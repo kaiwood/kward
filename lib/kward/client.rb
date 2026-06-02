@@ -16,11 +16,11 @@ module Kward
       @model = model
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta) if provider == "Codex"
+      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta) if provider == "Codex"
 
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
@@ -35,12 +35,14 @@ module Kward
         raise "#{provider} request failed: #{response.code} #{response.body}"
       end
 
-      JSON.parse(response.body).fetch("choices").first.fetch("message")
+      message = JSON.parse(response.body).fetch("choices").first.fetch("message")
+      on_assistant_delta&.call(message.fetch("content", ""))
+      message
     end
 
     private
 
-    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil)
+    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
@@ -49,65 +51,102 @@ module Kward
       request["originator"] = "codex_cli_rs"
       request.body = JSON.dump(codex_payload(messages, tools))
 
-      response = Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
-        http.request(request)
+      message = nil
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise "Codex OAuth request failed: #{response.code} #{redact(body, token)}"
+          end
+
+          message = parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
+        end
       end
 
-      unless response.is_a?(Net::HTTPSuccess)
-        raise "Codex OAuth request failed: #{response.code} #{redact(response.body, token)}"
-      end
-
-      parse_codex_sse(response.body, on_reasoning_delta: on_reasoning_delta)
+      message
     end
 
-    def parse_codex_sse(body, on_reasoning_delta: nil)
-      content = +""
-      reasoning_summary = +""
-      tool_calls = []
-      final_output = []
-
+    def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil)
+      state = codex_sse_state
       body.split(/\r?\n\r?\n/).each do |block|
-        data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
-        next if data.empty? || data == "[DONE]"
-
-        event = JSON.parse(data)
-        case event["type"]
-        when "response.output_text.delta"
-          content << event["delta"].to_s
-        when "response.reasoning_summary_text.delta"
-          delta = event["delta"].to_s
-          reasoning_summary << delta
-          on_reasoning_delta&.call(delta)
-        when "response.output_item.done"
-          item = event["item"]
-          final_output << item if item.is_a?(Hash)
-          tool_call = codex_tool_call(item)
-          tool_calls << tool_call if tool_call
-        when "response.completed"
-          response = event["response"]
-          if content.empty? && response.is_a?(Hash) && response["output"].is_a?(Array)
-            final_output = response["output"]
-            content << text_from_codex_items(final_output)
-            reasoning_summary << reasoning_summary_from_codex_items(final_output) if reasoning_summary.empty?
-          end
-        when "response.failed", "response.incomplete"
-          raise "Codex OAuth response #{event["type"]}: #{event["error"] || event["response"] || event}"
-        end
+        process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
       end
-
-      if tool_calls.empty?
-        final_output.each do |item|
-          tool_call = codex_tool_call(item)
-          tool_calls << tool_call if tool_call
-        end
-      end
-
-      message = { "role" => "assistant", "content" => content }
-      message["reasoning_summary"] = reasoning_summary unless reasoning_summary.empty?
-      message["tool_calls"] = tool_calls unless tool_calls.empty?
-      message
+      codex_sse_message(state)
     rescue JSON::ParserError => e
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
+    end
+
+    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil)
+      state = codex_sse_state
+      buffer = +""
+
+      response.read_body do |chunk|
+        buffer << chunk
+        while (index = buffer.index(/\r?\n\r?\n/))
+          delimiter = Regexp.last_match[0]
+          block = buffer[0...index]
+          buffer = buffer[(index + delimiter.length)..] || +""
+          process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
+        end
+      end
+      process_codex_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta) unless buffer.empty?
+      codex_sse_message(state)
+    rescue JSON::ParserError => e
+      raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
+    end
+
+    def codex_sse_state
+      { content: +"", reasoning_summary: +"", tool_calls: [], final_output: [] }
+    end
+
+    def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_assistant_delta: nil)
+      data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
+      return if data.empty? || data == "[DONE]"
+
+      event = JSON.parse(data)
+      case event["type"]
+      when "response.output_text.delta"
+        delta = event["delta"].to_s
+        state[:content] << delta
+        on_assistant_delta&.call(delta)
+      when "response.reasoning_summary_text.delta"
+        delta = event["delta"].to_s
+        state[:reasoning_summary] << delta
+        on_reasoning_delta&.call(delta)
+      when "response.output_item.done"
+        item = event["item"]
+        state[:final_output] << item if item.is_a?(Hash)
+        tool_call = codex_tool_call(item)
+        state[:tool_calls] << tool_call if tool_call
+      when "response.completed"
+        response = event["response"]
+        if state[:content].empty? && response.is_a?(Hash) && response["output"].is_a?(Array)
+          state[:final_output] = response["output"]
+          text = text_from_codex_items(state[:final_output])
+          state[:content] << text
+          on_assistant_delta&.call(text) unless text.empty?
+          if state[:reasoning_summary].empty?
+            state[:reasoning_summary] << reasoning_summary_from_codex_items(state[:final_output])
+          end
+        end
+      when "response.failed", "response.incomplete"
+        raise "Codex OAuth response #{event["type"]}: #{event["error"] || event["response"] || event}"
+      end
+    end
+
+    def codex_sse_message(state)
+      if state[:tool_calls].empty?
+        state[:final_output].each do |item|
+          tool_call = codex_tool_call(item)
+          state[:tool_calls] << tool_call if tool_call
+        end
+      end
+
+      message = { "role" => "assistant", "content" => state[:content] }
+      message["reasoning_summary"] = state[:reasoning_summary] unless state[:reasoning_summary].empty?
+      message["tool_calls"] = state[:tool_calls] unless state[:tool_calls].empty?
+      message
     end
 
     def codex_tool_call(item)

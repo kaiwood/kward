@@ -1,6 +1,8 @@
+require "json"
 require "tty-prompt"
 require_relative "agent"
 require_relative "client"
+require_relative "events"
 require_relative "openai_oauth"
 require_relative "tool_registry"
 require_relative "workspace"
@@ -24,13 +26,15 @@ module Kward
 
       first_prompt = @argv.join(" ").strip
       unless first_prompt.empty?
-        puts one_shot(first_prompt)
+        answer = one_shot(first_prompt)
+        puts answer unless answer.empty?
         return
       end
 
       stdin_prompt = piped_prompt
       unless stdin_prompt.empty?
-        puts one_shot(stdin_prompt)
+        answer = one_shot(stdin_prompt)
+        puts answer unless answer.empty?
         return
       end
 
@@ -38,9 +42,21 @@ module Kward
     end
 
     def one_shot(input)
-      message = chat(Conversation.new.tap { |conversation| conversation.append_user(input) }.messages, tools: ToolRegistry.new.schemas, on_reasoning_delta: method(:print_reasoning_delta))
-      puts if message["reasoning_summary"] && !message["reasoning_summary"].empty?
-      message.fetch("content", "")
+      streamed = false
+      message = chat(
+        Conversation.new.tap { |conversation| conversation.append_user(input) }.messages,
+        tools: ToolRegistry.new.schemas,
+        on_reasoning_delta: lambda do |delta|
+          streamed = true
+          print_block_delta("Reasoning", delta)
+        end,
+        on_assistant_delta: lambda do |delta|
+          streamed = true
+          print_block_delta("Assistant", delta)
+        end
+      )
+      finish_stream_block if streamed
+      streamed ? "" : message.fetch("content", "")
     end
 
     def login(oauth: OpenAIOAuth.new)
@@ -68,16 +84,25 @@ module Kward
           next
         end
 
-        printed_reasoning = false
-        answer = agent.ask(input, on_reasoning_delta: lambda do |delta|
-          unless printed_reasoning
-            @prompt.say("\nReasoning>")
-            printed_reasoning = true
+        streamed = false
+        answer = agent.ask(input) do |event|
+          case event
+          when Events::ReasoningDelta
+            streamed = true
+            print_block_delta("Reasoning", event.delta)
+          when Events::AssistantDelta
+            streamed = true
+            print_block_delta("Assistant", event.delta)
+          when Events::ToolCall
+            streamed = true
+            print_tool_call(event.tool_call)
+          when Events::ToolResult
+            streamed = true
+            print_tool_result(event.tool_call, event.content)
           end
-          print_reasoning_delta(delta)
-        end)
-        @prompt.say("") if printed_reasoning
-        @prompt.say("\nAssistant> #{answer}\n") unless answer.empty?
+        end
+        finish_stream_block if streamed
+        @prompt.say("\nAssistant> #{answer}\n") unless streamed || answer.empty?
       end
 
       agent.conversation
@@ -94,17 +119,71 @@ module Kward
 
     private
 
-    def chat(messages, tools:, on_reasoning_delta: nil)
-      @client.chat(messages, tools: tools, on_reasoning_delta: on_reasoning_delta)
+    def chat(messages, tools:, on_reasoning_delta: nil, on_assistant_delta: nil)
+      @client.chat(messages, tools: tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
     rescue ArgumentError => e
-      raise unless e.message.include?("on_reasoning_delta")
+      raise unless e.message.include?("on_reasoning_delta") || e.message.include?("on_assistant_delta")
 
       @client.chat(messages, tools: tools)
     end
 
-    def print_reasoning_delta(delta)
+    def print_block_delta(label, delta)
+      start_stream_block(label)
       print delta
       $stdout.flush
+    end
+
+    def print_tool_call(tool_call)
+      start_stream_block("Tool")
+      puts tool_command(tool_call)
+      $stdout.flush
+      @stream_block = nil
+    end
+
+    def print_tool_result(tool_call, content)
+      start_stream_block("Tool output")
+      puts tool_command(tool_call)
+      print content
+      puts unless content.to_s.end_with?("\n")
+      $stdout.flush
+      @stream_block = nil
+    end
+
+    def start_stream_block(label)
+      return if @stream_block == label
+
+      puts if @stream_block
+      puts "\n#{label}>"
+      @stream_block = label
+    end
+
+    def finish_stream_block
+      puts if @stream_block
+      @stream_block = nil
+    end
+
+    def tool_command(tool_call)
+      function = tool_call["function"] || tool_call[:function] || {}
+      name = function["name"] || function[:name] || "unknown_tool"
+      arguments = function["arguments"] || function[:arguments]
+      args = parse_tool_arguments(arguments)
+
+      if name == "run_shell_command"
+        args["command"] || args[:command] || ""
+      elsif args.empty?
+        name.to_s
+      else
+        "#{name} #{JSON.dump(args)}"
+      end
+    end
+
+    def parse_tool_arguments(arguments)
+      return {} if arguments.nil? || arguments.empty?
+      return arguments if arguments.is_a?(Hash)
+
+      JSON.parse(arguments)
+    rescue JSON::ParserError
+      {}
     end
   end
 end

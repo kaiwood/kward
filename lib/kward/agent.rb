@@ -1,4 +1,5 @@
 require_relative "conversation"
+require_relative "events"
 require_relative "tool_registry"
 
 module Kward
@@ -11,29 +12,47 @@ module Kward
 
     attr_reader :conversation
 
-    def ask(input, on_reasoning_delta: nil)
+    def ask(input, on_reasoning_delta: nil, &block)
       @conversation.append_user(input)
-      run_turn(on_reasoning_delta: on_reasoning_delta)
+      run_turn(on_reasoning_delta: on_reasoning_delta, &block)
     end
 
     def run_turn(on_reasoning_delta: nil)
       loop do
-        message = chat(on_reasoning_delta: on_reasoning_delta)
+        message = chat(on_reasoning_delta: on_reasoning_delta) do |event|
+          yield event if block_given?
+        end
+        yield Events::AssistantMessage.new(message: message) if block_given?
         @conversation.append_assistant(message)
 
         tool_calls = message["tool_calls"] || message[:tool_calls] || []
-        return safe_answer(message.fetch("content", message[:content] || "")) if tool_calls.empty?
+        if tool_calls.empty?
+          answer = safe_answer(message.fetch("content", message[:content] || ""))
+          yield Events::Answer.new(content: answer) if block_given?
+          return answer
+        end
 
-        tool_calls.each { |tool_call| @tool_registry.dispatch(tool_call, @conversation) }
+        tool_calls.each do |tool_call|
+          yield Events::ToolCall.new(tool_call: tool_call) if block_given?
+          content = @tool_registry.dispatch(tool_call, @conversation)
+          yield Events::ToolResult.new(tool_call: tool_call, content: content) if block_given?
+        end
       end
     end
 
     private
 
     def chat(on_reasoning_delta: nil)
-      @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: on_reasoning_delta)
+      reasoning_delta = lambda do |delta|
+        on_reasoning_delta&.call(delta)
+        yield Events::ReasoningDelta.new(delta: delta) if block_given?
+      end
+      assistant_delta = lambda do |delta|
+        yield Events::AssistantDelta.new(delta: delta) if block_given?
+      end
+      @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta)
     rescue ArgumentError => e
-      raise unless e.message.include?("on_reasoning_delta")
+      raise unless e.message.include?("on_reasoning_delta") || e.message.include?("on_assistant_delta")
 
       @client.chat(@conversation.messages, tools: @tool_registry.schemas)
     end
