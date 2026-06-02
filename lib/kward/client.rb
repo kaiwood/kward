@@ -16,11 +16,11 @@ module Kward
       @model = model
     end
 
-    def chat(messages, tools: [])
+    def chat(messages, tools: [], on_reasoning_delta: nil)
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      return codex_chat(url, token, account_id, messages, tools) if provider == "Codex"
+      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta) if provider == "Codex"
 
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
@@ -40,7 +40,7 @@ module Kward
 
     private
 
-    def codex_chat(url, token, account_id, messages, tools)
+    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
@@ -57,11 +57,12 @@ module Kward
         raise "Codex OAuth request failed: #{response.code} #{redact(response.body, token)}"
       end
 
-      parse_codex_sse(response.body)
+      parse_codex_sse(response.body, on_reasoning_delta: on_reasoning_delta)
     end
 
-    def parse_codex_sse(body)
+    def parse_codex_sse(body, on_reasoning_delta: nil)
       content = +""
+      reasoning_summary = +""
       tool_calls = []
       final_output = []
 
@@ -73,6 +74,10 @@ module Kward
         case event["type"]
         when "response.output_text.delta"
           content << event["delta"].to_s
+        when "response.reasoning_summary_text.delta"
+          delta = event["delta"].to_s
+          reasoning_summary << delta
+          on_reasoning_delta&.call(delta)
         when "response.output_item.done"
           item = event["item"]
           final_output << item if item.is_a?(Hash)
@@ -83,6 +88,7 @@ module Kward
           if content.empty? && response.is_a?(Hash) && response["output"].is_a?(Array)
             final_output = response["output"]
             content << text_from_codex_items(final_output)
+            reasoning_summary << reasoning_summary_from_codex_items(final_output) if reasoning_summary.empty?
           end
         when "response.failed", "response.incomplete"
           raise "Codex OAuth response #{event["type"]}: #{event["error"] || event["response"] || event}"
@@ -97,6 +103,7 @@ module Kward
       end
 
       message = { "role" => "assistant", "content" => content }
+      message["reasoning_summary"] = reasoning_summary unless reasoning_summary.empty?
       message["tool_calls"] = tool_calls unless tool_calls.empty?
       message
     rescue JSON::ParserError => e
@@ -132,6 +139,18 @@ module Kward
       end.join
     end
 
+    def reasoning_summary_from_codex_items(items)
+      items.flat_map do |item|
+        next [] unless item.is_a?(Hash)
+
+        if item["type"] == "reasoning" && item["summary"].is_a?(Array)
+          item["summary"].filter_map { |part| part["text"] if part.is_a?(Hash) }
+        else
+          []
+        end
+      end.join
+    end
+
     def credentials
       openai_token = @openai_access_token || @oauth.access_token
       if openai_token
@@ -160,7 +179,7 @@ module Kward
         stream: true,
         store: false,
         include: [],
-        reasoning: { effort: ENV.fetch("OPENAI_REASONING_EFFORT", "medium") }
+        reasoning: { effort: ENV.fetch("OPENAI_REASONING_EFFORT", "medium"), summary: "auto" }
       }
     end
 

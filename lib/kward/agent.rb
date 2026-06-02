@@ -11,14 +11,14 @@ module Kward
 
     attr_reader :conversation
 
-    def ask(input)
+    def ask(input, on_reasoning_delta: nil)
       @conversation.append_user(input)
-      run_turn
+      run_turn(on_reasoning_delta: on_reasoning_delta)
     end
 
-    def run_turn
+    def run_turn(on_reasoning_delta: nil)
       loop do
-        message = @client.chat(@conversation.messages, tools: @tool_registry.schemas)
+        message = chat(on_reasoning_delta: on_reasoning_delta)
         @conversation.append_assistant(message)
 
         tool_calls = message["tool_calls"] || message[:tool_calls] || []
@@ -29,6 +29,14 @@ module Kward
     end
 
     private
+
+    def chat(on_reasoning_delta: nil)
+      @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: on_reasoning_delta)
+    rescue ArgumentError => e
+      raise unless e.message.include?("on_reasoning_delta")
+
+      @client.chat(@conversation.messages, tools: @tool_registry.schemas)
+    end
 
     def safe_answer(content)
       text = content.to_s

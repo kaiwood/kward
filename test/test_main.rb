@@ -78,7 +78,7 @@ class TestMain < Minitest::Test
     payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
 
     assert_equal "gpt-5.5", payload[:model]
-    assert_equal({ effort: "medium" }, payload[:reasoning])
+    assert_equal({ effort: "medium", summary: "auto" }, payload[:reasoning])
     assert_equal true, payload[:stream]
     assert_equal false, payload[:store]
   end
@@ -130,6 +130,18 @@ class TestMain < Minitest::Test
 
     assert_equal "assistant", message["role"]
     assert_equal "hi", message["content"]
+  end
+
+  def test_codex_sse_parses_reasoning_summary
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    deltas = []
+    body = "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"thinking\"}\n\n" \
+      "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n"
+
+    message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
+
+    assert_equal "thinking", message["reasoning_summary"]
+    assert_equal ["thinking"], deltas
   end
 
   def test_codex_sse_parses_tool_call
