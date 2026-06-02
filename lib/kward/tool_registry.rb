@@ -8,7 +8,7 @@ module Kward
     def initialize(workspace: Workspace.new, prompt: nil)
       @workspace = workspace
       @prompt = prompt
-      @schemas = [list_directory_schema, read_file_schema, write_file_schema].freeze
+      @schemas = [list_directory_schema, read_file_schema, write_file_schema, run_shell_command_schema].freeze
     end
 
     def dispatch(tool_call, conversation)
@@ -23,6 +23,8 @@ module Kward
                   read_file(args, conversation)
                 when "write_file"
                   write_file(args, conversation)
+                when "run_shell_command"
+                  run_shell_command(args)
                 else
                   "Unknown tool: #{name}"
                 end
@@ -49,7 +51,19 @@ module Kward
       path = args["path"] || args[:path] || ""
       content = args["content"] || args[:content] || ""
 
-      @workspace.write_file(path, content, read_paths: conversation.read_paths)
+      @workspace.write_file(path, content, read_paths: conversation.read_paths) do |relative_path, bytes|
+        next true unless @prompt
+
+        @prompt.say("\nWrite request> #{relative_path} (#{bytes} bytes)")
+        @prompt.yes?("Approve write?", default: false)
+      end
+    end
+
+    def run_shell_command(args)
+      command = args["command"] || args[:command] || ""
+      timeout_seconds = args["timeout_seconds"] || args[:timeout_seconds] || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS
+
+      @workspace.run_shell_command(command, timeout_seconds: timeout_seconds)
     end
 
     def parse_arguments(arguments)
@@ -106,6 +120,25 @@ module Kward
               content: { type: "string", description: "Complete file content to write." }
             },
             required: ["path", "content"],
+            additionalProperties: false
+          }
+        }
+      }
+    end
+
+    def run_shell_command_schema
+      {
+        type: "function",
+        function: {
+          name: "run_shell_command",
+          description: "Run a shell command in the current workspace.",
+          parameters: {
+            type: "object",
+            properties: {
+              command: { type: "string", description: "Shell command to run from the workspace root." },
+              timeout_seconds: { type: "integer", description: "Optional timeout in seconds. Defaults to 30." }
+            },
+            required: ["command"],
             additionalProperties: false
           }
         }

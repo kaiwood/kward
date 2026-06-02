@@ -183,10 +183,10 @@ class TestMain < Minitest::Test
     assert_empty client.seen_messages
   end
 
-  def test_tool_schemas_are_workspace_only
+  def test_tool_schemas_include_shell_command
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-    assert_equal ["list_directory", "read_file", "write_file"], tool_names
+    assert_equal ["list_directory", "read_file", "write_file", "run_shell_command"], tool_names
   end
 
   def test_list_directory_and_read_file_still_work
@@ -313,6 +313,31 @@ class TestMain < Minitest::Test
   ensure
     File.delete(link) if link && File.symlink?(link)
     File.delete(outside) if outside && File.exist?(outside)
+  end
+
+  def test_run_shell_command_runs_in_workspace
+    output = Kward::Workspace.new.run_shell_command("ruby -e 'puts Dir.pwd; puts 2 + 2'")
+
+    assert_includes output, "Exit status: 0"
+    assert_includes output, Dir.pwd
+    assert_includes output, "4"
+  end
+
+  def test_run_shell_command_times_out
+    output = Kward::Workspace.new.run_shell_command("ruby -e 'sleep 2'", timeout_seconds: 1)
+
+    assert_equal "Error: command timed out after 1 seconds", output
+  end
+
+  def test_tool_registry_shell_command_runs_without_confirmation
+    prompt = FakePrompt.new([], confirmations: [false])
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new(prompt: prompt)
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "echo ok"), conversation)
+
+    refute_includes prompt.output, "\nShell command request> echo ok"
+    assert_includes result, "ok"
   end
 
   def test_piped_prompt_reads_non_tty_input
