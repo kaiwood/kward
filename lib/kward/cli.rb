@@ -65,21 +65,24 @@ module Kward
     end
 
     def interactive_loop(agent: nil)
+      setup_interactive_prompt
       agent ||= Agent.new(
         client: @client,
         tool_registry: ToolRegistry.new(workspace: Workspace.new, prompt: @prompt)
       )
 
       @prompt.say("Ruby CLI Agent")
-      @prompt.say("Ask a question and press Enter. Type /exit to quit.\n")
+      help = "Ask a question and press Enter. Type /exit to quit."
+      help += " Use Shift+Enter for new lines." if prompt_interface?
+      @prompt.say("#{help}\n")
 
       loop do
         input = @prompt.ask("You>") || ""
 
-        input = input.strip
-        next if input.empty?
-        break if input == "/exit"
-        if input == "/status"
+        command = input.strip
+        next if command.empty?
+        break if command == "/exit"
+        if command == "/status"
           @prompt.say("\nAssistant> #{STATUS_MESSAGE}\n")
           next
         end
@@ -109,6 +112,8 @@ module Kward
     rescue Interrupt
       @prompt.say("\nGoodbye.")
       agent&.conversation
+    ensure
+      @prompt.close if prompt_interface?
     end
 
     def piped_prompt
@@ -119,6 +124,35 @@ module Kward
 
     private
 
+    def setup_interactive_prompt
+      return unless @stdin.tty?
+      return unless @prompt.is_a?(TTY::Prompt)
+
+      prompt_interface = load_prompt_interface
+      return unless prompt_interface
+
+      @prompt = prompt_interface.new
+      @prompt.start
+    end
+
+    def load_prompt_interface
+      require_relative "prompt_interface"
+      PromptInterface
+    rescue LoadError => e
+      raise unless missing_tty_tui_load_error?(e)
+
+      nil
+    end
+
+    def missing_tty_tui_load_error?(error)
+      ["tty-cursor", "tty-reader", "tty-screen"].include?(error.path) ||
+        error.message.match?(/cannot load such file -- tty-(cursor|reader|screen)/)
+    end
+
+    def prompt_interface?
+      @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
+    end
+
     def chat(messages, tools:, on_reasoning_delta: nil, on_assistant_delta: nil)
       @client.chat(messages, tools: tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
     rescue ArgumentError => e
@@ -128,25 +162,44 @@ module Kward
     end
 
     def print_block_delta(label, delta)
-      start_stream_block(label)
-      print delta
-      $stdout.flush
+      if prompt_interface?
+        @prompt.start_stream_block(label)
+        @prompt.write_delta(delta)
+      else
+        start_stream_block(label)
+        print delta
+        $stdout.flush
+      end
     end
 
     def print_tool_call(tool_call)
-      start_stream_block("Tool")
-      puts tool_command(tool_call)
-      $stdout.flush
-      @stream_block = nil
+      if prompt_interface?
+        @prompt.start_stream_block("Tool")
+        @prompt.write_delta("#{tool_command(tool_call)}\n")
+        @prompt.finish_stream_block
+      else
+        start_stream_block("Tool")
+        puts tool_command(tool_call)
+        $stdout.flush
+        @stream_block = nil
+      end
     end
 
     def print_tool_result(tool_call, content)
-      start_stream_block("Tool output")
-      puts tool_command(tool_call)
-      print content
-      puts unless content.to_s.end_with?("\n")
-      $stdout.flush
-      @stream_block = nil
+      if prompt_interface?
+        @prompt.start_stream_block("Tool output")
+        @prompt.write_delta("#{tool_command(tool_call)}\n")
+        @prompt.write_delta(content)
+        @prompt.write_delta("\n") unless content.to_s.end_with?("\n")
+        @prompt.finish_stream_block
+      else
+        start_stream_block("Tool output")
+        puts tool_command(tool_call)
+        print content
+        puts unless content.to_s.end_with?("\n")
+        $stdout.flush
+        @stream_block = nil
+      end
     end
 
     def start_stream_block(label)
@@ -158,8 +211,12 @@ module Kward
     end
 
     def finish_stream_block
-      puts if @stream_block
-      @stream_block = nil
+      if prompt_interface?
+        @prompt.finish_stream_block
+      else
+        puts if @stream_block
+        @stream_block = nil
+      end
     end
 
     def tool_command(tool_call)

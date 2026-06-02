@@ -1,7 +1,9 @@
 require "minitest/autorun"
+require "stringio"
 require_relative "../lib/main"
 require_relative "../lib/kward/client"
 require_relative "../lib/kward/cli"
+require_relative "../lib/kward/prompt_interface"
 require_relative "../lib/kward/tool_registry"
 require_relative "../lib/kward/workspace"
 
@@ -181,6 +183,19 @@ class TestMain < Minitest::Test
     assert_equal "reply 1", client.seen_messages[1][2]["content"]
     assert_equal "again", client.seen_messages[1][3][:content]
     assert_equal 5, conversation.messages.length
+  end
+
+  def test_prompt_interface_renders_output_when_screen_has_extra_rows
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.say("first\nsecond")
+
+    assert_includes output.string, "first"
+    assert_includes output.string, "second"
   end
 
   def test_status_slash_command_prints_static_status_without_calling_client
