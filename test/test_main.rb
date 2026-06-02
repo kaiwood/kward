@@ -185,6 +185,28 @@ class TestMain < Minitest::Test
     assert_equal 5, conversation.messages.length
   end
 
+  def test_prompt_interface_renders_empty_composer_before_typing
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.start
+
+    assert_includes output.string, "You> "
+  end
+
+  def test_prompt_interface_cursor_stays_on_input_row_above_help_text
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.start
+
+    input_cursor = TTY::Cursor.move_to(5, TTY::Screen.height - 2)
+    help_text_cursor = TTY::Cursor.move_to(5, TTY::Screen.height - 1)
+
+    assert_includes output.string, input_cursor
+    refute_match(/#{Regexp.escape(help_text_cursor)}\z/, output.string)
+  end
+
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

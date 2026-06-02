@@ -183,6 +183,7 @@ module Kward
       height = screen_height
       width = screen_width
       input_lines = @input.split("\n", -1)
+      input_lines = [""] if input_lines.empty?
       prompt_rows = input_lines.length + 2
       output_height = [height - prompt_rows, 0].max
 
@@ -214,8 +215,9 @@ module Kward
     def move_cursor(input_start_row, width)
       before_cursor = @input[0...@cursor]
       row_offset = before_cursor.count("\n")
-      col_offset = before_cursor.split("\n", -1).last.length
-      row = [input_start_row + row_offset, screen_height - 1].min
+      col_offset = (before_cursor.split("\n", -1).last || "").length
+      last_input_row = screen_height > 1 ? screen_height - 2 : 0
+      row = [input_start_row + row_offset, last_input_row].min
       col = [@prompt_label.length + 1 + col_offset, width - 1].min
       @output_io.print(TTY::Cursor.move_to(col, row))
     rescue StandardError
