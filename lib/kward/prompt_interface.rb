@@ -4,42 +4,44 @@ require "tty-screen"
 
 module Kward
   class PromptInterface
-    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • PgUp/PgDn scroll • /exit quits".freeze
+    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • /exit quits".freeze
 
     def initialize(input: $stdin, output: $stdout)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
-      @output_lines = []
-      @stream_block = nil
       @input = ""
       @cursor = 0
-      @scroll_offset = 0
       @started = false
+      @asking = false
       @prompt_label = "You>"
+      @stream_block = nil
+      @rendered_rows = 0
+      @cursor_rendered_row = 0
     end
 
     def start
       return if @started
 
-      @output_io.print(TTY::Cursor.clear_screen)
       @started = true
+      @asking = true
+      @output_io.puts HELP_TEXT
       render
     end
 
     def close
       return unless @started
 
-      @output_io.print(TTY::Cursor.move_to(0, screen_height - 1))
-      @output_io.print(TTY::Cursor.clear_line)
+      clear_prompt
       @output_io.puts
       @output_io.flush
       @started = false
     end
 
     def say(message)
-      append_output(message.to_s)
-      append_output("\n") unless message.to_s.end_with?("\n")
+      clear_prompt
+      @output_io.print(message.to_s)
+      @output_io.print("\n") unless message.to_s.end_with?("\n")
       @stream_block = nil
       render
     end
@@ -49,6 +51,7 @@ module Kward
       @prompt_label = message.to_s
       @input = ""
       @cursor = 0
+      @asking = true
       render
 
       loop do
@@ -69,14 +72,6 @@ module Kward
           @cursor = 0
         when :end
           @cursor = @input.length
-        when :page_up
-          scroll_output(page_size)
-        when :page_down
-          scroll_output(-page_size)
-        when :ctrl_up
-          scroll_output(1)
-        when :ctrl_down
-          scroll_output(-1)
         else
           case key
           when "\n", "\r"
@@ -103,19 +98,22 @@ module Kward
     def start_stream_block(label)
       return if @stream_block == label
 
-      append_output("\n") unless @output_lines.empty? && current_output_line.empty?
-      append_output("#{label}>\n")
+      clear_prompt
+      @output_io.puts if @stream_block
+      @output_io.puts "#{label}>"
       @stream_block = label
-      render
+      @output_io.flush
     end
 
     def write_delta(delta)
-      append_output(delta.to_s)
-      render
+      clear_prompt
+      @output_io.print(delta.to_s)
+      @output_io.flush
     end
 
     def finish_stream_block
-      append_output("\n") if @stream_block
+      clear_prompt
+      @output_io.puts if @stream_block
       @stream_block = nil
       render
     end
@@ -124,9 +122,14 @@ module Kward
 
     def submit_input
       value = @input
+      move_cursor_to_end
+      @output_io.puts
+      @output_io.flush
       @input = ""
       @cursor = 0
-      render
+      @asking = false
+      @rendered_rows = 0
+      @cursor_rendered_row = 0
       value
     end
 
@@ -171,52 +174,66 @@ module Kward
       @input = @input[0...@cursor] + @input[(@cursor + 1)..]
     end
 
-    def append_output(text)
-      text.each_char do |char|
-        if char == "\n"
-          @output_lines << String.new
-          @scroll_offset += 1 if @scroll_offset.positive?
-        else
-          current_output_line << char
-        end
-      end
-      clamp_scroll_offset
-    end
-
-    def current_output_line
-      @output_lines << String.new if @output_lines.empty?
-      @output_lines[-1]
-    end
-
     def render
-      return unless @started
+      return unless @started && @asking
 
-      height = screen_height
-      width = screen_width
-      rows = input_rows(width)
-      prompt_rows = rows.length + 2
-      output_height = [height - prompt_rows, 0].max
-      clamp_scroll_offset(output_height)
-
-      @output_io.print(TTY::Cursor.move_to(0, 0))
-      @output_io.print(TTY::Cursor.clear_screen_down)
-      visible_output_lines(output_height).each_with_index do |line, row|
-        draw(row, 0, line, width)
-      end
-
-      separator_row = output_height
-      draw(separator_row, 0, "─" * width, width) if separator_row < height
-      rows.each_with_index do |line, index|
-        draw(separator_row + 1 + index, 0, line, width)
-      end
-      draw(height - 1, 0, HELP_TEXT, width) if height.positive?
-      move_cursor(separator_row + 1, width)
+      clear_prompt
+      rows = input_rows(screen_width)
+      @output_io.print(rows.join("\n"))
+      @rendered_rows = rows.length
+      @cursor_rendered_row = @rendered_rows - 1
+      move_cursor
       @output_io.flush
+    end
+
+    def clear_prompt
+      return unless @rendered_rows.positive?
+
+      @output_io.print(TTY::Cursor.up(@cursor_rendered_row)) if @cursor_rendered_row.positive?
+      @output_io.print("\r")
+      @output_io.print(TTY::Cursor.clear_screen_down)
+      @rendered_rows = 0
+      @cursor_rendered_row = 0
+    end
+
+    def move_cursor_to_end
+      return unless @rendered_rows.positive?
+
+      rows = input_rows(screen_width)
+      row = rows.length - 1
+      col = rows.last.to_s.length
+      move_to_rendered_position(row, col)
+    end
+
+    def move_cursor
+      cursor_line, cursor_col = cursor_logical_position
+      row_offset = 0
+      input_lines.each_with_index do |line, index|
+        prefix = input_prefix(index)
+        available = input_text_width(screen_width, prefix)
+        if index == cursor_line
+          row = row_offset + (cursor_col / available)
+          col = prefix.length + (cursor_col % available)
+          move_to_rendered_position(row, col)
+          return
+        end
+        row_offset += [(line.length.to_f / available).ceil, 1].max
+      end
+    rescue StandardError
+      nil
+    end
+
+    def move_to_rendered_position(row, col)
+      @output_io.print(TTY::Cursor.up(@cursor_rendered_row - row)) if @cursor_rendered_row > row
+      @output_io.print(TTY::Cursor.down(row - @cursor_rendered_row)) if row > @cursor_rendered_row
+      @output_io.print("\r")
+      @output_io.print(TTY::Cursor.forward(col)) if col.positive?
+      @cursor_rendered_row = row
     end
 
     def input_rows(width)
       cursor_line, cursor_col = cursor_logical_position
-      @input.split("\n", -1).each_with_index.flat_map do |line, index|
+      input_lines.each_with_index.flat_map do |line, index|
         prefix = input_prefix(index)
         continuation_prefix = " " * prefix.length
         available = input_text_width(width, prefix)
@@ -231,73 +248,22 @@ module Kward
       end
     end
 
+    def input_lines
+      lines = @input.split("\n", -1)
+      lines.empty? ? [""] : lines
+    end
+
     def input_prefix(index)
       "#{index.zero? ? @prompt_label : " " * @prompt_label.length} "
     end
 
     def input_text_width(width, prefix)
-      [width - prefix.length, 1].max
+      [width - prefix.length - 1, 1].max
     end
 
     def cursor_logical_position
       before_cursor = @input[0...@cursor]
       [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
-    end
-
-    def visible_output_lines(output_height)
-      return [] unless output_height.positive?
-
-      start = [@output_lines.length - output_height - @scroll_offset, 0].max
-      @output_lines[start, output_height] || []
-    end
-
-    def scroll_output(lines)
-      @scroll_offset += lines
-      clamp_scroll_offset
-    end
-
-    def page_size
-      [screen_height - input_rows(screen_width).length - 2, 1].max
-    end
-
-    def clamp_scroll_offset(output_height = nil)
-      output_height ||= page_size
-      @scroll_offset = [[@scroll_offset, 0].max, max_scroll_offset(output_height)].min
-    end
-
-    def max_scroll_offset(output_height)
-      [@output_lines.length - output_height, 0].max
-    end
-
-    def draw(row, col, text, width)
-      return if row.negative? || row >= screen_height
-
-      @output_io.print(TTY::Cursor.move_to(col, row))
-      @output_io.print(text.to_s[0, width])
-    end
-
-    def move_cursor(input_start_row, width)
-      cursor_line, cursor_col = cursor_logical_position
-      row_offset = 0
-      @input.split("\n", -1).each_with_index do |line, index|
-        prefix = input_prefix(index)
-        available = input_text_width(width, prefix)
-        if index == cursor_line
-          row_offset += cursor_col / available
-          col = prefix.length + (cursor_col % available)
-          last_input_row = screen_height > 1 ? screen_height - 2 : 0
-          row = [input_start_row + row_offset, last_input_row].min
-          @output_io.print(TTY::Cursor.move_to([col, width - 1].min, row))
-          return
-        end
-        row_offset += [(line.length.to_f / available).ceil, 1].max
-      end
-    rescue StandardError
-      nil
-    end
-
-    def screen_height
-      [TTY::Screen.height, 1].max
     end
 
     def screen_width

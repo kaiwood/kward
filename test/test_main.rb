@@ -194,17 +194,15 @@ class TestMain < Minitest::Test
     assert_includes output.string, "You> "
   end
 
-  def test_prompt_interface_cursor_stays_on_input_row_above_help_text
+  def test_prompt_interface_uses_scrolling_terminal_output_not_box_layout
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
 
     prompt.start
 
-    input_cursor = TTY::Cursor.move_to(5, TTY::Screen.height - 2)
-    help_text_cursor = TTY::Cursor.move_to(5, TTY::Screen.height - 1)
-
-    assert_includes output.string, input_cursor
-    refute_match(/#{Regexp.escape(help_text_cursor)}\z/, output.string)
+    assert_includes output.string, "You> "
+    refute_includes output.string, TTY::Cursor.clear_screen
+    refute_includes output.string, TTY::Cursor.clear_screen_down
   end
 
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
@@ -218,6 +216,49 @@ class TestMain < Minitest::Test
 
     assert_includes output.string, "first"
     assert_includes output.string, "second"
+  end
+
+  def test_prompt_interface_submits_input_on_enter
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("hello\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "hello", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_handles_cursor_movement_keys
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("ab\e[DZ\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "aZb", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_wraps_before_terminal_width
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("abcde\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    prompt.instance_variable_set(:@input, "abcde")
+    assert prompt.send(:input_rows, 10).all? { |row| row.length < 10 }
+
+    original_width = TTY::Screen.method(:width)
+    TTY::Screen.define_singleton_method(:width) { 10 }
+
+    assert_equal "abcde", prompt.ask("You>")
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    input&.close unless input&.closed?
   end
 
   def test_status_slash_command_prints_static_status_without_calling_client
