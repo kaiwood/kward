@@ -193,9 +193,8 @@ module Kward
 
       height = screen_height
       width = screen_width
-      input_lines = @input.split("\n", -1)
-      input_lines = [""] if input_lines.empty?
-      prompt_rows = input_lines.length + 2
+      rows = input_rows(width)
+      prompt_rows = rows.length + 2
       output_height = [height - prompt_rows, 0].max
       clamp_scroll_offset(output_height)
 
@@ -207,13 +206,42 @@ module Kward
 
       separator_row = output_height
       draw(separator_row, 0, "─" * width, width) if separator_row < height
-      input_lines.each_with_index do |line, index|
-        label = index.zero? ? @prompt_label : " " * @prompt_label.length
-        draw(separator_row + 1 + index, 0, "#{label} #{line}", width)
+      rows.each_with_index do |line, index|
+        draw(separator_row + 1 + index, 0, line, width)
       end
       draw(height - 1, 0, HELP_TEXT, width) if height.positive?
       move_cursor(separator_row + 1, width)
       @output_io.flush
+    end
+
+    def input_rows(width)
+      cursor_line, cursor_col = cursor_logical_position
+      @input.split("\n", -1).each_with_index.flat_map do |line, index|
+        prefix = input_prefix(index)
+        continuation_prefix = " " * prefix.length
+        available = input_text_width(width, prefix)
+        chunks = line.scan(/.{1,#{available}}/m)
+        chunks = [""] if chunks.empty?
+        if index == cursor_line && cursor_col == line.length && line.length.positive? && (line.length % available).zero?
+          chunks << ""
+        end
+        chunks.each_with_index.map do |chunk, chunk_index|
+          "#{chunk_index.zero? ? prefix : continuation_prefix}#{chunk}"
+        end
+      end
+    end
+
+    def input_prefix(index)
+      "#{index.zero? ? @prompt_label : " " * @prompt_label.length} "
+    end
+
+    def input_text_width(width, prefix)
+      [width - prefix.length, 1].max
+    end
+
+    def cursor_logical_position
+      before_cursor = @input[0...@cursor]
+      [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
     end
 
     def visible_output_lines(output_height)
@@ -229,7 +257,7 @@ module Kward
     end
 
     def page_size
-      [screen_height - @input.split("\n", -1).length - 2, 1].max
+      [screen_height - input_rows(screen_width).length - 2, 1].max
     end
 
     def clamp_scroll_offset(output_height = nil)
@@ -249,13 +277,21 @@ module Kward
     end
 
     def move_cursor(input_start_row, width)
-      before_cursor = @input[0...@cursor]
-      row_offset = before_cursor.count("\n")
-      col_offset = (before_cursor.split("\n", -1).last || "").length
-      last_input_row = screen_height > 1 ? screen_height - 2 : 0
-      row = [input_start_row + row_offset, last_input_row].min
-      col = [@prompt_label.length + 1 + col_offset, width - 1].min
-      @output_io.print(TTY::Cursor.move_to(col, row))
+      cursor_line, cursor_col = cursor_logical_position
+      row_offset = 0
+      @input.split("\n", -1).each_with_index do |line, index|
+        prefix = input_prefix(index)
+        available = input_text_width(width, prefix)
+        if index == cursor_line
+          row_offset += cursor_col / available
+          col = prefix.length + (cursor_col % available)
+          last_input_row = screen_height > 1 ? screen_height - 2 : 0
+          row = [input_start_row + row_offset, last_input_row].min
+          @output_io.print(TTY::Cursor.move_to([col, width - 1].min, row))
+          return
+        end
+        row_offset += [(line.length.to_f / available).ceil, 1].max
+      end
     rescue StandardError
       nil
     end
