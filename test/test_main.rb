@@ -265,35 +265,16 @@ class TestMain < Minitest::Test
     File.delete(path) if path && File.exist?(path)
   end
 
-  def test_tool_registry_write_requires_confirmation
+  def test_tool_registry_write_runs_without_confirmation
     path = "kward_confirm_tool.txt"
-    prompt = FakePrompt.new([], confirmations: [true])
+    prompt = FakePrompt.new([], confirmations: [false])
     conversation = Kward::Conversation.new
     registry = Kward::ToolRegistry.new(prompt: prompt)
 
     registry.dispatch(tool_call("write_file", path: path, content: "hello\n"), conversation)
 
-    assert_includes prompt.output, "\nWrite request> #{path} (6 bytes)"
+    refute_includes prompt.output, "\nWrite request> #{path} (6 bytes)"
     assert_equal "hello\n", File.read(path)
-  ensure
-    File.delete(path) if path && File.exist?(path)
-  end
-
-  def test_declined_tool_write_does_not_claim_success
-    path = "kward_declined_agent.txt"
-    prompt = FakePrompt.new(["change it", "/exit"], confirmations: [false])
-    client = FakeClient.new([
-      assistant_tool_call("write_file", path: path, content: "hello\n"),
-      { "role" => "assistant", "content" => "I wrote the file." }
-    ])
-    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
-    cli = Kward::CLI.new(prompt: prompt, client: client)
-
-    cli.interactive_loop(agent: agent)
-
-    assistant_output = prompt.output.join("\n")
-    assert_includes assistant_output, "write_file returned an error or declined result"
-    refute File.exist?(path)
   ensure
     File.delete(path) if path && File.exist?(path)
   end

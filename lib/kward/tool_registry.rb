@@ -51,12 +51,7 @@ module Kward
       path = args["path"] || args[:path] || ""
       content = args["content"] || args[:content] || ""
 
-      @workspace.write_file(path, content, read_paths: conversation.read_paths) do |relative_path, bytes|
-        next true unless @prompt
-
-        @prompt.say("\nWrite request> #{relative_path} (#{bytes} bytes)")
-        @prompt.yes?("Approve write?", default: false)
-      end
+      @workspace.write_file(path, content, read_paths: conversation.read_paths)
     end
 
     def run_shell_command(args)
