@@ -4,7 +4,7 @@ require "tty-screen"
 
 module Kward
   class PromptInterface
-    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • /exit quits".freeze
+    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • PgUp/PgDn scroll • /exit quits".freeze
 
     def initialize(input: $stdin, output: $stdout)
       @input_io = input
@@ -14,6 +14,7 @@ module Kward
       @stream_block = nil
       @input = ""
       @cursor = 0
+      @scroll_offset = 0
       @started = false
       @prompt_label = "You>"
     end
@@ -68,6 +69,14 @@ module Kward
           @cursor = 0
         when :end
           @cursor = @input.length
+        when :page_up
+          scroll_output(page_size)
+        when :page_down
+          scroll_output(-page_size)
+        when :ctrl_up
+          scroll_output(1)
+        when :ctrl_down
+          scroll_output(-1)
         else
           case key
           when "\n", "\r"
@@ -166,10 +175,12 @@ module Kward
       text.each_char do |char|
         if char == "\n"
           @output_lines << String.new
+          @scroll_offset += 1 if @scroll_offset.positive?
         else
           current_output_line << char
         end
       end
+      clamp_scroll_offset
     end
 
     def current_output_line
@@ -186,11 +197,11 @@ module Kward
       input_lines = [""] if input_lines.empty?
       prompt_rows = input_lines.length + 2
       output_height = [height - prompt_rows, 0].max
+      clamp_scroll_offset(output_height)
 
       @output_io.print(TTY::Cursor.move_to(0, 0))
       @output_io.print(TTY::Cursor.clear_screen_down)
-      visible_output = @output_lines.last(output_height)
-      visible_output.each_with_index do |line, row|
+      visible_output_lines(output_height).each_with_index do |line, row|
         draw(row, 0, line, width)
       end
 
@@ -203,6 +214,31 @@ module Kward
       draw(height - 1, 0, HELP_TEXT, width) if height.positive?
       move_cursor(separator_row + 1, width)
       @output_io.flush
+    end
+
+    def visible_output_lines(output_height)
+      return [] unless output_height.positive?
+
+      start = [@output_lines.length - output_height - @scroll_offset, 0].max
+      @output_lines[start, output_height] || []
+    end
+
+    def scroll_output(lines)
+      @scroll_offset += lines
+      clamp_scroll_offset
+    end
+
+    def page_size
+      [screen_height - @input.split("\n", -1).length - 2, 1].max
+    end
+
+    def clamp_scroll_offset(output_height = nil)
+      output_height ||= page_size
+      @scroll_offset = [[@scroll_offset, 0].max, max_scroll_offset(output_height)].min
+    end
+
+    def max_scroll_offset(output_height)
+      [@output_lines.length - output_height, 0].max
     end
 
     def draw(row, col, text, width)
