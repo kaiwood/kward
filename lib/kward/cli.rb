@@ -58,12 +58,11 @@ module Kward
       @prompt.say("Ask a question and press Enter. Type /exit to quit.\n")
 
       loop do
-        input = @prompt.ask("You>")
-        break if input.nil?
+        input = @prompt.ask("You>") || ""
 
         input = input.strip
         next if input.empty?
-        break if ["/exit", "/quit"].include?(input)
+        break if input == "/exit"
         if input == "/status"
           @prompt.say("\nAssistant> #{STATUS_MESSAGE}\n")
           next
