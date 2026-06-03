@@ -323,6 +323,45 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_renders_braille_spinner_while_busy
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.begin_busy_input("You>")
+
+    assert_includes output.string, "╭ You · ⠋ streaming "
+  end
+
+  def test_prompt_interface_advances_braille_spinner_while_busy
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    prompt.begin_busy_input("You>")
+    prompt.instance_variable_set(:@last_spinner_tick, prompt.send(:monotonic_now) - Kward::PromptInterface::SPINNER_INTERVAL)
+    output.truncate(0)
+    output.rewind
+
+    prompt.poll_input
+
+    assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, output.string)
+  ensure
+    writer&.close unless writer&.closed?
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_hides_spinner_when_input_is_queued
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.set_queued_count(1)
+
+    assert_includes output.string, "╭ You · 1 queued "
+    refute_includes output.string, "streaming"
+  end
+
   def test_prompt_interface_queues_input_while_busy
     input, writer = IO.pipe
     output = StringIO.new

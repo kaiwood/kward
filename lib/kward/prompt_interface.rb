@@ -8,6 +8,8 @@ module Kward
   class PromptInterface
     HELP_TEXT = "Enter sends • Shift+Enter inserts newline • ↑/↓ history • Ctrl+D exits empty prompt".freeze
     BUSY_HELP_TEXT = "Streaming • type next prompt • Enter queues • Shift+Enter inserts newline".freeze
+    SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
+    SPINNER_INTERVAL = 0.1
     COMPOSER_MAX_INPUT_ROWS = 6
     TRANSCRIPT_BUFFER_LIMIT = 200_000
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
@@ -33,6 +35,8 @@ module Kward
       @asking = false
       @busy = false
       @queued_count = 0
+      @spinner_frame_index = 0
+      @last_spinner_tick = monotonic_now
       @prompt_label = "You>"
       @stream_block = nil
       @rendered_rows = 0
@@ -217,6 +221,7 @@ module Kward
         @asking = true
         @busy = true
         @queued_count = 0
+        reset_spinner_locked
         reset_history_navigation
         render_prompt_locked
       end
@@ -242,7 +247,9 @@ module Kward
       key = read_key(nonblock: true)
       @mutex.synchronize do
         if key.nil?
-          render_prompt_locked if handle_resize_locked
+          resized = handle_resize_locked
+          spun = tick_spinner_locked
+          render_prompt_locked if resized || spun
           return nil
         end
 
@@ -325,6 +332,32 @@ module Kward
 
     def terminal_newlines(text)
       text.gsub(/\r\n|\r|\n/, "\r\n")
+    end
+
+    def reset_spinner_locked
+      @spinner_frame_index = 0
+      @last_spinner_tick = monotonic_now
+    end
+
+    def tick_spinner_locked
+      return false unless @busy && @queued_count.zero? && @started && @asking
+
+      now = monotonic_now
+      elapsed = now - @last_spinner_tick
+      return false if elapsed < SPINNER_INTERVAL
+
+      steps = (elapsed / SPINNER_INTERVAL).floor
+      @spinner_frame_index = (@spinner_frame_index + steps) % SPINNER_FRAMES.length
+      @last_spinner_tick += steps * SPINNER_INTERVAL
+      true
+    end
+
+    def spinner_frame
+      SPINNER_FRAMES[@spinner_frame_index % SPINNER_FRAMES.length]
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def submit_input
@@ -1578,7 +1611,7 @@ module Kward
       if @busy && @queued_count.positive?
         " #{label} · #{@queued_count} queued "
       elsif @busy
-        " #{label} · streaming "
+        " #{label} · #{spinner_frame} streaming "
       else
         " #{label} "
       end
