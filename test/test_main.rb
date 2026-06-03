@@ -502,9 +502,35 @@ class TestMain < Minitest::Test
       assert_includes output, "Reasoning>\nNeed to inspect the file."
       assert_includes output, "Assistant>\nI'll read it."
       assert_includes output, "Tool>\nread_file"
-      assert_includes output, "Tool output>\nread_file"
-      assert_includes output, "README contents"
+      assert_includes output, "Tool output>\nread_file: README.md"
+      assert_includes output, "1 lines, 16 bytes"
+      refute_includes output, "README contents"
     end
+  end
+
+  def test_tool_output_display_uses_compact_summaries
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+    read_output = capture_io do
+      cli.send(:print_tool_result, tool_call("read_file", path: "README.md"), "line one\nline two\n")
+    end.first
+    assert_includes read_output, "read_file: README.md"
+    assert_includes read_output, "2 lines, 18 bytes"
+    refute_includes read_output, "line one"
+
+    shell_output = capture_io do
+      cli.send(:print_tool_result, tool_call("run_shell_command", command: "echo ok"), "Exit status: 0\n\nSTDOUT:\nok\n\nSTDERR:\nwarn\n")
+    end.first
+    assert_includes shell_output, "run_shell_command: echo ok"
+    assert_includes shell_output, "Exit status: 0"
+    assert_includes shell_output, "stdout (3 bytes):\nok"
+    assert_includes shell_output, "stderr (5 bytes):\nwarn"
+
+    research_output = capture_io do
+      cli.send(:print_tool_result, tool_call("web_research", queries: ["ruby"]), "# Web research\n\n## Query: ruby\n1. Ruby\n   URL: https://ruby-lang.org\n")
+    end.first
+    assert_includes research_output, "web_research"
+    assert_includes research_output, "ruby: 1 result(s)"
   end
 
   def test_session_store_restores_read_paths_and_skips_bad_jsonl
