@@ -223,6 +223,18 @@ class TestMain < Minitest::Test
     assert_equal 5, conversation.messages.length
   end
 
+  def test_interactive_loop_exits_when_prompt_returns_nil
+    prompt = FakePrompt.new([nil])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    conversation = cli.interactive_loop(agent: agent)
+
+    assert_empty client.seen_messages
+    assert_empty conversation.messages
+  end
+
   def test_prompt_interface_renders_empty_composer_before_typing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
@@ -277,6 +289,19 @@ class TestMain < Minitest::Test
     assert_equal "hello", prompt.ask("You>")
   ensure
     input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_exits_on_ctrl_d_when_empty
+    assert_nil ask_prompt_with_input("\x04")
+  end
+
+  def test_prompt_interface_exits_on_csi_u_ctrl_d_when_empty
+    assert_nil ask_prompt_with_input("\e[4u")
+    assert_nil ask_prompt_with_input("\e[100;5u")
+  end
+
+  def test_prompt_interface_does_not_exit_on_ctrl_d_when_text_remains
+    assert_equal "hello", ask_prompt_with_input("hello\x04\r")
   end
 
   def test_prompt_interface_handles_cursor_movement_keys

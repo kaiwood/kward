@@ -77,7 +77,8 @@ module Kward
       @prompt.say("#{help}\n")
 
       loop do
-        input = @prompt.ask("You>") || ""
+        input = @prompt.ask("You>")
+        break if input.nil?
 
         command = input.strip
         next if command.empty?

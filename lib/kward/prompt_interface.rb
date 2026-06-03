@@ -4,10 +4,11 @@ require "tty-screen"
 
 module Kward
   class PromptInterface
-    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • /exit quits".freeze
+    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • Ctrl+D exits empty prompt • /exit quits".freeze
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
+    EXIT_INPUT = :exit_input
 
     def initialize(input: $stdin, output: $stdout)
       @input_io = input
@@ -65,13 +66,17 @@ module Kward
         key = read_key
         result = handle_key(key)
         return result if result.is_a?(String)
+        return nil if result == EXIT_INPUT
 
         render
       end
     end
 
     def yes?(message, default: false)
-      answer = ask("#{message} #{default ? "[Y/n]" : "[y/N]"}").strip.downcase
+      answer = ask("#{message} #{default ? "[Y/n]" : "[y/N]"}")
+      return default if answer.nil?
+
+      answer = answer.strip.downcase
       return default if answer.empty?
 
       answer.start_with?("y")
@@ -114,6 +119,17 @@ module Kward
       value
     end
 
+    def exit_input
+      clear_prompt
+      @output_io.flush
+      @input = ""
+      @cursor = 0
+      @asking = false
+      @rendered_rows = 0
+      @cursor_rendered_row = 0
+      EXIT_INPUT
+    end
+
     def read_key
       @pending_keys.shift || @reader.read_keypress(echo: false, raw: true)
     end
@@ -132,6 +148,8 @@ module Kward
         delete_before_cursor
       when :delete
         delete_at_cursor
+      when :ctrl_d
+        exit_input if @input.empty?
       when :left
         @cursor -= 1 if @cursor.positive?
       when :right
@@ -146,6 +164,8 @@ module Kward
           submit_input
         when "\b", "\x7F"
           delete_before_cursor
+        when "\x04"
+          exit_input if @input.empty?
         when "\e"
           handle_escape_sequence
         else
@@ -173,9 +193,15 @@ module Kward
       when 8, 127
         delete_before_cursor
         nil
+      when 4
+        exit_input if @input.empty?
       else
-        false
+        ctrl_d_csi_u?(code, modifier) ? (exit_input if @input.empty?) : false
       end
+    end
+
+    def ctrl_d_csi_u?(code, modifier)
+      [68, 100].include?(code) && ((modifier - 1) & 4).positive?
     end
 
     def handle_shift_enter_key(key)
