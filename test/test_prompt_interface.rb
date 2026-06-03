@@ -122,6 +122,67 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_ask_user_question_selects_option
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[B\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    answers = prompt.ask_user_question([question_args("Proceed?")])
+
+    assert_equal [{ question: "Proceed?", answer: "No", custom: false }], answers
+    assert_includes strip_ansi(output.string), "Question 1/1"
+    assert_includes strip_ansi(output.string), "Proceed?"
+    assert_includes strip_ansi(output.string), "No — Stop."
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_ask_user_question_accepts_custom_answer
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("maybe\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    answers = prompt.ask_user_question([question_args("Proceed?")])
+
+    assert_equal [{ question: "Proceed?", answer: "maybe", custom: true }], answers
+    assert_includes strip_ansi(output.string), "Type something: maybe"
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_ask_user_question_handles_multiple_questions
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("custom\r\e[B\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    answers = prompt.ask_user_question([question_args("First?"), question_args("Second?")])
+
+    assert_equal [
+      { question: "First?", answer: "custom", custom: true },
+      { question: "Second?", answer: "No", custom: false }
+    ], answers
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_ask_user_question_escape_cancels
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_nil prompt.ask_user_question([question_args("Proceed?")])
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_exits_on_ctrl_d_when_empty
     assert_nil ask_prompt_with_input("\x04")
   end

@@ -75,6 +75,17 @@ class KwardTestCase < Minitest::Test
     { "role" => "assistant", "content" => nil, "tool_calls" => [tool_call(name, args)] }
   end
 
+  def question_args(text)
+    {
+      question: text,
+      header: "Confirm",
+      options: [
+        { label: "Yes", description: "Continue." },
+        { label: "No", description: "Stop." }
+      ]
+    }
+  end
+
   def fake_response(code, body)
     Kward::WebResearch::NetHttpClient::Response.new(code: code, body: body)
   end
@@ -204,6 +215,21 @@ class KwardTestCase < Minitest::Test
 
     def redraw
       @redraw_count += 1
+    end
+  end
+
+  class FakeQuestionPrompt < FakePrompt
+    attr_reader :questions
+
+    def initialize(answers)
+      super([])
+      @answers = answers
+      @questions = []
+    end
+
+    def ask_user_question(questions)
+      @questions << questions
+      @answers
     end
   end
 

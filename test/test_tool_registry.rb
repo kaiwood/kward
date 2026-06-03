@@ -39,7 +39,39 @@ class TestToolRegistry < KwardTestCase
   def test_tool_schemas_include_edit_file_shell_command_and_web_research
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research", "read_skill"], tool_names
+    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research", "read_skill", "ask_user_question"], tool_names
+  end
+
+  def test_ask_user_question_returns_prompt_answers_as_readable_text
+    prompt = FakeQuestionPrompt.new([{ question: "Proceed?", answer: "Yes" }])
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new(prompt: prompt)
+
+    result = registry.dispatch(tool_call("ask_user_question", questions: [question_args("Proceed?")]), conversation)
+
+    assert_equal "Proceed?: Yes", result
+    assert_equal [[{ question: "Proceed?", header: "Confirm", options: [{ label: "Yes", description: "Continue." }, { label: "No", description: "Stop." }] }]], prompt.questions
+  end
+
+  def test_ask_user_question_requires_interactive_prompt_support
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new(prompt: FakePrompt.new([]))
+
+    result = registry.dispatch(tool_call("ask_user_question", questions: [question_args("Proceed?")]), conversation)
+
+    assert_equal "Error: ask_user_question requires interactive prompt support.", result
+  end
+
+  def test_ask_user_question_validates_question_shape
+    prompt = FakeQuestionPrompt.new([])
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new(prompt: prompt)
+
+    too_few = registry.dispatch(tool_call("ask_user_question", questions: [{ question: "Proceed?", header: "Confirm", options: [{ label: "Yes", description: "Continue." }] }]), conversation)
+    unsupported = registry.dispatch(tool_call("ask_user_question", questions: [question_args("Proceed?").merge(multiSelect: true)]), conversation)
+
+    assert_equal "Error: question 1 requires 2 to 4 options.", too_few
+    assert_equal "Error: question 1 uses unsupported multiSelect.", unsupported
   end
 
   def test_tool_registry_dispatches_web_research

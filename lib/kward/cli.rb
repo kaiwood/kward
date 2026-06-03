@@ -650,6 +650,8 @@ module Kward
     end
 
     def collect_queued_input(queued_inputs)
+      return nil if @prompt.respond_to?(:modal_active?) && @prompt.modal_active?
+
       poll_result = @prompt.poll_input
       case poll_result
       when String

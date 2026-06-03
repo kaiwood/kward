@@ -11,7 +11,7 @@ module Kward
       @workspace = workspace
       @prompt = prompt
       @web_research = web_research
-      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema, read_skill_schema].freeze
+      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema, read_skill_schema, ask_user_question_schema].freeze
     end
 
     def dispatch(tool_call, conversation)
@@ -34,6 +34,8 @@ module Kward
                   @web_research.search(args)
                 when "read_skill"
                   read_skill(args)
+                when "ask_user_question"
+                  ask_user_question(args)
                 else
                   "Unknown tool: #{name}"
                 end
@@ -82,6 +84,55 @@ module Kward
       path = args["path"] || args[:path]
 
       ConfigFiles.read_skill_file(name, path)
+    end
+
+    def ask_user_question(args)
+      return "Error: ask_user_question requires interactive prompt support." unless @prompt.respond_to?(:ask_user_question)
+
+      questions = validated_questions(args)
+      return questions if questions.is_a?(String)
+
+      answers = @prompt.ask_user_question(questions)
+      return "Cancelled." if answers.nil?
+
+      answers.map { |answer| "#{answer[:question]}: #{answer[:answer]}" }.join("\n")
+    end
+
+    def validated_questions(args)
+      questions = args["questions"] || args[:questions]
+      return "Error: ask_user_question requires questions." unless questions.is_a?(Array)
+      return "Error: ask_user_question requires 1 to 4 questions." unless questions.length.between?(1, 4)
+
+      questions.map.with_index(1) do |question, index|
+        return "Error: question #{index} must be an object." unless question.respond_to?(:key?)
+        return "Error: question #{index} uses unsupported multiSelect." if question.key?("multiSelect") || question.key?(:multiSelect)
+
+        text = question_value(question, :question).to_s.strip
+        header = question_value(question, :header).to_s.strip
+        options = question_value(question, :options)
+        return "Error: question #{index} requires question and header." if text.empty? || header.empty?
+        return "Error: question #{index} requires 2 to 4 options." unless options.is_a?(Array) && options.length.between?(2, 4)
+
+        normalized_options = options.map.with_index(1) do |option, option_index|
+          return "Error: question #{index} option #{option_index} must be an object." unless option.respond_to?(:key?)
+          return "Error: question #{index} option #{option_index} uses unsupported preview." if option.key?("preview") || option.key?(:preview)
+
+          label = question_value(option, :label).to_s.strip
+          description = question_value(option, :description).to_s.strip
+          return "Error: question #{index} option #{option_index} requires label and description." if label.empty? || description.empty?
+
+          { label: label, description: description }
+        end
+
+        { question: text, header: header, options: normalized_options }
+      end
+    end
+
+    def question_value(object, key)
+      return object[key] if object.key?(key)
+      return object[key.to_s] if object.key?(key.to_s)
+
+      nil
     end
 
     def parse_arguments(arguments)
@@ -235,6 +286,51 @@ module Kward
               path: { type: "string", description: "Optional path relative to the skill folder. Defaults to SKILL.md." }
             },
             required: ["name"],
+            additionalProperties: false
+          }
+        }
+      }
+    end
+
+    def ask_user_question_schema
+      {
+        type: "function",
+        function: {
+          name: "ask_user_question",
+          description: "Ask the user one to four structured clarification questions in interactive mode. Supports single-select choices and custom typed answers.",
+          parameters: {
+            type: "object",
+            properties: {
+              questions: {
+                type: "array",
+                minItems: 1,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  properties: {
+                    question: { type: "string", description: "The question to ask." },
+                    header: { type: "string", description: "Short label shown in the overlay." },
+                    options: {
+                      type: "array",
+                      minItems: 2,
+                      maxItems: 4,
+                      items: {
+                        type: "object",
+                        properties: {
+                          label: { type: "string", description: "Choice label." },
+                          description: { type: "string", description: "Choice explanation." }
+                        },
+                        required: ["label", "description"],
+                        additionalProperties: false
+                      }
+                    }
+                  },
+                  required: ["question", "header", "options"],
+                  additionalProperties: false
+                }
+              }
+            },
+            required: ["questions"],
             additionalProperties: false
           }
         }
