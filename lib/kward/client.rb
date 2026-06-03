@@ -9,11 +9,13 @@ module Kward
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
 
-    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new)
+    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path)
       @openrouter_api_key = presence(api_key)
       @openai_access_token = presence(openai_access_token)
       @oauth = oauth
       @model = model
+      @config_path = File.expand_path(config_path)
+      @config = load_config
     end
 
     def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
@@ -218,7 +220,7 @@ module Kward
         stream: true,
         store: false,
         include: [],
-        reasoning: { effort: ENV.fetch("OPENAI_REASONING_EFFORT", "medium"), summary: "auto" }
+        reasoning: { effort: reasoning_effort, summary: "auto" }
       }
     end
 
@@ -277,10 +279,31 @@ module Kward
       return @model if @model
 
       if provider == "OpenRouter"
-        ENV.fetch("OPENROUTER_MODEL", "openai/gpt-5.5")
+        ENV["OPENROUTER_MODEL"] || config_value("openrouter_model", "model") || "openai/gpt-5.5"
       else
-        ENV.fetch("OPENAI_MODEL", "gpt-5.5")
+        ENV["OPENAI_MODEL"] || config_value("openai_model", "model") || "gpt-5.5"
       end
+    end
+
+    def reasoning_effort
+      ENV["OPENAI_REASONING_EFFORT"] || config_value("openai_reasoning_effort", "reasoning_effort", "thinking_level") || "medium"
+    end
+
+    def config_value(*keys)
+      keys.each do |key|
+        value = @config[key]
+        text = presence(value)
+        return text if text
+      end
+      nil
+    end
+
+    def load_config
+      return {} unless File.exist?(@config_path)
+
+      JSON.parse(File.read(@config_path))
+    rescue JSON::ParserError
+      raise "Invalid Kward config JSON: #{@config_path}"
     end
 
     def redact(text, token)
