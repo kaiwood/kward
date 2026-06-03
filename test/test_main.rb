@@ -243,6 +243,17 @@ class TestMain < Minitest::Test
     refute_includes output.string, TTY::Cursor.clear_screen_down
   end
 
+  def test_prompt_interface_enables_and_restores_keyboard_protocol
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.start
+    prompt.close
+
+    assert_includes output.string, "\e[>1u"
+    assert_includes output.string, "\e[<u"
+  end
+
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
@@ -278,6 +289,48 @@ class TestMain < Minitest::Test
     assert_equal "aZb", prompt.ask("You>")
   ensure
     input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_backspace_deletes_empty_line
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("hello\e[13;2u\b\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "hello", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_backspace_after_escape_return_shift_enter_deletes_empty_line
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("hello\e\r\x7F\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "hello", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_inserts_newline_on_shift_enter_variants
+    ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].each do |sequence|
+      assert_equal "hello\nworld", ask_prompt_with_input("hello#{sequence}world\r")
+    end
+  end
+
+  def test_prompt_interface_submits_on_csi_u_enter
+    assert_equal "hello", ask_prompt_with_input("hello\e[13u")
+  end
+
+  def test_prompt_interface_csi_u_backspace_deletes_empty_line
+    assert_equal "hello", ask_prompt_with_input("hello\e[13;2u\e[127u\r")
+  end
+
+  def test_prompt_interface_handles_bundled_csi_u_keys
+    assert_equal "hello", ask_prompt_with_input("hello\e[13;2u\e[127u\e[13u")
   end
 
   def test_prompt_interface_wraps_before_terminal_width
@@ -459,6 +512,18 @@ class TestMain < Minitest::Test
     cli = Kward::CLI.new(stdin: FakeInput.new("ignored", tty: true), client: FakeClient.new([]))
 
     assert_equal "", cli.piped_prompt
+  end
+
+  def ask_prompt_with_input(keys)
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write(keys)
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
   end
 
   def tool_call(name, args)

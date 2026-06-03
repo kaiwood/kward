@@ -5,6 +5,9 @@ require "tty-screen"
 module Kward
   class PromptInterface
     HELP_TEXT = "Enter sends • Shift+Enter inserts newline • /exit quits".freeze
+    KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
+    KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
+    SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
 
     def initialize(input: $stdin, output: $stdout)
       @input_io = input
@@ -18,6 +21,7 @@ module Kward
       @stream_block = nil
       @rendered_rows = 0
       @cursor_rendered_row = 0
+      @pending_keys = []
     end
 
     def start
@@ -25,6 +29,7 @@ module Kward
 
       @started = true
       @asking = true
+      @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
       @output_io.puts HELP_TEXT
       render
     end
@@ -33,6 +38,7 @@ module Kward
       return unless @started
 
       clear_prompt
+      @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
       @output_io.puts
       @output_io.flush
       @started = false
@@ -51,39 +57,15 @@ module Kward
       @prompt_label = message.to_s
       @input = ""
       @cursor = 0
+      @pending_keys.clear
       @asking = true
       render
 
       loop do
-        key = @reader.read_keypress(echo: false, raw: true)
-        key_name = @reader.console.keys[key]
-        case key_name
-        when :return, :enter
-          return submit_input
-        when :backspace
-          delete_before_cursor
-        when :delete
-          delete_at_cursor
-        when :left
-          @cursor -= 1 if @cursor.positive?
-        when :right
-          @cursor += 1 if @cursor < @input.length
-        when :home
-          @cursor = 0
-        when :end
-          @cursor = @input.length
-        else
-          case key
-          when "\n", "\r"
-            return submit_input
-          when "\b", "\x7F"
-            delete_before_cursor
-          when "\e"
-            handle_escape_sequence
-          else
-            insert_key(key)
-          end
-        end
+        key = read_key
+        result = handle_key(key)
+        return result if result.is_a?(String)
+
         render
       end
     end
@@ -122,8 +104,7 @@ module Kward
 
     def submit_input
       value = @input
-      move_cursor_to_end
-      @output_io.puts
+      clear_prompt
       @output_io.flush
       @input = ""
       @cursor = 0
@@ -133,9 +114,96 @@ module Kward
       value
     end
 
+    def read_key
+      @pending_keys.shift || @reader.read_keypress(echo: false, raw: true)
+    end
+
+    def handle_key(key)
+      return submit_input if key.nil?
+      csi_result = handle_csi_u_key(key)
+      return csi_result unless csi_result == false
+      return if handle_shift_enter_key(key)
+
+      key_name = @reader.console.keys[key]
+      case key_name
+      when :return, :enter
+        submit_input
+      when :backspace
+        delete_before_cursor
+      when :delete
+        delete_at_cursor
+      when :left
+        @cursor -= 1 if @cursor.positive?
+      when :right
+        @cursor += 1 if @cursor < @input.length
+      when :home
+        @cursor = 0
+      when :end
+        @cursor = @input.length
+      else
+        case key
+        when "\n", "\r"
+          submit_input
+        when "\b", "\x7F"
+          delete_before_cursor
+        when "\e"
+          handle_escape_sequence
+        else
+          insert_key(key)
+        end
+      end
+    end
+
     def handle_escape_sequence
-      sequence = read_pending_escape_sequence
-      insert_string("\n") if shift_enter_sequence?(sequence)
+      handle_shift_enter_key("\e#{read_pending_escape_sequence}")
+    end
+
+    def handle_csi_u_key(key)
+      match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
+      return false unless match
+
+      sequence = match[0]
+      code = match[1].to_i
+      modifier = (match[2] || "1").split(":", 2).first.to_i
+      queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+
+      case code
+      when 13
+        modifier == 2 ? insert_string("\n") : submit_input
+      when 8, 127
+        delete_before_cursor
+        nil
+      else
+        false
+      end
+    end
+
+    def handle_shift_enter_key(key)
+      sequence = shift_enter_sequence_for(key)
+      return false unless sequence
+
+      insert_string("\n")
+      queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+      true
+    end
+
+    def queue_pending_keys(keys)
+      remaining = keys.to_s
+      until remaining.empty?
+        token = next_key_token(remaining)
+        @pending_keys << token
+        remaining = remaining[token.length..] || ""
+      end
+    end
+
+    def next_key_token(keys)
+      keys.match(/\A\e\[[0-9;:]*[A-Za-z~]/)&.[](0) || keys[0, 1]
+    end
+
+    def shift_enter_sequence_for(key)
+      return nil unless key.is_a?(String)
+
+      SHIFT_ENTER_SEQUENCES.find { |sequence| key.start_with?(sequence) }
     end
 
     def read_pending_escape_sequence
@@ -146,12 +214,8 @@ module Kward
       sequence
     end
 
-    def shift_enter_sequence?(sequence)
-      ["[13;2u", "[27;2;13~"].include?(sequence)
-    end
-
     def insert_key(key)
-      return unless key.is_a?(String) && key.match?(/[[:print:]]/)
+      return unless key.is_a?(String) && key.length == 1 && key.match?(/[[:print:]]/)
 
       insert_string(key)
     end
