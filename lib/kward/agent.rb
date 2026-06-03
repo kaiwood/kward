@@ -60,18 +60,19 @@ module Kward
     def safe_answer(content)
       text = content.to_s
       return text unless claims_file_edit?(text)
-      return text if last_write_succeeded?
-      return "write_file returned an error or declined result, so I did not successfully change the file." if @conversation.last_write_result
+      return text if last_file_change_succeeded?
+      return "The file change tool returned an error or declined result, so I did not successfully change the file." if @conversation.last_file_change_result
 
-      "I have not changed any files. I need to use write_file successfully before claiming a file change."
+      "I have not changed any files. I need to use write_file or edit_file successfully before claiming a file change."
     end
 
     def claims_file_edit?(text)
       text.match?(/\b(I|I've|I have)\s+(changed|updated|modified|edited|created|deleted|wrote)\b/i)
     end
 
-    def last_write_succeeded?
-      @conversation.last_write_result&.fetch(:content, "")&.start_with?("Wrote ")
+    def last_file_change_succeeded?
+      content = @conversation.last_file_change_result&.fetch(:content, "")
+      content&.start_with?("Wrote ", "Edited ")
     end
   end
 end

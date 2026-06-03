@@ -12,7 +12,7 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 ruby test/test_main.rb
 ```
 
-In chat mode, the agent waits at `You>` until you ask something. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, and run shell commands with `run_shell_command` after confirmation. Existing files must be read in the current conversation before writing, and every write asks for confirmation first. Type `/exit` or `/quit` to leave.
+In chat mode, the agent waits at `You>` until you ask something. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, and run shell commands with `run_shell_command` after confirmation. Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Type `/exit` or `/quit` to leave.
 
 Auth options:
 

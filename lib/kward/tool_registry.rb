@@ -8,7 +8,7 @@ module Kward
     def initialize(workspace: Workspace.new, prompt: nil)
       @workspace = workspace
       @prompt = prompt
-      @schemas = [list_directory_schema, read_file_schema, write_file_schema, run_shell_command_schema].freeze
+      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema].freeze
     end
 
     def dispatch(tool_call, conversation)
@@ -23,6 +23,8 @@ module Kward
                   read_file(args, conversation)
                 when "write_file"
                   write_file(args, conversation)
+                when "edit_file"
+                  edit_file(args, conversation)
                 when "run_shell_command"
                   run_shell_command(args)
                 else
@@ -52,6 +54,13 @@ module Kward
       content = args["content"] || args[:content] || ""
 
       @workspace.write_file(path, content, read_paths: conversation.read_paths)
+    end
+
+    def edit_file(args, conversation)
+      path = args["path"] || args[:path] || ""
+      edits = args["edits"] || args[:edits] || []
+
+      @workspace.edit_file(path, edits, read_paths: conversation.read_paths)
     end
 
     def run_shell_command(args)
@@ -115,6 +124,37 @@ module Kward
               content: { type: "string", description: "Complete file content to write." }
             },
             required: ["path", "content"],
+            additionalProperties: false
+          }
+        }
+      }
+    end
+
+    def edit_file_schema
+      {
+        type: "function",
+        function: {
+          name: "edit_file",
+          description: "Edit an existing file inside the current workspace using exact text replacement. Existing files must be read first. Each old_text must match exactly once and edits must not overlap.",
+          parameters: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "Workspace-relative file path." },
+              edits: {
+                type: "array",
+                description: "One or more non-overlapping replacements matched against the original file content.",
+                items: {
+                  type: "object",
+                  properties: {
+                    old_text: { type: "string", description: "Exact text to replace. Must be unique in the original file." },
+                    new_text: { type: "string", description: "Replacement text." }
+                  },
+                  required: ["old_text", "new_text"],
+                  additionalProperties: false
+                }
+              }
+            },
+            required: ["path", "edits"],
             additionalProperties: false
           }
         }

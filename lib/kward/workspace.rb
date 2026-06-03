@@ -54,6 +54,24 @@ module Kward
       "Error: #{e.message}"
     end
 
+    def edit_file(path, edits, read_paths:)
+      resolved = workspace_path(path)
+      return "Error: not a file: #{path}" unless File.file?(resolved)
+      return "Error: existing file must be read before editing: #{path}" unless read_paths.include?(resolved)
+
+      size = File.size(resolved)
+      return "Error: file too large: #{path} is #{size} bytes; limit is #{@max_file_bytes} bytes" if size > @max_file_bytes
+
+      content = File.read(resolved)
+      result = apply_edits(path, content, edits)
+      return result[:error] if result[:error]
+
+      File.write(resolved, result[:content])
+      "Edited #{path}: replaced #{result[:count]} block(s)\n#{unified_diff(path, content, result[:content])}"
+    rescue SecurityError, Errno::ENOENT => e
+      "Error: #{e.message}"
+    end
+
     def run_shell_command(command, timeout_seconds: DEFAULT_COMMAND_TIMEOUT_SECONDS)
       command = command.to_s.strip
       return "Error: command is required" if command.empty?
@@ -122,6 +140,85 @@ module Kward
 
     def relative_path(path)
       Pathname.new(path).relative_path_from(@root).to_s
+    end
+
+    def apply_edits(path, content, edits)
+      return { error: "Error: edits must contain at least one replacement" } unless edits.is_a?(Array) && !edits.empty?
+
+      replacements = []
+      edits.each_with_index do |edit, index|
+        old_text = edit_value(edit, "old_text")
+        new_text = edit_value(edit, "new_text")
+        return { error: "Error: edits[#{index}].old_text must be a string" } unless old_text.is_a?(String)
+        return { error: "Error: edits[#{index}].new_text must be a string" } unless new_text.is_a?(String)
+        return { error: "Error: edits[#{index}].old_text must not be empty" } if old_text.empty?
+
+        matches = match_indexes(content, old_text)
+        return { error: "Error: edits[#{index}].old_text was not found in #{path}" } if matches.empty?
+        if matches.length > 1
+          return { error: "Error: edits[#{index}].old_text appears #{matches.length} times in #{path}; provide more context" }
+        end
+
+        replacements << { index: index, start: matches.first, length: old_text.length, new_text: new_text }
+      end
+
+      replacements.sort_by! { |replacement| replacement[:start] }
+      replacements.each_cons(2) do |left, right|
+        if left[:start] + left[:length] > right[:start]
+          return { error: "Error: edits[#{left[:index]}] and edits[#{right[:index]}] overlap in #{path}" }
+        end
+      end
+
+      new_content = content.dup
+      replacements.reverse_each do |replacement|
+        new_content[replacement[:start], replacement[:length]] = replacement[:new_text]
+      end
+      return { error: "Error: no changes made to #{path}" } if new_content == content
+
+      { content: new_content, count: replacements.length }
+    end
+
+    def edit_value(edit, key)
+      return nil unless edit.is_a?(Hash)
+
+      edit[key] || edit[key.to_sym]
+    end
+
+    def match_indexes(content, needle)
+      indexes = []
+      offset = 0
+      while (index = content.index(needle, offset))
+        indexes << index
+        offset = index + needle.length
+      end
+      indexes
+    end
+
+    def unified_diff(path, old_content, new_content)
+      old_lines = old_content.lines(chomp: true)
+      new_lines = new_content.lines(chomp: true)
+      prefix = 0
+      prefix += 1 while prefix < old_lines.length && prefix < new_lines.length && old_lines[prefix] == new_lines[prefix]
+
+      old_suffix = old_lines.length - 1
+      new_suffix = new_lines.length - 1
+      while old_suffix >= prefix && new_suffix >= prefix && old_lines[old_suffix] == new_lines[new_suffix]
+        old_suffix -= 1
+        new_suffix -= 1
+      end
+
+      context_start = [prefix - 3, 0].max
+      old_context_end = [old_suffix + 3, old_lines.length - 1].min
+      new_context_end = [new_suffix + 3, new_lines.length - 1].min
+      old_hunk_length = old_context_end >= context_start ? old_context_end - context_start + 1 : 0
+      new_hunk_length = new_context_end >= context_start ? new_context_end - context_start + 1 : 0
+
+      lines = ["--- #{path}", "+++ #{path}", "@@ -#{context_start + 1},#{old_hunk_length} +#{context_start + 1},#{new_hunk_length} @@"]
+      old_lines[context_start...prefix].to_a.each { |line| lines << " #{line}" }
+      old_lines[prefix..old_suffix].to_a.each { |line| lines << "-#{line}" }
+      new_lines[prefix..new_suffix].to_a.each { |line| lines << "+#{line}" }
+      old_lines[(old_suffix + 1)..old_context_end].to_a.each { |line| lines << " #{line}" }
+      lines.join("\n")
     end
 
     def truncate_output(output)

@@ -35,5 +35,11 @@ module Kward
     def last_write_result
       @messages.select { |message| message[:role] == "tool" && message[:name] == "write_file" }.last
     end
+
+    def last_file_change_result
+      @messages.select do |message|
+        message[:role] == "tool" && ["write_file", "edit_file"].include?(message[:name])
+      end.last
+    end
   end
 end

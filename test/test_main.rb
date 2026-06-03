@@ -389,10 +389,10 @@ class TestMain < Minitest::Test
     assert_empty client.seen_messages
   end
 
-  def test_tool_schemas_include_shell_command
+  def test_tool_schemas_include_edit_file_and_shell_command
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-    assert_equal ["list_directory", "read_file", "write_file", "run_shell_command"], tool_names
+    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command"], tool_names
   end
 
   def test_list_directory_and_read_file_still_work
@@ -407,6 +407,7 @@ class TestMain < Minitest::Test
 
     assert_match(/Error: path outside workspace:/, workspace.read_file("../Gemfile"))
     assert_match(/Error: path outside workspace:/, workspace.write_file("../outside.txt", "nope", read_paths: []))
+    assert_match(/Error: path outside workspace:/, workspace.edit_file("../Gemfile", [{ "old_text" => "x", "new_text" => "y" }], read_paths: []))
   end
 
   def test_reject_oversized_file
@@ -485,6 +486,111 @@ class TestMain < Minitest::Test
     File.delete(path) if path && File.exist?(path)
   end
 
+  def test_edit_file_requires_prior_successful_read
+    path = "kward_edit_requires_read.txt"
+    File.write(path, "old\n")
+    workspace = Kward::Workspace.new
+
+    result = workspace.edit_file(path, [{ "old_text" => "old", "new_text" => "new" }], read_paths: [])
+
+    assert_equal "Error: existing file must be read before editing: #{path}", result
+    assert_equal "old\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_edit_file_applies_exact_replacement_after_read_and_returns_diff
+    path = "kward_edit_exact.txt"
+    File.write(path, "one\ntwo\nthree\n")
+    workspace = Kward::Workspace.new
+    conversation = Kward::Conversation.new
+    content = workspace.read_file(path)
+    conversation.mark_read(workspace.resolved_path(path)) unless content.start_with?("Error:")
+
+    result = workspace.edit_file(path, [{ "old_text" => "two", "new_text" => "TWO" }], read_paths: conversation.read_paths)
+
+    assert_includes result, "Edited #{path}: replaced 1 block(s)"
+    assert_includes result, "--- #{path}"
+    assert_includes result, "-two"
+    assert_includes result, "+TWO"
+    assert_equal "one\nTWO\nthree\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_edit_file_applies_multiple_disjoint_edits_against_original_content
+    path = "kward_edit_multiple.txt"
+    File.write(path, "alpha\nbeta\ngamma\n")
+    workspace = Kward::Workspace.new
+    conversation = Kward::Conversation.new
+    content = workspace.read_file(path)
+    conversation.mark_read(workspace.resolved_path(path)) unless content.start_with?("Error:")
+
+    result = workspace.edit_file(
+      path,
+      [
+        { "old_text" => "alpha", "new_text" => "ALPHA" },
+        { "old_text" => "gamma", "new_text" => "GAMMA" }
+      ],
+      read_paths: conversation.read_paths
+    )
+
+    assert_includes result, "Edited #{path}: replaced 2 block(s)"
+    assert_equal "ALPHA\nbeta\nGAMMA\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_edit_file_rejects_empty_duplicate_missing_and_overlapping_edits_without_changes
+    path = "kward_edit_invalid.txt"
+    File.write(path, "abc abc\n")
+    workspace = Kward::Workspace.new
+    conversation = Kward::Conversation.new
+    content = workspace.read_file(path)
+    conversation.mark_read(workspace.resolved_path(path)) unless content.start_with?("Error:")
+
+    assert_equal "Error: edits[0].old_text must not be empty", workspace.edit_file(path, [{ "old_text" => "", "new_text" => "x" }], read_paths: conversation.read_paths)
+    assert_match(/appears 2 times/, workspace.edit_file(path, [{ "old_text" => "abc", "new_text" => "x" }], read_paths: conversation.read_paths))
+    assert_equal "Error: edits[0].old_text was not found in #{path}", workspace.edit_file(path, [{ "old_text" => "missing", "new_text" => "x" }], read_paths: conversation.read_paths)
+    assert_equal "Error: edits[0] and edits[1] overlap in #{path}", workspace.edit_file(path, [{ "old_text" => "abc ", "new_text" => "x" }, { "old_text" => "bc abc", "new_text" => "y" }], read_paths: conversation.read_paths)
+    assert_equal "abc abc\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_tool_registry_edit_file_updates_existing_read_file
+    path = "kward_edit_tool.txt"
+    File.write(path, "hello world\n")
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new
+
+    registry.dispatch(tool_call("read_file", path: path), conversation)
+    result = registry.dispatch(tool_call("edit_file", path: path, edits: [{ old_text: "world", new_text: "there" }]), conversation)
+
+    assert_includes result, "Edited #{path}: replaced 1 block(s)"
+    assert_equal "hello there\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_agent_allows_claim_after_successful_edit_file
+    path = "kward_agent_edit.txt"
+    File.write(path, "old\n")
+    client = FakeClient.new([
+      assistant_tool_call("read_file", path: path),
+      assistant_tool_call("edit_file", path: path, edits: [{ old_text: "old", new_text: "new" }]),
+      { "role" => "assistant", "content" => "I edited the file." }
+    ])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new)
+
+    answer = agent.ask("edit it")
+
+    assert_equal "I edited the file.", answer
+    assert_equal "new\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
   def test_symlink_escape_remains_rejected
     skip "symlinks are unavailable" unless File.respond_to?(:symlink)
 
@@ -496,6 +602,7 @@ class TestMain < Minitest::Test
 
     assert_match(/Error: path outside workspace:/, workspace.read_file(link))
     assert_match(/Error: path outside workspace:/, workspace.write_file(link, "nope\n", read_paths: []) { true })
+    assert_match(/Error: path outside workspace:/, workspace.edit_file(link, [{ "old_text" => "outside", "new_text" => "nope" }], read_paths: []))
     assert_equal "outside\n", File.read(outside)
   ensure
     File.delete(link) if link && File.symlink?(link)
