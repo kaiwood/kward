@@ -1,6 +1,7 @@
 require "json"
 require "net/http"
 require "uri"
+require_relative "image_attachments"
 require_relative "openai_oauth"
 
 module Kward
@@ -204,8 +205,33 @@ module Kward
     end
 
     def request_payload(provider, messages, tools)
-      payload = { model: model_for(provider), messages: messages, tools: tools }
+      payload = { model: model_for(provider), messages: chat_messages(messages), tools: tools }
       payload
+    end
+
+    def chat_messages(messages)
+      messages.map do |message|
+        role = message[:role] || message["role"]
+        content = message[:content] || message["content"]
+        content_key = message.key?(:content) ? :content : "content"
+        if role.to_s == "assistant" && content.is_a?(Array)
+          next message.merge(content_key => plain_content(content))
+        end
+        next message unless role.to_s == "user" && content.is_a?(Array)
+
+        message.merge(content_key => chat_user_content(content))
+      end
+    end
+
+    def chat_user_content(content)
+      content.filter_map do |part|
+        type = part[:type] || part["type"]
+        if type == "text"
+          { type: "text", text: part[:text] || part["text"] || "" }
+        elsif type == "image"
+          { type: "image_url", image_url: { url: ImageAttachments.data_url(part) } }
+        end
+      end
     end
 
     def codex_payload(messages, tools)
@@ -233,14 +259,15 @@ module Kward
         content = message[:content] || message["content"] || ""
         case role.to_s
         when "system"
-          instructions << content.to_s
+          instructions << plain_content(content).to_s
         when "tool"
           input << {
             type: "function_call_output",
             call_id: message[:tool_call_id] || message["tool_call_id"] || message[:name] || message["name"] || "tool-call",
-            output: content.to_s
+            output: plain_content(content).to_s
           }
         when "assistant"
+          content = plain_content(content)
           input << codex_message("assistant", content.to_s) unless content.to_s.empty?
           (message[:tool_calls] || message["tool_calls"] || []).each do |tool_call|
             function = tool_call[:function] || tool_call["function"] || {}
@@ -252,16 +279,39 @@ module Kward
             }
           end
         else
-          input << codex_message("user", content.to_s)
+          input << codex_user_message(content)
         end
       end
 
       [instructions.join("\n\n"), input]
     end
 
+    def codex_user_message(content)
+      return codex_message("user", content.to_s) unless content.is_a?(Array)
+
+      parts = content.filter_map do |part|
+        type = part[:type] || part["type"]
+        if type == "text"
+          { type: "input_text", text: part[:text] || part["text"] || "" }
+        elsif type == "image"
+          { type: "input_image", image_url: ImageAttachments.data_url(part) }
+        end
+      end
+      { type: "message", role: "user", content: parts }
+    end
+
     def codex_message(role, text)
       type = role == "assistant" ? "output_text" : "input_text"
       { type: "message", role: role, content: [{ type: type, text: text }] }
+    end
+
+    def plain_content(content)
+      return content unless content.is_a?(Array)
+
+      content.filter_map do |part|
+        type = part[:type] || part["type"]
+        part[:text] || part["text"] if type == "text"
+      end.join
     end
 
     def codex_tool_schema(tool)

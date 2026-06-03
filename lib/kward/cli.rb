@@ -4,6 +4,7 @@ require_relative "agent"
 require_relative "ansi"
 require_relative "client"
 require_relative "events"
+require_relative "image_attachments"
 require_relative "openai_oauth"
 require_relative "tool_registry"
 require_relative "workspace"
@@ -234,6 +235,14 @@ module Kward
 
     def print_user_transcript(input)
       @prompt.say("\n#{colored("You>", :blue, :bold)} #{input}\n")
+      print_pasted_images(input)
+    end
+
+    def print_pasted_images(input)
+      Kward::ImageAttachments.image_parts_from_text(input).each do |part|
+        sequence = Kward::ImageAttachments.terminal_image_sequence(part)
+        @prompt.say(sequence) if sequence
+      end
     end
 
     def chat(messages, tools:, on_reasoning_delta: nil, on_assistant_delta: nil)

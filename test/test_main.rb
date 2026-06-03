@@ -3,6 +3,7 @@ require "stringio"
 require_relative "../lib/main"
 require_relative "../lib/kward/ansi"
 require_relative "../lib/kward/client"
+require_relative "../lib/kward/conversation"
 require_relative "../lib/kward/cli"
 require_relative "../lib/kward/prompt_interface"
 require_relative "../lib/kward/tool_registry"
@@ -76,7 +77,7 @@ class TestMain < Minitest::Test
   end
 
   def test_codex_oauth_defaults_to_gpt_5_5_medium_reasoning
-    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil))
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
     payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
 
@@ -84,6 +85,37 @@ class TestMain < Minitest::Test
     assert_equal({ effort: "medium", summary: "auto" }, payload[:reasoning])
     assert_equal true, payload[:stream]
     assert_equal false, payload[:store]
+  end
+
+  def test_conversation_attaches_pasted_image_path
+    path = "kward_image_attach.png"
+    File.binwrite(path, "png bytes")
+    conversation = Kward::Conversation.new(system_message: nil)
+
+    conversation.append_user("look at #{path}")
+
+    content = conversation.messages.last[:content]
+    assert_equal "look at #{path}", content.first[:text]
+    assert_equal "image/png", content[1][:media_type]
+    assert_equal Base64.strict_encode64("png bytes"), content[1][:data]
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_terminal_image_sequence_renders_inline_image_escape
+    part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
+
+    sequence = Kward::ImageAttachments.terminal_image_sequence(part, env: {})
+
+    assert_equal "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64("pasted.png")}:#{Base64.strict_encode64("png bytes")}\e\\", sequence
+  end
+
+  def test_terminal_image_sequence_uses_iterm_protocol_in_iterm
+    part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
+
+    sequence = Kward::ImageAttachments.terminal_image_sequence(part, env: { "TERM_PROGRAM" => "iTerm.app" })
+
+    assert_equal "\e]1337;File=inline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64("pasted.png")}:#{Base64.strict_encode64("png bytes")}\a", sequence
   end
 
   def test_codex_oauth_reads_model_and_reasoning_from_config
@@ -260,7 +292,7 @@ class TestMain < Minitest::Test
     conversation = cli.interactive_loop(agent: agent)
 
     assert_empty client.seen_messages
-    assert_empty conversation.messages
+    assert_equal Kward::Conversation.new.messages, conversation.messages
   end
 
   def test_prompt_interface_renders_empty_composer_before_typing
@@ -484,6 +516,23 @@ class TestMain < Minitest::Test
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     input&.close unless input&.closed?
+  end
+
+  def test_interactive_turn_displays_pasted_image
+    path = "kward_user_transcript.png"
+    original_term_program = ENV["TERM_PROGRAM"]
+    ENV.delete("TERM_PROGRAM")
+    File.binwrite(path, "png bytes")
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:print_user_transcript, "look #{path}")
+
+    assert_includes prompt.output.join("\n"), "You> look #{path}"
+    assert_includes prompt.output.join("\n"), "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
+  ensure
+    original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
+    File.delete(path) if path && File.exist?(path)
   end
 
   def test_interactive_turn_returns_prompt_queued_during_streaming

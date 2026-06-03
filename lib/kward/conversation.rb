@@ -1,4 +1,5 @@
 require "set"
+require_relative "image_attachments"
 require_relative "prompts"
 
 module Kward
@@ -6,12 +7,12 @@ module Kward
     attr_reader :messages, :read_paths
 
     def initialize(system_message: SYSTEM_MESSAGE)
-      @messages = [system_message]
+      @messages = system_message.nil? ? [] : [system_message]
       @read_paths = Set.new
     end
 
     def append_user(content)
-      @messages << { role: "user", content: content }
+      @messages << { role: "user", content: ImageAttachments.content_from_text(content) }
     end
 
     def append_assistant(message)
