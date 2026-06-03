@@ -521,10 +521,93 @@ class TestMain < Minitest::Test
     assert_empty client.seen_messages
   end
 
-  def test_tool_schemas_include_edit_file_and_shell_command
+  def test_tool_schemas_include_edit_file_shell_command_and_web_research
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command"], tool_names
+    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research"], tool_names
+  end
+
+  def test_web_research_uses_duckduckgo_results
+    html = '<div class="result"><a class="result__a" href="https://example.com/ruby">Ruby News</a><a class="result__snippet">Ruby release notes</a></div>'
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, html)
+    )
+    research = Kward::WebResearch.new(http_client: http, searxng_instances: [])
+
+    result = research.search("queries" => ["ruby news"])
+
+    assert_includes result, "# Web research"
+    assert_includes result, "Provider: duckduckgo"
+    assert_includes result, "Ruby News"
+    assert_includes result, "https://example.com/ruby"
+  end
+
+  def test_web_research_falls_back_to_searxng_json
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(429, "rate limited"),
+      ["GET", "https://searx.test/search?q=ruby&format=json"] => fake_response(200, JSON.dump(
+        "results" => [{ "title" => "Fallback Result", "url" => "https://example.com/fallback", "content" => "search snippet" }]
+      ))
+    )
+    research = Kward::WebResearch.new(http_client: http, searxng_instances: ["https://searx.test"])
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "Provider fallback note: DuckDuckGo search failed with HTTP 429"
+    assert_includes result, "Provider: searxng"
+    assert_includes result, "search snippet"
+  end
+
+  def test_web_research_uses_searxng_html_when_json_is_disabled
+    html = '<article class="result"><h3><a href="https://example.com/html-page">HTML Result</a></h3><p class="content">HTML snippet</p></article>'
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(500, "nope"),
+      ["GET", "https://searx.test/search?q=ruby&format=json"] => fake_response(403, "json disabled"),
+      ["GET", "https://searx.test/search?q=ruby"] => fake_response(200, html)
+    )
+    research = Kward::WebResearch.new(http_client: http, searxng_instances: ["https://searx.test"])
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "HTML Result"
+    assert_includes result, "HTML snippet"
+  end
+
+  def test_web_research_returns_clear_error_when_all_providers_fail
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(500, "nope"),
+      ["GET", "https://searx.test/search?q=ruby&format=json"] => fake_response(403, "json disabled")
+    )
+    research = Kward::WebResearch.new(http_client: http, searxng_instances: ["https://searx.test"])
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "Error: web_research found no results"
+    assert_includes result, "DuckDuckGo search failed with HTTP 500"
+    assert_includes result, "SearXNG search failed with HTTP 403"
+  end
+
+  def test_web_research_truncates_large_output
+    html = "<div class=\"result\"><a class=\"result__a\" href=\"https://example.com/large\">Large</a><a class=\"result__snippet\">#{"x" * 500}</a></div>"
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, html)
+    )
+    research = Kward::WebResearch.new(http_client: http, searxng_instances: [], max_output_bytes: 120)
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "... truncated to 120 bytes"
+  end
+
+  def test_tool_registry_dispatches_web_research
+    research = FakeWebResearch.new("research result")
+    registry = Kward::ToolRegistry.new(web_research: research)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("web_research", queries: ["ruby"]), conversation)
+
+    assert_equal "research result", result
+    assert_equal [{ "queries" => ["ruby"] }], research.calls
   end
 
   def test_list_directory_and_read_file_still_work
@@ -818,6 +901,51 @@ class TestMain < Minitest::Test
 
   def assistant_tool_call(name, args)
     { "role" => "assistant", "content" => nil, "tool_calls" => [tool_call(name, args)] }
+  end
+
+  def fake_response(code, body)
+    Kward::WebResearch::NetHttpClient::Response.new(code: code, body: body)
+  end
+
+  class FakeHttpClient
+    attr_reader :requests
+
+    def initialize(routes)
+      @routes = routes
+      @requests = []
+    end
+
+    def get(url, headers: {})
+      request("GET", url, headers: headers)
+    end
+
+    def post(url, form:, headers: {})
+      request("POST", url, headers: headers, form: form)
+    end
+
+    private
+
+    def request(method, url, headers:, form: nil)
+      @requests << { method: method, url: url, headers: headers, form: form }
+      response = @routes[[method, url]] || @routes[url]
+      raise "unexpected URL: #{method} #{url}" unless response
+
+      response
+    end
+  end
+
+  class FakeWebResearch
+    attr_reader :calls
+
+    def initialize(result)
+      @result = result
+      @calls = []
+    end
+
+    def search(args)
+      @calls << args
+      @result
+    end
   end
 
   class FakeClient

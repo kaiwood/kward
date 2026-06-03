@@ -1,14 +1,16 @@
 require "json"
+require_relative "web_research"
 require_relative "workspace"
 
 module Kward
   class ToolRegistry
     attr_reader :schemas
 
-    def initialize(workspace: Workspace.new, prompt: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new)
       @workspace = workspace
       @prompt = prompt
-      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema].freeze
+      @web_research = web_research
+      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema].freeze
     end
 
     def dispatch(tool_call, conversation)
@@ -27,6 +29,8 @@ module Kward
                   edit_file(args, conversation)
                 when "run_shell_command"
                   run_shell_command(args)
+                when "web_research"
+                  @web_research.search(args)
                 else
                   "Unknown tool: #{name}"
                 end
@@ -174,6 +178,34 @@ module Kward
               timeout_seconds: { type: "integer", description: "Optional timeout in seconds. Defaults to 30." }
             },
             required: ["command"],
+            additionalProperties: false
+          }
+        }
+      }
+    end
+
+    def web_research_schema
+      {
+        type: "function",
+        function: {
+          name: "web_research",
+          description: "Search the live web without an API key. Uses DuckDuckGo HTML search first, then public SearXNG instances as fallback.",
+          parameters: {
+            type: "object",
+            properties: {
+              queries: {
+                type: "array",
+                description: "One to four distinct web research queries. Prefer varied angles over near-duplicates.",
+                items: { type: "string" },
+                minItems: 1,
+                maxItems: 4
+              },
+              max_results: {
+                type: "integer",
+                description: "Optional maximum results per query. Defaults to 5 and is capped at 10."
+              }
+            },
+            required: ["queries"],
             additionalProperties: false
           }
         }

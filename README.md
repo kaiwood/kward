@@ -12,11 +12,13 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 ruby test/test_main.rb
 ```
 
-In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, and run shell commands with `run_shell_command` after confirmation. Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Type `/exit` or `/quit` to leave.
+In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, run shell commands with `run_shell_command` after confirmation, and search the web with `web_research`. Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Type `/exit` or `/quit` to leave.
 
 Composer keys: Enter sends, Shift+Enter inserts a newline, Up/Down browse prompt history, Ctrl+D exits an empty prompt. While assistant/tool output is streaming, the composer stays pinned and editable; pressing Enter queues the next prompt and sends it after the current response finishes. Multiline input grows the composer up to a capped height.
 
 ANSI colors are enabled automatically on TTY output. Set `NO_COLOR=1`, `CLICOLOR=0`, or `KWARD_COLOR=never` to disable colors; set `KWARD_COLOR=always` or `FORCE_COLOR=1` to force them.
+
+Web research uses no API key by default. It tries DuckDuckGo HTML search first, then bundled public SearXNG instances as fallback. Queries are sent over the network to those services.
 
 Auth options:
 
