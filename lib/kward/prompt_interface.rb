@@ -16,6 +16,8 @@ module Kward
     BRACKETED_PASTE_RESTORE = "\e[?2004l".freeze
     BRACKETED_PASTE_START = "\e[200~".freeze
     BRACKETED_PASTE_END = "\e[201~".freeze
+    CURSOR_SHOW = "\e[?25h".freeze
+    CURSOR_HIDE = "\e[?25l".freeze
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
     EXIT_INPUT = :exit_input
     SELECT_CANCEL = :select_cancel
@@ -51,6 +53,7 @@ module Kward
       @last_height = screen_height
       @reserved_rows = 0
       @color_enabled = ANSI.enabled?(output)
+      @cursor_visible = true
     end
 
     def start
@@ -73,6 +76,7 @@ module Kward
         restore_scroll_region_locked
         @output_io.print(BRACKETED_PASTE_RESTORE)
         @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
+        set_cursor_visible_locked(true, force: true)
         @output_io.puts
         @output_io.flush
         @started = false
@@ -1128,6 +1132,7 @@ module Kward
       @last_width = screen_width
       @last_height = screen_height
       move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
+      render_cursor_visibility_locked
       @output_io.flush
     end
 
@@ -1167,6 +1172,19 @@ module Kward
 
       _rows, cursor_row, cursor_col = composer_layout(screen_width)
       move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
+      render_cursor_visibility_locked
+    end
+
+    def render_cursor_visibility_locked
+      visible = !(@question_state && !selected_question_choice&.fetch(:custom, false))
+      set_cursor_visible_locked(visible)
+    end
+
+    def set_cursor_visible_locked(visible, force: false)
+      return if !force && @cursor_visible == visible
+
+      @output_io.print(visible ? CURSOR_SHOW : CURSOR_HIDE)
+      @cursor_visible = visible
     end
 
     def reserve_composer_region_locked
@@ -1269,7 +1287,10 @@ module Kward
       @last_width = screen_width
       @last_height = screen_height
       reset_stream_position_from_transcript_locked
-      move_to_screen(composer_top_row + cursor_row, cursor_col + 1) if @asking
+      if @asking
+        move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
+        render_cursor_visibility_locked
+      end
     end
 
     def redraw_transcript_locked
@@ -1320,6 +1341,7 @@ module Kward
 
     def composer_layout(width)
       return compact_composer_layout(width) if screen_height < 4
+      return question_composer_layout(width) if @question_state
 
       content_width = [width - 4, 1].max
       input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
@@ -1335,6 +1357,15 @@ module Kward
       [rows, cursor_row, cursor_col]
     end
 
+    def question_composer_layout(width)
+      content_width = [width - 4, 1].max
+      overlay_rows = active_overlay_rows(width)
+      rows = overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
+      return [rows, question_custom_cursor_row, question_custom_cursor_col(width)] if selected_question_choice&.fetch(:custom, false)
+
+      [rows, overlay_rows.length + 1, 2]
+    end
+
     def active_overlay_rows(width)
       return question_overlay_rows(width) if @question_state
       return selection_overlay_rows(width) if @select_state
@@ -1343,57 +1374,154 @@ module Kward
     end
 
     def question_overlay_rows(width)
-      title = "Question #{@question_state[:index]}/#{@question_state[:total]} · #{@question_state[:header]} · ↑/↓ select · Enter choose · Esc cancel"
-      rows = [slash_overlay_row(title, width), slash_overlay_row(@question_state[:question], width)]
+      title = "Question #{@question_state[:index]}/#{@question_state[:total]} · #{@question_state[:header]}"
+      lines = [
+        overlay_text_line(@question_state[:question].to_s, :bold),
+        overlay_text_line("↑/↓ select · Enter choose · Esc cancel", :muted),
+        overlay_blank_line
+      ]
       question_choices.each_with_index do |choice, index|
-        marker = index == question_selection_index ? "›" : " "
-        if choice[:custom]
-          text = @input.strip.empty? ? "#{marker} Type something." : "#{marker} Type something: #{@input.strip}"
-        else
-          description = choice[:description].empty? ? "" : " — #{choice[:description]}"
-          text = "#{marker} #{choice[:label]}#{description}"
-        end
-        rows << slash_overlay_row(text, width)
+        selected = index == question_selection_index
+        lines << overlay_choice_line(choice_text(choice, selected: selected), selected: selected)
       end
-      rows
+      overlay_card_rows(title, lines, width)
     end
 
     def slash_overlay_rows(width)
       return [] unless slash_overlay_visible?
 
-      rows = [slash_overlay_row("Slash commands", width)]
-      slash_overlay_matches.each_with_index do |command, index|
-        marker = index == @slash_selection_index ? "›" : " "
+      lines = slash_overlay_matches.each_with_index.map do |command, index|
         hint = command[:argument_hint].empty? ? "" : " #{command[:argument_hint]}"
         description = command[:description].empty? ? "" : " — #{command[:description]}"
-        rows << slash_overlay_row("#{marker} /#{command[:name]}#{hint}#{description}", width)
+        overlay_choice_line("/#{command[:name]}#{hint}#{description}", selected: index == @slash_selection_index)
       end
-      rows
+      overlay_card_rows("Slash commands", lines, width)
     end
 
     def selection_overlay_rows(width)
       matches = selection_matches
-      rows = [slash_overlay_row("Sessions · ↑/↓ select · Enter open · Esc cancel", width)]
-      return rows + [slash_overlay_row("  No matches", width)] if matches.empty?
+      lines = [overlay_text_line("↑/↓ select · Enter open · Esc cancel", :muted), overlay_blank_line]
+      if matches.empty?
+        lines << overlay_text_line("No matches", :muted)
+        return overlay_card_rows("Sessions", lines, width)
+      end
 
       visible = visible_selection_matches(matches)
       start_index = visible[:start]
       visible[:choices].each_with_index do |choice, offset|
         index = start_index + offset
-        marker = index == selection_index ? "›" : " "
-        rows << slash_overlay_row("#{marker} #{choice}", width)
+        lines << overlay_choice_line(choice, selected: index == selection_index)
       end
-      rows
+      overlay_card_rows("Sessions", lines, width)
     end
 
     def visible_selection_matches(matches)
-      max_rows = [[screen_height - 4, 1].max, 8].min
+      max_rows = [[screen_height - 7, 1].max, 8].min
       start = [[selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
       { start: start, choices: matches[start, max_rows] || [] }
     end
 
+    def question_custom_cursor_row
+      4 + question_choices.index { |choice| choice[:custom] }.to_i
+    end
+
+    def question_custom_cursor_col(width)
+      card_width = overlay_card_width(width)
+      left_padding = [width - card_width, 0].max / 2
+      custom_prefix = selected_question_choice&.fetch(:custom, false) || !@input.empty? ? "Type something: " : "Type something."
+      visible_before_cursor = display_question_input(@input[0...@cursor])
+      [[left_padding + 2 + 2 + custom_prefix.length + visible_before_cursor.length, width - 1].min, 0].max
+    end
+
+    def choice_text(choice, selected: false)
+      if choice[:custom]
+        if selected || !@input.empty?
+          "Type something: #{display_question_input(@input)}"
+        else
+          "Type something."
+        end
+      else
+        description = choice[:description].empty? ? "" : " — #{choice[:description]}"
+        "#{choice[:label]}#{description}"
+      end
+    end
+
+    def display_question_input(value)
+      value.to_s.gsub(/\s+/, " ").strip
+    end
+
+    def overlay_card_rows(title, content_rows, width)
+      card_width = overlay_card_width(width)
+      inner_width = [card_width - 4, 1].max
+      rows = [overlay_top_border(title, card_width)]
+      rows.concat(content_rows.map { |row| overlay_content_row(row, inner_width) })
+      rows << overlay_bottom_border(card_width)
+      rows.map { |row| center_overlay_row(row, width) }
+    end
+
+    def overlay_card_width(width)
+      return width if width < 32
+
+      [[width - 4, 32].max, 96].min
+    end
+
+    def overlay_top_border(title, card_width)
+      title = visible_truncate(title.to_s, [card_width - 4, 1].max)
+      plain_length = ANSI.strip(title).length
+      colored("╭", :cyan) + " #{colored(title, :cyan, :bold)} " + colored("─" * [card_width - plain_length - 4, 0].max, :cyan) + colored("╮", :cyan)
+    end
+
+    def overlay_bottom_border(card_width)
+      colored("╰#{"─" * [card_width - 2, 0].max}╯", :cyan)
+    end
+
+    def overlay_content_row(row, inner_width)
+      text = visible_truncate(row[:text], inner_width)
+      text = colored(text, :cyan, :bold) if row[:selected]
+      colored("│", :cyan) + " " + visible_ljust(text, inner_width) + " " + colored("│", :cyan)
+    end
+
+    def overlay_text_line(text, style = nil)
+      rendered = case style
+                 when :bold
+                   colored(text.to_s, :bold)
+                 when :muted
+                   colored(text.to_s, :gray)
+                 else
+                   text.to_s
+                 end
+      { text: rendered }
+    end
+
+    def overlay_blank_line
+      { text: "" }
+    end
+
+    def overlay_choice_line(text, selected: false)
+      { text: "#{selected ? "›" : " "} #{text}", selected: selected }
+    end
+
+    def center_overlay_row(row, width)
+      plain_length = ANSI.strip(row).length
+      padding = [width - plain_length, 0].max
+      left = padding / 2
+      right = padding - left
+      (" " * left) + row + (" " * right)
+    end
+
+    def visible_ljust(text, width)
+      text.to_s + (" " * [width - ANSI.strip(text.to_s).length, 0].max)
+    end
+
+    def visible_truncate(text, width)
+      plain = ANSI.strip(text.to_s)
+      return text.to_s if plain.length <= width
+
+      plain[0, width]
+    end
+
     def slash_overlay_row(text, width)
-      text.to_s[0, width].ljust(width)
+      visible_ljust(visible_truncate(text.to_s, width), width)
     end
 
     def compact_composer_layout(width)
