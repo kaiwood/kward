@@ -1,6 +1,7 @@
 require "minitest/autorun"
 require "stringio"
 require_relative "../lib/main"
+require_relative "../lib/kward/ansi"
 require_relative "../lib/kward/client"
 require_relative "../lib/kward/cli"
 require_relative "../lib/kward/prompt_interface"
@@ -201,6 +202,33 @@ class TestMain < Minitest::Test
 
     assert_equal "call_1", message["tool_calls"].first["id"]
     assert_equal "list_directory", message["tool_calls"].first["function"]["name"]
+  end
+
+  def test_ansi_colorizes_when_enabled_and_strips_sequences
+    colored = Kward::ANSI.colorize("Assistant>", :green, :bold, enabled: true)
+
+    assert_equal "\e[32;1mAssistant>\e[0m", colored
+    assert_equal "Assistant>", Kward::ANSI.strip(colored)
+    assert_equal "Assistant>", Kward::ANSI.colorize("Assistant>", :green, enabled: false)
+  end
+
+  def test_ansi_enablement_respects_environment_overrides
+    output = FakeInput.new("", tty: false)
+
+    assert Kward::ANSI.enabled?(output, env: { "KWARD_COLOR" => "always" })
+    refute Kward::ANSI.enabled?(output, env: { "KWARD_COLOR" => "never" })
+    refute Kward::ANSI.enabled?(FakeInput.new("", tty: true), env: { "NO_COLOR" => "1" })
+    assert Kward::ANSI.enabled?(output, env: { "FORCE_COLOR" => "1" })
+  end
+
+  def test_cli_colors_stream_labels_when_forced
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+    output = capture_io do
+      cli.send(:start_stream_block, "Assistant")
+    end.first
+
+    assert_includes output, "\e[32;1mAssistant>\e[0m"
   end
 
   def test_module_split_keeps_one_shot_mode_working
@@ -774,7 +802,7 @@ class TestMain < Minitest::Test
   end
 
   def strip_ansi(text)
-    text.gsub(/\e\[[0-9;?]*[A-Za-z~]/, "")
+    Kward::ANSI.strip(text)
   end
 
   def tool_call(name, args)

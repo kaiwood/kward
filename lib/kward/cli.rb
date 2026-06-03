@@ -1,6 +1,7 @@
 require "json"
 require "tty-prompt"
 require_relative "agent"
+require_relative "ansi"
 require_relative "client"
 require_relative "events"
 require_relative "openai_oauth"
@@ -16,6 +17,7 @@ module Kward
       @stdin = stdin
       @prompt = prompt
       @client = client
+      @color_enabled = ANSI.enabled?($stdout)
     end
 
     def run
@@ -61,7 +63,7 @@ module Kward
 
     def login(oauth: OpenAIOAuth.new)
       path = oauth.login(prompt: @prompt)
-      @prompt.say("Saved OpenAI OAuth login to #{path}")
+      @prompt.say("#{colored("Saved", :green, :bold)} OpenAI OAuth login to #{path}")
     end
 
     def interactive_loop(agent: nil)
@@ -71,7 +73,7 @@ module Kward
         tool_registry: ToolRegistry.new(workspace: Workspace.new, prompt: @prompt)
       )
 
-      @prompt.say("Ruby CLI Agent")
+      @prompt.say(colored("Ruby CLI Agent", :cyan, :bold))
       help = "Ask a question and press Enter. Type /exit to quit."
       help += " Use Shift+Enter for new lines." if prompt_interface?
       @prompt.say("#{help}\n")
@@ -86,7 +88,7 @@ module Kward
         next if command.empty?
         break if command == "/exit"
         if command == "/status"
-          @prompt.say("\nAssistant> #{STATUS_MESSAGE}\n")
+          @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{STATUS_MESSAGE}\n")
           next
         end
 
@@ -178,7 +180,7 @@ module Kward
       raise error if error
 
       finish_stream_block if streamed
-      @prompt.say("\nAssistant> #{answer}\n") unless streamed || answer.to_s.empty?
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{answer}\n") unless streamed || answer.to_s.empty?
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       queued_inputs
     end
@@ -225,7 +227,7 @@ module Kward
         end
       end
       finish_stream_block if streamed
-      @prompt.say("\nAssistant> #{answer}\n") unless streamed || answer.to_s.empty?
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{answer}\n") unless streamed || answer.to_s.empty?
       []
     end
 
@@ -282,7 +284,7 @@ module Kward
       return if @stream_block == label
 
       puts if @stream_block
-      puts "\n#{label}>"
+      puts "\n#{colored("#{label}>", label_color(label), :bold)}"
       @stream_block = label
     end
 
@@ -292,6 +294,25 @@ module Kward
       else
         puts if @stream_block
         @stream_block = nil
+      end
+    end
+
+    def colored(text, *styles)
+      ANSI.colorize(text, *styles, enabled: @color_enabled)
+    end
+
+    def label_color(label)
+      case label
+      when "Reasoning"
+        :yellow
+      when "Assistant"
+        :green
+      when "Tool"
+        :magenta
+      when "Tool output"
+        :cyan
+      else
+        :blue
       end
     end
 

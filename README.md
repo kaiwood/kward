@@ -16,6 +16,8 @@ In chat mode, the agent shows a boxed bottom composer. It can inspect the worksp
 
 Composer keys: Enter sends, Shift+Enter inserts a newline, Up/Down browse prompt history, Ctrl+D exits an empty prompt. While assistant/tool output is streaming, the composer stays pinned and editable; pressing Enter queues the next prompt and sends it after the current response finishes. Multiline input grows the composer up to a capped height.
 
+ANSI colors are enabled automatically on TTY output. Set `NO_COLOR=1`, `CLICOLOR=0`, or `KWARD_COLOR=never` to disable colors; set `KWARD_COLOR=always` or `FORCE_COLOR=1` to force them.
+
 Auth options:
 
 - OpenAI OAuth: put `openai_oauth_client_id` in `~/.kward/config.json`, then run `ruby lib/main.rb login` and complete the browser redirect flow. OAuth tokens are saved to `~/.kward/auth.json` with file mode `0600`.

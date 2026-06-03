@@ -2,6 +2,7 @@ require "thread"
 require "tty-cursor"
 require "tty-reader"
 require "tty-screen"
+require_relative "ansi"
 
 module Kward
   class PromptInterface
@@ -41,6 +42,7 @@ module Kward
       @last_width = screen_width
       @last_height = screen_height
       @reserved_rows = 0
+      @color_enabled = ANSI.enabled?(output)
     end
 
     def start
@@ -173,7 +175,7 @@ module Kward
           if @stream_block
             write_transcript_text_locked("\n")
           end
-          write_transcript_text_locked("#{label}>\n")
+          write_transcript_text_locked("#{colored("#{label}>", label_color(label), :bold)}\n")
           @stream_block = label
           @output_io.flush
         end
@@ -614,7 +616,8 @@ module Kward
 
     def top_border(width)
       title = composer_title
-      "╭#{title}#{"─" * [width - title.length - 2, 0].max}╮"
+      plain_title = ANSI.strip(title)
+      "#{colored("╭", :blue)}#{title}#{colored("─" * [width - plain_title.length - 2, 0].max, :blue)}#{colored("╮", :blue)}"
     end
 
     def composer_title
@@ -629,11 +632,11 @@ module Kward
     end
 
     def bottom_border(width)
-      "╰#{"─" * [width - 2, 0].max}╯"
+      colored("╰#{"─" * [width - 2, 0].max}╯", :blue)
     end
 
     def box_content_row(row, content_width)
-      "│ #{row[0, content_width].to_s.ljust(content_width)} │"
+      "#{colored("│", :blue)} #{row[0, content_width].to_s.ljust(content_width)} #{colored("│", :blue)}"
     end
 
     def max_visible_input_rows
@@ -719,7 +722,7 @@ module Kward
 
     def update_stream_position(text)
       width = screen_width
-      text.each_char do |char|
+      ANSI.strip(text).each_char do |char|
         case char
         when "\n", "\r"
           @stream_col = 0
@@ -739,6 +742,25 @@ module Kward
         @last_height = current_height
       end
       changed
+    end
+
+    def colored(text, *styles)
+      ANSI.colorize(text, *styles, enabled: @color_enabled)
+    end
+
+    def label_color(label)
+      case label
+      when "Reasoning"
+        :yellow
+      when "Assistant"
+        :green
+      when "Tool"
+        :magenta
+      when "Tool output"
+        :cyan
+      else
+        :blue
+      end
     end
 
     def screen_width
