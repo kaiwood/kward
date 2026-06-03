@@ -46,6 +46,10 @@ module Kward
           name: @name
         })
       end
+
+      def delete_if_unused
+        @store.delete_unused_session(self)
+      end
     end
 
     def initialize(config_dir: ConfigFiles.config_dir, cwd: Dir.pwd)
@@ -98,9 +102,7 @@ module Kward
       messages = records.filter_map do |record|
         record["message"] if record["type"] == "message" && record["message"].is_a?(Hash)
       end
-      name = records.filter_map do |record|
-        record["name"] if record["type"] == "session_info"
-      end.last
+      name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
 
       conversation = Conversation.new(messages: messages, read_paths: read_paths)
@@ -120,6 +122,17 @@ module Kward
       Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
         session_info(path)
       end.sort_by { |info| info.modified_at || Time.at(0) }.reverse.first(limit)
+    end
+
+    def delete_unused_session(session)
+      path = session.path
+      return false if session_named?(session)
+      return false unless unused_session_file?(path)
+
+      File.delete(path)
+      true
+    rescue StandardError
+      false
     end
 
     def session_dir
@@ -155,13 +168,47 @@ module Kward
       end
     end
 
+    def session_named?(session)
+      return true unless session.name.to_s.strip.empty?
+
+      name = session_name(records_from_file(session.path))
+      !name.to_s.strip.empty?
+    rescue StandardError
+      true
+    end
+
+    def unused_session_file?(path)
+      records = strict_records_from_file(path)
+      return false unless records
+
+      header = records.find { |record| record["type"] == "session" }
+      return false unless header && header["id"].to_s != ""
+
+      records.none? do |record|
+        next false unless record["type"] == "message"
+
+        ["user", "assistant", "tool"].include?(message_role(record["message"] || {}))
+      end
+    end
+
+    def session_name(records)
+      record = records.select { |item| item["type"] == "session_info" }.last
+      record ? record["name"] : nil
+    end
+
+    def strict_records_from_file(path)
+      File.readlines(path, chomp: true).map { |line| JSON.parse(line) }
+    rescue JSON::ParserError
+      nil
+    end
+
     def session_info(path)
       records = records_from_file(path)
       header = records.find { |record| record["type"] == "session" }
       return nil unless header && header["id"].to_s != ""
 
       messages = records.select { |record| record["type"] == "message" }.map { |record| record["message"] }.compact
-      name = records.filter_map { |record| record["name"] if record["type"] == "session_info" }.last
+      name = session_name(records)
       first_message = messages.find { |message| message_role(message) == "user" }
       stats = File.stat(path)
 

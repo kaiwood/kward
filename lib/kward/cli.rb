@@ -17,6 +17,7 @@ module Kward
     RESTORED_TOOL_OUTPUT_LIMIT = 2_000
     BUILTIN_SLASH_COMMANDS = [
       { name: "exit", description: "Exit the interactive session.", argument_hint: "" },
+      { name: "quit", description: "Exit the interactive session.", argument_hint: "" },
       { name: "new", description: "Start a new session.", argument_hint: "" },
       { name: "resume", description: "Resume a saved session.", argument_hint: "[path]" },
       { name: "name", description: "Name or clear the current session.", argument_hint: "[name]" },
@@ -33,6 +34,7 @@ module Kward
       @client = client
       @session_store = session_store
       @active_session = nil
+      @cleanup_sessions = []
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -87,12 +89,12 @@ module Kward
       setup_interactive_prompt
       session_store = interactive_session_store(agent)
       if session_store && agent.nil?
-        @active_session = session_store.create
+        @active_session = track_session(session_store.create)
         conversation = Conversation.new
         @active_session.attach(conversation)
         agent = build_interactive_agent(conversation)
       elsif session_store
-        @active_session = session_store.create
+        @active_session = track_session(session_store.create)
         @active_session.attach(agent.conversation)
       else
         agent ||= build_interactive_agent(Conversation.new)
@@ -114,7 +116,7 @@ module Kward
         next if command.empty?
         input = selected_slash_command_input(input) || input
         command = input.strip
-        break if command == "/exit"
+        break if ["/exit", "/quit"].include?(command)
         handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
         agent = replacement_agent if replacement_agent
         next if handled
@@ -129,7 +131,11 @@ module Kward
       @prompt.say("\nGoodbye.")
       agent&.conversation
     ensure
-      @prompt.close if prompt_interface?
+      begin
+        @prompt.close if prompt_interface?
+      ensure
+        cleanup_unused_sessions
+      end
     end
 
     def piped_prompt
@@ -145,6 +151,18 @@ module Kward
       return nil if agent
 
       SessionStore.new
+    end
+
+    def track_session(session)
+      @cleanup_sessions << session if session
+      session
+    end
+
+    def cleanup_unused_sessions
+      @cleanup_sessions.reverse_each do |session|
+        session.delete_if_unused if session.respond_to?(:delete_if_unused)
+      end
+      @cleanup_sessions.clear
     end
 
     def build_interactive_agent(conversation)
@@ -201,7 +219,7 @@ module Kward
     def start_new_session(session_store)
       return say_sessions_unavailable unless session_store
 
-      @active_session = session_store.create
+      @active_session = track_session(session_store.create)
       conversation = Conversation.new
       @active_session.attach(conversation)
       @prompt.say("\nStarted new session: #{@active_session.path}\n")
@@ -216,6 +234,7 @@ module Kward
       return nil if path.to_s.empty?
 
       @active_session, conversation = session_store.load(path, workspace: Workspace.new)
+      track_session(@active_session)
       @prompt.say("\nResumed session: #{@active_session.path}\n")
       render_conversation_transcript(conversation)
       build_interactive_agent(conversation)
@@ -238,7 +257,7 @@ module Kward
     def clone_session(session_store, agent)
       return say_sessions_unavailable unless session_store
 
-      @active_session = session_store.create_from_conversation(agent.conversation)
+      @active_session = track_session(session_store.create_from_conversation(agent.conversation))
       @prompt.say("\nCloned session: #{@active_session.path}\n")
       render_conversation_transcript(agent.conversation)
       agent

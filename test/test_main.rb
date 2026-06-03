@@ -497,6 +497,60 @@ class TestMain < Minitest::Test
     end
   end
 
+  def test_unused_session_removed_on_exit
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+    end
+  end
+
+  def test_non_empty_session_kept_on_exit
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["hello", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new(["reply"]), session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 1, files.length
+      assert jsonl_records(files.first).any? { |record| record["type"] == "message" && record["message"]["role"] == "user" }
+    end
+  end
+
+  def test_named_empty_session_kept_on_exit
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/name Useful", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 1, files.length
+      assert jsonl_records(files.first).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" }
+    end
+  end
+
+  def test_quit_exits_like_exit
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      client = RecordingClient.new([])
+      prompt = FakePrompt.new(["/quit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_empty client.seen_messages
+      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+    end
+  end
+
   def test_one_shot_does_not_create_session_file
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
