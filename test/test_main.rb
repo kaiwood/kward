@@ -283,6 +283,18 @@ class TestMain < Minitest::Test
     assert_equal 5, conversation.messages.length
   end
 
+  def test_interactive_loop_redraw_command_refreshes_prompt
+    prompt = FakePrompt.new(["/redraw", "/exit"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_equal 1, prompt.redraw_count
+    assert_empty client.seen_messages
+  end
+
   def test_interactive_loop_exits_when_prompt_returns_nil
     prompt = FakePrompt.new([nil])
     client = RecordingClient.new([])
@@ -472,6 +484,135 @@ class TestMain < Minitest::Test
 
     stripped = strip_ansi(output.string)
     assert_includes stripped, "Tool output>\r\n.git/\r\n.gitignore\r\nREADME.md\r\n"
+  end
+
+  def test_prompt_interface_advances_after_full_width_stream_chunk
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    TTY::Screen.define_singleton_method(:width) { 10 }
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.write_delta("a" * 10)
+    prompt.write_delta("next")
+
+    assert_includes output.string, "\r\nnext"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+  end
+
+  def test_prompt_interface_resets_scroll_region_and_rerenders_on_resize
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_height = TTY::Screen.method(:height)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+    TTY::Screen.define_singleton_method(:height) { 12 }
+
+    prompt.send(:handle_resize_locked)
+    prompt.send(:render_prompt_locked)
+
+    assert_includes output.string, "\e[r"
+    assert_includes output.string, TTY::Cursor.clear_screen
+    assert_match(/\e\[1;\d+r/, output.string)
+    assert_includes output.string, "╭ You "
+  ensure
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_redraw_replays_visible_transcript_and_composer
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.say("first\nsecond")
+    output.truncate(0)
+    output.rewind
+
+    prompt.redraw
+
+    assert_includes output.string, TTY::Cursor.clear_screen
+    assert_includes output.string, "first\r\nsecond"
+    assert_includes output.string, "╭ You "
+  end
+
+  def test_prompt_interface_clears_between_old_and_new_composer_when_height_grows
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@last_width, 80)
+    prompt.instance_variable_set(:@last_height, 10)
+    prompt.instance_variable_set(:@reserved_rows, 3)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+
+    prompt.send(:handle_resize_locked)
+
+    assert_includes output.string, "\e[8;1H#{TTY::Cursor.clear_line}"
+    assert_includes output.string, "\e[20;1H#{TTY::Cursor.clear_line}"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_clears_wrapped_old_composer_rows_when_resized_narrower
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@last_width, 120)
+    prompt.instance_variable_set(:@last_height, 20)
+    prompt.instance_variable_set(:@reserved_rows, 3)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 30 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+
+    prompt.send(:handle_resize_locked)
+
+    assert_includes output.string, "\e[9;1H#{TTY::Cursor.clear_line}"
+    assert_includes output.string, "\e[20;1H#{TTY::Cursor.clear_line}"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_reserves_composer_rows_after_resized_clear_for_output
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt.start
+    output.truncate(0)
+    output.rewind
+    TTY::Screen.define_singleton_method(:height) { 10 }
+
+    prompt.send(:clear_prompt_for_output_locked)
+
+    assert_includes output.string, "\e[r"
+    assert_includes output.string, "\e[1;7r"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_uses_compact_composer_on_tiny_screens
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:height) { 3 }
+    prompt.instance_variable_set(:@input, "hello")
+    prompt.instance_variable_set(:@cursor, 5)
+
+    rows, cursor_row, = prompt.send(:composer_layout, 20)
+
+    assert_equal 1, rows.length
+    assert_equal 0, cursor_row
+    assert_includes rows.join, "You> hello"
+  ensure
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
   def test_prompt_interface_caps_boxed_composer_height
@@ -1048,12 +1189,13 @@ class TestMain < Minitest::Test
   end
 
   class FakePrompt
-    attr_reader :output
+    attr_reader :output, :redraw_count
 
     def initialize(inputs, confirmations: [])
       @inputs = inputs
       @confirmations = confirmations
       @output = []
+      @redraw_count = 0
     end
 
     def ask(_message)
@@ -1066,6 +1208,10 @@ class TestMain < Minitest::Test
 
     def say(message)
       @output << message
+    end
+
+    def redraw
+      @redraw_count += 1
     end
   end
 

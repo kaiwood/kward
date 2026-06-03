@@ -9,6 +9,7 @@ module Kward
     HELP_TEXT = "Enter sends • Shift+Enter inserts newline • ↑/↓ history • Ctrl+D exits empty prompt".freeze
     BUSY_HELP_TEXT = "Streaming • type next prompt • Enter queues • Shift+Enter inserts newline".freeze
     COMPOSER_MAX_INPUT_ROWS = 6
+    TRANSCRIPT_BUFFER_LIMIT = 200_000
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
@@ -35,6 +36,8 @@ module Kward
       @cursor_rendered_row = 0
       @prompt_gap_rows = 0
       @stream_col = 0
+      @stream_pending_wrap = false
+      @transcript_buffer = +""
       @pending_keys = []
       @history = []
       @history_index = nil
@@ -102,14 +105,20 @@ module Kward
       end
 
       loop do
-        key = read_key
+        key = read_key(nonblock: true)
         result = nil
         @mutex.synchronize do
-          result = handle_key(key)
-          render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT
+          if key.nil?
+            render_prompt_locked if handle_resize_locked
+          else
+            result = handle_key(key)
+            render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT
+          end
         end
         return result if result.is_a?(String)
         return nil if result == EXIT_INPUT
+
+        sleep 0.02 if key.nil?
       end
     end
 
@@ -158,7 +167,7 @@ module Kward
       key = read_key(nonblock: true)
       @mutex.synchronize do
         if key.nil?
-          render_prompt_locked if resized?
+          render_prompt_locked if handle_resize_locked
           return nil
         end
 
@@ -201,12 +210,28 @@ module Kward
       end
     end
 
+    def redraw
+      @mutex.synchronize do
+        redraw_screen_locked
+        @output_io.flush
+      end
+    end
+
     private
 
     def write_transcript_text_locked(text)
+      append_transcript_buffer(text.to_s)
       output_text = terminal_newlines(text.to_s)
+      advance_pending_stream_wrap_locked(output_text)
       @output_io.print(output_text)
       update_stream_position(output_text)
+    end
+
+    def append_transcript_buffer(text)
+      @transcript_buffer << ANSI.strip(text)
+      return if @transcript_buffer.length <= TRANSCRIPT_BUFFER_LIMIT
+
+      @transcript_buffer = @transcript_buffer[-TRANSCRIPT_BUFFER_LIMIT, TRANSCRIPT_BUFFER_LIMIT]
     end
 
     def terminal_newlines(text)
@@ -255,8 +280,7 @@ module Kward
     end
 
     def read_key(nonblock: false)
-      pending = nil
-      @mutex.synchronize { pending = @pending_keys.shift unless @pending_keys.empty? }
+      pending = @pending_keys.shift unless @pending_keys.empty?
       return pending if pending
 
       @reader.read_keypress(echo: false, raw: true, nonblock: nonblock)
@@ -491,6 +515,7 @@ module Kward
     def render_prompt_locked
       return unless @started && @asking
 
+      handle_resize_locked
       rows, cursor_row, cursor_col = composer_layout(screen_width)
       ensure_scroll_region_locked(rows.length)
       render_composer_rows_locked(rows)
@@ -511,12 +536,15 @@ module Kward
     end
 
     def clear_prompt_locked
+      handle_resize_locked
       clear_composer_region_locked
       @rendered_rows = 0
       @cursor_rendered_row = 0
     end
 
     def clear_prompt_for_output_locked
+      handle_resize_locked
+      reserve_composer_region_locked if @started && @asking
       clear_composer_region_locked
       @rendered_rows = 0
       @cursor_rendered_row = 0
@@ -525,9 +553,14 @@ module Kward
     end
 
     def prepare_transcript_output_locked
+      handle_resize_locked
+      reserve_composer_region_locked
+      move_to_transcript_cursor_locked
+    end
+
+    def reserve_composer_region_locked
       rows, = composer_layout(screen_width)
       ensure_scroll_region_locked(rows.length)
-      move_to_transcript_cursor_locked
     end
 
     def ensure_scroll_region_locked(row_count)
@@ -538,6 +571,24 @@ module Kward
       @reserved_rows = new_reserved_rows
       @output_io.print("\e[1;#{transcript_bottom_row}r")
       clear_composer_region_locked(rows_to_clear)
+    end
+
+    def handle_resize_locked
+      current_width = screen_width
+      current_height = screen_height
+      return false if current_width == @last_width && current_height == @last_height
+
+      old_width = @last_width
+      old_height = @last_height
+      old_reserved_rows = @reserved_rows
+      restore_scroll_region_locked
+      rows_to_clear = resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)
+      clear_resized_composer_region_locked(old_height, current_height, rows_to_clear)
+      @reserved_rows = 0
+      @last_width = current_width
+      @last_height = current_height
+      redraw_screen_locked
+      true
     end
 
     def restore_scroll_region_locked
@@ -554,21 +605,111 @@ module Kward
       end
     end
 
-    def clear_composer_region_locked(rows_to_clear = @reserved_rows)
+    def clear_composer_region_locked(rows_to_clear = nil)
+      rows_to_clear ||= [@reserved_rows, @rendered_rows].max
+      clear_bottom_rows_locked(screen_height, rows_to_clear)
+    end
+
+    def resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)
+      return old_reserved_rows unless old_reserved_rows.positive?
+
+      return old_reserved_rows unless current_width < old_width
+
+      wrapped_rows_per_row = ((old_width - 1) / current_width) + 1
+      old_reserved_rows * wrapped_rows_per_row
+    end
+
+    def clear_resized_composer_region_locked(old_height, current_height, rows_to_clear)
       return unless rows_to_clear.positive?
 
-      top = [screen_height - rows_to_clear + 1, 1].max
-      top.upto(screen_height) do |row|
+      old_top = [old_height - rows_to_clear + 1, 1].max
+      current_top = [current_height - rows_to_clear + 1, 1].max
+      clear_screen_rows_locked([old_top, current_top].min, current_height)
+    end
+
+    def clear_bottom_rows_locked(height, rows_to_clear)
+      return unless rows_to_clear.positive?
+
+      bottom = [height, screen_height].min
+      top = [bottom - rows_to_clear + 1, 1].max
+      clear_screen_rows_locked(top, bottom)
+    end
+
+    def clear_screen_rows_locked(top, bottom)
+      top.upto(bottom) do |row|
         move_to_screen(row, 1)
         @output_io.print(TTY::Cursor.clear_line)
       end
     end
 
+    def redraw_screen_locked
+      return unless @started
+
+      restore_scroll_region_locked
+      @output_io.print(TTY::Cursor.clear_screen)
+      move_to_screen(1, 1)
+      @reserved_rows = 0
+      rows, cursor_row, cursor_col = composer_layout(screen_width)
+      ensure_scroll_region_locked(rows.length)
+      redraw_transcript_locked
+      render_composer_rows_locked(rows) if @asking
+      @rendered_rows = @asking ? rows.length : 0
+      @cursor_rendered_row = @asking ? cursor_row : 0
+      @last_width = screen_width
+      @last_height = screen_height
+      reset_stream_position_from_transcript_locked
+      move_to_screen(composer_top_row + cursor_row, cursor_col + 1) if @asking
+    end
+
+    def redraw_transcript_locked
+      visible_text = transcript_viewport_text(transcript_bottom_row, screen_width)
+      return if visible_text.empty?
+
+      move_to_screen(1, 1)
+      @output_io.print(terminal_newlines(visible_text))
+    end
+
+    def transcript_viewport_text(row_count, width)
+      return "" unless row_count.positive?
+
+      transcript_display_rows(width).last(row_count).join("\n")
+    end
+
+    def transcript_display_rows(width)
+      line_width = [width - 1, 1].max
+      @transcript_buffer.split(/\r\n|\r|\n/, -1).flat_map do |line|
+        chunks = line.scan(/.{1,#{line_width}}/m)
+        chunks.empty? ? [""] : chunks
+      end
+    end
+
+    def reset_stream_position_from_transcript_locked
+      rows = transcript_display_rows(screen_width)
+      @stream_col = rows.empty? ? 0 : rows.last.length
+      @stream_pending_wrap = false
+    end
+
     def move_to_transcript_cursor_locked
-      move_to_screen(transcript_bottom_row, [@stream_col + 1, screen_width].min)
+      if @stream_pending_wrap
+        move_to_screen(transcript_bottom_row, screen_width)
+      else
+        move_to_screen(transcript_bottom_row, [@stream_col + 1, screen_width].min)
+      end
+    end
+
+    def advance_pending_stream_wrap_locked(output_text)
+      return unless @stream_pending_wrap
+      return if output_text.empty? || output_text.start_with?("\r", "\n")
+
+      move_to_screen(transcript_bottom_row, screen_width)
+      @output_io.print("\r\n")
+      @stream_col = 0
+      @stream_pending_wrap = false
     end
 
     def composer_layout(width)
+      return compact_composer_layout(width) if screen_height < 4
+
       content_width = [width - 4, 1].max
       input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
       max_input_rows = max_visible_input_rows
@@ -580,6 +721,17 @@ module Kward
       cursor_row = 1 + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
       [rows, cursor_row, cursor_col]
+    end
+
+    def compact_composer_layout(width)
+      cursor_line, cursor_col = cursor_logical_position
+      prefix = "#{@prompt_label} "
+      line = input_lines[cursor_line] || ""
+      input_width = [width - prefix.length, 1].max
+      visible_start = [[cursor_col - input_width + 1, 0].max, [line.length - input_width, 0].max].min
+      visible = line[visible_start, input_width].to_s
+      row = "#{prefix}#{visible}"[0, width].to_s.ljust(width)
+      [[row], 0, [prefix.length + cursor_col - visible_start, width - 1].min]
     end
 
     def input_layout(content_width)
@@ -640,7 +792,7 @@ module Kward
     end
 
     def max_visible_input_rows
-      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 2].min, 1].max
+      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3].min, 1].max
     end
 
     def composer_top_row
@@ -726,22 +878,16 @@ module Kward
         case char
         when "\n", "\r"
           @stream_col = 0
+          @stream_pending_wrap = false
         else
+          @stream_pending_wrap = false
           @stream_col += 1
-          @stream_col = 0 if @stream_col >= width
+          if @stream_col >= width
+            @stream_col = 0
+            @stream_pending_wrap = true
+          end
         end
       end
-    end
-
-    def resized?
-      current_width = screen_width
-      current_height = screen_height
-      changed = current_width != @last_width || current_height != @last_height
-      if changed
-        @last_width = current_width
-        @last_height = current_height
-      end
-      changed
     end
 
     def colored(text, *styles)

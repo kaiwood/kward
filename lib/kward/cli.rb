@@ -75,7 +75,7 @@ module Kward
       )
 
       @prompt.say(colored("Ruby CLI Agent", :cyan, :bold))
-      help = "Ask a question and press Enter. Type /exit to quit."
+      help = "Ask a question and press Enter. Type /exit to quit. Use /redraw to refresh."
       help += " Use Shift+Enter for new lines." if prompt_interface?
       @prompt.say("#{help}\n")
 
@@ -90,6 +90,10 @@ module Kward
         break if command == "/exit"
         if command == "/status"
           @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{STATUS_MESSAGE}\n")
+          next
+        end
+        if command == "/redraw"
+          @prompt.redraw if @prompt.respond_to?(:redraw)
           next
         end
 
