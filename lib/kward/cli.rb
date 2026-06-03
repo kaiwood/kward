@@ -439,8 +439,7 @@ module Kward
     end
 
     def select_session_path(session_store)
-      active_path = @active_session&.path
-      sessions = session_store.recent.reject { |session| active_path && File.expand_path(session.path) == File.expand_path(active_path) }
+      sessions = session_store.recent
       if sessions.empty?
         @prompt.say("\nNo saved sessions found.\n")
         return nil

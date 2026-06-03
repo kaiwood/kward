@@ -704,6 +704,25 @@ class TestMain < Minitest::Test
     end
   end
 
+  def test_resume_picker_shows_renamed_active_session_immediately
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("selected session")
+      conversation.append_assistant("old reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{saved.path}", "/name Useful", "/resume", "/exit"], "Useful")
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal ["Session>"], prompt.select_messages
+      assert prompt.select_choices.first.any? { |choice| choice.start_with?("Useful —") }
+    end
+  end
+
   def test_interactive_prompt_slash_command_expands_template
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
@@ -1855,15 +1874,17 @@ class TestMain < Minitest::Test
   end
 
   class FakeSelectPrompt < FakePrompt
-    attr_reader :select_messages
+    attr_reader :select_messages, :select_choices
 
     def initialize(inputs, confirmations: [])
       super
       @select_messages = []
+      @select_choices = []
     end
 
     def select(message, choices)
       @select_messages << message
+      @select_choices << choices
       choices.find { |choice| choice.start_with?("/plan") } || choices.first
     end
   end
@@ -1876,6 +1897,7 @@ class TestMain < Minitest::Test
 
     def select(message, choices)
       @select_messages << message
+      @select_choices << choices
       choices.find { |choice| choice.include?(@selected_text) } || choices.first
     end
   end
