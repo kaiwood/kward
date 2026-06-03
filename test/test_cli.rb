@@ -55,6 +55,18 @@ class TestCLI < KwardTestCase
     assert_equal "hi", cli.one_shot("hello")
   end
 
+  def test_rpc_subcommand_starts_rpc_server
+    initialize_body = JSON.generate({ jsonrpc: "2.0", id: 1, method: "initialize" })
+    shutdown_body = JSON.generate({ jsonrpc: "2.0", id: 2, method: "shutdown" })
+    stdin = StringIO.new("Content-Length: #{initialize_body.bytesize}\r\n\r\n#{initialize_body}Content-Length: #{shutdown_body.bytesize}\r\n\r\n#{shutdown_body}")
+    cli = Kward::CLI.new(argv: ["rpc"], stdin: stdin, client: FakeClient.new([]))
+
+    output = capture_io { cli.run }.first
+
+    assert_includes output, '"protocolVersion":1'
+    assert_includes output, '"ok":true'
+  end
+
   def test_interactive_conversation_history_still_works
     prompt = FakePrompt.new(["hello", "again", "/exit"])
     client = RecordingClient.new(["reply 1", "reply 2"])

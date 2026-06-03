@@ -7,6 +7,7 @@ require_relative "config_files"
 require_relative "events"
 require_relative "image_attachments"
 require_relative "openai_oauth"
+require_relative "rpc/server"
 require_relative "session_store"
 require_relative "tool_registry"
 require_relative "workspace"
@@ -39,6 +40,11 @@ module Kward
     end
 
     def run
+      if @argv.first == "rpc" && @argv.length == 1
+        Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
+        return
+      end
+
       if ["login", "--login"].include?(@argv.first) && @argv.length == 1
         login
         return
