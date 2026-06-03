@@ -222,6 +222,7 @@ module Kward
       @active_session = track_session(session_store.create)
       conversation = Conversation.new
       @active_session.attach(conversation)
+      clear_prompt_transcript
       @prompt.say("\nStarted new session: #{@active_session.path}\n")
       build_interactive_agent(conversation)
     end
@@ -436,6 +437,10 @@ module Kward
     def say_sessions_unavailable
       @prompt.say("\nSessions are unavailable for this interactive loop.\n")
       nil
+    end
+
+    def clear_prompt_transcript
+      @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
     end
 
     def select_session_path(session_store)

@@ -99,6 +99,30 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_new_command_clears_prompt_transcript
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      output = StringIO.new
+      input, writer = IO.pipe
+      writer.write("hello\r/new\r/exit\r")
+      writer.close
+      prompt = Kward::PromptInterface.new(input: input, output: output)
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_includes strip_ansi(output.string), "You> hello"
+      assert_includes output.string, TTY::Cursor.clear_screen
+      after_clear = output.string.split(TTY::Cursor.clear_screen).last
+      refute_includes strip_ansi(after_clear), "You> hello"
+      refute_includes strip_ansi(after_clear), "Assistant>"
+      assert_includes strip_ansi(after_clear), "Started new session:"
+    ensure
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_non_empty_session_kept_on_exit
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

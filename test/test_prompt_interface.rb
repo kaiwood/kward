@@ -340,6 +340,21 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "╭ You "
   end
 
+  def test_prompt_interface_clear_transcript_removes_visible_transcript
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.say("former transcript")
+    output.truncate(0)
+    output.rewind
+
+    prompt.clear_transcript
+
+    assert_includes output.string, TTY::Cursor.clear_screen
+    refute_includes output.string, "former transcript"
+    assert_includes output.string, "╭ You "
+  end
+
   def test_prompt_interface_clears_between_old_and_new_composer_when_height_grows
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

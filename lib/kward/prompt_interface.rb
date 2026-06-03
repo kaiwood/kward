@@ -262,6 +262,17 @@ module Kward
       end
     end
 
+    def clear_transcript
+      @mutex.synchronize do
+        @transcript_buffer = +""
+        @stream_block = nil
+        @stream_col = 0
+        @stream_pending_wrap = false
+        redraw_screen_locked
+        @output_io.flush
+      end
+    end
+
     private
 
     def write_transcript_text_locked(text)
