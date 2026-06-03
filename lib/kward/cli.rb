@@ -61,20 +61,21 @@ module Kward
 
     def one_shot(input)
       streamed = false
+      markdown_chunks = []
       message = chat(
         Conversation.new.tap { |conversation| conversation.append_user(input) }.messages,
         tools: ToolRegistry.new.schemas,
         on_reasoning_delta: lambda do |delta|
           streamed = true
-          print_block_delta("Reasoning", delta)
+          append_markdown_delta(markdown_chunks, "Reasoning", delta)
         end,
         on_assistant_delta: lambda do |delta|
           streamed = true
-          print_block_delta("Assistant", delta)
+          append_markdown_delta(markdown_chunks, "Assistant", delta)
         end
       )
-      finish_stream_block if streamed
-      streamed ? "" : message.fetch("content", "")
+      flush_markdown_deltas(markdown_chunks) if streamed
+      streamed ? "" : render_markdown_transcript(message.fetch("content", ""))
     end
 
     def login(oauth: OpenAIOAuth.new)
@@ -305,12 +306,38 @@ module Kward
     def render_transcript_block(label, content)
       return if content.to_s.empty?
 
+      rendered = render_markdown_transcript(content)
       if prompt_interface?
-        print_block_delta(label, content)
+        print_block_delta(label, rendered)
         finish_stream_block
       else
-        @prompt.say("\n#{colored("#{label}>", label_color(label), :bold)}\n#{content}\n")
+        @prompt.say("\n#{colored("#{label}>", label_color(label), :bold)}\n#{rendered}\n")
       end
+    end
+
+    def render_markdown_transcript(content)
+      ANSI.markdown(content, enabled: @color_enabled)
+    end
+
+    def append_markdown_delta(chunks, label, delta)
+      text = delta.to_s
+      return if text.empty?
+
+      if chunks.last&.first == label
+        chunks.last[1] << text
+      else
+        chunks << [label, +text]
+      end
+    end
+
+    def flush_markdown_deltas(chunks)
+      chunks.each do |label, content|
+        next if content.empty?
+
+        print_block_delta(label, render_markdown_transcript(content))
+        finish_stream_block
+      end
+      chunks.clear
     end
 
     def message_reasoning(message)
@@ -557,6 +584,7 @@ module Kward
 
       queued_inputs = []
       streamed = false
+      markdown_chunks = []
       answer = nil
       error = nil
       @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
@@ -566,15 +594,17 @@ module Kward
           case event
           when Events::ReasoningDelta
             streamed = true
-            print_block_delta("Reasoning", event.delta)
+            append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
           when Events::AssistantDelta
             streamed = true
-            print_block_delta("Assistant", event.delta)
+            append_markdown_delta(markdown_chunks, "Assistant", event.delta)
           when Events::ToolCall
             streamed = true
+            flush_markdown_deltas(markdown_chunks)
             print_tool_call(event.tool_call)
           when Events::ToolResult
             streamed = true
+            flush_markdown_deltas(markdown_chunks)
             print_tool_result(event.tool_call, event.content)
           end
         end
@@ -590,8 +620,8 @@ module Kward
       drain_queued_input(queued_inputs)
       raise error if error
 
-      finish_stream_block if streamed
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{answer}\n") unless streamed || answer.to_s.empty?
+      flush_markdown_deltas(markdown_chunks) if streamed
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       queued_inputs
     end
@@ -621,24 +651,27 @@ module Kward
 
     def run_blocking_interactive_turn(agent, input)
       streamed = false
+      markdown_chunks = []
       answer = agent.ask(input) do |event|
         case event
         when Events::ReasoningDelta
           streamed = true
-          print_block_delta("Reasoning", event.delta)
+          append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
         when Events::AssistantDelta
           streamed = true
-          print_block_delta("Assistant", event.delta)
+          append_markdown_delta(markdown_chunks, "Assistant", event.delta)
         when Events::ToolCall
           streamed = true
+          flush_markdown_deltas(markdown_chunks)
           print_tool_call(event.tool_call)
         when Events::ToolResult
           streamed = true
+          flush_markdown_deltas(markdown_chunks)
           print_tool_result(event.tool_call, event.content)
         end
       end
-      finish_stream_block if streamed
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{answer}\n") unless streamed || answer.to_s.empty?
+      flush_markdown_deltas(markdown_chunks) if streamed
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
       []
     end
 

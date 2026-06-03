@@ -41,6 +41,45 @@ module Kward
       text.to_s.gsub(ESCAPE_PATTERN, "")
     end
 
+    def markdown(text, enabled: enabled?)
+      string = text.to_s
+      lines = string.lines(chomp: true)
+      rendered = []
+      in_fence = false
+
+      lines.each do |line|
+        if (match = line.match(/\A\s*```([^`]*)\s*\z/))
+          if in_fence
+            rendered << colorize("└" + "─" * 39, :gray, enabled: enabled)
+            in_fence = false
+          else
+            language = match[1].to_s.strip
+            label = language.empty? ? "code" : "code #{language}"
+            rendered << colorize("┌─ #{label}", :gray, enabled: enabled)
+            in_fence = true
+          end
+          next
+        end
+
+        if in_fence
+          rendered << colorize("│ #{line}", :dim, enabled: enabled)
+        elsif line.match?(/\A\#{1,6}\s+/)
+          rendered << colorize(line, :bold, enabled: enabled)
+        else
+          rendered << inline_code(line, enabled: enabled)
+        end
+      end
+
+      rendered << colorize("└" + "─" * 39, :gray, enabled: enabled) if in_fence
+      rendered.join("\n") + (string.end_with?("\n") ? "\n" : "")
+    end
+
+    def inline_code(line, enabled: enabled?)
+      line.gsub(/`([^`\n]+)`/) do
+        "`#{colorize(Regexp.last_match(1), :dim, enabled: enabled)}`"
+      end
+    end
+
     def forced_color?(env)
       force_color = env["FORCE_COLOR"]
       clicolor_force = env["CLICOLOR_FORCE"]

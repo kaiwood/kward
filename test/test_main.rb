@@ -385,6 +385,61 @@ class TestMain < Minitest::Test
     assert_equal "Assistant>", Kward::ANSI.colorize("Assistant>", :green, enabled: false)
   end
 
+  def test_ansi_markdown_renders_basic_styles
+    rendered = Kward::ANSI.markdown("# Heading\nUse `code`.\n\n```ruby\nputs :ok\n```\n- item\n", enabled: true)
+
+    assert_includes rendered, "\e[1m# Heading\e[0m"
+    assert_includes rendered, "`\e[2mcode\e[0m`"
+    assert_includes rendered, "\e[90m┌─ code ruby\e[0m"
+    assert_includes rendered, "\e[2m│ puts :ok\e[0m"
+    assert_includes rendered, "\e[90m└───────────────────────────────────────\e[0m"
+    assert_includes Kward::ANSI.strip(rendered), "- item"
+  end
+
+  def test_ansi_markdown_separates_code_fences_without_color
+    rendered = Kward::ANSI.markdown("```ruby\nputs :ok\n```\n", enabled: false)
+
+    assert_equal "┌─ code ruby\n│ puts :ok\n└───────────────────────────────────────\n", rendered
+  end
+
+  def test_one_shot_renders_markdown_without_streaming
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "# Plan\nRun `bundle test`.\n" }]))
+    cli.instance_variable_set(:@color_enabled, true)
+
+    output = cli.one_shot("hello")
+
+    assert_includes output, "\e[1m# Plan\e[0m"
+    assert_includes output, "`\e[2mbundle test\e[0m`"
+  end
+
+  def test_streamed_interactive_turn_renders_markdown_after_buffering
+    prompt = FakePrompt.new([])
+    client = MarkdownStreamingClient.new(["# Pla", "n\n```ruby\n", "puts :ok\n```\n"])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    cli.instance_variable_set(:@color_enabled, true)
+
+    output = capture_io do
+      cli.send(:run_blocking_interactive_turn, agent, "hello")
+    end.first
+
+    assert_includes output, "\e[1m# Plan\e[0m"
+    assert_includes output, "\e[90m┌─ code ruby\e[0m"
+    assert_includes output, "\e[2m│ puts :ok\e[0m"
+  end
+
+  def test_transcript_block_renders_markdown_when_colored
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+
+    cli.send(:render_transcript_block, "Assistant", "## Plan\nRun `bundle test`.\n")
+
+    output = prompt.output.join("\n")
+    assert_includes output, "\e[1m## Plan\e[0m"
+    assert_includes output, "`\e[2mbundle test\e[0m`"
+  end
+
   def test_ansi_enablement_respects_environment_overrides
     output = FakeInput.new("", tty: false)
 
@@ -1704,6 +1759,17 @@ class TestMain < Minitest::Test
       on_assistant_delta&.call(content)
       sleep 0.12
       { "role" => "assistant", "content" => content }
+    end
+  end
+
+  class MarkdownStreamingClient
+    def initialize(chunks)
+      @chunks = chunks
+    end
+
+    def chat(_messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
+      @chunks.each { |chunk| on_assistant_delta&.call(chunk) }
+      { "role" => "assistant", "content" => @chunks.join }
     end
   end
 
