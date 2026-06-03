@@ -9,7 +9,7 @@ bundle install
 ruby lib/main.rb login                   # sign in with OpenAI OAuth
 ruby lib/main.rb                         # start a multi-turn chat
 ruby lib/main.rb "Explain this Ruby file" # single prompt
-ruby test/test_main.rb
+ruby -Itest -e 'Dir["test/test_*.rb"].sort.each { |file| require_relative file }'
 ```
 
 In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, run shell commands with `run_shell_command` after confirmation, and search the web with `web_research`. Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Interactive chats are saved as per-workspace JSONL sessions under `~/.kward/sessions/`. Type `/exit` or `/quit` to leave.

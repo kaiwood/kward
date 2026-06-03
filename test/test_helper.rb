@@ -1,0 +1,253 @@
+require "fileutils"
+require "minitest/autorun"
+require "stringio"
+require "tmpdir"
+require_relative "../lib/main"
+require_relative "../lib/kward/ansi"
+require_relative "../lib/kward/client"
+require_relative "../lib/kward/conversation"
+require_relative "../lib/kward/cli"
+require_relative "../lib/kward/prompt_interface"
+require_relative "../lib/kward/tool_registry"
+require_relative "../lib/kward/workspace"
+
+class KwardTestCase < Minitest::Test
+  def ask_prompt_with_input(keys)
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write(keys)
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def poll_prompt_until(prompt, timeout: 1)
+    deadline = Time.now + timeout
+    loop do
+      result = prompt.poll_input
+      return result if yield(result)
+      raise "timed out waiting for prompt input" if Time.now > deadline
+
+      sleep 0.01
+    end
+  end
+
+  def strip_ansi(text)
+    Kward::ANSI.strip(text)
+  end
+
+  def with_env(values)
+    previous = {}
+    values.each do |key, value|
+      previous[key] = ENV[key]
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+    yield
+  ensure
+    previous.each do |key, value|
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+  end
+
+  def jsonl_records(path)
+    File.readlines(path, chomp: true).filter_map do |line|
+      JSON.parse(line)
+    rescue JSON::ParserError
+      nil
+    end
+  end
+
+  def tool_call(name, args)
+    {
+      "id" => "call_#{name}",
+      "type" => "function",
+      "function" => {
+        "name" => name,
+        "arguments" => JSON.dump(args)
+      }
+    }
+  end
+
+  def assistant_tool_call(name, args)
+    { "role" => "assistant", "content" => nil, "tool_calls" => [tool_call(name, args)] }
+  end
+
+  def fake_response(code, body)
+    Kward::WebResearch::NetHttpClient::Response.new(code: code, body: body)
+  end
+
+  class FakeHttpClient
+    attr_reader :requests
+
+    def initialize(routes)
+      @routes = routes
+      @requests = []
+    end
+
+    def get(url, headers: {})
+      request("GET", url, headers: headers)
+    end
+
+    def post(url, form:, headers: {})
+      request("POST", url, headers: headers, form: form)
+    end
+
+    private
+
+    def request(method, url, headers:, form: nil)
+      @requests << { method: method, url: url, headers: headers, form: form }
+      response = @routes[[method, url]] || @routes[url]
+      raise "unexpected URL: #{method} #{url}" unless response
+
+      response
+    end
+  end
+
+  class FakeWebResearch
+    attr_reader :calls
+
+    def initialize(result)
+      @result = result
+      @calls = []
+    end
+
+    def search(args)
+      @calls << args
+      @result
+    end
+  end
+
+  class FakeClient
+    def initialize(responses)
+      @responses = responses
+    end
+
+    def chat(_messages, tools: [])
+      @responses.shift
+    end
+  end
+
+  class FakeOAuth
+    def initialize(access_token)
+      @access_token = access_token
+    end
+
+    attr_reader :access_token
+  end
+
+  class RecordingClient
+    attr_reader :seen_messages
+
+    def initialize(responses)
+      @responses = responses
+      @seen_messages = []
+    end
+
+    def chat(messages, tools: [])
+      @seen_messages << messages.map(&:dup)
+      { "role" => "assistant", "content" => @responses.shift }
+    end
+  end
+
+  class StreamingRecordingClient
+    attr_reader :seen_messages
+
+    def initialize(responses)
+      @responses = responses
+      @seen_messages = []
+    end
+
+    def chat(messages, tools: [], on_assistant_delta: nil)
+      @seen_messages << messages.map(&:dup)
+      content = @responses.shift
+      on_assistant_delta&.call(content)
+      sleep 0.12
+      { "role" => "assistant", "content" => content }
+    end
+  end
+
+  class MarkdownStreamingClient
+    def initialize(chunks)
+      @chunks = chunks
+    end
+
+    def chat(_messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
+      @chunks.each { |chunk| on_assistant_delta&.call(chunk) }
+      { "role" => "assistant", "content" => @chunks.join }
+    end
+  end
+
+  class FakePrompt
+    attr_reader :output, :redraw_count
+
+    def initialize(inputs, confirmations: [])
+      @inputs = inputs
+      @confirmations = confirmations
+      @output = []
+      @redraw_count = 0
+    end
+
+    def ask(_message)
+      @inputs.shift
+    end
+
+    def yes?(_message, default: false)
+      @confirmations.empty? ? default : @confirmations.shift
+    end
+
+    def say(message)
+      @output << message
+    end
+
+    def redraw
+      @redraw_count += 1
+    end
+  end
+
+  class FakeSelectPrompt < FakePrompt
+    attr_reader :select_messages, :select_choices
+
+    def initialize(inputs, confirmations: [])
+      super
+      @select_messages = []
+      @select_choices = []
+    end
+
+    def select(message, choices)
+      @select_messages << message
+      @select_choices << choices
+      choices.find { |choice| choice.start_with?("/plan") } || choices.first
+    end
+  end
+
+  class FakeSessionSelectPrompt < FakeSelectPrompt
+    def initialize(inputs, selected_text)
+      super(inputs)
+      @selected_text = selected_text
+    end
+
+    def select(message, choices)
+      @select_messages << message
+      @select_choices << choices
+      choices.find { |choice| choice.include?(@selected_text) } || choices.first
+    end
+  end
+
+  class FakeInput
+    def initialize(content, tty:)
+      @content = content
+      @tty = tty
+    end
+
+    def tty?
+      @tty
+    end
+
+    def read
+      @content
+    end
+  end
+end
