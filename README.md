@@ -36,6 +36,25 @@ Example `~/.kward/config.json`:
 ```
 
 You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level.
+
+Prompt and skills can live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead.
+
+- `AGENTS.md`: appended to Kward's built-in system instructions when present.
+- `skills/<skill-name>/SKILL.md`: listed in the system instructions by frontmatter `name` and `description`. The assistant can call `read_skill` to load `SKILL.md` or related files inside that skill folder.
+
+Example skill:
+
+```markdown
+---
+name: planner
+description: Helps plan implementation work.
+---
+
+# Planner
+
+Use this when planning a code change.
+```
+
 - Optional env fallback: `OPENAI_ACCESS_TOKEN` or `OPENROUTER_API_KEY`.
 
 OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. `OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists. Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, or the config file values above.

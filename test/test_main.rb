@@ -1,5 +1,7 @@
+require "fileutils"
 require "minitest/autorun"
 require "stringio"
+require "tmpdir"
 require_relative "../lib/main"
 require_relative "../lib/kward/ansi"
 require_relative "../lib/kward/client"
@@ -129,6 +131,93 @@ class TestMain < Minitest::Test
     assert_equal({ effort: "high", summary: "auto" }, payload[:reasoning])
   ensure
     File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_config_agents_prompt_appends_from_config_dir
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      File.write(File.join(dir, "AGENTS.md"), "Config prompt instructions.\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        content = Kward::Conversation.new.messages.first[:content]
+
+        assert_includes content, "# AGENTS.md"
+        assert_includes content, "Config prompt instructions."
+      end
+    end
+  end
+
+  def test_config_skills_are_listed_without_body
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nSecret full body.\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        content = Kward::Conversation.new.messages.first[:content]
+
+        assert_includes content, "Available skills:"
+        assert_includes content, "- planner: Helps plan work."
+        assert_includes content, "use read_skill"
+        refute_includes content, "Secret full body."
+      end
+    end
+  end
+
+  def test_read_skill_reads_skill_and_related_file_from_config_dir
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nFull skill body.\n")
+      File.write(File.join(skill_dir, "details.md"), "Skill details.\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        registry = Kward::ToolRegistry.new
+        conversation = Kward::Conversation.new(system_message: nil)
+
+        assert_includes registry.dispatch(tool_call("read_skill", name: "planner"), conversation), "Full skill body."
+        assert_includes registry.dispatch(tool_call("read_skill", name: "planner", path: "details.md"), conversation), "Skill details."
+      end
+    end
+  end
+
+  def test_read_skill_rejects_path_traversal
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n")
+      File.write(File.join(dir, "skills", "outside.md"), "outside\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        registry = Kward::ToolRegistry.new
+        conversation = Kward::Conversation.new(system_message: nil)
+
+        assert_equal "Error: skill path outside skill folder: ../outside.md", registry.dispatch(tool_call("read_skill", name: "planner", path: "../outside.md"), conversation)
+      end
+    end
+  end
+
+  def test_invalid_config_prompt_and_skill_warn_and_skip
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      Dir.mkdir(File.join(dir, "AGENTS.md"))
+      invalid_skill_path = File.join(dir, "skills", "bad", "SKILL.md")
+      FileUtils.mkdir_p(invalid_skill_path)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        _stdout, stderr = capture_io do
+          content = Kward::Conversation.new.messages.first[:content]
+
+          refute_includes content, "Available skills:"
+        end
+
+        assert_includes stderr, "Warning: skipping Kward prompt file"
+        assert_includes stderr, "Warning: skipping Kward skill"
+      end
+    end
   end
 
   def test_config_model_and_thinking_level_apply_to_current_provider
@@ -715,7 +804,7 @@ class TestMain < Minitest::Test
   def test_tool_schemas_include_edit_file_shell_command_and_web_research
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research"], tool_names
+    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research", "read_skill"], tool_names
   end
 
   def test_web_research_uses_duckduckgo_results
@@ -1077,6 +1166,19 @@ class TestMain < Minitest::Test
 
   def strip_ansi(text)
     Kward::ANSI.strip(text)
+  end
+
+  def with_env(values)
+    previous = {}
+    values.each do |key, value|
+      previous[key] = ENV[key]
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
+    yield
+  ensure
+    previous.each do |key, value|
+      value.nil? ? ENV.delete(key) : ENV[key] = value
+    end
   end
 
   def tool_call(name, args)

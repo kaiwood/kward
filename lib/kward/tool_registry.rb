@@ -1,4 +1,5 @@
 require "json"
+require_relative "config_files"
 require_relative "web_research"
 require_relative "workspace"
 
@@ -10,7 +11,7 @@ module Kward
       @workspace = workspace
       @prompt = prompt
       @web_research = web_research
-      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema].freeze
+      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema, read_skill_schema].freeze
     end
 
     def dispatch(tool_call, conversation)
@@ -31,6 +32,8 @@ module Kward
                   run_shell_command(args)
                 when "web_research"
                   @web_research.search(args)
+                when "read_skill"
+                  read_skill(args)
                 else
                   "Unknown tool: #{name}"
                 end
@@ -72,6 +75,13 @@ module Kward
       timeout_seconds = args["timeout_seconds"] || args[:timeout_seconds] || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS
 
       @workspace.run_shell_command(command, timeout_seconds: timeout_seconds)
+    end
+
+    def read_skill(args)
+      name = args["name"] || args[:name] || ""
+      path = args["path"] || args[:path]
+
+      ConfigFiles.read_skill_file(name, path)
     end
 
     def parse_arguments(arguments)
@@ -206,6 +216,25 @@ module Kward
               }
             },
             required: ["queries"],
+            additionalProperties: false
+          }
+        }
+      }
+    end
+
+    def read_skill_schema
+      {
+        type: "function",
+        function: {
+          name: "read_skill",
+          description: "Read configured skill instructions or related files from the Kward config skills directory.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Configured skill name." },
+              path: { type: "string", description: "Optional path relative to the skill folder. Defaults to SKILL.md." }
+            },
+            required: ["name"],
             additionalProperties: false
           }
         }

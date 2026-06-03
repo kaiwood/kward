@@ -6,7 +6,7 @@ module Kward
   class Conversation
     attr_reader :messages, :read_paths
 
-    def initialize(system_message: SYSTEM_MESSAGE)
+    def initialize(system_message: Prompts.system_message)
       @messages = system_message.nil? ? [] : [system_message]
       @read_paths = Set.new
     end
