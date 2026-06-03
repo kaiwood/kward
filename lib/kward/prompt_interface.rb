@@ -466,6 +466,8 @@ module Kward
       case code
       when 13
         select_current_choice
+      when 27
+        SELECT_CANCEL
       when 8, 127
         select_delete_before_cursor
         nil

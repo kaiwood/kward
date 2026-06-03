@@ -804,6 +804,20 @@ class TestMain < Minitest::Test
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_cancels_on_csi_u_escape
+    ["\e[27u", "\e[27;1u"].each do |sequence|
+      input, writer = IO.pipe
+      output = StringIO.new
+      writer.write(sequence)
+      writer.close
+      prompt = Kward::PromptInterface.new(input: input, output: output)
+
+      assert_nil prompt.select("Session>", ["first", "second"])
+    ensure
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_prompt_interface_exits_on_ctrl_d_when_empty
     assert_nil ask_prompt_with_input("\x04")
   end
