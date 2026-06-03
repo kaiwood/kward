@@ -502,6 +502,7 @@ class TestMain < Minitest::Test
 
     queued = cli.send(:run_interactive_turn, agent, "first")
 
+    assert_includes strip_ansi(output.string), "You> first"
     assert_equal ["second"], queued
     assert_equal "first", client.seen_messages[0][1][:content]
   ensure

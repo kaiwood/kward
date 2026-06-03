@@ -142,6 +142,7 @@ module Kward
     end
 
     def run_interactive_turn(agent, input)
+      print_user_transcript(input) if prompt_interface?
       return run_blocking_interactive_turn(agent, input) unless prompt_interface?
 
       queued_inputs = []
@@ -229,6 +230,10 @@ module Kward
       finish_stream_block if streamed
       @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{answer}\n") unless streamed || answer.to_s.empty?
       []
+    end
+
+    def print_user_transcript(input)
+      @prompt.say("\n#{colored("You>", :blue, :bold)} #{input}\n")
     end
 
     def chat(messages, tools:, on_reasoning_delta: nil, on_assistant_delta: nil)
