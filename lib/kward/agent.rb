@@ -71,7 +71,8 @@ module Kward
     end
 
     def last_file_change_succeeded?
-      content = @conversation.last_file_change_result&.fetch(:content, "")
+      result = @conversation.last_file_change_result
+      content = result&.fetch(:content, nil) || result&.fetch("content", "")
       content&.start_with?("Wrote ", "Edited ")
     end
   end

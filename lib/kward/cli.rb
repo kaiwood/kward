@@ -7,23 +7,32 @@ require_relative "config_files"
 require_relative "events"
 require_relative "image_attachments"
 require_relative "openai_oauth"
+require_relative "session_store"
 require_relative "tool_registry"
 require_relative "workspace"
 
 module Kward
   class CLI
     STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"
+    RESTORED_TOOL_OUTPUT_LIMIT = 2_000
     BUILTIN_SLASH_COMMANDS = [
       { name: "exit", description: "Exit the interactive session.", argument_hint: "" },
+      { name: "new", description: "Start a new session.", argument_hint: "" },
+      { name: "resume", description: "Resume a saved session.", argument_hint: "[path]" },
+      { name: "name", description: "Name or clear the current session.", argument_hint: "[name]" },
+      { name: "clone", description: "Clone the current session.", argument_hint: "" },
+      { name: "export", description: "Export the current session as Markdown.", argument_hint: "[path]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" }
     ].freeze
 
-    def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new)
+    def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new, session_store: nil)
       @argv = argv
       @stdin = stdin
       @prompt = prompt
       @client = client
+      @session_store = session_store
+      @active_session = nil
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -75,12 +84,21 @@ module Kward
 
     def interactive_loop(agent: nil)
       setup_interactive_prompt
-      agent ||= Agent.new(
-        client: @client,
-        tool_registry: ToolRegistry.new(workspace: Workspace.new, prompt: @prompt)
-      )
+      session_store = interactive_session_store(agent)
+      if session_store && agent.nil?
+        @active_session = session_store.create
+        conversation = Conversation.new
+        @active_session.attach(conversation)
+        agent = build_interactive_agent(conversation)
+      elsif session_store
+        @active_session = session_store.create
+        @active_session.attach(agent.conversation)
+      else
+        agent ||= build_interactive_agent(Conversation.new)
+      end
 
       @prompt.say(colored("Ruby CLI Agent", :cyan, :bold))
+      @prompt.say("Session: #{@active_session.path}") if @active_session
       help = "Ask a question and press Enter. Type /exit to quit. Use /redraw to refresh."
       help += " Use Shift+Enter for new lines." if prompt_interface?
       @prompt.say("#{help}\n")
@@ -96,14 +114,9 @@ module Kward
         input = selected_slash_command_input(input) || input
         command = input.strip
         break if command == "/exit"
-        if command == "/status"
-          @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{STATUS_MESSAGE}\n")
-          next
-        end
-        if command == "/redraw"
-          @prompt.redraw if @prompt.respond_to?(:redraw)
-          next
-        end
+        handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
+        agent = replacement_agent if replacement_agent
+        next if handled
 
         input = expand_prompt_template(input) || input
         pending_inputs = run_interactive_turn(agent, input)
@@ -125,6 +138,343 @@ module Kward
     end
 
     private
+
+    def interactive_session_store(agent)
+      return @session_store if @session_store
+      return nil if agent
+
+      SessionStore.new
+    end
+
+    def build_interactive_agent(conversation)
+      Agent.new(
+        client: @client,
+        tool_registry: ToolRegistry.new(workspace: Workspace.new, prompt: @prompt),
+        conversation: conversation
+      )
+    end
+
+    def handle_local_slash_command(command, agent, session_store)
+      name, argument = parse_slash_command(command)
+      case name
+      when "status"
+        print_status
+        [true, nil]
+      when "redraw"
+        @prompt.redraw if @prompt.respond_to?(:redraw)
+        [true, nil]
+      when "new"
+        [true, start_new_session(session_store)]
+      when "resume"
+        [true, resume_session(session_store, argument)]
+      when "name"
+        rename_session(argument)
+        [true, nil]
+      when "clone"
+        [true, clone_session(session_store, agent)]
+      when "export"
+        export_session(agent.conversation, argument)
+        [true, nil]
+      else
+        [false, nil]
+      end
+    end
+
+    def parse_slash_command(command)
+      match = command.match(%r{\A/([^\s/]+)(?:\s+(.*))?\z}m)
+      return [nil, ""] unless match
+
+      [match[1], match[2].to_s]
+    end
+
+    def print_status
+      lines = [STATUS_MESSAGE]
+      if @active_session
+        lines << ""
+        lines << "Session: #{@active_session.name || @active_session.id}"
+        lines << "File: #{@active_session.path}"
+      end
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{lines.join("\n")}\n")
+    end
+
+    def start_new_session(session_store)
+      return say_sessions_unavailable unless session_store
+
+      @active_session = session_store.create
+      conversation = Conversation.new
+      @active_session.attach(conversation)
+      @prompt.say("\nStarted new session: #{@active_session.path}\n")
+      build_interactive_agent(conversation)
+    end
+
+    def resume_session(session_store, argument)
+      return say_sessions_unavailable unless session_store
+
+      path = argument.to_s.strip
+      path = select_session_path(session_store) if path.empty?
+      return nil if path.to_s.empty?
+
+      @active_session, conversation = session_store.load(path, workspace: Workspace.new)
+      @prompt.say("\nResumed session: #{@active_session.path}\n")
+      render_conversation_transcript(conversation)
+      build_interactive_agent(conversation)
+    rescue StandardError => e
+      @prompt.say("\nError: #{e.message}\n")
+      nil
+    end
+
+    def rename_session(argument)
+      unless @active_session
+        @prompt.say("\nNo active persisted session.\n")
+        return
+      end
+
+      @active_session.rename(argument)
+      label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
+      @prompt.say("\n#{label}\n")
+    end
+
+    def clone_session(session_store, agent)
+      return say_sessions_unavailable unless session_store
+
+      @active_session = session_store.create_from_conversation(agent.conversation)
+      @prompt.say("\nCloned session: #{@active_session.path}\n")
+      render_conversation_transcript(agent.conversation)
+      agent
+    end
+
+    def render_conversation_transcript(conversation)
+      tool_calls_by_id = {}
+      @prompt.say("\n#{colored("Transcript", :cyan, :bold)}\n")
+      conversation.messages.each do |message|
+        role = message_role(message)
+        next if role == "system"
+
+        case role
+        when "user"
+          print_user_transcript(message_content_text(message_content(message)))
+        when "assistant"
+          render_reasoning(message)
+          render_assistant_message(message)
+          message_tool_calls(message).each do |tool_call|
+            tool_calls_by_id[tool_call_id(tool_call)] = tool_call
+            render_tool_call(tool_call)
+          end
+        when "tool"
+          render_tool_message(message, tool_calls_by_id)
+        else
+          render_transcript_block(role.to_s.capitalize, message_content_text(message_content(message)))
+        end
+      end
+    end
+
+    def render_reasoning(message)
+      reasoning = message_reasoning(message)
+      render_transcript_block("Reasoning", reasoning) unless reasoning.empty?
+    end
+
+    def render_assistant_message(message)
+      content = message_content_text(message_content(message))
+      return if content.empty?
+
+      render_transcript_block("Assistant", content)
+    end
+
+    def render_tool_message(message, tool_calls_by_id)
+      content = summarize_restored_tool_output(message_content(message).to_s)
+      tool_call = tool_calls_by_id[message_tool_call_id(message)] || synthetic_tool_call(message_name(message), message_tool_call_id(message))
+      render_tool_result(tool_call, content)
+    end
+
+    def render_tool_call(tool_call)
+      if prompt_interface?
+        print_tool_call(tool_call)
+      else
+        @prompt.say("\n#{colored("Tool>", :magenta, :bold)}\n#{tool_command(tool_call)}\n")
+      end
+    end
+
+    def render_tool_result(tool_call, content)
+      if prompt_interface?
+        print_tool_result(tool_call, content)
+      else
+        @prompt.say("\n#{colored("Tool output>", :cyan, :bold)}\n#{tool_command(tool_call)}\n#{content}\n")
+      end
+    end
+
+    def render_transcript_block(label, content)
+      return if content.to_s.empty?
+
+      if prompt_interface?
+        print_block_delta(label, content)
+        finish_stream_block
+      else
+        @prompt.say("\n#{colored("#{label}>", label_color(label), :bold)}\n#{content}\n")
+      end
+    end
+
+    def message_reasoning(message)
+      direct = message["reasoning_summary"] || message[:reasoning_summary]
+      return direct.to_s unless direct.to_s.empty?
+
+      content = message_content(message)
+      return "" unless content.is_a?(Array)
+
+      content.filter_map do |part|
+        type = part["type"] || part[:type]
+        next unless ["thinking", "reasoning"].include?(type)
+
+        part["thinking"] || part[:thinking] || part["text"] || part[:text]
+      end.join("\n")
+    end
+
+    def message_content_text(content)
+      case content
+      when Array
+        content.filter_map do |part|
+          type = part["type"] || part[:type]
+          if type == "text"
+            part["text"] || part[:text]
+          elsif type == "image"
+            path = part["path"] || part[:path]
+            media_type = part["media_type"] || part[:media_type] || "image"
+            "[#{media_type}#{path ? ": #{path}" : ""}]"
+          end
+        end.join("\n")
+      else
+        content.to_s
+      end
+    end
+
+    def summarize_restored_tool_output(content)
+      text = content.to_s
+      return text if text.length <= RESTORED_TOOL_OUTPUT_LIMIT
+
+      "#{text[0, RESTORED_TOOL_OUTPUT_LIMIT]}\n...[truncated #{text.length - RESTORED_TOOL_OUTPUT_LIMIT} bytes from restored tool output]"
+    end
+
+    def synthetic_tool_call(name, id)
+      {
+        "id" => id || "restored_tool",
+        "type" => "function",
+        "function" => { "name" => name || "tool", "arguments" => "{}" }
+      }
+    end
+
+    def message_role(message)
+      message["role"] || message[:role]
+    end
+
+    def message_content(message)
+      message["content"] || message[:content]
+    end
+
+    def message_name(message)
+      message["name"] || message[:name]
+    end
+
+    def message_tool_call_id(message)
+      message["tool_call_id"] || message[:tool_call_id]
+    end
+
+    def message_tool_calls(message)
+      value = message["tool_calls"] || message[:tool_calls]
+      value.is_a?(Array) ? value : []
+    end
+
+    def tool_call_id(tool_call)
+      tool_call["id"] || tool_call[:id]
+    end
+
+    def export_session(conversation, argument)
+      path = export_path(argument)
+      File.write(path, markdown_transcript(conversation))
+      @prompt.say("\nExported session: #{path}\n")
+    rescue StandardError => e
+      @prompt.say("\nError: #{e.message}\n")
+    end
+
+    def say_sessions_unavailable
+      @prompt.say("\nSessions are unavailable for this interactive loop.\n")
+      nil
+    end
+
+    def select_session_path(session_store)
+      active_path = @active_session&.path
+      sessions = session_store.recent.reject { |session| active_path && File.expand_path(session.path) == File.expand_path(active_path) }
+      if sessions.empty?
+        @prompt.say("\nNo saved sessions found.\n")
+        return nil
+      end
+
+      labels = sessions.map { |session| session_label(session) }
+      if @prompt.respond_to?(:select)
+        choice = @prompt.select("Session>", labels)
+        return nil unless choice
+
+        selected = sessions[labels.index(choice)]
+        return selected&.path
+      end
+
+      numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
+      @prompt.say("\nRecent sessions:\n#{numbered_labels.join("\n")}\n")
+      answer = @prompt.ask("Session number or path>").to_s.strip
+      if answer.match?(/\A\d+\z/)
+        sessions[answer.to_i - 1]&.path
+      else
+        answer
+      end
+    end
+
+    def session_label(session)
+      title = session.name.to_s.strip
+      title = session.first_message.to_s.strip if title.empty?
+      title = session.id if title.empty?
+      "#{title} — #{File.basename(session.path)}"
+    end
+
+    def export_path(argument)
+      explicit = argument.to_s.strip
+      return File.expand_path(explicit, Dir.pwd) unless explicit.empty?
+
+      if @active_session
+        return @active_session.path.sub(/\.jsonl\z/, ".md")
+      end
+
+      File.expand_path("kward-session-#{Time.now.utc.iso8601(3).tr(':', '-')}.md", Dir.pwd)
+    end
+
+    def markdown_transcript(conversation)
+      lines = ["# Kward Session", ""]
+      conversation.messages.each do |message|
+        role = message["role"] || message[:role]
+        next if role == "system"
+
+        lines << "## #{role.to_s.capitalize}"
+        name = message["name"] || message[:name]
+        lines << "Tool: `#{name}`" if role == "tool" && name
+        lines << ""
+        lines << markdown_content(message["content"] || message[:content])
+        lines << ""
+      end
+      lines.join("\n")
+    end
+
+    def markdown_content(content)
+      case content
+      when Array
+        content.map do |part|
+          text = part["text"] || part[:text]
+          next text if text
+
+          path = part["path"] || part[:path]
+          media_type = part["media_type"] || part[:media_type] || "image"
+          "[#{media_type}#{path ? ": #{path}" : ""}]"
+        end.compact.join("\n")
+      else
+        content.to_s
+      end
+    end
 
     def setup_interactive_prompt
       return unless @stdin.tty?

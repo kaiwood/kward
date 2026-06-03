@@ -18,6 +18,7 @@ module Kward
     BRACKETED_PASTE_END = "\e[201~".freeze
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
     EXIT_INPUT = :exit_input
+    SELECT_CANCEL = :select_cancel
 
     def initialize(input: $stdin, output: $stdout, slash_commands: [])
       @input_io = input
@@ -44,6 +45,7 @@ module Kward
       @history_draft = nil
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
+      @select_state = nil
       @last_width = screen_width
       @last_height = screen_height
       @reserved_rows = 0
@@ -132,6 +134,44 @@ module Kward
       return default if answer.empty?
 
       answer.start_with?("y")
+    end
+
+    def select(message, choices)
+      return nil if choices.empty?
+
+      start
+      @mutex.synchronize do
+        @prompt_label = message.to_s
+        @input = ""
+        @cursor = 0
+        @pending_keys.clear
+        @asking = true
+        @busy = false
+        @queued_count = 0
+        @select_state = { choices: choices.map(&:to_s), selection_index: 0 }
+        reset_history_navigation
+        render_prompt_locked
+      end
+
+      loop do
+        key = read_key(nonblock: true)
+        result = nil
+        @mutex.synchronize do
+          if key.nil?
+            render_prompt_locked if handle_resize_locked
+          else
+            result = handle_select_key(key)
+            render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL
+          end
+        end
+
+        if result.is_a?(String) || result == SELECT_CANCEL
+          finish_select_prompt
+          return result == SELECT_CANCEL ? nil : result
+        end
+
+        sleep 0.02 if key.nil?
+      end
     end
 
     def begin_busy_input(message = "You>")
@@ -363,6 +403,110 @@ module Kward
       true
     end
 
+    def handle_select_key(key)
+      return select_current_choice if key.nil?
+      return if handle_select_bracketed_paste_key(key)
+
+      csi_result = handle_select_csi_u_key(key)
+      return csi_result unless csi_result == false
+
+      if key.is_a?(String) && key.length > 1
+        token = next_key_token(key)
+        if token.length < key.length
+          queue_pending_keys(key[token.length..])
+          return handle_select_key(token)
+        end
+      end
+
+      key_name = @reader.console.keys[key]
+      case key_name
+      when :return, :enter
+        select_current_choice
+      when :backspace
+        select_delete_before_cursor
+      when :delete
+        select_delete_at_cursor
+      when :left
+        @cursor -= 1 if @cursor.positive?
+      when :right
+        @cursor += 1 if @cursor < @input.length
+      when :home
+        @cursor = 0
+      when :end
+        @cursor = @input.length
+      when :up
+        select_previous_choice
+      when :down
+        select_next_choice
+      else
+        case key
+        when "\n", "\r"
+          select_current_choice
+        when "\b", "\x7F"
+          select_delete_before_cursor
+        when "\e"
+          handle_select_escape_sequence
+        else
+          select_insert_key(key)
+        end
+      end
+    end
+
+    def handle_select_csi_u_key(key)
+      match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
+      return false unless match
+
+      sequence = match[0]
+      code = match[1].to_i
+      queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+
+      case code
+      when 13
+        select_current_choice
+      when 8, 127
+        select_delete_before_cursor
+        nil
+      else
+        false
+      end
+    end
+
+    def handle_select_escape_sequence
+      sequence = read_pending_escape_sequence
+      return SELECT_CANCEL if sequence.empty?
+
+      key_name = @reader.console.keys["\e#{sequence}"]
+      case key_name
+      when :up
+        select_previous_choice
+      when :down
+        select_next_choice
+      when :left
+        @cursor -= 1 if @cursor.positive?
+      when :right
+        @cursor += 1 if @cursor < @input.length
+      end
+      true
+    end
+
+    def handle_select_bracketed_paste_key(key)
+      text = key.to_s
+      return false unless text.start_with?(BRACKETED_PASTE_START)
+
+      pasted = text[BRACKETED_PASTE_START.length..] || ""
+      until pasted.include?(BRACKETED_PASTE_END)
+        chunk = @reader.read_keypress(echo: false, raw: true)
+        break if chunk.nil?
+
+        pasted << chunk.to_s
+      end
+
+      content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
+      select_insert_string(normalize_paste(content || ""))
+      queue_pending_keys(remaining) if remaining && !remaining.empty?
+      true
+    end
+
     def handle_bracketed_paste_key(key)
       text = key.to_s
       return false unless text.start_with?(BRACKETED_PASTE_START)
@@ -447,6 +591,92 @@ module Kward
       sequence
     rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
       sequence
+    end
+
+    def select_current_choice
+      selected_selection_choice || SELECT_CANCEL
+    end
+
+    def selected_selection_choice
+      matches = selection_matches
+      return nil if matches.empty?
+
+      matches[selection_index]
+    end
+
+    def select_previous_choice
+      matches = selection_matches
+      return if matches.empty?
+
+      @select_state[:selection_index] = (selection_index - 1) % matches.length
+    end
+
+    def select_next_choice
+      matches = selection_matches
+      return if matches.empty?
+
+      @select_state[:selection_index] = (selection_index + 1) % matches.length
+    end
+
+    def select_insert_key(key)
+      return unless key.is_a?(String) && key.length == 1 && key.match?(/[[:print:]]/)
+
+      select_insert_string(key)
+    end
+
+    def select_insert_string(string)
+      return if string.empty?
+
+      @input = @input[0...@cursor] + string + @input[@cursor..]
+      @cursor += string.length
+      @select_state[:selection_index] = 0 if @select_state
+    end
+
+    def select_delete_before_cursor
+      return unless @cursor.positive?
+
+      @input = @input[0...(@cursor - 1)] + @input[@cursor..]
+      @cursor -= 1
+      @select_state[:selection_index] = 0 if @select_state
+    end
+
+    def select_delete_at_cursor
+      return unless @cursor < @input.length
+
+      @input = @input[0...@cursor] + @input[(@cursor + 1)..]
+      @select_state[:selection_index] = 0 if @select_state
+    end
+
+    def selection_matches
+      choices = @select_state ? @select_state[:choices] : []
+      filter = @input.downcase.strip
+      matches = filter.empty? ? choices : choices.select { |choice| choice.downcase.include?(filter) }
+      clamp_selection_index(matches.length)
+      matches
+    end
+
+    def selection_index
+      @select_state ? @select_state[:selection_index].to_i : 0
+    end
+
+    def clamp_selection_index(count)
+      return unless @select_state
+
+      @select_state[:selection_index] = 0 if count <= 0
+      @select_state[:selection_index] = count - 1 if count.positive? && selection_index >= count
+    end
+
+    def finish_select_prompt
+      @mutex.synchronize do
+        @select_state = nil
+        clear_prompt_locked
+        @input = ""
+        @cursor = 0
+        @asking = false
+        @rendered_rows = 0
+        @cursor_rendered_row = 0
+        @output_io.flush
+      end
     end
 
     def insert_key(key)
@@ -783,13 +1013,19 @@ module Kward
       max_input_rows = max_visible_input_rows
       visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
       visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
-      overlay_rows = slash_overlay_rows(width)
+      overlay_rows = active_overlay_rows(width)
       rows = overlay_rows + [top_border(width)]
       rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
       rows << bottom_border(width)
       cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
       [rows, cursor_row, cursor_col]
+    end
+
+    def active_overlay_rows(width)
+      return selection_overlay_rows(width) if @select_state
+
+      slash_overlay_rows(width)
     end
 
     def slash_overlay_rows(width)
@@ -803,6 +1039,27 @@ module Kward
         rows << slash_overlay_row("#{marker} /#{command[:name]}#{hint}#{description}", width)
       end
       rows
+    end
+
+    def selection_overlay_rows(width)
+      matches = selection_matches
+      rows = [slash_overlay_row("Sessions · ↑/↓ select · Enter open · Esc cancel", width)]
+      return rows + [slash_overlay_row("  No matches", width)] if matches.empty?
+
+      visible = visible_selection_matches(matches)
+      start_index = visible[:start]
+      visible[:choices].each_with_index do |choice, offset|
+        index = start_index + offset
+        marker = index == selection_index ? "›" : " "
+        rows << slash_overlay_row("#{marker} #{choice}", width)
+      end
+      rows
+    end
+
+    def visible_selection_matches(matches)
+      max_rows = [[screen_height - 4, 1].max, 8].min
+      start = [[selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
+      { start: start, choices: matches[start, max_rows] || [] }
     end
 
     def slash_overlay_row(text, width)
@@ -878,7 +1135,7 @@ module Kward
     end
 
     def max_visible_input_rows
-      overlay_count = slash_overlay_visible? ? slash_overlay_matches.length + 1 : 0
+      overlay_count = active_overlay_rows(screen_width).length
       [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - overlay_count].min, 1].max
     end
 

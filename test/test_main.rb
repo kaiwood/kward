@@ -424,6 +424,151 @@ class TestMain < Minitest::Test
     assert_equal 5, conversation.messages.length
   end
 
+  def test_interactive_mode_persists_session_jsonl
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["hello", "/exit"])
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 1, files.length
+      records = jsonl_records(files.first)
+      assert_equal "session", records[0]["type"]
+      assert_equal "hello", records[1]["message"]["content"]
+      assert_equal "reply", records[2]["message"]["content"]
+    end
+  end
+
+  def test_one_shot_does_not_create_session_file
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: client, session_store: store)
+
+      assert_equal "reply", cli.one_shot("hello")
+
+      refute Dir.exist?(store.session_dir)
+    end
+  end
+
+  def test_resume_explicit_session_path_loads_prior_messages
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("hello")
+      conversation.append_assistant("reply")
+      prompt = FakePrompt.new(["/resume #{saved.path}", "again", "/exit"])
+      client = RecordingClient.new(["second"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal "hello", client.seen_messages[0][1]["content"]
+      assert_equal "reply", client.seen_messages[0][2]["content"]
+      assert_equal "again", client.seen_messages[0][3][:content]
+      output = prompt.output.join("\n")
+      assert_includes output, "You> hello"
+      assert_includes output, "Assistant>\nreply"
+    end
+  end
+
+  def test_resume_renders_reasoning_tools_and_tool_output
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("inspect file")
+      conversation.append_assistant({
+        "role" => "assistant",
+        "content" => "I'll read it.",
+        "reasoning_summary" => "Need to inspect the file.",
+        "tool_calls" => [tool_call("read_file", path: "README.md")]
+      })
+      conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "README contents\n")
+      prompt = FakePrompt.new(["/resume #{saved.path}", "/exit"])
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      output = prompt.output.join("\n")
+      assert_includes output, "You> inspect file"
+      assert_includes output, "Reasoning>\nNeed to inspect the file."
+      assert_includes output, "Assistant>\nI'll read it."
+      assert_includes output, "Tool>\nread_file"
+      assert_includes output, "Tool output>\nread_file"
+      assert_includes output, "README contents"
+    end
+  end
+
+  def test_session_store_restores_read_paths_and_skips_bad_jsonl
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        path = File.join(workspace_dir, "file.txt")
+        File.write(path, "old\n")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new
+        session.attach(conversation)
+        conversation.append_assistant(assistant_tool_call("read_file", path: "file.txt"))
+        conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "old\n")
+        File.open(session.path, "a") { |file| file.puts("not json") }
+
+        workspace = Kward::Workspace.new(root: workspace_dir)
+        _loaded_session, loaded_conversation = store.load(session.path, workspace: workspace)
+
+        assert_includes loaded_conversation.read_paths, workspace.resolved_path("file.txt")
+      end
+    end
+  end
+
+  def test_session_commands_name_clone_and_export
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      export_path = File.join(config_dir, "session.md")
+      prompt = FakePrompt.new(["hello", "/name Useful", "/clone", "/export #{export_path}", "/exit"])
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 2, files.length
+      assert files.any? { |file| jsonl_records(file).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" } }
+      output = prompt.output.join("\n")
+      assert_includes output, "You> hello"
+      assert_includes output, "Assistant>\nreply"
+      assert_includes File.read(export_path), "## User\n\nhello"
+      assert_includes File.read(export_path), "## Assistant\n\nreply"
+    end
+  end
+
+  def test_interactive_resume_can_select_recent_session
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("selected session")
+      conversation.append_assistant("old reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume", "again", "/exit"], "selected session")
+      client = RecordingClient.new(["new reply"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal ["Session>"], prompt.select_messages
+      assert_equal "selected session", client.seen_messages[0][1]["content"]
+      assert_equal "again", client.seen_messages[0][3][:content]
+    end
+  end
+
   def test_interactive_prompt_slash_command_expands_template
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
@@ -581,6 +726,54 @@ class TestMain < Minitest::Test
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
     assert_equal "hello", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_uses_arrows_and_enter
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[B\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_filters_choices
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("sec\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_escape_cancels
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_nil prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_submits_on_csi_u_enter
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[B\e[13u")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
   ensure
     input&.close unless input&.closed?
   end
@@ -1329,6 +1522,14 @@ class TestMain < Minitest::Test
     end
   end
 
+  def jsonl_records(path)
+    File.readlines(path, chomp: true).filter_map do |line|
+      JSON.parse(line)
+    rescue JSON::ParserError
+      nil
+    end
+  end
+
   def tool_call(name, args)
     {
       "id" => "call_#{name}",
@@ -1476,6 +1677,18 @@ class TestMain < Minitest::Test
     def select(message, choices)
       @select_messages << message
       choices.find { |choice| choice.start_with?("/plan") } || choices.first
+    end
+  end
+
+  class FakeSessionSelectPrompt < FakeSelectPrompt
+    def initialize(inputs, selected_text)
+      super(inputs)
+      @selected_text = selected_text
+    end
+
+    def select(message, choices)
+      @select_messages << message
+      choices.find { |choice| choice.include?(@selected_text) } || choices.first
     end
   end
 
