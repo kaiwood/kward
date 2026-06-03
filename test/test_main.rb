@@ -244,15 +244,17 @@ class TestMain < Minitest::Test
     assert_includes output.string, "You> "
   end
 
-  def test_prompt_interface_uses_scrolling_terminal_output_not_box_layout
+  def test_prompt_interface_renders_boxed_composer_and_scroll_region
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
 
     prompt.start
 
-    assert_includes output.string, "You> "
+    assert_includes output.string, "╭ You "
+    assert_includes output.string, "│ You> "
+    assert_includes output.string, "╰"
+    assert_match(/\e\[1;\d+r/, output.string)
     refute_includes output.string, TTY::Cursor.clear_screen
-    refute_includes output.string, TTY::Cursor.clear_screen_down
   end
 
   def test_prompt_interface_enables_and_restores_keyboard_protocol
@@ -263,6 +265,7 @@ class TestMain < Minitest::Test
     prompt.close
 
     assert_includes output.string, "\e[>1u"
+    assert_includes output.string, "\e[r"
     assert_includes output.string, "\e[<u"
   end
 
@@ -346,6 +349,84 @@ class TestMain < Minitest::Test
     end
   end
 
+  def test_prompt_interface_pastes_bracketed_multiline_text
+    assert_equal "hello\nworld", ask_prompt_with_input("\e[200~hello\nworld\e[201~\r")
+  end
+
+  def test_prompt_interface_reuses_history_with_up_arrow
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("first\r\e[A\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "first", prompt.ask("You>")
+    assert_equal "first", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_queues_input_while_busy
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("next\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    prompt.begin_busy_input("You>")
+
+    queued = poll_prompt_until(prompt) { |result| result.is_a?(String) }
+
+    assert_equal "next", queued
+    assert_includes output.string, "You> "
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_does_not_redraw_composer_between_stream_chunks
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.start_stream_block("Assistant")
+    prompt.write_delta("hello")
+
+    assert_includes output.string, "Assistant>"
+    assert_includes output.string, "hello"
+    refute_includes strip_ansi(output.string), Kward::PromptInterface::HELP_TEXT
+    refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT
+    refute_includes strip_ansi(output.string), "You> "
+    refute_includes strip_ansi(output.string), "╭"
+  end
+
+  def test_prompt_interface_writes_transcript_newlines_as_crlf
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.start_stream_block("Tool output")
+    prompt.write_delta(".git/\n.gitignore\nREADME.md\n")
+
+    stripped = strip_ansi(output.string)
+    assert_includes stripped, "Tool output>\r\n.git/\r\n.gitignore\r\nREADME.md\r\n"
+  end
+
+  def test_prompt_interface_caps_boxed_composer_height
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    value = (1..10).map { |index| "line #{index}" }.join("\n")
+    prompt.instance_variable_set(:@input, value)
+    prompt.instance_variable_set(:@cursor, value.length)
+
+    rows, cursor_row, = prompt.send(:composer_layout, 80)
+
+    assert_operator rows.length, :<=, Kward::PromptInterface::COMPOSER_MAX_INPUT_ROWS + 2
+    assert_operator cursor_row, :<, rows.length - 1
+    assert_includes rows.join("\n"), "line 10"
+  end
+
   def test_prompt_interface_submits_on_csi_u_enter
     assert_equal "hello", ask_prompt_with_input("hello\e[13u")
   end
@@ -374,6 +455,29 @@ class TestMain < Minitest::Test
     assert_equal "abcde", prompt.ask("You>")
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    input&.close unless input&.closed?
+  end
+
+  def test_interactive_turn_returns_prompt_queued_during_streaming
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    client = StreamingRecordingClient.new(["reply 1"])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    writer_thread = Thread.new do
+      sleep 0.03
+      writer.write("second\r")
+      writer.close
+    end
+
+    queued = cli.send(:run_interactive_turn, agent, "first")
+
+    assert_equal ["second"], queued
+    assert_equal "first", client.seen_messages[0][1][:content]
+  ensure
+    writer_thread&.join
     input&.close unless input&.closed?
   end
 
@@ -658,6 +762,21 @@ class TestMain < Minitest::Test
     input&.close unless input&.closed?
   end
 
+  def poll_prompt_until(prompt, timeout: 1)
+    deadline = Time.now + timeout
+    loop do
+      result = prompt.poll_input
+      return result if yield(result)
+      raise "timed out waiting for prompt input" if Time.now > deadline
+
+      sleep 0.01
+    end
+  end
+
+  def strip_ansi(text)
+    text.gsub(/\e\[[0-9;?]*[A-Za-z~]/, "")
+  end
+
   def tool_call(name, args)
     {
       "id" => "call_#{name}",
@@ -702,6 +821,23 @@ class TestMain < Minitest::Test
     def chat(messages, tools: [])
       @seen_messages << messages.map(&:dup)
       { "role" => "assistant", "content" => @responses.shift }
+    end
+  end
+
+  class StreamingRecordingClient
+    attr_reader :seen_messages
+
+    def initialize(responses)
+      @responses = responses
+      @seen_messages = []
+    end
+
+    def chat(messages, tools: [], on_assistant_delta: nil)
+      @seen_messages << messages.map(&:dup)
+      content = @responses.shift
+      on_assistant_delta&.call(content)
+      sleep 0.12
+      { "role" => "assistant", "content" => content }
     end
   end
 

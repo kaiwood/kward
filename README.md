@@ -12,7 +12,9 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 ruby test/test_main.rb
 ```
 
-In chat mode, the agent waits at `You>` until you ask something. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, and run shell commands with `run_shell_command` after confirmation. Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Type `/exit` or `/quit` to leave.
+In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, and run shell commands with `run_shell_command` after confirmation. Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Type `/exit` or `/quit` to leave.
+
+Composer keys: Enter sends, Shift+Enter inserts a newline, Up/Down browse prompt history, Ctrl+D exits an empty prompt. While assistant/tool output is streaming, the composer stays pinned and editable; pressing Enter queues the next prompt and sends it after the current response finishes. Multiline input grows the composer up to a capped height.
 
 Auth options:
 

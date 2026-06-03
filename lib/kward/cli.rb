@@ -76,8 +76,10 @@ module Kward
       help += " Use Shift+Enter for new lines." if prompt_interface?
       @prompt.say("#{help}\n")
 
+      @pending_inputs = []
+
       loop do
-        input = @prompt.ask("You>")
+        input = @pending_inputs.shift || @prompt.ask("You>")
         break if input.nil?
 
         command = input.strip
@@ -88,25 +90,8 @@ module Kward
           next
         end
 
-        streamed = false
-        answer = agent.ask(input) do |event|
-          case event
-          when Events::ReasoningDelta
-            streamed = true
-            print_block_delta("Reasoning", event.delta)
-          when Events::AssistantDelta
-            streamed = true
-            print_block_delta("Assistant", event.delta)
-          when Events::ToolCall
-            streamed = true
-            print_tool_call(event.tool_call)
-          when Events::ToolResult
-            streamed = true
-            print_tool_result(event.tool_call, event.content)
-          end
-        end
-        finish_stream_block if streamed
-        @prompt.say("\nAssistant> #{answer}\n") unless streamed || answer.empty?
+        pending_inputs = run_interactive_turn(agent, input)
+        pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
       end
 
       agent.conversation
@@ -152,6 +137,96 @@ module Kward
 
     def prompt_interface?
       @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
+    end
+
+    def run_interactive_turn(agent, input)
+      return run_blocking_interactive_turn(agent, input) unless prompt_interface?
+
+      queued_inputs = []
+      streamed = false
+      answer = nil
+      error = nil
+      @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+
+      worker = Thread.new do
+        answer = agent.ask(input) do |event|
+          case event
+          when Events::ReasoningDelta
+            streamed = true
+            print_block_delta("Reasoning", event.delta)
+          when Events::AssistantDelta
+            streamed = true
+            print_block_delta("Assistant", event.delta)
+          when Events::ToolCall
+            streamed = true
+            print_tool_call(event.tool_call)
+          when Events::ToolResult
+            streamed = true
+            print_tool_result(event.tool_call, event.content)
+          end
+        end
+      rescue StandardError => e
+        error = e
+      end
+
+      while worker.alive?
+        collect_queued_input(queued_inputs)
+        sleep 0.02
+      end
+      worker.join
+      drain_queued_input(queued_inputs)
+      raise error if error
+
+      finish_stream_block if streamed
+      @prompt.say("\nAssistant> #{answer}\n") unless streamed || answer.to_s.empty?
+      @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+      queued_inputs
+    end
+
+    def collect_queued_input(queued_inputs)
+      poll_result = @prompt.poll_input
+      case poll_result
+      when String
+        queued_inputs << poll_result unless poll_result.strip.empty?
+        @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+      when PromptInterface::EXIT_INPUT
+        queued_inputs << "/exit"
+        @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+      end
+      poll_result
+    end
+
+    def drain_queued_input(queued_inputs)
+      deadline = Time.now + 0.15
+      loop do
+        poll_result = collect_queued_input(queued_inputs)
+        break if Time.now > deadline && poll_result.nil?
+
+        sleep 0.01
+      end
+    end
+
+    def run_blocking_interactive_turn(agent, input)
+      streamed = false
+      answer = agent.ask(input) do |event|
+        case event
+        when Events::ReasoningDelta
+          streamed = true
+          print_block_delta("Reasoning", event.delta)
+        when Events::AssistantDelta
+          streamed = true
+          print_block_delta("Assistant", event.delta)
+        when Events::ToolCall
+          streamed = true
+          print_tool_call(event.tool_call)
+        when Events::ToolResult
+          streamed = true
+          print_tool_result(event.tool_call, event.content)
+        end
+      end
+      finish_stream_block if streamed
+      @prompt.say("\nAssistant> #{answer}\n") unless streamed || answer.to_s.empty?
+      []
     end
 
     def chat(messages, tools:, on_reasoning_delta: nil, on_assistant_delta: nil)
