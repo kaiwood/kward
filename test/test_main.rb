@@ -241,7 +241,7 @@ class TestMain < Minitest::Test
 
     prompt.start
 
-    assert_includes output.string, "You> "
+    refute_includes output.string, "You> "
   end
 
   def test_prompt_interface_renders_boxed_composer_and_scroll_region
@@ -251,7 +251,7 @@ class TestMain < Minitest::Test
     prompt.start
 
     assert_includes output.string, "╭ You "
-    assert_includes output.string, "│ You> "
+    refute_includes output.string, "│ You> "
     assert_includes output.string, "╰"
     assert_match(/\e\[1;\d+r/, output.string)
     refute_includes output.string, TTY::Cursor.clear_screen
@@ -377,7 +377,7 @@ class TestMain < Minitest::Test
     queued = poll_prompt_until(prompt) { |result| result.is_a?(String) }
 
     assert_equal "next", queued
-    assert_includes output.string, "You> "
+    refute_includes output.string, "You> "
   ensure
     input&.close unless input&.closed?
   end

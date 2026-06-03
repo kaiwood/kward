@@ -704,8 +704,8 @@ module Kward
       lines.empty? ? [""] : lines
     end
 
-    def input_prefix(index)
-      "#{index.zero? ? @prompt_label : " " * @prompt_label.length} "
+    def input_prefix(_index)
+      ""
     end
 
     def input_text_width(width, prefix)
