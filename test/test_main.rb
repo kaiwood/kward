@@ -141,7 +141,7 @@ class TestMain < Minitest::Test
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         content = Kward::Conversation.new.messages.first[:content]
 
-        assert_includes content, "# AGENTS.md"
+        refute_includes content, "# AGENTS.md"
         assert_includes content, "Config prompt instructions."
       end
     end
