@@ -3,6 +3,7 @@ require "tty-prompt"
 require_relative "agent"
 require_relative "ansi"
 require_relative "client"
+require_relative "config_files"
 require_relative "events"
 require_relative "image_attachments"
 require_relative "openai_oauth"
@@ -12,6 +13,11 @@ require_relative "workspace"
 module Kward
   class CLI
     STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"
+    BUILTIN_SLASH_COMMANDS = [
+      { name: "exit", description: "Exit the interactive session.", argument_hint: "" },
+      { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
+      { name: "status", description: "Show the current status message.", argument_hint: "" }
+    ].freeze
 
     def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new)
       @argv = argv
@@ -87,6 +93,8 @@ module Kward
 
         command = input.strip
         next if command.empty?
+        input = selected_slash_command_input(input) || input
+        command = input.strip
         break if command == "/exit"
         if command == "/status"
           @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{STATUS_MESSAGE}\n")
@@ -97,6 +105,7 @@ module Kward
           next
         end
 
+        input = expand_prompt_template(input) || input
         pending_inputs = run_interactive_turn(agent, input)
         pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
       end
@@ -124,7 +133,7 @@ module Kward
       prompt_interface = load_prompt_interface
       return unless prompt_interface
 
-      @prompt = prompt_interface.new
+      @prompt = prompt_interface.new(slash_commands: slash_command_entries)
       @prompt.start
     end
 
@@ -144,6 +153,59 @@ module Kward
 
     def prompt_interface?
       @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
+    end
+
+    def prompt_templates
+      @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMANDS.map { |command| command[:name] })
+    end
+
+    def slash_command_entries
+      prompt_entries = prompt_templates.map do |template|
+        {
+          name: template.command,
+          description: template.description,
+          argument_hint: template.argument_hint
+        }
+      end
+      BUILTIN_SLASH_COMMANDS + prompt_entries
+    end
+
+    def prompt_template_for(command)
+      prompt_templates.find { |template| template.command == command }
+    end
+
+    def expand_prompt_template(input)
+      match = input.match(%r{\A/([^\s/]+)(?:\s+(.*))?\z}m)
+      return nil unless match
+
+      template = prompt_template_for(match[1])
+      return nil unless template
+
+      template.expand(match[2].to_s)
+    end
+
+    def selected_slash_command_input(input)
+      return nil if prompt_interface?
+      return nil unless @prompt.respond_to?(:select)
+      return nil unless input.match?(%r{\A/[^\s/]*\z})
+      return nil if prompt_template_for(input.delete_prefix("/"))
+
+      prefix = input.delete_prefix("/").downcase
+      return nil if slash_command_entries.any? { |entry| entry[:name].downcase == prefix }
+
+      matches = slash_command_entries.select { |entry| entry[:name].downcase.start_with?(prefix) }
+      return nil if matches.empty?
+
+      labels = matches.map { |entry| slash_command_label(entry) }
+      choice = @prompt.select("Slash command>", labels)
+      entry = matches[labels.index(choice)]
+      entry ? "/#{entry[:name]}" : nil
+    end
+
+    def slash_command_label(entry)
+      hint = entry[:argument_hint].to_s.empty? ? "" : " #{entry[:argument_hint]}"
+      description = entry[:description].to_s.empty? ? "" : " - #{entry[:description]}"
+      "/#{entry[:name]}#{hint}#{description}"
     end
 
     def run_interactive_turn(agent, input)

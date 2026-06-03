@@ -6,6 +6,11 @@ module Kward
     MAX_SKILL_FILE_BYTES = 100_000
 
     Skill = Struct.new(:name, :description, :folder, :path, keyword_init: true)
+    PromptTemplate = Struct.new(:command, :description, :argument_hint, :body, :path, keyword_init: true) do
+      def expand(arguments)
+        body.gsub("$ARGUMENTS", arguments.to_s)
+      end
+    end
 
     module_function
 
@@ -48,6 +53,33 @@ module Kward
       []
     end
 
+    def prompt_templates(reserved_commands: [])
+      prompts_root = File.join(config_dir, "prompts")
+      return [] unless Dir.exist?(prompts_root)
+
+      reserved = reserved_commands.map(&:to_s)
+      seen = {}
+      Dir.glob(File.join(prompts_root, "*.md")).sort.filter_map do |path|
+        template = parse_prompt_template(path)
+        next unless template
+
+        if reserved.include?(template.command)
+          warn "Warning: skipping Kward prompt command /#{template.command}: reserved command"
+          next
+        end
+        if seen[template.command]
+          warn "Warning: skipping duplicate Kward prompt command /#{template.command}: #{path}"
+          next
+        end
+
+        seen[template.command] = true
+        template
+      end
+    rescue StandardError => e
+      warn "Warning: skipping Kward prompt templates in #{prompts_root}: #{e.message}"
+      []
+    end
+
     def read_skill_file(name, relative_path = nil)
       skill = skills.find { |candidate| candidate.name == name.to_s }
       return "Error: unknown skill: #{name}" unless skill
@@ -74,7 +106,7 @@ module Kward
     end
 
     def parse_skill(path)
-      frontmatter = frontmatter_for(path)
+      frontmatter, = markdown_parts(path)
       name = frontmatter.fetch("name", "").to_s.strip
       name = File.basename(File.dirname(path)) if name.empty?
       description = frontmatter.fetch("description", "").to_s.strip
@@ -85,16 +117,37 @@ module Kward
       nil
     end
 
-    def frontmatter_for(path)
+    def parse_prompt_template(path)
+      command = File.basename(path, ".md")
+      unless command.match?(/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/)
+        warn "Warning: skipping Kward prompt template #{path}: invalid command name"
+        return nil
+      end
+
+      frontmatter, body = markdown_parts(path)
+      PromptTemplate.new(
+        command: command,
+        description: frontmatter.fetch("description", "").to_s.strip,
+        argument_hint: frontmatter.fetch("argument-hint", "").to_s.strip,
+        body: body,
+        path: path
+      )
+    rescue StandardError => e
+      warn "Warning: skipping Kward prompt template #{path}: #{e.message}"
+      nil
+    end
+
+    def markdown_parts(path)
       content = File.read(path)
-      return {} unless content.start_with?("---\n", "---\r\n")
+      return [{}, content] unless content.start_with?("---\n", "---\r\n")
 
       _opening, rest = content.split(/\A---\r?\n/, 2)
-      yaml_text, = rest.to_s.split(/\r?\n---\r?\n/, 2)
-      return {} if yaml_text.nil? || yaml_text.empty?
+      yaml_text, body = rest.to_s.split(/\r?\n---\r?\n/, 2)
+      raise "missing frontmatter closing delimiter" if body.nil?
 
-      data = YAML.safe_load(yaml_text, permitted_classes: [], aliases: false)
-      data.is_a?(Hash) ? data.transform_keys(&:to_s) : {}
+      data = yaml_text.to_s.empty? ? {} : YAML.safe_load(yaml_text, permitted_classes: [], aliases: false)
+      frontmatter = data.is_a?(Hash) ? data.transform_keys(&:to_s) : {}
+      [frontmatter, body]
     end
 
     def inside_directory?(path, base)

@@ -19,7 +19,7 @@ module Kward
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
     EXIT_INPUT = :exit_input
 
-    def initialize(input: $stdin, output: $stdout)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [])
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -42,6 +42,8 @@ module Kward
       @history = []
       @history_index = nil
       @history_draft = nil
+      @slash_commands = normalize_slash_commands(slash_commands)
+      @slash_selection_index = 0
       @last_width = screen_width
       @last_height = screen_height
       @reserved_rows = 0
@@ -322,13 +324,15 @@ module Kward
       when :end
         @cursor = @input.length
       when :up
-        recall_previous_history
+        slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
       when :down
-        recall_next_history
+        slash_overlay_visible? ? select_next_slash_command : recall_next_history
       else
         case key
         when "\n", "\r"
           submit_input
+        when "\t"
+          complete_selected_slash_command || insert_key(key)
         when "\b", "\x7F"
           delete_before_cursor
         when "\x04"
@@ -348,9 +352,9 @@ module Kward
       key_name = @reader.console.keys[sequence]
       case key_name
       when :up
-        recall_previous_history
+        slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
       when :down
-        recall_next_history
+        slash_overlay_visible? ? select_next_slash_command : recall_next_history
       when :left
         @cursor -= 1 if @cursor.positive?
       when :right
@@ -454,6 +458,7 @@ module Kward
     def insert_string(string)
       return if string.empty?
 
+      reset_slash_selection
       reset_history_navigation
       @input = @input[0...@cursor] + string + @input[@cursor..]
       @cursor += string.length
@@ -462,6 +467,7 @@ module Kward
     def delete_before_cursor
       return unless @cursor.positive?
 
+      reset_slash_selection
       reset_history_navigation
       @input = @input[0...(@cursor - 1)] + @input[@cursor..]
       @cursor -= 1
@@ -470,6 +476,7 @@ module Kward
     def delete_at_cursor
       return unless @cursor < @input.length
 
+      reset_slash_selection
       reset_history_navigation
       @input = @input[0...@cursor] + @input[(@cursor + 1)..]
     end
@@ -510,6 +517,67 @@ module Kward
     def reset_history_navigation
       @history_index = nil
       @history_draft = nil
+    end
+
+    def reset_slash_selection
+      @slash_selection_index = 0
+    end
+
+    def normalize_slash_commands(commands)
+      commands.map do |command|
+        {
+          name: slash_command_value(command, :name).to_s,
+          description: slash_command_value(command, :description).to_s,
+          argument_hint: slash_command_value(command, :argument_hint).to_s
+        }
+      end.reject { |command| command[:name].empty? }.sort_by { |command| command[:name] }
+    end
+
+    def slash_command_value(command, key)
+      return command[key] if command.respond_to?(:key?) && command.key?(key)
+      return command[key.to_s] if command.respond_to?(:key?) && command.key?(key.to_s)
+      return command.public_send(key) if command.respond_to?(key)
+
+      ""
+    end
+
+    def slash_overlay_visible?
+      @input.match?(%r{\A/[^\s/]*\z}) && !slash_overlay_matches.empty?
+    end
+
+    def slash_overlay_matches
+      prefix = @input.delete_prefix("/").downcase
+      @slash_commands.select { |command| command[:name].downcase.start_with?(prefix) }.first(8)
+    end
+
+    def selected_slash_command
+      matches = slash_overlay_matches
+      return nil if matches.empty?
+
+      matches[[@slash_selection_index, matches.length - 1].min]
+    end
+
+    def select_previous_slash_command
+      matches = slash_overlay_matches
+      return if matches.empty?
+
+      @slash_selection_index = (@slash_selection_index - 1) % matches.length
+    end
+
+    def select_next_slash_command
+      matches = slash_overlay_matches
+      return if matches.empty?
+
+      @slash_selection_index = (@slash_selection_index + 1) % matches.length
+    end
+
+    def complete_selected_slash_command
+      command = selected_slash_command
+      return false unless command
+
+      replace_input("/#{command[:name]} ")
+      reset_slash_selection
+      true
     end
 
     def render_prompt_locked
@@ -715,12 +783,30 @@ module Kward
       max_input_rows = max_visible_input_rows
       visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
       visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
-      rows = [top_border(width)]
+      overlay_rows = slash_overlay_rows(width)
+      rows = overlay_rows + [top_border(width)]
       rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
       rows << bottom_border(width)
-      cursor_row = 1 + input_cursor_row - visible_start
+      cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
       [rows, cursor_row, cursor_col]
+    end
+
+    def slash_overlay_rows(width)
+      return [] unless slash_overlay_visible?
+
+      rows = [slash_overlay_row("Slash commands", width)]
+      slash_overlay_matches.each_with_index do |command, index|
+        marker = index == @slash_selection_index ? "›" : " "
+        hint = command[:argument_hint].empty? ? "" : " #{command[:argument_hint]}"
+        description = command[:description].empty? ? "" : " — #{command[:description]}"
+        rows << slash_overlay_row("#{marker} /#{command[:name]}#{hint}#{description}", width)
+      end
+      rows
+    end
+
+    def slash_overlay_row(text, width)
+      text.to_s[0, width].ljust(width)
     end
 
     def compact_composer_layout(width)
@@ -792,7 +878,8 @@ module Kward
     end
 
     def max_visible_input_rows
-      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3].min, 1].max
+      overlay_count = slash_overlay_visible? ? slash_overlay_matches.length + 1 : 0
+      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - overlay_count].min, 1].max
     end
 
     def composer_top_row

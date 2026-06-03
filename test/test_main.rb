@@ -220,6 +220,58 @@ class TestMain < Minitest::Test
     end
   end
 
+  def test_config_prompt_templates_parse_and_expand_arguments
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "plan.md"), "---\ndescription: Plan work.\nargument-hint: <task>\n---\nPlan this:\n$ARGUMENTS\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        template = Kward::ConfigFiles.prompt_templates.first
+
+        assert_equal "plan", template.command
+        assert_equal "Plan work.", template.description
+        assert_equal "<task>", template.argument_hint
+        assert_equal "Plan this:\nfix bug\n", template.expand("fix bug")
+      end
+    end
+  end
+
+  def test_prompt_templates_skip_reserved_commands_with_warning
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "exit.md"), "Do not override.\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        _stdout, stderr = capture_io do
+          assert_empty Kward::ConfigFiles.prompt_templates(reserved_commands: ["exit"])
+        end
+
+        assert_includes stderr, "reserved command"
+      end
+    end
+  end
+
+  def test_prompt_templates_warn_and_skip_invalid_frontmatter
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "bad.md"), "---\ndescription: [\n---\nBad\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        _stdout, stderr = capture_io do
+          assert_empty Kward::ConfigFiles.prompt_templates
+        end
+
+        assert_includes stderr, "Warning: skipping Kward prompt template"
+      end
+    end
+  end
+
   def test_config_model_and_thinking_level_apply_to_current_provider
     path = "kward_test_config.json"
     File.write(path, JSON.dump("model" => "configured-model", "thinking_level" => "low"))
@@ -372,6 +424,84 @@ class TestMain < Minitest::Test
     assert_equal 5, conversation.messages.length
   end
 
+  def test_interactive_prompt_slash_command_expands_template
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "plan.md"), "---\ndescription: Plan work.\nargument-hint: <task>\n---\nPlan this:\n$ARGUMENTS\n")
+      prompt = FakePrompt.new(["/plan fix bug", "/exit"])
+      client = RecordingClient.new(["planned"])
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal "Plan this:\nfix bug\n", client.seen_messages[0][1][:content]
+    end
+  end
+
+  def test_interactive_prompt_slash_command_allows_empty_arguments
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+      prompt = FakePrompt.new(["/plan", "/exit"])
+      client = RecordingClient.new(["planned"])
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal "Plan this:\n\n", client.seen_messages[0][1][:content]
+    end
+  end
+
+  def test_one_shot_does_not_expand_prompt_slash_command
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+      client = RecordingClient.new(["ok"])
+      cli = Kward::CLI.new(argv: ["/plan fix bug"], stdin: FakeInput.new("", tty: true), client: client)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        cli.one_shot("/plan fix bug")
+      end
+
+      assert_equal "/plan fix bug", client.seen_messages[0][1][:content]
+    end
+  end
+
+  def test_non_tui_slash_command_selection_expands_template
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+      prompt = FakeSelectPrompt.new(["/p", "/exit"])
+      client = RecordingClient.new(["planned"])
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal "Plan this:\n\n", client.seen_messages[0][1][:content]
+      assert_equal ["Slash command>"], prompt.select_messages
+    end
+  end
+
   def test_interactive_loop_redraw_command_refreshes_prompt
     prompt = FakePrompt.new(["/redraw", "/exit"])
     client = RecordingClient.new([])
@@ -512,6 +642,24 @@ class TestMain < Minitest::Test
 
   def test_prompt_interface_pastes_bracketed_multiline_text
     assert_equal "hello\nworld", ask_prompt_with_input("\e[200~hello\nworld\e[201~\r")
+  end
+
+  def test_prompt_interface_shows_slash_overlay_and_completes_selection
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/\t\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(
+      input: input,
+      output: output,
+      slash_commands: [{ name: "plan", description: "Plan work.", argument_hint: "<task>" }]
+    )
+
+    assert_equal "/plan ", prompt.ask("You>")
+    assert_includes strip_ansi(output.string), "Slash commands"
+    assert_includes strip_ansi(output.string), "/plan <task>"
+  ensure
+    input&.close unless input&.closed?
   end
 
   def test_prompt_interface_reuses_history_with_up_arrow
@@ -1314,6 +1462,20 @@ class TestMain < Minitest::Test
 
     def redraw
       @redraw_count += 1
+    end
+  end
+
+  class FakeSelectPrompt < FakePrompt
+    attr_reader :select_messages
+
+    def initialize(inputs, confirmations: [])
+      super
+      @select_messages = []
+    end
+
+    def select(message, choices)
+      @select_messages << message
+      choices.find { |choice| choice.start_with?("/plan") } || choices.first
     end
   end
 
