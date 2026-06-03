@@ -228,8 +228,9 @@ module Kward
           end
           write_transcript_text_locked("#{colored("#{label}>", label_color(label), :bold)}\n")
           @stream_block = label
-          @output_io.flush
         end
+        restore_composer_cursor_locked
+        @output_io.flush
       end
     end
 
@@ -237,6 +238,7 @@ module Kward
       @mutex.synchronize do
         prepare_transcript_output_locked
         write_transcript_text_locked(delta.to_s)
+        restore_composer_cursor_locked
         @output_io.flush
       end
     end
@@ -248,6 +250,7 @@ module Kward
           write_transcript_text_locked("\n")
         end
         @stream_block = nil
+        restore_composer_cursor_locked
         @output_io.flush
       end
     end
@@ -854,6 +857,13 @@ module Kward
       handle_resize_locked
       reserve_composer_region_locked
       move_to_transcript_cursor_locked
+    end
+
+    def restore_composer_cursor_locked
+      return unless @started && @asking
+
+      _rows, cursor_row, cursor_col = composer_layout(screen_width)
+      move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
     end
 
     def reserve_composer_region_locked

@@ -902,6 +902,34 @@ class TestMain < Minitest::Test
     refute_includes strip_ansi(output.string), "╭"
   end
 
+  def test_prompt_interface_restores_cursor_to_composer_after_stream_render
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.start_stream_block("Assistant")
+    assert_match(/\e\[19;3H\z/, output.string)
+
+    output.truncate(0)
+    output.rewind
+    prompt.write_delta("hello")
+    assert_match(/\e\[19;3H\z/, output.string)
+
+    output.truncate(0)
+    output.rewind
+    prompt.finish_stream_block
+    assert_match(/\e\[19;3H\z/, output.string)
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_prompt_interface_writes_transcript_newlines_as_crlf
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
