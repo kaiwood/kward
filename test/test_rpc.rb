@@ -88,13 +88,21 @@ class TestRPC < KwardTestCase
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]
     assert_equal false, capabilities["runtime"]["stats"]["contextUsage"]
-    assert_equal false, capabilities["runtimeSettings"]["supported"]
+    assert_equal true, capabilities["runtimeSettings"]["supported"]
+    assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
+    assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]
     assert_equal true, capabilities["auth"]["supported"]
     assert_equal "tauren-auth-v1", capabilities["auth"]["providerFormat"]
     assert_equal ["openai"], capabilities["auth"]["oauthProviders"]
-    assert_equal false, capabilities["auth"]["logout"]
-    assert_equal false, capabilities["commands"]["supported"]
-    assert_equal false, capabilities["startupResources"]["supported"]
+    assert_equal ["openrouter"], capabilities["auth"]["apiKeyProviders"]
+    assert_equal true, capabilities["auth"]["logout"]
+    assert_includes capabilities["auth"]["methods"], "auth/providers"
+    assert_includes capabilities["auth"]["methods"], "auth/loginWithApiKey"
+    assert_includes capabilities["auth"]["methods"], "auth/logoutProvider"
+    assert_includes capabilities["auth"]["methods"], "auth/loginWithOAuth"
+    assert_equal true, capabilities["commands"]["supported"]
+    assert_equal ["prompt", "skill"], capabilities["commands"]["sources"]
+    assert_equal true, capabilities["startupResources"]["supported"]
     assert_equal true, capabilities["extensionUi"]["question"]["supported"]
     assert_equal false, capabilities["extensionUi"]["question"]["multiSelect"]
     assert_equal false, capabilities["extensionUi"]["question"]["preview"]
@@ -316,6 +324,121 @@ class TestRPC < KwardTestCase
       assert_equal "[REDACTED]", config["openrouter_api_key"]
       assert_equal "test-model", config["model"]
       assert_equal "sk-secret123", JSON.parse(File.read(config_path))["openrouter_api_key"]
+    end
+  end
+
+  def test_auth_provider_cards_api_key_login_and_logout
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      auth_path = File.join(config_dir, "auth.json")
+      File.write(auth_path, JSON.pretty_generate("tokens" => { "access_token" => "stored-openai-token" }))
+      File.chmod(0o600, auth_path)
+
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "auth/providers" },
+        { jsonrpc: "2.0", id: 2, method: "auth/loginWithApiKey", params: { providerId: "openrouter", apiKey: "sk-secret456" } },
+        { jsonrpc: "2.0", id: 3, method: "auth/providers" },
+        { jsonrpc: "2.0", id: 4, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path, "KWARD_AUTH_PATH" => auth_path, "OPENROUTER_API_KEY" => "sk-env456" })
+
+      openai = messages[0]["result"]["providers"].find { |provider| provider["id"] == "openai" }
+      assert_equal "oauth", openai["authType"]
+      assert_equal true, openai["configured"]
+      assert_equal "stored", openai["source"]
+      assert_equal true, openai["canLogout"]
+      assert_equal true, openai["usesCallbackServer"]
+
+      assert_equal({ "providerId" => "openrouter", "message" => "Saved API key for OpenRouter." }, messages[1]["result"])
+      refute_includes messages[1].to_s, "sk-secret456"
+      assert_equal "sk-secret456", JSON.parse(File.read(config_path))["openrouter_api_key"]
+      assert_equal 0o600, File.stat(config_path).mode & 0o777
+
+      openrouter = messages[2]["result"]["providers"].find { |provider| provider["id"] == "openrouter" }
+      assert_equal true, openrouter["configured"]
+      assert_equal "environment", openrouter["source"]
+      assert_equal true, openrouter["canLogout"]
+
+      logout_messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "auth/logoutProvider", params: { providerId: "openrouter" } },
+        { jsonrpc: "2.0", id: 2, method: "auth/logoutProvider", params: { providerId: "openai" } },
+        { jsonrpc: "2.0", id: 3, method: "auth/providers" },
+        { jsonrpc: "2.0", id: 4, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path, "KWARD_AUTH_PATH" => auth_path, "OPENROUTER_API_KEY" => "sk-env456", "OPENAI_ACCESS_TOKEN" => "env-openai-token" })
+
+      assert_equal({ "providerId" => "openrouter", "message" => "Logged out of OpenRouter." }, logout_messages[0]["result"])
+      assert_equal({ "providerId" => "openai", "message" => "Logged out of OpenAI." }, logout_messages[1]["result"])
+      refute JSON.parse(File.read(config_path)).key?("openrouter_api_key")
+      refute File.exist?(auth_path)
+      openrouter = logout_messages[2]["result"]["providers"].find { |provider| provider["id"] == "openrouter" }
+      assert_equal true, openrouter["configured"]
+      assert_equal "environment", openrouter["source"]
+      assert_equal false, openrouter["canLogout"]
+      openai = logout_messages[2]["result"]["providers"].find { |provider| provider["id"] == "openai" }
+      assert_equal true, openai["configured"]
+      assert_equal "environment", openai["source"]
+      assert_equal false, openai["canLogout"]
+    end
+  end
+
+  def test_runtime_update_setting_and_reload
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: client)
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+
+        model_result = server.send(:runtime_update_setting, "sessionId" => session[:id], "settingId" => "defaultModel", "value" => "OpenRouter/anthropic/claude-sonnet")
+        thinking_result = server.send(:runtime_update_setting, "sessionId" => session[:id], "settingId" => "defaultThinkingLevel", "value" => "high")
+        reload_result = server.send(:runtime_reload, "sessionId" => session[:id])
+
+        assert_equal "live", model_result[:applied]
+        assert_equal "Model updated for this session.", model_result[:message]
+        assert_equal "Thinking level updated for this session.", thinking_result[:message]
+        assert_equal({ ok: true, message: "Resources reloaded." }, reload_result)
+        config = JSON.parse(File.read(config_path))
+        assert_equal "anthropic/claude-sonnet", config["openrouter_model"]
+        assert_equal "high", config["openai_reasoning_effort"]
+        assert_equal 3, client.reload_count
+
+        error = assert_raises(ArgumentError) do
+          server.send(:runtime_update_setting, "sessionId" => session[:id], "settingId" => "transport", "value" => "stdio")
+        end
+        assert_equal "Unsupported runtime setting: transport", error.message
+      end
+    end
+  end
+
+  def test_commands_list_and_startup_resources_return_prompts_and_skills
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      prompts_dir = File.join(config_dir, "prompts")
+      skill_dir = File.join(config_dir, "skills", "testing-verification")
+      FileUtils.mkdir_p(prompts_dir)
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(config_dir, "AGENTS.md"), "# Context\n")
+      File.write(File.join(prompts_dir, "review.md"), "---\ndescription: Review current changes\nargument-hint: files\n---\nReview $ARGUMENTS\n")
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: testing-verification\ndescription: Testing and verification guidance\n---\n# Skill\n")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+
+        commands = server.send(:commands_list, "sessionId" => session[:id])[:commands]
+        prompt = commands.find { |command| command[:source] == "prompt" }
+        skill = commands.find { |command| command[:source] == "skill" }
+        assert_equal "review", prompt[:name]
+        assert_equal "Review current changes", prompt[:description]
+        assert_equal File.join(prompts_dir, "review.md"), prompt[:path]
+        assert_equal "skill:testing-verification", skill[:name]
+        assert_equal "Testing and verification guidance", skill[:description]
+        assert_equal File.join(skill_dir, "SKILL.md"), skill[:path]
+
+        sections = server.send(:startup_resources, "sessionId" => session[:id])[:sections]
+        assert_equal ["AGENTS.md"], sections.find { |section| section[:name] == "Context" }[:items]
+        assert_equal ["testing-verification"], sections.find { |section| section[:name] == "Skills" }[:items]
+        assert_equal ["/review"], sections.find { |section| section[:name] == "Prompts" }[:items]
+      end
     end
   end
 

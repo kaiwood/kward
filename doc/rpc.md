@@ -50,10 +50,10 @@ Detailed capability fields include:
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats; token, cost, and context usage are currently not computed.
-- `runtimeSettings`: currently unsupported.
-- `auth`: Tauren auth provider format, OpenAI OAuth methods, no API key provider methods, and no logout support.
-- `commands`: currently unsupported `commands/list` capability for prompt/skill/extension/builtin command sources.
-- `startupResources`: currently unsupported startup resource listing.
+- `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
+- `auth`: Tauren auth provider format, OpenAI OAuth, OpenRouter API-key login, and provider logout for stored credentials.
+- `commands`: supported `commands/list` capability for prompt and skill command sources.
+- `startupResources`: supported startup resource listing for context, skills, and prompts.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`; other UI primitives are explicitly unsupported.
 - `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
@@ -271,6 +271,24 @@ Params:
 
 Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. Token, cost, and context-usage fields are omitted until Kward can compute them.
 
+### `runtime/updateSetting`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+- `settingId`: currently `defaultModel` or `defaultThinkingLevel`.
+- `value`: setting value. `defaultModel` accepts `Provider/model-id` and preserves slashes after the provider separator.
+
+Applies the setting live by updating config and refreshing client config. Unsupported setting IDs are rejected.
+
+### `runtime/reload`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Refreshes config-backed runtime state and returns `{ "ok": true, "message": "Resources reloaded." }`.
+
 ## Model methods
 
 ### `models/list`
@@ -303,6 +321,22 @@ Updates the config-backed OpenAI/Codex reasoning effort and returns the current 
 ### `tools/list`
 
 Returns current tool schemas.
+
+### `commands/list`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns Tauren-compatible slash command metadata for configured prompt templates and skills. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Builtin terminal-only commands are omitted.
+
+### `resources/startup`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns stable startup sections for configured context (`AGENTS.md`), skills, and prompt templates.
 
 ### `prompts/list`
 
@@ -337,7 +371,37 @@ Updates config, including secret values, and returns a redacted config object. T
 
 ### `auth/status`
 
-Returns whether OpenAI OAuth, OpenAI access token env, and OpenRouter API key env are available.
+Returns whether OpenAI OAuth, OpenAI access token env, and OpenRouter API key env/config are available.
+
+### `auth/providers`
+
+Returns Tauren-compatible provider cards for OpenAI OAuth and OpenRouter API-key auth. Provider cards report whether credentials are configured, whether they came from stored config or environment variables, and whether stored credentials can be removed.
+
+### `auth/loginWithApiKey`
+
+Params:
+
+- `providerId`: currently `openrouter`.
+- `apiKey`: API key secret.
+
+Stores the API key with `0600` file permissions, refreshes client config, and returns a redacted message payload. Secret values are not returned.
+
+### `auth/logoutProvider`
+
+Params:
+
+- `providerId`: `openai` or `openrouter`.
+
+Removes stored credentials only. Environment variables remain active and are still reported by `auth/providers`.
+
+### `auth/loginWithOAuth`
+
+Params:
+
+- `providerId`: currently `openai`.
+- `timeoutSeconds`: optional callback wait timeout.
+
+Provider-scoped wrapper around the OpenAI OAuth flow. The result includes `providerId`, `loginId`, `authorizationUrl`, `redirectUri`, and `status`.
 
 ### `auth/startOpenAILogin`
 
@@ -350,7 +414,7 @@ Returns:
 - `redirectUri`
 - `status`
 
-The server emits `auth/loginFinished` when login completes or fails.
+The server emits `auth/loginFinished` when login completes or fails. The notification includes `providerId`, `loginId`, `status`, `redirectUri`, and optional `message`/`error`.
 
 ### `auth/submitOpenAICode`
 

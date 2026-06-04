@@ -9,7 +9,7 @@ module Kward
         case value
         when Hash
           value.each_with_object({}) do |(key, item), result|
-            result[key] = key.to_s.match?(SECRET_KEYS) ? "[REDACTED]" : redact(item)
+            result[key] = secret_key?(key) ? "[REDACTED]" : redact(item)
           end
         when Array
           value.map { |item| redact(item) }
@@ -24,6 +24,13 @@ module Kward
         value
           .gsub(/Bearer\s+[^\s"']+/i, "Bearer [REDACTED]")
           .gsub(/(sk-[A-Za-z0-9_-]{8,})/, "[REDACTED]")
+      end
+
+      def secret_key?(key)
+        text = key.to_s
+        return false if text == "apiKeyProviders"
+
+        text.match?(SECRET_KEYS)
       end
     end
   end

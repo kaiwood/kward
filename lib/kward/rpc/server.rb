@@ -28,8 +28,8 @@ module Kward
         @transport = Transport.new(input: input, output: output)
         @error_output = error_output
         @session_manager = SessionManager.new(server: self, client: client)
-        @auth_manager = AuthManager.new(server: self)
         @config_manager = ConfigManager.new
+        @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @shutdown = false
       end
 
@@ -125,12 +125,28 @@ module Kward
           @session_manager.runtime_state(session_id: params.fetch("sessionId"))
         when "runtime/stats"
           @session_manager.runtime_stats(session_id: params.fetch("sessionId"))
+        when "runtime/updateSetting"
+          runtime_update_setting(params)
+        when "runtime/reload"
+          runtime_reload(params)
+        when "commands/list"
+          commands_list(params)
+        when "resources/startup"
+          startup_resources(params)
         when "config/read"
           { path: @config_manager.config_path, config: @config_manager.read(redacted: params.fetch("redacted", true)) }
         when "config/update"
           { path: @config_manager.config_path, config: @config_manager.update(params.fetch("values")) }
         when "auth/status"
           @auth_manager.status
+        when "auth/providers"
+          @auth_manager.providers
+        when "auth/loginWithApiKey"
+          auth_login_with_api_key(params)
+        when "auth/logoutProvider"
+          auth_logout_provider(params)
+        when "auth/loginWithOAuth"
+          @auth_manager.login_with_oauth(provider_id: params.fetch("providerId"), timeout_seconds: params["timeoutSeconds"] || 120)
         when "auth/startOpenAILogin"
           @auth_manager.start_openai_login(timeout_seconds: params["timeoutSeconds"] || 120)
         when "auth/submitOpenAICode"
@@ -257,17 +273,21 @@ module Kward
             state: { supported: true },
             stats: { messageCounts: true, tokens: false, cost: false, contextUsage: false }
           },
-          runtimeSettings: { supported: false, methods: [], settings: [] },
+          runtimeSettings: {
+            supported: true,
+            methods: ["runtime/updateSetting", "runtime/reload"],
+            settings: ["defaultModel", "defaultThinkingLevel"]
+          },
           auth: {
             supported: true,
             providerFormat: "tauren-auth-v1",
-            methods: ["auth/status", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"],
+            methods: ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"],
             oauthProviders: ["openai"],
-            apiKeyProviders: [],
-            logout: false
+            apiKeyProviders: ["openrouter"],
+            logout: true
           },
-          commands: { supported: false, method: "commands/list", sources: ["prompt", "skill", "extension", "builtin"] },
-          startupResources: { supported: false, method: "resources/startup" },
+          commands: { supported: true, method: "commands/list", sources: ["prompt", "skill"] },
+          startupResources: { supported: true, method: "resources/startup" },
           extensionUi: {
             question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
             select: false,
@@ -328,6 +348,77 @@ module Kward
         { models: @session_manager.available_models }
       end
 
+      def runtime_update_setting(params)
+        session_id = params.fetch("sessionId")
+        @session_manager.runtime_state(session_id: session_id)
+        setting_id = params.fetch("settingId").to_s
+        value = params.fetch("value")
+        case setting_id
+        when "defaultModel"
+          provider, model = provider_model_from(value)
+          @config_manager.set_model(model, provider: provider)
+        when "defaultThinkingLevel"
+          @config_manager.set_reasoning_effort(value)
+        else
+          raise ArgumentError, "Unsupported runtime setting: #{setting_id}"
+        end
+        @session_manager.refresh_client_config
+        { applied: "live", message: runtime_setting_message(setting_id) }
+      end
+
+      def runtime_reload(params)
+        @session_manager.runtime_state(session_id: params.fetch("sessionId"))
+        @session_manager.refresh_client_config
+        { ok: true, message: "Resources reloaded." }
+      end
+
+      def commands_list(params)
+        @session_manager.runtime_state(session_id: params.fetch("sessionId"))
+        prompts = ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES).map do |template|
+          {
+            name: template.command,
+            description: template.description,
+            source: "prompt",
+            location: template.path,
+            path: template.path,
+            sourceInfo: {}
+          }
+        end
+        skills = ConfigFiles.skills.map do |skill|
+          {
+            name: "skill:#{skill.name}",
+            description: skill.description,
+            source: "skill",
+            path: skill.path
+          }
+        end
+        { commands: prompts + skills }
+      end
+
+      def startup_resources(params)
+        @session_manager.runtime_state(session_id: params.fetch("sessionId"))
+        sections = []
+        agents_path = File.join(ConfigFiles.config_dir, "AGENTS.md")
+        sections << { name: "Context", items: ["AGENTS.md"] } if File.exist?(agents_path)
+        skills = ConfigFiles.skills.map(&:name)
+        prompts = ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES).map { |template| "/#{template.command}" }
+        sections << { name: "Skills", items: skills } unless skills.empty?
+        sections << { name: "Prompts", items: prompts } unless prompts.empty?
+        { sections: sections }
+      end
+
+      def auth_login_with_api_key(params)
+        result = @auth_manager.login_with_api_key(provider_id: params.fetch("providerId"), api_key: params.fetch("apiKey"))
+        @session_manager.refresh_client_config
+        result
+      end
+
+      def auth_logout_provider(params)
+        result = @auth_manager.logout_provider(provider_id: params.fetch("providerId"))
+        @session_manager.refresh_client_config
+        result
+      end
+
       def models_current
         @session_manager.current_model
       end
@@ -343,6 +434,27 @@ module Kward
         @config_manager.set_reasoning_effort(params.fetch("effort"))
         @session_manager.refresh_client_config
         @session_manager.current_model
+      end
+
+      def provider_model_from(value)
+        text = value.to_s.strip
+        raise ArgumentError, "Model must be a non-empty string" if text.empty?
+
+        provider, model = text.split("/", 2)
+        if model.to_s.empty?
+          [@session_manager.current_model[:provider], text]
+        else
+          [provider, model]
+        end
+      end
+
+      def runtime_setting_message(setting_id)
+        case setting_id
+        when "defaultModel"
+          "Model updated for this session."
+        when "defaultThinkingLevel"
+          "Thinking level updated for this session."
+        end
       end
 
       def write_result(id, result)

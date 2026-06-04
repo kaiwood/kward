@@ -41,6 +41,23 @@ module Kward
         update("openai_reasoning_effort" => effort)
       end
 
+      def set_api_key(provider_id, api_key)
+        provider_id = provider_id.to_s
+        api_key = api_key.to_s.strip
+        raise "API key must be a non-empty string" if api_key.empty?
+        raise "Unsupported API key provider: #{provider_id}" unless provider_id == "openrouter"
+
+        update("openrouter_api_key" => api_key)
+      end
+
+      def delete_key(key)
+        config = load_config
+        existed = config.key?(key.to_s)
+        config.delete(key.to_s)
+        write_config(config) if existed
+        existed
+      end
+
       private
 
       def load_config

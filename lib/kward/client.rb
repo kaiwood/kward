@@ -232,8 +232,8 @@ module Kward
       openai_token = @openai_access_token || @oauth.access_token
       if openai_token
         [CODEX_URL, openai_token, "Codex", @oauth.respond_to?(:account_id) ? @oauth.account_id : nil]
-      elsif @openrouter_api_key
-        [OPENROUTER_URL, @openrouter_api_key, "OpenRouter", nil]
+      elsif openrouter_api_key
+        [OPENROUTER_URL, openrouter_api_key, "OpenRouter", nil]
       else
         [CODEX_URL, nil, "Codex", nil]
       end
@@ -378,6 +378,10 @@ module Kward
       !@openai_access_token.to_s.empty? || @oauth.access_token.to_s != ""
     rescue StandardError
       false
+    end
+
+    def openrouter_api_key
+      @openrouter_api_key || config_value("openrouter_api_key")
     end
 
     def config_value(*keys)
