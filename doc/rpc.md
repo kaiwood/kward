@@ -274,6 +274,8 @@ Examples:
 
 ## UI question bridge
 
+Kward's only supported extension-style UI surface is the structured question bridge. The `extensionUi` capability reports `question.supported: true` with `notification: "ui/question"`, `method: "ui/answerQuestion"`, `maxQuestions: 4`, `multiSelect: false`, and `preview: false`. Other Pi-style extension UI primitives (`select`, `confirm`, `input`, `editor`, `widgets`, `footer`, `custom`, and `terminalInput`) are explicitly reported as unsupported until Kward has a real plugin/extension consumer for them.
+
 When the model calls `ask_user_question`, RPC emits a `ui/question` notification:
 
 ```json

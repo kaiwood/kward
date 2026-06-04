@@ -104,10 +104,24 @@ class TestRPC < KwardTestCase
     assert_equal true, capabilities["commands"]["supported"]
     assert_equal ["prompt", "skill"], capabilities["commands"]["sources"]
     assert_equal true, capabilities["startupResources"]["supported"]
-    assert_equal true, capabilities["extensionUi"]["question"]["supported"]
-    assert_equal false, capabilities["extensionUi"]["question"]["multiSelect"]
-    assert_equal false, capabilities["extensionUi"]["question"]["preview"]
-    assert_equal false, capabilities["extensionUi"]["select"]
+    assert_equal({
+      "question" => {
+        "supported" => true,
+        "notification" => "ui/question",
+        "method" => "ui/answerQuestion",
+        "maxQuestions" => 4,
+        "multiSelect" => false,
+        "preview" => false
+      },
+      "select" => false,
+      "confirm" => false,
+      "input" => false,
+      "editor" => false,
+      "widgets" => false,
+      "footer" => false,
+      "custom" => false,
+      "terminalInput" => false
+    }, capabilities["extensionUi"])
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
     assert_equal "none", capabilities["security"]["toolApproval"]
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
