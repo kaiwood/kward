@@ -36,12 +36,23 @@ module Kward
 
       def answer(request_id, answers)
         @mutex.synchronize do
-          @answers[request_id.to_s] = answers
+          @answers[request_id.to_s] = normalize_answers(answers)
           @condition.broadcast
         end
       end
 
       private
+
+      def normalize_answers(answers)
+        return nil if answers.nil?
+        return answers unless answers.is_a?(Array)
+
+        answers.map do |answer|
+          next answer unless answer.is_a?(Hash)
+
+          { question: value(answer, :question).to_s, answer: value(answer, :answer).to_s }
+        end
+      end
 
       def validate_questions(questions)
         raise ArgumentError, "questions must be an array" unless questions.is_a?(Array)

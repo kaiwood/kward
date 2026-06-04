@@ -992,6 +992,22 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_prompt_bridge_normalizes_rpc_answer_string_keys_for_tool_prompt
+    server = RecordingServer.new
+    bridge = Kward::RPC::PromptBridge.new(server: server, session_id: "session-1")
+    answer_thread = Thread.new do
+      wait_until { server.notifications.any? }
+      params = server.notifications.first[:params]
+      bridge.answer(params[:questionRequestId], [{ "question" => "Continue?", "answer" => "Yes" }])
+    end
+
+    answers = bridge.ask_user_question([question_args("Continue?")])
+
+    assert_equal [{ question: "Continue?", answer: "Yes" }], answers
+  ensure
+    answer_thread&.join
+  end
+
   def test_prompt_bridge_brokers_questions_to_rpc_ui
     server = RecordingServer.new
     bridge = Kward::RPC::PromptBridge.new(server: server, session_id: "session-1")
