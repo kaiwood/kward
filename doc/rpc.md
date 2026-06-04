@@ -39,22 +39,25 @@ Result fields:
 - `protocolVersion`: currently `1`.
 - `serverName`: `"kward"`.
 - `experimental`: `true`.
-- `capabilities`: includes the legacy boolean/simple fields (`sessions`, `asyncTurns`, `turnCancellation`, `turnEventReplay`, `uiQuestions`, `authLogin`, `configUpdate`) plus detailed capability objects for newer clients.
+- `capabilities`: includes detailed Tauren-compatible capability groups. Some legacy simple fields remain for older clients, but `sessions` is now the detailed session capability object.
 
 Detailed capability fields include:
 
-- `session`: explicit RPC session mode and persistence type.
-- `turns`: async turn mode and per-session concurrency.
-- `cancellation`: best-effort behavior for queued and running turns.
-- `eventReplay`: recent in-memory replay behavior and limit; events are not persisted.
-- `uiQuestion`: `ui/question` notification and `ui/answerQuestion` response support.
-- `prompts`: prompt list/expand methods.
-- `skills`: skill support through the `read_skill` tool.
-- `tools`: tool list support and normalized event metadata availability.
-- `models`: model/reasoning RPC methods.
-- `auth`: auth status and OpenAI OAuth login methods.
-- `config`: config read/update methods.
+- `transcript`: Tauren transcript format support, including normalized messages, image/tool support, and explicit unsupported compaction/reasoning restore flags.
+- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, and explicit unsupported fork/compact/import/tree/update features.
+- `turns`: async turn mode, per-session concurrency, unsupported busy-input steering/follow-up, best-effort cancellation, and recent in-memory event replay behavior.
+- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata support, and explicit unsupported tool diff/session update flags.
+- `attachments`: input attachment contract for `turns/start`; currently unsupported, but documents accepted base64 image MIME types and the stable max byte value for future support.
+- `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
+- `runtimeSettings`: currently unsupported.
+- `auth`: Tauren auth provider format, OpenAI OAuth methods, no API key provider methods, and no logout support.
+- `commands`: currently unsupported `commands/list` capability for prompt/skill/extension/builtin command sources.
+- `startupResources`: currently unsupported startup resource listing.
+- `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`; other UI primitives are explicitly unsupported.
+- `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
+
+Legacy compatibility fields still present include `asyncTurns`, `turnCancellation`, `turnEventReplay`, `uiQuestions`, `authLogin`, `configUpdate`, `session`, `cancellation`, `eventReplay`, `uiQuestion`, `prompts`, `skills`, `tools`, and `config`.
 
 ### `shutdown`
 

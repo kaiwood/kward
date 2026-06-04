@@ -171,28 +171,114 @@ module Kward
           protocolVersion: PROTOCOL_VERSION,
           serverName: "kward",
           experimental: true,
-          capabilities: {
-            framing: "content-length",
-            sessions: true,
-            asyncTurns: true,
-            turnCancellation: "best-effort",
-            turnEventReplay: true,
-            uiQuestions: true,
-            authLogin: true,
-            configUpdate: true,
-            session: { mode: "explicit", persistence: "jsonl" },
-            turns: { mode: "async", perSessionConcurrency: 1 },
-            cancellation: { behavior: "best-effort", queuedTurns: "cancel-before-run", runningTurns: "stop-emitting-events-when-possible" },
-            eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT },
-            uiQuestion: { supported: true, method: "ui/answerQuestion", notification: "ui/question", maxQuestions: 4, multiSelect: false },
-            prompts: { supported: true, methods: ["prompts/list", "prompts/expand"] },
-            skills: { supported: true, tool: "read_skill" },
-            tools: { supported: true, method: "tools/list", eventMetadata: true },
-            models: { supported: true, methods: ["models/list", "models/current", "models/set", "reasoning/set"] },
-            auth: { supported: true, methods: ["auth/status", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"] },
-            config: { supported: true, methods: ["config/read", "config/update"] },
-            export: { supported: true, formats: ["markdown", "html"], defaultFormat: "markdown" }
-          }
+          capabilities: capabilities
+        }
+      end
+
+      def capabilities
+        {
+          framing: "content-length",
+          asyncTurns: true,
+          turnCancellation: "best-effort",
+          turnEventReplay: true,
+          uiQuestions: true,
+          authLogin: true,
+          configUpdate: true,
+          transcript: {
+            format: "tauren-transcript-v1",
+            messagesNormalized: true,
+            supportsImages: true,
+            supportsToolCalls: true,
+            supportsToolResults: true,
+            supportsCompactionSummaries: false,
+            supportsReasoningRestore: false
+          },
+          sessions: {
+            mode: "explicit",
+            persistence: "jsonl",
+            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/export", "sessions/transcript"],
+            list: { supported: true, source: "rpc" },
+            fork: { supported: false },
+            compact: { supported: false },
+            import: { supported: false },
+            tree: { supported: false, labels: false, navigate: false, summarize: false },
+            updates: { supported: false, notification: "session/updated" }
+          },
+          turns: {
+            mode: "async",
+            perSessionConcurrency: 1,
+            busyInput: {
+              steer: "unsupported",
+              followUp: "unsupported",
+              defaultWhenIdle: "newTurn"
+            },
+            cancellation: {
+              behavior: "best-effort",
+              queuedTurns: "cancel-before-run",
+              runningTurns: "stop-emitting-events-when-possible"
+            },
+            eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT }
+          },
+          events: {
+            notification: "turn/event",
+            assistantText: "assistantDelta",
+            reasoning: { start: false, delta: true, end: false },
+            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: false, changedFiles: false },
+            errors: true,
+            sessionUpdates: false
+          },
+          attachments: {
+            input: {
+              supported: false,
+              method: "turns/start",
+              encoding: "base64",
+              mimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp"],
+              maxBytes: 10_485_760
+            }
+          },
+          models: {
+            supported: true,
+            methods: ["models/list", "models/current", "models/set", "reasoning/set"],
+            fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
+            scopedModels: false
+          },
+          runtimeSettings: { supported: false, methods: [], settings: [] },
+          auth: {
+            supported: true,
+            providerFormat: "tauren-auth-v1",
+            methods: ["auth/status", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"],
+            oauthProviders: ["openai"],
+            apiKeyProviders: [],
+            logout: false
+          },
+          commands: { supported: false, method: "commands/list", sources: ["prompt", "skill", "extension", "builtin"] },
+          startupResources: { supported: false, method: "resources/startup" },
+          extensionUi: {
+            question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
+            select: false,
+            confirm: false,
+            input: false,
+            editor: false,
+            widgets: false,
+            footer: false,
+            custom: false,
+            terminalInput: false
+          },
+          security: {
+            workspaceMutationGuard: "none",
+            toolApproval: "none",
+            canRunShell: true,
+            canWriteFiles: true
+          },
+          export: { supported: true, formats: ["markdown", "html"], defaultFormat: "markdown" },
+          session: { mode: "explicit", persistence: "jsonl" },
+          cancellation: { behavior: "best-effort", queuedTurns: "cancel-before-run", runningTurns: "stop-emitting-events-when-possible" },
+          eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT },
+          uiQuestion: { supported: true, method: "ui/answerQuestion", notification: "ui/question", maxQuestions: 4, multiSelect: false },
+          prompts: { supported: true, methods: ["prompts/list", "prompts/expand"] },
+          skills: { supported: true, tool: "read_skill" },
+          tools: { supported: true, method: "tools/list", eventMetadata: true },
+          config: { supported: true, methods: ["config/read", "config/update"] }
         }
       end
 
