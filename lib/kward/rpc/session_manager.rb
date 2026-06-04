@@ -6,6 +6,7 @@ require "time"
 require_relative "../agent"
 require_relative "../client"
 require_relative "../config_files"
+require_relative "../context_usage"
 require_relative "../conversation"
 require_relative "../events"
 require_relative "../session_store"
@@ -23,13 +24,14 @@ module Kward
       RPC_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
 
-      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :prompt, :queue, :worker, :running_turn_id, keyword_init: true)
+      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :queue, :worker, :running_turn_id, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, keyword_init: true)
 
-      def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir)
+      def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
         @server = server
         @client = client
         @config_dir = config_dir
+        @context_usage = context_usage
         @sessions = {}
         @turns = {}
         @mutex = Mutex.new
@@ -248,6 +250,7 @@ module Kward
         rpc_session = fetch_session(session_id)
         session = session_payload(rpc_session)
         counts = message_stats(rpc_session.conversation)
+        model = current_model
         {
           sessionFile: session[:path],
           sessionId: session[:persistentId],
@@ -257,8 +260,9 @@ module Kward
           toolCalls: counts[:toolCalls],
           toolResults: counts[:toolResults],
           totalMessages: counts[:totalMessages],
-          usingSubscription: current_model[:provider] == "Codex",
-          autoCompactionEnabled: false
+          usingSubscription: model[:provider] == "Codex",
+          autoCompactionEnabled: false,
+          contextUsage: context_usage(rpc_session, model)
         }.compact
       end
 
@@ -325,10 +329,23 @@ module Kward
         value.to_s == "true"
       end
 
+      OPENAI_CONTEXT_WINDOWS = [
+        [/\Agpt-5\.5\b/, 200_000],
+        [/\Agpt-5/, 400_000],
+        [/\Agpt-4\.1/, 1_047_576],
+        [/\Agpt-4o/, 128_000],
+        [/\Ao3/, 200_000],
+        [/\Ao4/, 200_000],
+        [/\Agpt-4/, 128_000],
+        [/\Agpt-3\.5-turbo/, 16_385],
+        [/\Afake-model\z/, 200_000]
+      ].freeze
+
       def default_context_window(provider, id)
         return nil unless provider == "Codex"
 
-        200_000 if id.to_s.start_with?("gpt-5") || id.to_s == "fake-model"
+        match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
+        match&.last
       end
 
       def default_model_label(model)
@@ -356,6 +373,20 @@ module Kward
 
       def message_count(conversation)
         conversation.messages.count { |message| message_role(message) != "system" }
+      end
+
+      def context_usage(rpc_session, model)
+        context_parts = if @client.respond_to?(:current_context_parts)
+                          @client.current_context_parts(rpc_session.conversation.messages, rpc_session.tool_registry.schemas)
+                        else
+                          { provider: model[:provider], model: model[:id], messages: rpc_session.conversation.messages, tools: rpc_session.tool_registry.schemas }
+                        end
+        @context_usage.call(
+          provider: model[:provider],
+          model: model[:id],
+          context_window: model[:contextWindow],
+          context_parts: context_parts
+        )
       end
 
       def message_stats(conversation)
@@ -484,9 +515,10 @@ module Kward
         id = SecureRandom.uuid
         prompt = PromptBridge.new(server: @server, session_id: id)
         workspace = Workspace.new(root: workspace_root)
+        tool_registry = ToolRegistry.new(workspace: workspace, prompt: prompt)
         agent = Agent.new(
           client: @client,
-          tool_registry: ToolRegistry.new(workspace: workspace, prompt: prompt),
+          tool_registry: tool_registry,
           conversation: conversation
         )
         RpcSession.new(
@@ -496,6 +528,7 @@ module Kward
           session: session,
           conversation: conversation,
           agent: agent,
+          tool_registry: tool_registry,
           prompt: prompt,
           queue: Queue.new,
           worker: nil,

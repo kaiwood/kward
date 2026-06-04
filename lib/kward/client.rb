@@ -74,6 +74,10 @@ module Kward
       models
     end
 
+    def current_context_parts(messages, tools)
+      build_context_parts(current_provider, messages, tools)
+    end
+
     def reload_config
       @config = load_config
     end
@@ -240,8 +244,8 @@ module Kward
     end
 
     def request_payload(provider, messages, tools)
-      payload = { model: model_for(provider), messages: chat_messages(messages), tools: tools }
-      payload
+      parts = build_context_parts(provider, messages, tools)
+      { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
     end
 
     def chat_messages(messages)
@@ -270,12 +274,12 @@ module Kward
     end
 
     def codex_payload(messages, tools)
-      instructions, input = codex_messages(messages)
+      parts = build_context_parts("Codex", messages, tools)
       {
-        model: model_for("Codex"),
-        instructions: instructions.empty? ? "You are a helpful assistant." : instructions,
-        input: input,
-        tools: tools.map { |tool| codex_tool_schema(tool) },
+        model: parts[:model],
+        instructions: parts[:instructions],
+        input: parts[:input],
+        tools: parts[:tools],
         tool_choice: "auto",
         parallel_tool_calls: false,
         stream: true,
@@ -283,6 +287,26 @@ module Kward
         include: [],
         reasoning: { effort: reasoning_effort, summary: "auto" }
       }
+    end
+
+    def build_context_parts(provider, messages, tools)
+      if provider == "Codex"
+        instructions, input = codex_messages(messages)
+        {
+          provider: provider,
+          model: model_for(provider),
+          instructions: instructions.empty? ? "You are a helpful assistant." : instructions,
+          input: input,
+          tools: tools.map { |tool| codex_tool_schema(tool) }
+        }
+      else
+        {
+          provider: provider,
+          model: model_for(provider),
+          messages: chat_messages(messages),
+          tools: tools
+        }
+      end
     end
 
     def codex_messages(messages)

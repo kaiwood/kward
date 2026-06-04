@@ -49,7 +49,7 @@ Detailed capability fields include:
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
-- `runtime`: supported state/stats methods with message-count stats; token, cost, and context usage are currently not computed.
+- `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: Tauren auth provider format, OpenAI OAuth, OpenRouter API-key login, and provider logout for stored credentials.
 - `commands`: supported `commands/list` capability for prompt and skill command sources.
@@ -312,7 +312,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. Token, cost, and context-usage fields are omitted until Kward can compute them.
+Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. For OpenAI/Codex sessions with a known model context window and text-only context, also returns `contextUsage` with current next-request context tokens, context window, and percent used. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
 
 ### `runtime/updateSetting`
 

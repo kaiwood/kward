@@ -88,7 +88,7 @@ class TestRPC < KwardTestCase
     assert_equal true, capabilities["runtime"]["supported"]
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]
-    assert_equal false, capabilities["runtime"]["stats"]["contextUsage"]
+    assert_equal true, capabilities["runtime"]["stats"]["contextUsage"]
     assert_equal true, capabilities["runtimeSettings"]["supported"]
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]
@@ -365,7 +365,8 @@ class TestRPC < KwardTestCase
 
   def test_runtime_stats_counts_messages_and_tool_activity
     Dir.mktmpdir do |config_dir|
-      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      context_usage = StaticContextUsage.new(tokens: 50)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir, context_usage: context_usage)
       session = manager.create_session(workspace_root: Dir.pwd, name: "Stats")
       rpc_session = manager.send(:fetch_session, session[:id])
 
@@ -386,7 +387,7 @@ class TestRPC < KwardTestCase
       assert_equal 4, stats[:totalMessages]
       assert_equal true, stats[:usingSubscription]
       assert_equal false, stats[:autoCompactionEnabled]
-      refute stats.key?(:contextUsage)
+      assert_equal({ tokens: 50, contextWindow: 200_000, percent: 0.03 }, stats[:contextUsage])
       refute stats.key?(:tokens)
     end
   end
@@ -983,6 +984,20 @@ class TestRPC < KwardTestCase
       raise "timed out" if Time.now > deadline
 
       sleep 0.01
+    end
+  end
+
+  class StaticContextUsage
+    def initialize(tokens:)
+      @tokens = tokens
+    end
+
+    def call(provider:, model:, context_window:, context_parts:)
+      {
+        tokens: @tokens,
+        contextWindow: context_window,
+        percent: ((@tokens.to_f / context_window.to_i) * 100).round(2)
+      }
     end
   end
 

@@ -277,7 +277,7 @@ module Kward
             supported: true,
             methods: ["runtime/state", "runtime/stats"],
             state: { supported: true },
-            stats: { messageCounts: true, tokens: false, cost: false, contextUsage: false }
+            stats: { messageCounts: true, tokens: false, cost: false, contextUsage: true }
           },
           runtimeSettings: {
             supported: true,
