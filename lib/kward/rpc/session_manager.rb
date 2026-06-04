@@ -11,6 +11,7 @@ require_relative "../session_store"
 require_relative "../tool_registry"
 require_relative "../workspace"
 require_relative "prompt_bridge"
+require_relative "transcript_normalizer"
 
 module Kward
   module RPC
@@ -98,7 +99,7 @@ module Kward
 
       def transcript(session_id:)
         rpc_session = fetch_session(session_id)
-        { session: session_payload(rpc_session), messages: rpc_session.conversation.messages }
+        { session: session_payload(rpc_session), messages: TranscriptNormalizer.new(rpc_session.conversation.messages).normalize }
       end
 
       def start_turn(session_id:, input:)
@@ -167,12 +168,18 @@ module Kward
       def session_payload(rpc_session)
         {
           id: rpc_session.id,
-          workspaceRoot: rpc_session.workspace_root,
-          path: rpc_session.session.path,
           persistentId: rpc_session.session.id,
+          path: rpc_session.session.path,
+          workspaceRoot: rpc_session.workspace_root,
+          cwd: rpc_session.session.cwd.to_s.empty? ? rpc_session.workspace_root : rpc_session.session.cwd,
           name: rpc_session.session.name,
-          createdAt: rpc_session.session.created_at&.utc&.iso8601(3)
+          createdAt: rpc_session.session.created_at&.utc&.iso8601(3),
+          modifiedAt: session_modified_at(rpc_session.session)&.utc&.iso8601(3)
         }
+      end
+
+      def session_modified_at(session)
+        File.exist?(session.path) ? File.mtime(session.path) : nil
       end
 
       def validate_workspace_root(root)
