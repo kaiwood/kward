@@ -90,6 +90,7 @@ class TestRPC < KwardTestCase
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]
     assert_equal true, capabilities["runtime"]["stats"]["contextUsage"]
+    assert_equal true, capabilities["runtime"]["stats"]["contextUsageEstimated"]
     assert_equal true, capabilities["runtimeSettings"]["supported"]
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]

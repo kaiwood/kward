@@ -13,14 +13,18 @@ module Kward
       return nil unless context_window
       return nil if contains_image?(context_parts)
 
-      payload = prompt_payload(context_parts)
+      parts = stringify_keys(context_parts || {})
+      return nil unless contains_session_content?(parts)
+
+      payload = prompt_payload(parts)
       return nil if payload.empty?
 
       tokens = @token_counter.count(JSON.generate(payload), model: model)
       {
         tokens: tokens,
         contextWindow: context_window,
-        percent: ((tokens.to_f / context_window.to_i) * 100).round(2)
+        percent: ((tokens.to_f / context_window.to_i) * 100).round(2),
+        estimated: true
       }
     rescue LoadError
       nil
@@ -28,8 +32,7 @@ module Kward
 
     private
 
-    def prompt_payload(context_parts)
-      parts = stringify_keys(context_parts || {})
+    def prompt_payload(parts)
       payload = {}
       if parts.key?("instructions")
         payload[:instructions] = parts["instructions"]
@@ -39,6 +42,23 @@ module Kward
       payload[:input] = parts["input"] if parts.key?("input")
       payload[:tools] = parts["tools"] if parts.key?("tools")
       payload.compact
+    end
+
+    def contains_session_content?(parts)
+      input = parts["input"]
+      return !input.empty? if input.is_a?(Array)
+      return !input.to_s.empty? if parts.key?("input")
+
+      messages = parts["messages"]
+      return messages.any? { |message| message_role(message) != "system" } if messages.is_a?(Array)
+
+      false
+    end
+
+    def message_role(message)
+      return nil unless message.respond_to?(:key?)
+
+      message[:role] || message["role"]
     end
 
     def contains_image?(value)

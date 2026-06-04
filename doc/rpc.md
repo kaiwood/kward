@@ -332,7 +332,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. For OpenAI/Codex sessions with a known model context window and text-only context, also returns `contextUsage` with current next-request context tokens, context window, and percent used. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
+Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. For OpenAI/Codex sessions with a known model context window and text-only non-empty conversation context, also returns `contextUsage` with estimated current next-request context tokens, context window, percent used, and `estimated: true`. Fresh sessions with no non-system content omit `contextUsage` because only static prompt/tool overhead would be measurable. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
 
 ### `runtime/updateSetting`
 
