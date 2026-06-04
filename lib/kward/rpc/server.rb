@@ -225,7 +225,7 @@ module Kward
           sessions: {
             mode: "explicit",
             persistence: "jsonl",
-            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/transcript"],
+            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
             list: { supported: true, source: "rpc" },
             fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "message-index", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: false },

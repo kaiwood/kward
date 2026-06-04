@@ -59,7 +59,7 @@ class TestRPC < KwardTestCase
     assert_equal false, capabilities["transcript"]["supportsCompactionSummaries"]
     assert_equal "explicit", capabilities["sessions"]["mode"]
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
-    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/transcript"], capabilities["sessions"]["methods"]
+    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]
     assert_equal true, capabilities["sessions"]["list"]["supported"]
     assert_equal true, capabilities["sessions"]["fork"]["supported"]
     assert_equal ["sessions/forkMessages", "sessions/fork"], capabilities["sessions"]["fork"]["methods"]
@@ -132,6 +132,26 @@ class TestRPC < KwardTestCase
     assert_equal true, messages[1]["result"]["ok"]
   end
 
+  def test_initialize_capability_method_lists_match_rpc_methods
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ])
+    capabilities = messages[0]["result"]["capabilities"]
+
+    assert_equal ["models/list", "models/current", "models/set", "reasoning/set"], capabilities["models"]["methods"]
+    assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
+    assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
+    assert_equal ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"], capabilities["auth"]["methods"]
+    assert_equal ["prompts/list", "prompts/expand"], capabilities["prompts"]["methods"]
+    assert_equal ["config/read", "config/update"], capabilities["config"]["methods"]
+    assert_equal "tools/list", capabilities["tools"]["method"]
+    assert_equal "commands/list", capabilities["commands"]["method"]
+    assert_equal "resources/startup", capabilities["startupResources"]["method"]
+    assert_includes capabilities["sessions"]["methods"], "sessions/delete"
+    assert_includes capabilities["sessions"]["methods"], "sessions/close"
+  end
+
   def test_session_manager_turn_events_complete_and_replay
     Dir.mktmpdir do |config_dir|
       server = RecordingServer.new
@@ -146,6 +166,34 @@ class TestRPC < KwardTestCase
       assert events.any? { |event| event[:type] == "answer" && event[:payload][:content] == "reply" }
       assert_equal "completed", manager.turn_status(turn_id: turn[:id])[:status]
       assert server.notifications.any? { |notification| notification[:method] == "turn/event" }
+    end
+  end
+
+  def test_turn_events_have_stable_lifecycle_reasoning_and_replay_filter
+    Dir.mktmpdir do |config_dir|
+      server = RecordingServer.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: ReasoningStreamingClient.new, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "think")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      events = manager.turn_events(turn_id: turn[:id], after_sequence: 0)[:events]
+      assert_equal "turnQueued", events[0][:type]
+      assert_equal "turnStarted", events[1][:type]
+      assert_equal "turnFinished", events[-1][:type]
+      assert_equal 1, events.count { |event| event[:type] == "turnFinished" }
+      assert_equal "completed", events[-1][:payload][:status]
+      assert events.each_cons(2).all? { |left, right| left[:sequence] < right[:sequence] }
+
+      reasoning = events.find { |event| event[:type] == "reasoningDelta" }
+      assert_equal({ delta: "because" }, reasoning[:payload])
+      assistant = events.find { |event| event[:type] == "assistantDelta" }
+      assert_equal({ delta: "answer" }, assistant[:payload])
+
+      replayed = manager.turn_events(turn_id: turn[:id], after_sequence: reasoning[:sequence])[:events]
+      refute_includes replayed.map { |event| event[:type] }, "reasoningDelta"
+      assert_includes replayed.map { |event| event[:type] }, "assistantDelta"
     end
   end
 
@@ -220,6 +268,22 @@ class TestRPC < KwardTestCase
       end
       assert_equal "Unsupported streamingBehavior: steer", error.message
     end
+  end
+
+  def test_turn_start_rpc_invalid_params_for_attachments_and_streaming_behavior
+    output = StringIO.new
+    server = Kward::RPC::Server.new(input: StringIO.new, output: output, error_output: StringIO.new, client: FakeClient.new([]))
+    session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+
+    server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 1, "method" => "turns/start", "params" => { "sessionId" => session[:id], "input" => "bad", "attachments" => [{ "type" => "image", "data" => "YQ==", "mimeType" => "image/svg+xml" }] } })
+    server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 2, "method" => "turns/start", "params" => { "sessionId" => session[:id], "input" => "large", "attachments" => [{ "type" => "image", "data" => "YQ==", "mimeType" => "image/png", "sizeBytes" => Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES + 1 }] } })
+    server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 3, "method" => "turns/start", "params" => { "sessionId" => session[:id], "input" => "steer", "streamingBehavior" => "steer" } })
+
+    messages = read_framed_messages(output)
+    assert_equal [-32_602, -32_602, -32_602], messages.map { |message| message["error"]["code"] }
+    assert_equal "Unsupported image MIME type: image/svg+xml", messages[0]["error"]["message"]
+    assert_equal "Image attachment is too large", messages[1]["error"]["message"]
+    assert_equal "Unsupported streamingBehavior: steer", messages[2]["error"]["message"]
   end
 
   def test_cancel_queued_turn_is_best_effort
@@ -841,6 +905,34 @@ class TestRPC < KwardTestCase
     answer_thread&.join
   end
 
+  def test_prompt_bridge_validates_question_contract
+    server = RecordingServer.new
+    bridge = Kward::RPC::PromptBridge.new(server: server, session_id: "session-1")
+
+    error = assert_raises(ArgumentError) { bridge.ask_user_question([]) }
+    assert_equal "ui/question requires 1-4 questions", error.message
+
+    too_many = Array.new(5) { question_args("Continue?") }
+    error = assert_raises(ArgumentError) { bridge.ask_user_question(too_many) }
+    assert_equal "ui/question requires 1-4 questions", error.message
+
+    error = assert_raises(ArgumentError) do
+      bridge.ask_user_question([{ question: "Continue?", header: "Confirm", options: [{ label: "Yes", description: "Continue." }] }])
+    end
+    assert_equal "question 1 requires 2-4 options", error.message
+
+    error = assert_raises(ArgumentError) do
+      bridge.ask_user_question([{ question: "Continue?", header: "Confirm", multiSelect: true, options: question_args("Continue?")[:options] }])
+    end
+    assert_equal "question 1 multiSelect is unsupported", error.message
+
+    error = assert_raises(ArgumentError) do
+      bridge.ask_user_question([{ question: "Continue?", header: "Confirm", options: [{ label: "Yes", description: "Continue.", preview: "code" }, { label: "No", description: "Stop." }] }])
+    end
+    assert_equal "question 1 preview is unsupported", error.message
+    assert_empty server.notifications
+  end
+
   def wait_until(timeout: 2)
     deadline = Time.now + timeout
     until yield
@@ -875,6 +967,14 @@ class TestRPC < KwardTestCase
       sleep 0.1
       on_assistant_delta&.call("slow")
       { "role" => "assistant", "content" => "slow" }
+    end
+  end
+
+  class ReasoningStreamingClient
+    def chat(_messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
+      on_reasoning_delta&.call("because")
+      on_assistant_delta&.call("answer")
+      { "role" => "assistant", "content" => "answer" }
     end
   end
 
