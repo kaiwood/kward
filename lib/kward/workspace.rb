@@ -4,7 +4,7 @@ require "timeout"
 
 module Kward
   class Workspace
-    MAX_FILE_BYTES = 50 * 1024
+    MAX_FILE_BYTES = 256 * 1024
     MAX_COMMAND_OUTPUT_BYTES = 20 * 1024
     DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
 

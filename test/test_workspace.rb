@@ -16,6 +16,16 @@ class TestWorkspace < KwardTestCase
     assert_match(/Error: path outside workspace:/, workspace.edit_file("../Gemfile", [{ "old_text" => "x", "new_text" => "y" }], read_paths: []))
   end
 
+  def test_file_at_size_limit_can_be_read
+    path = "max_size_test_file.tmp"
+    content = "x" * Kward::Workspace::MAX_FILE_BYTES
+    File.write(path, content)
+
+    assert_equal content, Kward::Workspace.new.read_file(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
   def test_reject_oversized_file
     path = "oversized_test_file.tmp"
     File.write(path, "x" * (Kward::Workspace::MAX_FILE_BYTES + 1))
