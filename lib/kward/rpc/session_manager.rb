@@ -61,7 +61,7 @@ module Kward
       def list_sessions(workspace_root: Dir.pwd, limit: 20)
         root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
-        store.recent(limit: limit.to_i <= 0 ? 20 : limit.to_i).map { |info| session_info_payload(info) }
+        store.recent(limit: limit.to_i <= 0 ? 20 : limit.to_i).map { |info| session_info_payload(info, workspace_root: root) }
       end
 
       def rename_session(session_id:, name:)
@@ -72,10 +72,38 @@ module Kward
 
       def clone_session(session_id:)
         source = fetch_session(session_id)
-        session = source.store.create_from_conversation(source.conversation)
-        rpc_session = build_rpc_session(source.store, session, source.conversation, source.workspace_root)
+        session, conversation = source.store.create_independent_from_conversation(source.conversation)
+        rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
         session_payload(rpc_session)
+      end
+
+      def fork_messages(session_id:)
+        rpc_session = fetch_session(session_id)
+        {
+          messages: entry_messages(rpc_session.conversation).each_with_index.filter_map do |message, index|
+            next unless message_role(message) == "user"
+
+            { entryId: entry_id(index), text: display_message_text(message) }
+          end
+        }
+      end
+
+      def fork_session(session_id:, entry_id:)
+        source = fetch_session(session_id)
+        index = entry_index(entry_id)
+        messages = entry_messages(source.conversation)
+        selected = messages[index] || raise(ArgumentError, "Unknown fork entryId: #{entry_id}")
+        raise ArgumentError, "Entry is not forkable: #{entry_id}" unless message_role(selected) == "user"
+
+        session, conversation = source.store.create_independent_from_messages(messages[0...index])
+        rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
+        remember_session(rpc_session)
+        {
+          session: session_payload(rpc_session),
+          text: full_message_text(selected),
+          cancelled: false
+        }
       end
 
       def export_session(session_id:, path: nil, format: nil)
@@ -346,6 +374,35 @@ module Kward
         value.each_with_object({}) { |(key, item), result| result[key.to_s] = item }
       end
 
+      def entry_messages(conversation)
+        conversation.messages.reject { |message| message_role(message) == "system" }
+      end
+
+      def entry_id(index)
+        "message:#{index}"
+      end
+
+      def entry_index(entry_id)
+        match = entry_id.to_s.match(/\Amessage:(\d+)\z/)
+        raise ArgumentError, "Invalid entryId: #{entry_id}" unless match
+
+        match[1].to_i
+      end
+
+      def display_message_text(message)
+        full_message_text(message).gsub(/\s+/, " ").strip.slice(0, 120).to_s
+      end
+
+      def full_message_text(message)
+        content = message["content"] || message[:content]
+        text = if content.is_a?(Array)
+                 content.filter_map { |part| part["text"] || part[:text] }.join("\n")
+               else
+                 content.to_s
+               end
+        text.strip
+      end
+
       def validate_streaming_behavior(streaming_behavior)
         behavior = streaming_behavior.to_s.empty? ? "newTurn" : streaming_behavior.to_s
         raise ArgumentError, "Unsupported streamingBehavior: #{behavior}" unless STREAMING_BEHAVIORS.include?(behavior)
@@ -538,15 +595,18 @@ module Kward
         }.compact
       end
 
-      def session_info_payload(info)
+      def session_info_payload(info, workspace_root:)
+        cwd = info.cwd.to_s.empty? ? workspace_root : info.cwd
         {
           id: info.id,
-          path: info.path,
-          cwd: info.cwd,
+          path: File.expand_path(info.path),
+          cwd: cwd,
+          workspaceRoot: workspace_root,
           createdAt: info.created_at&.utc&.iso8601(3),
           modifiedAt: info.modified_at&.utc&.iso8601(3),
           name: info.name,
-          firstMessage: info.first_message
+          firstMessage: info.first_message.to_s,
+          messageCount: info.message_count.to_i
         }
       end
 

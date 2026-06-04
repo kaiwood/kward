@@ -44,7 +44,7 @@ Result fields:
 Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, and explicit unsupported compaction/reasoning restore flags.
-- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, and explicit unsupported fork/compact/import/tree/update features.
+- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, supported linear-session fork methods, and explicit unsupported compact/import/tree/update features.
 - `turns`: async turn mode, per-session concurrency, unsupported busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
@@ -107,7 +107,7 @@ Params:
 - `workspaceRoot`: optional.
 - `limit`: optional, default `20`.
 
-Returns recent persisted sessions for that workspace.
+Returns recent persisted sessions for that workspace, newest first. Each item includes absolute `path`, `cwd`, `workspaceRoot`, `createdAt`, `modifiedAt`, optional `name`, compact `firstMessage`, and `messageCount` excluding metadata records.
 
 ### `sessions/rename`
 
@@ -124,7 +124,46 @@ Params:
 
 - `sessionId`
 
-Creates a new persisted session from the current conversation.
+Creates a new persisted session from the current conversation and returns a new independent RPC session. Future messages in the clone append only to the clone file; the source session remains unchanged.
+
+### `sessions/forkMessages`
+
+Params:
+
+- `sessionId`
+
+Returns forkable user-message entries for the active session:
+
+```json
+{
+  "messages": [
+    { "entryId": "message:0", "text": "User message text" }
+  ]
+}
+```
+
+`entryId` values are stable message-index IDs within the linear session. `text` is compact display text.
+
+### `sessions/fork`
+
+Params:
+
+- `sessionId`
+- `entryId`: an ID returned by `sessions/forkMessages`.
+
+Creates a new independent persisted session from history before the selected user message. The selected user message is excluded from the new session and returned as `text` so clients can place it into the composer for editing/resubmission.
+
+Returns:
+
+```json
+{
+  "session": {},
+  "text": "selected user message text",
+  "cancelled": false
+}
+```
+
+Future messages in the fork append only to the fork file; the source session remains unchanged.
 
 ### `sessions/export`
 

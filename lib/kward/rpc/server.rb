@@ -163,6 +163,10 @@ module Kward
           @session_manager.rename_session(session_id: params.fetch("sessionId"), name: params["name"])
         when "sessions/clone"
           @session_manager.clone_session(session_id: params.fetch("sessionId"))
+        when "sessions/forkMessages"
+          @session_manager.fork_messages(session_id: params.fetch("sessionId"))
+        when "sessions/fork"
+          @session_manager.fork_session(session_id: params.fetch("sessionId"), entry_id: params.fetch("entryId"))
         when "sessions/export"
           @session_manager.export_session(session_id: params.fetch("sessionId"), path: params["path"], format: params["format"])
         when "sessions/delete"
@@ -221,9 +225,9 @@ module Kward
           sessions: {
             mode: "explicit",
             persistence: "jsonl",
-            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/export", "sessions/transcript"],
+            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/transcript"],
             list: { supported: true, source: "rpc" },
-            fork: { supported: false },
+            fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "message-index", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: false },
             import: { supported: false },
             tree: { supported: false, labels: false, navigate: false, summarize: false },

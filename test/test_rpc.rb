@@ -59,9 +59,10 @@ class TestRPC < KwardTestCase
     assert_equal false, capabilities["transcript"]["supportsCompactionSummaries"]
     assert_equal "explicit", capabilities["sessions"]["mode"]
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
-    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/export", "sessions/transcript"], capabilities["sessions"]["methods"]
+    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/transcript"], capabilities["sessions"]["methods"]
     assert_equal true, capabilities["sessions"]["list"]["supported"]
-    assert_equal false, capabilities["sessions"]["fork"]["supported"]
+    assert_equal true, capabilities["sessions"]["fork"]["supported"]
+    assert_equal ["sessions/forkMessages", "sessions/fork"], capabilities["sessions"]["fork"]["methods"]
     assert_equal false, capabilities["sessions"]["compact"]["supported"]
     assert_equal false, capabilities["sessions"]["import"]["supported"]
     assert_equal false, capabilities["sessions"]["tree"]["supported"]
@@ -463,6 +464,167 @@ class TestRPC < KwardTestCase
     ensure
       File.delete(markdown[:path]) if markdown && File.exist?(markdown[:path])
       File.delete(File.join(Dir.pwd, "tmp-rpc-export.html")) if File.exist?(File.join(Dir.pwd, "tmp-rpc-export.html"))
+    end
+  end
+
+  def test_session_list_returns_rpc_metadata_message_counts_and_newest_first
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      older = manager.create_session(workspace_root: workspace_root, name: "Named")
+      older_rpc = manager.send(:fetch_session, older[:id])
+      older_rpc.conversation.append_user("first prompt\nwith spaces")
+      older_rpc.conversation.append_assistant("reply")
+      older_rpc.conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "contents")
+
+      newer = manager.create_session(workspace_root: workspace_root)
+      newer_rpc = manager.send(:fetch_session, newer[:id])
+      newer_rpc.conversation.append_user("new prompt")
+
+      old_time = Time.now - 60
+      File.utime(old_time, old_time, older[:path])
+      File.utime(Time.now, Time.now, newer[:path])
+
+      sessions = manager.list_sessions(workspace_root: workspace_root, limit: 10)
+
+      assert_equal [newer[:persistentId], older[:persistentId]], sessions.map { |session| session[:id] }
+      info = sessions.find { |session| session[:id] == older[:persistentId] }
+      assert_equal File.expand_path(older[:path]), info[:path]
+      assert_equal workspace_root, info[:cwd]
+      assert_equal workspace_root, info[:workspaceRoot]
+      assert_equal "Named", info[:name]
+      assert_equal "first prompt with spaces", info[:firstMessage]
+      assert_equal 3, info[:messageCount]
+      assert info[:createdAt]
+      assert info[:modifiedAt]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_resume_returns_metadata_and_restores_transcript
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root, name: "Resume me")
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("restored prompt")
+
+      resumed = manager.resume_session(path: session[:path], workspace_root: workspace_root)
+      transcript = manager.transcript(session_id: resumed[:id])
+
+      refute_equal session[:id], resumed[:id]
+      assert_equal session[:persistentId], resumed[:persistentId]
+      assert_equal session[:path], resumed[:path]
+      assert_equal workspace_root, resumed[:cwd]
+      assert_equal workspace_root, resumed[:workspaceRoot]
+      assert_equal "Resume me", resumed[:name]
+      assert_equal "restored prompt", transcript[:messages].find { |message| message[:role] == "user" }[:content][0][:text]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_rename_clears_empty_names
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd, name: "Initial")
+
+      renamed = manager.rename_session(session_id: session[:id], name: "   ")
+
+      assert_nil renamed[:name]
+      records = jsonl_records(session[:path]).select { |record| record["type"] == "session_info" }
+      assert_nil records.last["name"]
+    end
+  end
+
+  def test_session_clone_uses_independent_conversation_and_file
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      source = manager.create_session(workspace_root: workspace_root)
+      source_rpc = manager.send(:fetch_session, source[:id])
+      source_rpc.conversation.append_user("original prompt")
+      source_rpc.conversation.append_assistant("original reply")
+
+      clone = manager.clone_session(session_id: source[:id])
+      clone_rpc = manager.send(:fetch_session, clone[:id])
+
+      refute_equal source[:persistentId], clone[:persistentId]
+      refute_equal source[:path], clone[:path]
+      refute_same source_rpc.conversation, clone_rpc.conversation
+
+      clone_rpc.conversation.append_user("clone only")
+      source_rpc.conversation.append_user("source only")
+
+      source_records = jsonl_records(source[:path]).to_s
+      clone_records = jsonl_records(clone[:path]).to_s
+      assert_includes source_records, "original prompt"
+      assert_includes source_records, "source only"
+      refute_includes source_records, "clone only"
+      assert_includes clone_records, "original prompt"
+      assert_includes clone_records, "clone only"
+      refute_includes clone_records, "source only"
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_fork_messages_returns_stable_user_entries
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("first prompt\nwith spaces")
+      rpc_session.conversation.append_assistant("reply")
+      rpc_session.conversation.append_user("second prompt")
+
+      before = manager.fork_messages(session_id: session[:id])[:messages]
+      rpc_session.conversation.append_user("third prompt")
+      after = manager.fork_messages(session_id: session[:id])[:messages]
+
+      assert_equal ["message:0", "message:2"], before.map { |message| message[:entryId] }
+      assert_equal "first prompt with spaces", before.first[:text]
+      assert_equal before.map { |message| message[:entryId] }, after.first(2).map { |message| message[:entryId] }
+      assert_equal "message:3", after.last[:entryId]
+    end
+  end
+
+  def test_session_fork_creates_independent_session_and_returns_selected_text
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      source = manager.create_session(workspace_root: workspace_root)
+      source_rpc = manager.send(:fetch_session, source[:id])
+      source_rpc.conversation.append_user("keep this")
+      source_rpc.conversation.append_assistant("kept reply")
+      source_rpc.conversation.append_user("edit this prompt")
+      source_rpc.conversation.append_assistant("future reply")
+
+      fork = manager.fork_session(session_id: source[:id], entry_id: "message:2")
+      fork_rpc = manager.send(:fetch_session, fork[:session][:id])
+
+      assert_equal "edit this prompt", fork[:text]
+      assert_equal false, fork[:cancelled]
+      refute_equal source[:persistentId], fork[:session][:persistentId]
+      refute_equal source[:path], fork[:session][:path]
+      refute_same source_rpc.conversation, fork_rpc.conversation
+      assert_equal ["keep this", "kept reply"], fork_rpc.conversation.messages.reject { |message| message[:role] == "system" || message["role"] == "system" }.map { |message| message[:content] || message["content"] }
+
+      fork_rpc.conversation.append_user("fork only")
+      source_rpc.conversation.append_user("source only")
+
+      source_records = jsonl_records(source[:path]).to_s
+      fork_records = jsonl_records(fork[:session][:path]).to_s
+      assert_includes source_records, "edit this prompt"
+      assert_includes source_records, "source only"
+      refute_includes source_records, "fork only"
+      assert_includes fork_records, "keep this"
+      assert_includes fork_records, "fork only"
+      refute_includes fork_records, "edit this prompt"
+      refute_includes fork_records, "source only"
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
   end
 

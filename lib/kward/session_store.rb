@@ -10,7 +10,7 @@ module Kward
   class SessionStore
     VERSION = 1
 
-    SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, keyword_init: true)
+    SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, keyword_init: true)
 
     class Session
       attr_reader :id, :path, :cwd, :created_at
@@ -84,13 +84,22 @@ module Kward
 
     def create_from_conversation(conversation)
       session = create
-      conversation.messages.each do |message|
-        next if message_role(message) == "system"
-
-        session.append_message(message)
-      end
+      persisted_messages(conversation).each { |message| session.append_message(message) }
       session.attach(conversation)
       session
+    end
+
+    def create_independent_from_conversation(conversation)
+      create_independent_from_messages(persisted_messages(conversation), read_paths: Array(conversation.read_paths))
+    end
+
+    def create_independent_from_messages(messages, read_paths: [])
+      session = create
+      persisted = deep_copy(messages)
+      persisted.each { |message| session.append_message(message) }
+      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths)
+      session.attach(conversation)
+      [session, conversation]
     end
 
     def load(path, workspace: Workspace.new)
@@ -219,10 +228,19 @@ module Kward
         created_at: parse_time(header["timestamp"]) || stats.mtime,
         modified_at: stats.mtime,
         name: name,
-        first_message: first_message ? message_text(first_message) : "(no messages)"
+        first_message: first_message ? message_text(first_message) : "",
+        message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult"].include?(message_role(message)) }
       )
     rescue StandardError
       nil
+    end
+
+    def persisted_messages(conversation)
+      conversation.messages.reject { |message| message_role(message) == "system" }.map { |message| deep_copy(message) }
+    end
+
+    def deep_copy(value)
+      JSON.parse(JSON.generate(value))
     end
 
     def restored_read_paths(messages, workspace)
