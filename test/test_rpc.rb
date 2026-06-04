@@ -69,6 +69,8 @@ class TestRPC < KwardTestCase
     assert_equal "async", capabilities["turns"]["mode"]
     assert_equal 1, capabilities["turns"]["perSessionConcurrency"]
     assert_equal "unsupported", capabilities["turns"]["busyInput"]["steer"]
+    assert_equal "queue", capabilities["turns"]["busyInput"]["followUp"]
+    assert_equal "newTurn", capabilities["turns"]["busyInput"]["defaultWhenIdle"]
     assert_equal "best-effort", capabilities["turns"]["cancellation"]["behavior"]
     assert_equal false, capabilities["turns"]["eventReplay"]["persisted"]
     assert_equal 1000, capabilities["turns"]["eventReplay"]["limit"]
@@ -77,7 +79,7 @@ class TestRPC < KwardTestCase
     assert_equal true, capabilities["events"]["tools"]["diffs"]
     assert_equal false, capabilities["events"]["tools"]["changedFiles"]
     assert_equal false, capabilities["events"]["sessionUpdates"]
-    assert_equal false, capabilities["attachments"]["input"]["supported"]
+    assert_equal true, capabilities["attachments"]["input"]["supported"]
     assert_equal ["image/png", "image/jpeg", "image/gif", "image/webp"], capabilities["attachments"]["input"]["mimeTypes"]
     assert_equal 10_485_760, capabilities["attachments"]["input"]["maxBytes"]
     assert_includes capabilities["models"]["methods"], "models/set"
@@ -127,7 +129,7 @@ class TestRPC < KwardTestCase
       manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
       session = manager.create_session(workspace_root: Dir.pwd)
       first = manager.start_turn(session_id: session[:id], input: "first")
-      second = manager.start_turn(session_id: session[:id], input: "second")
+      second = manager.start_turn(session_id: session[:id], input: "second", streaming_behavior: "followUp")
 
       wait_until { manager.turn_status(turn_id: second[:id])[:status] == "completed" }
 
@@ -135,6 +137,61 @@ class TestRPC < KwardTestCase
       assert_equal "second", client.seen_messages[1][3][:content]
       assert_equal "completed", manager.turn_status(turn_id: first[:id])[:status]
       assert_equal "completed", manager.turn_status(turn_id: second[:id])[:status]
+    end
+  end
+
+  def test_turn_start_accepts_image_attachment_and_restores_transcript
+    Dir.mktmpdir do |config_dir|
+      png_data = "iVBORw0KGgo="
+      client = RecordingClient.new(["ok"])
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(
+        session_id: session[:id],
+        input: "describe this",
+        attachments: [{ type: "image", data: png_data, mimeType: "image/png", name: "pixel.png", sizeBytes: 8 }]
+      )
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      content = client.seen_messages[0][1][:content]
+      assert_equal({ type: "text", text: "describe this" }, content[0])
+      assert_equal({ type: "image", data: png_data, mimeType: "image/png", alt: "pixel.png" }, content[1])
+
+      user_message = manager.transcript(session_id: session[:id])[:messages].find { |message| message[:role] == "user" }
+      assert_equal "describe this", user_message[:content][0][:text]
+      image = user_message[:content][1]
+      assert_equal "image", image[:type]
+      assert_equal png_data, image[:data]
+      assert_equal "image/png", image[:mimeType]
+      assert_equal "pixel.png", image[:alt]
+    end
+  end
+
+  def test_turn_start_rejects_invalid_attachments_and_unsupported_streaming_behavior
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+
+      assert_raises(ArgumentError) do
+        manager.start_turn(session_id: session[:id], input: "bad", attachments: [{ type: "image", data: "YQ==", mimeType: "image/svg+xml" }])
+      end
+
+      error = assert_raises(ArgumentError) do
+        manager.start_turn(session_id: session[:id], input: "large", attachments: [{ type: "image", data: "YQ==", mimeType: "image/png", sizeBytes: Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES + 1 }])
+      end
+      assert_equal "Image attachment is too large", error.message
+
+      large_data = Base64.strict_encode64("a" * (Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES + 1))
+      error = assert_raises(ArgumentError) do
+        manager.start_turn(session_id: session[:id], input: "large", attachments: [{ type: "image", data: large_data, mimeType: "image/png" }])
+      end
+      assert_equal "Image attachment is too large", error.message
+
+      error = assert_raises(ArgumentError) do
+        manager.start_turn(session_id: session[:id], input: "steer", streaming_behavior: "steer")
+      end
+      assert_equal "Unsupported streamingBehavior: steer", error.message
     end
   end
 

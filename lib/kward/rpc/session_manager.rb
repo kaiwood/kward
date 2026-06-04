@@ -1,3 +1,4 @@
+require "base64"
 require "cgi"
 require "securerandom"
 require "thread"
@@ -18,9 +19,12 @@ module Kward
   module RPC
     class SessionManager
       RECENT_EVENT_LIMIT = 1_000
+      RPC_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+      RPC_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
+      STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :prompt, :queue, :worker, :running_turn_id, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, keyword_init: true)
 
       def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir)
         @server = server
@@ -103,17 +107,20 @@ module Kward
         { session: session_payload(rpc_session), messages: TranscriptNormalizer.new(rpc_session.conversation.messages).normalize }
       end
 
-      def start_turn(session_id:, input:)
+      def start_turn(session_id:, input:, streaming_behavior: "newTurn", attachments: [])
         rpc_session = fetch_session(session_id)
+        streaming_behavior = validate_streaming_behavior(streaming_behavior)
+        content = user_turn_content(input, attachments)
         turn = Turn.new(
           id: SecureRandom.uuid,
           session_id: rpc_session.id,
-          input: input.to_s,
+          input: content,
           status: "queued",
           cancel_requested: false,
           created_at: now,
           events: [],
-          next_sequence: 1
+          next_sequence: 1,
+          streaming_behavior: streaming_behavior
         )
         @mutex.synchronize { @turns[turn.id] = turn }
         rpc_session.queue << turn.id
@@ -191,6 +198,68 @@ module Kward
       end
 
       private
+
+      def validate_streaming_behavior(streaming_behavior)
+        behavior = streaming_behavior.to_s.empty? ? "newTurn" : streaming_behavior.to_s
+        raise ArgumentError, "Unsupported streamingBehavior: #{behavior}" unless STREAMING_BEHAVIORS.include?(behavior)
+        raise ArgumentError, "Unsupported streamingBehavior: steer" if behavior == "steer"
+
+        behavior
+      end
+
+      def user_turn_content(input, attachments)
+        normalized_attachments = normalize_attachments(attachments)
+        return input.to_s if normalized_attachments.empty?
+
+        [{ type: "text", text: input.to_s }] + normalized_attachments
+      end
+
+      def normalize_attachments(attachments)
+        return [] if attachments.nil?
+        raise ArgumentError, "attachments must be an array" unless attachments.is_a?(Array)
+
+        attachments.map { |attachment| normalize_attachment(attachment) }
+      end
+
+      def normalize_attachment(attachment)
+        raise ArgumentError, "attachment must be an object" unless attachment.is_a?(Hash)
+
+        type = value(attachment, :type).to_s
+        raise ArgumentError, "Unsupported attachment type: #{type.empty? ? "unknown" : type}" unless type == "image"
+
+        mime_type = normalize_attachment_mime_type(value(attachment, :mimeType) || value(attachment, :mime_type) || value(attachment, :media_type))
+        raise ArgumentError, "Unsupported image MIME type: #{mime_type.empty? ? "unknown" : mime_type}" unless RPC_IMAGE_MIME_TYPES.include?(mime_type)
+
+        data = value(attachment, :data).to_s
+        raise ArgumentError, "Image attachment data must be valid base64" if data.empty?
+        raise ArgumentError, "Image attachment data must be raw base64" if data.start_with?("data:")
+        declared_size = value(attachment, :sizeBytes) || value(attachment, :size_bytes)
+        raise ArgumentError, "Image attachment is too large" if declared_size && declared_size.to_i > RPC_ATTACHMENT_MAX_BYTES
+
+        decoded_size = Base64.strict_decode64(data).bytesize
+        raise ArgumentError, "Image attachment is too large" if decoded_size > RPC_ATTACHMENT_MAX_BYTES
+
+        result = { type: "image", data: data, mimeType: mime_type }
+        name = value(attachment, :name)
+        result[:alt] = name.to_s unless name.to_s.empty?
+        result
+      rescue ArgumentError => e
+        raise e if e.message.start_with?("Unsupported", "Image attachment", "attachment")
+
+        raise ArgumentError, "Image attachment data must be valid base64"
+      end
+
+      def normalize_attachment_mime_type(mime_type)
+        mime_type.to_s.downcase
+      end
+
+      def value(object, key)
+        return nil unless object.respond_to?(:key?)
+        return object[key] if object.key?(key)
+        return object[key.to_s] if object.key?(key.to_s)
+
+        nil
+      end
 
       def build_rpc_session(store, session, conversation, workspace_root)
         id = SecureRandom.uuid
@@ -452,7 +521,7 @@ module Kward
             next text if text
 
             path = part["path"] || part[:path]
-            media_type = part["media_type"] || part[:media_type] || "image"
+            media_type = part["mimeType"] || part[:mimeType] || part["media_type"] || part[:media_type] || "image"
             "[#{media_type}#{path ? ": #{path}" : ""}]"
           end.compact.join("\n")
         else

@@ -16,7 +16,8 @@ module Kward
     end
 
     def append_user(content)
-      append_message({ role: "user", content: ImageAttachments.content_from_text(content) })
+      content = ImageAttachments.content_from_text(content) unless content.is_a?(Array)
+      append_message({ role: "user", content: content })
     end
 
     def append_assistant(message)

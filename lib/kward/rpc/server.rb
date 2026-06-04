@@ -152,7 +152,12 @@ module Kward
         when "sessions/transcript"
           @session_manager.transcript(session_id: params.fetch("sessionId"))
         when "turns/start"
-          @session_manager.start_turn(session_id: params.fetch("sessionId"), input: params.fetch("input"))
+          @session_manager.start_turn(
+            session_id: params.fetch("sessionId"),
+            input: params.fetch("input"),
+            streaming_behavior: params["streamingBehavior"] || "newTurn",
+            attachments: params["attachments"] || []
+          )
         when "turns/cancel"
           @session_manager.cancel_turn(turn_id: params.fetch("turnId"))
         when "turns/status"
@@ -209,7 +214,7 @@ module Kward
             perSessionConcurrency: 1,
             busyInput: {
               steer: "unsupported",
-              followUp: "unsupported",
+              followUp: "queue",
               defaultWhenIdle: "newTurn"
             },
             cancellation: {
@@ -229,7 +234,7 @@ module Kward
           },
           attachments: {
             input: {
-              supported: false,
+              supported: true,
               method: "turns/start",
               encoding: "base64",
               mimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp"],

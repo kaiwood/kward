@@ -45,9 +45,9 @@ Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, and explicit unsupported compaction/reasoning restore flags.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, and explicit unsupported fork/compact/import/tree/update features.
-- `turns`: async turn mode, per-session concurrency, unsupported busy-input steering/follow-up, best-effort cancellation, and recent in-memory event replay behavior.
+- `turns`: async turn mode, per-session concurrency, unsupported busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
-- `attachments`: input attachment contract for `turns/start`; currently unsupported, but documents accepted base64 image MIME types and the stable max byte value for future support.
+- `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
 - `runtimeSettings`: currently unsupported.
 - `auth`: Tauren auth provider format, OpenAI OAuth methods, no API key provider methods, and no logout support.
@@ -157,6 +157,10 @@ Params:
 
 - `sessionId`
 - `input`
+- `streamingBehavior`: optional; `newTurn` by default, `followUp` queues behind the active turn, and `steer` is currently unsupported.
+- `attachments`: optional array of image attachments: `{ "type": "image", "data": "base64", "mimeType": "image/png", "name": "optional.png", "sizeBytes": 12345 }`.
+
+Supported attachment MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`. Image data must be raw base64 without a `data:` prefix, and the RPC boundary limit is 10MB per image.
 
 Returns a turn object with `id`, `sessionId`, `status`, timestamps, and cancellation state. Status starts as `queued` or quickly becomes `running`.
 

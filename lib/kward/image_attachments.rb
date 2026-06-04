@@ -132,7 +132,8 @@ module Kward
     end
 
     def data_url(part)
-      "data:#{part[:media_type] || part["media_type"]};base64,#{part[:data] || part["data"]}"
+      media_type = part[:mimeType] || part["mimeType"] || part[:media_type] || part["media_type"]
+      "data:#{media_type};base64,#{part[:data] || part["data"]}"
     end
 
     def terminal_image_sequence(part, width: DEFAULT_TERMINAL_IMAGE_WIDTH, env: ENV)
