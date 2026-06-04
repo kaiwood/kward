@@ -41,11 +41,21 @@ module Kward
           normalize_tool_result_message(message)
         when "toolResult"
           normalize_tool_result_message(message)
-        when "compactionSummary", "branchSummary", "custom"
+        when "compactionSummary"
+          normalize_compaction_summary(message)
+        when "branchSummary", "custom"
           message
         else
           nil
         end
+      end
+
+      def normalize_compaction_summary(message)
+        summary = value(message, :summary) || value(message, :content)
+        result = { role: "compactionSummary", summary: summary.to_s }
+        tokens_before = value(message, :tokensBefore) || value(message, :tokens_before)
+        result[:tokensBefore] = tokens_before if tokens_before
+        result
       end
 
       def normalize_user_message(message)

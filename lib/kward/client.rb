@@ -253,6 +253,9 @@ module Kward
         role = message[:role] || message["role"]
         content = message[:content] || message["content"]
         content_key = message.key?(:content) ? :content : "content"
+        if role.to_s == "compactionSummary"
+          next { role: "assistant", content: message[:summary] || message["summary"] || content.to_s }
+        end
         if role.to_s == "assistant" && content.is_a?(Array)
           next message.merge(content_key => plain_content(content))
         end
@@ -337,6 +340,9 @@ module Kward
               arguments: function[:arguments] || function["arguments"] || "{}"
             }
           end
+        when "compactionSummary"
+          summary = message[:summary] || message["summary"] || content
+          input << codex_message("assistant", summary.to_s) unless summary.to_s.empty?
         else
           input << codex_user_message(content)
         end

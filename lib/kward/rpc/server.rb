@@ -165,6 +165,8 @@ module Kward
           @session_manager.rename_session(session_id: params.fetch("sessionId"), name: params["name"])
         when "sessions/clone"
           @session_manager.clone_session(session_id: params.fetch("sessionId"))
+        when "sessions/compact"
+          @session_manager.compact_session(session_id: params.fetch("sessionId"), custom_instructions: params["customInstructions"] || "")
         when "sessions/forkMessages"
           @session_manager.fork_messages(session_id: params.fetch("sessionId"))
         when "sessions/fork"
@@ -221,16 +223,16 @@ module Kward
             supportsImages: true,
             supportsToolCalls: true,
             supportsToolResults: true,
-            supportsCompactionSummaries: false,
+            supportsCompactionSummaries: true,
             supportsReasoningRestore: false
           },
           sessions: {
             mode: "explicit",
             persistence: "jsonl",
-            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
+            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
             list: { supported: true, source: "rpc" },
             fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "message-index", selectedMessage: "excludedFromForkComposerTextReturned" },
-            compact: { supported: false },
+            compact: { supported: true, method: "sessions/compact", notification: "session/event", events: ["compactionStart", "compactionEnd"] },
             import: { supported: false },
             tree: { supported: false, labels: false, navigate: false, summarize: false },
             updates: { supported: false, notification: "session/updated" }

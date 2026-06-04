@@ -5,6 +5,7 @@ require "thread"
 require "time"
 require_relative "../agent"
 require_relative "../client"
+require_relative "../compactor"
 require_relative "../config_files"
 require_relative "../context_usage"
 require_relative "../conversation"
@@ -78,6 +79,21 @@ module Kward
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
         session_payload(rpc_session)
+      end
+
+      def compact_session(session_id:, custom_instructions: "")
+        rpc_session = fetch_session(session_id)
+        emit_session_event(rpc_session, "compactionStart", {})
+        result = Compactor.new(conversation: rpc_session.conversation, client: @client).compact(custom_instructions: custom_instructions)
+        payload = {
+          summary: result.summary,
+          firstKeptEntryId: entry_id(0)
+        }
+        emit_session_event(rpc_session, "compactionEnd", { result: payload, aborted: false, willRetry: false, errorMessage: nil })
+        payload
+      rescue StandardError => e
+        emit_session_event(rpc_session, "compactionEnd", { result: nil, aborted: true, willRetry: false, errorMessage: e.message }) if rpc_session
+        raise e
       end
 
       def fork_messages(session_id:)
@@ -628,6 +644,15 @@ module Kward
         turn.events.shift while turn.events.length > RECENT_EVENT_LIMIT
         @server.notify("turn/event", event)
         event
+      end
+
+      def emit_session_event(rpc_session, type, payload)
+        @server.notify("session/event", {
+          timestamp: now,
+          sessionId: rpc_session.id,
+          type: type,
+          payload: payload
+        })
       end
 
       def turn_payload(turn)

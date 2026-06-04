@@ -238,7 +238,7 @@ module Kward
 
       messages = restored_messages(records)
       name = session_name(records)
-      first_message = messages.find { |message| message_role(message) == "user" }
+      first_message = messages.find { |message| ["user", "compactionSummary"].include?(message_role(message)) }
       stats = File.stat(path)
 
       SessionInfo.new(
@@ -249,7 +249,7 @@ module Kward
         modified_at: stats.mtime,
         name: name,
         first_message: first_message ? message_text(first_message) : "",
-        message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult"].include?(message_role(message)) }
+        message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult", "compactionSummary"].include?(message_role(message)) }
       )
     rescue StandardError
       nil
@@ -328,6 +328,8 @@ module Kward
     end
 
     def message_text(message)
+      return (message["summary"] || message[:summary]).to_s.gsub(/\s+/, " ").strip.slice(0, 120) if message_role(message) == "compactionSummary"
+
       content = message_content(message)
       text = if content.is_a?(Array)
                content.filter_map { |part| part["text"] || part[:text] }.join(" ")

@@ -43,8 +43,8 @@ Result fields:
 
 Detailed capability fields include:
 
-- `transcript`: Tauren transcript format support, including normalized messages, image/tool support, and explicit unsupported compaction/reasoning restore flags.
-- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, supported linear-session fork methods, and explicit unsupported compact/import/tree/update features.
+- `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and explicit unsupported reasoning restore flags.
+- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, supported linear-session fork methods, supported compaction, and explicit unsupported import/tree/update features.
 - `turns`: async turn mode, per-session concurrency, unsupported busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
@@ -125,6 +125,26 @@ Params:
 - `sessionId`
 
 Creates a new persisted session from the current conversation and returns a new independent RPC session. Future messages in the clone append only to the clone file; the source session remains unchanged.
+
+### `sessions/compact`
+
+Params:
+
+- `sessionId`
+- `customInstructions`: optional additional guidance for the summarizer.
+
+Summarizes the current non-system conversation into a continuation summary, replaces the prior context with a `compactionSummary` transcript message, clears remembered read-file state, and appends a compaction record to the session JSONL.
+
+Returns:
+
+```json
+{
+  "summary": "Compaction summary",
+  "firstKeptEntryId": "message:0"
+}
+```
+
+The server emits `session/event` notifications with `type: "compactionStart"` before summarization and `type: "compactionEnd"` after completion or failure. The end payload includes `{ "result": {}, "aborted": false, "willRetry": false, "errorMessage": null }`; failed compactions set `aborted: true` and return a JSON-RPC error.
 
 ### `sessions/forkMessages`
 

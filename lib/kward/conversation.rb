@@ -39,8 +39,12 @@ module Kward
       @read_paths << path
     end
 
-    def compact!(summary)
-      message = { role: "assistant", content: summary.to_s }
+    def compact!(summary, compaction_summary: false)
+      message = if compaction_summary
+                  { role: "compactionSummary", summary: summary.to_s }
+                else
+                  { role: "assistant", content: summary.to_s }
+                end
       @messages = @messages.select { |item| message_role(item) == "system" }
       @messages << message
       @read_paths.clear

@@ -56,14 +56,15 @@ class TestRPC < KwardTestCase
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
     assert_equal true, capabilities["transcript"]["messagesNormalized"]
-    assert_equal false, capabilities["transcript"]["supportsCompactionSummaries"]
+    assert_equal true, capabilities["transcript"]["supportsCompactionSummaries"]
     assert_equal "explicit", capabilities["sessions"]["mode"]
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
-    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]
+    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]
     assert_equal true, capabilities["sessions"]["list"]["supported"]
     assert_equal true, capabilities["sessions"]["fork"]["supported"]
     assert_equal ["sessions/forkMessages", "sessions/fork"], capabilities["sessions"]["fork"]["methods"]
-    assert_equal false, capabilities["sessions"]["compact"]["supported"]
+    assert_equal true, capabilities["sessions"]["compact"]["supported"]
+    assert_equal "sessions/compact", capabilities["sessions"]["compact"]["method"]
     assert_equal false, capabilities["sessions"]["import"]["supported"]
     assert_equal false, capabilities["sessions"]["tree"]["supported"]
     assert_equal false, capabilities["sessions"]["updates"]["supported"]
@@ -148,6 +149,7 @@ class TestRPC < KwardTestCase
     assert_equal "tools/list", capabilities["tools"]["method"]
     assert_equal "commands/list", capabilities["commands"]["method"]
     assert_equal "resources/startup", capabilities["startupResources"]["method"]
+    assert_includes capabilities["sessions"]["methods"], "sessions/compact"
     assert_includes capabilities["sessions"]["methods"], "sessions/delete"
     assert_includes capabilities["sessions"]["methods"], "sessions/close"
   end
@@ -690,6 +692,38 @@ class TestRPC < KwardTestCase
       refute_includes clone_records, "source only"
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+
+  def test_session_compact_emits_events_persists_summary_and_restores_transcript
+    Dir.mktmpdir do |config_dir|
+      server = RecordingServer.new
+      client = RecordingClient.new(["summary"])
+      manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("hello")
+      rpc_session.conversation.append_assistant("reply")
+
+      result = manager.compact_session(session_id: session[:id], custom_instructions: "focus")
+
+      assert_equal "summary", result[:summary]
+      assert_equal "message:0", result[:firstKeptEntryId]
+      assert_includes client.seen_messages.last.last[:content], "Additional user instructions for compaction: focus"
+      assert_equal [{ role: "compactionSummary", summary: "summary" }], rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      records = jsonl_records(session[:path])
+      assert records.any? { |record| record["type"] == "compaction" && record["message"]["role"] == "compactionSummary" && record["message"]["summary"] == "summary" }
+
+      event_types = server.notifications.select { |notification| notification[:method] == "session/event" }.map { |notification| notification[:params][:type] }
+      assert_equal ["compactionStart", "compactionEnd"], event_types
+      end_payload = server.notifications.last[:params][:payload]
+      assert_equal false, end_payload[:aborted]
+      assert_equal result, end_payload[:result]
+
+      resumed = manager.resume_session(path: session[:path], workspace_root: Dir.pwd)
+      transcript_message = manager.transcript(session_id: resumed[:id])[:messages].first
+      assert_equal({ role: "compactionSummary", summary: "summary" }, transcript_message)
     end
   end
 
