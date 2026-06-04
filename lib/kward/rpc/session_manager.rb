@@ -159,14 +159,68 @@ module Kward
       end
 
       def available_models
-        @client.respond_to?(:available_models) ? @client.available_models : []
+        models = @client.respond_to?(:available_models) ? Array(@client.available_models) : []
+        normalized = models.map { |model| normalize_model(model) }
+        current = current_model
+        normalized << current if normalized.none? { |model| model[:provider] == current[:provider] && model[:id] == current[:id] }
+        normalized
       end
 
       def current_model
         provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
         model = @client.respond_to?(:current_model) ? @client.current_model : nil
         reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
-        { provider: provider, model: model, reasoningEffort: reasoning }.compact
+        normalize_model(provider: provider, id: model, model: model, reasoningEffort: reasoning, current: true)
+      end
+
+      def runtime_state(session_id:)
+        rpc_session = fetch_session(session_id)
+        model = current_model
+        session = session_payload(rpc_session)
+        pending_count = pending_turn_count(rpc_session.id)
+        {
+          model: model,
+          thinkingLevel: model[:reasoningEffort],
+          isStreaming: streaming?(rpc_session),
+          isCompacting: false,
+          steeringMode: "one-at-a-time",
+          followUpMode: "one-at-a-time",
+          sessionFile: session[:path],
+          sessionId: session[:persistentId],
+          sessionName: session[:name],
+          autoCompactionEnabled: false,
+          autoRetryEnabled: false,
+          defaultProvider: model[:provider],
+          defaultModel: default_model_label(model),
+          defaultThinkingLevel: model[:reasoningEffort],
+          hideThinkingBlock: false,
+          quietStartup: false,
+          transport: "kward-rpc",
+          imageAutoResize: false,
+          blockImages: false,
+          enabledModels: [],
+          enableSkillCommands: true,
+          messageCount: message_count(rpc_session.conversation),
+          pendingMessageCount: pending_count
+        }.compact
+      end
+
+      def runtime_stats(session_id:)
+        rpc_session = fetch_session(session_id)
+        session = session_payload(rpc_session)
+        counts = message_stats(rpc_session.conversation)
+        {
+          sessionFile: session[:path],
+          sessionId: session[:persistentId],
+          sessionName: session[:name],
+          userMessages: counts[:userMessages],
+          assistantMessages: counts[:assistantMessages],
+          toolCalls: counts[:toolCalls],
+          toolResults: counts[:toolResults],
+          totalMessages: counts[:totalMessages],
+          usingSubscription: current_model[:provider] == "Codex",
+          autoCompactionEnabled: false
+        }.compact
       end
 
       def refresh_client_config
@@ -198,6 +252,99 @@ module Kward
       end
 
       private
+
+      def normalize_model(model)
+        model = stringify_keys(model || {})
+        provider = model["provider"]
+        id = model["id"] || model["model"]
+        reasoning = boolean_value(model["reasoning"], default: provider == "Codex")
+        reasoning_effort = model["reasoningEffort"] || model["reasoning_effort"] || (current_reasoning_effort if reasoning)
+        {
+          provider: provider,
+          id: id,
+          name: model["name"] || id,
+          model: model["model"] || id,
+          reasoning: reasoning,
+          reasoningEffort: reasoning_effort,
+          contextWindow: model["contextWindow"] || model["context_window"] || default_context_window(provider, id),
+          current: boolean_value(model["current"], default: current_model?(provider, id))
+        }.compact
+      end
+
+      def current_reasoning_effort
+        @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
+      end
+
+      def current_model?(provider, id)
+        provider == (@client.current_provider if @client.respond_to?(:current_provider)) && id == (@client.current_model if @client.respond_to?(:current_model))
+      end
+
+      def boolean_value(value, default: false)
+        return default if value.nil?
+        return value if value == true || value == false
+
+        value.to_s == "true"
+      end
+
+      def default_context_window(provider, id)
+        return nil unless provider == "Codex"
+
+        200_000 if id.to_s.start_with?("gpt-5") || id.to_s == "fake-model"
+      end
+
+      def default_model_label(model)
+        return nil if model[:provider].to_s.empty? || model[:id].to_s.empty?
+
+        "#{model[:provider]}/#{model[:id]}"
+      end
+
+      def streaming?(rpc_session)
+        turn_id = rpc_session.running_turn_id
+        return false unless turn_id
+
+        @mutex.synchronize { @turns[turn_id]&.status == "running" }
+      end
+
+      def pending_turn_count(session_id)
+        @mutex.synchronize do
+          @turns.values.count { |turn| turn.session_id == session_id && ["queued", "running"].include?(turn.status) }
+        end
+      end
+
+      def message_count(conversation)
+        conversation.messages.count { |message| message_role(message) != "system" }
+      end
+
+      def message_stats(conversation)
+        conversation.messages.each_with_object({ userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0 }) do |message, counts|
+          role = message_role(message)
+          next if role == "system"
+
+          counts[:totalMessages] += 1
+          case role
+          when "user"
+            counts[:userMessages] += 1
+          when "assistant"
+            counts[:assistantMessages] += 1
+            counts[:toolCalls] += tool_calls(message).length
+          when "tool", "toolResult"
+            counts[:toolResults] += 1
+          end
+        end
+      end
+
+      def tool_calls(message)
+        calls = message["tool_calls"] || message[:tool_calls]
+        calls.is_a?(Array) ? calls : []
+      end
+
+      def message_role(message)
+        message["role"] || message[:role]
+      end
+
+      def stringify_keys(value)
+        value.each_with_object({}) { |(key, item), result| result[key.to_s] = item }
+      end
 
       def validate_streaming_behavior(streaming_behavior)
         behavior = streaming_behavior.to_s.empty? ? "newTurn" : streaming_behavior.to_s

@@ -121,6 +121,10 @@ module Kward
           models_set(params)
         when "reasoning/set"
           reasoning_set(params)
+        when "runtime/state"
+          @session_manager.runtime_state(session_id: params.fetch("sessionId"))
+        when "runtime/stats"
+          @session_manager.runtime_stats(session_id: params.fetch("sessionId"))
         when "config/read"
           { path: @config_manager.config_path, config: @config_manager.read(redacted: params.fetch("redacted", true)) }
         when "config/update"
@@ -246,6 +250,12 @@ module Kward
             methods: ["models/list", "models/current", "models/set", "reasoning/set"],
             fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
             scopedModels: false
+          },
+          runtime: {
+            supported: true,
+            methods: ["runtime/state", "runtime/stats"],
+            state: { supported: true },
+            stats: { messageCounts: true, tokens: false, cost: false, contextUsage: false }
           },
           runtimeSettings: { supported: false, methods: [], settings: [] },
           auth: {

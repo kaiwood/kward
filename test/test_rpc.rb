@@ -51,7 +51,7 @@ class TestRPC < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtimeSettings auth commands startupResources extensionUi security export]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi security export]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -84,6 +84,10 @@ class TestRPC < KwardTestCase
     assert_equal 10_485_760, capabilities["attachments"]["input"]["maxBytes"]
     assert_includes capabilities["models"]["methods"], "models/set"
     assert_equal false, capabilities["models"]["scopedModels"]
+    assert_equal true, capabilities["runtime"]["supported"]
+    assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
+    assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]
+    assert_equal false, capabilities["runtime"]["stats"]["contextUsage"]
     assert_equal false, capabilities["runtimeSettings"]["supported"]
     assert_equal true, capabilities["auth"]["supported"]
     assert_equal "tauren-auth-v1", capabilities["auth"]["providerFormat"]
@@ -226,8 +230,17 @@ class TestRPC < KwardTestCase
       ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
 
       assert_equal "Codex", messages[0]["result"]["provider"]
+      assert_equal "fake-model", messages[0]["result"]["id"]
       assert_equal "fake-model", messages[0]["result"]["model"]
-      assert_equal "fake-model", messages[1]["result"]["models"].find { |model| model["provider"] == "Codex" }["id"]
+      assert_equal "fake-model", messages[0]["result"]["name"]
+      assert_equal true, messages[0]["result"]["reasoning"]
+      list_model = messages[1]["result"]["models"].find { |model| model["provider"] == "Codex" }
+      assert_equal "fake-model", list_model["id"]
+      assert_equal "fake-model", list_model["name"]
+      assert_equal true, list_model["reasoning"]
+      assert_equal "medium", list_model["reasoningEffort"]
+      assert_equal 200_000, list_model["contextWindow"]
+      assert_equal "new-openai-model", messages[2]["result"]["id"]
       assert_equal "new-openai-model", messages[2]["result"]["model"]
       assert_equal "high", messages[3]["result"]["reasoningEffort"]
       assert_equal 2, client.reload_count
@@ -235,6 +248,59 @@ class TestRPC < KwardTestCase
       config = JSON.parse(File.read(config_path))
       assert_equal "new-openai-model", config["openai_model"]
       assert_equal "high", config["openai_reasoning_effort"]
+    end
+  end
+
+  def test_runtime_state_returns_session_and_model_info
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd, name: "Work")
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("hello")
+
+      state = manager.runtime_state(session_id: session[:id])
+
+      assert_equal session[:path], state[:sessionFile]
+      assert_equal session[:persistentId], state[:sessionId]
+      assert_equal "Work", state[:sessionName]
+      assert_equal "kward-rpc", state[:transport]
+      assert_equal false, state[:isStreaming]
+      assert_equal 1, state[:messageCount]
+      assert_equal 0, state[:pendingMessageCount]
+      assert_equal "Codex", state[:model][:provider]
+      assert_equal "fake-model", state[:model][:id]
+      assert_equal "fake-model", state[:model][:name]
+      assert_equal true, state[:model][:reasoning]
+      assert_equal "medium", state[:thinkingLevel]
+      assert_equal "Codex/fake-model", state[:defaultModel]
+    end
+  end
+
+  def test_runtime_stats_counts_messages_and_tool_activity
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd, name: "Stats")
+      rpc_session = manager.send(:fetch_session, session[:id])
+
+      rpc_session.conversation.append_user("hello")
+      rpc_session.conversation.append_assistant(assistant_tool_call("read_file", { path: "README.md" }))
+      rpc_session.conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "contents")
+      rpc_session.conversation.append_assistant("done")
+
+      stats = manager.runtime_stats(session_id: session[:id])
+
+      assert_equal session[:path], stats[:sessionFile]
+      assert_equal session[:persistentId], stats[:sessionId]
+      assert_equal "Stats", stats[:sessionName]
+      assert_equal 1, stats[:userMessages]
+      assert_equal 2, stats[:assistantMessages]
+      assert_equal 1, stats[:toolCalls]
+      assert_equal 1, stats[:toolResults]
+      assert_equal 4, stats[:totalMessages]
+      assert_equal true, stats[:usingSubscription]
+      assert_equal false, stats[:autoCompactionEnabled]
+      refute stats.key?(:contextUsage)
+      refute stats.key?(:tokens)
     end
   end
 

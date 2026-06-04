@@ -49,6 +49,7 @@ Detailed capability fields include:
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
+- `runtime`: supported state/stats methods with message-count stats; token, cost, and context usage are currently not computed.
 - `runtimeSettings`: currently unsupported.
 - `auth`: Tauren auth provider format, OpenAI OAuth methods, no API key provider methods, and no logout support.
 - `commands`: currently unsupported `commands/list` capability for prompt/skill/extension/builtin command sources.
@@ -252,15 +253,33 @@ Params:
 - `questionRequestId`
 - `answers`: answer array returned to the tool.
 
+## Runtime methods
+
+### `runtime/state`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns Tauren-compatible runtime state for the session, including session file, persisted session ID/name, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. Unsupported runtime settings are returned as false or omitted.
+
+### `runtime/stats`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. Token, cost, and context-usage fields are omitted until Kward can compute them.
+
 ## Model methods
 
 ### `models/list`
 
-Returns known model entries from the current client/config backend. This is intentionally simple and may include only defaults/currently configured options.
+Returns known model entries from the current client/config backend. This is intentionally simple and may include only defaults/currently configured options. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`; legacy `model` is retained as an alias for older clients.
 
 ### `models/current`
 
-Returns current provider, model, and reasoning effort where available.
+Returns the current model entry with `id`, `name`, `reasoning`, `reasoningEffort`, and legacy `model` alias where available.
 
 ### `models/set`
 
