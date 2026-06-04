@@ -151,9 +151,10 @@ class KwardTestCase < Minitest::Test
       @provider = "Codex"
       @model = "fake-model"
       @reasoning_effort = "medium"
+      @context_window = 200_000
     end
 
-    attr_accessor :provider, :model, :reasoning_effort
+    attr_accessor :provider, :model, :reasoning_effort, :context_window
 
     def chat(_messages, tools: [])
       @responses.shift
@@ -172,11 +173,11 @@ class KwardTestCase < Minitest::Test
     end
 
     def current_context_window
-      nil
+      @context_window
     end
 
     def available_models
-      [{ provider: @provider, id: @model, current: true }]
+      [{ provider: @provider, id: @model, contextWindow: @context_window, current: true }]
     end
   end
 

@@ -352,6 +352,17 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_current_model_does_not_give_fake_model_a_production_context_window
+    client = FakeClient.new([])
+    client.context_window = nil
+    manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client)
+
+    model = manager.current_model
+
+    assert_equal "fake-model", model[:id]
+    refute model.key?(:contextWindow)
+  end
+
   def test_model_rpc_methods_read_and_update_config
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

@@ -233,7 +233,8 @@ module Kward
         provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
         model = @client.respond_to?(:current_model) ? @client.current_model : nil
         reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
-        normalize_model(provider: provider, id: model, model: model, reasoningEffort: reasoning, current: true)
+        context_window = @client.respond_to?(:current_context_window) ? @client.current_context_window : nil
+        normalize_model(provider: provider, id: model, model: model, reasoningEffort: reasoning, contextWindow: context_window, current: true)
       end
 
       def runtime_state(session_id:)
@@ -367,8 +368,7 @@ module Kward
         [/\Ao3/, 200_000],
         [/\Ao4/, 200_000],
         [/\Agpt-4/, 128_000],
-        [/\Agpt-3\.5-turbo/, 16_385],
-        [/\Afake-model\z/, 200_000]
+        [/\Agpt-3\.5-turbo/, 16_385]
       ].freeze
 
       def default_context_window(provider, id)
