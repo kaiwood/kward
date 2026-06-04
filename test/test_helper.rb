@@ -198,7 +198,8 @@ class KwardTestCase < Minitest::Test
 
     def chat(messages, tools: [])
       @seen_messages << messages.map(&:dup)
-      { "role" => "assistant", "content" => @responses.shift }
+      response = @responses.shift
+      response.is_a?(Hash) ? response : { "role" => "assistant", "content" => response }
     end
   end
 

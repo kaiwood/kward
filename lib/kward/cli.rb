@@ -74,21 +74,35 @@ module Kward
 
     def one_shot(input)
       streamed = false
+      assistant_streamed = false
       markdown_chunks = []
-      message = chat(
-        Conversation.new.tap { |conversation| conversation.append_user(input) }.messages,
-        tools: ToolRegistry.new.schemas,
-        on_reasoning_delta: lambda do |delta|
-          streamed = true
-          append_markdown_delta(markdown_chunks, "Reasoning", delta)
-        end,
-        on_assistant_delta: lambda do |delta|
-          streamed = true
-          append_markdown_delta(markdown_chunks, "Assistant", delta)
-        end
+      conversation = Conversation.new
+      agent = Agent.new(
+        client: @client,
+        tool_registry: ToolRegistry.new(prompt: @prompt),
+        conversation: conversation
       )
+      answer = agent.ask(input) do |event|
+        case event
+        when Events::ReasoningDelta
+          streamed = true
+          append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
+        when Events::AssistantDelta
+          streamed = true
+          assistant_streamed = true
+          append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+        when Events::ToolCall
+          streamed = true
+          flush_markdown_deltas(markdown_chunks)
+          print_tool_call(event.tool_call)
+        when Events::ToolResult
+          streamed = true
+          flush_markdown_deltas(markdown_chunks)
+          print_tool_result(event.tool_call, event.content)
+        end
+      end
       flush_markdown_deltas(markdown_chunks) if streamed
-      streamed ? "" : render_markdown_transcript(message.fetch("content", ""))
+      assistant_streamed ? "" : render_markdown_transcript(answer)
     end
 
     def login(oauth: OpenAIOAuth.new)

@@ -189,6 +189,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_one_shot_executes_tool_calls
+    client = RecordingClient.new([
+      assistant_tool_call("read_file", path: "README.md"),
+      "README summary"
+    ])
+    cli = Kward::CLI.new(argv: ["read README"], stdin: FakeInput.new("", tty: true), client: client)
+
+    output = capture_io do
+      assert_equal "README summary", cli.one_shot("read README")
+    end.first
+
+    assert_equal 2, client.seen_messages.length
+    assert_equal "tool", client.seen_messages[1][3][:role]
+    assert_equal "call_read_file", client.seen_messages[1][3][:tool_call_id]
+    assert_equal "read_file", client.seen_messages[1][3][:name]
+    assert_includes client.seen_messages[1][3][:content], "# Ruby CLI Agent"
+    assert_includes output, "Tool>"
+    assert_includes output, "Tool output>"
+  end
+
   def test_resume_explicit_session_path_loads_prior_messages
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
