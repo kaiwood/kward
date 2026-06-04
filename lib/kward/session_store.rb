@@ -111,11 +111,17 @@ module Kward
       [session, conversation]
     end
 
+    def session_location(path)
+      resolved_path = resolve_session_path(path)
+      records = records_from_file(resolved_path)
+      header = session_header(records, resolved_path)
+      { path: resolved_path, cwd: header["cwd"].to_s.empty? ? @cwd : header["cwd"].to_s }
+    end
+
     def load(path, workspace: Workspace.new)
       resolved_path = resolve_session_path(path)
       records = records_from_file(resolved_path)
-      header = records.find { |record| record["type"] == "session" }
-      raise "Invalid Kward session file: #{resolved_path}" unless header && header["id"].to_s != ""
+      header = session_header(records, resolved_path)
 
       messages = restored_messages(records)
       name = session_name(records)
@@ -183,6 +189,13 @@ module Kward
       rescue JSON::ParserError
         nil
       end
+    end
+
+    def session_header(records, path)
+      header = records.find { |record| record["type"] == "session" }
+      raise "Invalid Kward session file: #{path}" unless header && header["id"].to_s != ""
+
+      header
     end
 
     def session_named?(session)

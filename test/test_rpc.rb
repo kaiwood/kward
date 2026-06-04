@@ -691,6 +691,36 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_session_resume_uses_persisted_workspace_for_restored_read_paths
+    Dir.mktmpdir do |config_dir|
+      original_root = File.realpath(Dir.mktmpdir)
+      wrong_root = File.realpath(Dir.mktmpdir)
+      File.write(File.join(original_root, "file.txt"), "old text\n")
+      File.write(File.join(wrong_root, "file.txt"), "old text\n")
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: original_root)
+      source = manager.send(:fetch_session, session[:id])
+      source.conversation.append_assistant(assistant_tool_call("read_file", { path: "file.txt" }))
+      source.conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "old text\n")
+
+      resumed = manager.resume_session(path: session[:path], workspace_root: wrong_root)
+      resumed_rpc = manager.send(:fetch_session, resumed[:id])
+      result = resumed_rpc.tool_registry.dispatch(
+        tool_call("edit_file", { path: "file.txt", edits: [{ old_text: "old text", new_text: "new text" }] }),
+        resumed_rpc.conversation
+      )
+
+      assert_equal original_root, resumed[:cwd]
+      assert_equal original_root, resumed[:workspaceRoot]
+      assert_includes result, "Edited file.txt"
+      assert_equal "new text\n", File.read(File.join(original_root, "file.txt"))
+      assert_equal "old text\n", File.read(File.join(wrong_root, "file.txt"))
+    ensure
+      FileUtils.remove_entry(original_root) if original_root && File.exist?(original_root)
+      FileUtils.remove_entry(wrong_root) if wrong_root && File.exist?(wrong_root)
+    end
+  end
+
   def test_session_rename_clears_empty_names
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

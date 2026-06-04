@@ -55,9 +55,10 @@ module Kward
       def resume_session(path:, workspace_root: nil)
         root = validate_workspace_root(workspace_root || Dir.pwd)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
-        session, conversation = store.load(path, workspace: Workspace.new(root: root))
-        root = validate_workspace_root(session.cwd) unless session.cwd.to_s.empty?
+        location = store.session_location(path)
+        root = validate_workspace_root(location[:cwd])
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
+        session, conversation = store.load(location[:path], workspace: Workspace.new(root: root))
         rpc_session = build_rpc_session(store, session, conversation, root)
         remember_session(rpc_session)
         session_payload(rpc_session)
