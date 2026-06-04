@@ -22,6 +22,23 @@ class TestClient < KwardTestCase
     assert_equal false, payload[:store]
   end
 
+  def test_codex_payload_converts_tool_result_role_to_function_call_output
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    messages = [
+      { "role" => "compactionSummary", "summary" => "summary" },
+      assistant_tool_call("read_file", path: "README.md"),
+      { "role" => "toolResult", "toolCallId" => "call_read_file", "toolName" => "read_file", "content" => "README contents" }
+    ]
+
+    input = client.send(:codex_payload, messages, [])[:input]
+    calls = input.select { |item| item[:type] == "function_call" }.map { |item| item[:call_id] }
+    outputs = input.select { |item| item[:type] == "function_call_output" }.map { |item| item[:call_id] }
+
+    assert_equal ["call_read_file"], calls
+    assert_equal ["call_read_file"], outputs
+    assert_empty calls - outputs
+  end
+
   def test_codex_oauth_reads_model_and_reasoning_from_config
     path = "kward_test_config.json"
     File.write(path, JSON.dump("openai_model" => "gpt-config", "openai_reasoning_effort" => "high"))

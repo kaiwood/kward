@@ -355,10 +355,10 @@ module Kward
         case role.to_s
         when "system"
           instructions << plain_content(content).to_s
-        when "tool"
+        when "tool", "toolResult"
           input << {
             type: "function_call_output",
-            call_id: message[:tool_call_id] || message["tool_call_id"] || message[:name] || message["name"] || "tool-call",
+            call_id: message[:tool_call_id] || message["tool_call_id"] || message[:toolCallId] || message["toolCallId"] || message[:name] || message["name"] || message[:toolName] || message["toolName"] || "tool-call",
             output: plain_content(content).to_s
           }
         when "assistant"

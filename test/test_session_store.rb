@@ -73,4 +73,27 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_cloned_compacted_session_restores_tool_result_pair_for_codex
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      conversation = Kward::Conversation.new(system_message: nil)
+      conversation.append_user("inspect README")
+      conversation.append_assistant(assistant_tool_call("read_file", path: "README.md"))
+      conversation.messages << { "role" => "toolResult", "toolCallId" => "call_read_file", "toolName" => "read_file", "content" => "README contents" }
+      kept = conversation.messages[1..]
+      conversation.compact!("summary", compaction_summary: true, first_kept_entry_id: "message:1", keep_messages: kept)
+
+      clone_session, _clone_conversation = store.create_independent_from_conversation(conversation)
+      _loaded_session, loaded_conversation = store.load(clone_session.path)
+      client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+      input = client.send(:codex_payload, loaded_conversation.messages, [])[:input]
+      calls = input.select { |item| item[:type] == "function_call" }.map { |item| item[:call_id] }
+      outputs = input.select { |item| item[:type] == "function_call_output" }.map { |item| item[:call_id] }
+
+      assert_equal ["call_read_file"], calls
+      assert_equal ["call_read_file"], outputs
+      assert_empty calls - outputs
+    end
+  end
+
 end
