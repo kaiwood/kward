@@ -307,6 +307,28 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_cancel_running_turn_signals_client_and_finishes_promptly
+    Dir.mktmpdir do |config_dir|
+      server = RecordingServer.new
+      client = BlockingCancellableClient.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "running")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      manager.cancel_turn(turn_id: turn[:id])
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "canceled" }
+      assert_equal true, client.cancelled?
+      assert_equal true, manager.turn_status(turn_id: turn[:id])[:cancelRequested]
+      events = manager.turn_events(turn_id: turn[:id])[:events]
+      assert_equal "turnCancelRequested", events[-2][:type]
+      assert_equal "turnFinished", events[-1][:type]
+      assert_equal "canceled", events[-1][:payload][:status]
+      refute events.any? { |event| event[:type] == "assistantMessage" }
+    end
+  end
+
   def test_model_rpc_methods_read_and_update_config
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -1122,6 +1144,33 @@ class TestRPC < KwardTestCase
       sleep 0.1
       on_assistant_delta&.call("slow")
       { "role" => "assistant", "content" => "slow" }
+    end
+  end
+
+  class BlockingCancellableClient
+    def initialize
+      @mutex = Mutex.new
+      @condition = ConditionVariable.new
+      @cancelled = false
+    end
+
+    def chat(_messages, tools: [], cancellation: nil, on_reasoning_delta: nil, on_assistant_delta: nil)
+      cancellation&.on_cancel do
+        @mutex.synchronize do
+          @cancelled = true
+          @condition.broadcast
+        end
+      end
+      @mutex.synchronize do
+        @condition.wait(@mutex) until @cancelled
+      end
+      cancellation&.raise_if_cancelled!
+      on_assistant_delta&.call("late")
+      { "role" => "assistant", "content" => "late" }
+    end
+
+    def cancelled?
+      @mutex.synchronize { @cancelled }
     end
   end
 

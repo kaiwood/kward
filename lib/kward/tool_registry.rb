@@ -14,7 +14,8 @@ module Kward
       @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema, read_skill_schema, ask_user_question_schema].freeze
     end
 
-    def dispatch(tool_call, conversation)
+    def dispatch(tool_call, conversation, cancellation: nil)
+      cancellation&.raise_if_cancelled!
       function = tool_call["function"] || tool_call[:function] || {}
       name = function["name"] || function[:name]
       args = parse_arguments(function["arguments"] || function[:arguments])
@@ -29,7 +30,7 @@ module Kward
                 when "edit_file"
                   edit_file(args, conversation)
                 when "run_shell_command"
-                  run_shell_command(args)
+                  run_shell_command(args, cancellation: cancellation)
                 when "web_research"
                   @web_research.search(args)
                 when "read_skill"
@@ -82,11 +83,11 @@ module Kward
       false
     end
 
-    def run_shell_command(args)
+    def run_shell_command(args, cancellation: nil)
       command = args["command"] || args[:command] || ""
       timeout_seconds = args["timeout_seconds"] || args[:timeout_seconds] || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS
 
-      @workspace.run_shell_command(command, timeout_seconds: timeout_seconds)
+      @workspace.run_shell_command(command, timeout_seconds: timeout_seconds, cancellation: cancellation)
     end
 
     def read_skill(args)

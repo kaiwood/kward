@@ -1,6 +1,7 @@
 require "json"
 require "net/http"
 require "uri"
+require_relative "cancellation"
 require_relative "image_attachments"
 require_relative "openai_oauth"
 
@@ -22,11 +23,12 @@ module Kward
       @config = load_config
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
+      cancellation&.raise_if_cancelled!
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta) if provider == "Codex"
+      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation) if provider == "Codex"
 
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
@@ -34,16 +36,24 @@ module Kward
       request.body = JSON.dump(request_payload(provider, messages, tools))
 
       response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
         http.request(request)
       end
+      cancellation&.raise_if_cancelled!
 
       unless response.is_a?(Net::HTTPSuccess)
         raise "#{provider} request failed: #{response.code} #{response.body}"
       end
 
       message = JSON.parse(response.body).fetch("choices").first.fetch("message")
+      cancellation&.raise_if_cancelled!
       on_assistant_delta&.call(message.fetch("content", ""))
       message
+    rescue IOError, EOFError, SystemCallError => e
+      raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
+
+      raise e
     end
 
     def current_provider
@@ -92,7 +102,7 @@ module Kward
 
     private
 
-    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil)
+    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
@@ -103,6 +113,8 @@ module Kward
 
       message = nil
       Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
         http.request(request) do |response|
           unless response.is_a?(Net::HTTPSuccess)
             body = +""
@@ -110,11 +122,16 @@ module Kward
             raise "Codex OAuth request failed: #{response.code} #{redact(body, token)}"
           end
 
-          message = parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
+          message = parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
         end
       end
 
+      cancellation&.raise_if_cancelled!
       message
+    rescue IOError, EOFError, SystemCallError => e
+      raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
+
+      raise e
     end
 
     def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil)
@@ -127,11 +144,12 @@ module Kward
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
     end
 
-    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil)
+    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
       state = codex_sse_state
       buffer = +""
 
       response.read_body do |chunk|
+        cancellation&.raise_if_cancelled!
         buffer << chunk
         while (index = buffer.index(/\r?\n\r?\n/))
           delimiter = Regexp.last_match[0]
@@ -140,10 +158,17 @@ module Kward
           process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
         end
       end
+      cancellation&.raise_if_cancelled!
       process_codex_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta) unless buffer.empty?
       codex_sse_message(state)
     rescue JSON::ParserError => e
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
+    end
+
+    def close_http(http)
+      http.finish if http&.started?
+    rescue IOError
+      nil
     end
 
     def codex_sse_state

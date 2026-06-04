@@ -1,3 +1,4 @@
+require_relative "cancellation"
 require_relative "compactor"
 require_relative "conversation"
 require_relative "events"
@@ -13,16 +14,18 @@ module Kward
 
     attr_reader :conversation
 
-    def ask(input, on_reasoning_delta: nil, &block)
+    def ask(input, on_reasoning_delta: nil, cancellation: nil, &block)
+      cancellation&.raise_if_cancelled!
       @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input)
       auto_compact_if_needed
-      run_turn(on_reasoning_delta: on_reasoning_delta, &block)
+      run_turn(on_reasoning_delta: on_reasoning_delta, cancellation: cancellation, &block)
     end
 
-    def run_turn(on_reasoning_delta: nil)
+    def run_turn(on_reasoning_delta: nil, cancellation: nil)
       loop do
-        message = chat(on_reasoning_delta: on_reasoning_delta) do |event|
+        cancellation&.raise_if_cancelled!
+        message = chat(on_reasoning_delta: on_reasoning_delta, cancellation: cancellation) do |event|
           yield event if block_given?
         end
         yield Events::AssistantMessage.new(message: message) if block_given?
@@ -36,8 +39,10 @@ module Kward
         end
 
         tool_calls.each do |tool_call|
+          cancellation&.raise_if_cancelled!
           yield Events::ToolCall.new(tool_call: tool_call) if block_given?
-          content = @tool_registry.dispatch(tool_call, @conversation)
+          content = @tool_registry.dispatch(tool_call, @conversation, cancellation: cancellation)
+          cancellation&.raise_if_cancelled!
           yield Events::ToolResult.new(tool_call: tool_call, content: content) if block_given?
         end
       end
@@ -53,19 +58,27 @@ module Kward
       nil
     end
 
-    def chat(on_reasoning_delta: nil)
+    def chat(on_reasoning_delta: nil, cancellation: nil)
       reasoning_delta = lambda do |delta|
+        cancellation&.raise_if_cancelled!
         on_reasoning_delta&.call(delta)
         yield Events::ReasoningDelta.new(delta: delta) if block_given?
       end
       assistant_delta = lambda do |delta|
+        cancellation&.raise_if_cancelled!
         yield Events::AssistantDelta.new(delta: delta) if block_given?
       end
-      @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta)
+      @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta, cancellation: cancellation)
     rescue ArgumentError => e
-      raise unless e.message.include?("on_reasoning_delta") || e.message.include?("on_assistant_delta")
+      raise unless e.message.include?("on_reasoning_delta") || e.message.include?("on_assistant_delta") || e.message.include?("cancellation")
 
-      @client.chat(@conversation.messages, tools: @tool_registry.schemas)
+      begin
+        @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta)
+      rescue ArgumentError => retry_error
+        raise unless retry_error.message.include?("on_reasoning_delta") || retry_error.message.include?("on_assistant_delta")
+
+        @client.chat(@conversation.messages, tools: @tool_registry.schemas)
+      end
     end
 
     def safe_answer(content)

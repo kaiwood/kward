@@ -4,6 +4,7 @@ require "securerandom"
 require "thread"
 require "time"
 require_relative "../agent"
+require_relative "../cancellation"
 require_relative "../client"
 require_relative "../compactor"
 require_relative "../config_files"
@@ -27,7 +28,7 @@ module Kward
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :queue, :worker, :running_turn_id, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, keyword_init: true)
 
       def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
         @server = server
@@ -177,6 +178,7 @@ module Kward
           input: content,
           status: "queued",
           cancel_requested: false,
+          cancellation: Cancellation.new,
           created_at: now,
           events: [],
           next_sequence: 1,
@@ -192,6 +194,7 @@ module Kward
       def cancel_turn(turn_id:)
         turn = fetch_turn(turn_id)
         turn.cancel_requested = true
+        turn.cancellation&.cancel!
         emit_turn_event(turn, "turnCancelRequested", {})
         if turn.status == "queued"
           finish_turn(turn, "canceled")
@@ -610,10 +613,12 @@ module Kward
           return
         end
 
-        rpc_session.agent.ask(turn.input) do |event|
+        rpc_session.agent.ask(turn.input, cancellation: turn.cancellation) do |event|
           handle_agent_event(turn, event) unless turn.cancel_requested
         end
         finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
+      rescue Cancellation::CancelledError
+        finish_turn(turn, "canceled")
       rescue StandardError => e
         turn.error = turn_error_payload(e)
         emit_turn_event(turn, "error", turn.error)

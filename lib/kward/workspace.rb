@@ -74,18 +74,20 @@ module Kward
       "Error: #{e.message}"
     end
 
-    def run_shell_command(command, timeout_seconds: DEFAULT_COMMAND_TIMEOUT_SECONDS)
+    def run_shell_command(command, timeout_seconds: DEFAULT_COMMAND_TIMEOUT_SECONDS, cancellation: nil)
       command = command.to_s.strip
       return "Error: command is required" if command.empty?
 
       timeout_seconds = timeout_seconds.to_i
       timeout_seconds = DEFAULT_COMMAND_TIMEOUT_SECONDS if timeout_seconds <= 0
+      cancellation&.raise_if_cancelled!
 
       Open3.popen3(command, chdir: @root.to_s) do |stdin, stdout, stderr, wait_thread|
         stdin.close
         stdout_reader = Thread.new { stdout.read }
         stderr_reader = Thread.new { stderr.read }
-        status = Timeout.timeout(timeout_seconds) { wait_thread.value }
+        cancellation&.on_cancel { terminate_process(wait_thread.pid) }
+        status = wait_for_process(wait_thread, timeout_seconds, cancellation)
 
         output = +"Exit status: #{status.exitstatus}\n"
         output << "\nSTDOUT:\n#{stdout_reader.value}" unless stdout_reader.value.empty?
@@ -227,6 +229,15 @@ module Kward
       return output if output.bytesize <= @max_command_output_bytes
 
       output.byteslice(0, @max_command_output_bytes) << "\n... truncated to #{@max_command_output_bytes} bytes"
+    end
+
+    def wait_for_process(wait_thread, timeout_seconds, cancellation)
+      deadline = Time.now + timeout_seconds
+      loop do
+        cancellation&.raise_if_cancelled!
+        return wait_thread.value if wait_thread.join(0.05)
+        raise Timeout::Error if Time.now >= deadline
+      end
     end
 
     def terminate_process(pid)
