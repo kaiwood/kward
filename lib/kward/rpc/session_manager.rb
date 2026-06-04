@@ -1,3 +1,4 @@
+require "cgi"
 require "securerandom"
 require "thread"
 require "time"
@@ -71,11 +72,13 @@ module Kward
         session_payload(rpc_session)
       end
 
-      def export_session(session_id:, path: nil)
+      def export_session(session_id:, path: nil, format: nil)
         rpc_session = fetch_session(session_id)
-        path = export_path(rpc_session, path)
-        File.write(path, markdown_transcript(rpc_session.conversation))
-        { path: path }
+        format = export_format(format)
+        path = export_path(rpc_session, path, format)
+        content = export_content(rpc_session.conversation, format)
+        File.write(path, content)
+        { path: path, format: format }
       end
 
       def delete_session(session_id:)
@@ -144,6 +147,21 @@ module Kward
         rpc_session = fetch_session(session_id)
         rpc_session.prompt.answer(question_request_id, answers)
         { ok: true }
+      end
+
+      def available_models
+        @client.respond_to?(:available_models) ? @client.available_models : []
+      end
+
+      def current_model
+        provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
+        model = @client.respond_to?(:current_model) ? @client.current_model : nil
+        reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
+        { provider: provider, model: model, reasoningEffort: reasoning }.compact
+      end
+
+      def refresh_client_config
+        @client.reload_config if @client.respond_to?(:reload_config)
       end
 
       def session_payload(rpc_session)
@@ -251,9 +269,9 @@ module Kward
         when Events::AssistantMessage
           emit_turn_event(turn, "assistantMessage", { message: event.message })
         when Events::ToolCall
-          emit_turn_event(turn, "toolCall", { toolCall: event.tool_call })
+          emit_turn_event(turn, "toolCall", { toolCall: event.tool_call, tool: tool_metadata(event.tool_call) })
         when Events::ToolResult
-          emit_turn_event(turn, "toolResult", { toolCall: event.tool_call, content: event.content })
+          emit_turn_event(turn, "toolResult", { toolCall: event.tool_call, tool: tool_metadata(event.tool_call), content: event.content })
         when Events::Answer
           emit_turn_event(turn, "answer", { content: event.content })
         end
@@ -308,11 +326,75 @@ module Kward
         }
       end
 
-      def export_path(rpc_session, path)
+      def export_path(rpc_session, path, format)
         explicit = path.to_s.strip
         return File.expand_path(explicit, rpc_session.workspace_root) unless explicit.empty?
 
-        rpc_session.session.path.sub(/\.jsonl\z/, ".md")
+        extension = format == "html" ? ".html" : ".md"
+        rpc_session.session.path.sub(/\.jsonl\z/, extension)
+      end
+
+      def export_format(format)
+        value = format.to_s.strip.downcase
+        value = "markdown" if value.empty? || value == "md"
+        raise "Unsupported export format: #{format}" unless ["markdown", "html"].include?(value)
+
+        value
+      end
+
+      def export_content(conversation, format)
+        markdown = markdown_transcript(conversation)
+        return markdown if format == "markdown"
+
+        html_transcript(markdown)
+      end
+
+      def html_transcript(markdown)
+        escaped = CGI.escapeHTML(markdown)
+        <<~HTML
+          <!doctype html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Kward Session</title>
+          </head>
+          <body>
+          <pre>#{escaped}</pre>
+          </body>
+          </html>
+        HTML
+      end
+
+      def tool_metadata(tool_call)
+        function = tool_call["function"] || tool_call[:function] || {}
+        name = function["name"] || function[:name]
+        args = parse_tool_arguments(function["arguments"] || function[:arguments])
+
+        case name
+        when "edit_file"
+          edit = Array(args["edits"] || args[:edits]).first || {}
+          {
+            kind: "edit",
+            path: args["path"] || args[:path],
+            oldText: edit["old_text"] || edit[:old_text],
+            newText: edit["new_text"] || edit[:new_text]
+          }.compact
+        when "write_file"
+          { kind: "write", path: args["path"] || args[:path] }.compact
+        when "run_shell_command"
+          { kind: "shell", command: args["command"] || args[:command] }.compact
+        else
+          nil
+        end
+      end
+
+      def parse_tool_arguments(arguments)
+        return {} if arguments.nil? || arguments.empty?
+        return arguments if arguments.is_a?(Hash)
+
+        JSON.parse(arguments)
+      rescue JSON::ParserError
+        {}
       end
 
       def markdown_transcript(conversation)

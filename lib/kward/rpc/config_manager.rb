@@ -26,6 +26,21 @@ module Kward
         Redactor.redact(config)
       end
 
+      def set_model(model, provider: nil)
+        model = model.to_s.strip
+        raise "Model must be a non-empty string" if model.empty?
+
+        key = provider.to_s == "OpenRouter" ? "openrouter_model" : "openai_model"
+        update(key => model)
+      end
+
+      def set_reasoning_effort(effort)
+        effort = effort.to_s.strip
+        raise "Reasoning effort must be a non-empty string" if effort.empty?
+
+        update("openai_reasoning_effort" => effort)
+      end
+
       private
 
       def load_config

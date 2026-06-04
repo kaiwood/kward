@@ -113,6 +113,14 @@ module Kward
           prompts_list
         when "prompts/expand"
           prompts_expand(params)
+        when "models/list"
+          models_list
+        when "models/current"
+          models_current
+        when "models/set"
+          models_set(params)
+        when "reasoning/set"
+          reasoning_set(params)
         when "config/read"
           { path: @config_manager.config_path, config: @config_manager.read(redacted: params.fetch("redacted", true)) }
         when "config/update"
@@ -136,7 +144,7 @@ module Kward
         when "sessions/clone"
           @session_manager.clone_session(session_id: params.fetch("sessionId"))
         when "sessions/export"
-          @session_manager.export_session(session_id: params.fetch("sessionId"), path: params["path"])
+          @session_manager.export_session(session_id: params.fetch("sessionId"), path: params["path"], format: params["format"])
         when "sessions/delete"
           @session_manager.delete_session(session_id: params.fetch("sessionId"))
         when "sessions/close"
@@ -171,7 +179,19 @@ module Kward
             turnEventReplay: true,
             uiQuestions: true,
             authLogin: true,
-            configUpdate: true
+            configUpdate: true,
+            session: { mode: "explicit", persistence: "jsonl" },
+            turns: { mode: "async", perSessionConcurrency: 1 },
+            cancellation: { behavior: "best-effort", queuedTurns: "cancel-before-run", runningTurns: "stop-emitting-events-when-possible" },
+            eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT },
+            uiQuestion: { supported: true, method: "ui/answerQuestion", notification: "ui/question", maxQuestions: 4, multiSelect: false },
+            prompts: { supported: true, methods: ["prompts/list", "prompts/expand"] },
+            skills: { supported: true, tool: "read_skill" },
+            tools: { supported: true, method: "tools/list", eventMetadata: true },
+            models: { supported: true, methods: ["models/list", "models/current", "models/set", "reasoning/set"] },
+            auth: { supported: true, methods: ["auth/status", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"] },
+            config: { supported: true, methods: ["config/read", "config/update"] },
+            export: { supported: true, formats: ["markdown", "html"], defaultFormat: "markdown" }
           }
         }
       end
@@ -201,6 +221,27 @@ module Kward
         raise "Unknown prompt template: #{command}" unless template
 
         { command: command, text: template.expand(params["arguments"].to_s) }
+      end
+
+      def models_list
+        { models: @session_manager.available_models }
+      end
+
+      def models_current
+        @session_manager.current_model
+      end
+
+      def models_set(params)
+        provider = params["provider"] || @session_manager.current_model[:provider]
+        @config_manager.set_model(params.fetch("model"), provider: provider)
+        @session_manager.refresh_client_config
+        @session_manager.current_model
+      end
+
+      def reasoning_set(params)
+        @config_manager.set_reasoning_effort(params.fetch("effort"))
+        @session_manager.refresh_client_config
+        @session_manager.current_model
       end
 
       def write_result(id, result)

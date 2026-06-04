@@ -39,7 +39,22 @@ Result fields:
 - `protocolVersion`: currently `1`.
 - `serverName`: `"kward"`.
 - `experimental`: `true`.
-- `capabilities`: includes content-length framing, explicit sessions, async turns, best-effort cancellation, event replay, UI questions, auth login, and config updates.
+- `capabilities`: includes the legacy boolean/simple fields (`sessions`, `asyncTurns`, `turnCancellation`, `turnEventReplay`, `uiQuestions`, `authLogin`, `configUpdate`) plus detailed capability objects for newer clients.
+
+Detailed capability fields include:
+
+- `session`: explicit RPC session mode and persistence type.
+- `turns`: async turn mode and per-session concurrency.
+- `cancellation`: best-effort behavior for queued and running turns.
+- `eventReplay`: recent in-memory replay behavior and limit; events are not persisted.
+- `uiQuestion`: `ui/question` notification and `ui/answerQuestion` response support.
+- `prompts`: prompt list/expand methods.
+- `skills`: skill support through the `read_skill` tool.
+- `tools`: tool list support and normalized event metadata availability.
+- `models`: model/reasoning RPC methods.
+- `auth`: auth status and OpenAI OAuth login methods.
+- `config`: config read/update methods.
+- `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
 
 ### `shutdown`
 
@@ -112,9 +127,10 @@ Creates a new persisted session from the current conversation.
 Params:
 
 - `sessionId`
-- `path`: optional markdown path.
+- `path`: optional output path.
+- `format`: optional export format, `markdown` or `html`; defaults to `markdown`. `md` is accepted as an alias for `markdown`.
 
-Exports the transcript as Markdown.
+Exports the transcript. Markdown preserves the previous default behavior. HTML is a minimal escaped `<pre>` transcript wrapper.
 
 ### `sessions/delete`
 
@@ -191,6 +207,12 @@ Known event types:
 - `error`
 - `turnFinished`
 
+`toolCall` and `toolResult` payloads include the original `toolCall`. When recognized, they also include normalized `tool` metadata for UI adapters:
+
+- `edit_file`: `{ "kind": "edit", "path": "...", "oldText": "...", "newText": "..." }` for the first edit.
+- `write_file`: `{ "kind": "write", "path": "..." }`.
+- `run_shell_command`: `{ "kind": "shell", "command": "..." }`.
+
 ## UI question bridge
 
 When the model calls `ask_user_question`, RPC emits a `ui/question` notification:
@@ -210,6 +232,33 @@ Params:
 - `sessionId`
 - `questionRequestId`
 - `answers`: answer array returned to the tool.
+
+## Model methods
+
+### `models/list`
+
+Returns known model entries from the current client/config backend. This is intentionally simple and may include only defaults/currently configured options.
+
+### `models/current`
+
+Returns current provider, model, and reasoning effort where available.
+
+### `models/set`
+
+Params:
+
+- `model`: model ID string.
+- `provider`: optional provider hint, currently `Codex` or `OpenRouter`; defaults to the active provider.
+
+Updates the config-backed provider model and returns the current model payload.
+
+### `reasoning/set`
+
+Params:
+
+- `effort`: reasoning effort string.
+
+Updates the config-backed OpenAI/Codex reasoning effort and returns the current model payload.
 
 ## Tool and prompt methods
 

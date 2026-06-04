@@ -48,7 +48,21 @@ class TestRPC < KwardTestCase
     ])
 
     assert_equal 1, messages[0]["result"]["protocolVersion"]
-    assert_equal "content-length", messages[0]["result"]["capabilities"]["framing"]
+    capabilities = messages[0]["result"]["capabilities"]
+    assert_equal "content-length", capabilities["framing"]
+    assert_equal true, capabilities["sessions"]
+    assert_equal "explicit", capabilities["session"]["mode"]
+    assert_equal "async", capabilities["turns"]["mode"]
+    assert_equal "best-effort", capabilities["cancellation"]["behavior"]
+    assert_equal false, capabilities["eventReplay"]["persisted"]
+    assert_equal true, capabilities["uiQuestion"]["supported"]
+    assert_equal true, capabilities["prompts"]["supported"]
+    assert_equal true, capabilities["skills"]["supported"]
+    assert_equal true, capabilities["tools"]["eventMetadata"]
+    assert_includes capabilities["models"]["methods"], "models/set"
+    assert_equal true, capabilities["auth"]["supported"]
+    assert_equal true, capabilities["config"]["supported"]
+    assert_equal ["markdown", "html"], capabilities["export"]["formats"]
     assert_equal true, messages[1]["result"]["ok"]
   end
 
@@ -103,6 +117,31 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_model_rpc_methods_read_and_update_config
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "models/current" },
+        { jsonrpc: "2.0", id: 2, method: "models/list" },
+        { jsonrpc: "2.0", id: 3, method: "models/set", params: { model: "new-openai-model" } },
+        { jsonrpc: "2.0", id: 4, method: "reasoning/set", params: { effort: "high" } },
+        { jsonrpc: "2.0", id: 5, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "Codex", messages[0]["result"]["provider"]
+      assert_equal "fake-model", messages[0]["result"]["model"]
+      assert_equal "fake-model", messages[1]["result"]["models"].find { |model| model["provider"] == "Codex" }["id"]
+      assert_equal "new-openai-model", messages[2]["result"]["model"]
+      assert_equal "high", messages[3]["result"]["reasoningEffort"]
+      assert_equal 2, client.reload_count
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "new-openai-model", config["openai_model"]
+      assert_equal "high", config["openai_reasoning_effort"]
+    end
+  end
+
   def test_config_update_redacts_secrets_in_response
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -115,6 +154,56 @@ class TestRPC < KwardTestCase
       assert_equal "[REDACTED]", config["openrouter_api_key"]
       assert_equal "test-model", config["model"]
       assert_equal "sk-secret123", JSON.parse(File.read(config_path))["openrouter_api_key"]
+    end
+  end
+
+  def test_session_export_supports_markdown_default_and_html
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("hello <world>")
+      rpc_session.conversation.append_assistant("reply")
+
+      markdown = manager.export_session(session_id: session[:id])
+      html = manager.export_session(session_id: session[:id], path: File.join(Dir.pwd, "tmp-rpc-export.html"), format: "html")
+
+      assert_equal "markdown", markdown[:format]
+      assert_equal ".md", File.extname(markdown[:path])
+      assert_includes File.read(markdown[:path]), "## User\n\nhello <world>"
+      assert_equal "html", html[:format]
+      html_content = File.read(html[:path])
+      assert_includes html_content, "<!doctype html>"
+      assert_includes html_content, "hello &lt;world&gt;"
+    ensure
+      File.delete(markdown[:path]) if markdown && File.exist?(markdown[:path])
+      File.delete(File.join(Dir.pwd, "tmp-rpc-export.html")) if File.exist?(File.join(Dir.pwd, "tmp-rpc-export.html"))
+    end
+  end
+
+  def test_tool_events_include_normalized_metadata
+    Dir.mktmpdir do |config_dir|
+      workspace_root = Dir.mktmpdir
+      path = File.join(workspace_root, "test.txt")
+      File.write(path, "old")
+      responses = [
+        assistant_tool_call("read_file", { path: "test.txt" }),
+        assistant_tool_call("edit_file", { path: "test.txt", edits: [{ old_text: "old", new_text: "new" }] }),
+        { "role" => "assistant", "content" => "done" }
+      ]
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new(responses), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+      turn = manager.start_turn(session_id: session[:id], input: "edit")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      tool_event = manager.turn_events(turn_id: turn[:id])[:events].find { |event| event[:type] == "toolCall" && event[:payload][:tool] }
+      assert_equal "edit", tool_event[:payload][:tool][:kind]
+      assert_equal "test.txt", tool_event[:payload][:tool][:path]
+      assert_equal "old", tool_event[:payload][:tool][:oldText]
+      assert_equal "new", tool_event[:payload][:tool][:newText]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
   end
 
@@ -169,6 +258,36 @@ class TestRPC < KwardTestCase
       sleep 0.1
       on_assistant_delta&.call("slow")
       { "role" => "assistant", "content" => "slow" }
+    end
+  end
+
+  class ReloadableFakeClient < FakeClient
+    attr_reader :reload_count
+
+    def initialize(responses, config_path)
+      super(responses)
+      @config_path = config_path
+      @reload_count = 0
+    end
+
+    def current_model
+      config["openai_model"] || super
+    end
+
+    def current_reasoning_effort
+      config["openai_reasoning_effort"] || super
+    end
+
+    def reload_config
+      @reload_count += 1
+    end
+
+    private
+
+    def config
+      return {} unless File.exist?(@config_path)
+
+      JSON.parse(File.read(@config_path))
     end
   end
 end

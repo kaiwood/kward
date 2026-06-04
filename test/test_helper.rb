@@ -134,10 +134,31 @@ class KwardTestCase < Minitest::Test
   class FakeClient
     def initialize(responses)
       @responses = responses
+      @provider = "Codex"
+      @model = "fake-model"
+      @reasoning_effort = "medium"
     end
+
+    attr_accessor :provider, :model, :reasoning_effort
 
     def chat(_messages, tools: [])
       @responses.shift
+    end
+
+    def current_provider
+      @provider
+    end
+
+    def current_model
+      @model
+    end
+
+    def current_reasoning_effort
+      @reasoning_effort
+    end
+
+    def available_models
+      [{ provider: @provider, id: @model, current: true }]
     end
   end
 

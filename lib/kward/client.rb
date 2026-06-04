@@ -9,6 +9,9 @@ module Kward
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
+    DEFAULT_OPENAI_MODEL = "gpt-5.5"
+    DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
+    DEFAULT_REASONING_EFFORT = "medium"
 
     def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path)
       @openrouter_api_key = presence(api_key)
@@ -41,6 +44,38 @@ module Kward
       message = JSON.parse(response.body).fetch("choices").first.fetch("message")
       on_assistant_delta&.call(message.fetch("content", ""))
       message
+    end
+
+    def current_provider
+      _url, _token, provider = credentials
+      provider
+    rescue StandardError
+      openai_configured? ? "Codex" : "OpenRouter"
+    end
+
+    def current_model
+      model_for(current_provider)
+    end
+
+    def current_reasoning_effort
+      reasoning_effort
+    end
+
+    def available_models
+      provider = current_provider
+      openai_model = model_for("Codex")
+      openrouter_model = model_for("OpenRouter")
+      models = [
+        { provider: "Codex", id: DEFAULT_OPENAI_MODEL, current: provider == "Codex" && openai_model == DEFAULT_OPENAI_MODEL },
+        { provider: "OpenRouter", id: DEFAULT_OPENROUTER_MODEL, current: provider == "OpenRouter" && openrouter_model == DEFAULT_OPENROUTER_MODEL }
+      ]
+      models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless openai_model == DEFAULT_OPENAI_MODEL
+      models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_model == DEFAULT_OPENROUTER_MODEL
+      models
+    end
+
+    def reload_config
+      @config = load_config
     end
 
     private
@@ -329,14 +364,20 @@ module Kward
       return @model if @model
 
       if provider == "OpenRouter"
-        ENV["OPENROUTER_MODEL"] || config_value("openrouter_model", "model") || "openai/gpt-5.5"
+        ENV["OPENROUTER_MODEL"] || config_value("openrouter_model", "model") || DEFAULT_OPENROUTER_MODEL
       else
-        ENV["OPENAI_MODEL"] || config_value("openai_model", "model") || "gpt-5.5"
+        ENV["OPENAI_MODEL"] || config_value("openai_model", "model") || DEFAULT_OPENAI_MODEL
       end
     end
 
     def reasoning_effort
-      ENV["OPENAI_REASONING_EFFORT"] || config_value("openai_reasoning_effort", "reasoning_effort", "thinking_level") || "medium"
+      ENV["OPENAI_REASONING_EFFORT"] || config_value("openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+    end
+
+    def openai_configured?
+      !@openai_access_token.to_s.empty? || @oauth.access_token.to_s != ""
+    rescue StandardError
+      false
     end
 
     def config_value(*keys)
