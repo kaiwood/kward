@@ -209,7 +209,7 @@ Known event types:
 
 `toolCall` and `toolResult` payloads include the original `toolCall`. When recognized, they also include normalized `tool` metadata for UI adapters:
 
-- `edit_file`: `{ "kind": "edit", "path": "...", "oldText": "...", "newText": "..." }` for the first edit.
+- `edit_file`: `{ "kind": "edit", "path": "...", "edits": [{ "oldText": "...", "newText": "..." }], "oldText": "...", "newText": "..." }`. `edits` includes every replacement. The top-level `oldText`/`newText` fields are retained for backward compatibility and mirror the first edit.
 - `write_file`: `{ "kind": "write", "path": "..." }`.
 - `run_shell_command`: `{ "kind": "shell", "command": "..." }`.
 

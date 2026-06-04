@@ -372,12 +372,19 @@ module Kward
 
         case name
         when "edit_file"
-          edit = Array(args["edits"] || args[:edits]).first || {}
+          edits = Array(args["edits"] || args[:edits]).map do |edit|
+            {
+              oldText: edit["old_text"] || edit[:old_text],
+              newText: edit["new_text"] || edit[:new_text]
+            }.compact
+          end
+          first_edit = edits.first || {}
           {
             kind: "edit",
             path: args["path"] || args[:path],
-            oldText: edit["old_text"] || edit[:old_text],
-            newText: edit["new_text"] || edit[:new_text]
+            edits: edits,
+            oldText: first_edit[:oldText],
+            newText: first_edit[:newText]
           }.compact
         when "write_file"
           { kind: "write", path: args["path"] || args[:path] }.compact

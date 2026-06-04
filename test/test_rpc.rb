@@ -185,10 +185,17 @@ class TestRPC < KwardTestCase
     Dir.mktmpdir do |config_dir|
       workspace_root = Dir.mktmpdir
       path = File.join(workspace_root, "test.txt")
-      File.write(path, "old")
+      File.write(path, "old one\nold two\n")
+      edit_file_args = {
+        path: "test.txt",
+        edits: [
+          { old_text: "old one", new_text: "new one" },
+          { old_text: "old two", new_text: "new two" }
+        ]
+      }
       responses = [
         assistant_tool_call("read_file", { path: "test.txt" }),
-        assistant_tool_call("edit_file", { path: "test.txt", edits: [{ old_text: "old", new_text: "new" }] }),
+        assistant_tool_call("edit_file", edit_file_args),
         { "role" => "assistant", "content" => "done" }
       ]
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new(responses), config_dir: config_dir)
@@ -197,11 +204,17 @@ class TestRPC < KwardTestCase
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
 
-      tool_event = manager.turn_events(turn_id: turn[:id])[:events].find { |event| event[:type] == "toolCall" && event[:payload][:tool] }
-      assert_equal "edit", tool_event[:payload][:tool][:kind]
-      assert_equal "test.txt", tool_event[:payload][:tool][:path]
-      assert_equal "old", tool_event[:payload][:tool][:oldText]
-      assert_equal "new", tool_event[:payload][:tool][:newText]
+      tool_events = manager.turn_events(turn_id: turn[:id])[:events].select { |event| ["toolCall", "toolResult"].include?(event[:type]) && event[:payload][:tool]&.dig(:kind) == "edit" }
+      assert_equal 2, tool_events.length
+      tool_events.each do |tool_event|
+        assert_equal "test.txt", tool_event[:payload][:tool][:path]
+        assert_equal "old one", tool_event[:payload][:tool][:oldText]
+        assert_equal "new one", tool_event[:payload][:tool][:newText]
+        assert_equal [
+          { oldText: "old one", newText: "new one" },
+          { oldText: "old two", newText: "new two" }
+        ], tool_event[:payload][:tool][:edits]
+      end
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
