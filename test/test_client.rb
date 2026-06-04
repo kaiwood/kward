@@ -52,6 +52,14 @@ class TestClient < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
+  def test_codex_payload_includes_max_output_tokens_when_limited
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+
+    payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [], max_tokens: 1234)
+
+    assert_equal 1234, payload[:max_output_tokens]
+  end
+
   def test_config_model_and_thinking_level_apply_to_current_provider
     path = "kward_test_config.json"
     File.write(path, JSON.dump("model" => "configured-model", "thinking_level" => "low"))
@@ -84,6 +92,14 @@ class TestClient < KwardTestCase
 
     assert_equal "openai/gpt-5.5", payload[:model]
     refute payload.key?(:reasoning_effort)
+  end
+
+  def test_openrouter_payload_includes_max_tokens_when_limited
+    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
+
+    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [], max_tokens: 1234)
+
+    assert_equal 1234, payload[:max_tokens]
   end
 
   def test_openai_oauth_takes_precedence_over_openrouter_env

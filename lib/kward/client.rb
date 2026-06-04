@@ -23,17 +23,17 @@ module Kward
       @config = load_config
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
       cancellation&.raise_if_cancelled!
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation) if provider == "Codex"
+      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens) if provider == "Codex"
 
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"
-      request.body = JSON.dump(request_payload(provider, messages, tools))
+      request.body = JSON.dump(request_payload(provider, messages, tools, max_tokens: max_tokens))
 
       response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
         cancellation&.on_cancel { close_http(http) }
@@ -102,14 +102,14 @@ module Kward
 
     private
 
-    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
+    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
       request["originator"] = "codex_cli_rs"
-      request.body = JSON.dump(codex_payload(messages, tools))
+      request.body = JSON.dump(codex_payload(messages, tools, max_tokens: max_tokens))
 
       message = nil
       Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
@@ -276,9 +276,11 @@ module Kward
       end
     end
 
-    def request_payload(provider, messages, tools)
+    def request_payload(provider, messages, tools, max_tokens: nil)
       parts = build_context_parts(provider, messages, tools)
-      { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
+      payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
+      payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
+      payload
     end
 
     def chat_messages(messages)
@@ -309,9 +311,9 @@ module Kward
       end
     end
 
-    def codex_payload(messages, tools)
+    def codex_payload(messages, tools, max_tokens: nil)
       parts = build_context_parts("Codex", messages, tools)
-      {
+      payload = {
         model: parts[:model],
         instructions: parts[:instructions],
         input: parts[:input],
@@ -323,6 +325,8 @@ module Kward
         include: [],
         reasoning: { effort: reasoning_effort, summary: "auto" }
       }
+      payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
+      payload
     end
 
     def build_context_parts(provider, messages, tools)
