@@ -483,6 +483,40 @@ class TestCLI < KwardTestCase
     assert_empty client.seen_messages
   end
 
+  def test_settings_slash_command_reports_unavailable_without_tui_prompt
+    prompt = FakePrompt.new(["/settings", "/exit"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join("\n"), "Settings overlay is unavailable"
+    assert_empty client.seen_messages
+  end
+
+  def test_settings_slash_command_persists_overlay_settings
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({ "openai_model" => "existing" }))
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Right", "Maximum"])
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "existing", config["openai_model"]
+      assert_equal({ "alignment" => "right", "width" => "maximum" }, config["overlay"])
+      assert_equal [{ "alignment" => "right", "width" => "capped" }, { "alignment" => "right", "width" => "maximum" }], prompt.overlay_settings_updates
+      assert_equal ["Overlay alignment", "Overlay width"], prompt.select_messages
+      assert_equal ["Settings", "Settings"], prompt.select_titles
+    end
+  end
+
   def test_piped_prompt_reads_non_tty_input
     cli = Kward::CLI.new(stdin: FakeInput.new("hello from stdin\n", tty: false), client: FakeClient.new([]))
 

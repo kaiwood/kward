@@ -15,6 +15,19 @@ Example `~/.kward/config.json`:
 
 You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level.
 
+Overlay settings are stored under `overlay`:
+
+```json
+{
+  "overlay": {
+    "alignment": "center",
+    "width": "capped"
+  }
+}
+```
+
+`alignment` can be `left`, `center`, or `right`. `width` can be `capped` for the default compact card or `maximum` to use the terminal width minus the side inset.
+
 ## Environment fallback
 
 - Optional env fallback: `OPENAI_ACCESS_TOKEN` or `OPENROUTER_API_KEY`.

@@ -1,9 +1,14 @@
+require "fileutils"
+require "json"
 require "pathname"
 require "yaml"
 
 module Kward
   module ConfigFiles
     MAX_SKILL_FILE_BYTES = 100_000
+    DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "capped" }.freeze
+    OVERLAY_ALIGNMENTS = %w[left center right].freeze
+    OVERLAY_WIDTHS = %w[capped maximum].freeze
 
     Skill = Struct.new(:name, :description, :folder, :path, keyword_init: true)
     PromptTemplate = Struct.new(:command, :description, :argument_hint, :body, :path, keyword_init: true) do
@@ -19,6 +24,62 @@ module Kward
       return File.expand_path(File.dirname(config_path)) if config_path && !config_path.empty?
 
       File.expand_path("~/.kward")
+    end
+
+    def config_path
+      File.expand_path(ENV["KWARD_CONFIG_PATH"] || File.join(config_dir, "config.json"))
+    end
+
+    def read_config
+      path = config_path
+      return {} unless File.exist?(path)
+
+      JSON.parse(File.read(path))
+    rescue JSON::ParserError
+      raise "Invalid Kward config JSON: #{path}"
+    end
+
+    def write_config(config)
+      path = config_path
+      FileUtils.mkdir_p(File.dirname(path), mode: 0o700)
+      File.open(path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
+        file.write(JSON.pretty_generate(config))
+        file.write("\n")
+      end
+      File.chmod(0o600, path)
+    end
+
+    def overlay_settings(config = read_config)
+      overlay = config["overlay"].is_a?(Hash) ? config["overlay"] : {}
+      settings = DEFAULT_OVERLAY_SETTINGS.dup
+      alignment = overlay["alignment"].to_s
+      width = overlay["width"].to_s
+      settings["alignment"] = alignment if OVERLAY_ALIGNMENTS.include?(alignment)
+      settings["width"] = width if OVERLAY_WIDTHS.include?(width)
+      settings
+    end
+
+    def update_overlay_settings(values)
+      raise "Overlay settings must be an object" unless values.is_a?(Hash)
+
+      config = read_config
+      overlay = config["overlay"].is_a?(Hash) ? config["overlay"].dup : {}
+      values.each do |key, value|
+        key = key.to_s
+        value = value.to_s
+        case key
+        when "alignment"
+          raise "Overlay alignment must be left, center, or right" unless OVERLAY_ALIGNMENTS.include?(value)
+        when "width"
+          raise "Overlay width must be capped or maximum" unless OVERLAY_WIDTHS.include?(value)
+        else
+          raise "Unknown overlay setting: #{key}"
+        end
+        overlay[key] = value
+      end
+      config["overlay"] = overlay
+      write_config(config)
+      overlay_settings(config)
     end
 
     def agents_prompt

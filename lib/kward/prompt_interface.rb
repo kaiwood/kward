@@ -24,7 +24,7 @@ module Kward
     EXIT_INPUT = :exit_input
     SELECT_CANCEL = :select_cancel
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [])
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -58,6 +58,7 @@ module Kward
       @reserved_rows = 0
       @color_enabled = ANSI.enabled?(output)
       @cursor_visible = true
+      @overlay_settings = normalize_overlay_settings(overlay_settings)
     end
 
     def start
@@ -145,7 +146,7 @@ module Kward
       answer.start_with?("y")
     end
 
-    def select(message, choices)
+    def select(message, choices, title: "Sessions")
       return nil if choices.empty?
 
       start
@@ -157,7 +158,7 @@ module Kward
         @asking = true
         @busy = false
         @queued_count = 0
-        @select_state = { choices: choices.map(&:to_s), selection_index: 0 }
+        @select_state = { choices: choices.map(&:to_s), selection_index: 0, title: title.to_s }
         reset_history_navigation
         render_prompt_locked
       end
@@ -209,6 +210,13 @@ module Kward
 
     def modal_active?
       @mutex.synchronize { !@question_state.nil? }
+    end
+
+    def update_overlay_settings(settings)
+      @mutex.synchronize do
+        @overlay_settings = normalize_overlay_settings(settings)
+        render_prompt_locked if @started && @asking
+      end
     end
 
     def begin_busy_input(message = "You>")
@@ -1436,7 +1444,7 @@ module Kward
       lines = [overlay_text_line("↑/↓ select · Enter open · Esc cancel", :muted), overlay_blank_line]
       if matches.empty?
         lines << overlay_text_line("No matches", :muted)
-        return overlay_card_rows("Sessions", lines, width)
+        return overlay_card_rows(selection_overlay_title, lines, width)
       end
 
       visible = visible_selection_matches(matches)
@@ -1445,7 +1453,12 @@ module Kward
         index = start_index + offset
         lines << overlay_choice_line(choice, selected: index == selection_index)
       end
-      overlay_card_rows("Sessions", lines, width)
+      overlay_card_rows(selection_overlay_title, lines, width)
+    end
+
+    def selection_overlay_title
+      title = @select_state && @select_state[:title].to_s
+      title && !title.empty? ? title : "Sessions"
     end
 
     def visible_selection_matches(matches)
@@ -1460,7 +1473,7 @@ module Kward
 
     def question_custom_cursor_col(width)
       card_width = overlay_card_width(width)
-      left_padding = [width - card_width, 0].max / 2
+      left_padding = overlay_left_padding(width, card_width)
       custom_prefix = selected_question_choice&.fetch(:custom, false) || !@input.empty? ? "Type something: " : "Type something."
       visible_before_cursor = display_question_input(@input[0...@cursor])
       [[left_padding + 2 + 2 + custom_prefix.length + visible_before_cursor.length, width - 1].min, 0].max
@@ -1489,13 +1502,17 @@ module Kward
       rows = [overlay_top_border(title, card_width)]
       rows.concat(content_rows.map { |row| overlay_content_row(row, inner_width) })
       rows << overlay_bottom_border(card_width)
-      rows.map { |row| center_overlay_row(row, width) }
+      rows.map { |row| align_overlay_row(row, width) }
     end
 
     def overlay_card_width(width)
       return width if width < 32
 
-      [[width - 4, 32].max, 96].min
+      if @overlay_settings["width"] == "maximum"
+        [[width - 4, 32].max, width].min
+      else
+        [[width - 4, 32].max, 96].min
+      end
     end
 
     def overlay_top_border(title, card_width)
@@ -1534,12 +1551,34 @@ module Kward
       { text: "#{selected ? "›" : " "} #{text}", selected: selected }
     end
 
-    def center_overlay_row(row, width)
+    def align_overlay_row(row, width)
       plain_length = ANSI.strip(row).length
       padding = [width - plain_length, 0].max
-      left = padding / 2
+      left = overlay_left_padding(width, plain_length)
       right = padding - left
       (" " * left) + row + (" " * right)
+    end
+
+    def overlay_left_padding(width, row_width)
+      padding = [width - row_width, 0].max
+      case @overlay_settings["alignment"]
+      when "left"
+        0
+      when "right"
+        padding
+      else
+        padding / 2
+      end
+    end
+
+    def normalize_overlay_settings(settings)
+      values = { "alignment" => "center", "width" => "capped" }
+      source = settings.is_a?(Hash) ? settings : {}
+      alignment = (source[:alignment] || source["alignment"]).to_s
+      width = (source[:width] || source["width"]).to_s
+      values["alignment"] = alignment if %w[left center right].include?(alignment)
+      values["width"] = width if %w[capped maximum].include?(width)
+      values
     end
 
     def visible_ljust(text, width)

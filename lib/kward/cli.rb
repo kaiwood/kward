@@ -25,6 +25,7 @@ module Kward
       { name: "clone", description: "Clone the current session.", argument_hint: "" },
       { name: "export", description: "Export the current session as Markdown.", argument_hint: "[path]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
+      { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" }
     ].freeze
 
@@ -188,6 +189,9 @@ module Kward
       when "redraw"
         @prompt.redraw if @prompt.respond_to?(:redraw)
         [true, nil]
+      when "settings"
+        configure_settings
+        [true, nil]
       when "new"
         [true, start_new_session(session_store)]
       when "resume"
@@ -220,6 +224,56 @@ module Kward
         lines << "File: #{@active_session.path}"
       end
       @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{lines.join("\n")}\n")
+    end
+
+    def configure_settings
+      unless settings_overlay_available?
+        @prompt.say("\nSettings overlay is unavailable in this prompt.\n")
+        return
+      end
+
+      settings = ConfigFiles.overlay_settings
+      alignment = choose_overlay_setting("Overlay alignment", overlay_alignment_choices(settings), ConfigFiles::OVERLAY_ALIGNMENTS)
+      return unless alignment
+
+      settings = ConfigFiles.update_overlay_settings("alignment" => alignment)
+      @prompt.update_overlay_settings(settings)
+
+      width = choose_overlay_setting("Overlay width", overlay_width_choices(settings), ConfigFiles::OVERLAY_WIDTHS)
+      return unless width
+
+      settings = ConfigFiles.update_overlay_settings("width" => width)
+      @prompt.update_overlay_settings(settings)
+      @prompt.say("\nSaved overlay settings.\n")
+    rescue StandardError => e
+      @prompt.say("\nSettings error: #{e.message}\n")
+    end
+
+    def settings_overlay_available?
+      @prompt.respond_to?(:select) && @prompt.respond_to?(:update_overlay_settings)
+    end
+
+    def choose_overlay_setting(message, choices, values)
+      choice = @prompt.select(message, choices, title: "Settings")
+      return nil unless choice
+
+      values.find { |value| choice.to_s.downcase.start_with?(value) }
+    end
+
+    def overlay_alignment_choices(settings)
+      ConfigFiles::OVERLAY_ALIGNMENTS.map do |alignment|
+        label = alignment.capitalize
+        label += " (current)" if settings["alignment"] == alignment
+        label
+      end
+    end
+
+    def overlay_width_choices(settings)
+      ConfigFiles::OVERLAY_WIDTHS.map do |width|
+        label = width.capitalize
+        label += " (current)" if settings["width"] == width
+        label
+      end
     end
 
     def start_new_session(session_store)
@@ -532,7 +586,7 @@ module Kward
       prompt_interface = load_prompt_interface
       return unless prompt_interface
 
-      @prompt = prompt_interface.new(slash_commands: slash_command_entries)
+      @prompt = prompt_interface.new(slash_commands: slash_command_entries, overlay_settings: ConfigFiles.overlay_settings)
       @prompt.start
     end
 

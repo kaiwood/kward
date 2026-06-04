@@ -255,18 +255,44 @@ class KwardTestCase < Minitest::Test
   end
 
   class FakeSelectPrompt < FakePrompt
-    attr_reader :select_messages, :select_choices
+    attr_reader :select_messages, :select_choices, :select_titles
 
     def initialize(inputs, confirmations: [])
       super
       @select_messages = []
       @select_choices = []
+      @select_titles = []
     end
 
-    def select(message, choices)
+    def select(message, choices, title: "Sessions")
       @select_messages << message
       @select_choices << choices
+      @select_titles << title
       choices.find { |choice| choice.start_with?("/plan") } || choices.first
+    end
+  end
+
+  class FakeSettingsPrompt < FakePrompt
+    attr_reader :overlay_settings_updates, :select_messages, :select_choices, :select_titles
+
+    def initialize(inputs, selections)
+      super(inputs)
+      @selections = selections
+      @overlay_settings_updates = []
+      @select_messages = []
+      @select_choices = []
+      @select_titles = []
+    end
+
+    def select(message, choices, title: "Sessions")
+      @select_messages << message
+      @select_choices << choices
+      @select_titles << title
+      @selections.shift
+    end
+
+    def update_overlay_settings(settings)
+      @overlay_settings_updates << settings.dup
     end
   end
 
@@ -276,9 +302,10 @@ class KwardTestCase < Minitest::Test
       @selected_text = selected_text
     end
 
-    def select(message, choices)
+    def select(message, choices, title: "Sessions")
       @select_messages << message
       @select_choices << choices
+      @select_titles << title
       choices.find { |choice| choice.include?(@selected_text) } || choices.first
     end
   end

@@ -310,6 +310,40 @@ class TestPromptInterface < KwardTestCase
     assert_match(/\e\[36;1m› A very long sele\e\[0m/, row)
   end
 
+  def test_prompt_interface_aligns_overlay_left_and_right
+    left_prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "alignment" => "left" })
+    right_prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "alignment" => "right" })
+
+    left_row = left_prompt.send(:overlay_card_rows, "Menu", [left_prompt.send(:overlay_text_line, "Choice")], 40).first
+    right_row = right_prompt.send(:overlay_card_rows, "Menu", [right_prompt.send(:overlay_text_line, "Choice")], 40).first
+
+    assert_equal "╭", strip_ansi(left_row)[0]
+    assert_equal " " * 4, strip_ansi(right_row)[0, 4]
+    assert_equal "╭", strip_ansi(right_row)[4]
+  end
+
+  def test_prompt_interface_maximum_overlay_width_uses_terminal_inset
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "width" => "maximum" })
+
+    assert_equal 116, prompt.send(:overlay_card_width, 120)
+  end
+
+  def test_prompt_interface_question_cursor_uses_overlay_alignment
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "alignment" => "right" })
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: [{ label: "Yes", description: "Continue." }],
+      selection_index: 1,
+      index: 1,
+      total: 1
+    })
+    prompt.instance_variable_set(:@input, "maybe")
+    prompt.instance_variable_set(:@cursor, 5)
+
+    assert_equal 49, prompt.send(:question_custom_cursor_col, 120)
+  end
+
   def test_prompt_interface_reuses_history_with_up_arrow
     input, writer = IO.pipe
     output = StringIO.new
