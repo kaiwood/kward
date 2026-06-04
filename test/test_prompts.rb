@@ -3,14 +3,100 @@ require_relative "test_helper"
 class TestPrompts < KwardTestCase
   def test_config_agents_prompt_appends_from_config_dir
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "config.json"), JSON.dump({}))
-      File.write(File.join(dir, "AGENTS.md"), "Config prompt instructions.\n")
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        File.write(File.join(dir, "AGENTS.md"), "Config prompt instructions.\n")
 
-      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-        content = Kward::Conversation.new.messages.first[:content]
+        with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
 
-        refute_includes content, "# AGENTS.md"
-        assert_includes content, "Config prompt instructions."
+          refute_includes content, "# AGENTS.md"
+          assert_includes content, "Config prompt instructions."
+        end
+      end
+    end
+  end
+
+  def test_workspace_system_prompt_and_agents_prompt_order
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "AGENTS.md"), "Config instructions.\n")
+        File.write(File.join(workspace, "AGENTS.md"), "Workspace instructions.\n")
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "workspaces" => {
+            workspace => { "system_prompt" => "Workspace personality." }
+          }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+
+          assert_order content,
+                       "You are Kward",
+                       "Config instructions.",
+                       "Workspace personality.",
+                       "Workspace instructions."
+        end
+      end
+    end
+  end
+
+  def test_different_workspaces_use_different_system_prompts
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |first_workspace|
+        Dir.mktmpdir do |second_workspace|
+          File.write(File.join(config_dir, "config.json"), JSON.dump({
+            "workspaces" => {
+              first_workspace => { "system_prompt" => "First personality." },
+              second_workspace => { "system_prompt" => "Second personality." }
+            }
+          }))
+
+          with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+            first_content = Kward::Conversation.new(workspace_root: first_workspace).messages.first[:content]
+            second_content = Kward::Conversation.new(workspace_root: second_workspace).messages.first[:content]
+
+            assert_includes first_content, "First personality."
+            refute_includes first_content, "Second personality."
+            assert_includes second_content, "Second personality."
+            refute_includes second_content, "First personality."
+          end
+        end
+      end
+    end
+  end
+
+  def test_missing_workspace_system_prompt_falls_back_without_configuration
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({ "workspaces" => {} }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+
+          assert_includes content, "You are Kward"
+          refute_includes content, "personality"
+        end
+      end
+    end
+  end
+
+  def test_workspace_agents_and_personality_coexist
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(workspace, "AGENTS.md"), "Run focused tests.\n")
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "workspaces" => {
+            workspace => { "system_prompt" => "Speak tersely." }
+          }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+
+          assert_includes content, "Speak tersely."
+          assert_includes content, "Run focused tests."
+        end
       end
     end
   end

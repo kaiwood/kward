@@ -39,6 +39,16 @@ class KwardTestCase < Minitest::Test
     Kward::ANSI.strip(text)
   end
 
+  def assert_order(content, *needles)
+    previous = -1
+    needles.each do |needle|
+      index = content.index(needle)
+      assert index, "Expected #{needle.inspect} to appear in content"
+      assert_operator index, :>, previous, "Expected #{needle.inspect} to appear after previous item"
+      previous = index
+    end
+  end
+
   def with_env(values)
     previous = {}
     values.each do |key, value|

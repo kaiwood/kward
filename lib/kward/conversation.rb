@@ -4,11 +4,23 @@ require_relative "prompts"
 
 module Kward
   class Conversation
-    attr_reader :messages, :read_paths
+    DEFAULT_SYSTEM_MESSAGE = Object.new.freeze
+
+    attr_reader :messages, :read_paths, :workspace_root, :compaction_system_message
     attr_accessor :on_append, :on_compact
 
-    def initialize(system_message: Prompts.system_message, messages: [], read_paths: [], on_append: nil, on_compact: nil)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE)
+      @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
       @messages = []
+      if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
+        system_message = messages.any? { |message| message_role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root)
+      end
+      @system_message_enabled = !!(system_message || messages.find { |message| message_role(message) == "system" })
+      if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
+        compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false) : nil
+      end
+      @compaction_system_message = compaction_system_message
+      @workspace_agents_mtime = workspace_agents_mtime
       @messages << system_message unless system_message.nil?
       @messages.concat(messages)
       @read_paths = Set.new(read_paths)
@@ -33,6 +45,21 @@ module Kward
         name: name,
         content: content
       })
+    end
+
+    def refresh_system_message!
+      return nil unless @system_message_enabled
+
+      replacement = Prompts.system_message(workspace_root: @workspace_root)
+      index = @messages.index { |message| message_role(message) == "system" }
+      index ? @messages[index] = replacement : @messages.unshift(replacement)
+      @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false)
+      @workspace_agents_mtime = workspace_agents_mtime
+      replacement
+    end
+
+    def refresh_system_message_if_workspace_agents_changed!
+      refresh_system_message! if @system_message_enabled && workspace_agents_mtime != @workspace_agents_mtime
     end
 
     def mark_read(path)
@@ -63,6 +90,11 @@ module Kward
     end
 
     private
+
+    def workspace_agents_mtime
+      path = File.join(@workspace_root, "AGENTS.md")
+      File.exist?(path) ? File.mtime(path) : nil
+    end
 
     def append_message(message)
       @messages << message

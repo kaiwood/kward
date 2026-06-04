@@ -101,7 +101,7 @@ module Kward
       session_store = interactive_session_store(agent)
       if session_store && agent.nil?
         @active_session = track_session(session_store.create)
-        conversation = Conversation.new
+        conversation = Conversation.new(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
         agent = build_interactive_agent(conversation)
       elsif session_store
@@ -177,9 +177,10 @@ module Kward
     end
 
     def build_interactive_agent(conversation)
+      workspace = Workspace.new(root: conversation.workspace_root)
       Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(workspace: Workspace.new, prompt: @prompt),
+        tool_registry: ToolRegistry.new(workspace: workspace, prompt: @prompt),
         conversation: conversation
       )
     end
@@ -284,7 +285,7 @@ module Kward
       return say_sessions_unavailable unless session_store
 
       @active_session = track_session(session_store.create)
-      conversation = Conversation.new
+      conversation = Conversation.new(workspace_root: session_store.cwd)
       @active_session.attach(conversation)
       clear_prompt_transcript
       @prompt.say("\nStarted new session: #{@active_session.path}\n")
@@ -298,7 +299,7 @@ module Kward
       path = select_session_path(session_store) if path.empty?
       return nil if path.to_s.empty?
 
-      @active_session, conversation = session_store.load(path, workspace: Workspace.new)
+      @active_session, conversation = session_store.load(path, workspace: Workspace.new(root: session_store.cwd))
       track_session(@active_session)
       @prompt.say("\nResumed session: #{@active_session.path}\n")
       render_conversation_transcript(conversation)

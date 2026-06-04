@@ -62,14 +62,24 @@ module Kward
       path = args["path"] || args[:path] || ""
       content = args["content"] || args[:content] || ""
 
-      @workspace.write_file(path, content, read_paths: conversation.read_paths)
+      result = @workspace.write_file(path, content, read_paths: conversation.read_paths)
+      conversation.refresh_system_message! if agents_file_changed?(path, result)
+      result
     end
 
     def edit_file(args, conversation)
       path = args["path"] || args[:path] || ""
       edits = args["edits"] || args[:edits] || []
 
-      @workspace.edit_file(path, edits, read_paths: conversation.read_paths)
+      result = @workspace.edit_file(path, edits, read_paths: conversation.read_paths)
+      conversation.refresh_system_message! if agents_file_changed?(path, result)
+      result
+    end
+
+    def agents_file_changed?(path, result)
+      result.to_s.start_with?("Wrote ", "Edited ") && File.basename(path.to_s) == "AGENTS.md" && @workspace.resolved_path(path) == File.join(@workspace.root.to_s, "AGENTS.md")
+    rescue StandardError
+      false
     end
 
     def run_shell_command(args)

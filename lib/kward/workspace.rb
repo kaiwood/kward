@@ -14,6 +14,8 @@ module Kward
       @max_command_output_bytes = max_command_output_bytes
     end
 
+    attr_reader :root
+
     def list_directory(path)
       resolved = workspace_path(path)
       return "Error: not a directory: #{path}" unless File.directory?(resolved)

@@ -4,15 +4,17 @@ module Kward
   module Prompts
     module_function
 
-    def system_message
+    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true)
       {
         role: "system",
-        content: prompt_parts.compact.join("\n\n")
+        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality).compact.join("\n\n")
       }
     end
 
-    def prompt_parts
-      [base_prompt, config_agents_prompt, skills_prompt]
+    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true)
+      parts = [base_prompt, config_agents_prompt]
+      parts << workspace_system_prompt(workspace_root) if include_workspace_personality
+      parts + [workspace_agents_prompt(workspace_root), skills_prompt]
     end
 
     def base_prompt
@@ -23,6 +25,14 @@ module Kward
 
     def config_agents_prompt
       ConfigFiles.agents_prompt
+    end
+
+    def workspace_system_prompt(workspace_root = Dir.pwd)
+      ConfigFiles.workspace_system_prompt(workspace_root)
+    end
+
+    def workspace_agents_prompt(workspace_root = Dir.pwd)
+      ConfigFiles.workspace_agents_prompt(workspace_root)
     end
 
     def skills_prompt
@@ -41,6 +51,4 @@ module Kward
       lines.join("\n")
     end
   end
-
-  SYSTEM_MESSAGE = Prompts.system_message
 end

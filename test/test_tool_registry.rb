@@ -114,6 +114,29 @@ class TestToolRegistry < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
+  def test_editing_workspace_agents_refreshes_system_prompt
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+        agents_path = File.join(workspace, "AGENTS.md")
+        File.write(agents_path, "Old guidance.\n")
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          conversation = Kward::Conversation.new(workspace_root: workspace)
+          registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace))
+
+          assert_includes conversation.messages.first[:content], "Old guidance."
+
+          registry.dispatch(tool_call("read_file", path: "AGENTS.md"), conversation)
+          registry.dispatch(tool_call("edit_file", path: "AGENTS.md", edits: [{ old_text: "Old guidance.", new_text: "New guidance." }]), conversation)
+
+          assert_includes conversation.messages.first[:content], "New guidance."
+          refute_includes conversation.messages.first[:content], "Old guidance."
+        end
+      end
+    end
+  end
+
   def test_tool_registry_shell_command_runs_without_confirmation
     prompt = FakePrompt.new([], confirmations: [false])
     conversation = Kward::Conversation.new

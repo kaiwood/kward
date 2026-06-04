@@ -106,7 +106,7 @@ module Kward
       session = create
       persisted = deep_copy(messages)
       persisted.each { |message| session.append_message(message) }
-      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths)
+      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd)
       session.attach(conversation)
       [session, conversation]
     end
@@ -121,7 +121,7 @@ module Kward
       name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
 
-      conversation = Conversation.new(messages: messages, read_paths: read_paths)
+      conversation = Conversation.new(messages: messages, read_paths: read_paths, workspace_root: workspace.root)
       session = Session.new(
         store: self,
         id: header["id"],

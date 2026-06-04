@@ -92,6 +92,46 @@ module Kward
       nil
     end
 
+    def workspace_system_prompt(workspace_root, config = read_config)
+      entry = workspace_config(workspace_root, config)
+      return nil unless entry
+
+      prompt = if entry.is_a?(Hash)
+                 entry["system_prompt"] || entry["systemPrompt"]
+               elsif entry.is_a?(String)
+                 entry
+               end
+      prompt = prompt.to_s
+      prompt.empty? ? nil : prompt
+    end
+
+    def workspace_agents_prompt(workspace_root)
+      root = canonical_workspace_root(workspace_root)
+      path = File.join(root, "AGENTS.md")
+      return nil unless File.exist?(path)
+
+      File.read(path)
+    rescue StandardError => e
+      warn "Warning: skipping workspace AGENTS.md #{path}: #{e.message}"
+      nil
+    end
+
+    def workspace_config(workspace_root, config = read_config)
+      workspaces = config["workspaces"]
+      return nil unless workspaces.is_a?(Hash)
+
+      root = canonical_workspace_root(workspace_root)
+      workspaces.each do |path, entry|
+        return entry if canonical_workspace_root(path) == root
+      end
+      nil
+    end
+
+    def canonical_workspace_root(path)
+      expanded = File.expand_path(path.to_s.empty? ? Dir.pwd : path.to_s)
+      File.directory?(expanded) ? File.realpath(expanded) : expanded
+    end
+
     def skills
       skills_root = File.join(config_dir, "skills")
       return [] unless Dir.exist?(skills_root)

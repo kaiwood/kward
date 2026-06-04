@@ -1,4 +1,5 @@
 require "json"
+require_relative "prompts"
 
 module Kward
   class Compactor
@@ -29,9 +30,10 @@ module Kward
     end
 
     def compaction_messages(custom_instructions = "")
+      @conversation.refresh_system_message_if_workspace_agents_changed!
       system_message = @conversation.messages.find { |message| message_role(message) == "system" }
       messages = []
-      messages << system_message if system_message
+      messages << compaction_system_message if system_message
       messages << {
         role: "user",
         content: compaction_prompt(compaction_transcript, custom_instructions)
@@ -40,6 +42,10 @@ module Kward
     end
 
     private
+
+    def compaction_system_message
+      @conversation.compaction_system_message || Prompts.system_message(workspace_root: @conversation.workspace_root, include_workspace_personality: false)
+    end
 
     def chat(messages)
       @client.chat(messages, tools: [])

@@ -13,6 +13,7 @@ module Kward
     attr_reader :conversation
 
     def ask(input, on_reasoning_delta: nil, &block)
+      @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input)
       run_turn(on_reasoning_delta: on_reasoning_delta, &block)
     end
