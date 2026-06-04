@@ -11,6 +11,7 @@ require_relative "openai_oauth"
 require_relative "prompt_commands"
 require_relative "rpc/server"
 require_relative "session_store"
+require_relative "tool_call"
 require_relative "tool_registry"
 require_relative "workspace"
 
@@ -958,13 +959,11 @@ module Kward
     end
 
     def tool_call_name(tool_call)
-      function = tool_call["function"] || tool_call[:function] || {}
-      function["name"] || function[:name] || "unknown_tool"
+      ToolCall.name(tool_call) || "unknown_tool"
     end
 
     def tool_call_args(tool_call)
-      function = tool_call["function"] || tool_call[:function] || {}
-      parse_tool_arguments(function["arguments"] || function[:arguments])
+      ToolCall.arguments(tool_call)
     end
 
     def start_stream_block(label)
@@ -1004,10 +1003,8 @@ module Kward
     end
 
     def tool_command(tool_call)
-      function = tool_call["function"] || tool_call[:function] || {}
-      name = function["name"] || function[:name] || "unknown_tool"
-      arguments = function["arguments"] || function[:arguments]
-      args = parse_tool_arguments(arguments)
+      name = tool_call_name(tool_call)
+      args = tool_call_args(tool_call)
 
       if name == "run_shell_command"
         args["command"] || args[:command] || ""
@@ -1018,13 +1015,5 @@ module Kward
       end
     end
 
-    def parse_tool_arguments(arguments)
-      return {} if arguments.nil? || arguments.empty?
-      return arguments if arguments.is_a?(Hash)
-
-      JSON.parse(arguments)
-    rescue JSON::ParserError
-      {}
-    end
   end
 end

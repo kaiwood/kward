@@ -13,6 +13,7 @@ require_relative "../conversation"
 require_relative "../events"
 require_relative "../prompt_commands"
 require_relative "../session_store"
+require_relative "../tool_call"
 require_relative "../tool_registry"
 require_relative "../workspace"
 require_relative "prompt_bridge"
@@ -781,9 +782,8 @@ module Kward
       end
 
       def tool_metadata(tool_call)
-        function = tool_call["function"] || tool_call[:function] || {}
-        name = function["name"] || function[:name]
-        args = parse_tool_arguments(function["arguments"] || function[:arguments])
+        name = ToolCall.name(tool_call)
+        args = ToolCall.arguments(tool_call)
 
         case name
         when "edit_file"
@@ -808,15 +808,6 @@ module Kward
         else
           nil
         end
-      end
-
-      def parse_tool_arguments(arguments)
-        return {} if arguments.nil? || arguments.empty?
-        return arguments if arguments.is_a?(Hash)
-
-        JSON.parse(arguments)
-      rescue JSON::ParserError
-        {}
       end
 
       def markdown_transcript(conversation)

@@ -1,19 +1,8 @@
-require "json"
+require_relative "../tool_call"
 
 module Kward
   module RPC
     class TranscriptNormalizer
-      TOOL_NAME_MAP = {
-        "read_file" => "read",
-        "edit_file" => "edit",
-        "write_file" => "write",
-        "run_shell_command" => "bash",
-        "list_directory" => "list_directory",
-        "web_research" => "web_research",
-        "read_skill" => "read_skill",
-        "ask_user_question" => "ask_user_question"
-      }.freeze
-
       IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
 
       def initialize(messages)
@@ -104,14 +93,12 @@ module Kward
       def normalize_tool_call(tool_call)
         return nil unless tool_call.is_a?(Hash)
 
-        function = value(tool_call, :function) || {}
-        raw_name = value(function, :name)
-        id = value(tool_call, :id)
+        raw_name = ToolCall.name(tool_call)
         {
           type: "toolCall",
-          id: id,
+          id: ToolCall.id(tool_call),
           name: normalize_tool_name(raw_name) || raw_name,
-          arguments: normalize_tool_arguments(raw_name, value(function, :arguments))
+          arguments: normalize_tool_arguments(raw_name, ToolCall.raw_arguments(tool_call))
         }.compact
       end
 
@@ -227,11 +214,11 @@ module Kward
       end
 
       def normalize_tool_name(name)
-        TOOL_NAME_MAP[name.to_s]
+        ToolCall.normalized_name(name)
       end
 
       def normalize_tool_arguments(name, arguments)
-        args = parse_tool_arguments(arguments)
+        args = ToolCall.parse_arguments(arguments)
         case name.to_s
         when "edit_file", "edit"
           normalize_edit_args(args)
@@ -265,35 +252,7 @@ module Kward
       end
 
       def camelize_tool_args(args)
-        return {} unless args.is_a?(Hash)
-
-        args.each_with_object({}) do |(key, value), result|
-          result[camelize_key(key)] = camelize_value(value)
-        end
-      end
-
-      def camelize_value(value)
-        case value
-        when Hash
-          camelize_tool_args(value)
-        when Array
-          value.map { |item| camelize_value(item) }
-        else
-          value
-        end
-      end
-
-      def camelize_key(key)
-        key.to_s.gsub(/_([a-z])/) { Regexp.last_match(1).upcase }.to_sym
-      end
-
-      def parse_tool_arguments(arguments)
-        return {} if arguments.nil? || arguments == ""
-        return arguments if arguments.is_a?(Hash)
-
-        JSON.parse(arguments.to_s)
-      rescue JSON::ParserError
-        {}
+        ToolCall.camelize_args(args)
       end
 
       def normalize_mime_type(mime_type)
@@ -305,11 +264,7 @@ module Kward
       end
 
       def value(object, key)
-        return nil unless object.respond_to?(:key?)
-        return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
-
-        nil
+        ToolCall.value(object, key)
       end
 
       def has_key?(object, key)
