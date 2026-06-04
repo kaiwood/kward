@@ -5,14 +5,15 @@ require_relative "prompts"
 module Kward
   class Conversation
     attr_reader :messages, :read_paths
-    attr_accessor :on_append
+    attr_accessor :on_append, :on_compact
 
-    def initialize(system_message: Prompts.system_message, messages: [], read_paths: [], on_append: nil)
+    def initialize(system_message: Prompts.system_message, messages: [], read_paths: [], on_append: nil, on_compact: nil)
       @messages = []
       @messages << system_message unless system_message.nil?
       @messages.concat(messages)
       @read_paths = Set.new(read_paths)
       @on_append = on_append
+      @on_compact = on_compact
     end
 
     def append_user(content)
@@ -36,6 +37,15 @@ module Kward
 
     def mark_read(path)
       @read_paths << path
+    end
+
+    def compact!(summary)
+      message = { role: "assistant", content: summary.to_s }
+      @messages = @messages.select { |item| message_role(item) == "system" }
+      @messages << message
+      @read_paths.clear
+      @on_compact&.call(message)
+      message
     end
 
     def last_write_result

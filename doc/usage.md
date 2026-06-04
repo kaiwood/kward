@@ -8,7 +8,7 @@ Existing files must be read in the current conversation before writing or editin
 
 Interactive chats are saved as per-workspace JSONL sessions under `~/.kward/sessions/`. Type `/exit` or `/quit` to leave.
 
-Use `/new` to start fresh, `/resume` to pick a saved session, `/name <name>` to name the current session, `/clone` to duplicate it, `/export [path]` to write a Markdown transcript, `/settings` to configure overlay alignment and width, and `/redraw` to refresh the visible terminal after resize glitches.
+Use `/new` to start fresh, `/resume` to pick a saved session, `/name <name>` to name the current session, `/clone` to duplicate it, `/export [path]` to write a Markdown transcript, `/compact [instructions]` to summarize prior conversation into a smaller continuation context, `/settings` to configure overlay alignment and width, and `/redraw` to refresh the visible terminal after resize glitches. After compaction, files may need to be re-read before future edits.
 
 ## Composer keys
 

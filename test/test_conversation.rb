@@ -16,4 +16,21 @@ class TestConversation < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
+  def test_compact_preserves_system_message_and_resets_read_paths
+    compacted = nil
+    conversation = Kward::Conversation.new(system_message: { role: "system", content: "system" }, read_paths: ["README.md"])
+    conversation.on_compact = lambda { |message| compacted = message }
+    conversation.append_user("hello")
+    conversation.append_assistant("reply")
+
+    conversation.compact!("summary")
+
+    assert_equal [
+      { role: "system", content: "system" },
+      { role: "assistant", content: "summary" }
+    ], conversation.messages
+    assert_empty conversation.read_paths
+    assert_equal({ role: "assistant", content: "summary" }, compacted)
+  end
+
 end

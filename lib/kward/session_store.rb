@@ -27,12 +27,21 @@ module Kward
 
       def attach(conversation)
         conversation.on_append = lambda { |message| append_message(message) }
+        conversation.on_compact = lambda { |message| compact(message) }
         self
       end
 
       def append_message(message)
         @store.append_record(@path, {
           type: "message",
+          timestamp: Time.now.utc.iso8601(3),
+          message: message
+        })
+      end
+
+      def compact(message)
+        @store.append_record(@path, {
+          type: "compaction",
           timestamp: Time.now.utc.iso8601(3),
           message: message
         })
@@ -108,9 +117,7 @@ module Kward
       header = records.find { |record| record["type"] == "session" }
       raise "Invalid Kward session file: #{resolved_path}" unless header && header["id"].to_s != ""
 
-      messages = records.filter_map do |record|
-        record["message"] if record["type"] == "message" && record["message"].is_a?(Hash)
-      end
+      messages = restored_messages(records)
       name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
 
@@ -205,6 +212,19 @@ module Kward
       record ? record["name"] : nil
     end
 
+    def restored_messages(records)
+      records.each_with_object([]) do |record, messages|
+        message = record["message"]
+        next unless message.is_a?(Hash)
+
+        if record["type"] == "message"
+          messages << message
+        elsif record["type"] == "compaction"
+          messages.replace([message])
+        end
+      end
+    end
+
     def strict_records_from_file(path)
       File.readlines(path, chomp: true).map { |line| JSON.parse(line) }
     rescue JSON::ParserError
@@ -216,7 +236,7 @@ module Kward
       header = records.find { |record| record["type"] == "session" }
       return nil unless header && header["id"].to_s != ""
 
-      messages = records.select { |record| record["type"] == "message" }.map { |record| record["message"] }.compact
+      messages = restored_messages(records)
       name = session_name(records)
       first_message = messages.find { |message| message_role(message) == "user" }
       stats = File.stat(path)

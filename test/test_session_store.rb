@@ -22,4 +22,24 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_store_persists_and_loads_compacted_history
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new
+      session.attach(conversation)
+      conversation.append_user("hello")
+      conversation.append_assistant("reply")
+      conversation.compact!("summary")
+      conversation.append_user("again")
+
+      records = jsonl_records(session.path)
+      assert records.any? { |record| record["type"] == "compaction" && record["message"]["content"] == "summary" }
+
+      _loaded_session, loaded_conversation = store.load(session.path)
+
+      assert_equal ["summary", "again"], loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.map { |message| message["content"] || message[:content] }
+    end
+  end
+
 end

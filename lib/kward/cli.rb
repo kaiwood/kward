@@ -24,6 +24,7 @@ module Kward
       { name: "name", description: "Name or clear the current session.", argument_hint: "[name]" },
       { name: "clone", description: "Clone the current session.", argument_hint: "" },
       { name: "export", description: "Export the current session as Markdown.", argument_hint: "[path]" },
+      { name: "compact", description: "Compact the current conversation context.", argument_hint: "[instructions]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
       { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" }
@@ -204,6 +205,9 @@ module Kward
       when "export"
         export_session(agent.conversation, argument)
         [true, nil]
+      when "compact"
+        compact_context(agent, argument)
+        [true, nil]
       else
         [false, nil]
       end
@@ -322,6 +326,87 @@ module Kward
       @prompt.say("\nCloned session: #{@active_session.path}\n")
       render_conversation_transcript(agent.conversation)
       agent
+    end
+
+    def compact_context(agent, argument)
+      conversation = agent.conversation
+      old_count = conversation.messages.length
+      if compactable_messages(conversation).empty?
+        @prompt.say("\nNothing to compact yet.\n")
+        return
+      end
+
+      message = chat(compaction_messages(conversation, argument), tools: [])
+      summary = message_content_text(message_content(message)).strip
+      if summary.empty?
+        @prompt.say("\nCompaction produced an empty summary; context was not changed.\n")
+        return
+      end
+
+      conversation.compact!(summary)
+      @prompt.say("\nCompacted context: #{old_count} messages -> #{conversation.messages.length} messages.\n")
+      render_transcript_block("Assistant", summary)
+    rescue StandardError => e
+      @prompt.say("\nCompaction error: #{e.message}\n")
+    end
+
+    def compactable_messages(conversation)
+      conversation.messages.reject { |message| message_role(message) == "system" }
+    end
+
+    def compaction_messages(conversation, argument)
+      system_message = conversation.messages.find { |message| message_role(message) == "system" }
+      messages = []
+      messages << system_message if system_message
+      messages << {
+        role: "user",
+        content: compaction_prompt(compaction_transcript(conversation), argument)
+      }
+      messages
+    end
+
+    def compaction_prompt(transcript, argument)
+      guidance = argument.to_s.strip
+      lines = [
+        "Compact the conversation transcript below into a concise continuation summary for a coding agent.",
+        "Preserve goals, user preferences, constraints, decisions, completed work, relevant files inspected or changed, blockers, and pending tasks.",
+        "Mention tool results only when they are needed to continue the work.",
+        "Do not invent facts. Write in a form that can replace the prior conversation history."
+      ]
+      lines << "Additional user instructions for compaction: #{guidance}" unless guidance.empty?
+      lines << ""
+      lines << "Transcript:"
+      lines << transcript
+      lines.join("\n")
+    end
+
+    def compaction_transcript(conversation)
+      tool_calls_by_id = {}
+      compactable_messages(conversation).map do |message|
+        role = message_role(message).to_s
+        case role
+        when "assistant"
+          parts = []
+          reasoning = message_reasoning(message)
+          parts << "Reasoning: #{reasoning}" unless reasoning.empty?
+          content = message_content_text(message_content(message))
+          parts << content unless content.empty?
+          message_tool_calls(message).each do |tool_call|
+            tool_calls_by_id[tool_call_id(tool_call)] = tool_call
+            parts << "Tool call: #{tool_command(tool_call)}"
+          end
+          transcript_entry("assistant", parts.join("\n"))
+        when "tool"
+          tool_call = tool_calls_by_id[message_tool_call_id(message)] || synthetic_tool_call(message_name(message), message_tool_call_id(message))
+          transcript_entry("tool #{message_name(message)}", tool_result_summary(tool_call, message_content(message).to_s))
+        else
+          transcript_entry(role, message_content_text(message_content(message)))
+        end
+      end.join("\n\n")
+    end
+
+    def transcript_entry(role, content)
+      "#{role}:\n#{content}"
     end
 
     def render_conversation_transcript(conversation)
