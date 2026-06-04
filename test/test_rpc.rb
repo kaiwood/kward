@@ -761,6 +761,40 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_session_close_stops_idle_worker
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+      worker = rpc_session.worker
+      assert worker&.alive?
+
+      manager.close_session(session_id: session[:id])
+
+      wait_until { !worker.alive? && rpc_session.worker.nil? }
+    end
+  end
+
+  def test_cleanup_unused_sessions_stops_idle_workers
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+      worker = rpc_session.worker
+      assert worker&.alive?
+
+      manager.cleanup_unused_sessions
+
+      wait_until { !worker.alive? && rpc_session.worker.nil? }
+    end
+  end
+
   def test_rpc_shutdown_deletes_empty_unnamed_sessions
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

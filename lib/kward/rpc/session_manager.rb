@@ -26,6 +26,7 @@ module Kward
       RPC_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
       RPC_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
+      WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :queue, :worker, :running_turn_id, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, keyword_init: true)
@@ -148,8 +149,7 @@ module Kward
 
       def close_session(session_id:)
         rpc_session = fetch_session(session_id)
-        @mutex.synchronize { @sessions.delete(rpc_session.id) }
-        rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+        close_rpc_session(rpc_session)
         { closed: true }
       end
 
@@ -158,8 +158,7 @@ module Kward
         rpc_sessions.reverse_each do |rpc_session|
           next unless session_idle?(rpc_session)
 
-          @mutex.synchronize { @sessions.delete(rpc_session.id) }
-          rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+          close_rpc_session(rpc_session)
         end
         { closed: true }
       end
@@ -591,16 +590,36 @@ module Kward
         rpc_session.worker = Thread.new { worker_loop(rpc_session) }
       end
 
+      def close_rpc_session(rpc_session)
+        @mutex.synchronize { @sessions.delete(rpc_session.id) }
+        stop_worker(rpc_session)
+        rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+      end
+
+      def stop_worker(rpc_session)
+        worker = rpc_session.worker
+        return unless worker&.alive?
+        return if worker == Thread.current
+
+        rpc_session.queue << WORKER_STOP
+      end
+
       def worker_loop(rpc_session)
         loop do
           turn_id = rpc_session.queue.pop
-          turn = fetch_turn(turn_id)
-          next if turn.status == "canceled"
+          break if turn_id.equal?(WORKER_STOP)
 
-          run_turn(rpc_session, turn)
-        rescue StandardError => e
-          @server.log_error(e)
+          begin
+            turn = fetch_turn(turn_id)
+            next if turn.status == "canceled"
+
+            run_turn(rpc_session, turn)
+          rescue StandardError => e
+            @server.log_error(e)
+          end
         end
+      ensure
+        rpc_session.worker = nil if rpc_session.worker == Thread.current
       end
 
       def run_turn(rpc_session, turn)
