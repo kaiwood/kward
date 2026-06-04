@@ -237,10 +237,21 @@ module Kward
       first_kept_entry_id = compaction_message["first_kept_entry_id"] || compaction_message["firstKeptEntryId"]
       return [compaction_message] if first_kept_entry_id.to_s.empty?
 
-      index = previous_messages.each_with_index.find do |message, message_index|
+      messages = previous_messages.reject { |message| message_role(message) == "system" }
+      previous_compaction_index = messages.rindex { |message| message_role(message) == "compactionSummary" }
+      branch_messages = previous_compaction_index ? messages[previous_compaction_index..] : messages
+
+      branch_index = branch_messages.each_with_index.find do |message, message_index|
         message["id"] == first_kept_entry_id || "message:#{message_index}" == first_kept_entry_id
       end&.last
-      kept = index ? previous_messages[index..] : []
+      if branch_index
+        kept = branch_messages[branch_index..]
+      else
+        index = messages.each_with_index.find do |message, message_index|
+          message["id"] == first_kept_entry_id || "message:#{message_index}" == first_kept_entry_id
+        end&.last
+        kept = index ? messages[index..] : []
+      end
       [compaction_message] + kept
     end
 

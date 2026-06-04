@@ -42,4 +42,35 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_store_restores_latest_prompt_after_repeated_compaction
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      client = RecordingClient.new(["first summary", "second summary", "third summary", "fourth summary"])
+      settings = Kward::Compaction::Settings.new(keep_recent_tokens: 10)
+
+      conversation.append_user("old first prompt " * 20)
+      conversation.append_assistant("old first answer " * 20)
+      conversation.append_user("kept first prompt")
+      conversation.append_assistant("ok")
+      Kward::Compactor.new(conversation: conversation, client: client, settings: settings).compact
+
+      conversation.append_user("old second prompt " * 20)
+      conversation.append_assistant("old second answer " * 20)
+      conversation.append_user("latest prompt")
+      conversation.append_assistant("latest answer")
+      Kward::Compactor.new(conversation: conversation, client: client, settings: settings).compact
+
+      live_messages = conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      _loaded_session, loaded_conversation = store.load(session.path)
+      loaded_messages = loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+
+      assert_equal live_messages.map { |message| message["role"] || message[:role] }, loaded_messages.map { |message| message["role"] || message[:role] }
+      assert_equal live_messages.map { |message| message["summary"] || message[:summary] || message["content"] || message[:content] }, loaded_messages.map { |message| message["summary"] || message[:summary] || message["content"] || message[:content] }
+      assert_includes loaded_messages.map { |message| message["content"] || message[:content] }, "latest prompt"
+    end
+  end
+
 end

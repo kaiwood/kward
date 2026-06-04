@@ -363,6 +363,8 @@ module Kward
           end
         when "tool"
           render_tool_message(message, tool_calls_by_id)
+        when "compactionSummary"
+          render_transcript_block("Compaction summary", message_summary(message))
         else
           render_transcript_block(role.to_s.capitalize, message_content_text(message_content(message)))
         end
@@ -489,6 +491,10 @@ module Kward
       message["content"] || message[:content]
     end
 
+    def message_summary(message)
+      message["summary"] || message[:summary] || message_content(message)
+    end
+
     def message_name(message)
       message["name"] || message[:name]
     end
@@ -577,7 +583,8 @@ module Kward
         name = message["name"] || message[:name]
         lines << "Tool: `#{name}`" if role == "tool" && name
         lines << ""
-        lines << markdown_content(message["content"] || message[:content])
+        content = role == "compactionSummary" ? (message["summary"] || message[:summary]) : (message["content"] || message[:content])
+        lines << markdown_content(content)
         lines << ""
       end
       lines.join("\n")

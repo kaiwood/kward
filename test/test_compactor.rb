@@ -101,7 +101,7 @@ class TestCompactor < KwardTestCase
 
     assert preparation.split_turn
     assert_equal ["user", "assistant", "tool"], preparation.turn_prefix_messages.map { |message| message[:role] || message["role"] }
-    assert_equal ["assistant"], preparation.kept_messages.map { |message| message[:role] || message["role"] }
+    assert_equal ["user", "assistant"], preparation.kept_messages.map { |message| message[:role] || message["role"] }
   end
 
   def test_successful_compaction_appends_summary_and_keeps_recent_messages

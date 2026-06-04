@@ -573,6 +573,21 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_session_export_renders_compaction_summary_content
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.compact!("summary content", compaction_summary: true)
+
+      markdown = manager.export_session(session_id: session[:id])
+
+      assert_includes File.read(markdown[:path]), "## Compactionsummary\n\nsummary content"
+    ensure
+      File.delete(markdown[:path]) if markdown && File.exist?(markdown[:path])
+    end
+  end
+
   def test_session_list_returns_rpc_metadata_message_counts_and_newest_first
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

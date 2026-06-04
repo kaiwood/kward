@@ -289,6 +289,19 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_export_renders_compaction_summary_content
+    Dir.mktmpdir do |config_dir|
+      export_path = File.join(config_dir, "session.md")
+      conversation = Kward::Conversation.new(system_message: nil)
+      conversation.compact!("summary content", compaction_summary: true)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+
+      cli.send(:export_session, conversation, export_path)
+
+      assert_includes File.read(export_path), "## Compactionsummary\n\nsummary content"
+    end
+  end
+
   def test_compact_command_summarizes_context_before_next_turn
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

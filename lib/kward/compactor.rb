@@ -45,7 +45,7 @@ module Kward
       keyword_init: true
     )
 
-    Cut = Struct.new(:first_kept_index, :messages_to_summarize, :turn_prefix_messages, :split_turn, keyword_init: true)
+    Cut = Struct.new(:first_kept_index, :messages_to_summarize, :turn_prefix_messages, :split_turn, :preserved_messages, :preserved_start_index, keyword_init: true)
 
     class Settings
       DEFAULT_ENABLED = true
@@ -426,11 +426,14 @@ module Kward
         index = candidates.find { |candidate| suffix_tokens(entries, candidate) <= keep_recent_tokens }
         return nil unless index
 
+        preserved_messages = message_role(entries[latest_turn_start]) == "user" ? [entries[latest_turn_start]] : []
         Cut.new(
           first_kept_index: index,
           messages_to_summarize: entries[start_index...latest_turn_start],
           turn_prefix_messages: entries[latest_turn_start...index],
-          split_turn: true
+          split_turn: true,
+          preserved_messages: preserved_messages,
+          preserved_start_index: preserved_messages.empty? ? nil : latest_turn_start
         )
       end
 
@@ -483,14 +486,16 @@ module Kward
         raise NothingToCompact, "Nothing to compact" unless cut
         raise NothingToCompact, "Nothing to compact" if cut.messages_to_summarize.empty? && cut.turn_prefix_messages.empty?
 
-        first_kept_entry_id = entry_id(branch_entries[cut.first_kept_index], cut.first_kept_index)
+        first_kept_index = cut.preserved_start_index || cut.first_kept_index
+        first_kept_entry_id = entry_id(branch_entries[first_kept_index], first_kept_index)
         summarized_for_file_ops = cut.messages_to_summarize + cut.turn_prefix_messages
         file_ops = @file_operation_tracker.call(summarized_for_file_ops, previous_details: compaction_details(previous_entry))
+        kept_messages = Array(cut.preserved_messages) + (branch_entries[cut.first_kept_index..] || [])
 
         PreparationResult.new(
           first_kept_entry_id: first_kept_entry_id,
           messages_to_summarize: cut.messages_to_summarize,
-          kept_messages: branch_entries[cut.first_kept_index..] || [],
+          kept_messages: kept_messages,
           turn_prefix_messages: cut.turn_prefix_messages,
           split_turn: cut.split_turn,
           tokens_before: @estimator.messages_tokens(@conversation.messages),

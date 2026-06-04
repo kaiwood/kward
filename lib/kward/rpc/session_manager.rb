@@ -804,7 +804,8 @@ module Kward
           name = message["name"] || message[:name]
           lines << "Tool: `#{name}`" if role == "tool" && name
           lines << ""
-          lines << markdown_content(message["content"] || message[:content])
+          content = role == "compactionSummary" ? (message["summary"] || message[:summary]) : (message["content"] || message[:content])
+          lines << markdown_content(content)
           lines << ""
         end
         lines.join("\n")
