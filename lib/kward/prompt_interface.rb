@@ -1181,10 +1181,6 @@ module Kward
       render_prompt_locked
     end
 
-    def render_prompt_rows_locked
-      render_prompt_locked
-    end
-
     def clear_prompt_locked
       handle_resize_locked
       clear_composer_region_locked
@@ -1592,10 +1588,6 @@ module Kward
       plain[0, width]
     end
 
-    def slash_overlay_row(text, width)
-      visible_ljust(visible_truncate(text.to_s, width), width)
-    end
-
     def compact_composer_layout(width)
       cursor_line, cursor_col = cursor_logical_position
       prefix = "#{@prompt_label} "
@@ -1679,36 +1671,6 @@ module Kward
 
     def move_to_screen(row, col)
       @output_io.print("\e[#{row};#{col}H")
-    end
-
-    def move_cursor
-      cursor_line, cursor_col = cursor_logical_position
-      row_offset = 0
-      input_lines.each_with_index do |line, index|
-        prefix = input_prefix(index)
-        available = input_text_width(screen_width, prefix)
-        if index == cursor_line
-          row = row_offset + (cursor_col / available)
-          col = prefix.length + (cursor_col % available)
-          move_to_rendered_position(row, col)
-          return
-        end
-        row_offset += [(line.length.to_f / available).ceil, 1].max
-      end
-    rescue StandardError
-      nil
-    end
-
-    def move_to_rendered_position(row, col)
-      @output_io.print(TTY::Cursor.up(@cursor_rendered_row - row)) if @cursor_rendered_row > row
-      @output_io.print(TTY::Cursor.down(row - @cursor_rendered_row)) if row > @cursor_rendered_row
-      @output_io.print("\r")
-      @output_io.print(TTY::Cursor.forward(col)) if col.positive?
-      @cursor_rendered_row = row
-    end
-
-    def prompt_rows(width)
-      input_rows(width)
     end
 
     def input_rows(width)

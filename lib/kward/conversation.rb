@@ -96,10 +96,6 @@ module Kward
       @last_entry_compaction = true
     end
 
-    def last_write_result
-      @messages.select { |message| message_role(message) == "tool" && message_name(message) == "write_file" }.last
-    end
-
     def last_file_change_result
       @messages.select do |message|
         message_role(message) == "tool" && ["write_file", "edit_file"].include?(message_name(message))

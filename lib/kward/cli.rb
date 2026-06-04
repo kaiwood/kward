@@ -807,14 +807,6 @@ module Kward
       end
     end
 
-    def chat(messages, tools:, on_reasoning_delta: nil, on_assistant_delta: nil)
-      @client.chat(messages, tools: tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
-    rescue ArgumentError => e
-      raise unless e.message.include?("on_reasoning_delta") || e.message.include?("on_assistant_delta")
-
-      @client.chat(messages, tools: tools)
-    end
-
     def print_block_delta(label, delta)
       if prompt_interface?
         @prompt.start_stream_block(label)

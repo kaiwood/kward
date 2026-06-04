@@ -3,28 +3,6 @@ require_relative "config_files"
 require_relative "prompts"
 
 module Kward
-  class CompactionEntry
-    attr_reader :id,
-                :parent_id,
-                :timestamp,
-                :summary,
-                :first_kept_entry_id,
-                :tokens_before,
-                :from_hook,
-                :details
-
-    def initialize(id:, parent_id:, timestamp:, summary:, first_kept_entry_id:, tokens_before:, from_hook: false, details: {})
-      @id = id
-      @parent_id = parent_id
-      @timestamp = timestamp
-      @summary = summary
-      @first_kept_entry_id = first_kept_entry_id
-      @tokens_before = tokens_before
-      @from_hook = from_hook
-      @details = details
-    end
-  end
-
   module Compaction
     class Error < StandardError; end
     class NothingToCompact < Error; end
