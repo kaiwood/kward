@@ -11,6 +11,7 @@ require_relative "../session_store"
 require_relative "../tool_registry"
 require_relative "../workspace"
 require_relative "prompt_bridge"
+require_relative "tool_event_normalizer"
 require_relative "transcript_normalizer"
 
 module Kward
@@ -117,7 +118,7 @@ module Kward
         @mutex.synchronize { @turns[turn.id] = turn }
         rpc_session.queue << turn.id
         ensure_worker(rpc_session)
-        emit_turn_event(turn, "turnQueued", {})
+        emit_turn_event(turn, "turnQueued", { status: "queued" })
         turn_payload(turn)
       end
 
@@ -248,7 +249,7 @@ module Kward
         rpc_session.running_turn_id = turn.id
         turn.status = "running"
         turn.started_at = now
-        emit_turn_event(turn, "turnStarted", {})
+        emit_turn_event(turn, "turnStarted", { status: "running" })
 
         if turn.cancel_requested
           finish_turn(turn, "canceled")
@@ -260,7 +261,7 @@ module Kward
         end
         finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
       rescue StandardError => e
-        turn.error = @server.error_payload(e)
+        turn.error = turn_error_payload(e)
         emit_turn_event(turn, "error", turn.error)
         finish_turn(turn, "failed")
       ensure
@@ -276,9 +277,9 @@ module Kward
         when Events::AssistantMessage
           emit_turn_event(turn, "assistantMessage", { message: event.message })
         when Events::ToolCall
-          emit_turn_event(turn, "toolCall", { toolCall: event.tool_call, tool: tool_metadata(event.tool_call) })
+          emit_turn_event(turn, "toolCall", normalized_tool_event_payload(event.tool_call))
         when Events::ToolResult
-          emit_turn_event(turn, "toolResult", { toolCall: event.tool_call, tool: tool_metadata(event.tool_call), content: event.content })
+          emit_turn_event(turn, "toolResult", normalized_tool_result_event_payload(event.tool_call, event.content))
         when Events::Answer
           emit_turn_event(turn, "answer", { content: event.content })
         end
@@ -289,7 +290,7 @@ module Kward
 
         turn.status = status
         turn.finished_at = now
-        emit_turn_event(turn, "turnFinished", { status: status, error: turn.error }.compact)
+        emit_turn_event(turn, "turnFinished", { status: status, error: turn.error })
       end
 
       def emit_turn_event(turn, type, payload)
@@ -370,6 +371,22 @@ module Kward
           </body>
           </html>
         HTML
+      end
+
+      def normalized_tool_event_payload(tool_call)
+        ToolEventNormalizer.new(tool_call).call_payload(legacy_tool: tool_metadata(tool_call))
+      end
+
+      def normalized_tool_result_event_payload(tool_call, content)
+        ToolEventNormalizer.new(tool_call, content: content).result_payload(legacy_tool: tool_metadata(tool_call))
+      end
+
+      def turn_error_payload(error)
+        {
+          message: error.message,
+          code: error.class.name,
+          fatal: false
+        }
       end
 
       def tool_metadata(tool_call)

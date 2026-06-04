@@ -223,7 +223,7 @@ module Kward
             notification: "turn/event",
             assistantText: "assistantDelta",
             reasoning: { start: false, delta: true, end: false },
-            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: false, changedFiles: false },
+            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false },
             errors: true,
             sessionUpdates: false
           },

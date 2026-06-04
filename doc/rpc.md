@@ -46,7 +46,7 @@ Detailed capability fields include:
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, and explicit unsupported compaction/reasoning restore flags.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, and explicit unsupported fork/compact/import/tree/update features.
 - `turns`: async turn mode, per-session concurrency, unsupported busy-input steering/follow-up, best-effort cancellation, and recent in-memory event replay behavior.
-- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata support, and explicit unsupported tool diff/session update flags.
+- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: input attachment contract for `turns/start`; currently unsupported, but documents accepted base64 image MIME types and the stable max byte value for future support.
 - `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
 - `runtimeSettings`: currently unsupported.
@@ -210,11 +210,23 @@ Known event types:
 - `error`
 - `turnFinished`
 
-`toolCall` and `toolResult` payloads include the original `toolCall`. When recognized, they also include normalized `tool` metadata for UI adapters:
+Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFinished`. Exactly one terminal `turnFinished` is emitted per turn with `status` set to `completed`, `failed`, or `canceled`; failed turns include a sanitized `{ "message": "...", "code": "...", "fatal": false }` error payload.
 
-- `edit_file`: `{ "kind": "edit", "path": "...", "edits": [{ "oldText": "...", "newText": "..." }], "oldText": "...", "newText": "..." }`. `edits` includes every replacement. The top-level `oldText`/`newText` fields are retained for backward compatibility and mirror the first edit.
-- `write_file`: `{ "kind": "write", "path": "..." }`.
-- `run_shell_command`: `{ "kind": "shell", "command": "..." }`.
+`toolCall` and `toolResult` payloads include canonical Tauren-normalized fields:
+
+- `toolCallId`: tool call ID.
+- `toolName`: normalized tool name, such as `read`, `edit`, `write`, or `bash`.
+- `args`: normalized arguments. Edit replacements use `oldText`/`newText`; shell timeout is `timeout`.
+- `rawToolCall` and `toolCall`: original model tool call for compatibility.
+- `tool`: legacy normalized metadata retained for older clients.
+
+`toolResult` additionally includes `result` with `content`, `isError`, optional unified `diff`, optional `changedFiles`, and `images`. Failed or declined tools set `isError: true`.
+
+Examples:
+
+- `edit_file`: `toolName: "edit"`, `args: { "path": "...", "edits": [{ "oldText": "...", "newText": "..." }] }`.
+- `write_file`: `toolName: "write"`, `args: { "path": "...", "content": "..." }`.
+- `run_shell_command`: `toolName: "bash"`, `args: { "command": "...", "timeout": 30 }`.
 
 ## UI question bridge
 

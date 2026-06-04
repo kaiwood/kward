@@ -74,7 +74,8 @@ class TestRPC < KwardTestCase
     assert_equal 1000, capabilities["turns"]["eventReplay"]["limit"]
     assert_equal "turn/event", capabilities["events"]["notification"]
     assert_equal true, capabilities["events"]["tools"]["normalizedMetadata"]
-    assert_equal false, capabilities["events"]["tools"]["diffs"]
+    assert_equal true, capabilities["events"]["tools"]["diffs"]
+    assert_equal false, capabilities["events"]["tools"]["changedFiles"]
     assert_equal false, capabilities["events"]["sessionUpdates"]
     assert_equal false, capabilities["attachments"]["input"]["supported"]
     assert_equal ["image/png", "image/jpeg", "image/gif", "image/webp"], capabilities["attachments"]["input"]["mimeTypes"]
@@ -149,6 +150,8 @@ class TestRPC < KwardTestCase
 
       assert_equal "canceled", manager.turn_status(turn_id: second[:id])[:status]
       assert_equal true, manager.turn_status(turn_id: second[:id])[:cancelRequested]
+      second_events = manager.turn_events(turn_id: second[:id])[:events]
+      assert_equal "canceled", second_events.find { |event| event[:type] == "turnFinished" }[:payload][:status]
       wait_until { manager.turn_status(turn_id: first[:id])[:status] == "completed" }
     end
   end
@@ -287,7 +290,7 @@ class TestRPC < KwardTestCase
     end
   end
 
-  def test_tool_events_include_normalized_metadata
+  def test_tool_events_include_normalized_edit_metadata_and_diff_result
     Dir.mktmpdir do |config_dir|
       workspace_root = Dir.mktmpdir
       path = File.join(workspace_root, "test.txt")
@@ -310,17 +313,90 @@ class TestRPC < KwardTestCase
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
 
-      tool_events = manager.turn_events(turn_id: turn[:id])[:events].select { |event| ["toolCall", "toolResult"].include?(event[:type]) && event[:payload][:tool]&.dig(:kind) == "edit" }
+      tool_events = manager.turn_events(turn_id: turn[:id])[:events].select { |event| ["toolCall", "toolResult"].include?(event[:type]) && event[:payload][:toolName] == "edit" }
       assert_equal 2, tool_events.length
       tool_events.each do |tool_event|
-        assert_equal "test.txt", tool_event[:payload][:tool][:path]
-        assert_equal "old one", tool_event[:payload][:tool][:oldText]
-        assert_equal "new one", tool_event[:payload][:tool][:newText]
+        assert_equal "call_edit_file", tool_event[:payload][:toolCallId]
+        assert_equal "edit", tool_event[:payload][:toolName]
+        assert_equal "test.txt", tool_event[:payload][:args][:path]
         assert_equal [
           { oldText: "old one", newText: "new one" },
           { oldText: "old two", newText: "new two" }
-        ], tool_event[:payload][:tool][:edits]
+        ], tool_event[:payload][:args][:edits]
+        assert_equal "test.txt", tool_event[:payload][:tool][:path]
       end
+      result = tool_events.find { |event| event[:type] == "toolResult" }[:payload][:result]
+      assert_equal false, result[:isError]
+      assert_equal ["test.txt"], result[:changedFiles]
+      assert_includes result[:diff], "--- test.txt"
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_write_and_shell_tool_events_include_normalized_args
+    Dir.mktmpdir do |config_dir|
+      workspace_root = Dir.mktmpdir
+      responses = [
+        assistant_tool_call("write_file", { path: "new.txt", content: "hello" }),
+        assistant_tool_call("run_shell_command", { command: "echo hi", timeout_seconds: 7 }),
+        { "role" => "assistant", "content" => "done" }
+      ]
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new(responses), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+      turn = manager.start_turn(session_id: session[:id], input: "write and shell")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      events = manager.turn_events(turn_id: turn[:id])[:events]
+      write_call = events.find { |event| event[:type] == "toolCall" && event[:payload][:toolName] == "write" }
+      write_result = events.find { |event| event[:type] == "toolResult" && event[:payload][:toolName] == "write" }
+      shell_call = events.find { |event| event[:type] == "toolCall" && event[:payload][:toolName] == "bash" }
+      shell_result = events.find { |event| event[:type] == "toolResult" && event[:payload][:toolName] == "bash" }
+
+      assert_equal({ path: "new.txt", content: "hello" }, write_call[:payload][:args])
+      assert_equal false, write_result[:payload][:result][:isError]
+      assert_equal ["new.txt"], write_result[:payload][:result][:changedFiles]
+      assert_equal({ command: "echo hi", timeout: 7 }, shell_call[:payload][:args])
+      assert_equal({ command: "echo hi", timeout: 7 }, shell_result[:payload][:args])
+      assert_equal false, shell_result[:payload][:result][:isError]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_failed_tool_result_and_failed_turn_events_are_normalized
+    Dir.mktmpdir do |config_dir|
+      workspace_root = Dir.mktmpdir
+      manager = Kward::RPC::SessionManager.new(
+        server: RecordingServer.new,
+        client: FakeClient.new([assistant_tool_call("edit_file", { path: "missing.txt", edits: [{ old_text: "old", new_text: "new" }] }), { "role" => "assistant", "content" => "done" }]),
+        config_dir: config_dir
+      )
+      session = manager.create_session(workspace_root: workspace_root)
+      turn = manager.start_turn(session_id: session[:id], input: "bad edit")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      tool_result = manager.turn_events(turn_id: turn[:id])[:events].find { |event| event[:type] == "toolResult" }
+      assert_equal "edit", tool_result[:payload][:toolName]
+      assert_equal true, tool_result[:payload][:result][:isError]
+      refute tool_result[:payload][:result].key?(:changedFiles)
+
+      failing_manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: ErrorClient.new, config_dir: config_dir)
+      failing_session = failing_manager.create_session(workspace_root: workspace_root)
+      failing_turn = failing_manager.start_turn(session_id: failing_session[:id], input: "explode")
+
+      wait_until { failing_manager.turn_status(turn_id: failing_turn[:id])[:status] == "failed" }
+
+      events = failing_manager.turn_events(turn_id: failing_turn[:id])[:events]
+      error_event = events.find { |event| event[:type] == "error" }
+      finished_event = events.find { |event| event[:type] == "turnFinished" }
+      assert_equal "boom", error_event[:payload][:message]
+      assert_equal "RuntimeError", error_event[:payload][:code]
+      assert_equal false, error_event[:payload][:fatal]
+      assert_equal "failed", finished_event[:payload][:status]
+      assert_equal error_event[:payload], finished_event[:payload][:error]
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
@@ -377,6 +453,12 @@ class TestRPC < KwardTestCase
       sleep 0.1
       on_assistant_delta&.call("slow")
       { "role" => "assistant", "content" => "slow" }
+    end
+  end
+
+  class ErrorClient
+    def chat(_messages, tools: [])
+      raise "boom"
     end
   end
 
