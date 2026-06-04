@@ -3,43 +3,63 @@ require "json"
 require "net/http"
 require "nokogiri"
 require "uri"
+require_relative "config_files"
 
 module Kward
   class WebResearch
     DEFAULT_MAX_RESULTS = 5
-    MAX_MAX_RESULTS = 10
+    MAX_MAX_RESULTS = 20
     MAX_QUERIES = 4
     MAX_OUTPUT_BYTES = 20 * 1024
     HTTP_TIMEOUT_SECONDS = 10
     DUCKDUCKGO_URL = "https://html.duckduckgo.com/html/"
+    EXA_MCP_URL = "https://mcp.exa.ai/mcp"
+    EXA_ANSWER_URL = "https://api.exa.ai/answer"
+    EXA_SEARCH_URL = "https://api.exa.ai/search"
+    PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+    GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+    DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
     PUBLIC_SEARXNG_INSTANCES = [
       "https://searx.be",
       "https://search.inetol.net",
       "https://searx.tiekoetter.com"
     ].freeze
+    PROVIDERS = %w[auto exa perplexity gemini legacy duckduckgo].freeze
 
     Result = Struct.new(:title, :url, :excerpt, :provider, keyword_init: true)
+    SearchResponse = Struct.new(:answer, :results, :provider, :note, keyword_init: true)
 
-    def initialize(http_client: NetHttpClient.new, searxng_instances: PUBLIC_SEARXNG_INSTANCES, max_output_bytes: MAX_OUTPUT_BYTES)
+    def initialize(http_client: NetHttpClient.new, searxng_instances: PUBLIC_SEARXNG_INSTANCES, max_output_bytes: MAX_OUTPUT_BYTES, config: nil)
       @http_client = http_client
       @searxng_instances = searxng_instances
       @max_output_bytes = max_output_bytes
+      @config = config
     end
 
     def search(args)
       queries = args_value(args, "queries")
       return "Error: queries must be an array with 1-#{MAX_QUERIES} strings" unless valid_queries?(queries)
 
-      max_results = bounded_max_results(args_value(args, "max_results"))
+      max_results = bounded_max_results(args_value(args, "max_results") || args_value(args, "num_results"))
+      provider = normalize_provider(args_value(args, "provider") || config_value("provider") || "auto")
+      return "Error: provider must be one of: #{PROVIDERS.join(", ")}" unless provider
+
+      options = {
+        max_results: max_results,
+        recency_filter: normalize_recency(args_value(args, "recency_filter") || args_value(args, "recencyFilter")),
+        domain_filter: normalize_domain_filter(args_value(args, "domain_filter") || args_value(args, "domainFilter")),
+        provider: provider
+      }
+
       sections = ["# Web research"]
       failures = []
       any_results = false
 
       queries.each do |query|
-        results, error = search_query(query, max_results)
-        any_results = true unless results.empty?
-        failures << "#{query}: #{error}" if error && results.empty?
-        sections << format_query_results(query, results, error)
+        response, error = search_query(query, options)
+        any_results = true if successful_response?(response)
+        failures << "#{query}: #{error}" if error && !successful_response?(response)
+        sections << format_query_results(query, response, error)
       end
 
       unless any_results
@@ -51,9 +71,286 @@ module Kward
 
     private
 
-    def search_query(query, max_results)
+    def search_query(query, options)
+      errors = []
+      provider_order(options[:provider]).each do |provider|
+        begin
+          response = case provider
+                     when "exa"
+                       exa_search(query, options)
+                     when "perplexity"
+                       perplexity_search(query, options)
+                     when "gemini"
+                       gemini_search(query, options)
+                     when "legacy"
+                       legacy_search(query, options)
+                     end
+          return [response, errors.empty? ? nil : errors.join("; ")] if successful_response?(response)
+          errors << "#{provider}: no results"
+        rescue StandardError => e
+          errors << "#{provider}: #{redact_secrets(e.message)}"
+        end
+      end
+
+      [nil, errors.join("; ")]
+    end
+
+    def provider_order(provider)
+      case provider
+      when "auto"
+        order = ["exa"]
+        order << "perplexity" if api_key("perplexity")
+        order << "gemini" if api_key("gemini")
+        order << "legacy"
+        order
+      when "duckduckgo"
+        ["legacy"]
+      else
+        [provider]
+      end
+    end
+
+    def exa_search(query, options)
+      key = api_key("exa")
+      return exa_api_search(query, options, key) if key
+
+      exa_mcp_search(query, options)
+    rescue StandardError
+      raise if key.nil?
+
+      # A configured key should not make the no-key path worse; fall back to Exa MCP.
+      exa_mcp_search(query, options)
+    end
+
+    def exa_mcp_search(query, options)
+      text = call_exa_mcp(
+        "web_search_exa",
+        {
+          "query" => enriched_query(query, options),
+          "numResults" => options[:max_results],
+          "livecrawl" => "fallback",
+          "type" => "auto",
+          "contextMaxCharacters" => 3000
+        }
+      )
+      results = parse_exa_mcp_results(text, options[:max_results])
+      SearchResponse.new(answer: answer_from_results(results), results: results, provider: "exa")
+    end
+
+    def call_exa_mcp(tool_name, arguments)
+      response = @http_client.post_json(
+        EXA_MCP_URL,
+        body: {
+          "jsonrpc" => "2.0",
+          "id" => 1,
+          "method" => "tools/call",
+          "params" => { "name" => tool_name, "arguments" => arguments }
+        },
+        headers: {
+          "Accept" => "application/json, text/event-stream",
+          "Content-Type" => "application/json"
+        }
+      )
+      raise "Exa MCP failed with HTTP #{response.code}" unless success?(response)
+
+      parsed = parse_mcp_rpc_response(response.body.to_s)
+      raise "Exa MCP returned an empty response" unless parsed
+      if parsed["error"].is_a?(Hash)
+        raise "Exa MCP error: #{parsed["error"]["message"] || "unknown error"}"
+      end
+
+      result = parsed["result"]
+      if result.is_a?(Hash) && result["isError"]
+        message = Array(result["content"]).find { |item| item.is_a?(Hash) && item["type"] == "text" }.to_h["text"]
+        raise(message.to_s.empty? ? "Exa MCP returned an error" : message.to_s)
+      end
+
+      text = Array(result.to_h["content"]).find { |item| item.is_a?(Hash) && item["type"] == "text" }.to_h["text"].to_s
+      raise "Exa MCP returned empty content" if text.strip.empty?
+
+      text
+    end
+
+    def parse_mcp_rpc_response(body)
+      body.each_line do |line|
+        stripped_line = line.strip
+        next unless stripped_line.start_with?("data:")
+
+        payload = stripped_line.delete_prefix("data:").strip
+        next if payload.empty? || payload == "[DONE]"
+
+        parsed = JSON.parse(payload)
+        return parsed if parsed.is_a?(Hash) && (parsed.key?("result") || parsed.key?("error"))
+      rescue JSON::ParserError
+        next
+      end
+
+      parsed = JSON.parse(body)
+      parsed if parsed.is_a?(Hash) && (parsed.key?("result") || parsed.key?("error"))
+    rescue JSON::ParserError
+      nil
+    end
+
+    def parse_exa_mcp_results(text, max_results)
+      blocks = text.split(/(?=^Title: )/).map(&:strip).reject(&:empty?)
+      parsed = blocks.filter_map do |block|
+        title = block[/^Title: (.+)/, 1].to_s.strip
+        url = block[/^URL: (.+)/, 1].to_s.strip
+        next if url.empty?
+
+        content = ""
+        if (index = block.index("\nText: "))
+          content = block[(index + 7)..].to_s.strip
+        elsif (match = block.match(/\nHighlights:\s*\n/))
+          content = block[(match.end(0))..].to_s.strip
+        end
+        content = content.sub(/\n---\s*\z/, "").strip
+        Result.new(title: title.empty? ? url : title, url: url, excerpt: content[0, 500], provider: "exa")
+      end
+
+      parsed.first(max_results)
+    end
+
+    def exa_api_search(query, options, key)
+      if options[:recency_filter] || options[:domain_filter].any? || options[:max_results] != DEFAULT_MAX_RESULTS
+        exa_api_structured_search(query, options, key)
+      else
+        exa_api_answer_search(query, key)
+      end
+    end
+
+    def exa_api_answer_search(query, key)
+      response = @http_client.post_json(
+        EXA_ANSWER_URL,
+        body: { "query" => query, "text" => true },
+        headers: { "x-api-key" => key, "Content-Type" => "application/json" }
+      )
+      raise "Exa API failed with HTTP #{response.code}: #{response.body.to_s[0, 300]}" unless success?(response)
+
+      data = JSON.parse(response.body.to_s)
+      results = results_from_exa_records(Array(data["citations"]), DEFAULT_MAX_RESULTS)
+      SearchResponse.new(answer: data["answer"].to_s, results: results, provider: "exa")
+    end
+
+    def exa_api_structured_search(query, options, key)
+      body = {
+        "query" => query,
+        "type" => "auto",
+        "numResults" => options[:max_results],
+        "contents" => { "text" => { "maxCharacters" => 3000 }, "highlights" => true }
+      }.merge(exa_domain_filters(options[:domain_filter]))
+      body["startPublishedDate"] = recency_start_date(options[:recency_filter]) if options[:recency_filter]
+
+      response = @http_client.post_json(
+        EXA_SEARCH_URL,
+        body: body,
+        headers: { "x-api-key" => key, "Content-Type" => "application/json" }
+      )
+      raise "Exa API failed with HTTP #{response.code}: #{response.body.to_s[0, 300]}" unless success?(response)
+
+      data = JSON.parse(response.body.to_s)
+      records = Array(data["results"])
+      results = results_from_exa_records(records, options[:max_results])
+      SearchResponse.new(answer: answer_from_results(results), results: results, provider: "exa")
+    end
+
+    def results_from_exa_records(records, max_results)
+      records.first(max_results).filter_map do |record|
+        next unless record.is_a?(Hash)
+
+        url = record["url"].to_s
+        next if url.empty?
+
+        text = if record["text"].is_a?(String)
+                 record["text"]
+               elsif record["highlights"].is_a?(Array)
+                 record["highlights"].join(" ")
+               else
+                 record["snippet"].to_s
+               end
+        Result.new(
+          title: record["title"].to_s.empty? ? url : clean_text(record["title"].to_s),
+          url: url,
+          excerpt: clean_text(text)[0, 500],
+          provider: "exa"
+        )
+      end
+    end
+
+    def perplexity_search(query, options)
+      key = api_key("perplexity")
+      raise "Perplexity API key not configured" unless key
+
+      body = {
+        "model" => config_value("perplexity_model") || "sonar",
+        "messages" => [{ "role" => "user", "content" => query }],
+        "max_tokens" => 1024,
+        "return_related_questions" => false
+      }
+      body["search_recency_filter"] = options[:recency_filter] if options[:recency_filter]
+      body["search_domain_filter"] = options[:domain_filter].first(20) unless options[:domain_filter].empty?
+
+      response = @http_client.post_json(
+        PERPLEXITY_API_URL,
+        body: body,
+        headers: { "Authorization" => "Bearer #{key}", "Content-Type" => "application/json" }
+      )
+      raise "Perplexity API failed with HTTP #{response.code}: #{response.body.to_s[0, 300]}" unless success?(response)
+
+      data = JSON.parse(response.body.to_s)
+      answer = Array(data["choices"]).first.to_h.dig("message", "content").to_s
+      citations = Array(data["citations"])
+      results = citations.first(options[:max_results]).each_with_index.filter_map do |citation, index|
+        if citation.is_a?(String)
+          Result.new(title: "Source #{index + 1}", url: citation, excerpt: "", provider: "perplexity")
+        elsif citation.is_a?(Hash) && citation["url"].to_s != ""
+          Result.new(title: citation["title"].to_s.empty? ? "Source #{index + 1}" : citation["title"].to_s, url: citation["url"].to_s, excerpt: citation["snippet"].to_s, provider: "perplexity")
+        end
+      end
+      SearchResponse.new(answer: answer, results: results, provider: "perplexity")
+    end
+
+    def gemini_search(query, options)
+      key = api_key("gemini")
+      raise "Gemini API key not configured" unless key
+
+      prompt = enriched_query(query, options)
+      model = config_value("gemini_model") || DEFAULT_GEMINI_MODEL
+      response = @http_client.post_json(
+        "#{GEMINI_API_BASE}/models/#{CGI.escape(model)}:generateContent?key=#{CGI.escape(key)}",
+        body: {
+          "contents" => [{ "parts" => [{ "text" => prompt }] }],
+          "tools" => [{ "google_search" => {} }]
+        },
+        headers: { "Content-Type" => "application/json" }
+      )
+      raise "Gemini API failed with HTTP #{response.code}: #{response.body.to_s[0, 300]}" unless success?(response)
+
+      data = JSON.parse(response.body.to_s)
+      candidate = Array(data["candidates"]).first.to_h
+      answer = Array(candidate.dig("content", "parts")).map { |part| part.to_h["text"] }.compact.join("\n")
+      chunks = Array(candidate.dig("groundingMetadata", "groundingChunks"))
+      results = chunks.first(options[:max_results]).filter_map do |chunk|
+        web = chunk.to_h["web"].to_h
+        url = web["uri"].to_s
+        next if url.empty?
+
+        Result.new(title: web["title"].to_s.empty? ? url : web["title"].to_s, url: url, excerpt: "", provider: "gemini")
+      end
+      SearchResponse.new(answer: answer, results: results, provider: "gemini")
+    end
+
+    def legacy_search(query, options)
+      legacy_query = query_with_domain_filter(query, options[:domain_filter])
+      results, error = legacy_search_query(legacy_query, options[:max_results], options[:recency_filter])
+      raise error if results.empty? && error
+
+      SearchResponse.new(answer: "", results: results, provider: results.first&.provider || "legacy", note: error)
+    end
+
+    def legacy_search_query(query, max_results, recency_filter)
       begin
-        duckduckgo_results = duckduckgo_search(query, max_results)
+        duckduckgo_results = duckduckgo_search(query, max_results, recency_filter)
         return [duckduckgo_results, nil] unless duckduckgo_results.empty?
 
         duckduckgo_error = "DuckDuckGo returned no results"
@@ -61,15 +358,17 @@ module Kward
         duckduckgo_error = e.message
       end
 
-      searxng_results, searxng_error = searxng_search(query, max_results)
+      searxng_results, searxng_error = searxng_search(query, max_results, recency_filter)
       error = [duckduckgo_error, searxng_error].compact.join("; ")
       [searxng_results, error.empty? ? nil : error]
     end
 
-    def duckduckgo_search(query, max_results)
+    def duckduckgo_search(query, max_results, recency_filter)
+      form = { "q" => query, "kl" => "wt-wt" }
+      form["df"] = duckduckgo_recency(recency_filter) if recency_filter
       response = @http_client.post(
         DUCKDUCKGO_URL,
-        form: { "q" => query, "kl" => "wt-wt" },
+        form: form,
         headers: browser_headers("text/html")
       )
       raise "DuckDuckGo search failed with HTTP #{response.code}" unless success?(response)
@@ -88,12 +387,12 @@ module Kward
       end.reject { |result| result.title.empty? || result.url.empty? }
     end
 
-    def searxng_search(query, max_results)
+    def searxng_search(query, max_results, recency_filter)
       errors = []
 
       @searxng_instances.each do |instance|
         begin
-          results = searxng_instance_search(instance, query, max_results)
+          results = searxng_instance_search(instance, query, max_results, recency_filter)
           return [results, nil] unless results.empty?
 
           errors << "#{instance} returned no results"
@@ -105,9 +404,9 @@ module Kward
       [[], errors.join("; ")]
     end
 
-    def searxng_instance_search(instance, query, max_results)
+    def searxng_instance_search(instance, query, max_results, recency_filter)
       begin
-        results = searxng_json_search(instance, query, max_results)
+        results = searxng_json_search(instance, query, max_results, recency_filter)
         return results unless results.empty?
 
         json_error = "SearXNG JSON search returned no results"
@@ -116,7 +415,7 @@ module Kward
       end
 
       begin
-        results = searxng_html_search(instance, query, max_results)
+        results = searxng_html_search(instance, query, max_results, recency_filter)
         return results unless results.empty?
 
         raise "SearXNG HTML search returned no results"
@@ -125,8 +424,10 @@ module Kward
       end
     end
 
-    def searxng_json_search(instance, query, max_results)
-      uri = searxng_search_uri(instance, q: query, format: "json")
+    def searxng_json_search(instance, query, max_results, recency_filter)
+      params = { q: query, format: "json" }
+      params[:time_range] = recency_filter if recency_filter
+      uri = searxng_search_uri(instance, params)
       response = @http_client.get(uri.to_s, headers: { "Accept" => "application/json" })
       raise "SearXNG search failed with HTTP #{response.code}" unless success?(response)
 
@@ -134,8 +435,10 @@ module Kward
       results_from_records(Array(data["results"]), max_results)
     end
 
-    def searxng_html_search(instance, query, max_results)
-      uri = searxng_search_uri(instance, q: query)
+    def searxng_html_search(instance, query, max_results, recency_filter)
+      params = { q: query }
+      params[:time_range] = recency_filter if recency_filter
+      uri = searxng_search_uri(instance, params)
       response = @http_client.get(uri.to_s, headers: browser_headers("text/html"))
       raise "SearXNG HTML search failed with HTTP #{response.code}" unless success?(response)
 
@@ -176,17 +479,46 @@ module Kward
       Result.new(title: title, url: url, excerpt: excerpt, provider: provider)
     end
 
-    def format_query_results(query, results, error)
+    def format_query_results(query, response, error)
       lines = ["## Query: #{query}"]
-      lines << "Provider fallback note: #{error}" if error && !results.empty?
-      results.each_with_index do |result, index|
-        lines << "#{index + 1}. #{result.title}"
-        lines << "   URL: #{result.url}"
-        lines << "   Provider: #{result.provider}"
-        lines << "   Excerpt: #{result.excerpt}" unless result.excerpt.to_s.empty?
+      fallback_note = [error, response&.note].compact.reject(&:empty?).join("; ")
+      lines << "Provider fallback note: #{fallback_note}" if !fallback_note.empty? && successful_response?(response)
+      unless successful_response?(response)
+        lines << "No results. #{error}"
+        return lines.join("\n")
       end
-      lines << "No results. #{error}" if results.empty?
+
+      answer = response.answer.to_s.strip
+      unless answer.empty?
+        lines << "Provider: #{response.provider}"
+        lines << "Answer:"
+        lines << answer
+      end
+
+      results = response.results || []
+      unless results.empty?
+        lines << "Sources:" unless answer.empty?
+        results.each_with_index do |result, index|
+          lines << "#{index + 1}. #{result.title}"
+          lines << "   URL: #{result.url}"
+          lines << "   Provider: #{result.provider}"
+          lines << "   Excerpt: #{result.excerpt}" unless result.excerpt.to_s.empty?
+        end
+      end
       lines.join("\n")
+    end
+
+    def answer_from_results(results)
+      results.filter_map do |result|
+        excerpt = result.excerpt.to_s.strip
+        next if excerpt.empty?
+
+        "#{excerpt}\nSource: #{result.title} (#{result.url})"
+      end.join("\n\n")
+    end
+
+    def successful_response?(response)
+      response && (!response.answer.to_s.strip.empty? || !Array(response.results).empty?)
     end
 
     def bounded_max_results(value)
@@ -229,8 +561,11 @@ module Kward
       {
         "Accept" => accept,
         "Accept-Language" => "en-US,en;q=0.9",
-        "User-Agent" => "Mozilla/5.0 (compatible; KwardWebResearch/1.0)",
-        "Sec-Fetch-Mode" => "navigate"
+        "User-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Sec-Fetch-Dest" => "document",
+        "Sec-Fetch-Mode" => "navigate",
+        "Sec-Fetch-Site" => "none",
+        "Sec-Fetch-User" => "?1"
       }
     end
 
@@ -239,6 +574,98 @@ module Kward
 
       truncated = output.byteslice(0, @max_output_bytes).to_s.scrub
       "#{truncated}\n... truncated to #{@max_output_bytes} bytes"
+    end
+
+    def config
+      return @config if @config
+
+      @config = ConfigFiles.read_config
+    rescue StandardError
+      @config = {}
+    end
+
+    def web_config
+      value = config["web_research"] || config["webResearch"] || {}
+      value.is_a?(Hash) ? value : {}
+    end
+
+    def config_value(key)
+      snake = key.to_s
+      camel = snake.gsub(/_([a-z])/) { Regexp.last_match(1).upcase }
+      web_config[snake] || web_config[camel] || config["web_research_#{snake}"] || config[snake] || config[camel]
+    end
+
+    def api_key(provider)
+      env_name = "#{provider.upcase}_API_KEY"
+      value = ENV[env_name].to_s.strip
+      return value unless value.empty?
+
+      configured = config_value("#{provider}_api_key").to_s.strip
+      configured.empty? ? nil : configured
+    end
+
+    def redact_secrets(message)
+      redacted = message.to_s.dup
+      %w[exa perplexity gemini].each do |provider|
+        key = api_key(provider)
+        redacted.gsub!(key, "[REDACTED]") if key && !key.empty?
+      end
+      redacted.gsub!(/key=([^\s&]+)/, "key=[REDACTED]")
+      redacted.gsub!(/Bearer\s+[^\s]+/, "Bearer [REDACTED]")
+      redacted
+    end
+
+    def normalize_provider(value)
+      normalized = value.to_s.strip.downcase
+      PROVIDERS.include?(normalized) ? normalized : nil
+    end
+
+    def normalize_recency(value)
+      normalized = value.to_s.strip.downcase
+      %w[day week month year].include?(normalized) ? normalized : nil
+    end
+
+    def normalize_domain_filter(value)
+      Array(value).filter_map do |domain|
+        text = domain.to_s.strip
+        text.empty? ? nil : text
+      end
+    end
+
+    def enriched_query(query, options)
+      parts = [query_with_domain_filter(query, options[:domain_filter])]
+      if options[:recency_filter]
+        labels = { "day" => "past 24 hours", "week" => "past week", "month" => "past month", "year" => "past year" }
+        parts << labels[options[:recency_filter]]
+      end
+      parts.join(" ")
+    end
+
+    def query_with_domain_filter(query, domain_filter)
+      return query if domain_filter.empty?
+
+      terms = domain_filter.map do |domain|
+        domain.start_with?("-") ? "-site:#{domain[1..]}" : "site:#{domain}"
+      end
+      ([query] + terms).join(" ")
+    end
+
+    def exa_domain_filters(domain_filter)
+      includes = domain_filter.reject { |domain| domain.start_with?("-") }
+      excludes = domain_filter.select { |domain| domain.start_with?("-") }.map { |domain| domain[1..] }.reject(&:empty?)
+      result = {}
+      result["includeDomains"] = includes unless includes.empty?
+      result["excludeDomains"] = excludes unless excludes.empty?
+      result
+    end
+
+    def recency_start_date(filter)
+      days = { "day" => 1, "week" => 7, "month" => 30, "year" => 365 }.fetch(filter, 0)
+      (Time.now.utc - (days * 86_400)).iso8601
+    end
+
+    def duckduckgo_recency(filter)
+      { "day" => "d", "week" => "w", "month" => "m", "year" => "y" }[filter]
     end
 
     class NetHttpClient
@@ -251,6 +678,12 @@ module Kward
       def post(url, form:, headers: {})
         request(url, Net::HTTP::Post, headers: headers) do |http_request|
           http_request.set_form_data(form)
+        end
+      end
+
+      def post_json(url, body:, headers: {})
+        request(url, Net::HTTP::Post, headers: headers) do |http_request|
+          http_request.body = JSON.generate(body)
         end
       end
 

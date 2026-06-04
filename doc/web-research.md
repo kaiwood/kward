@@ -1,5 +1,18 @@
 # Web research
 
-Web research uses no API key by default. It tries DuckDuckGo HTML search first, then bundled public SearXNG instances as fallback.
+Web research searches the live web. In `auto` mode the provider fallback order is:
 
-Queries are sent over the network to those services.
+1. Exa API when `EXA_API_KEY` is configured, otherwise keyless Exa MCP (`https://mcp.exa.ai/mcp`)
+2. Perplexity API when `PERPLEXITY_API_KEY` is configured
+3. Gemini API with Google Search grounding when `GEMINI_API_KEY` is configured
+4. Legacy DuckDuckGo HTML search, then bundled public SearXNG instances
+
+Queries are sent over the network to the selected provider. API keys are never bundled with Kward; configure your own keys only if you want higher limits or alternate providers.
+
+Supported arguments:
+
+- `queries`: one to four search strings
+- `max_results`: results per query, default 5, capped at 20
+- `provider`: optional `auto`, `exa`, `perplexity`, `gemini`, `legacy`, or `duckduckgo`
+- `recency_filter`: optional `day`, `week`, `month`, or `year`
+- `domain_filter`: optional list of included domains, or excluded domains prefixed with `-`

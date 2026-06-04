@@ -106,10 +106,14 @@ class KwardTestCase < Minitest::Test
       request("POST", url, headers: headers, form: form)
     end
 
+    def post_json(url, body:, headers: {})
+      request("POST_JSON", url, headers: headers, body: body)
+    end
+
     private
 
-    def request(method, url, headers:, form: nil)
-      @requests << { method: method, url: url, headers: headers, form: form }
+    def request(method, url, headers:, form: nil, body: nil)
+      @requests << { method: method, url: url, headers: headers, form: form, body: body }
       response = @routes[[method, url]] || @routes[url]
       raise "unexpected URL: #{method} #{url}" unless response
 

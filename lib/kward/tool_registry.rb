@@ -250,7 +250,7 @@ module Kward
         type: "function",
         function: {
           name: "web_research",
-          description: "Search the live web without an API key. Uses DuckDuckGo HTML search first, then public SearXNG instances as fallback.",
+          description: "Search the live web. Provider fallback order is Exa (API key if configured, otherwise keyless Exa MCP), Perplexity when configured, Gemini when configured, then legacy DuckDuckGo/SearXNG.",
           parameters: {
             type: "object",
             properties: {
@@ -263,7 +263,22 @@ module Kward
               },
               max_results: {
                 type: "integer",
-                description: "Optional maximum results per query. Defaults to 5 and is capped at 10."
+                description: "Optional maximum results per query. Defaults to 5 and is capped at 20."
+              },
+              provider: {
+                type: "string",
+                enum: %w[auto exa perplexity gemini legacy duckduckgo],
+                description: "Optional provider override. Defaults to auto."
+              },
+              recency_filter: {
+                type: "string",
+                enum: %w[day week month year],
+                description: "Optional recency filter."
+              },
+              domain_filter: {
+                type: "array",
+                description: "Optional domains to include, or prefix with '-' to exclude.",
+                items: { type: "string" }
               }
             },
             required: ["queries"],

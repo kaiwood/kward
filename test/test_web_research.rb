@@ -8,7 +8,7 @@ class TestWebResearch < KwardTestCase
     )
     research = Kward::WebResearch.new(http_client: http, searxng_instances: [])
 
-    result = research.search("queries" => ["ruby news"])
+    result = research.search("queries" => ["ruby news"], "provider" => "legacy")
 
     assert_includes result, "# Web research"
     assert_includes result, "Provider: duckduckgo"
@@ -25,7 +25,7 @@ class TestWebResearch < KwardTestCase
     )
     research = Kward::WebResearch.new(http_client: http, searxng_instances: ["https://searx.test"])
 
-    result = research.search("queries" => ["ruby"])
+    result = research.search("queries" => ["ruby"], "provider" => "legacy")
 
     assert_includes result, "Provider fallback note: DuckDuckGo search failed with HTTP 429"
     assert_includes result, "Provider: searxng"
@@ -41,7 +41,7 @@ class TestWebResearch < KwardTestCase
     )
     research = Kward::WebResearch.new(http_client: http, searxng_instances: ["https://searx.test"])
 
-    result = research.search("queries" => ["ruby"])
+    result = research.search("queries" => ["ruby"], "provider" => "legacy")
 
     assert_includes result, "HTML Result"
     assert_includes result, "HTML snippet"
@@ -54,7 +54,7 @@ class TestWebResearch < KwardTestCase
     )
     research = Kward::WebResearch.new(http_client: http, searxng_instances: ["https://searx.test"])
 
-    result = research.search("queries" => ["ruby"])
+    result = research.search("queries" => ["ruby"], "provider" => "legacy")
 
     assert_includes result, "Error: web_research found no results"
     assert_includes result, "DuckDuckGo search failed with HTTP 500"
@@ -68,9 +68,66 @@ class TestWebResearch < KwardTestCase
     )
     research = Kward::WebResearch.new(http_client: http, searxng_instances: [], max_output_bytes: 120)
 
-    result = research.search("queries" => ["ruby"])
+    result = research.search("queries" => ["ruby"], "provider" => "legacy")
 
     assert_includes result, "... truncated to 120 bytes"
+  end
+
+  def test_web_research_uses_keyless_exa_mcp_by_default
+    mcp_payload = JSON.dump(
+      "result" => {
+        "content" => [{ "type" => "text", "text" => "Title: Exa Result\nURL: https://example.com/exa\nText: Exa snippet\n---" }]
+      }
+    )
+    mcp_body = "data: #{mcp_payload}\n"
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://mcp.exa.ai/mcp"] => fake_response(200, mcp_body)
+    )
+    research = Kward::WebResearch.new(http_client: http, config: {})
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "Provider: exa"
+    assert_includes result, "Exa Result"
+    assert_includes result, "https://example.com/exa"
+    assert_equal "web_search_exa", http.requests.first[:body]["params"]["name"]
+  end
+
+  def test_web_research_uses_configured_exa_api_key_without_exposing_it
+    body = JSON.dump(
+      "answer" => "Configured Exa answer",
+      "citations" => [{ "title" => "Exa API", "url" => "https://example.com/api", "text" => "API snippet" }]
+    )
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://api.exa.ai/answer"] => fake_response(200, body)
+    )
+    research = Kward::WebResearch.new(http_client: http, config: { "web_research" => { "exa_api_key" => "exa-secret" } })
+
+    result = research.search("queries" => ["ruby"], "provider" => "exa")
+
+    assert_includes result, "Configured Exa answer"
+    assert_includes result, "Exa API"
+    refute_includes result, "exa-secret"
+    assert_equal "exa-secret", http.requests.first[:headers]["x-api-key"]
+  end
+
+  def test_web_research_falls_back_to_configured_perplexity_after_exa_failure
+    perplexity_body = JSON.dump(
+      "choices" => [{ "message" => { "content" => "Perplexity answer" } }],
+      "citations" => ["https://example.com/perplexity"]
+    )
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://mcp.exa.ai/mcp"] => fake_response(500, "nope"),
+      ["POST_JSON", "https://api.perplexity.ai/chat/completions"] => fake_response(200, perplexity_body)
+    )
+    research = Kward::WebResearch.new(http_client: http, config: { "web_research" => { "perplexity_api_key" => "pplx-secret" } })
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "Provider fallback note: exa: Exa MCP failed with HTTP 500"
+    assert_includes result, "Provider: perplexity"
+    assert_includes result, "Perplexity answer"
+    refute_includes result, "pplx-secret"
   end
 
 end
