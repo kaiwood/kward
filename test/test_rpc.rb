@@ -329,6 +329,29 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_cancel_turn_waiting_for_rpc_question_unblocks_worker
+    Dir.mktmpdir do |config_dir|
+      server = RecordingServer.new
+      client = FakeClient.new([
+        assistant_tool_call("ask_user_question", { questions: [question_args("Continue?")] }),
+        { "role" => "assistant", "content" => "after cancel" }
+      ])
+      manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      blocked = manager.start_turn(session_id: session[:id], input: "ask")
+
+      wait_until { server.notifications.any? { |notification| notification[:method] == "ui/question" } }
+      manager.cancel_turn(turn_id: blocked[:id])
+
+      wait_until { manager.turn_status(turn_id: blocked[:id])[:status] == "canceled" }
+      follow_up = manager.start_turn(session_id: session[:id], input: "next")
+      wait_until { manager.turn_status(turn_id: follow_up[:id])[:status] == "completed" }
+
+      assert_equal true, manager.turn_status(turn_id: blocked[:id])[:cancelRequested]
+      assert_equal "after cancel", manager.turn_events(turn_id: follow_up[:id])[:events].find { |event| event[:type] == "answer" }[:payload][:content]
+    end
+  end
+
   def test_model_rpc_methods_read_and_update_config
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

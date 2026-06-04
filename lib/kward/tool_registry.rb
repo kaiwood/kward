@@ -36,7 +36,7 @@ module Kward
                 when "read_skill"
                   read_skill(args)
                 when "ask_user_question"
-                  ask_user_question(args)
+                  ask_user_question(args, cancellation: cancellation)
                 else
                   "Unknown tool: #{name}"
                 end
@@ -97,16 +97,26 @@ module Kward
       ConfigFiles.read_skill_file(name, path)
     end
 
-    def ask_user_question(args)
+    def ask_user_question(args, cancellation: nil)
       return "Error: ask_user_question requires interactive prompt support." unless @prompt.respond_to?(:ask_user_question)
 
       questions = validated_questions(args)
       return questions if questions.is_a?(String)
 
-      answers = @prompt.ask_user_question(questions)
+      answers = prompt_ask_user_question(questions, cancellation: cancellation)
       return "Cancelled." if answers.nil?
 
       answers.map { |answer| "#{answer[:question]}: #{answer[:answer]}" }.join("\n")
+    end
+
+    def prompt_ask_user_question(questions, cancellation: nil)
+      method = @prompt.method(:ask_user_question)
+      supports_cancellation = method.parameters.any? do |type, name|
+        type == :keyrest || (type == :key && name == :cancellation) || (type == :keyreq && name == :cancellation)
+      end
+      return @prompt.ask_user_question(questions, cancellation: cancellation) if supports_cancellation
+
+      @prompt.ask_user_question(questions)
     end
 
     def validated_questions(args)

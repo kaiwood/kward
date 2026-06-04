@@ -14,20 +14,26 @@ module Kward
         @mutex = Mutex.new
         @condition = ConditionVariable.new
         @answers = {}
+        @pending_requests = {}
       end
 
-      def ask_user_question(questions)
+      def ask_user_question(questions, cancellation: nil)
         questions = validate_questions(questions)
         request_id = SecureRandom.uuid
-        @server.notify("ui/question", {
-          sessionId: @session_id,
-          questionRequestId: request_id,
-          questions: questions
-        })
+        @mutex.synchronize { @pending_requests[request_id] = true }
+        cancellation&.on_cancel { cancel_request(request_id) }
+        unless cancellation&.cancelled?
+          @server.notify("ui/question", {
+            sessionId: @session_id,
+            questionRequestId: request_id,
+            questions: questions
+          })
+        end
 
         @mutex.synchronize do
           @condition.wait(@mutex) until @answers.key?(request_id)
           answer = @answers.delete(request_id)
+          @pending_requests.delete(request_id)
           return nil if answer.nil?
 
           answer
@@ -36,7 +42,22 @@ module Kward
 
       def answer(request_id, answers)
         @mutex.synchronize do
-          @answers[request_id.to_s] = normalize_answers(answers)
+          request_id = request_id.to_s
+          return unless @pending_requests.key?(request_id)
+          return if @answers.key?(request_id)
+
+          @answers[request_id] = normalize_answers(answers)
+          @condition.broadcast
+        end
+      end
+
+      def cancel_request(request_id)
+        @mutex.synchronize do
+          request_id = request_id.to_s
+          return unless @pending_requests.key?(request_id)
+          return if @answers.key?(request_id)
+
+          @answers[request_id] = nil
           @condition.broadcast
         end
       end
