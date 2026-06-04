@@ -492,6 +492,30 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_rpc_turn_expands_configured_prompt_slash_commands
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      prompts_dir = File.join(config_dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+      client = RecordingClient.new(["planned", "literal"])
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+        session = manager.create_session(workspace_root: Dir.pwd)
+        plan_turn = manager.start_turn(session_id: session[:id], input: "/plan fix bug")
+        wait_until { manager.turn_status(turn_id: plan_turn[:id])[:status] == "completed" }
+
+        unknown_turn = manager.start_turn(session_id: session[:id], input: "/unknown fix bug")
+        wait_until { manager.turn_status(turn_id: unknown_turn[:id])[:status] == "completed" }
+      end
+
+      assert_equal "Plan this:\nfix bug\n", client.seen_messages[0][1][:content]
+      assert_equal "/unknown fix bug", client.seen_messages[1].last[:content]
+    end
+  end
+
   def test_commands_list_and_startup_resources_return_prompts_and_skills
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

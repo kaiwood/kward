@@ -222,6 +222,8 @@ Params:
 
 Supported attachment MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`. Image data must be raw base64 without a `data:` prefix, and the RPC boundary limit is 10MB per image.
 
+If `input` is a configured prompt slash command such as `/plan fix bug`, Kward expands the prompt template server-side before starting the turn. Unknown slash commands remain literal input. Clients may still call `prompts/expand` themselves when they need preview/editing before submission.
+
 Returns a turn object with `id`, `sessionId`, `status`, timestamps, and cancellation state. Status starts as `queued` or quickly becomes `running`.
 
 ### `turns/cancel`
@@ -391,7 +393,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns Tauren-compatible slash command metadata for configured prompt templates and skills. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Builtin terminal-only commands are omitted.
+Returns Tauren-compatible slash command metadata for configured prompt templates and skills. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`.
 
 ### `resources/startup`
 

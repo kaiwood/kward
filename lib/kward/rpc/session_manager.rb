@@ -10,6 +10,7 @@ require_relative "../config_files"
 require_relative "../context_usage"
 require_relative "../conversation"
 require_relative "../events"
+require_relative "../prompt_commands"
 require_relative "../session_store"
 require_relative "../tool_registry"
 require_relative "../workspace"
@@ -167,7 +168,7 @@ module Kward
       def start_turn(session_id:, input:, streaming_behavior: "newTurn", attachments: [])
         rpc_session = fetch_session(session_id)
         streaming_behavior = validate_streaming_behavior(streaming_behavior)
-        content = user_turn_content(input, attachments)
+        content = user_turn_content(expand_prompt_input(input), attachments)
         turn = Turn.new(
           id: SecureRandom.uuid,
           session_id: rpc_session.id,
@@ -478,6 +479,12 @@ module Kward
         return input.to_s if normalized_attachments.empty?
 
         [{ type: "text", text: input.to_s }] + normalized_attachments
+      end
+
+      def expand_prompt_input(input)
+        return input unless input.is_a?(String)
+
+        PromptCommands.expand(input) || input
       end
 
       def normalize_attachments(attachments)

@@ -8,6 +8,7 @@ require_relative "config_files"
 require_relative "events"
 require_relative "image_attachments"
 require_relative "openai_oauth"
+require_relative "prompt_commands"
 require_relative "rpc/server"
 require_relative "session_store"
 require_relative "tool_registry"
@@ -30,6 +31,7 @@ module Kward
       { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" }
     ].freeze
+    BUILTIN_SLASH_COMMAND_NAMES = BUILTIN_SLASH_COMMANDS.map { |command| command[:name] }.freeze
 
     def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new, session_store: nil)
       @argv = argv
@@ -215,10 +217,7 @@ module Kward
     end
 
     def parse_slash_command(command)
-      match = command.match(%r{\A/([^\s/]+)(?:\s+(.*))?\z}m)
-      return [nil, ""] unless match
-
-      [match[1], match[2].to_s]
+      PromptCommands.parse(command) || [nil, ""]
     end
 
     def print_status
@@ -629,7 +628,7 @@ module Kward
     end
 
     def prompt_templates
-      @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMANDS.map { |command| command[:name] })
+      @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
     end
 
     def slash_command_entries
@@ -648,13 +647,7 @@ module Kward
     end
 
     def expand_prompt_template(input)
-      match = input.match(%r{\A/([^\s/]+)(?:\s+(.*))?\z}m)
-      return nil unless match
-
-      template = prompt_template_for(match[1])
-      return nil unless template
-
-      template.expand(match[2].to_s)
+      PromptCommands.expand(input, templates: prompt_templates, reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
     end
 
     def selected_slash_command_input(input)

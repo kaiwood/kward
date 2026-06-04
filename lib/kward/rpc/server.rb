@@ -1,6 +1,7 @@
 require "json"
 require_relative "../client"
 require_relative "../config_files"
+require_relative "../prompt_commands"
 require_relative "../tool_registry"
 require_relative "../workspace"
 require_relative "auth_manager"
@@ -14,7 +15,7 @@ module Kward
     class Server
       PROTOCOL_VERSION = 1
       JSONRPC_VERSION = "2.0"
-      BUILTIN_SLASH_COMMAND_NAMES = %w[exit quit new resume name clone export redraw status].freeze
+      BUILTIN_SLASH_COMMAND_NAMES = PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES
 
       ERROR_CODES = {
         parse_error: -32_700,
