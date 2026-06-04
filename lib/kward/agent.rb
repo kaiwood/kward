@@ -1,3 +1,4 @@
+require_relative "compactor"
 require_relative "conversation"
 require_relative "events"
 require_relative "tool_registry"
@@ -15,6 +16,7 @@ module Kward
     def ask(input, on_reasoning_delta: nil, &block)
       @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input)
+      auto_compact_if_needed
       run_turn(on_reasoning_delta: on_reasoning_delta, &block)
     end
 
@@ -42,6 +44,14 @@ module Kward
     end
 
     private
+
+    def auto_compact_if_needed
+      context_window = @client.current_context_window if @client.respond_to?(:current_context_window)
+      Compactor.new(conversation: @conversation, client: @client).auto_compact_if_needed(context_window: context_window)
+    rescue StandardError => e
+      warn "Auto-compaction failed: #{e.message}"
+      nil
+    end
 
     def chat(on_reasoning_delta: nil)
       reasoning_delta = lambda do |delta|

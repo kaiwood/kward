@@ -8,7 +8,9 @@ Existing files must be read in the current conversation before writing or editin
 
 Interactive chats are saved as per-workspace JSONL sessions under `~/.kward/sessions/`. Type `/exit` or `/quit` to leave.
 
-Use `/new` to start fresh, `/resume` to pick a saved session, `/name <name>` to name the current session, `/clone` to duplicate it, `/export [path]` to write a Markdown transcript, `/compact [instructions]` to summarize prior conversation into a smaller continuation context, `/settings` to configure overlay alignment and width, and `/redraw` to refresh the visible terminal after resize glitches. After compaction, files may need to be re-read before future edits.
+Use `/new` to start fresh, `/resume` to pick a saved session, `/name <name>` to name the current session, `/clone` to duplicate it, `/export [path]` to write a Markdown transcript, `/compact [instructions]` to summarize older conversation into a structured Ruby-aware checkpoint while preserving recent messages, `/settings` to configure overlay alignment and width, and `/redraw` to refresh the visible terminal after resize glitches. Text after `/compact ` is freeform focus text, not parsed as flags. After compaction, files may need to be re-read before future edits.
+
+Auto-compaction is enabled by default when Kward can determine the active context window. Configure it in `config.json` with `compaction.enabled`, `compaction.reserve_tokens`, and `compaction.keep_recent_tokens`; manual `/compact` still works when auto-compaction is disabled.
 
 ## Composer keys
 

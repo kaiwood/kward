@@ -21,6 +21,7 @@ module Kward
       end
       @compaction_system_message = compaction_system_message
       @workspace_agents_mtime = workspace_agents_mtime
+      @last_entry_compaction = false
       @messages << system_message unless system_message.nil?
       @messages.concat(messages)
       @read_paths = Set.new(read_paths)
@@ -66,17 +67,33 @@ module Kward
       @read_paths << path
     end
 
-    def compact!(summary, compaction_summary: false)
+    def compact!(summary, compaction_summary: false, first_kept_entry_id: nil, tokens_before: nil, from_hook: false, details: {}, keep_messages: [])
       message = if compaction_summary
                   { role: "compactionSummary", summary: summary.to_s }
                 else
                   { role: "assistant", content: summary.to_s }
                 end
+      if compaction_summary
+        message[:first_kept_entry_id] = first_kept_entry_id if first_kept_entry_id
+        message[:tokens_before] = tokens_before if tokens_before
+        message[:from_hook] = from_hook
+        message[:details] = details || {}
+      end
       @messages = @messages.select { |item| message_role(item) == "system" }
       @messages << message
+      @messages.concat(Array(keep_messages))
       @read_paths.clear
+      @last_entry_compaction = true
       @on_compact&.call(message)
       message
+    end
+
+    def last_entry_compaction?
+      @last_entry_compaction
+    end
+
+    def mark_last_entry_compaction!
+      @last_entry_compaction = true
     end
 
     def last_write_result
@@ -98,6 +115,7 @@ module Kward
 
     def append_message(message)
       @messages << message
+      @last_entry_compaction = false
       @on_append&.call(message)
       message
     end

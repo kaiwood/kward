@@ -133,14 +133,19 @@ Params:
 - `sessionId`
 - `customInstructions`: optional additional guidance for the summarizer.
 
-Summarizes the current non-system conversation into a continuation summary, replaces the prior context with a `compactionSummary` transcript message, clears remembered read-file state, and appends a compaction record to the session JSONL.
+Summarizes older non-system conversation into a structured Ruby-aware checkpoint, keeps recent messages after `firstKeptEntryId` in live context, clears remembered read-file state, and appends a compaction record to the session JSONL. Historical message records remain in the session file for audit/export/navigation.
 
 Returns:
 
 ```json
 {
   "summary": "Compaction summary",
-  "firstKeptEntryId": "message:0"
+  "firstKeptEntryId": "message:2",
+  "tokensBefore": 1234,
+  "details": {
+    "read_files": [],
+    "modified_files": []
+  }
 }
 ```
 

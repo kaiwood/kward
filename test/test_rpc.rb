@@ -389,7 +389,7 @@ class TestRPC < KwardTestCase
       assert_equal 1, stats[:toolResults]
       assert_equal 4, stats[:totalMessages]
       assert_equal true, stats[:usingSubscription]
-      assert_equal false, stats[:autoCompactionEnabled]
+      assert_equal true, stats[:autoCompactionEnabled]
       assert_equal({ tokens: 50, contextWindow: 200_000, percent: 0.03 }, stats[:contextUsage])
       refute stats.key?(:tokens)
     end
@@ -723,22 +723,27 @@ class TestRPC < KwardTestCase
 
   def test_session_compact_emits_events_persists_summary_and_restores_transcript
     Dir.mktmpdir do |config_dir|
+      File.write(File.join(config_dir, "config.json"), JSON.dump({ "compaction" => { "keep_recent_tokens" => 10 } }))
       server = RecordingServer.new
       client = RecordingClient.new(["summary"])
       manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
       session = manager.create_session(workspace_root: Dir.pwd)
       rpc_session = manager.send(:fetch_session, session[:id])
-      rpc_session.conversation.append_user("hello")
+      rpc_session.conversation.append_user("hello with enough detail for compaction")
       rpc_session.conversation.append_assistant("reply")
+      rpc_session.conversation.append_user("recent turn")
+      rpc_session.conversation.append_assistant("recent reply")
 
       result = manager.compact_session(session_id: session[:id], custom_instructions: "focus")
 
-      assert_equal "summary", result[:summary]
-      assert_equal "message:0", result[:firstKeptEntryId]
-      assert_includes client.seen_messages.last.last[:content], "Additional user instructions for compaction: focus"
-      assert_equal [{ role: "compactionSummary", summary: "summary" }], rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      assert_includes result[:summary], "summary"
+      assert_equal "message:2", result[:firstKeptEntryId]
+      assert_includes client.seen_messages.last.last[:content], "Additional focus: focus"
+      live_messages = rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      assert_equal ["compactionSummary", "user", "assistant"], live_messages.map { |message| message[:role] || message["role"] }
+      assert_includes live_messages.first[:summary], "summary"
       records = jsonl_records(session[:path])
-      assert records.any? { |record| record["type"] == "compaction" && record["message"]["role"] == "compactionSummary" && record["message"]["summary"] == "summary" }
+      assert records.any? { |record| record["type"] == "compaction" && record["message"]["role"] == "compactionSummary" && record["message"]["summary"].to_s.include?("summary") }
 
       event_types = server.notifications.select { |notification| notification[:method] == "session/event" }.map { |notification| notification[:params][:type] }
       assert_equal ["compactionStart", "compactionEnd"], event_types
@@ -748,7 +753,8 @@ class TestRPC < KwardTestCase
 
       resumed = manager.resume_session(path: session[:path], workspace_root: Dir.pwd)
       transcript_message = manager.transcript(session_id: resumed[:id])[:messages].first
-      assert_equal({ role: "compactionSummary", summary: "summary" }, transcript_message)
+      assert_equal "compactionSummary", transcript_message[:role]
+      assert_includes transcript_message[:summary], "summary"
     end
   end
 

@@ -61,6 +61,14 @@ module Kward
       reasoning_effort
     end
 
+    def current_context_window
+      return nil unless current_provider == "Codex"
+
+      id = current_model
+      match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
+      match&.last
+    end
+
     def available_models
       provider = current_provider
       openai_model = model_for("Codex")
@@ -389,6 +397,17 @@ module Kward
         strict: false
       }
     end
+
+    OPENAI_CONTEXT_WINDOWS = [
+      [/\Agpt-5\.5\b/, 200_000],
+      [/\Agpt-5/, 400_000],
+      [/\Agpt-4\.1/, 1_047_576],
+      [/\Agpt-4o/, 128_000],
+      [/\Ao3/, 200_000],
+      [/\Ao4/, 200_000],
+      [/\Agpt-4/, 128_000],
+      [/\Agpt-3\.5-turbo/, 16_385]
+    ].freeze
 
     def model_for(provider)
       return @model if @model

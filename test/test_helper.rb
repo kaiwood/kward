@@ -171,6 +171,10 @@ class KwardTestCase < Minitest::Test
       @reasoning_effort
     end
 
+    def current_context_window
+      nil
+    end
+
     def available_models
       [{ provider: @provider, id: @model, current: true }]
     end

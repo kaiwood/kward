@@ -334,10 +334,10 @@ module Kward
         conversation: agent.conversation,
         client: @client,
         tool_result_summarizer: lambda { |tool_call, content| tool_result_summary(tool_call, content) }
-      ).compact(custom_instructions: argument, compaction_summary: false)
+      ).compact(custom_instructions: argument)
       @prompt.say("\nCompacted context: #{result.old_message_count} messages -> #{result.new_message_count} messages.\n")
       render_transcript_block("Assistant", result.summary)
-    rescue Compactor::NothingToCompact, Compactor::EmptySummary => e
+    rescue Compactor::NothingToCompact, Compactor::AlreadyCompacted, Compactor::EmptySummary => e
       @prompt.say("\n#{e.message}\n")
     rescue StandardError => e
       @prompt.say("\nCompaction error: #{e.message}\n")

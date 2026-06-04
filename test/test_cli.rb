@@ -290,19 +290,28 @@ class TestCLI < KwardTestCase
   end
 
   def test_compact_command_summarizes_context_before_next_turn
-    prompt = FakePrompt.new(["hello", "/compact focus on files", "again", "/exit"])
-    client = RecordingClient.new(["reply", "summary", "after"])
-    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
-    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({ "compaction" => { "keep_recent_tokens" => 20 } }))
+      prompt = FakePrompt.new(["hello with enough detail to compact", "second turn before compaction", "/compact focus on files", "again", "/exit"])
+      client = RecordingClient.new(["reply", "second reply", "summary", "after"])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
-    conversation = cli.interactive_loop(agent: agent)
+      conversation = nil
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        conversation = cli.interactive_loop(agent: agent)
+      end
 
-    refute client.seen_messages.flatten.any? { |message| message.is_a?(Hash) && message[:content] == "/compact focus on files" }
-    assert_includes client.seen_messages[1].last[:content], "Additional user instructions for compaction: focus on files"
-    assert_equal "summary", client.seen_messages[2][1][:content]
-    assert_equal "again", client.seen_messages[2][2][:content]
-    assert_equal "after", conversation.messages.last["content"]
-    assert_includes prompt.output.join("\n"), "Compacted context:"
+      refute client.seen_messages.flatten.any? { |message| message.is_a?(Hash) && message[:content] == "/compact focus on files" }
+      assert_includes client.seen_messages[2].last[:content], "Additional focus: focus on files"
+      summary_message = client.seen_messages[3].find { |message| (message[:role] || message["role"]) == "compactionSummary" }
+      assert summary_message
+      assert_includes summary_message[:summary], "summary"
+      assert_equal "again", client.seen_messages[3].last[:content]
+      assert_equal "after", conversation.messages.last["content"]
+      assert_includes prompt.output.join("\n"), "Compacted context:"
+    end
   end
 
   def test_compact_command_reports_empty_context_without_calling_client
@@ -314,7 +323,7 @@ class TestCLI < KwardTestCase
     cli.interactive_loop(agent: agent)
 
     assert_empty client.seen_messages
-    assert_includes prompt.output.join("\n"), "Nothing to compact yet."
+    assert_includes prompt.output.join("\n"), "Nothing to compact"
   end
 
   def test_interactive_resume_can_select_recent_session

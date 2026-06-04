@@ -122,6 +122,7 @@ module Kward
       read_paths = restored_read_paths(messages, workspace)
 
       conversation = Conversation.new(messages: messages, read_paths: read_paths, workspace_root: workspace.root)
+      conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"
       session = Session.new(
         store: self,
         id: header["id"],
@@ -207,6 +208,14 @@ module Kward
       end
     end
 
+    def latest_record_type(records)
+      records.reverse_each do |record|
+        type = record["type"]
+        return type if ["message", "compaction"].include?(type)
+      end
+      nil
+    end
+
     def session_name(records)
       record = records.select { |item| item["type"] == "session_info" }.last
       record ? record["name"] : nil
@@ -215,14 +224,24 @@ module Kward
     def restored_messages(records)
       records.each_with_object([]) do |record, messages|
         message = record["message"]
-        next unless message.is_a?(Hash)
-
-        if record["type"] == "message"
-          messages << message
-        elsif record["type"] == "compaction"
-          messages.replace([message])
+        case record["type"]
+        when "message"
+          messages << message if message.is_a?(Hash)
+        when "compaction"
+          messages.replace(rebuilt_compacted_messages(message, messages)) if message.is_a?(Hash)
         end
       end
+    end
+
+    def rebuilt_compacted_messages(compaction_message, previous_messages)
+      first_kept_entry_id = compaction_message["first_kept_entry_id"] || compaction_message["firstKeptEntryId"]
+      return [compaction_message] if first_kept_entry_id.to_s.empty?
+
+      index = previous_messages.each_with_index.find do |message, message_index|
+        message["id"] == first_kept_entry_id || "message:#{message_index}" == first_kept_entry_id
+      end&.last
+      kept = index ? previous_messages[index..] : []
+      [compaction_message] + kept
     end
 
     def strict_records_from_file(path)

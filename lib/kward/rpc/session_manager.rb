@@ -85,11 +85,13 @@ module Kward
       def compact_session(session_id:, custom_instructions: "")
         rpc_session = fetch_session(session_id)
         emit_session_event(rpc_session, "compactionStart", {})
-        result = Compactor.new(conversation: rpc_session.conversation, client: @client).compact(custom_instructions: custom_instructions)
+        result = Compactor.new(conversation: rpc_session.conversation, client: @client, settings: compaction_settings).compact(custom_instructions: custom_instructions)
         payload = {
           summary: result.summary,
-          firstKeptEntryId: entry_id(0)
-        }
+          firstKeptEntryId: result.first_kept_entry_id,
+          tokensBefore: result.tokens_before,
+          details: result.details
+        }.compact
         emit_session_event(rpc_session, "compactionEnd", { result: payload, aborted: false, willRetry: false, errorMessage: nil })
         payload
       rescue StandardError => e
@@ -246,7 +248,7 @@ module Kward
           sessionFile: session[:path],
           sessionId: session[:persistentId],
           sessionName: session[:name],
-          autoCompactionEnabled: false,
+          autoCompactionEnabled: compaction_settings.enabled,
           autoRetryEnabled: false,
           defaultProvider: model[:provider],
           defaultModel: default_model_label(model),
@@ -278,7 +280,7 @@ module Kward
           toolResults: counts[:toolResults],
           totalMessages: counts[:totalMessages],
           usingSubscription: model[:provider] == "Codex",
-          autoCompactionEnabled: false,
+          autoCompactionEnabled: compaction_settings.enabled,
           contextUsage: context_usage(rpc_session, model)
         }.compact
       end
@@ -312,6 +314,14 @@ module Kward
       end
 
       private
+
+      def compaction_settings
+        path = File.join(@config_dir, "config.json")
+        config = File.exist?(path) ? JSON.parse(File.read(path)) : {}
+        Kward::Compaction::Settings.from_config(config)
+      rescue StandardError
+        Kward::Compaction::Settings.new
+      end
 
       def normalize_model(model)
         model = stringify_keys(model || {})
