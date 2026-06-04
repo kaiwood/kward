@@ -616,6 +616,50 @@ class TestRPC < KwardTestCase
     end
   end
 
+  def test_session_close_deletes_empty_unnamed_session
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+
+      result = manager.close_session(session_id: session[:id])
+
+      assert_equal({ closed: true }, result)
+      refute_path_exists session[:path]
+    end
+  end
+
+  def test_session_close_keeps_named_and_used_sessions
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      named = manager.create_session(workspace_root: Dir.pwd, name: "Keep me")
+      used = manager.create_session(workspace_root: Dir.pwd)
+      manager.send(:fetch_session, used[:id]).conversation.append_user("keep me")
+
+      manager.close_session(session_id: named[:id])
+      manager.close_session(session_id: used[:id])
+
+      assert_path_exists named[:path]
+      assert_path_exists used[:path]
+    end
+  end
+
+  def test_rpc_shutdown_deletes_empty_unnamed_sessions
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      workspace_root = File.realpath(Dir.mktmpdir)
+      session_path = nil
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "sessions/create", params: { workspaceRoot: workspace_root } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path })
+      session_path = messages[0]["result"]["path"]
+
+      refute_path_exists session_path
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_clone_uses_independent_conversation_and_file
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

@@ -46,6 +46,8 @@ module Kward
             write_error(nil, ERROR_CODES[:invalid_request], e.message, e)
           end
         end
+      ensure
+        @session_manager.cleanup_unused_sessions
       end
 
       def notify(method, params = {})

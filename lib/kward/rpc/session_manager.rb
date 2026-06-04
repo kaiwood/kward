@@ -125,8 +125,19 @@ module Kward
 
       def close_session(session_id:)
         rpc_session = fetch_session(session_id)
-        @mutex.synchronize { @sessions.delete(session_id) }
+        @mutex.synchronize { @sessions.delete(rpc_session.id) }
         rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+        { closed: true }
+      end
+
+      def cleanup_unused_sessions
+        rpc_sessions = @mutex.synchronize { @sessions.values.dup }
+        rpc_sessions.reverse_each do |rpc_session|
+          next unless session_idle?(rpc_session)
+
+          @mutex.synchronize { @sessions.delete(rpc_session.id) }
+          rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+        end
         { closed: true }
       end
 
@@ -337,6 +348,10 @@ module Kward
         @mutex.synchronize do
           @turns.values.count { |turn| turn.session_id == session_id && ["queued", "running"].include?(turn.status) }
         end
+      end
+
+      def session_idle?(rpc_session)
+        pending_turn_count(rpc_session.id).zero?
       end
 
       def message_count(conversation)
