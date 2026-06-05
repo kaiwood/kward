@@ -7,12 +7,13 @@ module Kward
   class ToolRegistry
     attr_reader :schemas
 
-    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new, skills: nil, web_research_enabled: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new, skills: nil, web_research_enabled: nil, ask_user_question_enabled: nil)
       @workspace = workspace
       @prompt = prompt
       @web_research = web_research
       @skills = skills
       @web_research_enabled = web_research_enabled
+      @ask_user_question_enabled = ask_user_question_enabled
       @schemas = build_schemas.freeze
     end
 
@@ -76,6 +77,8 @@ module Kward
     end
 
     def ask_user_question_available?
+      return false if @ask_user_question_enabled == false
+
       @prompt.respond_to?(:ask_user_question)
     end
 

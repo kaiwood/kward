@@ -83,6 +83,12 @@ class TestToolRegistry < KwardTestCase
     assert_includes with_prompt, "ask_user_question"
   end
 
+  def test_tool_schemas_can_disable_ask_user_question
+    tool_names = Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: [], ask_user_question_enabled: false).schemas.map { |schema| schema[:function][:name] }
+
+    refute_includes tool_names, "ask_user_question"
+  end
+
   def test_read_file_schema_supports_offset_and_limit
     read_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "read_file" }
     properties = read_schema[:function][:parameters][:properties]

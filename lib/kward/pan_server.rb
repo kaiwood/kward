@@ -36,7 +36,7 @@ module Kward
       @session.attach(@conversation)
       @agent = Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(workspace: @workspace),
+        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false),
         conversation: @conversation
       )
       @prompt_queue = Queue.new

@@ -4,16 +4,18 @@ require_relative "test_helper"
 
 class TestPanServer < KwardTestCase
   class PanStreamingClient
-    attr_reader :seen_messages
+    attr_reader :seen_messages, :seen_tools
 
     def initialize(responses, delay: 0)
       @responses = responses
       @delay = delay
       @seen_messages = []
+      @seen_tools = []
     end
 
     def chat(messages, tools: [], on_assistant_delta: nil, **_kwargs)
       @seen_messages << messages.map(&:dup)
+      @seen_tools << tools.map { |tool| tool[:function][:name] }
       content = @responses.shift.to_s
       sleep @delay if @delay.positive?
       on_assistant_delta&.call(content)
@@ -64,6 +66,7 @@ class TestPanServer < KwardTestCase
 
       assert_includes response, "HTTP/1.1 202 Accepted"
       assert_equal "hello", client.seen_messages[0][1][:content]
+      refute_includes client.seen_tools[0], "ask_user_question"
       records = jsonl_records(server.session.path)
       assert records.any? { |record| record["type"] == "message" && record["message"]["role"] == "user" && record["message"]["content"] == "hello" }
       assert records.any? { |record| record["type"] == "message" && record["message"]["role"] == "assistant" && record["message"]["content"] == "reply" }
