@@ -173,10 +173,11 @@ class TestClient < KwardTestCase
     success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
 
     disable_sleep(client)
-    with_fake_http([fake_net_response(503, "upstream connect error"), success]) do |_http|
+    with_fake_http([fake_net_response(503, "upstream connect error"), success]) do |http|
       message = client.chat([{ role: "user", content: "hello" }], on_retry: ->(event) { retries << event })
 
       assert_equal "ok", message["content"]
+      assert_equal http.requests.first.body.bytesize, retries[0][:request_bytes]
     end
 
     assert_equal 1, retries.length
@@ -216,6 +217,7 @@ class TestClient < KwardTestCase
 
     assert_equal 1, retries.length
     assert_equal "OpenRouter", retries[0][:provider]
+    assert_operator retries[0][:request_bytes], :>, 0
 
     with_fake_http([fake_net_response(401, "bad token")]) do |http|
       error = assert_raises(Kward::Client::RequestError) do
@@ -224,6 +226,23 @@ class TestClient < KwardTestCase
 
       assert_equal 1, http.requests.length
       assert_includes error.message, "OpenRouter request failed: 401 bad token"
+    end
+  end
+
+  def test_openrouter_does_not_retry_provider_quota_429
+    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    retries = []
+
+    disable_sleep(client)
+    with_fake_http([fake_net_response(429, JSON.dump("error" => { "message" => "Monthly usage limit reached" }))]) do |http|
+      error = assert_raises(Kward::Client::RequestError) do
+        client.chat([{ role: "user", content: "hello" }], on_retry: ->(event) { retries << event })
+      end
+
+      assert_equal 1, http.requests.length
+      assert_empty retries
+      assert error.provider_limit?
+      refute error.transient?
     end
   end
 

@@ -265,14 +265,14 @@ class TestCLI < KwardTestCase
 
   def test_retry_event_renders_retry_message
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
-    event = Kward::Events::Retry.new(provider: "Codex", model: "gpt-test", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream")
+    event = Kward::Events::Retry.new(provider: "Codex", model: "gpt-test", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream", request_bytes: 123)
 
     output = capture_io do
       cli.send(:print_retry, event)
     end.first
 
     assert_includes output, "Retry>"
-    assert_includes output, "Retrying Codex request after transient failure (attempt 2/3) in 1s"
+    assert_includes output, "Retrying Codex request after transient failure (attempt 2/3) in 1s with 123 byte payload"
     assert_includes output, "Codex request failed: 503 upstream"
   end
 

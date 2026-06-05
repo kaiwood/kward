@@ -736,7 +736,8 @@ module Kward
           attempt: event.attempt,
           maxAttempts: event.max_attempts,
           delaySeconds: event.delay_seconds,
-          error: event.error
+          error: event.error,
+          requestBytes: event.request_bytes
         }.compact
       end
 

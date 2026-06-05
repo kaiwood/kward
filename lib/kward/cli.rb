@@ -956,7 +956,8 @@ module Kward
 
     def retry_message(event)
       provider = event.provider.to_s.empty? ? "model" : event.provider
-      "Retrying #{provider} request after transient failure (attempt #{event.attempt}/#{event.max_attempts}) in #{event.delay_seconds}s: #{event.error}"
+      payload = event.request_bytes ? " with #{event.request_bytes} byte payload" : ""
+      "Retrying #{provider} request after transient failure (attempt #{event.attempt}/#{event.max_attempts}) in #{event.delay_seconds}s#{payload}: #{event.error}"
     end
 
     def print_tool_call(tool_call)

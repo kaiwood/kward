@@ -17,6 +17,19 @@ module Kward
     DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
     RETRY_DELAYS = [1, 2].freeze
+    NON_RETRYABLE_PROVIDER_LIMIT_PATTERNS = [
+      /GoUsageLimitError/i,
+      /FreeUsageLimitError/i,
+      /Monthly usage limit reached/i,
+      /available balance/i,
+      /insufficient[_ ]quota/i,
+      /out of (?:budget|credits?)/i,
+      /quota exceeded/i,
+      /billing/i,
+      /payment required/i,
+      /(?:usage|spend|credit|quota).*(?:exceeded|reached|exhausted|depleted)/i,
+      /(?:exceeded|reached).*(?:usage|quota|credit|budget|balance)/i
+    ].freeze
 
     RequestError = Class.new(StandardError) do
       attr_reader :provider, :code, :body
@@ -33,7 +46,12 @@ module Kward
       end
 
       def transient?
-        !context_overflow? && (code == 429 || code.between?(500, 599))
+        !context_overflow? && !provider_limit? && (code == 429 || code.between?(500, 599))
+      end
+
+      def provider_limit?
+        text = [message, body].compact.join("\n")
+        Kward::Client::NON_RETRYABLE_PROVIDER_LIMIT_PATTERNS.any? { |pattern| text.match?(pattern) }
       end
 
       def message_after_attempts(attempts)
@@ -57,16 +75,17 @@ module Kward
       raise AUTH_ERROR if token.nil? || token.empty?
 
       current_model = model_for(provider)
-      with_retries(provider, current_model, on_retry: on_retry, cancellation: cancellation) do
+      request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens) : request_payload(provider, messages, tools, max_tokens: max_tokens))
+      with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         if provider == "Codex"
-          message = codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens)
+          message = codex_chat(url, token, account_id, messages, tools, request_body: request_body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens)
           next attach_response_metadata(message, provider: provider, model: current_model)
         end
 
         request = Net::HTTP::Post.new(url)
         request["Authorization"] = "Bearer #{token}"
         request["Content-Type"] = "application/json"
-        request.body = JSON.dump(request_payload(provider, messages, tools, max_tokens: max_tokens))
+        request.body = request_body
 
         response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
           cancellation&.on_cancel { close_http(http) }
@@ -133,7 +152,7 @@ module Kward
 
     private
 
-    def with_retries(provider, model, on_retry: nil, cancellation: nil)
+    def with_retries(provider, model, request_bytes: nil, on_retry: nil, cancellation: nil)
       attempts = RETRY_DELAYS.length + 1
       attempt = 1
 
@@ -145,7 +164,7 @@ module Kward
         raise e.message_after_attempts(attempt) if attempt >= attempts
 
         delay = RETRY_DELAYS[attempt - 1]
-        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message)
+        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message, request_bytes: request_bytes)
         sleep_with_cancellation(delay, cancellation)
         attempt += 1
         retry
@@ -154,7 +173,7 @@ module Kward
         raise "#{provider} request failed after #{attempt} attempts: #{e.message}" if attempt >= attempts
 
         delay = RETRY_DELAYS[attempt - 1]
-        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message)
+        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message, request_bytes: request_bytes)
         sleep_with_cancellation(delay, cancellation)
         attempt += 1
         retry
@@ -172,14 +191,14 @@ module Kward
       end
     end
 
-    def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
+    def codex_chat(url, token, account_id, messages, tools, request_body: nil, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
       request["originator"] = "codex_cli_rs"
-      request.body = JSON.dump(codex_payload(messages, tools, max_tokens: max_tokens))
+      request.body = request_body || JSON.dump(codex_payload(messages, tools, max_tokens: max_tokens))
 
       message = nil
       Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
