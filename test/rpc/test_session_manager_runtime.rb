@@ -25,6 +25,8 @@ class TestRPCSessionManagerRuntime < KwardTestCase
 
       assert_equal session[:path], state[:sessionFile]
       assert_equal session[:persistentId], state[:sessionId]
+      assert_equal session[:id], state[:rpcSessionId]
+      assert_equal session[:persistentId], state[:persistentSessionId]
       assert_equal "Work", state[:sessionName]
       assert_equal "kward-rpc", state[:transport]
       assert_equal false, state[:isStreaming]
@@ -55,6 +57,8 @@ class TestRPCSessionManagerRuntime < KwardTestCase
 
       assert_equal session[:path], stats[:sessionFile]
       assert_equal session[:persistentId], stats[:sessionId]
+      assert_equal session[:id], stats[:rpcSessionId]
+      assert_equal session[:persistentId], stats[:persistentSessionId]
       assert_equal "Stats", stats[:sessionName]
       assert_equal 1, stats[:userMessages]
       assert_equal 2, stats[:assistantMessages]

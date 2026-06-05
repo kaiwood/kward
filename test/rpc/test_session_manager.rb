@@ -155,6 +155,60 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_session_create_deletes_previous_empty_unnamed_session
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      first = manager.create_session(workspace_root: workspace_root)
+
+      second = manager.create_session(workspace_root: workspace_root)
+
+      refute_path_exists first[:path]
+      assert_path_exists second[:path]
+      assert_equal [second[:persistentId]], manager.list_sessions(workspace_root: workspace_root, limit: 10).map { |session| session[:id] }
+      error = assert_raises(RuntimeError) { manager.runtime_state(session_id: first[:id]) }
+      assert_equal "Unknown session: #{first[:id]}", error.message
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_resume_deletes_previous_empty_unnamed_session
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_root)
+      target = store.create
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      empty = manager.create_session(workspace_root: workspace_root)
+
+      resumed = manager.resume_session(path: target.path, workspace_root: workspace_root)
+
+      refute_path_exists empty[:path]
+      assert_path_exists resumed[:path]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_create_keeps_previous_named_used_and_busy_sessions
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: SlowClient.new, config_dir: config_dir)
+      named = manager.create_session(workspace_root: Dir.pwd, name: "Keep me")
+      used = manager.create_session(workspace_root: Dir.pwd)
+      manager.send(:fetch_session, used[:id]).conversation.append_user("keep me")
+      busy = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: busy[:id], input: "keep busy")
+
+      fresh = manager.create_session(workspace_root: Dir.pwd)
+
+      assert_path_exists named[:path]
+      assert_path_exists used[:path]
+      assert_path_exists busy[:path]
+      assert_path_exists fresh[:path]
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+    end
+  end
+
   def test_session_close_keeps_named_and_used_sessions
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

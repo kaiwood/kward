@@ -52,6 +52,7 @@ module Kward
         session.attach(conversation)
         rpc_session = build_rpc_session(store, session, conversation, workspace_root)
         remember_session(rpc_session)
+        cleanup_other_unused_sessions(rpc_session)
         session_payload(rpc_session)
       end
 
@@ -64,6 +65,7 @@ module Kward
         session, conversation = store.load(location[:path], workspace: Workspace.new(root: root))
         rpc_session = build_rpc_session(store, session, conversation, root)
         remember_session(rpc_session)
+        cleanup_other_unused_sessions(rpc_session)
         session_payload(rpc_session)
       end
 
@@ -84,6 +86,7 @@ module Kward
         session, conversation = source.store.create_independent_from_conversation(source.conversation)
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
+        cleanup_other_unused_sessions(rpc_session)
         session_payload(rpc_session)
       end
 
@@ -125,6 +128,7 @@ module Kward
         session, conversation = source.store.create_independent_from_messages(messages[0...index])
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
+        cleanup_other_unused_sessions(rpc_session)
         {
           session: session_payload(rpc_session),
           text: full_message_text(selected),
@@ -253,6 +257,8 @@ module Kward
           followUpMode: "one-at-a-time",
           sessionFile: session[:path],
           sessionId: session[:persistentId],
+          rpcSessionId: session[:id],
+          persistentSessionId: session[:persistentId],
           sessionName: session[:name],
           autoCompactionEnabled: compaction_settings.enabled,
           autoRetryEnabled: false,
@@ -279,6 +285,8 @@ module Kward
         {
           sessionFile: session[:path],
           sessionId: session[:persistentId],
+          rpcSessionId: session[:id],
+          persistentSessionId: session[:persistentId],
           sessionName: session[:name],
           userMessages: counts[:userMessages],
           assistantMessages: counts[:assistantMessages],
@@ -549,6 +557,20 @@ module Kward
         @mutex.synchronize { @sessions.delete(rpc_session.id) }
         stop_worker(rpc_session)
         rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+      end
+
+      def cleanup_other_unused_sessions(current_session)
+        rpc_sessions = @mutex.synchronize { @sessions.values.dup }
+        rpc_sessions.each do |rpc_session|
+          next if rpc_session.id == current_session.id
+          next if rpc_session.session.path == current_session.session.path
+          next unless session_idle?(rpc_session)
+          next unless rpc_session.session.respond_to?(:delete_if_unused)
+          next unless rpc_session.session.delete_if_unused
+
+          @mutex.synchronize { @sessions.delete(rpc_session.id) }
+          stop_worker(rpc_session)
+        end
       end
 
       def stop_worker(rpc_session)

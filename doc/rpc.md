@@ -80,7 +80,7 @@ Returns root, basename, and writability for a workspace.
 
 ## Session methods
 
-RPC sessions are explicit and have an RPC `id`, a persisted session `path`, and a `workspaceRoot`.
+RPC sessions are explicit and have an RPC `id`, a persisted session `path`, and a `workspaceRoot`. When a client creates, resumes, clones, or forks into another session, idle empty unnamed sessions are cleaned up automatically.
 
 ### `sessions/create`
 
@@ -331,7 +331,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns Tauren-compatible runtime state for the session, including session file, persisted session ID/name, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. Unsupported runtime settings are returned as false or omitted.
+Returns Tauren-compatible runtime state for the session, including session file, persisted session ID/name, active `rpcSessionId`, `persistentSessionId`, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. The legacy `sessionId` field remains the persisted session ID; clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. Unsupported runtime settings are returned as false or omitted.
 
 ### `runtime/stats`
 
@@ -339,7 +339,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns session file/id/name plus message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. For OpenAI/Codex sessions with a known model context window and text-only non-empty conversation context, also returns `contextUsage` with estimated current next-request context tokens, context window, percent used, and `estimated: true`. Fresh sessions with no non-system content omit `contextUsage` because only static prompt/tool overhead would be measurable. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
+Returns session file/id/name, active `rpcSessionId`, `persistentSessionId`, message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. The legacy `sessionId` field remains the persisted session ID; clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. For OpenAI/Codex sessions with a known model context window and text-only non-empty conversation context, also returns `contextUsage` with estimated current next-request context tokens, context window, percent used, and `estimated: true`. Fresh sessions with no non-system content omit `contextUsage` because only static prompt/tool overhead would be measurable. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
 
 ### `runtime/updateSetting`
 
