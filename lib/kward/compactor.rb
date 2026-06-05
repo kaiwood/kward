@@ -171,6 +171,10 @@ module Kward
     class ConversationSerializer
       TOOL_RESULT_LIMIT = 2_000
 
+      def initialize(tool_result_summarizer: nil)
+        @tool_result_summarizer = tool_result_summarizer
+      end
+
       def serialize(messages)
         tool_calls_by_id = {}
         Array(messages).map do |message|
@@ -216,13 +220,23 @@ module Kward
       def serialize_tool_result(message, tool_calls_by_id)
         tool_call = tool_calls_by_id[message_tool_call_id(message)] || synthetic_tool_call(message_name(message), message_tool_call_id(message))
         name = tool_call_name(tool_call)
-        content = truncate(message_content(message).to_s)
+        raw_content = message_content(message).to_s
+        content = summarized_tool_content(tool_call, raw_content) || truncate(raw_content)
         if name == "run_shell_command"
           command = tool_call_args(tool_call)["command"] || tool_call_args(tool_call)[:command]
           "[Bash]: #{command}\n[Output]: #{content}"
         else
           "[Tool result #{name}]: #{content}"
         end
+      end
+
+      def summarized_tool_content(tool_call, content)
+        return nil unless @tool_result_summarizer
+
+        summary = @tool_result_summarizer.call(tool_call, content)
+        summary.to_s.empty? ? nil : summary.to_s
+      rescue StandardError
+        nil
       end
 
       def truncate(text)
@@ -857,9 +871,11 @@ module Kward
     def initialize(conversation:, client:, tool_result_summarizer: nil, settings: nil, summarizer: nil)
       @conversation = conversation
       @client = client
-      @tool_result_summarizer = tool_result_summarizer
       @settings = settings || Compaction::Settings.from_config
-      @summarizer = summarizer || Compaction::Summarizer.new(client: client)
+      @prompt_builder = Compaction::PromptBuilder.new(
+        serializer: Compaction::ConversationSerializer.new(tool_result_summarizer: tool_result_summarizer)
+      )
+      @summarizer = summarizer || Compaction::Summarizer.new(client: client, prompt_builder: @prompt_builder)
     end
 
     def compactable?
@@ -913,7 +929,7 @@ module Kward
     end
 
     def compaction_messages(custom_instructions = nil)
-      Compaction::PromptBuilder.new.build(prepare, custom_instructions: custom_instructions)
+      @prompt_builder.build(prepare, custom_instructions: custom_instructions)
     end
 
     private

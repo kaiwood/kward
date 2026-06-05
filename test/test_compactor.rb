@@ -72,6 +72,32 @@ class TestCompactor < KwardTestCase
     assert_equal "#{"a" * 2_000}\n...[truncated 3000 bytes]", tool_result
   end
 
+  def test_compactor_uses_tool_result_summarizer_in_compaction_prompt
+    raw_content = "raw-file-content-" * 400
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("read an old file before recent work")
+    conversation.append_assistant(assistant_tool_call("read_file", path: "big.txt"))
+    conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: raw_content)
+    conversation.append_user("recent request")
+    conversation.append_assistant("recent reply")
+    settings = Kward::Compaction::Settings.new(keep_recent_tokens: 20)
+    client = RecordingClient.new(["## Goal\ncontinue"])
+
+    Kward::Compactor.new(
+      conversation: conversation,
+      client: client,
+      settings: settings,
+      tool_result_summarizer: lambda do |tool_call, content|
+        args = JSON.parse(tool_call.fetch("function").fetch("arguments"))
+        "read_file: #{args.fetch("path")}\n#{content.bytesize} bytes"
+      end
+    ).compact
+
+    prompt = client.seen_messages.first.last[:content]
+    assert_includes prompt, "[Tool result read_file]: read_file: big.txt\n#{raw_content.bytesize} bytes"
+    refute_includes prompt, raw_content[0, 80]
+  end
+
   def test_preparation_detects_nothing_and_already_compacted
     assert_raises(Kward::Compaction::NothingToCompact) do
       Kward::Compaction::Preparation.new(conversation: Kward::Conversation.new(system_message: nil)).call
