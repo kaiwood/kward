@@ -30,8 +30,8 @@ module Kward
       File.expand_path(ENV["KWARD_CONFIG_PATH"] || File.join(config_dir, "config.json"))
     end
 
-    def read_config
-      path = config_path
+    def read_config(path = config_path)
+      path = File.expand_path(path)
       return {} unless File.exist?(path)
 
       JSON.parse(File.read(path))
@@ -39,14 +39,39 @@ module Kward
       raise "Invalid Kward config JSON: #{path}"
     end
 
-    def write_config(config)
-      path = config_path
+    def write_config(config, path = config_path)
+      path = File.expand_path(path)
       FileUtils.mkdir_p(File.dirname(path), mode: 0o700)
       File.open(path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
         file.write(JSON.pretty_generate(config))
         file.write("\n")
       end
       File.chmod(0o600, path)
+    end
+
+    def update_config(values, path = config_path)
+      raise "Config values must be an object" unless values.is_a?(Hash)
+
+      config = read_config(path)
+      values.each { |key, value| config[key.to_s] = value }
+      write_config(config, path)
+      config
+    end
+
+    def delete_config_key(key, path = config_path)
+      config = read_config(path)
+      existed = config.key?(key.to_s)
+      config.delete(key.to_s)
+      write_config(config, path) if existed
+      existed
+    end
+
+    def config_value(config, *keys)
+      keys.each do |key|
+        text = presence(config[key])
+        return text if text
+      end
+      nil
     end
 
     def overlay_settings(config = read_config)
@@ -253,6 +278,11 @@ module Kward
 
     def inside_directory?(path, base)
       path == base || path.start_with?(base + File::SEPARATOR)
+    end
+
+    def presence(value)
+      text = value.to_s
+      text.empty? ? nil : text
     end
   end
 end

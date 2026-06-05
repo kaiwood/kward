@@ -1,5 +1,5 @@
-require "fileutils"
-require "json"
+require_relative "../config_files"
+require_relative "../model_info"
 require_relative "../openai_oauth"
 require_relative "redactor"
 
@@ -18,20 +18,14 @@ module Kward
       end
 
       def update(values)
-        raise "Config values must be an object" unless values.is_a?(Hash)
-
-        config = load_config
-        values.each { |key, value| config[key.to_s] = value }
-        write_config(config)
-        Redactor.redact(config)
+        Redactor.redact(ConfigFiles.update_config(values, @config_path))
       end
 
       def set_model(model, provider: nil)
         model = model.to_s.strip
         raise "Model must be a non-empty string" if model.empty?
 
-        key = provider.to_s == "OpenRouter" ? "openrouter_model" : "openai_model"
-        update(key => model)
+        update(ModelInfo.config_key_for_provider(provider) => model)
       end
 
       def set_reasoning_effort(effort)
@@ -51,30 +45,13 @@ module Kward
       end
 
       def delete_key(key)
-        config = load_config
-        existed = config.key?(key.to_s)
-        config.delete(key.to_s)
-        write_config(config) if existed
-        existed
+        ConfigFiles.delete_config_key(key, @config_path)
       end
 
       private
 
       def load_config
-        return {} unless File.exist?(@config_path)
-
-        JSON.parse(File.read(@config_path))
-      rescue JSON::ParserError
-        raise "Invalid Kward config JSON: #{@config_path}"
-      end
-
-      def write_config(config)
-        FileUtils.mkdir_p(File.dirname(@config_path), mode: 0o700)
-        File.open(@config_path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
-          file.write(JSON.pretty_generate(config))
-          file.write("\n")
-        end
-        File.chmod(0o600, @config_path)
+        ConfigFiles.read_config(@config_path)
       end
     end
   end

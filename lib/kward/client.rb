@@ -2,7 +2,9 @@ require "json"
 require "net/http"
 require "uri"
 require_relative "cancellation"
+require_relative "config_files"
 require_relative "image_attachments"
+require_relative "model_info"
 require_relative "openai_oauth"
 
 module Kward
@@ -10,9 +12,9 @@ module Kward
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
-    DEFAULT_OPENAI_MODEL = "gpt-5.5"
-    DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
-    DEFAULT_REASONING_EFFORT = "medium"
+    DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
+    DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
+    DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
 
     def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path)
       @openrouter_api_key = presence(api_key)
@@ -72,11 +74,7 @@ module Kward
     end
 
     def current_context_window
-      return nil unless current_provider == "Codex"
-
-      id = current_model
-      match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
-      match&.last
+      ModelInfo.context_window(current_provider, current_model)
     end
 
     def available_models
@@ -427,29 +425,12 @@ module Kward
       }
     end
 
-    OPENAI_CONTEXT_WINDOWS = [
-      [/\Agpt-5\.5\b/, 200_000],
-      [/\Agpt-5/, 400_000],
-      [/\Agpt-4\.1/, 1_047_576],
-      [/\Agpt-4o/, 128_000],
-      [/\Ao3/, 200_000],
-      [/\Ao4/, 200_000],
-      [/\Agpt-4/, 128_000],
-      [/\Agpt-3\.5-turbo/, 16_385]
-    ].freeze
-
     def model_for(provider)
-      return @model if @model
-
-      if provider == "OpenRouter"
-        ENV["OPENROUTER_MODEL"] || config_value("openrouter_model", "model") || DEFAULT_OPENROUTER_MODEL
-      else
-        ENV["OPENAI_MODEL"] || config_value("openai_model", "model") || DEFAULT_OPENAI_MODEL
-      end
+      ModelInfo.model_for(provider, config: @config, override_model: @model)
     end
 
     def reasoning_effort
-      ENV["OPENAI_REASONING_EFFORT"] || config_value("openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+      ModelInfo.reasoning_effort(config: @config)
     end
 
     def openai_configured?
@@ -463,20 +444,11 @@ module Kward
     end
 
     def config_value(*keys)
-      keys.each do |key|
-        value = @config[key]
-        text = presence(value)
-        return text if text
-      end
-      nil
+      ConfigFiles.config_value(@config, *keys)
     end
 
     def load_config
-      return {} unless File.exist?(@config_path)
-
-      JSON.parse(File.read(@config_path))
-    rescue JSON::ParserError
-      raise "Invalid Kward config JSON: #{@config_path}"
+      ConfigFiles.read_config(@config_path)
     end
 
     def redact(text, token)

@@ -11,6 +11,7 @@ require_relative "../config_files"
 require_relative "../context_usage"
 require_relative "../conversation"
 require_relative "../events"
+require_relative "../model_info"
 require_relative "../prompt_commands"
 require_relative "../session_store"
 require_relative "../tool_call"
@@ -322,61 +323,18 @@ module Kward
 
       def compaction_settings
         path = File.join(@config_dir, "config.json")
-        config = File.exist?(path) ? JSON.parse(File.read(path)) : {}
-        Kward::Compaction::Settings.from_config(config)
+        Kward::Compaction::Settings.from_config(ConfigFiles.read_config(path))
       rescue StandardError
         Kward::Compaction::Settings.new
       end
 
       def normalize_model(model)
-        model = stringify_keys(model || {})
-        provider = model["provider"]
-        id = model["id"] || model["model"]
-        reasoning = boolean_value(model["reasoning"], default: provider == "Codex")
-        reasoning_effort = model["reasoningEffort"] || model["reasoning_effort"] || (current_reasoning_effort if reasoning)
-        {
-          provider: provider,
-          id: id,
-          name: model["name"] || id,
-          model: model["model"] || id,
-          reasoning: reasoning,
-          reasoningEffort: reasoning_effort,
-          contextWindow: model["contextWindow"] || model["context_window"] || default_context_window(provider, id),
-          current: boolean_value(model["current"], default: current_model?(provider, id))
-        }.compact
-      end
-
-      def current_reasoning_effort
-        @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
-      end
-
-      def current_model?(provider, id)
-        provider == (@client.current_provider if @client.respond_to?(:current_provider)) && id == (@client.current_model if @client.respond_to?(:current_model))
-      end
-
-      def boolean_value(value, default: false)
-        return default if value.nil?
-        return value if value == true || value == false
-
-        value.to_s == "true"
-      end
-
-      OPENAI_CONTEXT_WINDOWS = [
-        [/\Agpt-5\.5\b/, 200_000],
-        [/\Agpt-5/, 400_000],
-        [/\Agpt-4\.1/, 1_047_576],
-        [/\Agpt-4o/, 128_000],
-        [/\Ao3/, 200_000],
-        [/\Ao4/, 200_000],
-        [/\Agpt-4/, 128_000],
-        [/\Agpt-3\.5-turbo/, 16_385]
-      ].freeze
-
-      def default_context_window(provider, id)
-        return nil unless provider == "Codex"
-
-        match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
-        match&.last
+        ModelInfo.normalize(
+          model,
+          current_provider: (@client.current_provider if @client.respond_to?(:current_provider)),
+          current_model: (@client.current_model if @client.respond_to?(:current_model)),
+          current_reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+        )
       end
 
       def default_model_label(model)
@@ -445,10 +403,6 @@ module Kward
 
       def message_role(message)
         message["role"] || message[:role]
-      end
-
-      def stringify_keys(value)
-        value.each_with_object({}) { |(key, item), result| result[key.to_s] = item }
       end
 
       def entry_messages(conversation)
