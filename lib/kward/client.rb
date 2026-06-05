@@ -51,8 +51,12 @@ module Kward
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      with_retries(provider, model_for(provider), on_retry: on_retry, cancellation: cancellation) do
-        return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens) if provider == "Codex"
+      current_model = model_for(provider)
+      with_retries(provider, current_model, on_retry: on_retry, cancellation: cancellation) do
+        if provider == "Codex"
+          message = codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens)
+          next attach_response_metadata(message, provider: provider, model: current_model)
+        end
 
         request = Net::HTTP::Post.new(url)
         request["Authorization"] = "Bearer #{token}"
@@ -70,10 +74,11 @@ module Kward
           raise RequestError.new(provider: provider, code: response.code, body: response.body)
         end
 
-        message = JSON.parse(response.body).fetch("choices").first.fetch("message")
+        body = JSON.parse(response.body)
+        message = body.fetch("choices").first.fetch("message")
         cancellation&.raise_if_cancelled!
         on_assistant_delta&.call(message.fetch("content", ""))
-        message
+        attach_response_metadata(message, provider: provider, model: current_model, usage: normalized_usage(body["usage"]))
       end
     rescue *TRANSIENT_NETWORK_ERRORS => e
       raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
@@ -232,7 +237,7 @@ module Kward
     end
 
     def codex_sse_state
-      { content: +"", reasoning_summary: +"", tool_calls: [], final_output: [] }
+      { content: +"", reasoning_summary: +"", tool_calls: [], final_output: [], usage: nil }
     end
 
     def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_assistant_delta: nil)
@@ -256,6 +261,8 @@ module Kward
         state[:tool_calls] << tool_call if tool_call
       when "response.completed"
         response = event["response"]
+        state[:usage] ||= normalized_usage(response["usage"]) if response.is_a?(Hash)
+        state[:usage] ||= normalized_usage(event["usage"])
         if state[:content].empty? && response.is_a?(Hash) && response["output"].is_a?(Array)
           state[:final_output] = response["output"]
           text = text_from_codex_items(state[:final_output])
@@ -281,7 +288,63 @@ module Kward
       message = { "role" => "assistant", "content" => state[:content] }
       message["reasoning_summary"] = state[:reasoning_summary] unless state[:reasoning_summary].empty?
       message["tool_calls"] = state[:tool_calls] unless state[:tool_calls].empty?
+      message["usage"] = state[:usage] if state[:usage]
       message
+    end
+
+    def attach_response_metadata(message, provider:, model:, usage: nil)
+      return message unless message.is_a?(Hash)
+
+      message["provider"] ||= provider
+      message["model"] ||= model
+      message["usage"] ||= usage if usage
+      message
+    end
+
+    def normalized_usage(usage)
+      return nil unless usage.is_a?(Hash)
+
+      input_tokens = integer_value(usage, "input_tokens", "prompt_tokens")
+      output_tokens = integer_value(usage, "output_tokens", "completion_tokens")
+      cache_read_tokens = positive_integer(
+        nested_value(usage, "input_tokens_details", "cached_tokens") ||
+        nested_value(usage, "prompt_tokens_details", "cached_tokens") ||
+        usage["cache_read_tokens"] || usage[:cache_read_tokens] || usage["cacheReadTokens"] || usage[:cacheReadTokens]
+      )
+      cache_write_tokens = integer_value(usage, "cache_write_tokens", "cacheWriteTokens")
+      total_tokens = integer_value(usage, "total_tokens", "totalTokens")
+      total_tokens ||= [input_tokens, output_tokens, cache_read_tokens, cache_write_tokens].compact.sum
+      return nil unless total_tokens&.positive? || input_tokens&.positive? || output_tokens&.positive?
+
+      {
+        "input_tokens" => input_tokens || 0,
+        "output_tokens" => output_tokens || 0,
+        "cache_read_tokens" => cache_read_tokens || 0,
+        "cache_write_tokens" => cache_write_tokens || 0,
+        "total_tokens" => total_tokens || 0,
+        "estimated" => false
+      }
+    end
+
+    def integer_value(source, *keys)
+      return nil unless source.respond_to?(:key?)
+
+      key = keys.find { |candidate| source.key?(candidate) || source.key?(candidate.to_sym) }
+      return nil unless key
+
+      positive_integer(source[key] || source[key.to_sym])
+    end
+
+    def nested_value(source, outer_key, inner_key)
+      outer = source[outer_key] || source[outer_key.to_sym]
+      return nil unless outer.respond_to?(:key?)
+
+      outer[inner_key] || outer[inner_key.to_sym]
+    end
+
+    def positive_integer(value)
+      integer = value.to_i
+      integer.positive? ? integer : nil
     end
 
     def codex_tool_call(item)
@@ -347,17 +410,37 @@ module Kward
       messages.map do |message|
         role = message[:role] || message["role"]
         content = message[:content] || message["content"]
-        content_key = message.key?(:content) ? :content : "content"
-        if role.to_s == "compactionSummary"
-          next { role: "assistant", content: message[:summary] || message["summary"] || content.to_s }
+        case role.to_s
+        when "compactionSummary"
+          { role: "assistant", content: message[:summary] || message["summary"] || content.to_s }
+        when "assistant"
+          api_message(message, role: "assistant", content: content.is_a?(Array) ? plain_content(content) : content, keys: ["tool_calls", :tool_calls, "name", :name])
+        when "toolResult"
+          api_message(message, role: "tool", content: plain_content(content).to_s, keys: ["tool_call_id", :tool_call_id, "toolCallId", :toolCallId, "name", :name, "toolName", :toolName])
+        when "tool"
+          api_message(message, role: "tool", content: plain_content(content).to_s, keys: ["tool_call_id", :tool_call_id, "name", :name])
+        when "user"
+          api_message(message, role: "user", content: content.is_a?(Array) ? chat_user_content(content) : content, keys: ["name", :name])
+        else
+          api_message(message, role: role, content: content, keys: ["name", :name])
         end
-        if role.to_s == "assistant" && content.is_a?(Array)
-          next message.merge(content_key => plain_content(content))
-        end
-        next message unless role.to_s == "user" && content.is_a?(Array)
-
-        message.merge(content_key => chat_user_content(content))
       end
+    end
+
+    def api_message(message, role:, content:, keys: [])
+      result = { role: role, content: content }
+      keys.each_slice(2) do |string_key, symbol_key|
+        value = message[string_key] || message[symbol_key]
+        next if value.nil?
+
+        target_key = case string_key.to_s
+                     when "toolCallId" then :tool_call_id
+                     when "toolName" then :name
+                     else string_key.to_sym
+                     end
+        result[target_key] = value
+      end
+      result
     end
 
     def chat_user_content(content)

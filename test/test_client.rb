@@ -227,6 +227,56 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_openrouter_chat_persists_provider_model_and_usage
+    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    body = JSON.dump(
+      "choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }],
+      "usage" => {
+        "prompt_tokens" => 42,
+        "completion_tokens" => 7,
+        "total_tokens" => 49,
+        "prompt_tokens_details" => { "cached_tokens" => 5 }
+      }
+    )
+
+    with_fake_http([fake_net_response(200, body)]) do |_http|
+      message = client.chat([{ role: "user", content: "hello" }])
+
+      assert_equal "OpenRouter", message["provider"]
+      assert_equal "openai/gpt-5.5", message["model"]
+      assert_equal({
+        "input_tokens" => 42,
+        "output_tokens" => 7,
+        "cache_read_tokens" => 5,
+        "cache_write_tokens" => 0,
+        "total_tokens" => 49,
+        "estimated" => false
+      }, message["usage"])
+    end
+  end
+
+  def test_openrouter_payload_strips_persisted_assistant_metadata
+    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    assistant = {
+      "role" => "assistant",
+      "content" => "ok",
+      "provider" => "OpenRouter",
+      "model" => "openai/gpt-5.5",
+      "usage" => { "total_tokens" => 49 },
+      "tool_calls" => [tool_call("read_file", "path" => "README.md")]
+    }
+
+    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }, assistant], [])
+    sent_assistant = payload[:messages].last
+
+    assert_equal "assistant", sent_assistant[:role]
+    assert_equal "ok", sent_assistant[:content]
+    assert_equal assistant["tool_calls"], sent_assistant[:tool_calls]
+    refute sent_assistant.key?(:provider)
+    refute sent_assistant.key?(:model)
+    refute sent_assistant.key?(:usage)
+  end
+
   def test_codex_sse_parses_text_response
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     body = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n" \
@@ -248,6 +298,32 @@ class TestClient < KwardTestCase
 
     assert_equal "thinking", message["reasoning_summary"]
     assert_equal ["thinking"], deltas
+  end
+
+  def test_codex_sse_parses_response_usage
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    event = {
+      "type" => "response.completed",
+      "response" => {
+        "usage" => {
+          "input_tokens" => 100,
+          "output_tokens" => 20,
+          "total_tokens" => 120,
+          "input_tokens_details" => { "cached_tokens" => 10 }
+        }
+      }
+    }
+
+    message = client.send(:parse_codex_sse, "data: #{JSON.dump(event)}\n\n")
+
+    assert_equal({
+      "input_tokens" => 100,
+      "output_tokens" => 20,
+      "cache_read_tokens" => 10,
+      "cache_write_tokens" => 0,
+      "total_tokens" => 120,
+      "estimated" => false
+    }, message["usage"])
   end
 
   def test_codex_sse_parses_tool_call

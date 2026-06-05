@@ -70,6 +70,16 @@ module Kward
         Array(messages).sum { |message| message_tokens(message) }
       end
 
+      def context_tokens(messages)
+        messages = Array(messages)
+        usage_info = last_assistant_usage_info(messages)
+        return messages_tokens(messages) unless usage_info
+
+        usage_tokens = usage_tokens(usage_info[:usage])
+        trailing_tokens = messages[(usage_info[:index] + 1)..].to_a.sum { |message| message_tokens(message) }
+        usage_tokens + trailing_tokens
+      end
+
       def message_tokens(message)
         role = value(message, :role)
         parts = [role]
@@ -119,6 +129,36 @@ module Kward
         function = value(tool_call, :function) || {}
         arguments = value(function, :arguments)
         arguments.is_a?(Hash) ? JSON.dump(arguments) : arguments.to_s
+      end
+
+      def last_assistant_usage_info(messages)
+        messages.each_with_index.reverse_each do |message, index|
+          next unless value(message, :role).to_s == "assistant"
+
+          usage = value(message, :usage)
+          tokens = usage_tokens(usage)
+          return { usage: usage, index: index } if tokens.positive?
+        end
+        nil
+      end
+
+      def usage_tokens(usage)
+        return 0 unless usage.respond_to?(:key?)
+
+        total = usage_value(usage, :total_tokens, "totalTokens")
+        return total if total.positive?
+
+        usage_value(usage, :input_tokens, "input", "prompt_tokens") +
+          usage_value(usage, :output_tokens, "output", "completion_tokens") +
+          usage_value(usage, :cache_read_tokens, "cacheRead", "cacheReadTokens", "cache_read", "cached_tokens") +
+          usage_value(usage, :cache_write_tokens, "cacheWrite", "cacheWriteTokens", "cache_write")
+      end
+
+      def usage_value(usage, *keys)
+        key = keys.find { |candidate| usage.key?(candidate) || usage.key?(candidate.to_s) }
+        return 0 unless key
+
+        (usage[key] || usage[key.to_s]).to_i
       end
 
       def value(object, key)
@@ -476,7 +516,7 @@ module Kward
           kept_messages: kept_messages,
           turn_prefix_messages: cut.turn_prefix_messages,
           split_turn: cut.split_turn,
-          tokens_before: @estimator.messages_tokens(@conversation.messages),
+          tokens_before: @estimator.context_tokens(@conversation.messages),
           previous_summary: previous_entry ? compaction_summary(previous_entry) : nil,
           file_ops: file_ops,
           settings: @settings
@@ -861,7 +901,7 @@ module Kward
       context_window ||= @settings.context_window
       return nil unless context_window
 
-      context_tokens ||= Compaction::TokenEstimator.new.messages_tokens(@conversation.messages)
+      context_tokens ||= Compaction::TokenEstimator.new.context_tokens(@conversation.messages)
       return nil unless context_tokens.to_i > context_window.to_i - @settings.reserve_tokens
 
       compact(custom_instructions: custom_instructions)

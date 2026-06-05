@@ -124,6 +124,32 @@ class TestCompactor < KwardTestCase
     assert_equal({ read_files: [], modified_files: [] }, summary[:details])
   end
 
+  def test_auto_compaction_uses_last_provider_usage_plus_trailing_messages
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("short old request")
+    conversation.append_assistant({
+      "role" => "assistant",
+      "content" => "short reply",
+      "usage" => {
+        "input_tokens" => 90,
+        "output_tokens" => 5,
+        "total_tokens" => 95,
+        "estimated" => false
+      }
+    })
+    conversation.append_user("new request")
+    settings = Kward::Compaction::Settings.new(reserve_tokens: 20, keep_recent_tokens: 4)
+    client = RecordingClient.new(["## Goal\ncontinue"])
+
+    old_heuristic_tokens = Kward::Compaction::TokenEstimator.new.messages_tokens(conversation.messages)
+    result = Kward::Compactor.new(conversation: conversation, client: client, settings: settings).auto_compact_if_needed(context_window: 100)
+
+    assert_operator old_heuristic_tokens, :<, 80
+    refute_nil result
+    assert_operator result.tokens_before, :>, 95
+    assert_equal "compactionSummary", conversation.messages.first[:role]
+  end
+
   def test_summarizer_failure_does_not_mutate_conversation
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("old request with enough detail to require compaction")
