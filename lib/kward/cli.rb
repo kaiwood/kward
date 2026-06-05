@@ -191,6 +191,13 @@ module Kward
       @cleanup_sessions.clear
     end
 
+    def cleanup_replaced_session(previous_session)
+      return unless previous_session
+      return if @active_session && File.expand_path(previous_session.path) == File.expand_path(@active_session.path)
+
+      previous_session.delete_if_unused if previous_session.respond_to?(:delete_if_unused)
+    end
+
     def build_interactive_agent(conversation)
       workspace = Workspace.new(root: conversation.workspace_root)
       Agent.new(
@@ -299,7 +306,9 @@ module Kward
     def start_new_session(session_store)
       return say_sessions_unavailable unless session_store
 
+      previous_session = @active_session
       @active_session = track_session(session_store.create)
+      cleanup_replaced_session(previous_session)
       conversation = Conversation.new(workspace_root: session_store.cwd)
       @active_session.attach(conversation)
       clear_prompt_transcript
@@ -314,8 +323,10 @@ module Kward
       path = select_session_path(session_store) if path.empty?
       return nil if path.to_s.empty?
 
+      previous_session = @active_session
       @active_session, conversation = session_store.load(path, workspace: Workspace.new(root: session_store.cwd))
       track_session(@active_session)
+      cleanup_replaced_session(previous_session)
       @prompt.say("\nResumed session: #{@active_session.path}\n")
       render_conversation_transcript(conversation)
       build_interactive_agent(conversation)
@@ -338,7 +349,9 @@ module Kward
     def clone_session(session_store, agent)
       return say_sessions_unavailable unless session_store
 
+      previous_session = @active_session
       @active_session = track_session(session_store.create_from_conversation(agent.conversation))
+      cleanup_replaced_session(previous_session)
       @prompt.say("\nCloned session: #{@active_session.path}\n")
       render_conversation_transcript(agent.conversation)
       agent
@@ -545,7 +558,10 @@ module Kward
     end
 
     def select_session_path(session_store)
-      sessions = session_store.recent
+      recent_limit = 20
+      sessions = session_store.recent(limit: recent_limit + 1)
+                              .reject { |session| active_empty_unnamed_session_info?(session) }
+                              .first(recent_limit)
       if sessions.empty?
         @prompt.say("\nNo saved sessions found.\n")
         return nil
@@ -568,6 +584,13 @@ module Kward
       else
         answer
       end
+    end
+
+    def active_empty_unnamed_session_info?(session)
+      return false unless @active_session
+      return false unless File.expand_path(session.path) == File.expand_path(@active_session.path)
+
+      session.name.to_s.strip.empty? && session.message_count.to_i.zero?
     end
 
     def session_label(session)

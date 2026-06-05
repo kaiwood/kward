@@ -374,8 +374,23 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
+      assert_equal ["selected session — #{File.basename(saved.path)}"], prompt.select_choices.first
       assert_equal "selected session", client.seen_messages[0][1]["content"]
       assert_equal "again", client.seen_messages[0][3][:content]
+    end
+  end
+
+  def test_resume_picker_hides_active_empty_unnamed_session
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/resume", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_empty prompt.output.grep(/Recent sessions:/)
+      assert_includes prompt.output.join("\n"), "No saved sessions found."
     end
   end
 

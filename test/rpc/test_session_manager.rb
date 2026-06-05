@@ -77,6 +77,38 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_session_list_hides_active_empty_unnamed_session
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+
+      sessions = manager.list_sessions(workspace_root: workspace_root, limit: 10)
+
+      assert_empty sessions
+      assert_path_exists session[:path]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_list_keeps_active_named_and_used_sessions
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      named = manager.create_session(workspace_root: workspace_root, name: "Keep me")
+      used = manager.create_session(workspace_root: workspace_root)
+      manager.send(:fetch_session, used[:id]).conversation.append_user("keep me")
+
+      sessions = manager.list_sessions(workspace_root: workspace_root, limit: 10)
+
+      assert_includes sessions.map { |session| session[:id] }, named[:persistentId]
+      assert_includes sessions.map { |session| session[:id] }, used[:persistentId]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_resume_returns_metadata_and_restores_transcript
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)
@@ -165,7 +197,7 @@ class TestRPCSessionManager < KwardTestCase
 
       refute_path_exists first[:path]
       assert_path_exists second[:path]
-      assert_equal [second[:persistentId]], manager.list_sessions(workspace_root: workspace_root, limit: 10).map { |session| session[:id] }
+      assert_empty manager.list_sessions(workspace_root: workspace_root, limit: 10)
       error = assert_raises(RuntimeError) { manager.runtime_state(session_id: first[:id]) }
       assert_equal "Unknown session: #{first[:id]}", error.message
     ensure
