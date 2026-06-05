@@ -35,8 +35,8 @@ Prompt assembly order is:
 1. Kward built-in base prompt
 2. Config-directory `AGENTS.md`
 3. Workspace `system_prompt`
-4. Workspace `AGENTS.md`
-5. Skills listing
+4. Skills listing
+5. Workspace `AGENTS.md`
 
 If a workspace has no configured `system_prompt`, Kward preserves existing behavior and simply omits that part. Conversation compaction uses a neutral prompt without workspace personality, so summaries stay continuation-focused and machine-oriented.
 

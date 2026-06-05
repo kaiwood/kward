@@ -14,7 +14,9 @@ module Kward
     def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true)
       parts = [base_prompt, config_agents_prompt]
       parts << workspace_system_prompt(workspace_root) if include_workspace_personality
-      parts + [workspace_agents_prompt(workspace_root), skills_prompt]
+      parts << skills_prompt
+      parts << workspace_agents_prompt(workspace_root)
+      parts
     end
 
     def base_prompt

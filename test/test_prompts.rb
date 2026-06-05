@@ -21,6 +21,9 @@ class TestPrompts < KwardTestCase
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
         File.write(File.join(config_dir, "AGENTS.md"), "Config instructions.\n")
+        skill_dir = File.join(config_dir, "skills", "planner")
+        FileUtils.mkdir_p(skill_dir)
+        File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nSkill body.\n")
         File.write(File.join(workspace, "AGENTS.md"), "Workspace instructions.\n")
         File.write(File.join(config_dir, "config.json"), JSON.dump({
           "workspaces" => {
@@ -35,6 +38,7 @@ class TestPrompts < KwardTestCase
                        "You are Kward",
                        "Config instructions.",
                        "Workspace personality.",
+                       "Available skills:",
                        "Workspace instructions."
         end
       end
