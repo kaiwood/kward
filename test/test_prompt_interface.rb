@@ -23,6 +23,34 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, TTY::Cursor.clear_screen
   end
 
+  def test_prompt_interface_renders_footer_line
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, footer: -> { "custom footer" })
+
+    prompt.start
+
+    assert_includes strip_ansi(output.string), "│ custom footer"
+  end
+
+  def test_prompt_interface_refreshes_footer_while_idle
+    input, writer = IO.pipe
+    output = StringIO.new
+    value = "first"
+    prompt = Kward::PromptInterface.new(input: input, output: output, footer: -> { value })
+    prompt.start
+    value = "second"
+    prompt.instance_variable_set(:@last_footer_refresh, prompt.send(:monotonic_now) - Kward::PromptInterface::FOOTER_REFRESH_INTERVAL)
+    output.truncate(0)
+    output.rewind
+
+    prompt.poll_input
+
+    assert_includes strip_ansi(output.string), "│ second"
+  ensure
+    writer&.close unless writer&.closed?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_enables_and_restores_keyboard_protocol
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

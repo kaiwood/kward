@@ -1,6 +1,7 @@
 require "json"
 require_relative "../client"
 require_relative "../config_files"
+require_relative "../plugin_registry"
 require_relative "../prompt_commands"
 require_relative "../tool_registry"
 require_relative "../workspace"
@@ -134,6 +135,8 @@ module Kward
           runtime_reload(params)
         when "commands/list"
           commands_list(params)
+        when "commands/run"
+          commands_run(params)
         when "resources/startup"
           startup_resources(params)
         when "config/read"
@@ -296,7 +299,7 @@ module Kward
             apiKeyProviders: ["openrouter"],
             logout: true
           },
-          commands: { supported: true, method: "commands/list", sources: ["prompt", "skill"] },
+          commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["prompt", "skill", "plugin"], executableSources: ["plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           extensionUi: {
             question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
@@ -402,7 +405,25 @@ module Kward
             path: skill.path
           }
         end
-        { commands: prompts + skills }
+        plugins = @session_manager.plugin_commands.map do |command|
+          {
+            name: command.name,
+            description: command.description,
+            argumentHint: command.argument_hint,
+            source: "plugin",
+            path: command.path,
+            executable: true
+          }
+        end
+        { commands: prompts + skills + plugins }
+      end
+
+      def commands_run(params)
+        @session_manager.run_plugin_command(
+          session_id: params.fetch("sessionId"),
+          command: params.fetch("name"),
+          arguments: params["arguments"] || ""
+        )
       end
 
       def startup_resources(params)
@@ -412,8 +433,10 @@ module Kward
         sections << { name: "Context", items: ["AGENTS.md"] } if File.exist?(agents_path)
         skills = ConfigFiles.skills.map(&:name)
         prompts = ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES).map { |template| "/#{template.command}" }
+        plugins = @session_manager.plugin_commands.map { |command| "/#{command.name}" }
         sections << { name: "Skills", items: skills } unless skills.empty?
         sections << { name: "Prompts", items: prompts } unless prompts.empty?
+        sections << { name: "Plugins", items: plugins } unless plugins.empty?
         { sections: sections }
       end
 

@@ -9,6 +9,7 @@ require_relative "events"
 require_relative "image_attachments"
 require_relative "openai_oauth"
 require_relative "pan_server"
+require_relative "plugin_registry"
 require_relative "prompt_commands"
 require_relative "rpc/server"
 require_relative "session_store"
@@ -43,6 +44,7 @@ module Kward
       @session_store = session_store
       @active_session = nil
       @cleanup_sessions = []
+      @plugin_registry = nil
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -136,6 +138,8 @@ module Kward
         agent ||= build_interactive_agent(Conversation.new)
       end
 
+      @footer_conversation = agent.conversation
+
       @prompt.say(colored("Ruby CLI Agent", :cyan, :bold))
       @prompt.say("Session: #{@active_session.path}") if @active_session
       help = "Ask a question and press Enter. Type /exit to quit. Use /redraw to refresh."
@@ -158,6 +162,7 @@ module Kward
         next if handled
 
         input = expand_prompt_template(input) || input
+        @footer_conversation = agent.conversation
         pending_inputs = run_interactive_turn(agent, input)
         pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
       end
@@ -262,6 +267,8 @@ module Kward
         compact_context(agent, argument)
         [true, nil]
       else
+        return run_plugin_command(name, argument, agent) if plugin_command_for(name)
+
         [false, nil]
       end
     end
@@ -678,7 +685,7 @@ module Kward
       prompt_interface = load_prompt_interface
       return unless prompt_interface
 
-      @prompt = prompt_interface.new(slash_commands: slash_command_entries, overlay_settings: ConfigFiles.overlay_settings)
+      @prompt = prompt_interface.new(slash_commands: slash_command_entries, overlay_settings: ConfigFiles.overlay_settings, footer: prompt_footer_renderer)
       @prompt.start
     end
 
@@ -704,6 +711,22 @@ module Kward
       @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
     end
 
+    def plugin_registry
+      @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+    end
+
+    def plugin_commands
+      plugin_registry.commands
+    end
+
+    def plugin_command_for(command)
+      plugin_registry.command_for(command)
+    end
+
+    def reserved_slash_command_names
+      BUILTIN_SLASH_COMMAND_NAMES + prompt_templates.map(&:command)
+    end
+
     def slash_command_entries
       prompt_entries = prompt_templates.map do |template|
         {
@@ -712,7 +735,8 @@ module Kward
           argument_hint: template.argument_hint
         }
       end
-      BUILTIN_SLASH_COMMANDS + prompt_entries
+      plugin_entries = plugin_commands.map(&:entry)
+      BUILTIN_SLASH_COMMANDS + prompt_entries + plugin_entries
     end
 
     def prompt_template_for(command)
@@ -721,6 +745,45 @@ module Kward
 
     def expand_prompt_template(input)
       PromptCommands.expand(input, templates: prompt_templates, reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
+    end
+
+    def run_plugin_command(name, argument, agent)
+      command = plugin_command_for(name)
+      return [false, nil] unless command
+
+      context = plugin_context(agent.conversation, argument)
+      command.handler.call(argument, context)
+      [true, nil]
+    rescue StandardError => e
+      @prompt.say("\nPlugin command /#{name} error: #{e.message}\n")
+      [true, nil]
+    end
+
+    def prompt_footer_renderer
+      renderer = plugin_registry.footer_renderer
+      return nil unless renderer
+
+      lambda do
+        context = plugin_context(current_footer_conversation, "")
+        renderer.call(context).to_s
+      rescue StandardError => e
+        warn "Warning: Kward plugin footer error: #{e.message}"
+        ""
+      end
+    end
+
+    def current_footer_conversation
+      @footer_conversation || Conversation.new(system_message: nil)
+    end
+
+    def plugin_context(conversation, args)
+      PluginRegistry::Context.new(
+        conversation: conversation,
+        args: args,
+        session: @active_session,
+        workspace_root: conversation.workspace_root,
+        say_callback: lambda { |message| @prompt.say("\n#{message}\n") }
+      )
     end
 
     def selected_slash_command_input(input)

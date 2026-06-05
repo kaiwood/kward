@@ -428,41 +428,45 @@ class TestCLI < KwardTestCase
 
   def test_interactive_prompt_slash_command_expands_template
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "config.json"), JSON.dump({}))
-      prompts_dir = File.join(dir, "prompts")
-      FileUtils.mkdir_p(prompts_dir)
-      File.write(File.join(prompts_dir, "plan.md"), "---\ndescription: Plan work.\nargument-hint: <task>\n---\nPlan this:\n$ARGUMENTS\n")
-      prompt = FakePrompt.new(["/plan fix bug", "/exit"])
-      client = RecordingClient.new(["planned"])
+      Dir.mktmpdir do |home|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        prompts_dir = File.join(dir, "prompts")
+        FileUtils.mkdir_p(prompts_dir)
+        File.write(File.join(prompts_dir, "plan.md"), "---\ndescription: Plan work.\nargument-hint: <task>\n---\nPlan this:\n$ARGUMENTS\n")
+        prompt = FakePrompt.new(["/plan fix bug", "/exit"])
+        client = RecordingClient.new(["planned"])
 
-      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
-        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+          cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
-        cli.interactive_loop(agent: agent)
+          cli.interactive_loop(agent: agent)
+        end
+
+        assert_equal "Plan this:\nfix bug\n", client.seen_messages[0][1][:content]
       end
-
-      assert_equal "Plan this:\nfix bug\n", client.seen_messages[0][1][:content]
     end
   end
 
   def test_interactive_prompt_slash_command_allows_empty_arguments
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "config.json"), JSON.dump({}))
-      prompts_dir = File.join(dir, "prompts")
-      FileUtils.mkdir_p(prompts_dir)
-      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
-      prompt = FakePrompt.new(["/plan", "/exit"])
-      client = RecordingClient.new(["planned"])
+      Dir.mktmpdir do |home|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        prompts_dir = File.join(dir, "prompts")
+        FileUtils.mkdir_p(prompts_dir)
+        File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+        prompt = FakePrompt.new(["/plan", "/exit"])
+        client = RecordingClient.new(["planned"])
 
-      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
-        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+          cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
-        cli.interactive_loop(agent: agent)
+          cli.interactive_loop(agent: agent)
+        end
+
+        assert_equal "Plan this:\n\n", client.seen_messages[0][1][:content]
       end
-
-      assert_equal "Plan this:\n\n", client.seen_messages[0][1][:content]
     end
   end
 
@@ -485,22 +489,24 @@ class TestCLI < KwardTestCase
 
   def test_non_tui_slash_command_selection_expands_template
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "config.json"), JSON.dump({}))
-      prompts_dir = File.join(dir, "prompts")
-      FileUtils.mkdir_p(prompts_dir)
-      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
-      prompt = FakeSelectPrompt.new(["/p", "/exit"])
-      client = RecordingClient.new(["planned"])
+      Dir.mktmpdir do |home|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        prompts_dir = File.join(dir, "prompts")
+        FileUtils.mkdir_p(prompts_dir)
+        File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+        prompt = FakeSelectPrompt.new(["/p", "/exit"])
+        client = RecordingClient.new(["planned"])
 
-      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
-        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+          cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
-        cli.interactive_loop(agent: agent)
+          cli.interactive_loop(agent: agent)
+        end
+
+        assert_equal "Plan this:\n\n", client.seen_messages[0][1][:content]
+        assert_equal ["Slash command>"], prompt.select_messages
       end
-
-      assert_equal "Plan this:\n\n", client.seen_messages[0][1][:content]
-      assert_equal ["Slash command>"], prompt.select_messages
     end
   end
 
@@ -625,6 +631,31 @@ class TestCLI < KwardTestCase
     cli = Kward::CLI.new(stdin: FakeInput.new("ignored", tty: true), client: FakeClient.new([]))
 
     assert_equal "", cli.piped_prompt
+  end
+
+  def test_interactive_plugin_slash_command_runs_without_calling_client
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins_dir)
+      File.write(File.join(plugins_dir, "count.rb"), <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.command "count", description: "Count transcript messages" do |_args, ctx|
+            ctx.say("messages=#{ctx.transcript.messages.length}")
+          end
+        end
+      RUBY
+      prompt = FakePrompt.new(["hello", "/count", "/exit"])
+      client = RecordingClient.new(["reply"])
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal 1, client.seen_messages.length
+      assert_includes prompt.output.join("\n"), "messages=3"
+    end
   end
 
 end

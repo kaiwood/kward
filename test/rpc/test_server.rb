@@ -67,7 +67,9 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["auth"]["methods"], "auth/logoutProvider"
     assert_includes capabilities["auth"]["methods"], "auth/loginWithOAuth"
     assert_equal true, capabilities["commands"]["supported"]
-    assert_equal ["prompt", "skill"], capabilities["commands"]["sources"]
+    assert_equal ["prompt", "skill", "plugin"], capabilities["commands"]["sources"]
+    assert_equal ["plugin"], capabilities["commands"]["executableSources"]
+    assert_equal "commands/run", capabilities["commands"]["runMethod"]
     assert_equal true, capabilities["startupResources"]["supported"]
     assert_equal({
       "question" => {
@@ -112,6 +114,7 @@ class TestRPCServer < KwardTestCase
     assert_equal ["config/read", "config/update"], capabilities["config"]["methods"]
     assert_equal "tools/list", capabilities["tools"]["method"]
     assert_equal "commands/list", capabilities["commands"]["method"]
+    assert_includes capabilities["commands"]["methods"], "commands/run"
     assert_equal "resources/startup", capabilities["startupResources"]["method"]
     assert_includes capabilities["sessions"]["methods"], "sessions/compact"
     assert_includes capabilities["sessions"]["methods"], "sessions/delete"
@@ -136,33 +139,56 @@ class TestRPCServer < KwardTestCase
 
   def test_commands_list_and_startup_resources_return_prompts_and_skills
     Dir.mktmpdir do |config_dir|
-      config_path = File.join(config_dir, "config.json")
-      prompts_dir = File.join(config_dir, "prompts")
-      skill_dir = File.join(config_dir, "skills", "testing-verification")
-      FileUtils.mkdir_p(prompts_dir)
-      FileUtils.mkdir_p(skill_dir)
-      File.write(File.join(config_dir, "AGENTS.md"), "# Context\n")
-      File.write(File.join(prompts_dir, "review.md"), "---\ndescription: Review current changes\nargument-hint: files\n---\nReview $ARGUMENTS\n")
-      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: testing-verification\ndescription: Testing and verification guidance\n---\n# Skill\n")
+      Dir.mktmpdir do |home|
+        config_path = File.join(config_dir, "config.json")
+        prompts_dir = File.join(config_dir, "prompts")
+        skill_dir = File.join(config_dir, "skills", "testing-verification")
+        plugins_dir = File.join(home, ".kward", "plugins")
+        FileUtils.mkdir_p(prompts_dir)
+        FileUtils.mkdir_p(skill_dir)
+        FileUtils.mkdir_p(plugins_dir)
+        File.write(File.join(config_dir, "AGENTS.md"), "# Context\n")
+        File.write(File.join(prompts_dir, "review.md"), "---\ndescription: Review current changes\nargument-hint: files\n---\nReview $ARGUMENTS\n")
+        File.write(File.join(skill_dir, "SKILL.md"), "---\nname: testing-verification\ndescription: Testing and verification guidance\n---\n# Skill\n")
+        File.write(File.join(plugins_dir, "hello.rb"), <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.command "hello", description: "Say hello", argument_hint: "<name>" do |args, ctx|
+              ctx.say("Hello #{args}; messages=#{ctx.transcript.messages.length}")
+              "returned #{args}"
+            end
+          end
+        RUBY
 
-      with_env("KWARD_CONFIG_PATH" => config_path) do
-        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
-        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => config_path) do
+          server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
+          session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
 
-        commands = server.send(:commands_list, "sessionId" => session[:id])[:commands]
-        prompt = commands.find { |command| command[:source] == "prompt" }
-        skill = commands.find { |command| command[:source] == "skill" }
-        assert_equal "review", prompt[:name]
-        assert_equal "Review current changes", prompt[:description]
-        assert_equal File.join(prompts_dir, "review.md"), prompt[:path]
-        assert_equal "skill:testing-verification", skill[:name]
-        assert_equal "Testing and verification guidance", skill[:description]
-        assert_equal File.join(skill_dir, "SKILL.md"), skill[:path]
+          commands = server.send(:commands_list, "sessionId" => session[:id])[:commands]
+          prompt = commands.find { |command| command[:source] == "prompt" }
+          skill = commands.find { |command| command[:source] == "skill" }
+          assert_equal "review", prompt[:name]
+          assert_equal "Review current changes", prompt[:description]
+          assert_equal File.join(prompts_dir, "review.md"), prompt[:path]
+          assert_equal "skill:testing-verification", skill[:name]
+          assert_equal "Testing and verification guidance", skill[:description]
+          assert_equal File.join(skill_dir, "SKILL.md"), skill[:path]
+          plugin = commands.find { |command| command[:source] == "plugin" }
+          assert_equal "hello", plugin[:name]
+          assert_equal "Say hello", plugin[:description]
+          assert_equal "<name>", plugin[:argumentHint]
+          assert_equal true, plugin[:executable]
 
-        sections = server.send(:startup_resources, "sessionId" => session[:id])[:sections]
-        assert_equal ["AGENTS.md"], sections.find { |section| section[:name] == "Context" }[:items]
-        assert_equal ["testing-verification"], sections.find { |section| section[:name] == "Skills" }[:items]
-        assert_equal ["/review"], sections.find { |section| section[:name] == "Prompts" }[:items]
+          run = server.send(:commands_run, "sessionId" => session[:id], "name" => "hello", "arguments" => "Martok")
+          assert_equal "hello", run[:command]
+          assert_equal ["Hello Martok; messages=1"], run[:output]
+          assert_equal "returned Martok", run[:result]
+
+          sections = server.send(:startup_resources, "sessionId" => session[:id])[:sections]
+          assert_equal ["AGENTS.md"], sections.find { |section| section[:name] == "Context" }[:items]
+          assert_equal ["testing-verification"], sections.find { |section| section[:name] == "Skills" }[:items]
+          assert_equal ["/review"], sections.find { |section| section[:name] == "Prompts" }[:items]
+          assert_equal ["/hello"], sections.find { |section| section[:name] == "Plugins" }[:items]
+        end
       end
     end
   end

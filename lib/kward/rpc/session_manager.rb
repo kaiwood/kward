@@ -12,6 +12,7 @@ require_relative "../context_usage"
 require_relative "../conversation"
 require_relative "../events"
 require_relative "../model_info"
+require_relative "../plugin_registry"
 require_relative "../prompt_commands"
 require_relative "../session_store"
 require_relative "../tool_call"
@@ -30,8 +31,8 @@ module Kward
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
       WORKER_STOP = Object.new.freeze
 
-      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :queue, :worker, :running_turn_id, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, keyword_init: true)
+      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, keyword_init: true)
 
       def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
         @server = server
@@ -181,7 +182,9 @@ module Kward
       def start_turn(session_id:, input:, streaming_behavior: "newTurn", attachments: [])
         rpc_session = fetch_session(session_id)
         streaming_behavior = validate_streaming_behavior(streaming_behavior)
-        content = user_turn_content(expand_prompt_input(input), attachments)
+        normalized_attachments = normalize_attachments(attachments)
+        plugin_command, plugin_arguments = plugin_command_turn(input, normalized_attachments)
+        content = plugin_command ? input.to_s : user_turn_content(expand_prompt_input(input), normalized_attachments)
         turn = Turn.new(
           id: SecureRandom.uuid,
           session_id: rpc_session.id,
@@ -192,7 +195,9 @@ module Kward
           created_at: now,
           events: [],
           next_sequence: 1,
-          streaming_behavior: streaming_behavior
+          streaming_behavior: streaming_behavior,
+          plugin_command_name: plugin_command&.name,
+          plugin_arguments: plugin_arguments
         )
         @mutex.synchronize { @turns[turn.id] = turn }
         rpc_session.queue << turn.id
@@ -229,6 +234,26 @@ module Kward
         rpc_session = fetch_session(session_id)
         rpc_session.prompt.answer(question_request_id, answers)
         { ok: true }
+      end
+
+      def run_plugin_command(session_id:, command:, arguments: "")
+        rpc_session = fetch_session(session_id)
+        command = plugin_registry.command_for(command.to_s.delete_prefix("/")) || raise(ArgumentError, "Unknown plugin command: #{command}")
+        output = []
+        context = PluginRegistry::Context.new(
+          conversation: rpc_session.conversation,
+          args: arguments.to_s,
+          session: rpc_session.session,
+          workspace_root: rpc_session.workspace_root,
+          say_callback: lambda { |message| output << message.to_s }
+        )
+        result = command.handler.call(arguments.to_s, context)
+        output = rpc_session.plugin_output.shift(rpc_session.plugin_output.length) + output
+        { command: command.name, output: output, result: result.nil? ? nil : result.to_s }
+      end
+
+      def plugin_commands
+        plugin_registry.commands
       end
 
       def available_models
@@ -470,16 +495,25 @@ module Kward
       end
 
       def user_turn_content(input, attachments)
-        normalized_attachments = normalize_attachments(attachments)
-        return input.to_s if normalized_attachments.empty?
+        return input.to_s if attachments.empty?
 
-        [{ type: "text", text: input.to_s }] + normalized_attachments
+        [{ type: "text", text: input.to_s }] + attachments
       end
 
       def expand_prompt_input(input)
         return input unless input.is_a?(String)
 
         PromptCommands.expand(input) || input
+      end
+
+      def plugin_command_turn(input, attachments)
+        return [nil, ""] unless input.is_a?(String)
+        return [nil, ""] unless attachments.empty?
+
+        command, arguments = PromptCommands.parse(input)
+        return [nil, ""] unless command
+
+        [plugin_registry.command_for(command), arguments]
       end
 
       def normalize_attachments(attachments)
@@ -529,6 +563,14 @@ module Kward
         nil
       end
 
+      def plugin_registry
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+      end
+
+      def reserved_plugin_command_names
+        PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES + ConfigFiles.prompt_templates(reserved_commands: PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES).map(&:command)
+      end
+
       def build_rpc_session(store, session, conversation, workspace_root)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(server: @server, session_id: id)
@@ -548,6 +590,7 @@ module Kward
           agent: agent,
           tool_registry: tool_registry,
           prompt: prompt,
+          plugin_output: [],
           queue: Queue.new,
           worker: nil,
           running_turn_id: nil
@@ -629,10 +672,14 @@ module Kward
           return
         end
 
-        rpc_session.agent.ask(turn.input, cancellation: turn.cancellation) do |event|
-          handle_agent_event(turn, event) unless turn.cancel_requested
+        if turn.plugin_command_name
+          run_plugin_turn(rpc_session, turn)
+        else
+          rpc_session.agent.ask(turn.input, cancellation: turn.cancellation) do |event|
+            handle_agent_event(turn, event) unless turn.cancel_requested
+          end
+          finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
         end
-        finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
       rescue Cancellation::CancelledError
         finish_turn(turn, "canceled")
       rescue StandardError => e
@@ -641,6 +688,26 @@ module Kward
         finish_turn(turn, "failed")
       ensure
         rpc_session.running_turn_id = nil
+      end
+
+      def run_plugin_turn(rpc_session, turn)
+        turn.cancellation&.raise_if_cancelled!
+        command = plugin_registry.command_for(turn.plugin_command_name) || raise(ArgumentError, "Unknown plugin command: #{turn.plugin_command_name}")
+        output = []
+        context = PluginRegistry::Context.new(
+          conversation: rpc_session.conversation,
+          args: turn.plugin_arguments.to_s,
+          session: rpc_session.session,
+          workspace_root: rpc_session.workspace_root,
+          say_callback: lambda { |message| output << message.to_s }
+        )
+        result = command.handler.call(turn.plugin_arguments.to_s, context)
+        answer = (output + [result]).compact.map(&:to_s).reject(&:empty?).join("\n")
+        unless answer.empty?
+          emit_turn_event(turn, "assistantDelta", { delta: answer })
+          emit_turn_event(turn, "answer", { content: answer })
+        end
+        finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
       end
 
       def handle_agent_event(turn, event)

@@ -52,8 +52,8 @@ Detailed capability fields include:
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: Tauren auth provider format, OpenAI OAuth, OpenRouter API-key login, and provider logout for stored credentials.
-- `commands`: supported `commands/list` capability for prompt and skill command sources.
-- `startupResources`: supported startup resource listing for context, skills, and prompts.
+- `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
+- `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`; other UI primitives are explicitly unsupported.
 - `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
@@ -227,7 +227,7 @@ Params:
 
 Supported attachment MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`. Image data must be raw base64 without a `data:` prefix, and the RPC boundary limit is 10MB per image.
 
-If `input` is a configured prompt slash command such as `/plan fix bug`, Kward expands the prompt template server-side before starting the turn. Unknown slash commands remain literal input. Clients may still call `prompts/expand` themselves when they need preview/editing before submission.
+If `input` is a configured prompt slash command such as `/plan fix bug`, Kward expands the prompt template server-side before starting the turn. If `input` is a configured plugin slash command such as `/hi_chatgpt`, Kward runs the plugin command and emits its output as turn events without calling the model. Unknown slash commands remain literal input. Clients may still call `prompts/expand` themselves when they need preview/editing before submission.
 
 Returns a turn object with `id`, `sessionId`, `status`, timestamps, and cancellation state. Status starts as `queued` or quickly becomes `running`.
 
@@ -401,7 +401,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns Tauren-compatible slash command metadata for configured prompt templates and skills. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`.
+Returns Tauren-compatible slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
 
 ### `resources/startup`
 
@@ -409,7 +409,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns stable startup sections for configured context (`AGENTS.md`), skills, and prompt templates.
+Returns stable startup sections for configured context (`AGENTS.md`), skills, prompt templates, and plugin slash commands.
 
 ### `prompts/list`
 

@@ -10,6 +10,7 @@ module Kward
     BUSY_HELP_TEXT = "Streaming • type next prompt • Enter queues • Shift+Enter inserts newline".freeze
     SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
     SPINNER_INTERVAL = 0.1
+    FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_MAX_INPUT_ROWS = 6
     TRANSCRIPT_BUFFER_LIMIT = 200_000
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
@@ -24,7 +25,7 @@ module Kward
     EXIT_INPUT = :exit_input
     SELECT_CANCEL = :select_cancel
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -37,6 +38,7 @@ module Kward
       @queued_count = 0
       @spinner_frame_index = 0
       @last_spinner_tick = monotonic_now
+      @last_footer_refresh = monotonic_now
       @prompt_label = "You>"
       @stream_block = nil
       @rendered_rows = 0
@@ -59,6 +61,7 @@ module Kward
       @color_enabled = ANSI.enabled?(output)
       @cursor_visible = true
       @overlay_settings = normalize_overlay_settings(overlay_settings)
+      @footer = footer
     end
 
     def start
@@ -123,7 +126,9 @@ module Kward
         result = nil
         @mutex.synchronize do
           if key.nil?
-            render_prompt_locked if handle_resize_locked
+            resized = handle_resize_locked
+            footer_refreshed = tick_footer_locked
+            render_prompt_locked if resized || footer_refreshed
           else
             result = handle_key(key)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT
@@ -168,7 +173,9 @@ module Kward
         result = nil
         @mutex.synchronize do
           if key.nil?
-            render_prompt_locked if handle_resize_locked
+            resized = handle_resize_locked
+            footer_refreshed = tick_footer_locked
+            render_prompt_locked if resized || footer_refreshed
           else
             result = handle_select_key(key)
             render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL
@@ -257,7 +264,8 @@ module Kward
         if key.nil?
           resized = handle_resize_locked
           spun = tick_spinner_locked
-          render_prompt_locked if resized || spun
+          footer_refreshed = tick_footer_locked
+          render_prompt_locked if resized || spun || footer_refreshed
           return nil
         end
 
@@ -362,6 +370,18 @@ module Kward
 
     def spinner_frame
       SPINNER_FRAMES[@spinner_frame_index % SPINNER_FRAMES.length]
+    end
+
+    def tick_footer_locked
+      return false unless @footer && @started && @asking
+
+      now = monotonic_now
+      elapsed = now - @last_footer_refresh
+      return false if elapsed < FOOTER_REFRESH_INTERVAL
+
+      steps = (elapsed / FOOTER_REFRESH_INTERVAL).floor
+      @last_footer_refresh += steps * FOOTER_REFRESH_INTERVAL
+      true
     end
 
     def monotonic_now
@@ -517,7 +537,9 @@ module Kward
         result = nil
         @mutex.synchronize do
           if key.nil?
-            render_prompt_locked if handle_resize_locked
+            resized = handle_resize_locked
+            footer_refreshed = tick_footer_locked
+            render_prompt_locked if resized || footer_refreshed
           else
             result = handle_question_key(key)
             render_prompt_locked unless result.is_a?(Hash) || result == SELECT_CANCEL
@@ -1388,6 +1410,8 @@ module Kward
       overlay_rows = active_overlay_rows(width)
       rows = overlay_rows + [top_border(width)]
       rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
+      footer = footer_row(content_width)
+      rows << footer if footer
       rows << bottom_border(width)
       cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
@@ -1656,9 +1680,25 @@ module Kward
       "#{colored("│", :blue)} #{row[0, content_width].to_s.ljust(content_width)} #{colored("│", :blue)}"
     end
 
+    def footer_row(content_width)
+      text = footer_text
+      return nil if text.empty?
+
+      box_content_row(visible_truncate(text, content_width), content_width)
+    end
+
+    def footer_text
+      return "" unless @footer
+
+      @footer.call.to_s.gsub(/\s+/, " ").strip
+    rescue StandardError
+      ""
+    end
+
     def max_visible_input_rows
       overlay_count = active_overlay_rows(screen_width).length
-      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - overlay_count].min, 1].max
+      footer_count = footer_text.to_s.empty? ? 0 : 1
+      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - overlay_count - footer_count].min, 1].max
     end
 
     def composer_top_row

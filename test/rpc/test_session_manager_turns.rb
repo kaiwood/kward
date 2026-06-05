@@ -227,4 +227,38 @@ class TestRPCSessionManagerTurns < KwardTestCase
       assert_equal "/unknown fix bug", client.seen_messages[1].last[:content]
     end
   end
+
+  def test_rpc_turn_runs_plugin_slash_command_without_calling_client
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |home|
+        config_path = File.join(config_dir, "config.json")
+        plugins_dir = File.join(home, ".kward", "plugins")
+        FileUtils.mkdir_p(plugins_dir)
+        File.write(config_path, JSON.dump({}))
+        File.write(File.join(plugins_dir, "hi_chatgpt.rb"), <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.command "hi_chatgpt", description: "Say hi" do |args, ctx|
+              ctx.say("Hi #{args}; messages=#{ctx.transcript.messages.length}")
+              "returned #{args}"
+            end
+          end
+        RUBY
+        server = RecordingServer.new
+        client = RecordingClient.new([])
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => config_path) do
+          manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
+          session = manager.create_session(workspace_root: Dir.pwd)
+          turn = manager.start_turn(session_id: session[:id], input: "/hi_chatgpt Martok")
+          wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+          events = manager.turn_events(turn_id: turn[:id], after_sequence: 0)[:events]
+          assert_equal "Hi Martok; messages=1\nreturned Martok", events.find { |event| event[:type] == "answer" }[:payload][:content]
+          assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta].include?("Hi Martok") }
+        end
+
+        assert_empty client.seen_messages
+      end
+    end
+  end
 end

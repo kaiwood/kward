@@ -1,6 +1,6 @@
 # Extensibility
 
-Prompt and skills can live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead.
+Prompts and skills can live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead. Plugins are different: user plugins are loaded only from `~/.kward/plugins`, regardless of `KWARD_CONFIG_PATH` or the current project directory.
 
 ## Agent instructions
 
@@ -72,4 +72,25 @@ argument-hint: <task>
 Plan this implementation request:
 
 $ARGUMENTS
+```
+
+## Plugins
+
+- `~/.kward/plugins/*.rb`: trusted top-level Ruby plugin files loaded from the user plugin directory only. Kward does not load plugins from the project/workspace directory or from a `KWARD_CONFIG_PATH` directory. If a custom config directory has a legacy `plugins` folder, Kward warns and ignores it. Plugins execute as local Ruby code in the Kward process, so install only plugins you trust.
+- Plugins can register slash commands and one custom footer renderer. Built-in commands and prompt-template commands are reserved.
+- Plugin slash commands are available in interactive slash completion and through RPC `commands/list`. RPC clients can execute plugin commands with `commands/run`.
+- Plugin command and footer contexts expose read-only transcript access through `ctx.transcript.messages`, plus session metadata and `ctx.say` for command output.
+
+Example plugin:
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.command "last-message", description: "Show transcript size" do |_args, ctx|
+    ctx.say("Messages: #{ctx.transcript.messages.length}")
+  end
+
+  plugin.footer do |ctx|
+    "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
+  end
+end
 ```
