@@ -59,6 +59,19 @@ class TestCompactor < KwardTestCase
     assert_equal 2_000, builder.split_turn_max_tokens(settings, model_max_tokens: 2_000)
   end
 
+  def test_compaction_serializer_limits_tool_results_to_two_thousand_chars
+    content = ("a" * 2_000) + ("b" * 3_000)
+    messages = [
+      assistant_tool_call("read_file", path: "big.txt"),
+      { role: "tool", tool_call_id: "call_read_file", name: "read_file", content: content }
+    ]
+
+    serialized = Kward::Compaction::ConversationSerializer.new.serialize(messages)
+    tool_result = serialized.split("[Tool result read_file]: ", 2).last
+
+    assert_equal "#{"a" * 2_000}\n...[truncated 3000 bytes]", tool_result
+  end
+
   def test_preparation_detects_nothing_and_already_compacted
     assert_raises(Kward::Compaction::NothingToCompact) do
       Kward::Compaction::Preparation.new(conversation: Kward::Conversation.new(system_message: nil)).call

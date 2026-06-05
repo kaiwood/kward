@@ -169,7 +169,7 @@ module Kward
     end
 
     class ConversationSerializer
-      TOOL_RESULT_LIMIT = 4_000
+      TOOL_RESULT_LIMIT = 2_000
 
       def serialize(messages)
         tool_calls_by_id = {}
