@@ -7,11 +7,12 @@ module Kward
   class ToolRegistry
     attr_reader :schemas
 
-    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new, skills: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new, skills: nil, web_research_enabled: nil)
       @workspace = workspace
       @prompt = prompt
       @web_research = web_research
       @skills = skills
+      @web_research_enabled = web_research_enabled
       @schemas = build_schemas.freeze
     end
 
@@ -55,10 +56,18 @@ module Kward
     private
 
     def build_schemas
-      schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema]
+      schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema]
+      schemas << web_research_schema if web_research_available?
       schemas << read_skill_schema if skills_available?
       schemas << ask_user_question_schema if ask_user_question_available?
       schemas
+    end
+
+    def web_research_available?
+      return @web_research_enabled unless @web_research_enabled.nil?
+      return @web_research.available? if @web_research.respond_to?(:available?)
+
+      true
     end
 
     def skills_available?
@@ -295,7 +304,7 @@ module Kward
         type: "function",
         function: {
           name: "web_research",
-          description: "Search the live web. Provider fallback order is Exa (API key if configured, otherwise keyless Exa MCP), Perplexity when configured, Gemini when configured, then legacy DuckDuckGo/SearXNG.",
+          description: "Search the live web when web research is enabled or configured. Auto mode uses Exa first, optional model-backed providers only when allowed, then legacy DuckDuckGo/SearXNG.",
           parameters: {
             type: "object",
             properties: {

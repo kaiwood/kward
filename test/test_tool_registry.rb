@@ -36,14 +36,26 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_include_core_tools_and_configured_optional_tools
+  def test_tool_schemas_include_core_tools_only_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json"), "EXA_API_KEY" => nil, "PERPLEXITY_API_KEY" => nil, "GEMINI_API_KEY" => nil) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command"], tool_names
+      end
+    end
+  end
+
+  def test_tool_schemas_include_web_research_when_enabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({ "web_research" => { "enabled" => true } }))
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-        assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research"], tool_names
+        assert_includes tool_names, "web_research"
       end
     end
   end
@@ -113,7 +125,7 @@ class TestToolRegistry < KwardTestCase
 
   def test_tool_registry_dispatches_web_research
     research = FakeWebResearch.new("research result")
-    registry = Kward::ToolRegistry.new(web_research: research)
+    registry = Kward::ToolRegistry.new(web_research: research, web_research_enabled: true)
     conversation = Kward::Conversation.new
 
     result = registry.dispatch(tool_call("web_research", queries: ["ruby"]), conversation)

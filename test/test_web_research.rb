@@ -120,7 +120,7 @@ class TestWebResearch < KwardTestCase
       ["POST_JSON", "https://mcp.exa.ai/mcp"] => fake_response(500, "nope"),
       ["POST_JSON", "https://api.perplexity.ai/chat/completions"] => fake_response(200, perplexity_body)
     )
-    research = Kward::WebResearch.new(http_client: http, config: { "web_research" => { "perplexity_api_key" => "pplx-secret" } })
+    research = Kward::WebResearch.new(http_client: http, config: { "web_research" => { "perplexity_api_key" => "pplx-secret", "allow_model_providers" => true } })
 
     result = research.search("queries" => ["ruby"])
 
@@ -128,6 +128,52 @@ class TestWebResearch < KwardTestCase
     assert_includes result, "Provider: perplexity"
     assert_includes result, "Perplexity answer"
     refute_includes result, "pplx-secret"
+  end
+
+  def test_auto_mode_skips_model_backed_fallbacks_unless_allowed
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://mcp.exa.ai/mcp"] => fake_response(500, "nope"),
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, '<div class="result"><a class="result__a" href="https://example.com/legacy">Legacy</a></div>')
+    )
+    research = Kward::WebResearch.new(http_client: http, searxng_instances: [], config: { "web_research" => { "perplexity_api_key" => "pplx-secret" } })
+
+    result = research.search("queries" => ["ruby"])
+
+    assert_includes result, "Provider: duckduckgo"
+    refute http.requests.any? { |request| request[:url] == "https://api.perplexity.ai/chat/completions" }
+  end
+
+  def test_perplexity_uses_smaller_completion_budget
+    perplexity_body = JSON.dump(
+      "choices" => [{ "message" => { "content" => "Perplexity answer" } }],
+      "citations" => []
+    )
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://api.perplexity.ai/chat/completions"] => fake_response(200, perplexity_body)
+    )
+    research = Kward::WebResearch.new(http_client: http, config: { "web_research" => { "perplexity_api_key" => "pplx-secret" } })
+
+    result = research.search("queries" => ["ruby"], "provider" => "perplexity")
+
+    assert_includes result, "Perplexity answer"
+    assert_equal 512, http.requests.first[:body]["max_tokens"]
+  end
+
+  def test_provider_answers_are_compacted_before_returning_to_model
+    large_answer = "x" * 2_500
+    body = JSON.dump(
+      "answer" => large_answer,
+      "citations" => [{ "title" => "Exa API", "url" => "https://example.com/api", "text" => "y" * 500 }]
+    )
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://api.exa.ai/answer"] => fake_response(200, body)
+    )
+    research = Kward::WebResearch.new(http_client: http, config: { "web_research" => { "exa_api_key" => "exa-secret" } })
+
+    result = research.search("queries" => ["ruby"], "provider" => "exa")
+
+    assert_includes result, "... truncated to 2000 characters"
+    assert_includes result, "... truncated to 300 characters"
   end
 
 end

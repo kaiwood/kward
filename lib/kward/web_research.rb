@@ -10,7 +10,10 @@ module Kward
     DEFAULT_MAX_RESULTS = 5
     MAX_MAX_RESULTS = 20
     MAX_QUERIES = 4
-    MAX_OUTPUT_BYTES = 20 * 1024
+    MAX_OUTPUT_BYTES = 8 * 1024
+    MODEL_PROVIDER_MAX_TOKENS = 512
+    MAX_ANSWER_CHARS = 2_000
+    MAX_EXCERPT_CHARS = 300
     HTTP_TIMEOUT_SECONDS = 10
     DUCKDUCKGO_URL = "https://html.duckduckgo.com/html/"
     EXA_MCP_URL = "https://mcp.exa.ai/mcp"
@@ -34,6 +37,13 @@ module Kward
       @searxng_instances = searxng_instances
       @max_output_bytes = max_output_bytes
       @config = config
+    end
+
+    def available?
+      enabled = boolean_config_value("enabled")
+      return enabled unless enabled.nil?
+
+      !config_value("provider").to_s.strip.empty? || %w[exa perplexity gemini].any? { |provider| api_key(provider) }
     end
 
     def search(args)
@@ -99,8 +109,10 @@ module Kward
       case provider
       when "auto"
         order = ["exa"]
-        order << "perplexity" if api_key("perplexity")
-        order << "gemini" if api_key("gemini")
+        if allow_model_provider_fallback?
+          order << "perplexity" if api_key("perplexity")
+          order << "gemini" if api_key("gemini")
+        end
         order << "legacy"
         order
       when "duckduckgo"
@@ -205,7 +217,7 @@ module Kward
           content = block[(match.end(0))..].to_s.strip
         end
         content = content.sub(/\n---\s*\z/, "").strip
-        Result.new(title: title.empty? ? url : title, url: url, excerpt: content[0, 500], provider: "exa")
+        Result.new(title: title.empty? ? url : title, url: url, excerpt: truncate_text(content, MAX_EXCERPT_CHARS), provider: "exa")
       end
 
       parsed.first(max_results)
@@ -229,7 +241,7 @@ module Kward
 
       data = JSON.parse(response.body.to_s)
       results = results_from_exa_records(Array(data["citations"]), DEFAULT_MAX_RESULTS)
-      SearchResponse.new(answer: data["answer"].to_s, results: results, provider: "exa")
+      SearchResponse.new(answer: truncate_text(data["answer"], MAX_ANSWER_CHARS), results: results, provider: "exa")
     end
 
     def exa_api_structured_search(query, options, key)
@@ -271,7 +283,7 @@ module Kward
         Result.new(
           title: record["title"].to_s.empty? ? url : clean_text(record["title"].to_s),
           url: url,
-          excerpt: clean_text(text)[0, 500],
+          excerpt: truncate_text(clean_text(text), MAX_EXCERPT_CHARS),
           provider: "exa"
         )
       end
@@ -284,7 +296,7 @@ module Kward
       body = {
         "model" => config_value("perplexity_model") || "sonar",
         "messages" => [{ "role" => "user", "content" => query }],
-        "max_tokens" => 1024,
+        "max_tokens" => MODEL_PROVIDER_MAX_TOKENS,
         "return_related_questions" => false
       }
       body["search_recency_filter"] = options[:recency_filter] if options[:recency_filter]
@@ -298,13 +310,13 @@ module Kward
       raise "Perplexity API failed with HTTP #{response.code}: #{response.body.to_s[0, 300]}" unless success?(response)
 
       data = JSON.parse(response.body.to_s)
-      answer = Array(data["choices"]).first.to_h.dig("message", "content").to_s
+      answer = truncate_text(Array(data["choices"]).first.to_h.dig("message", "content"), MAX_ANSWER_CHARS)
       citations = Array(data["citations"])
       results = citations.first(options[:max_results]).each_with_index.filter_map do |citation, index|
         if citation.is_a?(String)
           Result.new(title: "Source #{index + 1}", url: citation, excerpt: "", provider: "perplexity")
         elsif citation.is_a?(Hash) && citation["url"].to_s != ""
-          Result.new(title: citation["title"].to_s.empty? ? "Source #{index + 1}" : citation["title"].to_s, url: citation["url"].to_s, excerpt: citation["snippet"].to_s, provider: "perplexity")
+          Result.new(title: citation["title"].to_s.empty? ? "Source #{index + 1}" : citation["title"].to_s, url: citation["url"].to_s, excerpt: truncate_text(citation["snippet"], MAX_EXCERPT_CHARS), provider: "perplexity")
         end
       end
       SearchResponse.new(answer: answer, results: results, provider: "perplexity")
@@ -328,7 +340,7 @@ module Kward
 
       data = JSON.parse(response.body.to_s)
       candidate = Array(data["candidates"]).first.to_h
-      answer = Array(candidate.dig("content", "parts")).map { |part| part.to_h["text"] }.compact.join("\n")
+      answer = truncate_text(Array(candidate.dig("content", "parts")).map { |part| part.to_h["text"] }.compact.join("\n"), MAX_ANSWER_CHARS)
       chunks = Array(candidate.dig("groundingMetadata", "groundingChunks"))
       results = chunks.first(options[:max_results]).filter_map do |chunk|
         web = chunk.to_h["web"].to_h
@@ -473,7 +485,7 @@ module Kward
 
       title = clean_text(record["title"].to_s)
       url = clean_result_url(record["url"].to_s)
-      excerpt = clean_text((record["content"] || record["snippet"] || record["description"]).to_s)
+      excerpt = truncate_text(clean_text((record["content"] || record["snippet"] || record["description"]).to_s), MAX_EXCERPT_CHARS)
       return nil if title.empty? || url.empty?
 
       Result.new(title: title, url: url, excerpt: excerpt, provider: provider)
@@ -545,6 +557,13 @@ module Kward
       text.to_s.gsub(/\s+/, " ").strip
     end
 
+    def truncate_text(text, max_chars)
+      value = text.to_s.strip
+      return value if value.length <= max_chars
+
+      "#{value[0, max_chars].rstrip}\n... truncated to #{max_chars} characters"
+    end
+
     def clean_result_url(url)
       text = url.to_s.strip
       uri = URI.parse(text)
@@ -593,6 +612,21 @@ module Kward
       snake = key.to_s
       camel = snake.gsub(/_([a-z])/) { Regexp.last_match(1).upcase }
       web_config[snake] || web_config[camel] || config["web_research_#{snake}"] || config[snake] || config[camel]
+    end
+
+    def boolean_config_value(key)
+      value = config_value(key)
+      return value if value == true || value == false
+
+      normalized = value.to_s.strip.downcase
+      return true if %w[1 true yes on].include?(normalized)
+      return false if %w[0 false no off].include?(normalized)
+
+      nil
+    end
+
+    def allow_model_provider_fallback?
+      boolean_config_value("allow_model_providers") == true
     end
 
     def api_key(provider)
