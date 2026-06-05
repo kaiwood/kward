@@ -7,11 +7,12 @@ module Kward
   class ToolRegistry
     attr_reader :schemas
 
-    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new)
+    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new, skills: nil)
       @workspace = workspace
       @prompt = prompt
       @web_research = web_research
-      @schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema, read_skill_schema, ask_user_question_schema].freeze
+      @skills = skills
+      @schemas = build_schemas.freeze
     end
 
     def dispatch(tool_call, conversation, cancellation: nil)
@@ -52,6 +53,22 @@ module Kward
     end
 
     private
+
+    def build_schemas
+      schemas = [list_directory_schema, read_file_schema, write_file_schema, edit_file_schema, run_shell_command_schema, web_research_schema]
+      schemas << read_skill_schema if skills_available?
+      schemas << ask_user_question_schema if ask_user_question_available?
+      schemas
+    end
+
+    def skills_available?
+      skills = @skills.nil? ? ConfigFiles.skills : @skills
+      skills.any?
+    end
+
+    def ask_user_question_available?
+      @prompt.respond_to?(:ask_user_question)
+    end
 
     def read_file(args, conversation)
       path = args["path"] || args[:path] || ""

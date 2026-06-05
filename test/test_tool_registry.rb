@@ -36,10 +36,39 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_include_edit_file_shell_command_and_web_research
-    tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+  def test_tool_schemas_include_core_tools_and_configured_optional_tools
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
 
-    assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research", "read_skill", "ask_user_question"], tool_names
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research"], tool_names
+      end
+    end
+  end
+
+  def test_tool_schemas_include_read_skill_only_when_skills_exist
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        assert_includes tool_names, "read_skill"
+      end
+    end
+  end
+
+  def test_tool_schemas_include_ask_user_question_only_with_prompt_support
+    without_prompt = Kward::ToolRegistry.new(skills: []).schemas.map { |schema| schema[:function][:name] }
+    with_prompt = Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: []).schemas.map { |schema| schema[:function][:name] }
+
+    refute_includes without_prompt, "ask_user_question"
+    assert_includes with_prompt, "ask_user_question"
   end
 
   def test_read_file_schema_supports_offset_and_limit
