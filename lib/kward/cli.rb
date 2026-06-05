@@ -92,6 +92,10 @@ module Kward
           streamed = true
           assistant_streamed = true
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+        when Events::Retry
+          streamed = true
+          flush_markdown_deltas(markdown_chunks)
+          print_retry(event)
         when Events::ToolCall
           streamed = true
           flush_markdown_deltas(markdown_chunks)
@@ -740,6 +744,10 @@ module Kward
           when Events::AssistantDelta
             streamed = true
             append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+          when Events::Retry
+            streamed = true
+            flush_markdown_deltas(markdown_chunks)
+            print_retry(event)
           when Events::ToolCall
             streamed = true
             flush_markdown_deltas(markdown_chunks)
@@ -804,6 +812,10 @@ module Kward
         when Events::AssistantDelta
           streamed = true
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+        when Events::Retry
+          streamed = true
+          flush_markdown_deltas(markdown_chunks)
+          print_retry(event)
         when Events::ToolCall
           streamed = true
           flush_markdown_deltas(markdown_chunks)
@@ -840,6 +852,25 @@ module Kward
         print delta
         $stdout.flush
       end
+    end
+
+    def print_retry(event)
+      message = retry_message(event)
+      if prompt_interface?
+        @prompt.start_stream_block("Retry")
+        @prompt.write_delta("#{message}\n")
+        @prompt.finish_stream_block
+      else
+        start_stream_block("Retry")
+        puts message
+        $stdout.flush
+        @stream_block = nil
+      end
+    end
+
+    def retry_message(event)
+      provider = event.provider.to_s.empty? ? "model" : event.provider
+      "Retrying #{provider} request after transient failure (attempt #{event.attempt}/#{event.max_attempts}) in #{event.delay_seconds}s: #{event.error}"
     end
 
     def print_tool_call(tool_call)

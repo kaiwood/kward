@@ -108,6 +108,14 @@ module KwardRPCTestSupport
     end
   end
 
+  class RetryEventClient
+    def chat(_messages, tools: [], on_reasoning_delta: nil, on_retry: nil, on_assistant_delta: nil, cancellation: nil)
+      on_retry&.call(provider: "Codex", model: "fake-model", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream")
+      on_assistant_delta&.call("answer")
+      { "role" => "assistant", "content" => "answer" }
+    end
+  end
+
   class ReasoningStreamingClient
     def chat(_messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
       on_reasoning_delta&.call("because")

@@ -48,6 +48,26 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_retry_event_is_emitted_and_replayed
+    Dir.mktmpdir do |config_dir|
+      server = RecordingServer.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: RetryEventClient.new, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "retry")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      retry_event = manager.turn_events(turn_id: turn[:id], after_sequence: 0)[:events].find { |event| event[:type] == "modelRetry" }
+      assert_equal "Codex", retry_event[:payload][:provider]
+      assert_equal "fake-model", retry_event[:payload][:model]
+      assert_equal 2, retry_event[:payload][:attempt]
+      assert_equal 3, retry_event[:payload][:maxAttempts]
+      assert_equal 1, retry_event[:payload][:delaySeconds]
+      assert_equal "Codex request failed: 503 upstream", retry_event[:payload][:error]
+      assert server.notifications.any? { |notification| notification[:params][:type] == "modelRetry" }
+    end
+  end
+
   def test_session_manager_queues_turns_per_session
     Dir.mktmpdir do |config_dir|
       server = RecordingServer.new

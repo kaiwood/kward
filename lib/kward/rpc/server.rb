@@ -257,6 +257,7 @@ module Kward
             notification: "turn/event",
             assistantText: "assistantDelta",
             reasoning: { start: false, delta: true, end: false },
+            modelRetry: { supported: true, event: "modelRetry" },
             tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false },
             errors: true,
             sessionUpdates: false

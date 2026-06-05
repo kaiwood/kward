@@ -651,6 +651,8 @@ module Kward
           emit_turn_event(turn, "assistantDelta", { delta: event.delta })
         when Events::AssistantMessage
           emit_turn_event(turn, "assistantMessage", { message: event.message })
+        when Events::Retry
+          emit_turn_event(turn, "modelRetry", retry_event_payload(event))
         when Events::ToolCall
           emit_turn_event(turn, "toolCall", normalized_tool_event_payload(event.tool_call))
         when Events::ToolResult
@@ -658,6 +660,17 @@ module Kward
         when Events::Answer
           emit_turn_event(turn, "answer", { content: event.content })
         end
+      end
+
+      def retry_event_payload(event)
+        {
+          provider: event.provider,
+          model: event.model,
+          attempt: event.attempt,
+          maxAttempts: event.max_attempts,
+          delaySeconds: event.delay_seconds,
+          error: event.error
+        }.compact
       end
 
       def finish_turn(turn, status)

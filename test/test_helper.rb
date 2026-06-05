@@ -145,6 +145,32 @@ class KwardTestCase < Minitest::Test
     end
   end
 
+  def fake_net_response(code, body)
+    klass = Net::HTTPResponse::CODE_TO_OBJ.fetch(code.to_s, Net::HTTPUnknownResponse)
+    klass.new("1.1", code.to_s, "").tap do |response|
+      content = body
+      response.define_singleton_method(:body) { content }
+      response.define_singleton_method(:read_body) do |&block|
+        block.call(content) if block
+        content
+      end
+    end
+  end
+
+  class FakeResponse < Net::HTTPResponse
+    def initialize(code, body)
+      super("1.1", code.to_s, "")
+      @body = body
+    end
+
+    attr_reader :body
+
+    def read_body
+      yield body if block_given?
+      body
+    end
+  end
+
   class FakeClient
     def initialize(responses)
       @responses = responses

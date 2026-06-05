@@ -15,6 +15,27 @@ module Kward
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
     DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
+    RETRY_DELAYS = [1, 2].freeze
+
+    RequestError = Class.new(StandardError) do
+      attr_reader :provider, :code, :body
+
+      def initialize(provider:, code:, body:)
+        @provider = provider
+        @code = code.to_i
+        @body = body.to_s
+        super("#{provider} request failed: #{code} #{@body}")
+      end
+
+      def transient?
+        code == 429 || code.between?(500, 599)
+      end
+
+      def message_after_attempts(attempts)
+        "#{provider} request failed after #{attempts} attempts: #{code} #{body}"
+      end
+    end
+    TRANSIENT_NETWORK_ERRORS = [IOError, EOFError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout].freeze
 
     def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path)
       @openrouter_api_key = presence(api_key)
@@ -25,34 +46,36 @@ module Kward
       @config = load_config
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, max_tokens: nil)
       cancellation&.raise_if_cancelled!
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens) if provider == "Codex"
+      with_retries(provider, model_for(provider), on_retry: on_retry, cancellation: cancellation) do
+        return codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens) if provider == "Codex"
 
-      request = Net::HTTP::Post.new(url)
-      request["Authorization"] = "Bearer #{token}"
-      request["Content-Type"] = "application/json"
-      request.body = JSON.dump(request_payload(provider, messages, tools, max_tokens: max_tokens))
+        request = Net::HTTP::Post.new(url)
+        request["Authorization"] = "Bearer #{token}"
+        request["Content-Type"] = "application/json"
+        request.body = JSON.dump(request_payload(provider, messages, tools, max_tokens: max_tokens))
 
-      response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
-        cancellation&.on_cancel { close_http(http) }
+        response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
+          cancellation&.on_cancel { close_http(http) }
+          cancellation&.raise_if_cancelled!
+          http.request(request)
+        end
         cancellation&.raise_if_cancelled!
-        http.request(request)
-      end
-      cancellation&.raise_if_cancelled!
 
-      unless response.is_a?(Net::HTTPSuccess)
-        raise "#{provider} request failed: #{response.code} #{response.body}"
-      end
+        unless response.is_a?(Net::HTTPSuccess)
+          raise RequestError.new(provider: provider, code: response.code, body: response.body)
+        end
 
-      message = JSON.parse(response.body).fetch("choices").first.fetch("message")
-      cancellation&.raise_if_cancelled!
-      on_assistant_delta&.call(message.fetch("content", ""))
-      message
-    rescue IOError, EOFError, SystemCallError => e
+        message = JSON.parse(response.body).fetch("choices").first.fetch("message")
+        cancellation&.raise_if_cancelled!
+        on_assistant_delta&.call(message.fetch("content", ""))
+        message
+      end
+    rescue *TRANSIENT_NETWORK_ERRORS => e
       raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
 
       raise e
@@ -100,6 +123,45 @@ module Kward
 
     private
 
+    def with_retries(provider, model, on_retry: nil, cancellation: nil)
+      attempts = RETRY_DELAYS.length + 1
+      attempt = 1
+
+      begin
+        cancellation&.raise_if_cancelled!
+        yield
+      rescue RequestError => e
+        raise unless e.transient?
+        raise e.message_after_attempts(attempt) if attempt >= attempts
+
+        delay = RETRY_DELAYS[attempt - 1]
+        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message)
+        sleep_with_cancellation(delay, cancellation)
+        attempt += 1
+        retry
+      rescue *TRANSIENT_NETWORK_ERRORS => e
+        raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
+        raise "#{provider} request failed after #{attempt} attempts: #{e.message}" if attempt >= attempts
+
+        delay = RETRY_DELAYS[attempt - 1]
+        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message)
+        sleep_with_cancellation(delay, cancellation)
+        attempt += 1
+        retry
+      end
+    end
+
+    def sleep_with_cancellation(seconds, cancellation)
+      deadline = Time.now + seconds.to_f
+      loop do
+        cancellation&.raise_if_cancelled!
+        remaining = deadline - Time.now
+        break if remaining <= 0
+
+        sleep([remaining, 0.1].min)
+      end
+    end
+
     def codex_chat(url, token, account_id, messages, tools, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
@@ -117,7 +179,7 @@ module Kward
           unless response.is_a?(Net::HTTPSuccess)
             body = +""
             response.read_body { |chunk| body << chunk }
-            raise "Codex OAuth request failed: #{response.code} #{redact(body, token)}"
+            raise RequestError.new(provider: "Codex", code: response.code, body: redact(body, token))
           end
 
           message = parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
@@ -126,7 +188,7 @@ module Kward
 
       cancellation&.raise_if_cancelled!
       message
-    rescue IOError, EOFError, SystemCallError => e
+    rescue *TRANSIENT_NETWORK_ERRORS => e
       raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
 
       raise e

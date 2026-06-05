@@ -1,6 +1,42 @@
 require_relative "test_helper"
 
 class TestClient < KwardTestCase
+  class FakeHTTP
+    attr_reader :requests
+
+    def initialize(responses)
+      @responses = responses
+      @requests = []
+    end
+
+    def request(request)
+      @requests << request
+      response = @responses.shift
+      raise response if response.is_a?(Exception)
+
+      if block_given?
+        yield response
+      else
+        response
+      end
+    end
+  end
+
+  def with_fake_http(responses)
+    fake_http = FakeHTTP.new(responses)
+    original_start = Net::HTTP.method(:start)
+    Net::HTTP.define_singleton_method(:start) do |_host, _port, **_options, &block|
+      block.call(fake_http)
+    end
+    yield fake_http
+  ensure
+    Net::HTTP.define_singleton_method(:start, original_start) if original_start
+  end
+
+  def disable_sleep(client)
+    client.define_singleton_method(:sleep_with_cancellation) { |_seconds, _cancellation| nil }
+  end
+
   def test_client_requires_openai_oauth_login_or_openrouter
     client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil))
 
@@ -129,6 +165,66 @@ class TestClient < KwardTestCase
 
     assert_equal "env-token", token
     assert_equal "Codex", provider
+  end
+
+  def test_codex_request_retries_transient_failure_and_reports_retry
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    retries = []
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+
+    disable_sleep(client)
+    with_fake_http([fake_net_response(503, "upstream connect error"), success]) do |_http|
+      message = client.chat([{ role: "user", content: "hello" }], on_retry: ->(event) { retries << event })
+
+      assert_equal "ok", message["content"]
+    end
+
+    assert_equal 1, retries.length
+    assert_equal "Codex", retries[0][:provider]
+    assert_equal 2, retries[0][:attempt]
+    assert_equal 3, retries[0][:max_attempts]
+    assert_equal 1, retries[0][:delay_seconds]
+    assert_includes retries[0][:error], "Codex request failed: 503 upstream connect error"
+  end
+
+  def test_codex_request_exhaustion_uses_request_wording_not_oauth_wording
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+
+    error = nil
+    disable_sleep(client)
+    with_fake_http([fake_net_response(503, "upstream connect error"), fake_net_response(503, "upstream connect error"), fake_net_response(503, "upstream connect error")]) do |_http|
+      error = assert_raises(RuntimeError) do
+        client.chat([{ role: "user", content: "hello" }])
+      end
+    end
+
+    assert_includes error.message, "Codex request failed after 3 attempts: 503 upstream connect error"
+    refute_includes error.message, "Codex OAuth request failed"
+  end
+
+  def test_openrouter_retries_429_and_does_not_retry_401
+    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    success_body = JSON.dump("choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }])
+    retries = []
+
+    disable_sleep(client)
+    with_fake_http([fake_net_response(429, "slow down"), fake_net_response(200, success_body)]) do |_http|
+      message = client.chat([{ role: "user", content: "hello" }], on_retry: ->(event) { retries << event })
+
+      assert_equal "ok", message["content"]
+    end
+
+    assert_equal 1, retries.length
+    assert_equal "OpenRouter", retries[0][:provider]
+
+    with_fake_http([fake_net_response(401, "bad token")]) do |http|
+      error = assert_raises(Kward::Client::RequestError) do
+        client.chat([{ role: "user", content: "hello" }])
+      end
+
+      assert_equal 1, http.requests.length
+      assert_includes error.message, "OpenRouter request failed: 401 bad token"
+    end
   end
 
   def test_codex_sse_parses_text_response
