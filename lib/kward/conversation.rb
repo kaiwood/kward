@@ -7,9 +7,9 @@ module Kward
     DEFAULT_SYSTEM_MESSAGE = Object.new.freeze
 
     attr_reader :messages, :read_paths, :workspace_root, :compaction_system_message
-    attr_accessor :on_append, :on_compact
+    attr_accessor :on_append, :on_compact, :on_tool_execution
 
-    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
       @messages = []
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
@@ -27,6 +27,7 @@ module Kward
       @read_paths = Set.new(read_paths)
       @on_append = on_append
       @on_compact = on_compact
+      @on_tool_execution = on_tool_execution
     end
 
     def append_user(content)
@@ -46,6 +47,10 @@ module Kward
         name: name,
         content: content
       })
+    end
+
+    def append_tool_execution(tool_call:, content:)
+      @on_tool_execution&.call(tool_call, content)
     end
 
     def refresh_system_message!

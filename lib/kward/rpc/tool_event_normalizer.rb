@@ -1,3 +1,4 @@
+require "time"
 require_relative "../tool_call"
 require_relative "../workspace"
 
@@ -26,6 +27,19 @@ module Kward
           content: @content,
           result: normalized_result
         )
+      end
+
+      def execution_record(timestamp: Time.now.utc.iso8601(3))
+        result = normalized_result
+        {
+          type: "tool_execution_end",
+          timestamp: timestamp,
+          toolCallId: @fields[:toolCallId],
+          toolName: @fields[:toolName],
+          args: @fields[:args],
+          result: result,
+          isError: result[:isError]
+        }
       end
 
       private

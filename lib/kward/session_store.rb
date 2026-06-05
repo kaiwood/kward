@@ -4,6 +4,7 @@ require "securerandom"
 require "time"
 require_relative "config_files"
 require_relative "conversation"
+require_relative "rpc/tool_event_normalizer"
 require_relative "workspace"
 
 module Kward
@@ -28,6 +29,7 @@ module Kward
       def attach(conversation)
         conversation.on_append = lambda { |message| append_message(message) }
         conversation.on_compact = lambda { |message| compact(message) }
+        conversation.on_tool_execution = lambda { |tool_call, content| append_tool_execution(tool_call, content) }
         self
       end
 
@@ -45,6 +47,10 @@ module Kward
           timestamp: Time.now.utc.iso8601(3),
           message: message
         })
+      end
+
+      def append_tool_execution(tool_call, content)
+        @store.append_record(@path, RPC::ToolEventNormalizer.new(tool_call, content: content).execution_record)
       end
 
       def rename(name)

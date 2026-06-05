@@ -96,4 +96,122 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_persists_normalized_edit_tool_execution_record
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(workspace_dir, "file.txt"), "old one\nold two\n")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil, workspace_root: workspace_dir)
+        session.attach(conversation)
+        registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_dir))
+
+        registry.dispatch(tool_call("read_file", path: "file.txt"), conversation)
+        registry.dispatch(tool_call("edit_file", path: "file.txt", edits: [{ old_text: "old one", new_text: "new one" }]), conversation)
+
+        records = jsonl_records(session.path)
+        record = records.find { |item| item["type"] == "tool_execution_end" && item["toolName"] == "edit" }
+        raw_tool = records.find { |item| item["type"] == "message" && item.dig("message", "role") == "tool" && item.dig("message", "name") == "edit_file" }
+
+        assert raw_tool, "expected raw tool message to remain persisted"
+        assert record, "expected normalized edit execution record"
+        assert_equal "call_edit_file", record["toolCallId"]
+        assert_equal "file.txt", record.dig("args", "path")
+        assert_equal [{ "oldText" => "old one", "newText" => "new one" }], record.dig("args", "edits")
+        assert_equal false, record.dig("result", "isError")
+        assert_includes record.dig("result", "diff"), "--- file.txt"
+        assert_equal false, record["isError"]
+      end
+    end
+  end
+
+  def test_session_persists_normalized_write_tool_execution_record
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil, workspace_root: workspace_dir)
+        session.attach(conversation)
+        registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_dir))
+
+        registry.dispatch(tool_call("write_file", path: "new.txt", content: "complete\ncontent\n"), conversation)
+
+        record = jsonl_records(session.path).find { |item| item["type"] == "tool_execution_end" && item["toolName"] == "write" }
+
+        assert record, "expected normalized write execution record"
+        assert_equal "new.txt", record.dig("args", "path")
+        assert_equal "complete\ncontent\n", record.dig("args", "content")
+        assert_equal false, record.dig("result", "isError")
+        assert_equal ["new.txt"], record.dig("result", "changedFiles")
+        assert_equal false, record["isError"]
+      end
+    end
+  end
+
+  def test_session_persists_failed_mutation_without_changed_files
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(workspace_dir, "existing.txt"), "keep\n")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil, workspace_root: workspace_dir)
+        session.attach(conversation)
+        registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_dir))
+
+        registry.dispatch(tool_call("write_file", path: "existing.txt", content: "replace\n"), conversation)
+
+        record = jsonl_records(session.path).find { |item| item["type"] == "tool_execution_end" && item["toolName"] == "write" }
+
+        assert record, "expected normalized failed write execution record"
+        assert_equal true, record.dig("result", "isError")
+        assert_equal true, record["isError"]
+        refute record["result"].key?("changedFiles")
+      end
+    end
+  end
+
+  def test_session_loads_older_files_without_tool_execution_records
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.append_message({ role: "user", content: "hello" })
+      session.append_message({ role: "assistant", content: "reply" })
+
+      _loaded_session, loaded_conversation = store.load(session.path)
+
+      loaded_messages = loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+
+      assert_empty jsonl_records(session.path).select { |record| record["type"] == "tool_execution_end" }
+      assert_equal ["hello", "reply"], loaded_messages.map { |message| message["content"] || message[:content] }
+    end
+  end
+
+  def test_tool_execution_end_record_matches_tauren_session_diff_shape
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      record = {
+        type: "tool_execution_end",
+        timestamp: Time.now.utc.iso8601(3),
+        toolCallId: "call_123",
+        toolName: "edit",
+        args: { path: "src/file.ts", edits: [{ oldText: "old", newText: "new" }] },
+        result: { content: "Edited src/file.ts", isError: false, diff: "--- src/file.ts\n+++ src/file.ts\n", changedFiles: ["src/file.ts"], images: [] },
+        isError: false
+      }
+      store.append_record(session.path, record)
+
+      parsed = jsonl_records(session.path).last
+
+      assert_equal "tool_execution_end", parsed["type"]
+      assert_equal "edit", parsed["toolName"]
+      assert_equal "src/file.ts", parsed.dig("args", "path")
+      assert_equal [{ "oldText" => "old", "newText" => "new" }], parsed.dig("args", "edits")
+      assert_equal false, parsed.dig("result", "isError")
+      assert_equal false, parsed["isError"]
+      assert_equal ["src/file.ts"], parsed.dig("result", "changedFiles")
+    end
+  end
+
 end

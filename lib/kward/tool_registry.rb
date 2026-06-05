@@ -46,6 +46,7 @@ module Kward
         name: name,
         content: content
       )
+      conversation.append_tool_execution(tool_call: tool_call, content: content)
 
       content
     end
