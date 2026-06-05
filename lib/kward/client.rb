@@ -3,6 +3,7 @@ require "net/http"
 require "uri"
 require_relative "cancellation"
 require_relative "config_files"
+require_relative "context_overflow"
 require_relative "image_attachments"
 require_relative "model_info"
 require_relative "openai_oauth"
@@ -27,8 +28,12 @@ module Kward
         super("#{provider} request failed: #{code} #{@body}")
       end
 
+      def context_overflow?
+        ContextOverflow.error?(self)
+      end
+
       def transient?
-        code == 429 || code.between?(500, 599)
+        !context_overflow? && (code == 429 || code.between?(500, 599))
       end
 
       def message_after_attempts(attempts)

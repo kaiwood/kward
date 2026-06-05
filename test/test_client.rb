@@ -227,6 +227,17 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_context_overflow_request_error_is_not_transient
+    error = Kward::Client::RequestError.new(
+      provider: "OpenRouter",
+      code: 429,
+      body: "Your request has too many tokens for the model context window."
+    )
+
+    assert error.context_overflow?
+    refute error.transient?
+  end
+
   def test_openrouter_chat_persists_provider_model_and_usage
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     body = JSON.dump(

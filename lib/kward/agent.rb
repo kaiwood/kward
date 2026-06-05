@@ -1,5 +1,6 @@
 require_relative "cancellation"
 require_relative "compactor"
+require_relative "context_overflow"
 require_relative "conversation"
 require_relative "events"
 require_relative "tool_registry"
@@ -23,10 +24,19 @@ module Kward
     end
 
     def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil)
+      overflow_retried = false
       loop do
         cancellation&.raise_if_cancelled!
-        message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation) do |event|
-          yield event if block_given?
+        begin
+          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation) do |event|
+            yield event if block_given?
+          end
+        rescue StandardError => e
+          raise if cancellation&.cancelled?
+          raise unless !overflow_retried && ContextOverflow.error?(e) && compact_after_context_overflow(e)
+
+          overflow_retried = true
+          next
         end
         yield Events::AssistantMessage.new(message: message) if block_given?
         @conversation.append_assistant(message)
@@ -55,6 +65,18 @@ module Kward
       Compactor.new(conversation: @conversation, client: @client).auto_compact_if_needed(context_window: context_window)
     rescue StandardError => e
       warn "Auto-compaction failed: #{e.message}"
+      nil
+    end
+
+    def compact_after_context_overflow(error)
+      settings = Compaction::Settings.from_config
+      return nil unless settings.enabled
+
+      Compactor.new(conversation: @conversation, client: @client, settings: settings).compact(
+        custom_instructions: "The previous model request exceeded the context window. Preserve the current task state and critical details needed to retry."
+      )
+    rescue Compaction::NothingToCompact, Compaction::AlreadyCompacted, StandardError => compaction_error
+      warn "Context overflow recovery failed: #{compaction_error.message}; original error: #{error.message}"
       nil
     end
 
