@@ -4,6 +4,16 @@ In chat mode, the agent shows a boxed bottom composer. It can inspect the worksp
 
 Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Text file reads and edits are capped at 256 KiB per file to avoid accidentally loading very large files into context.
 
+## Pan mode
+
+Start a minimal LAN web UI with:
+
+```bash
+ruby lib/main.rb --pan-mode --working-directory="/path/to/workspace"
+```
+
+Pan mode serves a single authenticated page with a prompt textarea and transcript. It streams assistant output and tool calls, queues prompts submitted while a turn is running, and saves the conversation as a normal per-workspace session. Configure `pan_mode.username` and `pan_mode.password` first; see [Configuration](configuration.md).
+
 ## Sessions
 
 Interactive chats are saved as per-workspace JSONL sessions under `~/.kward/sessions/`. Type `/exit` or `/quit` to leave.

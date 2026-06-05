@@ -37,6 +37,25 @@ OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set
 
 Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, or the config file values above.
 
+## Pan mode
+
+`--pan-mode` starts a LAN-reachable web UI and requires HTTP Basic Auth. Configure credentials before starting it:
+
+```json
+{
+  "pan_mode": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "username": "kward",
+    "password": "choose-a-private-password"
+  }
+}
+```
+
+`host` defaults to `0.0.0.0` and `port` defaults to `8765`. Kward fails to start pan mode unless `username` and `password` are configured. These credentials are stored in plaintext config, so use a user-specific password and do not share the config file.
+
+Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who has the credentials. Use it only on trusted networks.
+
 ## Web research
 
 Web research works without an API key through Exa's public MCP endpoint. For higher limits or alternate providers, add your own keys using environment variables or config:

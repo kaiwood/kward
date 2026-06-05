@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kward Pan Mode</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 1rem; max-width: 56rem; margin-inline: auto; }
+    header { margin-bottom: 1rem; }
+    h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
+    .meta { color: #666; font-size: .85rem; overflow-wrap: anywhere; }
+    #transcript { border: 1px solid #9995; border-radius: .5rem; min-height: 45vh; max-height: 65vh; overflow-y: auto; padding: .75rem; background: #7771; }
+    .entry { margin: 0 0 .75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .label { font-weight: 700; margin-bottom: .15rem; }
+    .user .label { color: #2f6fca; }
+    .assistant .label { color: #14833b; }
+    .tool .label { color: #9b4ab8; }
+    .reasoning .label { color: #9a6b00; }
+    form { position: sticky; bottom: 0; background: Canvas; padding-top: .75rem; margin-top: .75rem; }
+    textarea { box-sizing: border-box; width: 100%; min-height: 7rem; font: inherit; padding: .65rem; border-radius: .5rem; border: 1px solid #999; }
+    .controls { display: flex; gap: .5rem; align-items: center; margin-top: .5rem; }
+    button { font: inherit; padding: .6rem .9rem; border-radius: .45rem; border: 1px solid #777; }
+    #status { color: #666; font-size: .9rem; }
+    @media (max-width: 600px) {
+      body { padding: .65rem; }
+      #transcript { max-height: 58vh; }
+      .controls { align-items: stretch; flex-direction: column; }
+      button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Kward Pan Mode</h1>
+    <div class="meta">Workspace: <%= ERB::Util.html_escape(@workspace_root) %></div>
+    <div class="meta">Session: <%= ERB::Util.html_escape(@session_path) %></div>
+  </header>
+
+  <main id="transcript" aria-live="polite"></main>
+
+  <form id="prompt-form">
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt" name="prompt" autocomplete="off" placeholder="Give Kward an order..."></textarea>
+    <div class="controls">
+      <button type="submit">Send</button>
+      <span id="status">Connecting…</span>
+    </div>
+  </form>
+
+  <script>
+    const transcript = document.getElementById('transcript');
+    const form = document.getElementById('prompt-form');
+    const promptBox = document.getElementById('prompt');
+    const statusEl = document.getElementById('status');
+    let currentAssistant = null;
+    let currentReasoning = null;
+
+    function entry(role, label, text) {
+      const node = document.createElement('section');
+      node.className = `entry ${role}`;
+      const labelNode = document.createElement('div');
+      labelNode.className = 'label';
+      labelNode.textContent = label;
+      const textNode = document.createElement('div');
+      textNode.className = 'text';
+      textNode.textContent = text || '';
+      node.append(labelNode, textNode);
+      transcript.appendChild(node);
+      transcript.scrollTop = transcript.scrollHeight;
+      return textNode;
+    }
+
+    function setStatus(payload) {
+      const queued = payload && Number(payload.queued || 0);
+      const active = payload && payload.active;
+      statusEl.textContent = active ? `Working${queued ? ` — ${queued} queued` : ''}` : (queued ? `${queued} queued` : 'Ready');
+    }
+
+    function resetStreamBlocks() {
+      currentAssistant = null;
+      currentReasoning = null;
+    }
+
+    fetch('/transcript')
+      .then(response => response.json())
+      .then(data => {
+        (data.transcript || []).forEach(item => entry(item.role || 'system', item.label || item.role || 'Message', item.text || ''));
+      })
+      .catch(error => entry('tool', 'Error', error.message));
+
+    const events = new EventSource('/events');
+    events.addEventListener('ready', event => setStatus(JSON.parse(event.data)));
+    events.addEventListener('queue', event => setStatus(JSON.parse(event.data)));
+    events.addEventListener('turn_started', event => { resetStreamBlocks(); setStatus(JSON.parse(event.data)); });
+    events.addEventListener('turn_finished', event => { resetStreamBlocks(); setStatus(JSON.parse(event.data)); });
+    events.addEventListener('user', event => entry('user', 'You', JSON.parse(event.data).text));
+    events.addEventListener('reasoning_delta', event => {
+      if (!currentReasoning) currentReasoning = entry('reasoning', 'Reasoning', '');
+      currentReasoning.textContent += JSON.parse(event.data).delta;
+      transcript.scrollTop = transcript.scrollHeight;
+    });
+    events.addEventListener('assistant_delta', event => {
+      if (!currentAssistant) currentAssistant = entry('assistant', 'Assistant', '');
+      currentAssistant.textContent += JSON.parse(event.data).delta;
+      transcript.scrollTop = transcript.scrollHeight;
+    });
+    events.addEventListener('tool_call', event => {
+      const data = JSON.parse(event.data);
+      entry('tool', 'Tool', `${data.name} ${JSON.stringify(data.args || {})}`);
+    });
+    events.addEventListener('tool_result', event => {
+      const data = JSON.parse(event.data);
+      entry('tool', 'Tool output', `${data.name}: ${data.content}`);
+    });
+    events.addEventListener('answer', event => {
+      if (!currentAssistant) entry('assistant', 'Assistant', JSON.parse(event.data).content);
+    });
+    events.addEventListener('retry', event => entry('tool', 'Retry', JSON.parse(event.data).message));
+    events.addEventListener('error', event => entry('tool', 'Error', JSON.parse(event.data).message));
+    events.onerror = () => { statusEl.textContent = 'Disconnected'; };
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const prompt = promptBox.value;
+      if (!prompt.trim()) return;
+      promptBox.value = '';
+      try {
+        const response = await fetch('/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+        const data = await response.json();
+        if (!data.ok) entry('tool', 'Error', data.error || 'Prompt was not accepted.');
+        setStatus(data);
+      } catch (error) {
+        entry('tool', 'Error', error.message);
+      }
+    });
+  </script>
+</body>
+</html>

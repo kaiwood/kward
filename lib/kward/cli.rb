@@ -8,6 +8,7 @@ require_relative "config_files"
 require_relative "events"
 require_relative "image_attachments"
 require_relative "openai_oauth"
+require_relative "pan_server"
 require_relative "prompt_commands"
 require_relative "rpc/server"
 require_relative "session_store"
@@ -48,6 +49,11 @@ module Kward
     def run
       if @argv.first == "rpc" && @argv.length == 1
         Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
+        return
+      end
+
+      if pan_mode?
+        PanServer.new(client: @client, working_directory: pan_working_directory).run
         return
       end
 
@@ -175,6 +181,23 @@ module Kward
     end
 
     private
+
+    def pan_mode?
+      @argv.include?("--pan-mode")
+    end
+
+    def pan_working_directory
+      value = option_value("--working-directory")
+      value.to_s.strip.empty? ? Dir.pwd : value
+    end
+
+    def option_value(name)
+      @argv.each_with_index do |argument, index|
+        return argument.split("=", 2).last if argument.start_with?("#{name}=")
+        return @argv[index + 1] if argument == name
+      end
+      nil
+    end
 
     def interactive_session_store(agent)
       return @session_store if @session_store
