@@ -1,4 +1,5 @@
 require_relative "cancellation"
+require_relative "chat_invocation"
 require_relative "compactor"
 require_relative "context_overflow"
 require_relative "conversation"
@@ -96,23 +97,17 @@ module Kward
         on_retry&.call(event)
         yield event if block_given?
       end
-      @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta, on_retry: retry_callback, cancellation: cancellation)
-    rescue ArgumentError => e
-      raise unless e.message.include?("on_reasoning_delta") || e.message.include?("on_assistant_delta") || e.message.include?("on_retry") || e.message.include?("cancellation")
-
-      begin
-        @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta, cancellation: cancellation)
-      rescue ArgumentError => retry_error
-        raise unless retry_error.message.include?("on_reasoning_delta") || retry_error.message.include?("on_assistant_delta") || retry_error.message.include?("cancellation")
-
-        begin
-          @client.chat(@conversation.messages, tools: @tool_registry.schemas, on_reasoning_delta: reasoning_delta, on_assistant_delta: assistant_delta)
-        rescue ArgumentError => final_error
-          raise unless final_error.message.include?("on_reasoning_delta") || final_error.message.include?("on_assistant_delta")
-
-          @client.chat(@conversation.messages, tools: @tool_registry.schemas)
-        end
-      end
+      ChatInvocation.call(
+        @client,
+        @conversation.messages,
+        {
+          tools: @tool_registry.schemas,
+          on_reasoning_delta: reasoning_delta,
+          on_assistant_delta: assistant_delta,
+          on_retry: retry_callback,
+          cancellation: cancellation
+        }
+      )
     end
 
     def safe_answer(content)

@@ -1,6 +1,19 @@
 require_relative "test_helper"
 
 class TestCompactor < KwardTestCase
+  class ArgumentErrorAfterSummaryClient
+    attr_reader :calls
+
+    def initialize
+      @calls = 0
+    end
+
+    def chat(_messages, tools: [], **_kwargs)
+      @calls += 1
+      raise ArgumentError, "unknown keyword: :max_tokens"
+    end
+  end
+
   def test_compaction_uses_ruby_checkpoint_prompt_without_workspace_personality
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
@@ -187,6 +200,20 @@ class TestCompactor < KwardTestCase
     refute_nil result
     assert_operator result.tokens_before, :>, 95
     assert_equal "compactionSummary", conversation.messages.first[:role]
+  end
+
+  def test_summarizer_does_not_retry_argument_errors_from_custom_client
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("old request with enough detail to require compaction")
+    conversation.append_assistant("old reply")
+    conversation.append_user("recent")
+    settings = Kward::Compaction::Settings.new(keep_recent_tokens: 10)
+    client = ArgumentErrorAfterSummaryClient.new
+
+    assert_raises(Kward::Compaction::SummarizationFailed) do
+      Kward::Compactor.new(conversation: conversation, client: client, settings: settings).compact
+    end
+    assert_equal 1, client.calls
   end
 
   def test_summarizer_failure_does_not_mutate_conversation

@@ -34,6 +34,19 @@ class TestAgent < KwardTestCase
     end
   end
 
+  class ArgumentErrorAfterChatClient
+    attr_reader :calls
+
+    def initialize
+      @calls = 0
+    end
+
+    def chat(_messages, tools: [], **_kwargs)
+      @calls += 1
+      raise ArgumentError, "unknown keyword: :on_retry"
+    end
+  end
+
   def test_context_overflow_compacts_and_retries_once
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -56,6 +69,16 @@ class TestAgent < KwardTestCase
         assert_equal ["compactionSummary", "user", "assistant"], conversation.messages.map { |message| message[:role] || message["role"] }
       end
     end
+  end
+
+  def test_agent_does_not_retry_argument_errors_from_custom_client
+    client = ArgumentErrorAfterChatClient.new
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new)
+
+    assert_raises(ArgumentError) do
+      agent.ask("hello")
+    end
+    assert_equal 1, client.calls
   end
 
   def test_agent_allows_claim_after_successful_edit_file

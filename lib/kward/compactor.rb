@@ -1,4 +1,5 @@
 require "json"
+require_relative "chat_invocation"
 require_relative "config_files"
 require_relative "prompts"
 
@@ -820,19 +821,7 @@ module Kward
       private
 
       def chat(messages, max_tokens: nil)
-        message = begin
-          @client.chat(messages, tools: [], max_tokens: max_tokens)
-        rescue ArgumentError => e
-          raise unless e.message.include?("max_tokens") || e.message.include?("unknown keyword")
-
-          begin
-            @client.chat(messages, tools: [])
-          rescue ArgumentError => tools_error
-            raise unless tools_error.message.include?("tools")
-
-            @client.chat(messages)
-          end
-        end
+        message = ChatInvocation.call(@client, messages, { tools: [], max_tokens: max_tokens })
         content = message_content(message)
         text = message_content_text(content).strip
         raise SummarizationFailed, "Compaction produced an empty summary; context was not changed." if text.empty?
