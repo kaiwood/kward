@@ -19,6 +19,7 @@ class TestRPCServer < KwardTestCase
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
     assert_equal true, capabilities["transcript"]["messagesNormalized"]
     assert_equal true, capabilities["transcript"]["supportsCompactionSummaries"]
+    assert_equal true, capabilities["transcript"]["supportsReasoningRestore"]
     assert_equal "explicit", capabilities["sessions"]["mode"]
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
     assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]

@@ -29,6 +29,48 @@ class TestRPCTranscriptNormalizer < KwardTestCase
     end
   end
 
+  def test_session_transcript_restores_reasoning_summary_as_thinking_block
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+
+      rpc_session.conversation.append_assistant({
+        "role" => "assistant",
+        "content" => "Here is the answer.",
+        "reasoning_summary" => "Checked the relevant files."
+      })
+
+      message = manager.transcript(session_id: session[:id])[:messages].first
+
+      assert_equal "assistant", message[:role]
+      assert_equal [
+        { type: "thinking", thinking: "Checked the relevant files." },
+        { type: "text", text: "Here is the answer." }
+      ], message[:content]
+    end
+  end
+
+  def test_assistant_existing_thinking_and_reasoning_content_normalizes_before_text
+    messages = Kward::RPC::TranscriptNormalizer.new([
+      {
+        role: "assistant",
+        reasoning_summary: "ignored because content already has thinking",
+        content: [
+          { type: "text", text: "final text" },
+          { type: "thinking", thinking: "first thought" },
+          { type: "reasoning", text: "second thought" }
+        ]
+      }
+    ]).normalize
+
+    assert_equal [
+      { type: "thinking", thinking: "first thought" },
+      { type: "thinking", thinking: "second thought" },
+      { type: "text", text: "final text" }
+    ], messages.first[:content]
+  end
+
   def test_session_transcript_normalizes_tool_calls_and_results
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

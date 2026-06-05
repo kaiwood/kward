@@ -4,6 +4,7 @@ module Kward
   module RPC
     class TranscriptNormalizer
       IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
+      THINKING_CONTENT_TYPES = ["thinking", "reasoning"].freeze
 
       def initialize(messages)
         @messages = Array(messages)
@@ -55,7 +56,9 @@ module Kward
       end
 
       def normalize_assistant_message(message)
-        content = normalize_content(value(message, :content))
+        content = reasoning_first_content(normalize_content(value(message, :content), preserve_thinking: true))
+        reasoning = normalize_reasoning_summary(message)
+        content.unshift(reasoning) if reasoning && !thinking_content?(content)
         tool_calls(message).each do |tool_call|
           normalized_tool_call = normalize_tool_call(tool_call)
           next unless normalized_tool_call
@@ -102,10 +105,10 @@ module Kward
         }.compact
       end
 
-      def normalize_content(content)
+      def normalize_content(content, preserve_thinking: false)
         case content
         when Array
-          content.filter_map { |part| normalize_content_part(part) }
+          content.filter_map { |part| normalize_content_part(part, preserve_thinking: preserve_thinking) }
         when nil
           []
         else
@@ -113,7 +116,7 @@ module Kward
         end
       end
 
-      def normalize_content_part(part)
+      def normalize_content_part(part, preserve_thinking: false)
         return { type: "text", text: part.to_s } unless part.is_a?(Hash)
 
         type = value(part, :type).to_s
@@ -125,10 +128,39 @@ module Kward
           normalize_image_part(part)
         when "toolCall"
           normalize_existing_tool_call_part(part)
+        when *THINKING_CONTENT_TYPES
+          preserve_thinking ? normalize_thinking_part(part) : normalize_unknown_content_part(part)
         else
-          text = value(part, :text)
-          text.nil? ? nil : { type: "text", text: text.to_s }
+          normalize_unknown_content_part(part)
         end
+      end
+
+      def normalize_unknown_content_part(part)
+        text = value(part, :text)
+        text.nil? ? nil : { type: "text", text: text.to_s }
+      end
+
+      def normalize_thinking_part(part)
+        thinking = value(part, :thinking) || value(part, :reasoning) || value(part, :text)
+        thinking.nil? ? nil : { type: "thinking", thinking: thinking.to_s }
+      end
+
+      def normalize_reasoning_summary(message)
+        summary = value(message, :reasoning_summary) || value(message, :reasoningSummary)
+        summary.to_s.empty? ? nil : { type: "thinking", thinking: summary.to_s }
+      end
+
+      def thinking_content?(content)
+        content.any? { |part| thinking_content_part?(part) }
+      end
+
+      def reasoning_first_content(content)
+        thinking, other = content.partition { |part| thinking_content_part?(part) }
+        thinking.empty? ? content : thinking + other
+      end
+
+      def thinking_content_part?(part)
+        part.is_a?(Hash) && value(part, :type) == "thinking"
       end
 
       def normalize_image_part(part)

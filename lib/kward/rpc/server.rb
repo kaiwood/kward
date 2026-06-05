@@ -225,7 +225,7 @@ module Kward
             supportsToolCalls: true,
             supportsToolResults: true,
             supportsCompactionSummaries: true,
-            supportsReasoningRestore: false
+            supportsReasoningRestore: true
           },
           sessions: {
             mode: "explicit",

@@ -43,7 +43,7 @@ Result fields:
 
 Detailed capability fields include:
 
-- `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and explicit unsupported reasoning restore flags.
+- `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, supported linear-session fork methods, supported compaction, and explicit unsupported import/tree/update features.
 - `turns`: async turn mode, per-session concurrency, unsupported busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
@@ -210,7 +210,7 @@ Closes the RPC session. Empty unnamed session files may be cleaned up.
 
 ### `sessions/transcript`
 
-Returns session metadata and full conversation messages.
+Returns session metadata and full conversation messages. Assistant `reasoning_summary` values and existing `thinking`/`reasoning` content parts are restored as normalized `{ "type": "thinking", "thinking": "..." }` blocks before assistant text; reasoning is not merged into normal text blocks.
 
 ## Turn methods
 
