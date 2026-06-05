@@ -5,12 +5,16 @@ require "timeout"
 module Kward
   class Workspace
     MAX_FILE_BYTES = 256 * 1024
+    MAX_READ_OUTPUT_BYTES = 50 * 1024
+    MAX_READ_OUTPUT_LINES = 2_000
     MAX_COMMAND_OUTPUT_BYTES = 20 * 1024
     DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
 
-    def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES)
+    def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES)
       @root = Pathname.new(root).realpath
       @max_file_bytes = max_file_bytes
+      @max_read_output_bytes = max_read_output_bytes
+      @max_read_output_lines = max_read_output_lines
       @max_command_output_bytes = max_command_output_bytes
     end
 
@@ -27,14 +31,14 @@ module Kward
       "Error: #{e.message}"
     end
 
-    def read_file(path)
+    def read_file(path, offset: nil, limit: nil)
       resolved = workspace_path(path)
       return "Error: not a file: #{path}" unless File.file?(resolved)
 
       size = File.size(resolved)
       return "Error: file too large: #{path} is #{size} bytes; limit is #{@max_file_bytes} bytes" if size > @max_file_bytes
 
-      File.read(resolved)
+      read_file_slice(File.read(resolved), offset: offset, limit: limit)
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end
@@ -144,6 +148,93 @@ module Kward
 
     def relative_path(path)
       Pathname.new(path).relative_path_from(@root).to_s
+    end
+
+    def read_file_slice(content, offset:, limit:)
+      lines = content.split("\n", -1)
+      lines = [""] if lines.empty?
+      start_index = read_start_index(offset)
+      return "Error: offset #{offset} is beyond end of file (#{lines.length} lines total)" if start_index >= lines.length
+
+      user_limit = read_limit(limit)
+      return user_limit if user_limit.is_a?(String)
+
+      selected_end = user_limit ? [start_index + user_limit, lines.length].min : lines.length
+      selected_lines = lines[start_index...selected_end]
+      truncated = truncate_read_lines(selected_lines)
+      return truncated[:error] if truncated[:error]
+
+      output = truncated[:content]
+      if truncated[:truncated]
+        output << read_truncation_notice(
+          start_index: start_index,
+          output_lines: truncated[:line_count],
+          total_lines: lines.length,
+          truncated_by: truncated[:truncated_by]
+        )
+      elsif user_limit && selected_end < lines.length
+        output << "\n\n[#{lines.length - selected_end} more lines in file. Use offset=#{selected_end + 1} to continue.]"
+      end
+
+      output
+    end
+
+    def read_start_index(offset)
+      return 0 if offset.nil?
+
+      [offset.to_i - 1, 0].max
+    end
+
+    def read_limit(limit)
+      return nil if limit.nil?
+
+      value = limit.to_i
+      return "Error: limit must be positive" unless value.positive?
+
+      value
+    end
+
+    def truncate_read_lines(lines)
+      first_line = lines.first.to_s
+      if first_line.bytesize > @max_read_output_bytes
+        return {
+          error: "Error: first line is #{first_line.bytesize} bytes, exceeds #{@max_read_output_bytes} byte read limit. Use run_shell_command with sed/head to inspect smaller chunks."
+        }
+      end
+
+      output_lines = []
+      bytes = 0
+      truncated_by = nil
+      lines.each do |line|
+        if output_lines.length >= @max_read_output_lines
+          truncated_by = "lines"
+          break
+        end
+
+        separator_bytes = output_lines.empty? ? 0 : 1
+        next_bytes = line.bytesize + separator_bytes
+        if bytes + next_bytes > @max_read_output_bytes
+          truncated_by = "bytes"
+          break
+        end
+
+        output_lines << line
+        bytes += next_bytes
+      end
+
+      {
+        content: output_lines.join("\n"),
+        line_count: output_lines.length,
+        truncated: output_lines.length < lines.length,
+        truncated_by: truncated_by
+      }
+    end
+
+    def read_truncation_notice(start_index:, output_lines:, total_lines:, truncated_by:)
+      end_line = start_index + output_lines
+      next_offset = end_line + 1
+      detail = truncated_by == "lines" ? "#{@max_read_output_lines} line limit" : "#{@max_read_output_bytes} byte limit"
+      "\n\n[Showing lines #{start_index + 1}-#{end_line} of #{total_lines} (#{detail}). Use offset=#{next_offset} to continue.]"
     end
 
     def apply_edits(path, content, edits)

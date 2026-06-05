@@ -42,6 +42,14 @@ class TestToolRegistry < KwardTestCase
     assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "web_research", "read_skill", "ask_user_question"], tool_names
   end
 
+  def test_read_file_schema_supports_offset_and_limit
+    read_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "read_file" }
+    properties = read_schema[:function][:parameters][:properties]
+
+    assert_includes properties.keys, :offset
+    assert_includes properties.keys, :limit
+  end
+
   def test_ask_user_question_returns_prompt_answers_as_readable_text
     prompt = FakeQuestionPrompt.new([{ question: "Proceed?", answer: "Yes" }])
     conversation = Kward::Conversation.new
@@ -95,6 +103,19 @@ class TestToolRegistry < KwardTestCase
 
     refute_includes prompt.output, "\nWrite request> #{path} (6 bytes)"
     assert_equal "hello\n", File.read(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_tool_registry_read_file_passes_offset_and_limit
+    path = "kward_offset_read_tool.txt"
+    File.write(path, "one\ntwo\nthree")
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new
+
+    result = registry.dispatch(tool_call("read_file", path: path, offset: 2, limit: 1), conversation)
+
+    assert_equal "two\n\n[1 more lines in file. Use offset=3 to continue.]", result
   ensure
     File.delete(path) if path && File.exist?(path)
   end

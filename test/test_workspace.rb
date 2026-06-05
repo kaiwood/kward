@@ -16,12 +16,60 @@ class TestWorkspace < KwardTestCase
     assert_match(/Error: path outside workspace:/, workspace.edit_file("../Gemfile", [{ "old_text" => "x", "new_text" => "y" }], read_paths: []))
   end
 
-  def test_file_at_size_limit_can_be_read
+  def test_file_at_size_limit_is_accepted_but_read_output_is_capped
     path = "max_size_test_file.tmp"
-    content = "x" * Kward::Workspace::MAX_FILE_BYTES
+    content = "x\n" * (Kward::Workspace::MAX_FILE_BYTES / 2)
     File.write(path, content)
 
-    assert_equal content, Kward::Workspace.new.read_file(path)
+    result = Kward::Workspace.new.read_file(path)
+
+    assert_includes result, "[Showing lines 1-2000 of"
+    assert_operator result.bytesize, :<, Kward::Workspace::MAX_READ_OUTPUT_BYTES
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_read_file_allows_empty_files
+    path = "empty_read.tmp"
+    File.write(path, "")
+
+    assert_equal "", Kward::Workspace.new.read_file(path)
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_read_file_truncates_by_byte_limit_with_offset_hint
+    path = "byte_limited_read.tmp"
+    File.write(path, "alpha\nbeta\ngamma")
+    workspace = Kward::Workspace.new(max_read_output_bytes: 12, max_read_output_lines: 100)
+
+    result = workspace.read_file(path)
+
+    assert_equal "alpha\nbeta\n\n[Showing lines 1-2 of 3 (12 byte limit). Use offset=3 to continue.]", result
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_read_file_supports_offset_and_limit
+    path = "offset_limited_read.tmp"
+    File.write(path, "alpha\nbeta\ngamma")
+    workspace = Kward::Workspace.new(max_read_output_bytes: 100, max_read_output_lines: 100)
+
+    result = workspace.read_file(path, offset: 2, limit: 1)
+
+    assert_equal "beta\n\n[1 more lines in file. Use offset=3 to continue.]", result
+  ensure
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_read_file_truncates_by_line_limit
+    path = "line_limited_read.tmp"
+    File.write(path, "one\ntwo\nthree")
+    workspace = Kward::Workspace.new(max_read_output_bytes: 100, max_read_output_lines: 2)
+
+    result = workspace.read_file(path)
+
+    assert_equal "one\ntwo\n\n[Showing lines 1-2 of 3 (2 line limit). Use offset=3 to continue.]", result
   ensure
     File.delete(path) if path && File.exist?(path)
   end
