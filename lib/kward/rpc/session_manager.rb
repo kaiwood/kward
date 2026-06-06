@@ -49,7 +49,7 @@ module Kward
         store = SessionStore.new(config_dir: @config_dir, cwd: workspace_root)
         session = store.create
         session.rename(name) unless name.to_s.strip.empty?
-        conversation = Conversation.new(workspace_root: workspace_root)
+        conversation = new_conversation(workspace_root: workspace_root)
         session.attach(conversation)
         rpc_session = build_rpc_session(store, session, conversation, workspace_root)
         remember_session(rpc_session)
@@ -357,6 +357,14 @@ module Kward
       end
 
       private
+
+      def new_conversation(workspace_root: Dir.pwd)
+        Conversation.new(
+          workspace_root: workspace_root,
+          model: (@client.current_model if @client.respond_to?(:current_model)),
+          reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+        )
+      end
 
       def compaction_settings
         path = File.join(@config_dir, "config.json")

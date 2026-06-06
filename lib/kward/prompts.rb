@@ -4,16 +4,16 @@ module Kward
   module Prompts
     module_function
 
-    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true)
+    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now)
       {
         role: "system",
-        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality).compact.join("\n\n")
+        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now).compact.join("\n\n")
       }
     end
 
-    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true)
+    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now)
       parts = [base_prompt, config_agents_prompt]
-      parts << workspace_system_prompt(workspace_root) if include_workspace_personality
+      parts << persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now) if include_workspace_personality
       parts << skills_prompt
       parts << workspace_agents_prompt(workspace_root)
       parts
@@ -29,8 +29,8 @@ module Kward
       ConfigFiles.agents_prompt
     end
 
-    def workspace_system_prompt(workspace_root = Dir.pwd)
-      ConfigFiles.workspace_system_prompt(workspace_root)
+    def persona_prompt(workspace_root = Dir.pwd, model: nil, reasoning_effort: nil, now: Time.now)
+      ConfigFiles.persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now)
     end
 
     def workspace_agents_prompt(workspace_root = Dir.pwd)

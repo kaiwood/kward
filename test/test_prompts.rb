@@ -17,7 +17,7 @@ class TestPrompts < KwardTestCase
     end
   end
 
-  def test_workspace_system_prompt_and_agents_prompt_order
+  def test_persona_prompt_and_agents_prompt_order
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
         File.write(File.join(config_dir, "AGENTS.md"), "Config instructions.\n")
@@ -26,8 +26,11 @@ class TestPrompts < KwardTestCase
         File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nSkill body.\n")
         File.write(File.join(workspace, "AGENTS.md"), "Workspace instructions.\n")
         File.write(File.join(config_dir, "config.json"), JSON.dump({
-          "workspaces" => {
-            workspace => { "system_prompt" => "Workspace personality." }
+          "personas" => {
+            "default" => "Default persona.",
+            "workspaces" => {
+              workspace => "Workspace persona."
+            }
           }
         }))
 
@@ -37,7 +40,8 @@ class TestPrompts < KwardTestCase
           assert_order content,
                        "You are Kward",
                        "Config instructions.",
-                       "Workspace personality.",
+                       "Default persona.",
+                       "Workspace persona.",
                        "Available skills:",
                        "Workspace instructions."
         end
@@ -45,14 +49,16 @@ class TestPrompts < KwardTestCase
     end
   end
 
-  def test_different_workspaces_use_different_system_prompts
+  def test_different_workspaces_use_different_personas
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |first_workspace|
         Dir.mktmpdir do |second_workspace|
           File.write(File.join(config_dir, "config.json"), JSON.dump({
-            "workspaces" => {
-              first_workspace => { "system_prompt" => "First personality." },
-              second_workspace => { "system_prompt" => "Second personality." }
+            "personas" => {
+              "workspaces" => {
+                first_workspace => "First persona.",
+                second_workspace => "Second persona."
+              }
             }
           }))
 
@@ -60,38 +66,41 @@ class TestPrompts < KwardTestCase
             first_content = Kward::Conversation.new(workspace_root: first_workspace).messages.first[:content]
             second_content = Kward::Conversation.new(workspace_root: second_workspace).messages.first[:content]
 
-            assert_includes first_content, "First personality."
-            refute_includes first_content, "Second personality."
-            assert_includes second_content, "Second personality."
-            refute_includes second_content, "First personality."
+            assert_includes first_content, "First persona."
+            refute_includes first_content, "Second persona."
+            assert_includes second_content, "Second persona."
+            refute_includes second_content, "First persona."
           end
         end
       end
     end
   end
 
-  def test_missing_workspace_system_prompt_falls_back_without_configuration
+  def test_missing_personas_falls_back_without_configuration
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
-        File.write(File.join(config_dir, "config.json"), JSON.dump({ "workspaces" => {} }))
+        File.write(File.join(config_dir, "config.json"), JSON.dump({}))
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
           content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
 
           assert_includes content, "You are Kward"
           refute_includes content, "personality"
+          refute_includes content, "persona"
         end
       end
     end
   end
 
-  def test_workspace_agents_and_personality_coexist
+  def test_workspace_agents_and_persona_coexist
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
         File.write(File.join(workspace, "AGENTS.md"), "Run focused tests.\n")
         File.write(File.join(config_dir, "config.json"), JSON.dump({
-          "workspaces" => {
-            workspace => { "system_prompt" => "Speak tersely." }
+          "personas" => {
+            "workspaces" => {
+              workspace => "Speak tersely."
+            }
           }
         }))
 
@@ -100,6 +109,96 @@ class TestPrompts < KwardTestCase
 
           assert_includes content, "Speak tersely."
           assert_includes content, "Run focused tests."
+        end
+      end
+    end
+  end
+
+  def test_model_reasoning_time_weekday_and_suffix_personas_append_in_order
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "personas" => {
+            "default" => "Default persona.",
+            "workspaces" => {
+              workspace => "Workspace persona."
+            },
+            "models" => {
+              "gpt-test" => "Model persona."
+            },
+            "persona_modifiers" => {
+              "reasoning" => {
+                "low" => "Low reasoning persona."
+              },
+              "time_of_day" => {
+                "morning" => "Morning persona."
+              },
+              "weekday" => {
+                "sunday" => "Sunday persona."
+              },
+              "unknown" => {
+                "ignored" => "Ignored persona."
+              },
+              "suffix" => "Act like it."
+            }
+          }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Prompts.system_message(
+            workspace_root: workspace,
+            model: "gpt-test",
+            reasoning_effort: "low",
+            now: Time.new(2024, 6, 2, 5, 30, 0)
+          )[:content]
+
+          assert_order content,
+                       "Default persona.",
+                       "Workspace persona.",
+                       "Model persona.",
+                       "Low reasoning persona.",
+                       "Morning persona.",
+                       "Sunday persona.",
+                       "Act like it."
+          refute_includes content, "Ignored persona."
+        end
+      end
+    end
+  end
+
+  def test_time_of_day_buckets
+    config = {
+      "personas" => {
+        "persona_modifiers" => {
+          "time_of_day" => {
+            "morning" => "Morning.",
+            "before_lunch" => "Hungry.",
+            "late_evening" => "Tired."
+          }
+        }
+      }
+    }
+
+    assert_includes Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 5), config: config), "Morning."
+    assert_includes Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 11), config: config), "Hungry."
+    assert_includes Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 21), config: config), "Tired."
+    assert_includes Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 4), config: config), "Tired."
+    assert_nil Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 12), config: config)
+  end
+
+  def test_legacy_workspace_system_prompt_is_ignored
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "workspaces" => {
+            workspace => { "system_prompt" => "Legacy personality." }
+          }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+
+          refute_includes content, "Legacy personality."
         end
       end
     end

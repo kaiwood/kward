@@ -9,36 +9,66 @@ Kward separates repository guidance from workspace-specific agent personality.
 - Config-directory `AGENTS.md`: global coding guidance appended to Kward's built-in system instructions when present.
 - Workspace `AGENTS.md`: repository guidance loaded from the active workspace root when present.
 
-Use `AGENTS.md` for engineering instructions such as coding rules, project conventions, testing requirements, review expectations, and workflow guidance. Avoid putting personality, roleplay, or communication style there; configure those as workspace system prompts instead.
+Use `AGENTS.md` for engineering instructions such as coding rules, project conventions, testing requirements, review expectations, and workflow guidance. Avoid putting personality, roleplay, or communication style there; configure those as personas instead.
 
 Workspace `AGENTS.md` is injected once when a conversation starts. Kward refreshes it only when the file changes or when the agent edits the workspace `AGENTS.md`.
 
-## Workspace system prompts
+## Personas
 
-Workspace-specific system prompts configure personality, role, and communication style without modifying repository files. Add them to `config.json` under `workspaces`, keyed by workspace root:
+Personas configure personality, role, and communication style without modifying repository files. Add them to `config.json` under `personas`:
 
 ```json
 {
-  "workspaces": {
-    "/Users/kwood/Repositories/github.com/kaiwood/kward": {
-      "system_prompt": "Always speak like the Computer on the USS Tauren, a famous Federation exploration vessel."
+  "personas": {
+    "default": "You are an officer on board of the USS Tauren",
+    "workspaces": {
+      "/Users/kwood/Repositories/github.com/kaiwood/tauren": "Always speak like the Computer on the USS Tauren, a famous Federation exploration vessel."
     },
-    "/Users/kwood/Repositories/github.com/kaiwood/tauren": {
-      "system_prompt": "Speak like a highly decorated Klingon officer serving aboard the USS Tauren."
+    "models": {
+      "gpt-5.5": "Speak like a highly decorated Klingon officer serving aboard the USS Tauren."
+    },
+    "persona_modifiers": {
+      "reasoning": {
+        "low": "You have a Patrick Starfish like IQ.",
+        "medium": "You are a competent Starfleet officer.",
+        "high": "You are a highly intelligent strategist.",
+        "xhigh": "You have an Albert Einstein level IQ."
+      },
+      "time_of_day": {
+        "morning": "You are sleepy and in need of coffee.",
+        "before_lunch": "You are hungry and slightly impatient.",
+        "late_evening": "You are tired and occasionally yawn."
+      },
+      "weekday": {
+        "monday": "You have a mild hangover from the weekend.",
+        "saturday": "You are annoyed because you expected shore leave.",
+        "sunday": "You are melancholic about Monday approaching."
+      },
+      "suffix": "Act like it."
     }
   }
 }
 ```
 
+Persona evaluation order is:
+
+1. `personas.default`
+2. Matching `personas.workspaces` entry, using normalized workspace paths
+3. Matching `personas.models` entry for the current model
+4. Matching `persona_modifiers.reasoning` entry for the current reasoning effort
+5. Matching `persona_modifiers.time_of_day` entry for local time: `morning` 05:00-10:59, `before_lunch` 11:00-11:59, `late_evening` 21:00-04:59
+6. Matching `persona_modifiers.weekday` entry for the local weekday
+7. `persona_modifiers.suffix`
+
 Prompt assembly order is:
 
 1. Kward built-in base prompt
 2. Config-directory `AGENTS.md`
-3. Workspace `system_prompt`
+3. Evaluated persona text
 4. Skills listing
 5. Workspace `AGENTS.md`
 
-If a workspace has no configured `system_prompt`, Kward preserves existing behavior and simply omits that part. Conversation compaction uses a neutral prompt without workspace personality, so summaries stay continuation-focused and machine-oriented.
+If no persona entries match, Kward simply omits that part. Conversation compaction uses a neutral prompt without workspace personality, so summaries stay continuation-focused and machine-oriented.
 
 ## Skills
 

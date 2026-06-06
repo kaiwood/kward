@@ -90,7 +90,7 @@ module Kward
       streamed = false
       assistant_streamed = false
       markdown_chunks = []
-      conversation = Conversation.new
+      conversation = new_conversation
       agent = Agent.new(
         client: @client,
         tool_registry: ToolRegistry.new(prompt: @prompt),
@@ -133,14 +133,14 @@ module Kward
       session_store = interactive_session_store(agent)
       if session_store && agent.nil?
         @active_session = track_session(session_store.create)
-        conversation = Conversation.new(workspace_root: session_store.cwd)
+        conversation = new_conversation(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
         agent = build_interactive_agent(conversation)
       elsif session_store
         @active_session = track_session(session_store.create)
         @active_session.attach(agent.conversation)
       else
-        agent ||= build_interactive_agent(Conversation.new)
+        agent ||= build_interactive_agent(new_conversation)
       end
 
       @footer_conversation = agent.conversation
@@ -233,6 +233,10 @@ module Kward
       return if @active_session && File.expand_path(previous_session.path) == File.expand_path(@active_session.path)
 
       previous_session.delete_if_unused if previous_session.respond_to?(:delete_if_unused)
+    end
+
+    def new_conversation(workspace_root: Dir.pwd)
+      Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort)
     end
 
     def build_interactive_agent(conversation)
@@ -444,6 +448,10 @@ module Kward
       @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
     end
 
+    def current_reasoning_effort
+      @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
+    end
+
     def reload_client_config
       @client.reload_config if @client.respond_to?(:reload_config)
     end
@@ -470,7 +478,7 @@ module Kward
       previous_session = @active_session
       @active_session = track_session(session_store.create)
       cleanup_replaced_session(previous_session)
-      conversation = Conversation.new(workspace_root: session_store.cwd)
+      conversation = new_conversation(workspace_root: session_store.cwd)
       @active_session.attach(conversation)
       clear_prompt_transcript
       @prompt.say("\nStarted new session: #{@active_session.path}\n")

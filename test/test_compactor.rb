@@ -14,13 +14,15 @@ class TestCompactor < KwardTestCase
     end
   end
 
-  def test_compaction_uses_ruby_checkpoint_prompt_without_workspace_personality
+  def test_compaction_uses_ruby_checkpoint_prompt_without_workspace_persona
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
         File.write(File.join(workspace, "AGENTS.md"), "Use project rules.\n")
         File.write(File.join(config_dir, "config.json"), JSON.dump({
-          "workspaces" => {
-            workspace => { "system_prompt" => "Speak like a starship computer." }
+          "personas" => {
+            "workspaces" => {
+              workspace => "Speak like a starship computer."
+            }
           }
         }))
 

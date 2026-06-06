@@ -117,17 +117,42 @@ module Kward
       nil
     end
 
-    def workspace_system_prompt(workspace_root, config = read_config)
-      entry = workspace_config(workspace_root, config)
-      return nil unless entry
+    def persona_prompt(workspace_root, model: nil, reasoning_effort: nil, now: Time.now, config: read_config)
+      personas = config["personas"]
+      return nil unless personas.is_a?(Hash)
 
-      prompt = if entry.is_a?(Hash)
-                 entry["system_prompt"] || entry["systemPrompt"]
-               elsif entry.is_a?(String)
-                 entry
-               end
-      prompt = prompt.to_s
-      prompt.empty? ? nil : prompt
+      parts = []
+      add_persona_part(parts, personas["default"])
+
+      workspaces = personas["workspaces"]
+      if workspaces.is_a?(Hash)
+        root = canonical_workspace_root(workspace_root)
+        workspaces.each do |path, prompt|
+          if canonical_workspace_root(path) == root
+            add_persona_part(parts, prompt)
+            break
+          end
+        end
+      end
+
+      models = personas["models"]
+      add_persona_part(parts, models[model.to_s]) if models.is_a?(Hash) && !model.to_s.empty?
+
+      modifiers = personas["persona_modifiers"]
+      if modifiers.is_a?(Hash)
+        reasoning = modifiers["reasoning"]
+        add_persona_part(parts, reasoning[reasoning_effort.to_s]) if reasoning.is_a?(Hash) && !reasoning_effort.to_s.empty?
+
+        time_of_day = modifiers["time_of_day"]
+        add_persona_part(parts, time_of_day[time_of_day_bucket(now)]) if time_of_day.is_a?(Hash)
+
+        weekday = modifiers["weekday"]
+        add_persona_part(parts, weekday[weekday_name(now)]) if weekday.is_a?(Hash)
+
+        add_persona_part(parts, modifiers["suffix"])
+      end
+
+      parts.empty? ? nil : parts.join("\n\n")
     end
 
     def workspace_agents_prompt(workspace_root)
@@ -155,6 +180,24 @@ module Kward
     def canonical_workspace_root(path)
       expanded = File.expand_path(path.to_s.empty? ? Dir.pwd : path.to_s)
       File.directory?(expanded) ? File.realpath(expanded) : expanded
+    end
+
+    def add_persona_part(parts, value)
+      text = presence(value)
+      parts << text if text
+    end
+
+    def time_of_day_bucket(now)
+      hour = now.hour
+      return "morning" if hour >= 5 && hour < 11
+      return "before_lunch" if hour == 11
+      return "late_evening" if hour >= 21 || hour < 5
+
+      nil
+    end
+
+    def weekday_name(now)
+      %w[sunday monday tuesday wednesday thursday friday saturday][now.wday]
     end
 
     def skills

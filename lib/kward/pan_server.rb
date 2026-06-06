@@ -32,7 +32,11 @@ module Kward
 
       @session_store = SessionStore.new(config_dir: config_dir, cwd: @workspace.root.to_s)
       @session = @session_store.create
-      @conversation = Conversation.new(workspace_root: @workspace.root.to_s)
+      @conversation = Conversation.new(
+        workspace_root: @workspace.root.to_s,
+        model: (@client.current_model if @client.respond_to?(:current_model)),
+        reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+      )
       @session.attach(@conversation)
       @agent = Agent.new(
         client: @client,
