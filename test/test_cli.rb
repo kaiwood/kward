@@ -1,6 +1,43 @@
 require_relative "test_helper"
 
 class TestCLI < KwardTestCase
+  class BusyPrompt < FakePrompt
+    attr_reader :events
+
+    def initialize(inputs)
+      super(inputs)
+      @events = []
+    end
+
+    def begin_busy_input(message)
+      @events << [:begin_busy_input, message]
+    end
+
+    def finish_busy_input
+      @events << [:finish_busy_input]
+    end
+
+    def poll_input
+      nil
+    end
+
+    def start_stream_block(label)
+      @events << [:start_stream_block, label]
+    end
+
+    def write_delta(delta)
+      @output << delta
+    end
+
+    def finish_stream_block
+      @events << [:finish_stream_block]
+    end
+
+    def close
+      @events << [:close]
+    end
+  end
+
   def test_one_shot_renders_markdown_without_streaming
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "# Plan\nRun `bundle test`.\n" }]))
     cli.instance_variable_set(:@color_enabled, true)
@@ -644,6 +681,29 @@ class TestCLI < KwardTestCase
       assert_includes output, "Crew>"
       assert_includes output, "Default identity"
       assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+    end
+  end
+
+  def test_crew_slash_command_keeps_busy_composer_visible_while_running
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("personas" => { "default" => "Default persona." }))
+      prompt = BusyPrompt.new(["/crew", "/exit"])
+      client = FakeClient.new([
+        { "role" => "assistant", "content" => "Default identity" },
+        { "role" => "assistant", "content" => "## Crew\n- Default identity" }
+      ])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal [:begin_busy_input, "You>"], prompt.events.first
+      assert_includes prompt.events, [:start_stream_block, "Crew"]
+      assert_includes prompt.events, [:finish_busy_input]
+      assert_operator prompt.events.index([:finish_busy_input]), :<, prompt.events.index([:close])
     end
   end
 

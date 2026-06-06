@@ -319,14 +319,47 @@ module Kward
     end
 
     def report_crew(argument = nil)
+      if prompt_interface?
+        queued_inputs = run_busy_local_command { render_crew_report(argument) }
+        queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+      else
+        render_crew_report(argument)
+      end
+    rescue StandardError => e
+      @prompt.say("\nCrew command failed: #{e.message}\n")
+    end
+
+    def render_crew_report(argument = nil)
       result = crew_report(argument)
       if result.success?
         render_transcript_block("Crew", result.summary)
       else
         @prompt.say("\n#{result.message}\n")
       end
-    rescue StandardError => e
-      @prompt.say("\nCrew command failed: #{e.message}\n")
+    end
+
+    def run_busy_local_command
+      queued_inputs = []
+      error = nil
+      @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+
+      worker = Thread.new do
+        yield
+      rescue StandardError => e
+        error = e
+      end
+
+      while worker.alive?
+        collect_queued_input(queued_inputs)
+        sleep 0.02
+      end
+      worker.join
+      drain_queued_input(queued_inputs)
+      raise error if error
+
+      queued_inputs
+    ensure
+      @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
     end
 
     def crew_report(argument = nil)
