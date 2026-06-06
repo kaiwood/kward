@@ -32,38 +32,76 @@ class TestCrewReporter < KwardTestCase
     end
   end
 
-  def test_report_queries_active_non_reasoning_personas_as_system_context_and_summarizes
+  def test_report_queries_crew_personas_without_modifiers_and_formats_table
     Dir.mktmpdir do |workspace|
       config = {
         "personas" => {
           "default" => "Default persona.",
           "workspaces" => { workspace => "Workspace persona." },
-          "models" => { "gpt-main" => "Model persona." },
+          "models" => {
+            "gpt-alt" => "Alternate model persona.",
+            "gpt-main" => "Model persona."
+          },
           "persona_modifiers" => {
             "reasoning" => { "high" => "Reasoning persona should be ignored." },
-            "suffix" => "Suffix persona."
+            "time_of_day" => { "morning" => "Time persona should be ignored." },
+            "weekday" => { "saturday" => "Weekday persona should be ignored." },
+            "suffix" => "Suffix persona should be ignored."
           }
         }
       }
-      client = CrewClient.new(["default identity", "workspace identity", "model identity", "suffix identity", "## Crew\n- Report"])
+      client = CrewClient.new(["default identity", "workspace identity", "alt identity", "model identity"])
 
       report = Kward::CrewReporter.new(
         client: client,
         workspace_root: workspace,
         model: "gpt-main",
         reasoning_effort: "high",
-        config: config
+        config: config,
+        now: Time.new(2024, 6, 1, 8, 0, 0)
       ).report
 
       assert report.success?
-      assert_equal "## Crew\n- Report", report.summary
-      assert_equal 5, client.calls.length
-      assert_equal ["Default persona.", "Workspace persona.", "Model persona.", "Suffix persona."], client.calls[0, 4].map { |call| call[:messages].first[:content] }
-      refute client.calls[0, 4].any? { |call| call[:messages].first[:content].include?("Reasoning persona") }
-      assert_equal [false, false, false, false, false], client.calls.map { |call| call[:reasoning] }
-      assert_equal ["gpt-main", "gpt-main", "gpt-main", "gpt-main", "gpt-main"], client.calls.map { |call| call[:model] }
-      assert_includes client.calls.last[:messages].last[:content], "default identity"
+      assert_includes report.summary, "Crew Summary"
+      assert_equal 4, client.calls.length
+      queried_prompts = client.calls[0, 4].map { |call| call[:messages].first[:content] }
+      assert_equal ["Default persona.", "Workspace persona.", "Alternate model persona.", "Model persona."], queried_prompts
+      refute queried_prompts.any? { |prompt| prompt.include?("should be ignored") }
+      assert_equal [false, false, false, false], client.calls.map { |call| call[:reasoning] }
+      assert_equal ["gpt-main", "gpt-main", "gpt-alt", "gpt-main"], client.calls.map { |call| call[:model] }
+      assert_includes report.summary, "| Persona"
+      assert_includes report.summary, "| Model"
+      assert_includes report.summary, "| Identity"
+      assert_includes report.summary, "| default"
+      refute_includes report.summary, "default [model:"
+      assert_includes report.summary, "| workspace (#{workspace})"
+      assert_includes report.summary, "| model (gpt-alt)"
+      assert_includes report.summary, "| model (gpt-main)"
     end
+  end
+
+  def test_summary_uses_aligned_table
+    config = {
+      "personas" => {
+        "default" => "Default persona.",
+        "models" => { "gpt-alt" => "Alternate model persona." }
+      }
+    }
+    client = CrewClient.new(["default identity", "alternate identity"])
+
+    report = Kward::CrewReporter.new(
+      client: client,
+      workspace_root: Dir.pwd,
+      model: "gpt-main",
+      reasoning_effort: "medium",
+      config: config
+    ).report
+
+    assert report.success?
+    assert_includes report.summary, "| Persona         | Model   | Identity           |"
+    assert_includes report.summary, "| --------------- | ------- | ------------------ |"
+    assert_includes report.summary, "| default         |         | default identity   |"
+    assert_includes report.summary, "| model (gpt-alt) | gpt-alt | alternate identity |"
   end
 
   def test_model_persona_uses_its_associated_model

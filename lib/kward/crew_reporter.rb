@@ -31,9 +31,7 @@ module Kward
       return Report.new(status: :empty, message: "No active personas found.", personas: []) if entries.empty?
 
       personas = entries.map { |entry| ask_persona(entry) }
-      summary = summarize_personas(personas, instructions: instructions)
-      summary = fallback_summary(personas) if summary.to_s.strip.empty?
-      Report.new(status: :ok, summary: summary, personas: personas)
+      Report.new(status: :ok, summary: crew_summary(personas), personas: personas)
     end
 
     private
@@ -43,14 +41,41 @@ module Kward
     end
 
     def active_persona_entries
-      ConfigFiles.persona_entries(
-        workspace_root: @workspace_root,
-        model: @model,
-        reasoning_effort: @reasoning_effort,
-        now: @now,
-        config: @config,
-        include_reasoning: false
-      )
+      personas = @config["personas"]
+      return [] unless personas.is_a?(Hash)
+
+      entries = []
+      add_crew_persona_entry(entries, "default", personas["default"])
+      add_workspace_persona_entry(entries, personas["workspaces"])
+      add_model_persona_entries(entries, personas["models"])
+      entries
+    end
+
+    def add_workspace_persona_entry(entries, workspaces)
+      return unless workspaces.is_a?(Hash)
+
+      root = ConfigFiles.canonical_workspace_root(@workspace_root)
+      workspaces.each do |path, prompt|
+        next unless ConfigFiles.canonical_workspace_root(path) == root
+
+        add_crew_persona_entry(entries, "workspace", prompt, name: path)
+        break
+      end
+    end
+
+    def add_model_persona_entries(entries, models)
+      return unless models.is_a?(Hash)
+
+      models.keys.sort.each do |model|
+        add_crew_persona_entry(entries, "model", models[model], name: model)
+      end
+    end
+
+    def add_crew_persona_entry(entries, layer, value, name: nil)
+      text = value.to_s.strip
+      return if text.empty?
+
+      entries << { layer: layer.to_s, name: name.to_s, prompt: text }
     end
 
     def ask_persona(entry)
@@ -66,36 +91,7 @@ module Kward
       persona_result(entry, status: :failed, error: e.message)
     end
 
-    def summarize_personas(personas, instructions: "")
-      response = chat_without_reasoning(
-        [
-          { role: "system", content: summary_system_prompt(instructions) },
-          { role: "user", content: summary_user_prompt(personas) }
-        ],
-        model: @model
-      )
-      response.fetch("content", "")
-    end
-
-    def summary_system_prompt(instructions)
-      prompt = "You are a concise assistant. Summarize persona identities in a compact Markdown crew report. Do not include reasoning."
-      extra = instructions.to_s.strip
-      extra.empty? ? prompt : "#{prompt} Additional instruction: #{extra}"
-    end
-
-    def summary_user_prompt(personas)
-      lines = personas.map do |persona|
-        label = persona_label(persona)
-        if persona[:status] == :ok
-          "- #{label}: #{persona[:summary].to_s.strip}"
-        else
-          "- #{label}: ERROR: #{persona[:error]}"
-        end
-      end
-      ["These are the active persona identity results:", "", lines.join("\n")].join("\n")
-    end
-
-    def fallback_summary(personas)
+    def crew_summary(personas)
       lines = ["Crew Summary", "", "Active personas queried: #{personas.length}", ""]
       successful = personas.select { |persona| persona[:status] == :ok }
       failed = personas.select { |persona| persona[:status] == :failed }
@@ -104,19 +100,34 @@ module Kward
         lines << "No personas responded successfully."
       else
         lines << "## Confirmed identities"
-        successful.each do |persona|
-          summary = persona[:summary].to_s.strip
-          lines << "- #{persona_label(persona)}: #{summary.empty? ? "(no response)" : summary}"
-        end
+        lines.concat(persona_table(successful) { |persona| persona[:summary].to_s.strip.empty? ? "(no response)" : persona[:summary].to_s.strip })
       end
 
       if failed.any?
         lines << ""
         lines << "## Errors"
-        failed.each { |persona| lines << "- #{persona_label(persona)}: #{persona[:error]}" }
+        lines.concat(persona_table(failed) { |persona| persona[:error].to_s })
       end
 
       lines.join("\n")
+    end
+
+    def persona_table(personas)
+      rows = personas.map do |persona|
+        [persona_label(persona), persona_model_value(persona), yield(persona)]
+      end
+      headers = ["Persona", "Model", "Identity"]
+      widths = headers.each_with_index.map do |header, index|
+        ([header.length] + rows.map { |row| row[index].length }).max
+      end
+      table = [format_table_row(headers, widths), format_table_row(widths.map { |width| "-" * width }, widths)]
+      table.concat(rows.map { |row| format_table_row(row, widths) })
+      table
+    end
+
+    def format_table_row(cells, widths)
+      padded = cells.each_with_index.map { |cell, index| cell.ljust(widths[index]) }
+      "| #{padded.join(" | ")} |"
     end
 
     def persona_result(entry, status:, summary: nil, error: nil)
@@ -134,6 +145,17 @@ module Kward
     def persona_label(persona)
       name = persona[:name].to_s.strip
       name.empty? ? persona[:layer].to_s : "#{persona[:layer]} (#{name})"
+    end
+
+    def persona_model_label(persona)
+      model = persona_model_value(persona)
+      model.empty? ? "" : " [model: #{model}]"
+    end
+
+    def persona_model_value(persona)
+      return "" if persona[:layer].to_s == "default"
+
+      persona[:model].to_s
     end
 
     def model_for_entry(entry)
