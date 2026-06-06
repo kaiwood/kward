@@ -286,6 +286,19 @@ module Kward
       end
     end
 
+    def print_visual_banner
+      @mutex.synchronize do
+        prepare_transcript_output_locked
+        banner_rows(screen_width).each do |row|
+          write_visual_transcript_text_locked(row)
+          write_visual_transcript_text_locked("\n")
+        end
+        @stream_block = nil
+        restore_composer_cursor_locked
+        @output_io.flush
+      end
+    end
+
     def start_stream_block(label)
       @mutex.synchronize do
         if @stream_block != label
@@ -344,6 +357,10 @@ module Kward
 
     def write_transcript_text_locked(text)
       append_transcript_buffer(text.to_s)
+      write_visual_transcript_text_locked(text)
+    end
+
+    def write_visual_transcript_text_locked(text)
       output_text = terminal_newlines(text.to_s)
       advance_pending_stream_wrap_locked(output_text)
       @output_io.print(output_text)
@@ -1425,26 +1442,24 @@ module Kward
       max_input_rows = max_visible_input_rows
       visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
       visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
-      banner_rows = banner_rows(width)
       overlay_rows = active_overlay_rows(width)
-      rows = banner_rows + overlay_rows + [top_border(width)]
+      rows = overlay_rows + [top_border(width)]
       rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
       footer = footer_row(content_width)
       rows << footer if footer
       rows << bottom_border(width)
-      cursor_row = banner_rows.length + overlay_rows.length + 1 + input_cursor_row - visible_start
+      cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
       [rows, cursor_row, cursor_col]
     end
 
     def question_composer_layout(width)
       content_width = [width - 4, 1].max
-      banner_rows = banner_rows(width)
       overlay_rows = active_overlay_rows(width)
-      rows = banner_rows + overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
-      return [rows, banner_rows.length + question_custom_cursor_row, question_custom_cursor_col(width)] if selected_question_choice&.fetch(:custom, false)
+      rows = overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
+      return [rows, question_custom_cursor_row, question_custom_cursor_col(width)] if selected_question_choice&.fetch(:custom, false)
 
-      [rows, banner_rows.length + overlay_rows.length + 1, 2]
+      [rows, overlay_rows.length + 1, 2]
     end
 
     def active_overlay_rows(width)
@@ -1799,10 +1814,9 @@ module Kward
     end
 
     def max_visible_input_rows
-      banner_count = banner_rows(screen_width).length
       overlay_count = active_overlay_rows(screen_width).length
       footer_count = footer_text.to_s.empty? ? 0 : 1
-      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - banner_count - overlay_count - footer_count].min, 1].max
+      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - overlay_count - footer_count].min, 1].max
     end
 
     def composer_top_row

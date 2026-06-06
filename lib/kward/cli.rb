@@ -147,6 +147,7 @@ module Kward
 
       @footer_conversation = agent.conversation
 
+      print_visual_banner
       @prompt.say(colored("Ruby CLI Agent", :cyan, :bold))
       @prompt.say("Session: #{@active_session.path}") if @active_session
       help = "Ask a question and press Enter. Type /exit to quit. Use /redraw to refresh."
@@ -554,6 +555,7 @@ module Kward
       conversation = new_conversation(workspace_root: session_store.cwd)
       @active_session.attach(conversation)
       clear_prompt_transcript
+      print_visual_banner
       @prompt.say("\nStarted new session: #{@active_session.path}\n")
       build_interactive_agent(conversation)
     end
@@ -920,6 +922,10 @@ module Kward
 
     def prompt_interface?
       @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
+    end
+
+    def print_visual_banner
+      @prompt.print_visual_banner if @prompt.respond_to?(:print_visual_banner)
     end
 
     def prompt_templates

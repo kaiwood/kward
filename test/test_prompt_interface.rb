@@ -118,7 +118,7 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "│ custom footer"
   end
 
-  def test_prompt_interface_renders_banner_message_without_inline_image_escape
+  def test_prompt_interface_start_does_not_render_banner_in_fixed_composer
     output = StringIO.new
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
@@ -130,9 +130,48 @@ class TestPromptInterface < KwardTestCase
     prompt.start
 
     rendered = strip_ansi(output.string)
+    refute_includes rendered, "State your business."
+    refute_includes output.string, "\e[48;2;"
+    refute_includes output.string, "\e_G"
+    refute_includes output.string, "\e]1337;File="
+  end
+
+  def test_prompt_interface_prints_visual_banner_message_without_inline_image_escape
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+    prompt.print_visual_banner
+
+    rendered = strip_ansi(output.string)
     assert_includes rendered, "State your business."
     refute_includes output.string, "\e_G"
     refute_includes output.string, "\e]1337;File="
+  end
+
+  def test_prompt_interface_visual_banner_is_not_replayed_on_redraw
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+    prompt.print_visual_banner
+    output.truncate(0)
+    output.rewind
+
+    prompt.redraw
+
+    refute_includes strip_ansi(output.string), "State your business."
+    refute_includes output.string, "\e[48;2;"
   end
 
   def test_prompt_interface_renders_banner_from_pixel_data_without_decoding_png
@@ -147,6 +186,7 @@ class TestPromptInterface < KwardTestCase
     )
 
     prompt.start
+    prompt.print_visual_banner
 
     assert_includes output.string, "\e[48;2;"
     assert_includes output.string, "\e[38;2;"
@@ -157,7 +197,7 @@ class TestPromptInterface < KwardTestCase
     Kward::PixelLogo.define_singleton_method(:indexed_png_pixels, original_decoder) if original_decoder
   end
 
-  def test_prompt_interface_renders_centered_banner_as_half_block_pixels_at_full_size
+  def test_prompt_interface_renders_centered_visual_banner_as_half_block_pixels_at_full_size
     output = StringIO.new
     original_width = TTY::Screen.method(:width)
     original_height = TTY::Screen.method(:height)
@@ -171,6 +211,7 @@ class TestPromptInterface < KwardTestCase
     )
 
     prompt.start
+    prompt.print_visual_banner
 
     color_index = output.string.index("\e[48;2;")
     assert color_index
@@ -188,7 +229,7 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
-  def test_prompt_interface_scales_banner_down_on_short_terminals
+  def test_prompt_interface_scales_visual_banner_down_on_short_terminals
     output = StringIO.new
     original_width = TTY::Screen.method(:width)
     original_height = TTY::Screen.method(:height)
@@ -202,6 +243,7 @@ class TestPromptInterface < KwardTestCase
     )
 
     prompt.start
+    prompt.print_visual_banner
 
     color_index = output.string.index("\e[48;2;")
     assert color_index

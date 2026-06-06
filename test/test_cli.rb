@@ -1,6 +1,20 @@
 require_relative "test_helper"
 
 class TestCLI < KwardTestCase
+  class BannerPrompt < FakePrompt
+    attr_reader :banner_count
+
+    def initialize(inputs)
+      super(inputs)
+      @banner_count = 0
+    end
+
+    def print_visual_banner
+      @banner_count += 1
+      @output << "[visual banner]"
+    end
+  end
+
   class BusyPrompt < FakePrompt
     attr_reader :events
 
@@ -136,6 +150,23 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_mode_prints_visual_banner_once_without_persisting_it
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = BannerPrompt.new(["hello", "/exit"])
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal 1, prompt.banner_count
+      assert_includes prompt.output, "[visual banner]"
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 1, files.length
+      refute_includes File.read(files.first), "visual banner"
+    end
+  end
+
   def test_unused_session_removed_on_exit
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
@@ -254,7 +285,7 @@ class TestCLI < KwardTestCase
       saved.attach(conversation)
       conversation.append_user("hello")
       conversation.append_assistant("reply")
-      prompt = FakePrompt.new(["/resume #{saved.path}", "again", "/exit"])
+      prompt = BannerPrompt.new(["/resume #{saved.path}", "again", "/exit"])
       client = RecordingClient.new(["second"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
@@ -263,6 +294,7 @@ class TestCLI < KwardTestCase
       assert_equal "hello", client.seen_messages[0][1]["content"]
       assert_equal "reply", client.seen_messages[0][2]["content"]
       assert_equal "again", client.seen_messages[0][3][:content]
+      assert_equal 1, prompt.banner_count
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
       assert_includes output, "Assistant>\nreply"
