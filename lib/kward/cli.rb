@@ -349,6 +349,7 @@ module Kward
       ConfigFiles.update_config(ModelInfo.config_key_for_provider(provider) => model)
       reload_client_config
       @prompt.say("\nSaved default model: #{provider} #{model}\n")
+      @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
       @prompt.say("\nModel error: #{e.message}\n")
     end
@@ -369,6 +370,7 @@ module Kward
       ConfigFiles.update_config("openai_reasoning_effort" => effort)
       reload_client_config
       @prompt.say("\nSaved reasoning effort: #{effort}\n")
+      @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
       @prompt.say("\nReasoning error: #{e.message}\n")
     end
@@ -810,7 +812,12 @@ module Kward
       prompt_interface = load_prompt_interface
       return unless prompt_interface
 
-      @prompt = prompt_interface.new(slash_commands: slash_command_entries, overlay_settings: ConfigFiles.overlay_settings, footer: prompt_footer_renderer)
+      @prompt = prompt_interface.new(
+        slash_commands: slash_command_entries,
+        overlay_settings: ConfigFiles.overlay_settings,
+        footer: prompt_footer_renderer,
+        composer_status: method(:composer_status_text)
+      )
       @prompt.start
     end
 
@@ -895,6 +902,14 @@ module Kward
         warn "Warning: Kward plugin footer error: #{e.message}"
         ""
       end
+    end
+
+    def composer_status_text
+      provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
+      model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
+      reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
+      reasoning = "n/a" if provider != "Codex" || reasoning.to_s.empty?
+      "#{provider} #{model} · #{reasoning}"
     end
 
     def current_footer_conversation

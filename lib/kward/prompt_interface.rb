@@ -25,7 +25,7 @@ module Kward
     EXIT_INPUT = :exit_input
     SELECT_CANCEL = :select_cancel
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -62,6 +62,7 @@ module Kward
       @cursor_visible = true
       @overlay_settings = normalize_overlay_settings(overlay_settings)
       @footer = footer
+      @composer_status = composer_status
     end
 
     def start
@@ -1668,6 +1669,11 @@ module Kward
 
     def top_border(width)
       title = composer_title
+      status = composer_status_text
+      if status
+        gap = width - 2 - ANSI.strip(title).length - ANSI.strip(status).length
+        title = title + (" " * gap) + status if gap >= 0
+      end
       plain_title = ANSI.strip(title)
       "#{colored("╭", :blue)}#{title}#{colored("─" * [width - plain_title.length - 2, 0].max, :blue)}#{colored("╮", :blue)}"
     end
@@ -1675,12 +1681,23 @@ module Kward
     def composer_title
       label = @prompt_label.delete_suffix(">")
       if @busy && @queued_count.positive?
-        " #{label} · #{@queued_count} queued "
+        status_composer_text("#{label} · #{@queued_count} queued")
       elsif @busy
-        " #{label} · #{spinner_frame} streaming "
+        status_composer_text("#{label} · #{spinner_frame} streaming")
       else
-        " #{label} "
+        status_composer_text(label)
       end
+    end
+
+    def composer_status_text
+      text = @composer_status&.call.to_s
+      return nil if text.empty?
+
+      status_composer_text(text)
+    end
+
+    def status_composer_text(text)
+      " #{text} "
     end
 
     def bottom_border(width)

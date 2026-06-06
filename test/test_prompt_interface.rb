@@ -10,6 +10,75 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "You> "
   end
 
+  def test_prompt_interface_top_border_displays_model_and_reasoning
+    output = StringIO.new
+    status = lambda { "Codex gpt-5.5 · medium" }
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      composer_status: status
+    )
+
+    prompt.start
+
+    assert_includes strip_ansi(output.string), "╭ You"
+    assert_includes strip_ansi(output.string), " Codex gpt-5.5 · medium ╮"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_top_border_symmetry_uses_single_space_padding
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, composer_status: -> { "Codex gpt-5.5 · medium" })
+    line = strip_ansi(prompt.send(:top_border, 80))
+
+    assert_equal "╭ You                                                   Codex gpt-5.5 · medium ╮", line
+  end
+
+  def test_prompt_interface_top_border_renders_status_at_minimum_exact_width
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, composer_status: -> { "Codex gpt-5.5 · medium" })
+    line = strip_ansi(prompt.send(:top_border, 40))
+
+    assert_equal "╭ You           Codex gpt-5.5 · medium ╮", line
+  end
+
+  def test_prompt_interface_top_border_hides_status_when_no_room
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      composer_status: -> { "Codex gpt-5.5 · medium" }
+    )
+
+    line = strip_ansi(prompt.send(:top_border, 20))
+
+    assert_equal "╭ You ─────────────╮", line
+  end
+
+  def test_prompt_interface_compact_composer_does_not_show_status
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      composer_status: -> { "Codex gpt-5.5 · medium" }
+    )
+    original_height = TTY::Screen.method(:height)
+    original_width = TTY::Screen.method(:width)
+    TTY::Screen.define_singleton_method(:height) { 3 }
+    TTY::Screen.define_singleton_method(:width) { 80 }
+
+    rows, = prompt.send(:composer_layout, 80)
+
+    assert_equal 1, rows.length
+    assert_includes rows.first, "You>"
+    refute_includes rows.first, "Codex gpt-5.5"
+  ensure
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+  end
+
   def test_prompt_interface_renders_boxed_composer_and_scroll_region
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
