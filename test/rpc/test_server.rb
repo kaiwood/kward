@@ -67,8 +67,8 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["auth"]["methods"], "auth/logoutProvider"
     assert_includes capabilities["auth"]["methods"], "auth/loginWithOAuth"
     assert_equal true, capabilities["commands"]["supported"]
-    assert_equal ["prompt", "skill", "plugin"], capabilities["commands"]["sources"]
-    assert_equal ["plugin"], capabilities["commands"]["executableSources"]
+    assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
+    assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
     assert_equal "commands/run", capabilities["commands"]["runMethod"]
     assert_equal true, capabilities["startupResources"]["supported"]
     assert_equal({
@@ -215,6 +215,9 @@ class TestRPCServer < KwardTestCase
           assert_equal "skill:testing-verification", skill[:name]
           assert_equal "Testing and verification guidance", skill[:description]
           assert_equal File.join(skill_dir, "SKILL.md"), skill[:path]
+          builtin = commands.find { |command| command[:source] == "builtin" }
+          assert_equal "crew", builtin[:name]
+          assert_equal true, builtin[:executable]
           plugin = commands.find { |command| command[:source] == "plugin" }
           assert_equal "hello", plugin[:name]
           assert_equal "Say hello", plugin[:description]
@@ -232,6 +235,29 @@ class TestRPCServer < KwardTestCase
           assert_equal ["/review"], sections.find { |section| section[:name] == "Prompts" }[:items]
           assert_equal ["/hello"], sections.find { |section| section[:name] == "Plugins" }[:items]
         end
+      end
+    end
+  end
+
+  def test_commands_run_executes_builtin_crew_command
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("personas" => { "default" => "Default persona." }))
+      client = FakeClient.new([
+        { "role" => "assistant", "content" => "Default identity" },
+        { "role" => "assistant", "content" => "## Crew\n- Default identity" }
+      ])
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: client)
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+        result = server.send(:commands_run, "sessionId" => session[:id], "name" => "crew")
+
+        assert_equal "crew", result[:command]
+        assert_equal "ok", result[:status]
+        assert_includes result[:result], "Default identity"
+        assert_equal [result[:result]], result[:output]
+        assert_equal 1, result[:personas].length
       end
     end
   end

@@ -5,6 +5,7 @@ require_relative "ansi"
 require_relative "client"
 require_relative "compactor"
 require_relative "config_files"
+require_relative "crew_reporter"
 require_relative "events"
 require_relative "image_attachments"
 require_relative "model_info"
@@ -37,7 +38,8 @@ module Kward
       { name: "model", description: "Select the default model.", argument_hint: "" },
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
-      { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" }
+      { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
+      { name: "crew", description: "Query all active personas and summarize the crew.", argument_hint: "" }
     ].freeze
     BUILTIN_SLASH_COMMAND_NAMES = BUILTIN_SLASH_COMMANDS.map { |command| command[:name] }.freeze
 
@@ -257,6 +259,9 @@ module Kward
       when "stats"
         print_stats(argument)
         [true, nil]
+      when "crew"
+        report_crew(argument)
+        [true, nil]
       when "redraw"
         @prompt.redraw if @prompt.respond_to?(:redraw)
         [true, nil]
@@ -311,6 +316,32 @@ module Kward
     rescue ArgumentError => e
       message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
       @prompt.say("\n#{message}\n")
+    end
+
+    def report_crew(argument = nil)
+      result = crew_report(argument)
+      if result.success?
+        render_transcript_block("Crew", result.summary)
+      else
+        @prompt.say("\n#{result.message}\n")
+      end
+    rescue StandardError => e
+      @prompt.say("\nCrew command failed: #{e.message}\n")
+    end
+
+    def crew_report(argument = nil)
+      CrewReporter.new(
+        client: @client,
+        workspace_root: current_workspace_root,
+        model: current_model_id,
+        reasoning_effort: current_reasoning_effort
+      ).report(instructions: argument.to_s)
+    end
+
+    def current_workspace_root
+      return @active_session.cwd.to_s unless @active_session&.cwd.to_s.empty?
+
+      Dir.pwd
     end
 
     def configure_settings

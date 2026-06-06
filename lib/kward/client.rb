@@ -71,13 +71,13 @@ module Kward
       @telemetry_logger = telemetry_logger
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, max_tokens: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, max_tokens: nil, model: nil, reasoning: nil)
       cancellation&.raise_if_cancelled!
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
 
-      current_model = model_for(provider)
-      request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens) : request_payload(provider, messages, tools, max_tokens: max_tokens))
+      current_model = model_for(provider, override_model: model)
+      request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning) : request_payload(provider, messages, tools, max_tokens: max_tokens, model: model))
       with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         request_started_at = @telemetry_logger.monotonic_now
         message = nil
@@ -483,8 +483,8 @@ module Kward
       end
     end
 
-    def request_payload(provider, messages, tools, max_tokens: nil)
-      parts = build_context_parts(provider, messages, tools)
+    def request_payload(provider, messages, tools, max_tokens: nil, model: nil)
+      parts = build_context_parts(provider, messages, tools, model: model)
       payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
       payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
@@ -538,8 +538,8 @@ module Kward
       end
     end
 
-    def codex_payload(messages, tools, max_tokens: nil)
-      parts = build_context_parts("Codex", messages, tools)
+    def codex_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
+      parts = build_context_parts("Codex", messages, tools, model: model)
       payload = {
         model: parts[:model],
         instructions: parts[:instructions],
@@ -549,19 +549,19 @@ module Kward
         parallel_tool_calls: false,
         stream: true,
         store: false,
-        include: [],
-        reasoning: { effort: reasoning_effort, summary: "auto" }
+        include: []
       }
+      payload[:reasoning] = { effort: reasoning_effort, summary: "auto" } unless reasoning == false
       payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end
 
-    def build_context_parts(provider, messages, tools)
+    def build_context_parts(provider, messages, tools, model: nil)
       if provider == "Codex"
         instructions, input = codex_messages(messages)
         {
           provider: provider,
-          model: model_for(provider),
+          model: model_for(provider, override_model: model),
           instructions: instructions.empty? ? "You are a helpful assistant." : instructions,
           input: input,
           tools: tools.map { |tool| codex_tool_schema(tool) }
@@ -569,7 +569,7 @@ module Kward
       else
         {
           provider: provider,
-          model: model_for(provider),
+          model: model_for(provider, override_model: model),
           messages: chat_messages(messages),
           tools: tools
         }
@@ -654,8 +654,8 @@ module Kward
       }
     end
 
-    def model_for(provider)
-      ModelInfo.model_for(provider, config: @config, override_model: @model)
+    def model_for(provider, override_model: nil)
+      ModelInfo.model_for(provider, config: @config, override_model: override_model || @model)
     end
 
     def reasoning_effort

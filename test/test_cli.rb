@@ -624,6 +624,29 @@ class TestCLI < KwardTestCase
     assert_empty client.seen_messages
   end
 
+  def test_crew_slash_command_prints_report_without_persisting_session_messages
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("personas" => { "default" => "Default persona." }))
+      prompt = FakePrompt.new(["/crew", "/exit"])
+      client = FakeClient.new([
+        { "role" => "assistant", "content" => "Default identity" },
+        { "role" => "assistant", "content" => "## Crew\n- Default identity" }
+      ])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      output = prompt.output.join("\n")
+      assert_includes output, "Crew>"
+      assert_includes output, "Default identity"
+      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+    end
+  end
+
   def test_settings_slash_command_reports_unavailable_without_tui_prompt
     prompt = FakePrompt.new(["/settings", "/exit"])
     client = RecordingClient.new([])

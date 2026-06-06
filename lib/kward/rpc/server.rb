@@ -303,7 +303,7 @@ module Kward
             apiKeyProviders: ["openrouter"],
             logout: true
           },
-          commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["prompt", "skill", "plugin"], executableSources: ["plugin"] },
+          commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           extensionUi: {
             question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
@@ -428,6 +428,15 @@ module Kward
             path: skill.path
           }
         end
+        builtins = [
+          {
+            name: "crew",
+            description: "Query all active personas and summarize the crew.",
+            argumentHint: "",
+            source: "builtin",
+            executable: true
+          }
+        ]
         plugins = @session_manager.plugin_commands.map do |command|
           {
             name: command.name,
@@ -438,11 +447,11 @@ module Kward
             executable: true
           }
         end
-        { commands: prompts + skills + plugins }
+        { commands: builtins + prompts + skills + plugins }
       end
 
       def commands_run(params)
-        @session_manager.run_plugin_command(
+        @session_manager.run_command(
           session_id: params.fetch("sessionId"),
           command: params.fetch("name"),
           arguments: params["arguments"] || ""

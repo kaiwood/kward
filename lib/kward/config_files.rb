@@ -118,41 +118,55 @@ module Kward
     end
 
     def persona_prompt(workspace_root, model: nil, reasoning_effort: nil, now: Time.now, config: read_config)
-      personas = config["personas"]
-      return nil unless personas.is_a?(Hash)
+      text = persona_entries(workspace_root: workspace_root, model: model, reasoning_effort: reasoning_effort, now: now, config: config).map do |entry|
+        entry[:prompt]
+      end.join("\n\n")
+      return nil if text.empty?
 
-      parts = []
-      add_persona_part(parts, personas["default"])
+      text
+    end
+
+    def persona_entries(workspace_root:, model: nil, reasoning_effort: nil, now: Time.now, config: read_config, include_reasoning: true)
+      personas = config["personas"]
+      return [] unless personas.is_a?(Hash)
+
+      entries = []
+
+      add_persona_entry(entries, "default", personas["default"])
 
       workspaces = personas["workspaces"]
       if workspaces.is_a?(Hash)
         root = canonical_workspace_root(workspace_root)
         workspaces.each do |path, prompt|
           if canonical_workspace_root(path) == root
-            add_persona_part(parts, prompt)
+            add_persona_entry(entries, "workspace", prompt, name: path)
             break
           end
         end
       end
 
       models = personas["models"]
-      add_persona_part(parts, models[model.to_s]) if models.is_a?(Hash) && !model.to_s.empty?
+      add_persona_entry(entries, "model", models[model.to_s], name: model.to_s) if models.is_a?(Hash) && !model.to_s.empty?
 
       modifiers = personas["persona_modifiers"]
       if modifiers.is_a?(Hash)
-        reasoning = modifiers["reasoning"]
-        add_persona_part(parts, reasoning[reasoning_effort.to_s]) if reasoning.is_a?(Hash) && !reasoning_effort.to_s.empty?
+        if include_reasoning
+          reasoning = modifiers["reasoning"]
+          add_persona_entry(entries, "reasoning", reasoning[reasoning_effort.to_s]) if reasoning.is_a?(Hash) && !reasoning_effort.to_s.empty?
+        end
 
         time_of_day = modifiers["time_of_day"]
-        add_persona_part(parts, time_of_day[time_of_day_bucket(now)]) if time_of_day.is_a?(Hash)
+        bucket = time_of_day_bucket(now)
+        add_persona_entry(entries, "time_of_day", time_of_day[bucket], name: bucket) if time_of_day.is_a?(Hash)
 
         weekday = modifiers["weekday"]
-        add_persona_part(parts, weekday[weekday_name(now)]) if weekday.is_a?(Hash)
+        day = weekday_name(now)
+        add_persona_entry(entries, "weekday", weekday[day], name: day) if weekday.is_a?(Hash)
 
-        add_persona_part(parts, modifiers["suffix"])
+        add_persona_entry(entries, "suffix", modifiers["suffix"])
       end
 
-      parts.empty? ? nil : parts.join("\n\n")
+      entries
     end
 
     def workspace_agents_prompt(workspace_root)
@@ -180,6 +194,13 @@ module Kward
     def canonical_workspace_root(path)
       expanded = File.expand_path(path.to_s.empty? ? Dir.pwd : path.to_s)
       File.directory?(expanded) ? File.realpath(expanded) : expanded
+    end
+
+    def add_persona_entry(entries, layer, value, name: nil)
+      text = presence(value)
+      return unless text
+
+      entries << { layer: layer.to_s, name: name.to_s, prompt: text }
     end
 
     def add_persona_part(parts, value)

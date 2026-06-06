@@ -184,6 +184,16 @@ class TestPrompts < KwardTestCase
     assert_includes Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 21), config: config), "Tired."
     assert_includes Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 4), config: config), "Tired."
     assert_nil Kward::ConfigFiles.persona_prompt(Dir.pwd, now: Time.new(2024, 1, 1, 12), config: config)
+
+    entries = Kward::ConfigFiles.persona_entries(
+      workspace_root: Dir.pwd,
+      now: Time.new(2024, 1, 1, 5),
+      config: config,
+      include_reasoning: false
+    )
+    assert_equal [
+      { layer: "time_of_day", name: "morning", prompt: "Morning." }
+    ], entries
   end
 
   def test_legacy_workspace_system_prompt_is_ignored
