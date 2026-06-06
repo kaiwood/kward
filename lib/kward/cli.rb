@@ -132,12 +132,12 @@ module Kward
       setup_interactive_prompt
       session_store = interactive_session_store(agent)
       if session_store && agent.nil?
-        @active_session = track_session(session_store.create)
+        @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
         conversation = new_conversation(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
         agent = build_interactive_agent(conversation)
       elsif session_store
-        @active_session = track_session(session_store.create)
+        @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
         @active_session.attach(agent.conversation)
       else
         agent ||= build_interactive_agent(new_conversation)
@@ -493,7 +493,7 @@ module Kward
       return nil if path.to_s.empty?
 
       previous_session = @active_session
-      @active_session, conversation = session_store.load(path, workspace: Workspace.new(root: session_store.cwd))
+      @active_session, conversation = session_store.load(path, workspace: Workspace.new(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
       track_session(@active_session)
       cleanup_replaced_session(previous_session)
       @prompt.say("\nResumed session: #{@active_session.path}\n")

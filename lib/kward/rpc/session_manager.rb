@@ -47,9 +47,9 @@ module Kward
       def create_session(workspace_root: Dir.pwd, name: nil)
         workspace_root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: workspace_root)
-        session = store.create
-        session.rename(name) unless name.to_s.strip.empty?
         conversation = new_conversation(workspace_root: workspace_root)
+        session = store.create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
+        session.rename(name) unless name.to_s.strip.empty?
         session.attach(conversation)
         rpc_session = build_rpc_session(store, session, conversation, workspace_root)
         remember_session(rpc_session)
@@ -63,7 +63,12 @@ module Kward
         location = store.session_location(path)
         root = validate_workspace_root(location[:cwd])
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
-        session, conversation = store.load(location[:path], workspace: Workspace.new(root: root))
+        session, conversation = store.load(
+          location[:path],
+          workspace: Workspace.new(root: root),
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort
+        )
         rpc_session = build_rpc_session(store, session, conversation, root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
@@ -130,7 +135,13 @@ module Kward
         selected = messages[index] || raise(ArgumentError, "Unknown fork entryId: #{entry_id}")
         raise ArgumentError, "Entry is not forkable: #{entry_id}" unless message_role(selected) == "user"
 
-        session, conversation = source.store.create_independent_from_messages(messages[0...index])
+        session, conversation = source.store.create_independent_from_messages(
+          messages[0...index],
+          model: source.conversation.model,
+          reasoning_effort: source.conversation.reasoning_effort
+        )
+
+        # ensure forked sessions retain the original persona context
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
@@ -371,6 +382,14 @@ module Kward
         Kward::Compaction::Settings.from_config(ConfigFiles.read_config(path))
       rescue StandardError
         Kward::Compaction::Settings.new
+      end
+
+      def current_model_id
+        @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
+      end
+
+      def current_reasoning_effort
+        @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
       end
 
       def normalize_model(model)

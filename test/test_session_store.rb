@@ -187,6 +187,43 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_load_prefers_persisted_reasoning_and_model_for_persona_evaluation
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "personas" => {
+            "default" => "Default persona.",
+            "persona_modifiers" => {
+              "reasoning" => {
+                "low" => "Reasoning was low.",
+                "xhigh" => "Reasoning was extra high."
+              }
+            }
+          }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+          conversation = Kward::Conversation.new(
+            workspace_root: workspace_dir,
+            model: "gpt-5.5",
+            reasoning_effort: "low"
+          )
+          session = store.create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
+          session.attach(conversation)
+          conversation.append_user("hello")
+
+          _loaded_session, loaded_conversation = store.load(session.path, workspace: Kward::Workspace.new(root: workspace_dir), model: "gpt-5.5", reasoning_effort: "xhigh")
+
+          prompt = loaded_conversation.messages.first[:content]
+          assert_includes prompt, "Default persona."
+          assert_includes prompt, "Reasoning was low."
+          refute_includes prompt, "Reasoning was extra high."
+        end
+      end
+    end
+  end
+
   def test_tool_execution_end_record_matches_tauren_session_diff_shape
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

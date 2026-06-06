@@ -74,7 +74,7 @@ module Kward
 
     attr_reader :cwd
 
-    def create
+    def create(model: nil, reasoning_effort: nil)
       dir = session_dir
       FileUtils.mkdir_p(dir, mode: 0o700)
       created_at = Time.now.utc
@@ -85,8 +85,10 @@ module Kward
         version: VERSION,
         id: id,
         timestamp: created_at.iso8601(3),
-        cwd: @cwd
-      }
+        cwd: @cwd,
+        model: model.to_s,
+        reasoningEffort: reasoning_effort.to_s
+      }.delete_if { |_key, value| value.to_s.empty? }
 
       File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
         file.write(JSON.generate(header))
@@ -98,21 +100,26 @@ module Kward
     end
 
     def create_from_conversation(conversation)
-      session = create
+      session = create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
       persisted_messages(conversation).each { |message| session.append_message(message) }
       session.attach(conversation)
       session
     end
 
     def create_independent_from_conversation(conversation)
-      create_independent_from_messages(persisted_messages(conversation), read_paths: Array(conversation.read_paths))
+      create_independent_from_messages(
+        persisted_messages(conversation),
+        read_paths: Array(conversation.read_paths),
+        model: conversation.model,
+        reasoning_effort: conversation.reasoning_effort
+      )
     end
 
-    def create_independent_from_messages(messages, read_paths: [])
-      session = create
+    def create_independent_from_messages(messages, read_paths: [], model: nil, reasoning_effort: nil)
+      session = create(model: model, reasoning_effort: reasoning_effort)
       persisted = deep_copy(messages)
       persisted.each { |message| session.append_message(message) }
-      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd)
+      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd, model: model, reasoning_effort: reasoning_effort)
       session.attach(conversation)
       [session, conversation]
     end
@@ -124,7 +131,7 @@ module Kward
       { path: resolved_path, cwd: header["cwd"].to_s.empty? ? @cwd : header["cwd"].to_s }
     end
 
-    def load(path, workspace: Workspace.new)
+    def load(path, workspace: Workspace.new, model: nil, reasoning_effort: nil)
       resolved_path = resolve_session_path(path)
       records = records_from_file(resolved_path)
       header = session_header(records, resolved_path)
@@ -133,7 +140,13 @@ module Kward
       name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
 
-      conversation = Conversation.new(messages: messages, read_paths: read_paths, workspace_root: workspace.root)
+      conversation = Conversation.new(
+        messages: messages,
+        read_paths: read_paths,
+        workspace_root: workspace.root,
+        model: header["model"] || model,
+        reasoning_effort: header["reasoningEffort"] || reasoning_effort
+      )
       conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"
       session = Session.new(
         store: self,
