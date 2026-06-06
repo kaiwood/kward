@@ -5,6 +5,7 @@ require_relative "ansi"
 require_relative "client"
 require_relative "compactor"
 require_relative "config_files"
+require_relative "context_usage"
 require_relative "crew_reporter"
 require_relative "events"
 require_relative "image_attachments"
@@ -43,12 +44,13 @@ module Kward
     ].freeze
     BUILTIN_SLASH_COMMAND_NAMES = BUILTIN_SLASH_COMMANDS.map { |command| command[:name] }.freeze
 
-    def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new, session_store: nil)
+    def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new, session_store: nil, context_usage: ContextUsage.new)
       @argv = argv
       @stdin = stdin
       @prompt = prompt
       @client = client
       @session_store = session_store
+      @context_usage = context_usage
       @active_session = nil
       @cleanup_sessions = []
       @plugin_registry = nil
@@ -239,9 +241,12 @@ module Kward
 
     def build_interactive_agent(conversation)
       workspace = Workspace.new(root: conversation.workspace_root)
+      tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
+      @footer_conversation = conversation
+      @footer_tool_registry = tool_registry
       Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(workspace: workspace, prompt: @prompt),
+        tool_registry: tool_registry,
         conversation: conversation
       )
     end
@@ -568,7 +573,9 @@ module Kward
       cleanup_replaced_session(previous_session)
       @prompt.say("\nResumed session: #{@active_session.path}\n")
       render_conversation_transcript(conversation)
-      build_interactive_agent(conversation)
+      agent = build_interactive_agent(conversation)
+      @prompt.redraw if @prompt.respond_to?(:redraw)
+      agent
     rescue StandardError => e
       @prompt.say("\nError: #{e.message}\n")
       nil
@@ -993,7 +1000,38 @@ module Kward
       model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
       reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
       reasoning = "n/a" if provider != "Codex" || reasoning.to_s.empty?
-      "#{provider} #{model} · #{reasoning}"
+      text = "#{provider} #{model} · #{reasoning}"
+      usage = composer_context_usage(provider, model)
+      usage ? "#{composer_context_percent_text(usage[:percent])} · #{text}" : text
+    end
+
+    def composer_context_percent_text(percent)
+      value = percent.round
+      color = if value >= 85
+                :red
+              elsif value >= 50
+                :yellow
+              end
+      ANSI.colorize("#{value}%", color, enabled: @color_enabled)
+    end
+
+    def composer_context_usage(provider, model)
+      context_window = @client.respond_to?(:current_context_window) ? @client.current_context_window : ModelInfo.context_window(provider, model)
+      context_parts = if @client.respond_to?(:current_context_parts)
+                        @client.current_context_parts(current_footer_conversation.messages, footer_tool_schemas)
+                      else
+                        { provider: provider, model: model, messages: current_footer_conversation.messages, tools: footer_tool_schemas }
+                      end
+      @context_usage.call(
+        provider: provider,
+        model: model,
+        context_window: context_window,
+        context_parts: context_parts
+      )
+    end
+
+    def footer_tool_schemas
+      @footer_tool_registry&.schemas || []
     end
 
     def current_footer_conversation

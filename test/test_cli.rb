@@ -316,6 +316,30 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_resume_updates_composer_context_usage_source
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      saved.attach(conversation)
+      conversation.append_user("resumed context")
+      prompt = FakePrompt.new(["/resume #{saved.path}", "/exit"])
+      context_usage = Object.new
+      seen_messages = []
+      context_usage.define_singleton_method(:call) do |context_parts:, **_kwargs|
+        seen_messages.replace(context_parts[:messages])
+        { percent: 9 }
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store, context_usage: context_usage)
+
+      cli.interactive_loop
+
+      assert_equal "9% · Codex fake-model · medium", cli.send(:composer_status_text)
+      assert_equal "resumed context", seen_messages.last["content"] || seen_messages.last[:content]
+      assert_equal 1, prompt.redraw_count
+    end
+  end
+
   def test_resume_renders_reasoning_tools_and_tool_output
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
@@ -752,6 +776,48 @@ class TestCLI < KwardTestCase
       assert_includes prompt.events, [:finish_busy_input]
       assert_operator prompt.events.index([:finish_busy_input]), :<, prompt.events.index([:close])
     end
+  end
+
+  def test_composer_status_includes_context_percentage_when_available
+    context_usage = Object.new
+    def context_usage.call(**_kwargs)
+      { percent: 12.4 }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("Status report.")
+    cli.instance_variable_set(:@footer_conversation, conversation)
+
+    assert_equal "12% · Codex fake-model · medium", cli.send(:composer_status_text)
+  end
+
+  def test_composer_status_colors_context_percentage_by_threshold
+    context_usage = Object.new
+    percent = 49
+    context_usage.define_singleton_method(:call) do |**_kwargs|
+      { percent: percent }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    cli.instance_variable_set(:@color_enabled, true)
+
+    assert_includes cli.send(:composer_status_text), "49% · Codex fake-model"
+    refute_includes cli.send(:composer_status_text), "\e["
+
+    percent = 50
+    assert_includes cli.send(:composer_status_text), "\e[33m50%\e[0m · Codex fake-model"
+
+    percent = 85
+    assert_includes cli.send(:composer_status_text), "\e[31m85%\e[0m · Codex fake-model"
+  end
+
+  def test_composer_status_hides_context_percentage_when_unavailable
+    context_usage = Object.new
+    def context_usage.call(**_kwargs)
+      nil
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+
+    assert_equal "Codex fake-model · medium", cli.send(:composer_status_text)
   end
 
   def test_settings_slash_command_reports_unavailable_without_tui_prompt
