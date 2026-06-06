@@ -179,9 +179,11 @@ class KwardTestCase < Minitest::Test
       @model = "fake-model"
       @reasoning_effort = "medium"
       @context_window = 200_000
+      @reload_count = 0
     end
 
     attr_accessor :provider, :model, :reasoning_effort, :context_window
+    attr_reader :reload_count
 
     def chat(_messages, tools: [])
       @responses.shift
@@ -205,6 +207,10 @@ class KwardTestCase < Minitest::Test
 
     def available_models
       [{ provider: @provider, id: @model, contextWindow: @context_window, current: true }]
+    end
+
+    def reload_config
+      @reload_count += 1
     end
   end
 
@@ -311,7 +317,7 @@ class KwardTestCase < Minitest::Test
       @select_titles = []
     end
 
-    def select(message, choices, title: "Sessions")
+    def select(message, choices, title: "Sessions", custom: false)
       @select_messages << message
       @select_choices << choices
       @select_titles << title
@@ -331,7 +337,7 @@ class KwardTestCase < Minitest::Test
       @select_titles = []
     end
 
-    def select(message, choices, title: "Sessions")
+    def select(message, choices, title: "Sessions", custom: false)
       @select_messages << message
       @select_choices << choices
       @select_titles << title
@@ -349,7 +355,7 @@ class KwardTestCase < Minitest::Test
       @selected_text = selected_text
     end
 
-    def select(message, choices, title: "Sessions")
+    def select(message, choices, title: "Sessions", custom: false)
       @select_messages << message
       @select_choices << choices
       @select_titles << title

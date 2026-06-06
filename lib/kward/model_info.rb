@@ -5,6 +5,14 @@ module Kward
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
     DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
     DEFAULT_REASONING_EFFORT = "medium"
+    OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
+    OPENROUTER_MODEL_CHOICES = OPENAI_MODEL_CHOICES.map { |model| "openai/#{model}" }.freeze
+    REASONING_EFFORT_CHOICES = [
+      ["low", "Low"],
+      ["medium", "Medium"],
+      ["high", "High"],
+      ["xhigh", "Extra High"]
+    ].freeze
 
     OPENAI_CONTEXT_WINDOWS = [
       [/\Agpt-5\.5\b/, 200_000],

@@ -7,6 +7,7 @@ require_relative "compactor"
 require_relative "config_files"
 require_relative "events"
 require_relative "image_attachments"
+require_relative "model_info"
 require_relative "openai_oauth"
 require_relative "pan_server"
 require_relative "plugin_registry"
@@ -33,6 +34,8 @@ module Kward
       { name: "compact", description: "Compact the current conversation context.", argument_hint: "[instructions]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
       { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
+      { name: "model", description: "Select the default model.", argument_hint: "" },
+      { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" }
     ].freeze
@@ -256,6 +259,12 @@ module Kward
       when "settings"
         configure_settings
         [true, nil]
+      when "model"
+        configure_model
+        [true, nil]
+      when "reasoning"
+        configure_reasoning
+        [true, nil]
       when "new"
         [true, start_new_session(session_store)]
       when "resume"
@@ -323,6 +332,51 @@ module Kward
       @prompt.say("\nSettings error: #{e.message}\n")
     end
 
+    def configure_model
+      unless model_overlay_available?
+        @prompt.say("\nModel overlay is unavailable in this prompt.\n")
+        return
+      end
+
+      models = normalized_available_models
+      choices = model_choices(models)
+      selected = @prompt.select("Default model", choices, title: "Models", custom: true)
+      return unless selected
+
+      provider, model = selected_model(selected, models)
+      raise "Model must be a non-empty string" if model.to_s.strip.empty?
+
+      ConfigFiles.update_config(ModelInfo.config_key_for_provider(provider) => model)
+      reload_client_config
+      @prompt.say("\nSaved default model: #{provider} #{model}\n")
+    rescue StandardError => e
+      @prompt.say("\nModel error: #{e.message}\n")
+    end
+
+    def configure_reasoning
+      unless model_overlay_available?
+        @prompt.say("\nReasoning overlay is unavailable in this prompt.\n")
+        return
+      end
+
+      choices = ModelInfo::REASONING_EFFORT_CHOICES
+      selected = @prompt.select("Reasoning effort", reasoning_choices(choices), title: "Reasoning")
+      return unless selected
+
+      effort, = choices.find { |_value, label| selected.to_s.downcase.start_with?(label.downcase) }
+      raise "Reasoning effort must be low, medium, high, or extra high" unless effort
+
+      ConfigFiles.update_config("openai_reasoning_effort" => effort)
+      reload_client_config
+      @prompt.say("\nSaved reasoning effort: #{effort}\n")
+    rescue StandardError => e
+      @prompt.say("\nReasoning error: #{e.message}\n")
+    end
+
+    def model_overlay_available?
+      @prompt.respond_to?(:select)
+    end
+
     def settings_overlay_available?
       @prompt.respond_to?(:select) && @prompt.respond_to?(:update_overlay_settings)
     end
@@ -332,6 +386,64 @@ module Kward
       return nil unless choice
 
       values.find { |value| choice.to_s.downcase.start_with?(value) }
+    end
+
+    def normalized_available_models
+      current_provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
+      current_model = @client.respond_to?(:current_model) ? @client.current_model : nil
+      current_reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
+      models = @client.respond_to?(:available_models) ? Array(@client.available_models) : []
+      models.map do |model|
+        ModelInfo.normalize(
+          model,
+          current_provider: current_provider,
+          current_model: current_model,
+          current_reasoning_effort: current_reasoning
+        )
+      end
+    end
+
+    def model_choices(models)
+      choices = models.map do |model|
+        label = "#{model[:provider]} #{model[:id]}"
+        label += " (current)" if model[:current]
+        label
+      end
+      choices.empty? ? ["#{current_model_provider} #{current_model_id} (current)"] : choices.uniq
+    end
+
+    def selected_model(selected, models)
+      text = selected.to_s.sub(/ \(current\)\z/, "").strip
+      known = models.find { |model| "#{model[:provider]} #{model[:id]}" == text }
+      return [known[:provider], known[:id]] if known
+
+      provider, model = text.split(/\s+/, 2)
+      if ["Codex", "OpenRouter"].include?(provider) && !model.to_s.strip.empty?
+        [provider, model.strip]
+      else
+        [current_model_provider, text]
+      end
+    end
+
+    def reasoning_choices(choices)
+      current = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort.to_s : ModelInfo::DEFAULT_REASONING_EFFORT
+      choices.map do |effort, label|
+        text = label.dup
+        text += " (current)" if current == effort
+        text
+      end
+    end
+
+    def current_model_provider
+      @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
+    end
+
+    def current_model_id
+      @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
+    end
+
+    def reload_client_config
+      @client.reload_config if @client.respond_to?(:reload_config)
     end
 
     def overlay_alignment_choices(settings)

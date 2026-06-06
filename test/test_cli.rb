@@ -636,6 +636,92 @@ class TestCLI < KwardTestCase
     assert_empty client.seen_messages
   end
 
+  def test_model_slash_command_reports_unavailable_without_tui_prompt
+    prompt = FakePrompt.new(["/model", "/exit"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join("\n"), "Model overlay is unavailable"
+    assert_empty client.seen_messages
+  end
+
+  def test_model_slash_command_persists_custom_model_and_reloads_config
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({ "openai_model" => "existing" }))
+      prompt = FakeSettingsPrompt.new(["/model", "/exit"], ["custom-model"])
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "existing"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "custom-model", config["openai_model"]
+      assert_equal 1, client.reload_count
+      assert_equal ["Default model"], prompt.select_messages
+      assert_equal ["Models"], prompt.select_titles
+      assert_includes prompt.select_choices.first, "Codex existing (current)"
+      assert_includes prompt.output.join("\n"), "Saved default model: Codex custom-model"
+    end
+  end
+
+  def test_model_slash_command_persists_selected_provider_model
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new(["/model", "/exit"], ["OpenRouter openai/gpt-5.5"])
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "gpt-5.5"
+      def client.available_models
+        [
+          { provider: "Codex", id: "gpt-5.5", current: true },
+          { provider: "OpenRouter", id: "openai/gpt-5.5", current: false }
+        ]
+      end
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "openai/gpt-5.5", config["openrouter_model"]
+      assert_equal 1, client.reload_count
+    end
+  end
+
+  def test_reasoning_slash_command_persists_effort_and_reloads_config
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new(["/reasoning", "/exit"], ["Extra High"])
+      client = FakeClient.new([])
+      client.reasoning_effort = "medium"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "xhigh", config["openai_reasoning_effort"]
+      assert_equal 1, client.reload_count
+      assert_equal ["Reasoning effort"], prompt.select_messages
+      assert_equal ["Reasoning"], prompt.select_titles
+      assert_equal ["Low", "Medium (current)", "High", "Extra High"], prompt.select_choices.first
+      assert_includes prompt.output.join("\n"), "Saved reasoning effort: xhigh"
+    end
+  end
+
   def test_settings_slash_command_persists_overlay_settings
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

@@ -121,6 +121,18 @@ class TestClient < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
+  def test_available_models_include_openai_and_openrouter_picker_choices
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+
+    models = client.available_models
+
+    assert_includes models, { provider: "Codex", id: "gpt-5.5", current: true }
+    assert_includes models, { provider: "Codex", id: "gpt-5.4", current: false }
+    assert_includes models, { provider: "Codex", id: "gpt-5.4-mini", current: false }
+    assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
+    assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+  end
+
   def test_openrouter_defaults_to_openai_gpt_5_5
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
 

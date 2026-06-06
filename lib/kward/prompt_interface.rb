@@ -151,8 +151,8 @@ module Kward
       answer.start_with?("y")
     end
 
-    def select(message, choices, title: "Sessions")
-      return nil if choices.empty?
+    def select(message, choices, title: "Sessions", custom: false)
+      return nil if choices.empty? && !custom
 
       start
       @mutex.synchronize do
@@ -163,7 +163,7 @@ module Kward
         @asking = true
         @busy = false
         @queued_count = 0
-        @select_state = { choices: choices.map(&:to_s), selection_index: 0, title: title.to_s }
+        @select_state = { choices: choices.map(&:to_s), selection_index: 0, title: title.to_s, custom: custom }
         reset_history_navigation
         render_prompt_locked
       end
@@ -967,7 +967,14 @@ module Kward
     end
 
     def select_current_choice
-      selected_selection_choice || SELECT_CANCEL
+      selected_selection_choice || custom_selection_choice || SELECT_CANCEL
+    end
+
+    def custom_selection_choice
+      return nil unless @select_state && @select_state[:custom]
+
+      value = @input.strip
+      value.empty? ? nil : value
     end
 
     def selected_selection_choice
@@ -1463,7 +1470,11 @@ module Kward
       matches = selection_matches
       lines = [overlay_text_line("↑/↓ select · Enter open · Esc cancel", :muted), overlay_blank_line]
       if matches.empty?
-        lines << overlay_text_line("No matches", :muted)
+        if @select_state && @select_state[:custom] && !@input.strip.empty?
+          lines << overlay_choice_line("Use custom: #{@input.strip}", selected: true)
+        else
+          lines << overlay_text_line("No matches", :muted)
+        end
         return overlay_card_rows(selection_overlay_title, lines, width)
       end
 

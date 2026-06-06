@@ -153,12 +153,14 @@ module Kward
       provider = current_provider
       openai_model = model_for("Codex")
       openrouter_model = model_for("OpenRouter")
-      models = [
-        { provider: "Codex", id: DEFAULT_OPENAI_MODEL, current: provider == "Codex" && openai_model == DEFAULT_OPENAI_MODEL },
-        { provider: "OpenRouter", id: DEFAULT_OPENROUTER_MODEL, current: provider == "OpenRouter" && openrouter_model == DEFAULT_OPENROUTER_MODEL }
-      ]
-      models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless openai_model == DEFAULT_OPENAI_MODEL
-      models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_model == DEFAULT_OPENROUTER_MODEL
+      models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
+        { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
+      end
+      models += ModelInfo::OPENROUTER_MODEL_CHOICES.map do |id|
+        { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
+      end
+      models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
+      models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless ModelInfo::OPENROUTER_MODEL_CHOICES.include?(openrouter_model)
       models
     end
 
