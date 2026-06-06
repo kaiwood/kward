@@ -13,7 +13,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi security export]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi security export logging]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -92,6 +92,11 @@ class TestRPCServer < KwardTestCase
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
     assert_equal "none", capabilities["security"]["toolApproval"]
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
+    assert_equal true, capabilities["logging"]["supported"]
+    assert_equal false, capabilities["logging"]["defaultEnabled"]
+    assert_equal ["tokens", "performance", "tools", "errors"], capabilities["logging"]["categories"]
+    assert_equal 10_485_760, capabilities["logging"]["rotation"]["maxBytes"]
+    assert_equal "redacted-metadata-only", capabilities["logging"]["content"]
 
     assert_equal true, capabilities["asyncTurns"]
     assert_equal "explicit", capabilities["session"]["mode"]

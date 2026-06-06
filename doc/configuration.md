@@ -88,6 +88,28 @@ For higher limits or alternate providers, add your own keys using environment va
 
 Do not put shared or published API keys in this file. Keys are account credentials and should be user-specific.
 
+## Logging
+
+Local telemetry logs are off by default. Enable logging with both the master flag and each category you want:
+
+```json
+{
+  "logging": {
+    "enabled": true,
+    "tokens": true,
+    "performance": true,
+    "tools": true,
+    "errors": true
+  }
+}
+```
+
+Environment variables override config for a single run: `KWARD_LOGGING`, `KWARD_LOGGING_TOKENS`, `KWARD_LOGGING_PERFORMANCE`, `KWARD_LOGGING_TOOLS`, and `KWARD_LOGGING_ERRORS`. Values `1`, `true`, `yes`, and `on` enable a flag; `0`, `false`, `no`, and `off` disable it.
+
+Logs are JSON Lines files in `<config-dir>/logs`, which is `~/.kward/logs` by default or beside `KWARD_CONFIG_PATH` when that environment variable is set. Files rotate after 10 MB using numbered suffixes, and Kward does not delete old rotated logs.
+
+Logged data is redacted metadata only. Kward does not intentionally log prompts, assistant text, tool arguments, tool outputs, file contents, shell command text, API keys, or OAuth tokens. Logged fields can include provider/model names, token counts, byte counts, durations, retry attempts, tool names, statuses, and redacted error messages.
+
 ## Color output
 
 ANSI colors are enabled automatically on TTY output. Set `NO_COLOR=1`, `CLICOLOR=0`, or `KWARD_COLOR=never` to disable colors; set `KWARD_COLOR=always` or `FORCE_COLOR=1` to force them.

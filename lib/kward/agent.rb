@@ -4,24 +4,35 @@ require_relative "compactor"
 require_relative "context_overflow"
 require_relative "conversation"
 require_relative "events"
+require_relative "telemetry_logger"
 require_relative "tool_registry"
 
 module Kward
   class Agent
-    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new)
+    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: TelemetryLogger.new)
       @client = client
       @tool_registry = tool_registry
       @conversation = conversation
+      @telemetry_logger = telemetry_logger
     end
 
     attr_reader :conversation
 
     def ask(input, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, &block)
+      started_at = @telemetry_logger.monotonic_now
+      status = "completed"
+      error = nil
       cancellation&.raise_if_cancelled!
       @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input)
       auto_compact_if_needed
       run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, &block)
+    rescue StandardError => e
+      status = "failed"
+      error = e
+      raise e
+    ensure
+      log_turn(duration_ms: @telemetry_logger.duration_ms(started_at), status: status, error: error)
     end
 
     def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil)
@@ -52,7 +63,19 @@ module Kward
         tool_calls.each do |tool_call|
           cancellation&.raise_if_cancelled!
           yield Events::ToolCall.new(tool_call: tool_call) if block_given?
-          content = @tool_registry.dispatch(tool_call, @conversation, cancellation: cancellation)
+          tool_started_at = @telemetry_logger.monotonic_now
+          content = nil
+          status = "completed"
+          error = nil
+          begin
+            content = @tool_registry.dispatch(tool_call, @conversation, cancellation: cancellation)
+          rescue StandardError => e
+            status = "failed"
+            error = e
+            raise e
+          ensure
+            log_tool(tool_call, content: content, duration_ms: @telemetry_logger.duration_ms(tool_started_at), status: status, error: error)
+          end
           cancellation&.raise_if_cancelled!
           yield Events::ToolResult.new(tool_call: tool_call, content: content) if block_given?
         end
@@ -60,6 +83,35 @@ module Kward
     end
 
     private
+
+    def log_turn(duration_ms:, status:, error:)
+      payload = { "duration_ms" => duration_ms, "status" => status }
+      @telemetry_logger.log("performance", "turn", payload)
+      log_error("turn_error", error, payload) if error
+    end
+
+    def log_tool(tool_call, content:, duration_ms:, status:, error:)
+      payload = {
+        "tool_name" => tool_name(tool_call),
+        "duration_ms" => duration_ms,
+        "status" => status,
+        "result_bytes" => content.to_s.bytesize
+      }
+      @telemetry_logger.log("tools", "tool_call", payload)
+      @telemetry_logger.log("performance", "tool_call", payload)
+      log_error("tool_error", error, payload) if error
+    end
+
+    def log_error(event, error, payload = {})
+      return unless error
+
+      @telemetry_logger.log("errors", event, payload.merge(TelemetryLogger.error_payload(error)))
+    end
+
+    def tool_name(tool_call)
+      function = tool_call["function"] || tool_call[:function] || {}
+      function["name"] || function[:name]
+    end
 
     def auto_compact_if_needed
       context_window = @client.current_context_window if @client.respond_to?(:current_context_window)

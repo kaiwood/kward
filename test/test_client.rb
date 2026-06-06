@@ -257,6 +257,30 @@ class TestClient < KwardTestCase
     refute error.transient?
   end
 
+  def test_openrouter_chat_logs_token_usage_when_enabled
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("logging" => { "enabled" => true, "tokens" => true, "performance" => true }))
+      client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: config_path)
+      body = JSON.dump(
+        "choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }],
+        "usage" => { "prompt_tokens" => 42, "completion_tokens" => 7, "total_tokens" => 49 }
+      )
+
+      with_fake_http([fake_net_response(200, body)]) do |_http|
+        client.chat([{ role: "user", content: "do not log this prompt" }])
+      end
+
+      records = Dir[File.join(dir, "logs", "*.jsonl")].flat_map { |path| jsonl_records(path) }
+      token_record = records.find { |record| record["category"] == "tokens" && record["event"] == "model_usage" }
+      performance_record = records.find { |record| record["category"] == "performance" && record["event"] == "model_request" }
+      assert_equal "OpenRouter", token_record["provider"]
+      assert_equal 49, token_record["usage"]["total_tokens"]
+      assert_equal "completed", performance_record["status"]
+      refute_includes records.map(&:to_json).join("\n"), "do not log this prompt"
+    end
+  end
+
   def test_openrouter_chat_persists_provider_model_and_usage
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     body = JSON.dump(

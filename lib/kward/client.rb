@@ -7,6 +7,7 @@ require_relative "context_overflow"
 require_relative "image_attachments"
 require_relative "model_info"
 require_relative "openai_oauth"
+require_relative "telemetry_logger"
 
 module Kward
   class Client
@@ -60,13 +61,14 @@ module Kward
     end
     TRANSIENT_NETWORK_ERRORS = [IOError, EOFError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout].freeze
 
-    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path)
+    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
       @openrouter_api_key = presence(api_key)
       @openai_access_token = presence(openai_access_token)
       @oauth = oauth
       @model = model
       @config_path = File.expand_path(config_path)
       @config = load_config
+      @telemetry_logger = telemetry_logger
     end
 
     def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, max_tokens: nil)
@@ -77,9 +79,15 @@ module Kward
       current_model = model_for(provider)
       request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens) : request_payload(provider, messages, tools, max_tokens: max_tokens))
       with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
+        request_started_at = @telemetry_logger.monotonic_now
+        message = nil
+        status = "completed"
+        error = nil
+        begin
         if provider == "Codex"
           message = codex_chat(url, token, account_id, messages, tools, request_body: request_body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens)
-          next attach_response_metadata(message, provider: provider, model: current_model)
+          message = attach_response_metadata(message, provider: provider, model: current_model)
+          next message
         end
 
         request = Net::HTTP::Post.new(url)
@@ -102,11 +110,23 @@ module Kward
         message = body.fetch("choices").first.fetch("message")
         cancellation&.raise_if_cancelled!
         on_assistant_delta&.call(message.fetch("content", ""))
-        attach_response_metadata(message, provider: provider, model: current_model, usage: normalized_usage(body["usage"]))
+        message = attach_response_metadata(message, provider: provider, model: current_model, usage: normalized_usage(body["usage"]))
+        message
+        rescue StandardError => e
+          status = "failed"
+          error = e
+          raise e
+        ensure
+          log_model_request(provider: provider, model: current_model, request_bytes: request_body.bytesize, duration_ms: @telemetry_logger.duration_ms(request_started_at), status: status, error: error, usage: message && (message["usage"] || message[:usage]))
+        end
       end
     rescue *TRANSIENT_NETWORK_ERRORS => e
       raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
 
+      log_error("model_request_error", e)
+      raise e
+    rescue StandardError => e
+      log_error("model_request_error", e)
       raise e
     end
 
@@ -164,7 +184,9 @@ module Kward
         raise e.message_after_attempts(attempt) if attempt >= attempts
 
         delay = RETRY_DELAYS[attempt - 1]
-        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message, request_bytes: request_bytes)
+        retry_info = { provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message, request_bytes: request_bytes }
+        log_retry(retry_info)
+        on_retry&.call(retry_info)
         sleep_with_cancellation(delay, cancellation)
         attempt += 1
         retry
@@ -173,11 +195,47 @@ module Kward
         raise "#{provider} request failed after #{attempt} attempts: #{e.message}" if attempt >= attempts
 
         delay = RETRY_DELAYS[attempt - 1]
-        on_retry&.call(provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message, request_bytes: request_bytes)
+        retry_info = { provider: provider, model: model, attempt: attempt + 1, max_attempts: attempts, delay_seconds: delay, error: e.message, request_bytes: request_bytes }
+        log_retry(retry_info)
+        on_retry&.call(retry_info)
         sleep_with_cancellation(delay, cancellation)
         attempt += 1
         retry
       end
+    end
+
+    def log_model_request(provider:, model:, request_bytes:, duration_ms:, status:, error:, usage:)
+      payload = {
+        "provider" => provider,
+        "model" => model,
+        "request_bytes" => request_bytes,
+        "duration_ms" => duration_ms,
+        "status" => status
+      }
+      if usage.respond_to?(:key?)
+        usage_payload = usage.each_with_object({}) { |(key, value), result| result[key.to_s] = value }
+        @telemetry_logger.log("tokens", "model_usage", payload.merge("usage" => usage_payload))
+      end
+      @telemetry_logger.log("performance", "model_request", payload)
+    end
+
+    def log_retry(retry_info)
+      payload = {
+        "provider" => retry_info[:provider],
+        "model" => retry_info[:model],
+        "attempt" => retry_info[:attempt],
+        "max_attempts" => retry_info[:max_attempts],
+        "delay_seconds" => retry_info[:delay_seconds],
+        "request_bytes" => retry_info[:request_bytes]
+      }.merge(TelemetryLogger.error_payload(StandardError.new(retry_info[:error].to_s)))
+      @telemetry_logger.log("performance", "model_retry", payload)
+      @telemetry_logger.log("errors", "model_retry", payload)
+    end
+
+    def log_error(event, error, payload = {})
+      return unless error
+
+      @telemetry_logger.log("errors", event, payload.merge(TelemetryLogger.error_payload(error)))
     end
 
     def sleep_with_cancellation(seconds, cancellation)

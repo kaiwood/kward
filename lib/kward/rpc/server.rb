@@ -5,6 +5,7 @@ require_relative "../plugin_registry"
 require_relative "../prompt_commands"
 require_relative "../tool_registry"
 require_relative "../workspace"
+require_relative "../telemetry_logger"
 require_relative "auth_manager"
 require_relative "config_manager"
 require_relative "redactor"
@@ -319,6 +320,17 @@ module Kward
             canWriteFiles: true
           },
           export: { supported: true, formats: ["markdown", "html"], defaultFormat: "markdown" },
+          logging: {
+            supported: true,
+            defaultEnabled: false,
+            config: "logging",
+            envPrefix: "KWARD_LOGGING",
+            directory: File.join(ConfigFiles.config_dir, "logs"),
+            format: "jsonl",
+            categories: ["tokens", "performance", "tools", "errors"],
+            rotation: { maxBytes: TelemetryLogger::DEFAULT_MAX_BYTES, retention: "manual" },
+            content: "redacted-metadata-only"
+          },
           session: { mode: "explicit", persistence: "jsonl" },
           cancellation: { behavior: "best-effort", queuedTurns: "cancel-before-run", runningTurns: "stop-emitting-events-when-possible" },
           eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT },

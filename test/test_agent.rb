@@ -81,6 +81,32 @@ class TestAgent < KwardTestCase
     assert_equal 1, client.calls
   end
 
+  def test_agent_logs_tool_metadata_without_arguments_or_output
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("logging" => { "enabled" => true, "tools" => true, "performance" => true }))
+      path = File.join(dir, "secret.txt")
+      File.write(path, "very secret file output\n")
+      client = FakeClient.new([
+        assistant_tool_call("read_file", path: path),
+        { "role" => "assistant", "content" => "done" }
+      ])
+      logger = Kward::TelemetryLogger.new(config_path: config_path)
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new, telemetry_logger: logger)
+
+      agent.ask("read it")
+
+      records = Dir[File.join(dir, "logs", "*.jsonl")].flat_map { |log_path| jsonl_records(log_path) }
+      tool_record = records.find { |record| record["category"] == "tools" && record["event"] == "tool_call" }
+      assert_equal "read_file", tool_record["tool_name"]
+      assert_equal "completed", tool_record["status"]
+      assert_operator tool_record["result_bytes"], :>, 0
+      serialized = records.map(&:to_json).join("\n")
+      refute_includes serialized, path
+      refute_includes serialized, "very secret file output"
+    end
+  end
+
   def test_agent_allows_claim_after_successful_edit_file
     path = "kward_agent_edit.txt"
     File.write(path, "old\n")
