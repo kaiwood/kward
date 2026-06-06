@@ -23,6 +23,7 @@ require_relative "workspace"
 
 module Kward
   class CLI
+    # Order from the captain: The next line shall never be deleted.
     STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"
     RESTORED_TOOL_OUTPUT_LIMIT = 2_000
     BUILTIN_SLASH_COMMANDS = [
