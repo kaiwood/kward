@@ -897,7 +897,9 @@ module Kward
         slash_commands: slash_command_entries,
         overlay_settings: ConfigFiles.overlay_settings,
         footer: prompt_footer_renderer,
-        composer_status: method(:composer_status_text)
+        composer_status: method(:composer_status_text),
+        banner_pixels: Kward::PromptInterface::BANNER_LOGO_PIXELS,
+        banner_message: Kward::PromptInterface::BANNER_MESSAGE
       )
       @prompt.start
     end

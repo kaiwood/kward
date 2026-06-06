@@ -1,6 +1,10 @@
 require_relative "test_helper"
 
 class TestPromptInterface < KwardTestCase
+  def bundled_test_banner_pixels
+    Kward::PromptInterface::BANNER_LOGO_PIXELS
+  end
+
   def test_prompt_interface_renders_empty_composer_before_typing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
@@ -112,6 +116,120 @@ class TestPromptInterface < KwardTestCase
     prompt.start
 
     assert_includes strip_ansi(output.string), "│ custom footer"
+  end
+
+  def test_prompt_interface_renders_banner_message_without_inline_image_escape
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+
+    rendered = strip_ansi(output.string)
+    assert_includes rendered, "State your business."
+    refute_includes output.string, "\e_G"
+    refute_includes output.string, "\e]1337;File="
+  end
+
+  def test_prompt_interface_renders_banner_from_pixel_data_without_decoding_png
+    output = StringIO.new
+    original_decoder = Kward::PixelLogo.method(:indexed_png_pixels)
+    Kward::PixelLogo.define_singleton_method(:indexed_png_pixels) { |_path| raise "PNG decoder should not be used" }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+
+    assert_includes output.string, "\e[48;2;"
+    assert_includes output.string, "\e[38;2;"
+    assert_includes strip_ansi(output.string), "▀"
+    refute_includes output.string, "\e_G"
+    refute_includes output.string, "\e]1337;File="
+  ensure
+    Kward::PixelLogo.define_singleton_method(:indexed_png_pixels, original_decoder) if original_decoder
+  end
+
+  def test_prompt_interface_renders_centered_banner_as_half_block_pixels_at_full_size
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 30 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+
+    color_index = output.string.index("\e[48;2;")
+    assert color_index
+    logo_row = strip_ansi(prompt.send(:banner_rows, 80).find { |row| row.include?("\e[48;2;") })
+    assert_equal 56, logo_row.length
+    assert_equal 16, prompt.send(:banner_logo_rows).length
+    assert_includes output.string, "\e[38;2;"
+    assert_includes strip_ansi(output.string), "▀"
+    refute_includes output.string, "\e_G"
+    refute_includes output.string, "\e]1337;File="
+    assert_includes strip_ansi(output.string), "                              State your business."
+    assert_operator output.string.rindex(TTY::Cursor.clear_line), :<, color_index
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_scales_banner_down_on_short_terminals
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 100 }
+    TTY::Screen.define_singleton_method(:height) { 17 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+
+    color_index = output.string.index("\e[48;2;")
+    assert color_index
+    logo_row = strip_ansi(prompt.send(:banner_rows, 100).find { |row| row.include?("\e[48;2;") })
+    assert_equal 66, logo_row.length
+    assert_equal 11, prompt.send(:banner_logo_rows).length
+    assert_includes strip_ansi(output.string), "                                        State your business."
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_hides_banner_logo_when_terminal_is_too_short
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:height) { 9 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    rows = prompt.send(:banner_rows, 80)
+
+    assert rows.any? { |row| row.include?("State your business.") }
+    refute rows.any? { |row| row.include?("\e[48;2;") }
+  ensure
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
   def test_prompt_interface_refreshes_footer_while_idle
