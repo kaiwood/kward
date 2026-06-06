@@ -765,6 +765,24 @@ class TestPromptInterface < KwardTestCase
     assert_includes stripped, "Tool output>\r\n.git/\r\n.gitignore\r\nREADME.md\r\n"
   end
 
+  def test_prompt_interface_separates_say_output_from_next_stream_block
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.say("\nYou> abcdefg\ndasdsadas\n")
+    prompt.start_stream_block("Tool")
+    prompt.write_delta("abcde\n")
+    prompt.finish_stream_block
+
+    stripped = strip_ansi(output.string)
+    assert_includes stripped, "dasdsadas\r\n"
+    assert_includes stripped, "\r\nTool>\r\nabcde"
+    refute_includes stripped, "╯Tool>"
+  end
+
   def test_prompt_interface_advances_after_full_width_stream_chunk
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

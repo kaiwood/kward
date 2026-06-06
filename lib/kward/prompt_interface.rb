@@ -303,9 +303,7 @@ module Kward
       @mutex.synchronize do
         if @stream_block != label
           prepare_transcript_output_locked
-          if @stream_block
-            write_transcript_text_locked("\n")
-          end
+          ensure_transcript_block_separator_locked
           write_transcript_text_locked("#{colored("#{label}>", label_color(label), :bold)}\n")
           @stream_block = label
         end
@@ -372,6 +370,12 @@ module Kward
       return if @transcript_buffer.length <= TRANSCRIPT_BUFFER_LIMIT
 
       @transcript_buffer = @transcript_buffer[-TRANSCRIPT_BUFFER_LIMIT, TRANSCRIPT_BUFFER_LIMIT]
+    end
+
+    def ensure_transcript_block_separator_locked
+      return if @transcript_buffer.empty? || @transcript_buffer.end_with?("\n\n")
+
+      write_transcript_text_locked("\n")
     end
 
     def terminal_newlines(text)
