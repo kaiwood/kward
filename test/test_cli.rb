@@ -150,6 +150,21 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_startup_omits_title_session_and_help_text
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      output = prompt.output.join("\n")
+      refute_includes output, "Ruby CLI Agent"
+      refute_includes output, "Session:"
+      refute_includes output, "Ask a question and press Enter"
+    end
+  end
+
   def test_interactive_mode_prints_visual_banner_once_without_persisting_it
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

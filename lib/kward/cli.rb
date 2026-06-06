@@ -148,11 +148,6 @@ module Kward
       @footer_conversation = agent.conversation
 
       print_visual_banner
-      @prompt.say(colored("Ruby CLI Agent", :cyan, :bold))
-      @prompt.say("Session: #{@active_session.path}") if @active_session
-      help = "Ask a question and press Enter. Type /exit to quit. Use /redraw to refresh."
-      help += " Use Shift+Enter for new lines." if prompt_interface?
-      @prompt.say("#{help}\n")
 
       @pending_inputs = []
 
