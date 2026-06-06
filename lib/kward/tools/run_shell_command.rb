@@ -1,0 +1,28 @@
+require_relative "base"
+require_relative "../workspace"
+
+module Kward
+  module Tools
+    class RunShellCommand < Base
+      def initialize(workspace:)
+        @workspace = workspace
+        super(
+          "run_shell_command",
+          "Run a shell command in the current workspace.",
+          properties: {
+            command: { type: "string", description: "Shell command to run from the workspace root." },
+            timeout_seconds: { type: "integer", description: "Optional timeout in seconds. Defaults to 30." }
+          },
+          required: ["command"]
+        )
+      end
+
+      def call(args, _conversation, cancellation: nil)
+        command = argument(args, :command, "")
+        timeout_seconds = argument(args, :timeout_seconds, Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS)
+
+        @workspace.run_shell_command(command, timeout_seconds: timeout_seconds, cancellation: cancellation)
+      end
+    end
+  end
+end

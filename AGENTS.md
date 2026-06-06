@@ -23,7 +23,8 @@ Kward is a small Ruby CLI coding agent. It supports interactive and one-shot cha
 - `lib/kward/cli.rb` - command-line flow and interactive chat orchestration.
 - `lib/kward/agent.rb` - agent loop and tool execution flow.
 - `lib/kward/client.rb` - model provider HTTP client behavior.
-- `lib/kward/tool_registry.rb` - tool definitions and dispatch.
+- `lib/kward/tool_registry.rb` - tool dispatch and schema exposure.
+- `lib/kward/tools/` - individual tool implementations, one file per tool.
 - `lib/kward/rpc/` - experimental JSON-RPC backend.
 - `lib/kward/prompts.rb` - system prompt and prompt/skill discovery.
 - `lib/kward/config_files.rb` - config path handling.
