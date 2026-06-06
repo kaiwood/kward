@@ -1459,12 +1459,21 @@ module Kward
     def slash_overlay_rows(width)
       return [] unless slash_overlay_visible?
 
-      lines = slash_overlay_matches.each_with_index.map do |command, index|
+      visible = visible_slash_overlay_matches(slash_overlay_matches)
+      start_index = visible[:start]
+      lines = visible[:commands].each_with_index.map do |command, offset|
+        index = start_index + offset
         hint = command[:argument_hint].empty? ? "" : " #{command[:argument_hint]}"
         description = command[:description].empty? ? "" : " — #{command[:description]}"
         overlay_choice_line("/#{command[:name]}#{hint}#{description}", selected: index == @slash_selection_index)
       end
       overlay_card_rows("Slash commands", lines, width)
+    end
+
+    def visible_slash_overlay_matches(matches)
+      max_rows = [[screen_height - 7, 1].max, 8].min
+      start = [[@slash_selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
+      { start: start, commands: matches[start, max_rows] || [] }
     end
 
     def selection_overlay_rows(width)
@@ -1539,12 +1548,9 @@ module Kward
 
     def overlay_card_width(width)
       return width if width < 32
+      return width if @overlay_settings["width"] == "maximum"
 
-      if @overlay_settings["width"] == "maximum"
-        [[width - 4, 32].max, width].min
-      else
-        [[width - 4, 32].max, 96].min
-      end
+      [[width - 4, 32].max, 96].min
     end
 
     def overlay_top_border(title, card_width)
@@ -1672,7 +1678,9 @@ module Kward
       status = composer_status_text
       if status
         gap = width - 2 - ANSI.strip(title).length - ANSI.strip(status).length
-        title = title + (" " * gap) + status if gap >= 0
+        if gap >= 0
+          return colored("╭", :blue) + title + colored("─" * gap, :blue) + status + colored("╮", :blue)
+        end
       end
       plain_title = ANSI.strip(title)
       "#{colored("╭", :blue)}#{title}#{colored("─" * [width - plain_title.length - 2, 0].max, :blue)}#{colored("╮", :blue)}"

@@ -36,14 +36,14 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, composer_status: -> { "Codex gpt-5.5 · medium" })
     line = strip_ansi(prompt.send(:top_border, 80))
 
-    assert_equal "╭ You                                                   Codex gpt-5.5 · medium ╮", line
+    assert_equal "╭ You ───────────────────────────────────────────────── Codex gpt-5.5 · medium ╮", line
   end
 
   def test_prompt_interface_top_border_renders_status_at_minimum_exact_width
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, composer_status: -> { "Codex gpt-5.5 · medium" })
     line = strip_ansi(prompt.send(:top_border, 40))
 
-    assert_equal "╭ You           Codex gpt-5.5 · medium ╮", line
+    assert_equal "╭ You ───────── Codex gpt-5.5 · medium ╮", line
   end
 
   def test_prompt_interface_top_border_hides_status_when_no_room
@@ -375,6 +375,28 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_slash_overlay_keeps_composer_visible_on_short_screens
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      slash_commands: (1..14).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } }
+    )
+    prompt.instance_variable_set(:@input, "/")
+    prompt.instance_variable_set(:@cursor, 1)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 12 }
+
+    rows, = prompt.send(:composer_layout, 80)
+
+    assert_operator rows.length, :<=, 11
+    assert_includes strip_ansi(rows.join("\n")), "╭ You"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_prompt_interface_selected_overlay_items_keep_color_after_navigation
     input, writer = IO.pipe
     output = StringIO.new
@@ -419,10 +441,10 @@ class TestPromptInterface < KwardTestCase
     assert_equal "╭", strip_ansi(right_row)[4]
   end
 
-  def test_prompt_interface_maximum_overlay_width_uses_terminal_inset
+  def test_prompt_interface_maximum_overlay_width_matches_composer_width
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "width" => "maximum" })
 
-    assert_equal 116, prompt.send(:overlay_card_width, 120)
+    assert_equal 120, prompt.send(:overlay_card_width, 120)
   end
 
   def test_prompt_interface_question_cursor_uses_overlay_alignment

@@ -862,7 +862,7 @@ class TestCLI < KwardTestCase
       config = JSON.parse(File.read(config_path))
       assert_equal "existing", config["openai_model"]
       assert_equal({ "alignment" => "right", "width" => "maximum" }, config["overlay"])
-      assert_equal [{ "alignment" => "right", "width" => "capped" }, { "alignment" => "right", "width" => "maximum" }], prompt.overlay_settings_updates
+      assert_equal [{ "alignment" => "right", "width" => "maximum" }, { "alignment" => "right", "width" => "maximum" }], prompt.overlay_settings_updates
       assert_equal ["Overlay alignment", "Overlay width"], prompt.select_messages
       assert_equal ["Settings", "Settings"], prompt.select_titles
     end

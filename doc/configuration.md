@@ -21,12 +21,12 @@ Overlay settings are stored under `overlay`:
 {
   "overlay": {
     "alignment": "center",
-    "width": "capped"
+    "width": "maximum"
   }
 }
 ```
 
-`alignment` can be `left`, `center`, or `right`. `width` can be `capped` for the default compact card or `maximum` to use the terminal width minus the side inset.
+`alignment` can be `left`, `center`, or `right`. `width` can be `maximum` to match the composer width or `capped` for a compact card.
 
 ## Environment fallback
 

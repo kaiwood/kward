@@ -6,7 +6,7 @@ require "yaml"
 module Kward
   module ConfigFiles
     MAX_SKILL_FILE_BYTES = 100_000
-    DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "capped" }.freeze
+    DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "maximum" }.freeze
     OVERLAY_ALIGNMENTS = %w[left center right].freeze
     OVERLAY_WIDTHS = %w[capped maximum].freeze
 
