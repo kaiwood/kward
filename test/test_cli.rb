@@ -783,6 +783,45 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_model_slash_command_refreshes_active_conversation_persona_and_session_runtime
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "openai_model" => "gpt-5.3-codex-spark",
+        "personas" => {
+          "models" => {
+            "gpt-5.3-codex-spark" => "Your name is Commander Spark.",
+            "gpt-5.5" => "Your name is Commander K'warD."
+          }
+        }
+      ))
+      store = Kward::SessionStore.new(config_dir: dir, cwd: Dir.pwd)
+      prompt = FakeSettingsPrompt.new(["/name keep", "/model", "/exit"], ["gpt-5.5"])
+      client = FakeClient.new([])
+      client.model = "gpt-5.3-codex-spark"
+      client.instance_variable_set(:@config_path, config_path)
+      def client.reload_config
+        @reload_count += 1
+        @model = JSON.parse(File.read(@config_path))["openai_model"]
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      conversation = with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "gpt-5.5", conversation.model
+      assert_includes conversation.messages.first[:content], "Commander K'warD"
+      refute_includes conversation.messages.first[:content], "Commander Spark"
+
+      session_path = Dir.glob(File.join(store.session_dir, "*.jsonl")).first
+      _session, restored = store.load(session_path, workspace: Kward::Workspace.new(root: Dir.pwd), model: "fallback", reasoning_effort: "fallback")
+      assert_equal "gpt-5.5", restored.model
+      assert_includes restored.messages.first[:content], "Commander K'warD"
+      refute_includes restored.messages.first[:content], "Commander Spark"
+    end
+  end
+
   def test_reasoning_slash_command_persists_effort_and_reloads_config
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

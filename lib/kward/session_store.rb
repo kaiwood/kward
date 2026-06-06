@@ -62,6 +62,16 @@ module Kward
         })
       end
 
+      def update_runtime(model:, reasoning_effort:)
+        @store.append_record(@path, {
+          type: "session_info",
+          timestamp: Time.now.utc.iso8601(3),
+          name: @name,
+          model: model.to_s,
+          reasoningEffort: reasoning_effort.to_s
+        }.delete_if { |_key, value| value.to_s.empty? })
+      end
+
       def delete_if_unused
         @store.delete_unused_session(self)
       end
@@ -140,12 +150,13 @@ module Kward
       name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
 
+      runtime = session_runtime(records, header)
       conversation = Conversation.new(
         messages: messages,
         read_paths: read_paths,
         workspace_root: workspace.root,
-        model: header["model"] || model,
-        reasoning_effort: header["reasoningEffort"] || reasoning_effort
+        model: runtime["model"] || model,
+        reasoning_effort: runtime["reasoningEffort"] || reasoning_effort
       )
       conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"
       session = Session.new(
@@ -251,6 +262,20 @@ module Kward
     def session_name(records)
       record = records.select { |item| item["type"] == "session_info" }.last
       record ? record["name"] : nil
+    end
+
+    def session_runtime(records, header)
+      result = {
+        "model" => header["model"],
+        "reasoningEffort" => header["reasoningEffort"]
+      }
+      records.each do |record|
+        next unless record["type"] == "session_info"
+
+        result["model"] = record["model"] if record.key?("model")
+        result["reasoningEffort"] = record["reasoningEffort"] if record.key?("reasoningEffort")
+      end
+      result.delete_if { |_key, value| value.to_s.empty? }
     end
 
     def restored_messages(records)

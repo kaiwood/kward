@@ -37,6 +37,37 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_runtime_model_update_refreshes_active_conversation_persona_and_session_runtime
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "openai_model" => "gpt-5.3-codex-spark",
+        "personas" => {
+          "models" => {
+            "gpt-5.3-codex-spark" => "Your name is Commander Spark.",
+            "gpt-5.5" => "Your name is Commander K'warD."
+          }
+        }
+      ))
+      client = ReloadableFakeClient.new([], config_path)
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: client)
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+
+        server.send(:runtime_update_setting, "sessionId" => session[:id], "settingId" => "defaultModel", "value" => "gpt-5.5")
+
+        rpc_session = server.instance_variable_get(:@session_manager).instance_variable_get(:@sessions).fetch(session[:id])
+        assert_equal "gpt-5.5", rpc_session.conversation.model
+        assert_includes rpc_session.conversation.messages.first[:content], "Commander K'warD"
+        refute_includes rpc_session.conversation.messages.first[:content], "Commander Spark"
+
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+        _session, restored = store.load(session[:path], workspace: Kward::Workspace.new(root: Dir.pwd), model: "fallback", reasoning_effort: "fallback")
+        assert_equal "gpt-5.5", restored.model
+      end
+    end
+  end
+
   def test_config_update_redacts_secrets_in_response
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

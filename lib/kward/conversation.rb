@@ -66,6 +66,12 @@ module Kward
       replacement
     end
 
+    def update_runtime_context!(model:, reasoning_effort:)
+      @model = model
+      @reasoning_effort = reasoning_effort
+      refresh_system_message!
+    end
+
     def refresh_system_message_if_workspace_agents_changed!
       refresh_system_message! if @system_message_enabled && workspace_agents_mtime != @workspace_agents_mtime
     end

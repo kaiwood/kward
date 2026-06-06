@@ -361,6 +361,7 @@ module Kward
 
       def refresh_client_config
         @client.reload_config if @client.respond_to?(:reload_config)
+        refresh_session_runtime_contexts
       end
 
       def session_payload(rpc_session)
@@ -395,6 +396,16 @@ module Kward
           model: (@client.current_model if @client.respond_to?(:current_model)),
           reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
         )
+      end
+
+      def refresh_session_runtime_contexts
+        model = current_model_id
+        reasoning_effort = current_reasoning_effort
+        sessions = @mutex.synchronize { @sessions.values }
+        sessions.each do |rpc_session|
+          rpc_session.conversation.update_runtime_context!(model: model, reasoning_effort: reasoning_effort)
+          rpc_session.session.update_runtime(model: model, reasoning_effort: reasoning_effort)
+        end
       end
 
       def compaction_settings

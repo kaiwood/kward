@@ -269,10 +269,10 @@ module Kward
         configure_settings
         [true, nil]
       when "model"
-        configure_model
+        configure_model(agent.conversation)
         [true, nil]
       when "reasoning"
-        configure_reasoning
+        configure_reasoning(agent.conversation)
         [true, nil]
       when "new"
         [true, start_new_session(session_store)]
@@ -400,7 +400,7 @@ module Kward
       @prompt.say("\nSettings error: #{e.message}\n")
     end
 
-    def configure_model
+    def configure_model(conversation = nil)
       unless model_overlay_available?
         @prompt.say("\nModel overlay is unavailable in this prompt.\n")
         return
@@ -416,13 +416,14 @@ module Kward
 
       ConfigFiles.update_config(ModelInfo.config_key_for_provider(provider) => model)
       reload_client_config
+      refresh_conversation_runtime(conversation)
       @prompt.say("\nSaved default model: #{provider} #{model}\n")
       @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
       @prompt.say("\nModel error: #{e.message}\n")
     end
 
-    def configure_reasoning
+    def configure_reasoning(conversation = nil)
       unless model_overlay_available?
         @prompt.say("\nReasoning overlay is unavailable in this prompt.\n")
         return
@@ -437,6 +438,7 @@ module Kward
 
       ConfigFiles.update_config("openai_reasoning_effort" => effort)
       reload_client_config
+      refresh_conversation_runtime(conversation)
       @prompt.say("\nSaved reasoning effort: #{effort}\n")
       @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
@@ -518,6 +520,13 @@ module Kward
 
     def reload_client_config
       @client.reload_config if @client.respond_to?(:reload_config)
+    end
+
+    def refresh_conversation_runtime(conversation)
+      return unless conversation&.respond_to?(:update_runtime_context!)
+
+      conversation.update_runtime_context!(model: current_model_id, reasoning_effort: current_reasoning_effort)
+      @active_session.update_runtime(model: conversation.model, reasoning_effort: conversation.reasoning_effort) if @active_session&.respond_to?(:update_runtime)
     end
 
     def overlay_alignment_choices(settings)
