@@ -9,6 +9,12 @@ class TestANSI < KwardTestCase
     assert_equal "Assistant>", Kward::ANSI.colorize("Assistant>", :green, enabled: false)
   end
 
+  def test_ansi_colorizes_palette_truecolor
+    colored = Kward::ANSI.colorize("border", :primary_green, enabled: true)
+
+    assert_equal "\e[38;2;138;160;106mborder\e[0m", colored
+  end
+
   def test_ansi_markdown_renders_basic_styles
     rendered = Kward::ANSI.markdown("# Heading\nUse `code`.\n\n```ruby\nputs :ok\n```\n- item\n", enabled: true)
 

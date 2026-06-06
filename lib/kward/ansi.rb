@@ -12,7 +12,14 @@ module Kward
       magenta: 35,
       cyan: 36,
       gray: 90,
-      grey: 90
+      grey: 90,
+      primary_green: "38;2;138;160;106",
+      bright_accent_green: "38;2;155;255;0",
+      augen: "38;2;155;255;0",
+      dark_forest_green: "38;2;78;88;53",
+      stone: "38;2;196;192;178",
+      metal_dark: "38;2;42;42;42",
+      background: "38;2;22;24;22"
     }.freeze
 
     module_function

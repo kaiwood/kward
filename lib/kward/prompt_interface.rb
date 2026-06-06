@@ -1556,17 +1556,17 @@ module Kward
     def overlay_top_border(title, card_width)
       title = visible_truncate(title.to_s, [card_width - 4, 1].max)
       plain_length = ANSI.strip(title).length
-      colored("╭", :cyan) + " #{colored(title, :cyan, :bold)} " + colored("─" * [card_width - plain_length - 4, 0].max, :cyan) + colored("╮", :cyan)
+      colored("╭", :primary_green) + " #{colored(title, :bright_accent_green, :bold)} " + colored("─" * [card_width - plain_length - 4, 0].max, :primary_green) + colored("╮", :primary_green)
     end
 
     def overlay_bottom_border(card_width)
-      colored("╰#{"─" * [card_width - 2, 0].max}╯", :cyan)
+      colored("╰#{"─" * [card_width - 2, 0].max}╯", :primary_green)
     end
 
     def overlay_content_row(row, inner_width)
       text = visible_truncate(row[:text], inner_width)
-      text = colored(text, :cyan, :bold) if row[:selected]
-      colored("│", :cyan) + " " + visible_ljust(text, inner_width) + " " + colored("│", :cyan)
+      text = colored(text, :bright_accent_green, :bold) if row[:selected]
+      colored("│", :primary_green) + " " + visible_ljust(text, inner_width) + " " + colored("│", :primary_green)
     end
 
     def overlay_text_line(text, style = nil)
@@ -1679,11 +1679,11 @@ module Kward
       if status
         gap = width - 2 - ANSI.strip(title).length - ANSI.strip(status).length
         if gap >= 0
-          return colored("╭", :blue) + title + colored("─" * gap, :blue) + status + colored("╮", :blue)
+          return colored("╭", :primary_green) + title + colored("─" * gap, :primary_green) + status + colored("╮", :primary_green)
         end
       end
       plain_title = ANSI.strip(title)
-      "#{colored("╭", :blue)}#{title}#{colored("─" * [width - plain_title.length - 2, 0].max, :blue)}#{colored("╮", :blue)}"
+      "#{colored("╭", :primary_green)}#{title}#{colored("─" * [width - plain_title.length - 2, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
     end
 
     def composer_title
@@ -1709,11 +1709,11 @@ module Kward
     end
 
     def bottom_border(width)
-      colored("╰#{"─" * [width - 2, 0].max}╯", :blue)
+      colored("╰#{"─" * [width - 2, 0].max}╯", :primary_green)
     end
 
     def box_content_row(row, content_width)
-      "#{colored("│", :blue)} #{row[0, content_width].to_s.ljust(content_width)} #{colored("│", :blue)}"
+      "#{colored("│", :primary_green)} #{row[0, content_width].to_s.ljust(content_width)} #{colored("│", :primary_green)}"
     end
 
     def footer_row(content_width)
