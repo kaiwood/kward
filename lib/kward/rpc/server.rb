@@ -6,6 +6,7 @@ require_relative "../prompt_commands"
 require_relative "../tool_registry"
 require_relative "../workspace"
 require_relative "../telemetry_logger"
+require_relative "../telemetry_stats"
 require_relative "auth_manager"
 require_relative "config_manager"
 require_relative "redactor"
@@ -144,6 +145,8 @@ module Kward
           { path: @config_manager.config_path, config: @config_manager.read(redacted: params.fetch("redacted", true)) }
         when "config/update"
           { path: @config_manager.config_path, config: @config_manager.update(params.fetch("values")) }
+        when "logging/stats"
+          logging_stats(params)
         when "auth/status"
           @auth_manager.status
         when "auth/providers"
@@ -323,6 +326,8 @@ module Kward
           logging: {
             supported: true,
             defaultEnabled: false,
+            methods: ["logging/stats"],
+            stats: { supported: true, method: "logging/stats", defaultRange: TelemetryStats::DEFAULT_RANGE, units: %w[minutes hours days weeks months years] },
             config: "logging",
             envPrefix: "KWARD_LOGGING",
             directory: File.join(ConfigFiles.config_dir, "logs"),
@@ -395,6 +400,12 @@ module Kward
         @session_manager.runtime_state(session_id: params.fetch("sessionId"))
         @session_manager.refresh_client_config
         { ok: true, message: "Resources reloaded." }
+      end
+
+      def logging_stats(params)
+        TelemetryStats.new.collect(params["range"].to_s).to_h
+      rescue ArgumentError => e
+        raise ArgumentError, e.message == TelemetryStats::USAGE ? e.message : "#{e.message} #{TelemetryStats::USAGE}"
       end
 
       def commands_list(params)

@@ -52,6 +52,14 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_rpc_redactor_preserves_numeric_token_counts_but_redacts_secret_tokens
+    redacted = Kward::RPC::Redactor.redact("total_tokens" => 12, "access_token" => "secret", "authorization" => "Bearer secret-token")
+
+    assert_equal 12, redacted["total_tokens"]
+    assert_equal "[REDACTED]", redacted["access_token"]
+    assert_equal "[REDACTED]", redacted["authorization"]
+  end
+
   def test_runtime_update_setting_and_reload
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

@@ -9,7 +9,13 @@ module Kward
         case value
         when Hash
           value.each_with_object({}) do |(key, item), result|
-            result[key] = secret_key?(key) ? "[REDACTED]" : redact(item)
+            if token_count_key?(key.to_s) && item.is_a?(Numeric)
+              result[key] = item
+            elsif secret_key?(key)
+              result[key] = "[REDACTED]"
+            else
+              result[key] = redact(item)
+            end
           end
         when Array
           value.map { |item| redact(item) }
@@ -31,6 +37,10 @@ module Kward
         return false if text == "apiKeyProviders"
 
         text.match?(SECRET_KEYS)
+      end
+
+      def token_count_key?(key)
+        key.match?(/\A(?:input|output|cache_read|cache_write|total)_tokens\z/) || key == "estimated"
       end
     end
   end

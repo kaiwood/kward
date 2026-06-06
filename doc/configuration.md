@@ -110,6 +110,8 @@ Logs are JSON Lines files in `<config-dir>/logs`, which is `~/.kward/logs` by de
 
 Logged data is redacted metadata only. Kward does not intentionally log prompts, assistant text, tool arguments, tool outputs, file contents, shell command text, API keys, or OAuth tokens. Logged fields can include provider/model names, token counts, byte counts, durations, retry attempts, tool names, statuses, and redacted error messages.
 
+Use `/stats [range]` in interactive mode to summarize enabled telemetry categories from the local logs. The range defaults to `1 week` and accepts values such as `10 minutes`, `2 days`, or `1 year` with minutes, hours, days, weeks, months, and years. Ranges use UTC calendar periods; for example, `1 month` means the current calendar month so far, and `2 months` means the previous month plus the current month so far. If logging is disabled, `/stats` reports that logging must be enabled first. Invalid ranges print usage instead of falling back to the default.
+
 ## Color output
 
 ANSI colors are enabled automatically on TTY output. Set `NO_COLOR=1`, `CLICOLOR=0`, or `KWARD_COLOR=never` to disable colors; set `KWARD_COLOR=always` or `FORCE_COLOR=1` to force them.

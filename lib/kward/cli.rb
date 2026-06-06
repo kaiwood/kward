@@ -15,6 +15,7 @@ require_relative "rpc/server"
 require_relative "session_store"
 require_relative "tool_call"
 require_relative "tool_registry"
+require_relative "telemetry_stats"
 require_relative "workspace"
 
 module Kward
@@ -32,7 +33,8 @@ module Kward
       { name: "compact", description: "Compact the current conversation context.", argument_hint: "[instructions]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
       { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
-      { name: "status", description: "Show the current status message.", argument_hint: "" }
+      { name: "status", description: "Show the current status message.", argument_hint: "" },
+      { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" }
     ].freeze
     BUILTIN_SLASH_COMMAND_NAMES = BUILTIN_SLASH_COMMANDS.map { |command| command[:name] }.freeze
 
@@ -245,6 +247,9 @@ module Kward
       when "status"
         print_status
         [true, nil]
+      when "stats"
+        print_stats(argument)
+        [true, nil]
       when "redraw"
         @prompt.redraw if @prompt.respond_to?(:redraw)
         [true, nil]
@@ -285,6 +290,14 @@ module Kward
         lines << "File: #{@active_session.path}"
       end
       @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{lines.join("\n")}\n")
+    end
+
+    def print_stats(argument)
+      result = TelemetryStats.new.collect(argument)
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{TelemetryStats.format(result)}\n")
+    rescue ArgumentError => e
+      message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
+      @prompt.say("\n#{message}\n")
     end
 
     def configure_settings

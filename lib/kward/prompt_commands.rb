@@ -2,7 +2,7 @@ require_relative "config_files"
 
 module Kward
   module PromptCommands
-    BUILTIN_RESERVED_COMMAND_NAMES = %w[exit quit new resume name clone export compact redraw settings status].freeze
+    BUILTIN_RESERVED_COMMAND_NAMES = %w[exit quit new resume name clone export compact redraw settings status stats].freeze
     SLASH_COMMAND_PATTERN = %r{\A/([^\s/]+)(?:\s+(.*))?\z}m
 
     module_function

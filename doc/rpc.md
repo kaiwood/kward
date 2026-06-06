@@ -362,6 +362,20 @@ Params:
 
 Refreshes config-backed runtime state and returns `{ "ok": true, "message": "Resources reloaded." }`.
 
+## Logging methods
+
+The `logging` capability reports local redacted telemetry logging support, the log directory, enabled categories, and `methods: ["logging/stats"]`. Logging stats require logging to be enabled by config or environment for at least one category.
+
+### `logging/stats`
+
+Params:
+
+- `range`: optional duration string such as `10 minutes`, `2 days`, or `1 year`; defaults to `1 week`.
+
+Accepted units are minutes, hours, days, weeks, months, and years. Ranges use UTC calendar periods: `1 month` means the current calendar month so far, and `2 months` means the previous month plus the current month so far. Invalid ranges return an invalid-params error with usage text.
+
+Returns structured stats for enabled categories only, including the requested range, log directory, record counts by category/event, `usageStats` token totals, performance duration summaries, tool call summaries, and error counts by event/class/provider/code. Error messages are not included in the stats response.
+
 ## Model methods
 
 ### `models/list`

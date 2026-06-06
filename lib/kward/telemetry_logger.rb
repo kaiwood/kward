@@ -32,6 +32,17 @@ module Kward
       settings["enabled"] && settings[category.to_s]
     end
 
+    def enabled_categories
+      settings = current_settings
+      return [] unless settings["enabled"]
+
+      CATEGORIES.select { |category| settings[category] }
+    end
+
+    def log_directory
+      log_dir
+    end
+
     def log(category, event, payload = {})
       category = category.to_s
       return false unless enabled?(category)
