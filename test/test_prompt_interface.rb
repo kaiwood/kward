@@ -794,7 +794,7 @@ class TestPromptInterface < KwardTestCase
     prompt.start_stream_block("Assistant")
     prompt.write_delta("hello")
 
-    assert_includes output.string, "Assistant>"
+    assert_includes output.string, "Kward>"
     assert_includes output.string, "hello"
     refute_includes strip_ansi(output.string), Kward::PromptInterface::HELP_TEXT
     refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT

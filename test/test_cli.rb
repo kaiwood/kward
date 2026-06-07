@@ -201,7 +201,7 @@ class TestCLI < KwardTestCase
       cli.send(:start_stream_block, "Assistant")
     end.first
 
-    assert_includes output, "\e[32;1mAssistant>\e[0m"
+    assert_includes output, "\e[32;1mKward>\e[0m"
   end
 
   def test_module_split_keeps_one_shot_mode_working
@@ -315,7 +315,7 @@ class TestCLI < KwardTestCase
       assert_includes output.string, TTY::Cursor.clear_screen
       after_clear = output.string.split(TTY::Cursor.clear_screen).last
       refute_includes strip_ansi(after_clear), "You> hello"
-      refute_includes strip_ansi(after_clear), "Assistant>"
+      refute_includes strip_ansi(after_clear), "Kward>"
       assert_includes strip_ansi(after_clear), "Started new session:"
     ensure
       input&.close unless input&.closed?
@@ -416,7 +416,7 @@ class TestCLI < KwardTestCase
       assert_equal 1, prompt.banner_count
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
-      assert_includes output, "Assistant>\nreply"
+      assert_includes output, "Kward>\nreply"
     end
   end
 
@@ -467,7 +467,7 @@ class TestCLI < KwardTestCase
       output = prompt.output.join("\n")
       assert_includes output, "You> inspect file"
       assert_includes output, "Reasoning>\nNeed to inspect the file."
-      assert_includes output, "Assistant>\nI'll read it."
+      assert_includes output, "Kward>\nI'll read it."
       assert_includes output, "Tool>\nread_file"
       assert_includes output, "Tool output>\nread_file: README.md"
       assert_includes output, "1 lines, 16 bytes"
@@ -528,7 +528,7 @@ class TestCLI < KwardTestCase
       assert files.any? { |file| jsonl_records(file).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" } }
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
-      assert_includes output, "Assistant>\nreply"
+      assert_includes output, "Kward>\nreply"
       assert_includes File.read(export_path), "## User\n\nhello"
       assert_includes File.read(export_path), "## Assistant\n\nreply"
     end

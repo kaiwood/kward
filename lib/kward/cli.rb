@@ -312,12 +312,12 @@ module Kward
         lines << "Session: #{@active_session.name || @active_session.id}"
         lines << "File: #{@active_session.path}"
       end
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{lines.join("\n")}\n")
+      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{lines.join("\n")}\n")
     end
 
     def print_stats(argument)
       result = TelemetryStats.new.collect(argument)
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{TelemetryStats.format(result)}\n")
+      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{TelemetryStats.format(result)}\n")
     rescue ArgumentError => e
       message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
       @prompt.say("\n#{message}\n")
@@ -691,7 +691,7 @@ module Kward
         print_block_delta(label, rendered)
         finish_stream_block
       else
-        @prompt.say("\n#{colored("#{label}>", label_color(label), :bold)}\n#{rendered}\n")
+        @prompt.say("\n#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n#{rendered}\n")
       end
     end
 
@@ -1124,7 +1124,7 @@ module Kward
       drain_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
       raise error if error
 
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
+      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       queued_inputs
     end
@@ -1241,7 +1241,7 @@ module Kward
         end
       end
       flush_markdown_deltas(markdown_chunks) if streamed
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
+      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
       []
     end
 
@@ -1439,7 +1439,7 @@ module Kward
       return if @stream_block == label
 
       puts if @stream_block
-      puts "\n#{colored("#{label}>", label_color(label), :bold)}"
+      puts "\n#{colored("#{transcript_label(label)}>", label_color(label), :bold)}"
       @stream_block = label
     end
 
@@ -1456,11 +1456,15 @@ module Kward
       ANSI.colorize(text, *styles, enabled: @color_enabled)
     end
 
+    def transcript_label(label)
+      label == "Assistant" ? "Kward" : label
+    end
+
     def label_color(label)
       case label
       when "Reasoning"
         :yellow
-      when "Assistant"
+      when "Assistant", "Kward"
         :green
       when "Tool"
         :magenta

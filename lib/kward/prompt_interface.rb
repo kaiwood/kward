@@ -310,7 +310,7 @@ module Kward
         if @stream_block != label
           prepare_transcript_output_locked
           ensure_transcript_block_separator_locked
-          write_transcript_text_locked("#{colored("#{label}>", label_color(label), :bold)}\n")
+          write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
           @stream_block = label
         end
         restore_composer_cursor_locked
@@ -2166,11 +2166,15 @@ module Kward
       ANSI.colorize(text, *styles, enabled: @color_enabled)
     end
 
+    def transcript_label(label)
+      label == "Assistant" ? "Kward" : label
+    end
+
     def label_color(label)
       case label
       when "Reasoning"
         :yellow
-      when "Assistant"
+      when "Assistant", "Kward"
         :green
       when "Tool"
         :magenta
