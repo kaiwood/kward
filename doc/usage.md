@@ -29,7 +29,7 @@ Auto-compaction is enabled by default when Kward can determine the active contex
 - Up/Down browse prompt history.
 - Ctrl+D exits an empty prompt.
 
-While assistant/tool output is streaming, the composer stays pinned and editable; pressing Enter queues the next prompt and sends it after the current response finishes. Multiline input grows the composer up to a capped height.
+While assistant/tool output is streaming, the composer stays pinned and editable; pressing Enter queues the next prompt and sends it after the current response finishes. When successful tool results include unified diffs, the composer status shows live session totals like `+700|-572` to the left of the context percentage. Multiline input grows the composer up to a capped height.
 
 ## Image attachments
 

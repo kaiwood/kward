@@ -55,6 +55,7 @@ Detailed capability fields include:
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`; other UI primitives are explicitly unsupported.
+- `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed.
 - `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
 

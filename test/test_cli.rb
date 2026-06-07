@@ -1030,6 +1030,45 @@ class TestCLI < KwardTestCase
     assert_equal "Codex fake-model · medium", cli.send(:composer_status_text)
   end
 
+  def test_composer_status_shows_session_diff_before_context_percentage
+    context_usage = Object.new
+    def context_usage.call(**_kwargs)
+      { percent: 42 }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 700, deletions: 572))
+
+    assert_equal "+700|-572 · 42% · Codex fake-model · medium", cli.send(:composer_status_text)
+  end
+
+  def test_composer_status_colors_session_diff
+    context_usage = Object.new
+    def context_usage.call(**_kwargs)
+      nil
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    cli.instance_variable_set(:@color_enabled, true)
+    cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 7, deletions: 5))
+
+    assert_includes cli.send(:composer_status_text), "\e[32m+7\e[0m|\e[31m-5\e[0m · Codex fake-model"
+  end
+
+  def test_prompt_interface_tool_result_updates_session_diff_and_redraws
+    prompt = BusyPrompt.new([])
+    content = "Edited file.txt\n--- file.txt\n+++ file.txt\n@@ -1,1 +1,2 @@\n-old\n+new\n+extra\n"
+    agent = EventAgent.new([Kward::Events::ToolResult.new(tool_call: tool_call("edit_file", path: "file.txt"), content: content)])
+    context_usage = Object.new
+    def context_usage.call(**_kwargs)
+      { percent: 10 }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), context_usage: context_usage)
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal 1, prompt.redraw_count
+    assert_equal "+2|-1 · 10% · Codex fake-model · medium", cli.send(:composer_status_text)
+  end
+
   def test_settings_slash_command_reports_unavailable_without_tui_prompt
     prompt = FakePrompt.new(["/settings", "/exit"])
     client = RecordingClient.new([])

@@ -318,6 +318,9 @@ module Kward
             custom: false,
             terminalInput: false
           },
+          composer: {
+            sessionDiff: { supported: false, reason: "interactiveComposerOnly" }
+          },
           security: {
             workspaceMutationGuard: "none",
             toolApproval: "none",

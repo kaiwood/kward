@@ -16,6 +16,7 @@ require_relative "pan_server"
 require_relative "plugin_registry"
 require_relative "prompt_commands"
 require_relative "rpc/server"
+require_relative "session_diff"
 require_relative "session_store"
 require_relative "steering"
 require_relative "tool_call"
@@ -57,6 +58,7 @@ module Kward
       @session_store = session_store
       @context_usage = context_usage
       @active_session = nil
+      @session_diff = SessionDiff.new
       @cleanup_sessions = []
       @plugin_registry = nil
       @color_enabled = ANSI.enabled?($stdout)
@@ -142,11 +144,13 @@ module Kward
       session_store = interactive_session_store(agent)
       if session_store && agent.nil?
         @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
+        reset_session_diff
         conversation = new_conversation(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
         agent = build_interactive_agent(conversation)
       elsif session_store
         @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
+        reset_session_diff
         @active_session.attach(agent.conversation)
       else
         agent ||= build_interactive_agent(new_conversation)
@@ -226,6 +230,16 @@ module Kward
     def track_session(session)
       @cleanup_sessions << session if session
       session
+    end
+
+    def reset_session_diff(path = nil)
+      @session_diff = path ? SessionDiff.from_session_file(path) : SessionDiff.new
+    end
+
+    def update_session_diff(content)
+      return unless @session_diff&.add_tool_result(content)
+
+      @prompt.redraw if @prompt.respond_to?(:redraw)
     end
 
     def cleanup_unused_sessions
@@ -558,6 +572,7 @@ module Kward
 
       previous_session = @active_session
       @active_session = track_session(session_store.create)
+      reset_session_diff
       cleanup_replaced_session(previous_session)
       conversation = new_conversation(workspace_root: session_store.cwd)
       @active_session.attach(conversation)
@@ -575,6 +590,7 @@ module Kward
 
       previous_session = @active_session
       @active_session, conversation = session_store.load(path, workspace: Workspace.new(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
+      reset_session_diff(@active_session.path)
       track_session(@active_session)
       cleanup_replaced_session(previous_session)
       @prompt.say("\nResumed session: #{@active_session.path}\n")
@@ -603,6 +619,7 @@ module Kward
 
       previous_session = @active_session
       @active_session = track_session(session_store.create_from_conversation(agent.conversation))
+      reset_session_diff(@active_session.path)
       cleanup_replaced_session(previous_session)
       @prompt.say("\nCloned session: #{@active_session.path}\n")
       render_conversation_transcript(agent.conversation)
@@ -1038,8 +1055,21 @@ module Kward
       reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
       reasoning = "n/a" if provider != "Codex" || reasoning.to_s.empty?
       text = "#{provider} #{model} · #{reasoning}"
+      parts = []
+      diff = composer_session_diff_text
+      parts << diff if diff
       usage = composer_context_usage(provider, model)
-      usage ? "#{composer_context_percent_text(usage[:percent])} · #{text}" : text
+      parts << composer_context_percent_text(usage[:percent]) if usage
+      parts << text
+      parts.join(" · ")
+    end
+
+    def composer_session_diff_text
+      return nil if @session_diff.nil? || @session_diff.empty?
+
+      additions = ANSI.colorize("+#{@session_diff.additions}", :green, enabled: @color_enabled)
+      deletions = ANSI.colorize("-#{@session_diff.deletions}", :red, enabled: @color_enabled)
+      "#{additions}|#{deletions}"
     end
 
     def composer_context_percent_text(percent)
@@ -1181,6 +1211,7 @@ module Kward
       when Events::ToolResult
         stream_state[:streamed] = true
         finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+        update_session_diff(event.content)
         print_tool_result(event.tool_call, event.content)
       end
     end

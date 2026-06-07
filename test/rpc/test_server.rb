@@ -26,7 +26,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi security export logging]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi composer security export logging]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -105,6 +105,8 @@ class TestRPCServer < KwardTestCase
       "custom" => false,
       "terminalInput" => false
     }, capabilities["extensionUi"])
+    assert_equal false, capabilities.dig("composer", "sessionDiff", "supported")
+    assert_equal "interactiveComposerOnly", capabilities.dig("composer", "sessionDiff", "reason")
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
     assert_equal "none", capabilities["security"]["toolApproval"]
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
