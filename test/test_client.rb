@@ -88,12 +88,12 @@ class TestClient < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
-  def test_codex_payload_includes_max_output_tokens_when_limited
+  def test_codex_payload_omits_unsupported_max_output_tokens
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
     payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [], max_tokens: 1234)
 
-    assert_equal 1234, payload[:max_output_tokens]
+    refute payload.key?(:max_output_tokens)
   end
 
   def test_config_model_and_thinking_level_apply_to_current_provider

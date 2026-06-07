@@ -556,7 +556,6 @@ module Kward
         include: []
       }
       payload[:reasoning] = { effort: reasoning_effort, summary: "auto" } unless reasoning == false
-      payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end
 
