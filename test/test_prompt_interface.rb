@@ -1083,8 +1083,32 @@ class TestPromptInterface < KwardTestCase
     prompt.write_delta("next")
 
     assert_includes output.string, "\r\nnext"
+    assert_equal ["", "", "", "aaaaaaaaaa", "next"], prompt.send(:transcript_viewport_rows, 5, 10)
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
+  end
+
+  def test_prompt_interface_resets_stream_position_after_redrawing_full_width_transcript
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 10 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.write_delta("a" * 10)
+    prompt.redraw
+    output.truncate(0)
+    output.rewind
+    prompt.write_delta("next")
+
+    assert_includes output.string, "\r\nnext"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
   def test_prompt_interface_resets_scroll_region_and_rerenders_on_resize

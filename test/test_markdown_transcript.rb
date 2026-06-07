@@ -31,4 +31,40 @@ class TestMarkdownTranscript < KwardTestCase
     assert_includes markdown, "[image/png: rpc.png]"
     assert_includes markdown, "[image/webp: cli.webp]"
   end
+
+  def test_renders_reasoning_parts_without_mislabeling_them_as_images
+    conversation = Kward::Conversation.new(
+      system_message: nil,
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "checked the route" },
+            { type: "text", text: "answer" }
+          ]
+        }
+      ]
+    )
+
+    markdown = Kward::MarkdownTranscript.new(conversation).render
+
+    assert_includes markdown, "Reasoning:\nchecked the route"
+    assert_includes markdown, "answer"
+    refute_includes markdown, "[image]"
+  end
+
+  def test_skips_unknown_parts_without_text
+    conversation = Kward::Conversation.new(
+      system_message: nil,
+      messages: [
+        { role: "assistant", content: [{ type: "unknown", data: "ignored" }, { type: "text", text: "answer" }] }
+      ]
+    )
+
+    markdown = Kward::MarkdownTranscript.new(conversation).render
+
+    assert_includes markdown, "answer"
+    refute_includes markdown, "ignored"
+    refute_includes markdown, "[image]"
+  end
 end

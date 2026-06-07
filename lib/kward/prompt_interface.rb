@@ -1813,7 +1813,7 @@ module Kward
     end
 
     def transcript_text_display_rows(width)
-      line_width = [width - 1, 1].max
+      line_width = [width, 1].max
       @transcript_buffer.split(/\r\n|\r|\n/, -1).flat_map do |line|
         chunks = line.scan(/.{1,#{line_width}}/m)
         chunks.empty? ? [""] : chunks
@@ -1821,9 +1821,16 @@ module Kward
     end
 
     def reset_stream_position_from_transcript_locked
-      rows = transcript_display_rows(screen_width)
-      @stream_col = rows.empty? ? 0 : rows.last.length
-      @stream_pending_wrap = false
+      width = screen_width
+      rows = transcript_display_rows(width)
+      last_length = rows.empty? ? 0 : rows.last.length
+      if last_length >= width
+        @stream_col = 0
+        @stream_pending_wrap = true
+      else
+        @stream_col = last_length
+        @stream_pending_wrap = false
+      end
     end
 
     def move_to_transcript_cursor_locked
