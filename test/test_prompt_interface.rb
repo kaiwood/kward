@@ -119,6 +119,32 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "│ custom footer"
   end
 
+  def test_prompt_interface_renders_attachment_badge_rows
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, attachment_badges: ->(_input) { ["[image] screenshot.png · image/png · 12 KB"] })
+    prompt.instance_variable_set(:@input, "describe screenshot.png")
+    prompt.instance_variable_set(:@cursor, "describe screenshot.png".length)
+
+    rows, cursor_row, = prompt.send(:composer_layout, 80)
+    rendered = strip_ansi(rows.join("\n"))
+
+    assert_includes rendered, "[image] screenshot.png · image/png · 12 KB"
+    assert_equal 2, cursor_row
+  end
+
+  def test_prompt_interface_caps_input_height_with_attachment_badges
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, attachment_badges: ->(_input) { ["[image] one.png", "[image] two.png"] })
+    value = (1..10).map { |index| "line #{index}" }.join("\n")
+    prompt.instance_variable_set(:@input, value)
+    prompt.instance_variable_set(:@cursor, value.length)
+
+    rows, cursor_row, = prompt.send(:composer_layout, 80)
+
+    assert_operator rows.length, :<=, Kward::PromptInterface::COMPOSER_MAX_INPUT_ROWS + 2
+    assert_operator cursor_row, :<, rows.length - 1
+    assert_includes rows.join("\n"), "[image] one.png"
+    assert_includes rows.join("\n"), "line 10"
+  end
+
   def test_prompt_interface_start_does_not_render_banner_in_fixed_composer
     output = StringIO.new
     prompt = Kward::PromptInterface.new(
@@ -668,6 +694,54 @@ class TestPromptInterface < KwardTestCase
 
   def test_prompt_interface_pastes_bracketed_multiline_text
     assert_equal "hello\nworld", ask_prompt_with_input("\e[200~hello\nworld\e[201~\r")
+  end
+
+  def test_prompt_interface_converts_pasted_image_path_to_hidden_attachment
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")
+      File.binwrite(path, "png bytes")
+      input, writer = IO.pipe
+      output = StringIO.new
+      writer.write("look \e[200~#{path}\e[201~\r")
+      writer.close
+      prompt = Kward::PromptInterface.new(
+        input: input,
+        output: output,
+        attachment_parser: ->(text) { Kward::ImageAttachments.extract_references_from_text(text) },
+        attachment_badges: ->(_input, attachments) { attachments.map { |attachment| "[image] #{attachment[:label]}" } }
+      )
+
+      result = prompt.ask("You>")
+
+      assert_kind_of Kward::PromptInterface::SubmittedInput, result
+      assert_equal "look", result.display_input
+      assert_equal "look\n#{path}", result.to_s
+      assert_includes strip_ansi(output.string), "[image] Screenshot 2026-06-07 at 12.34.56.png"
+      refute_includes strip_ansi(output.string), "look #{path}"
+    ensure
+      input&.close unless input&.closed?
+    end
+  end
+
+  def test_prompt_interface_backspace_at_start_removes_hidden_attachment
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")
+      File.binwrite(path, "png bytes")
+      input, writer = IO.pipe
+      output = StringIO.new
+      writer.write("\e[200~#{path}\e[201~\x7F\r")
+      writer.close
+      prompt = Kward::PromptInterface.new(
+        input: input,
+        output: output,
+        attachment_parser: ->(text) { Kward::ImageAttachments.extract_references_from_text(text) },
+        attachment_badges: ->(_input, attachments) { attachments.map { |attachment| "[image] #{attachment[:label]}" } }
+      )
+
+      assert_equal "", prompt.ask("You>")
+    ensure
+      input&.close unless input&.closed?
+    end
   end
 
   def test_prompt_interface_shows_slash_overlay_and_completes_selection

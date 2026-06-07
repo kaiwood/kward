@@ -33,7 +33,16 @@ module Kward
     EXIT_INPUT = :exit_input
     SELECT_CANCEL = :select_cancel
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, banner_pixels: nil, banner_message: nil)
+    class SubmittedInput < String
+      attr_reader :display_input
+
+      def initialize(value, display_input: nil)
+        super(value.to_s)
+        @display_input = display_input
+      end
+    end
+
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, attachment_badges: nil, attachment_parser: nil, banner_pixels: nil, banner_message: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -60,6 +69,7 @@ module Kward
       @visual_banner_count = 0
       @transcript_viewport_rows = 0
       @pending_keys = []
+      @attachments = []
       @kill_buffer = ""
       @original_console_mode = nil
       @raw_mode_active = false
@@ -78,6 +88,8 @@ module Kward
       @overlay_settings = normalize_overlay_settings(overlay_settings)
       @footer = footer
       @composer_status = composer_status
+      @attachment_badges = attachment_badges
+      @attachment_parser = attachment_parser
       @banner_message = banner_message.to_s
       @banner_logo_pixels = banner_pixels
       @banner_logo_cache = {}
@@ -133,6 +145,7 @@ module Kward
         unless preserve_input
           @input = ""
           @cursor = 0
+          @attachments.clear
           reset_history_navigation
         end
         @pending_keys.clear
@@ -180,6 +193,7 @@ module Kward
         @prompt_label = message.to_s
         @input = ""
         @cursor = 0
+        @attachments.clear
         @pending_keys.clear
         @asking = true
         @busy = false
@@ -254,6 +268,7 @@ module Kward
         @busy_activity = normalize_busy_activity(activity)
         @input = ""
         @cursor = 0
+        @attachments.clear
         @pending_keys.clear
         @asking = true
         @busy = true
@@ -481,12 +496,13 @@ module Kward
     end
 
     def submit_input
-      value = @input
-      add_history(value)
+      value = submitted_input
+      add_history(@input)
       if @busy
         clear_prompt_for_output_locked
         @input = ""
         @cursor = 0
+        @attachments.clear
         reset_history_navigation
         @asking = true
         render_prompt_after_output_locked
@@ -494,6 +510,7 @@ module Kward
         clear_prompt_locked
         @input = ""
         @cursor = 0
+        @attachments.clear
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -502,17 +519,28 @@ module Kward
       value
     end
 
+    def submitted_input
+      return @input if @attachments.empty?
+
+      sources = @attachments.map { |attachment| attachment[:source_text].to_s }.reject(&:empty?)
+      display_input = @input.to_s.rstrip
+      full_input = [display_input, *sources].reject { |part| part.to_s.strip.empty? }.join("\n")
+      SubmittedInput.new(full_input, display_input: display_input)
+    end
+
     def exit_input
       if @busy
         clear_prompt_for_output_locked
         @input = ""
         @cursor = 0
+        @attachments.clear
         @asking = true
         render_prompt_after_output_locked
       else
         clear_prompt_locked
         @input = ""
         @cursor = 0
+        @attachments.clear
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -931,7 +959,7 @@ module Kward
       end
 
       content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
-      insert_string(normalize_paste(content || ""))
+      insert_paste(normalize_paste(content || ""))
       queue_pending_keys(remaining) if remaining && !remaining.empty?
       true
     end
@@ -1263,13 +1291,54 @@ module Kward
       @cursor += string.length
     end
 
+    def insert_paste(string)
+      parsed = parse_attachments(string)
+      Array(parsed[:attachments]).each { |attachment| add_attachment(attachment) }
+      insert_string(parsed[:text].to_s) unless parsed[:text].to_s.empty?
+    end
+
+    def parse_attachments(string)
+      return { text: string.to_s, attachments: [] } unless @attachment_parser
+
+      result = @attachment_parser.call(string.to_s)
+      return { text: string.to_s, attachments: [] } unless result.is_a?(Hash)
+
+      {
+        text: result[:text] || result["text"] || "",
+        attachments: result[:attachments] || result["attachments"] || []
+      }
+    rescue StandardError
+      { text: string.to_s, attachments: [] }
+    end
+
+    def add_attachment(attachment)
+      return unless attachment.respond_to?(:key?)
+
+      source = attachment[:source_text] || attachment["source_text"] || attachment[:original_path] || attachment["original_path"]
+      return if source.to_s.empty?
+      return if @attachments.any? { |item| (item[:source_text] || item["source_text"]).to_s == source.to_s }
+
+      @attachments << attachment
+    end
+
     def delete_before_cursor
-      return unless @cursor.positive?
+      if @cursor.zero?
+        remove_last_attachment
+        return
+      end
 
       reset_slash_selection
       reset_history_navigation
       @input = @input[0...(@cursor - 1)] + @input[@cursor..]
       @cursor -= 1
+    end
+
+    def remove_last_attachment
+      return if @attachments.empty?
+
+      reset_slash_selection
+      reset_history_navigation
+      @attachments.pop
     end
 
     def delete_at_cursor
@@ -1781,16 +1850,18 @@ module Kward
 
       content_width = [width - 4, 1].max
       input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
-      max_input_rows = max_visible_input_rows
+      attachment_rows = attachment_badge_rows(content_width)
+      max_input_rows = max_visible_input_rows(attachment_rows.length)
       visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
       visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
       overlay_rows = active_overlay_rows(width)
       rows = overlay_rows + [top_border(width)]
+      rows.concat(attachment_rows)
       rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
       footer = footer_row(content_width)
       rows << footer if footer
       rows << bottom_border(width)
-      cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
+      cursor_row = overlay_rows.length + 1 + attachment_rows.length + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
       [rows, cursor_row, cursor_col]
     end
@@ -2157,10 +2228,25 @@ module Kward
       ""
     end
 
-    def max_visible_input_rows
+    def attachment_badge_rows(content_width)
+      attachment_badge_texts.map { |text| box_content_row(visible_truncate(text, content_width), content_width) }
+    end
+
+    def attachment_badge_texts
+      return [] unless @attachment_badges
+
+      Array(@attachment_badges.call(@input, @attachments)).map(&:to_s).reject(&:empty?)
+    rescue ArgumentError
+      Array(@attachment_badges.call(@input)).map(&:to_s).reject(&:empty?)
+    rescue StandardError
+      []
+    end
+
+    def max_visible_input_rows(attachment_count = 0)
       overlay_count = active_overlay_rows(screen_width).length
       footer_count = footer_text.to_s.empty? ? 0 : 1
-      [[COMPOSER_MAX_INPUT_ROWS, screen_height - 3 - overlay_count - footer_count].min, 1].max
+      input_cap = [COMPOSER_MAX_INPUT_ROWS - attachment_count, 1].max
+      [[input_cap, screen_height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
     end
 
     def composer_top_row

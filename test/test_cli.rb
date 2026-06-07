@@ -797,6 +797,39 @@ class TestCLI < KwardTestCase
     refute_includes markdown, "Plan this:"
   end
 
+  def test_transcript_replay_renders_structured_user_image_parts
+    original_term_program = ENV["TERM_PROGRAM"]
+    original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
+    ENV.delete("TERM_PROGRAM")
+    ENV["KITTY_WINDOW_ID"] = "1"
+    data = Base64.strict_encode64("png bytes")
+    conversation = Kward::Conversation.new(
+      system_message: nil,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "look\ndata:image/png;base64,#{data}" },
+            { type: "image", media_type: "image/png", data: data }
+          ]
+        }
+      ]
+    )
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+
+    cli.send(:render_conversation_transcript, conversation)
+
+    output = prompt.output.join("\n")
+    assert_includes output, "You> look"
+    refute_includes output, "You> look\ndata:image/png;base64"
+    assert_includes output, "[image] pasted image · image/png · 9 B"
+    assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40:#{data}\e\\"
+  ensure
+    original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
+    original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
+  end
+
   def test_interactive_prompt_slash_command_allows_empty_arguments
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |home|
@@ -886,7 +919,9 @@ class TestCLI < KwardTestCase
   def test_interactive_turn_displays_pasted_image
     path = "kward_user_transcript.png"
     original_term_program = ENV["TERM_PROGRAM"]
+    original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
     ENV.delete("TERM_PROGRAM")
+    ENV["KITTY_WINDOW_ID"] = "1"
     File.binwrite(path, "png bytes")
     prompt = FakePrompt.new([])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
@@ -894,10 +929,90 @@ class TestCLI < KwardTestCase
     cli.send(:print_user_transcript, "look #{path}")
 
     assert_includes prompt.output.join("\n"), "You> look #{path}"
+    assert_includes prompt.output.join("\n"), "[image] #{path} · image/png · 9 B"
     assert_includes prompt.output.join("\n"), "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
+    original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
     File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_user_transcript_uses_display_input_for_hidden_attachment
+    path = "kward_hidden_transcript.png"
+    original_term_program = ENV["TERM_PROGRAM"]
+    original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
+    ENV.delete("TERM_PROGRAM")
+    ENV["KITTY_WINDOW_ID"] = "1"
+    File.binwrite(path, "png bytes")
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:print_user_transcript, "look\n#{path}", display_input: "look")
+
+    output = prompt.output.join("\n")
+    assert_includes output, "You> look"
+    refute_includes output, "You> look\n#{path}"
+    assert_includes output, "[image] #{path} · image/png · 9 B"
+    assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
+  ensure
+    original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
+    original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_user_transcript_hides_data_url_text_and_renders_image_escape
+    original_term_program = ENV["TERM_PROGRAM"]
+    original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
+    ENV.delete("TERM_PROGRAM")
+    ENV["KITTY_WINDOW_ID"] = "1"
+    data = Base64.strict_encode64("png bytes")
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:print_user_transcript, "look\ndata:image/png;base64,#{data}", display_input: "look")
+
+    output = prompt.output.join("\n")
+    assert_includes output, "You> look"
+    refute_includes output, "You> look\ndata:image/png;base64"
+    assert_includes output, "[image] pasted image · image/png · 9 B"
+    assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40:#{data}\e\\"
+  ensure
+    original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
+    original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
+  end
+
+  def test_user_transcript_skips_image_escape_without_supported_terminal
+    path = "kward_unsupported_transcript.png"
+    original_term = ENV["TERM"]
+    original_term_program = ENV["TERM_PROGRAM"]
+    original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
+    ENV["TERM"] = "xterm-256color"
+    ENV.delete("TERM_PROGRAM")
+    ENV.delete("KITTY_WINDOW_ID")
+    File.binwrite(path, "png bytes")
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:print_user_transcript, "look #{path}")
+
+    output = prompt.output.join("\n")
+    assert_includes output, "[image] #{path} · image/png · 9 B"
+    refute_includes output, "\e_G"
+    refute_includes output, "\e]1337;File="
+  ensure
+    original_term ? ENV["TERM"] = original_term : ENV.delete("TERM")
+    original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
+    original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
+    File.delete(path) if path && File.exist?(path)
+  end
+
+  def test_composer_attachment_badges_reports_missing_image
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    badges = cli.send(:composer_attachment_badges, "look Screenshot 2099-01-01 at 12.00.00.png")
+
+    assert_equal ["[image?] Screenshot 2099-01-01 at 12.00.00.png not found"], badges
   end
 
   def test_interactive_turn_returns_prompt_queued_during_streaming

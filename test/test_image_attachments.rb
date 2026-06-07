@@ -69,12 +69,49 @@ class TestImageAttachments < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
-  def test_terminal_image_sequence_renders_inline_image_escape
+  def test_references_from_text_reports_attached_and_missing_image_badges
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")
+      File.binwrite(path, "png bytes")
+
+      refs = Kward::ImageAttachments.references_from_text("see #{path}\nmissing Screenshot 2099-01-01 at 12.00.00.png")
+
+      attached = refs.find { |ref| ref[:status] == :attached }
+      missing = refs.find { |ref| ref[:status] == :missing }
+      assert_equal "Screenshot 2026-06-07 at 12.34.56.png", attached[:label]
+      assert_equal "image/png", attached[:media_type]
+      assert_equal "png bytes".bytesize, attached[:size_bytes]
+      assert_equal path, attached[:path]
+      assert_equal path, attached[:source_text]
+      assert_equal "Screenshot 2099-01-01 at 12.00.00.png", missing[:label]
+    end
+  end
+
+  def test_extract_references_from_text_removes_attached_sources_from_display_text
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")
+      File.binwrite(path, "png bytes")
+
+      result = Kward::ImageAttachments.extract_references_from_text("look at this #{path}")
+
+      assert_equal "look at this", result[:text]
+      assert_equal 1, result[:attachments].length
+      assert_equal path, result[:attachments].first[:source_text]
+    end
+  end
+
+  def test_terminal_image_sequence_renders_kitty_inline_image_escape_when_supported
     part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
 
-    sequence = Kward::ImageAttachments.terminal_image_sequence(part, env: {})
+    sequence = Kward::ImageAttachments.terminal_image_sequence(part, env: { "KITTY_WINDOW_ID" => "1" })
 
     assert_equal "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64("pasted.png")}:#{Base64.strict_encode64("png bytes")}\e\\", sequence
+  end
+
+  def test_terminal_image_sequence_returns_nil_without_supported_terminal
+    part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
+
+    assert_nil Kward::ImageAttachments.terminal_image_sequence(part, env: {})
   end
 
   def test_terminal_image_sequence_uses_iterm_protocol_in_iterm

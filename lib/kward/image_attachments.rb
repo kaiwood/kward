@@ -36,6 +36,101 @@ module Kward
       data_uri_parts(text, seen) + path_parts(text, seen)
     end
 
+    def extract_references_from_text(text)
+      text = text.to_s
+      references = references_from_text(text).select { |reference| reference[:status] == :attached }
+      { text: display_text_without_references(text, references), attachments: references }
+    end
+
+    def display_text_without_references(text, references)
+      references.reduce(text.to_s.dup) do |result, reference|
+        source = reference[:source_text].to_s
+        source.empty? ? result : result.sub(source, "")
+      end.gsub(/[ \t]{2,}/, " ").gsub(/[ \t]+\n/, "\n").strip
+    end
+
+    def references_from_text(text)
+      seen = {}
+      refs = data_uri_references(text.to_s, seen)
+      image_paths_from_text(text.to_s).each do |path|
+        key = "path:#{path}"
+        next if seen[key]
+
+        expanded_path = resolve_image_path(path)
+        if expanded_path && File.file?(expanded_path)
+          next if seen[expanded_path]
+          next if File.size(expanded_path) > MAX_IMAGE_BYTES
+          next unless mime_type(expanded_path)
+
+          seen[key] = true
+          seen[expanded_path] = true
+          refs << image_reference(path, expanded_path)
+        elsif image_reference_candidate?(path)
+          seen[key] = true
+          refs << missing_image_reference(path)
+        end
+      rescue SystemCallError
+        seen[key] = true
+        refs << missing_image_reference(path)
+      end
+      refs
+    end
+
+    def data_uri_references(text, seen)
+      text.scan(DATA_URI_PATTERN).filter_map do |media_type, data|
+        source_text = Regexp.last_match[0]
+        normalized_data = data.gsub(/\s+/, "")
+        key = "data:#{media_type.downcase};#{normalized_data}"
+        next if seen[key]
+
+        decoded_bytes = Base64.decode64(normalized_data).bytesize
+        next if decoded_bytes > MAX_IMAGE_BYTES
+
+        seen[key] = true
+        {
+          status: :attached,
+          type: "image",
+          label: "pasted image",
+          media_type: media_type.downcase.sub("image/jpg", "image/jpeg"),
+          size_bytes: decoded_bytes,
+          source_text: source_text
+        }
+      rescue ArgumentError
+        nil
+      end
+    end
+
+    def image_reference(original_path, expanded_path)
+      {
+        status: :attached,
+        type: "image",
+        label: File.basename(expanded_path),
+        media_type: mime_type(expanded_path),
+        size_bytes: File.size(expanded_path),
+        path: expanded_path,
+        original_path: original_path,
+        source_text: original_path
+      }
+    end
+
+    def missing_image_reference(path)
+      {
+        status: :missing,
+        type: "image",
+        label: File.basename(clean_markdown_path(path)),
+        original_path: path,
+        source_text: path
+      }
+    end
+
+    def image_reference_candidate?(path)
+      path = clean_markdown_path(path)
+      return false unless image_extension?(path) || path.start_with?("file://")
+      return true if path.start_with?("file://", "/", "~/", "./", "../")
+
+      File.basename(path) == path && pasted_image_basename?(path)
+    end
+
     def data_uri_parts(text, seen)
       text.scan(DATA_URI_PATTERN).filter_map do |media_type, data|
         normalized_data = data.gsub(/\s+/, "")
@@ -85,26 +180,29 @@ module Kward
         candidate = path_candidate_from_line(line)
         paths << candidate if candidate
         paths.concat(path_tokens_from_line(line))
-        paths.concat(embedded_existing_paths_from_line(line))
+        paths.concat(embedded_image_candidates_from_line(line))
       end
       paths.compact.uniq
     end
 
-    def embedded_existing_paths_from_line(line)
+    def embedded_image_candidates_from_line(line)
       text = line.to_s
-      paths = []
+      candidates = []
       text.scan(EMBEDDED_IMAGE_EXTENSION_PATTERN) do
         end_index = Regexp.last_match.end(0)
         embedded_path_start_indexes(text, end_index).each do |start_index|
-          candidate = text[start_index...end_index]
-          expanded_path = resolve_image_path(candidate)
-          next unless expanded_path && File.file?(expanded_path)
+          candidate = clean_markdown_path(text[start_index...end_index])
+          next unless embedded_image_candidate?(candidate)
 
-          paths << expanded_path
+          candidates << candidate
           break
         end
       end
-      paths
+      candidates
+    end
+
+    def embedded_image_candidate?(path)
+      image_reference_candidate?(path)
     end
 
     def embedded_path_start_indexes(text, end_index)
@@ -205,13 +303,17 @@ module Kward
       name = part[:path] || part["path"]
       if iterm_image_protocol?(env)
         iterm_image_sequence(data, name, width)
-      else
+      elsif kitty_image_protocol?(env)
         kitty_image_sequence(data, name, width)
       end
     end
 
     def iterm_image_protocol?(env)
       env["TERM_PROGRAM"] == "iTerm.app"
+    end
+
+    def kitty_image_protocol?(env)
+      env["KITTY_WINDOW_ID"].to_s != "" || env["TERM"].to_s.include?("kitty") || env["TERM_PROGRAM"] == "WezTerm"
     end
 
     def iterm_image_sequence(data, name, width)

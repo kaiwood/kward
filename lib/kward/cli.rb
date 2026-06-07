@@ -1,3 +1,4 @@
+require "base64"
 require "json"
 require "thread"
 require "tty-prompt"
@@ -167,17 +168,27 @@ module Kward
         input = @pending_inputs.shift || @prompt.ask("You>")
         break if input.nil?
 
-        command = input.strip
-        next if command.empty?
-        input = selected_slash_command_input(input) || input
-        command = input.strip
-        break if ["/exit", "/quit"].include?(command)
-        handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
-        agent = replacement_agent if replacement_agent
+        display_input = submitted_display_input(input)
+        command_input = display_input.nil? ? input : display_input
+        command = command_input.strip
+        next if command.empty? && input.strip.empty?
+        if command.empty?
+          handled = false
+        else
+          selected_input = selected_slash_command_input(command_input)
+          if selected_input
+            input = selected_input
+            command = input.strip
+            display_input = input if display_input
+          end
+          break if ["/exit", "/quit"].include?(command)
+          handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
+          agent = replacement_agent if replacement_agent
+        end
         next if handled
 
         expanded_input = expand_prompt_template(input)
-        display_input = input if expanded_input
+        display_input = display_input || input if expanded_input
         input = expanded_input || input
         @footer_conversation = agent.conversation
         pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
@@ -662,7 +673,12 @@ module Kward
 
         case role
         when "user"
-          print_user_transcript(message_display_text(message))
+          print_user_transcript(
+            message_user_transcript_input(message),
+            display_input: message_user_display_text(message),
+            attachment_references: message_image_references(message),
+            image_parts: message_image_parts(message)
+          )
         when "assistant"
           render_reasoning(message)
           render_assistant_message(message)
@@ -807,6 +823,65 @@ module Kward
       return display_content.to_s unless display_content.nil?
 
       message_content_text(message_content(message))
+    end
+
+    def message_user_display_text(message)
+      display_content = message["display_content"] || message[:display_content] || message["displayContent"] || message[:displayContent]
+      return display_content.to_s unless display_content.nil?
+
+      content = message_content(message)
+      return content.to_s unless content.is_a?(Array)
+
+      text = content.filter_map do |part|
+        type = part["type"] || part[:type]
+        next unless type == "text"
+
+        part["text"] || part[:text]
+      end.join("\n")
+      Kward::ImageAttachments.display_text_without_references(text, Kward::ImageAttachments.references_from_text(text).select { |reference| reference[:status] == :attached })
+    end
+
+    def message_user_transcript_input(message)
+      content = message_content(message)
+      return content.to_s unless content.is_a?(Array)
+
+      message_user_display_text(message)
+    end
+
+    def message_image_parts(message)
+      content = message_content(message)
+      return [] unless content.is_a?(Array)
+
+      content.select do |part|
+        type = part["type"] || part[:type]
+        type == "image"
+      end
+    end
+
+    def message_image_references(message)
+      message_image_parts(message).map { |part| image_part_reference(part) }
+    end
+
+    def image_part_reference(part)
+      data = part[:data] || part["data"]
+      path = part[:path] || part["path"]
+      media_type = part[:media_type] || part["media_type"] || part[:mimeType] || part["mimeType"] || "image"
+      {
+        status: :attached,
+        type: "image",
+        label: path.to_s.empty? ? "pasted image" : File.basename(path),
+        media_type: media_type,
+        size_bytes: decoded_image_size(data),
+        path: path
+      }
+    end
+
+    def decoded_image_size(data)
+      return nil if data.to_s.empty?
+
+      Base64.decode64(data.to_s.gsub(/\s+/, "")).bytesize
+    rescue ArgumentError
+      nil
     end
 
     def synthetic_tool_call(name, id)
@@ -968,6 +1043,8 @@ module Kward
         overlay_settings: ConfigFiles.overlay_settings,
         footer: prompt_footer_renderer,
         composer_status: method(:composer_status_text),
+        attachment_badges: method(:composer_attachment_badges),
+        attachment_parser: method(:composer_attachment_parser),
         banner_pixels: Kward::PromptInterface::BANNER_LOGO_PIXELS,
         banner_message: Kward::PromptInterface::BANNER_MESSAGE
       )
@@ -1152,7 +1229,7 @@ module Kward
     end
 
     def run_interactive_turn(agent, input, display_input: nil)
-      print_user_transcript(display_input || input) if prompt_interface?
+      print_user_transcript(input, display_input: display_input) if prompt_interface?
       return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
 
       queued_inputs = []
@@ -1323,17 +1400,69 @@ module Kward
       []
     end
 
-    def print_user_transcript(input)
-      @prompt.say("\n#{colored("You>", :blue, :bold)} #{input}\n")
-      print_pasted_images(input)
+    def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
+      visible_input = display_input.nil? ? input : display_input
+      @prompt.say("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
+      print_attachment_badges(input, references: attachment_references)
+      print_pasted_images(input, image_parts: image_parts)
+    end
+
+    def print_attachment_badges(input, references: nil)
+      badges = references ? Array(references).map { |reference| attachment_badge_text(reference) } : composer_attachment_badges(input)
+      return if badges.empty?
+
+      @prompt.say("#{badges.join("\n")}\n")
+    end
+
+    def composer_attachment_badges(input, attachments = [])
+      references = Array(attachments)
+      references = Kward::ImageAttachments.references_from_text(input) if references.empty?
+      references.map { |reference| attachment_badge_text(reference) }
+    end
+
+    def composer_attachment_parser(input)
+      Kward::ImageAttachments.extract_references_from_text(input)
+    end
+
+    def submitted_display_input(input)
+      input.respond_to?(:display_input) ? input.display_input : nil
+    end
+
+    def attachment_badge_text(reference)
+      status = reference[:status] || reference["status"]
+      label = reference[:label] || reference["label"] || "image"
+      if status == :missing || status.to_s == "missing"
+        "[image?] #{label} not found"
+      else
+        media_type = reference[:media_type] || reference["media_type"] || reference[:mimeType] || reference["mimeType"] || "image"
+        size = format_attachment_size(reference[:size_bytes] || reference["size_bytes"] || reference[:sizeBytes] || reference["sizeBytes"])
+        "[image] #{label} · #{media_type}#{size.empty? ? "" : " · #{size}"}"
+      end
+    end
+
+    def format_attachment_size(bytes)
+      value = bytes.to_i
+      return "" unless value.positive?
+      return "#{value} B" if value < 1024
+
+      units = %w[KB MB GB]
+      size = value.to_f / 1024
+      unit = units.shift
+      while size >= 1024 && units.any?
+        size /= 1024
+        unit = units.shift
+      end
+      formatted = size >= 10 ? size.round.to_s : format("%.1f", size).sub(/\.0\z/, "")
+      "#{formatted} #{unit}"
     end
 
     def agent_display_options(display_input)
       display_input.nil? ? {} : { display_input: display_input }
     end
 
-    def print_pasted_images(input)
-      Kward::ImageAttachments.image_parts_from_text(input).each do |part|
+    def print_pasted_images(input, image_parts: nil)
+      parts = image_parts || Kward::ImageAttachments.image_parts_from_text(input)
+      parts.each do |part|
         sequence = Kward::ImageAttachments.terminal_image_sequence(part)
         @prompt.say(sequence) if sequence
       end

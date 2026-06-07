@@ -33,4 +33,4 @@ While assistant/tool output is streaming, the composer stays pinned and editable
 
 ## Image attachments
 
-Pasted image file paths, Markdown image links, file:// image URLs, and image data URLs are attached to the prompt when the active model supports images.
+Pasted image file paths, Markdown image links, file:// image URLs, and image data URLs are attached to the prompt when the active model supports images. In the interactive composer, pasted image references are shown as attachment badges instead of editable filename/base64 text. Press Backspace at the beginning of the prompt to remove the most recent attachment. Transcripts show attachment badges and render the image inline when the terminal advertises a supported inline image protocol, such as iTerm2 or Kitty/WezTerm.
