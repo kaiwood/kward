@@ -44,30 +44,31 @@ module Kward
       personas = @config["personas"]
       return [] unless personas.is_a?(Hash)
 
+      characters = ConfigFiles.crew_characters(personas)
       entries = []
-      add_crew_persona_entry(entries, "default", personas["default"])
-      add_workspace_persona_entry(entries, personas["workspaces"])
-      add_model_persona_entries(entries, personas["models"])
+      add_crew_persona_entry(entries, "default", ConfigFiles.resolved_persona_text(personas["default"], characters: characters))
+      add_workspace_persona_entry(entries, personas["workspaces"], characters: characters)
+      add_model_persona_entries(entries, personas["models"], characters: characters)
       entries
     end
 
-    def add_workspace_persona_entry(entries, workspaces)
+    def add_workspace_persona_entry(entries, workspaces, characters: {})
       return unless workspaces.is_a?(Hash)
 
       root = ConfigFiles.canonical_workspace_root(@workspace_root)
-      workspaces.each do |path, prompt|
+      workspaces.each do |path, key|
         next unless ConfigFiles.canonical_workspace_root(path) == root
 
-        add_crew_persona_entry(entries, "workspace", prompt, name: path)
+        add_crew_persona_entry(entries, "workspace", ConfigFiles.resolved_persona_text(key, characters: characters), name: path)
         break
       end
     end
 
-    def add_model_persona_entries(entries, models)
+    def add_model_persona_entries(entries, models, characters: {})
       return unless models.is_a?(Hash)
 
       models.keys.sort.each do |model|
-        add_crew_persona_entry(entries, "model", models[model], name: model)
+        add_crew_persona_entry(entries, "model", ConfigFiles.resolved_persona_text(models[model], characters: characters), name: model)
       end
     end
 

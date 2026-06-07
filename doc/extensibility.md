@@ -20,12 +20,29 @@ Personas configure personality, role, and communication style without modifying 
 ```json
 {
   "personas": {
-    "default": "You are an officer on board of the USS Tauren",
+    "crew": [
+      {
+        "key": "kward",
+        "label": "Kward",
+        "instruction": "You are an officer on board of the USS Tauren"
+      },
+      {
+        "key": "computer",
+        "label": "Computer",
+        "instruction": "Always speak like the computer on the USS Tauren, a famous Federation exploration vessel."
+      },
+      {
+        "key": "k-ward",
+        "label": "K'warD",
+        "instruction": "Speak like a highly decorated Klingon officer serving aboard the USS Tauren."
+      }
+    ],
+    "default": "kward",
     "workspaces": {
-      "/Users/kwood/Repositories/github.com/kaiwood/tauren": "Always speak like the Computer on the USS Tauren, a famous Federation exploration vessel."
+      "/Users/kwood/Repositories/github.com/kaiwood/tauren": "computer"
     },
     "models": {
-      "gpt-5.5": "Speak like a highly decorated Klingon officer serving aboard the USS Tauren."
+      "gpt-5.5": "k-ward"
     },
     "persona_modifiers": {
       "reasoning": {

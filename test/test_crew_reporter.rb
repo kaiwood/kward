@@ -36,11 +36,29 @@ class TestCrewReporter < KwardTestCase
     Dir.mktmpdir do |workspace|
       config = {
         "personas" => {
-          "default" => "Default persona.",
-          "workspaces" => { workspace => "Workspace persona." },
+          "crew" => {
+            "kward" => {
+              "label" => "Kward",
+              "instruction" => "Default persona."
+            },
+            "spark" => {
+              "label" => "Spark",
+              "instruction" => "Workspace persona."
+            },
+            "alt" => {
+              "label" => "Alternate",
+              "instruction" => "Alternate model persona."
+            },
+            "main" => {
+              "label" => "Model",
+              "instruction" => "Model persona."
+            }
+          },
+          "default" => "kward",
+          "workspaces" => { workspace => "spark" },
           "models" => {
-            "gpt-alt" => "Alternate model persona.",
-            "gpt-main" => "Model persona."
+            "gpt-alt" => "alt",
+            "gpt-main" => "main"
           },
           "persona_modifiers" => {
             "reasoning" => { "high" => "Reasoning persona should be ignored." },
@@ -83,8 +101,18 @@ class TestCrewReporter < KwardTestCase
   def test_summary_uses_aligned_table
     config = {
       "personas" => {
-        "default" => "Default persona.",
-        "models" => { "gpt-alt" => "Alternate model persona." }
+        "crew" => {
+          "kward" => {
+            "label" => "Kward",
+            "instruction" => "Default persona."
+          },
+          "alt" => {
+            "label" => "Model",
+            "instruction" => "Alternate model persona."
+          }
+        },
+        "default" => "kward",
+        "models" => { "gpt-alt" => "alt" }
       }
     }
     client = CrewClient.new(["default identity", "alternate identity"])
@@ -105,7 +133,17 @@ class TestCrewReporter < KwardTestCase
   end
 
   def test_model_persona_uses_its_associated_model
-    config = { "personas" => { "models" => { "gpt-alt" => "Alternate model persona." } } }
+    config = {
+      "personas" => {
+        "crew" => {
+          "alt" => {
+            "label" => "Alternate",
+            "instruction" => "Alternate model persona."
+          }
+        },
+        "models" => { "gpt-alt" => "alt" }
+      }
+    }
     client = CrewClient.new(["alt identity", "summary"])
 
     report = Kward::CrewReporter.new(

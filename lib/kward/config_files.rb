@@ -130,23 +130,24 @@ module Kward
       personas = config["personas"]
       return [] unless personas.is_a?(Hash)
 
+      characters = crew_characters(personas)
       entries = []
 
-      add_persona_entry(entries, "default", personas["default"])
+      add_persona_entry(entries, "default", resolved_persona_text(personas["default"], characters: characters))
 
       workspaces = personas["workspaces"]
       if workspaces.is_a?(Hash)
         root = canonical_workspace_root(workspace_root)
-        workspaces.each do |path, prompt|
+        workspaces.each do |path, key|
           if canonical_workspace_root(path) == root
-            add_persona_entry(entries, "workspace", prompt, name: path)
+            add_persona_entry(entries, "workspace", resolved_persona_text(key, characters: characters), name: path)
             break
           end
         end
       end
 
       models = personas["models"]
-      add_persona_entry(entries, "model", models[model.to_s], name: model.to_s) if models.is_a?(Hash) && !model.to_s.empty?
+      add_persona_entry(entries, "model", resolved_persona_text(models[model.to_s], characters: characters), name: model.to_s) if models.is_a?(Hash) && !model.to_s.empty?
 
       modifiers = personas["persona_modifiers"]
       if modifiers.is_a?(Hash)
@@ -168,7 +169,6 @@ module Kward
 
       entries
     end
-
     def workspace_agents_prompt(workspace_root)
       root = canonical_workspace_root(workspace_root)
       path = File.join(root, "AGENTS.md")
@@ -201,6 +201,73 @@ module Kward
       return unless text
 
       entries << { layer: layer.to_s, name: name.to_s, prompt: text }
+    end
+
+    def crew_characters(personas)
+      raw = personas["characters"] || personas["crew"]
+      return {} unless raw
+
+      if raw.is_a?(Hash)
+        parse_named_characters(raw)
+      elsif raw.is_a?(Array)
+        parse_named_characters_array(raw)
+      else
+        {}
+      end
+    end
+
+    def resolved_persona_text(value, characters: {})
+      return nil if value.nil?
+
+      key = value.to_s.strip
+      return nil if key.empty?
+
+      text = characters[key.to_s]
+      return text unless text.to_s.empty?
+
+      value
+    end
+
+    def parse_named_characters(raw)
+      raw.each_with_object({}) do |(key, definition), mapping|
+        instruction = extract_character_instruction(definition)
+        next if instruction.nil?
+
+        mapping[key.to_s] = instruction
+      end
+    end
+
+    def parse_named_characters_array(raw)
+      raw.each_with_object({}) do |entry, mapping|
+        char_key = nil
+        definition = nil
+
+        if entry.is_a?(Hash) && entry.length == 1 && entry.keys.first.is_a?(String)
+          char_key = entry.keys.first
+          definition = entry.values.first
+        elsif entry.is_a?(Hash)
+          char_key = entry["key"] || entry[:key] || entry["id"] || entry[:id] || entry["name"] || entry[:name]
+          definition = entry
+        end
+
+        next if char_key.to_s.empty?
+
+        instruction = extract_character_instruction(definition)
+        next if instruction.to_s.empty?
+
+        mapping[char_key.to_s] = instruction
+      end
+    end
+
+    def extract_character_instruction(definition)
+      return nil if definition.nil?
+
+      if definition.is_a?(Hash)
+        value = definition["instruction"] || definition[:instruction]
+        return presence(value)
+      end
+
+      presence(definition)
     end
 
     def add_persona_part(parts, value)

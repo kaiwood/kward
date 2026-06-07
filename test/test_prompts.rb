@@ -76,6 +76,58 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_crew_array_uses_instruction_field
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "personas" => {
+            "crew" => [
+              {
+                "key" => "kward",
+                "label" => "Kward",
+                "instruction" => "Default persona."
+              },
+              {
+                "key" => "spark",
+                "label" => "Spark",
+                "instruction" => "Workspace persona."
+              },
+              {
+                "key" => "gpt-alt",
+                "label" => "Input",
+                "instruction" => "Model persona."
+              }
+            ],
+            "default" => "kward",
+            "workspaces" => {
+              workspace => "spark"
+            },
+            "models" => {
+              "gpt-test" => "gpt-alt"
+            },
+            "persona_modifiers" => {
+              "reasoning" => {
+                "low" => "Low reasoning persona."
+              }
+            }
+          }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+
+          assert_includes content, "Default persona."
+          assert_includes content, "Workspace persona."
+          assert_includes content, "Model persona."
+          assert_includes content, "Low reasoning persona."
+          refute_includes content, "kward"
+          refute_includes content, "spark"
+          refute_includes content, "gpt-alt"
+        end
+      end
+    end
+  end
+
   def test_missing_personas_falls_back_without_configuration
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
@@ -119,12 +171,26 @@ class TestPrompts < KwardTestCase
       Dir.mktmpdir do |workspace|
         File.write(File.join(config_dir, "config.json"), JSON.dump({
           "personas" => {
-            "default" => "Default persona.",
+            "crew" => {
+              "kward" => {
+                "label" => "Kward",
+                "instruction" => "Default persona."
+              },
+              "spark" => {
+                "label" => "Spark",
+                "instruction" => "Workspace persona."
+              },
+              "gpt-alt" => {
+                "label" => "Input",
+                "instruction" => "Model persona."
+              }
+            },
+            "default" => "kward",
             "workspaces" => {
-              workspace => "Workspace persona."
+              workspace => "spark"
             },
             "models" => {
-              "gpt-test" => "Model persona."
+              "gpt-test" => "gpt-alt"
             },
             "persona_modifiers" => {
               "reasoning" => {
@@ -161,6 +227,9 @@ class TestPrompts < KwardTestCase
                        "Sunday persona.",
                        "Act like it."
           refute_includes content, "Ignored persona."
+          refute_includes content, "kward"
+          refute_includes content, "spark"
+          refute_includes content, "gpt-alt"
         end
       end
     end
