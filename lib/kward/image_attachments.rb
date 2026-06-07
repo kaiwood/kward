@@ -1,6 +1,7 @@
 require "base64"
 require "cgi"
 require "shellwords"
+require "tmpdir"
 require "uri"
 
 module Kward
@@ -15,7 +16,10 @@ module Kward
     }.freeze
     DATA_URI_PATTERN = %r{data:(image/(?:gif|jpe?g|png|webp));base64,([A-Za-z0-9+/=\r\n]+)}i.freeze
     MARKDOWN_IMAGE_PATTERN = /!\[[^\]]*\]\(([^)]+)\)/.freeze
+    EMBEDDED_IMAGE_EXTENSION_PATTERN = /\.(?:gif|jpe?g|png|webp)\b/i.freeze
     DEFAULT_TERMINAL_IMAGE_WIDTH = "40".freeze
+    SCREENSHOT_SEARCH_DIRS = ["Desktop", "Downloads", "Pictures"].freeze
+    PASTED_IMAGE_BASENAME_PATTERN = /\A(?:screenshot|screen shot|pasted[-_]image)/i.freeze
 
     module_function
 
@@ -50,7 +54,7 @@ module Kward
 
     def path_parts(text, seen)
       image_paths_from_text(text).filter_map do |path|
-        expanded_path = expand_image_path(path)
+        expanded_path = resolve_image_path(path)
         next unless expanded_path
         next if seen[expanded_path]
         next unless File.file?(expanded_path)
@@ -81,8 +85,32 @@ module Kward
         candidate = path_candidate_from_line(line)
         paths << candidate if candidate
         paths.concat(path_tokens_from_line(line))
+        paths.concat(embedded_existing_paths_from_line(line))
       end
       paths.compact.uniq
+    end
+
+    def embedded_existing_paths_from_line(line)
+      text = line.to_s
+      paths = []
+      text.scan(EMBEDDED_IMAGE_EXTENSION_PATTERN) do
+        end_index = Regexp.last_match.end(0)
+        embedded_path_start_indexes(text, end_index).each do |start_index|
+          candidate = text[start_index...end_index]
+          expanded_path = resolve_image_path(candidate)
+          next unless expanded_path && File.file?(expanded_path)
+
+          paths << expanded_path
+          break
+        end
+      end
+      paths
+    end
+
+    def embedded_path_start_indexes(text, end_index)
+      starts = [0]
+      text[0...end_index].scan(/\s+/) { starts << Regexp.last_match.end(0) }
+      starts.uniq
     end
 
     def path_candidate_from_line(line)
@@ -108,12 +136,46 @@ module Kward
       path.to_s.strip.sub(/\A["']/, "").sub(/["']\z/, "")
     end
 
+    def resolve_image_path(path)
+      expanded_path = expand_image_path(path)
+      return expanded_path if expanded_path && File.file?(expanded_path)
+
+      expand_image_basename(path)
+    end
+
     def expand_image_path(path)
       path = clean_markdown_path(path)
       path = file_uri_path(path) if path.start_with?("file://")
       return nil unless image_extension?(path)
 
       File.expand_path(path)
+    end
+
+    def expand_image_basename(path)
+      path = clean_markdown_path(path)
+      return nil unless image_extension?(path)
+      return nil unless File.basename(path) == path
+
+      current_candidate = File.join(Dir.pwd, path)
+      return File.expand_path(current_candidate) if File.file?(current_candidate)
+      return nil unless pasted_image_basename?(path)
+
+      screenshot_search_dirs.filter_map do |dir|
+        candidate = File.join(dir, path)
+        next unless File.file?(candidate)
+
+        File.expand_path(candidate)
+      end.first
+    end
+
+    def pasted_image_basename?(path)
+      File.basename(path).match?(PASTED_IMAGE_BASENAME_PATTERN)
+    end
+
+    def screenshot_search_dirs(home: Dir.home, tmpdir: Dir.tmpdir)
+      (SCREENSHOT_SEARCH_DIRS.map { |dir| File.join(home, dir) } + [tmpdir]).uniq
+    rescue ArgumentError
+      []
     end
 
     def file_uri_path(uri_text)
