@@ -1870,15 +1870,15 @@ module Kward
       content_width = [width - 4, 1].max
       input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
       attachment_rows = attachment_badge_rows(content_width)
-      max_input_rows = max_visible_input_rows(attachment_rows.length)
+      overlay_rows = active_overlay_rows(width)
+      footer_text = footer_text()
+      max_input_rows = max_visible_input_rows(attachment_rows.length, overlay_rows.length, footer_text.empty? ? 0 : 1)
       visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
       visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
-      overlay_rows = active_overlay_rows(width)
       rows = overlay_rows + [top_border(width)]
       rows.concat(attachment_rows)
       rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
-      footer = footer_row(content_width)
-      rows << footer if footer
+      rows << footer_row(content_width, footer_text) unless footer_text.empty?
       rows << bottom_border(width)
       cursor_row = overlay_rows.length + 1 + attachment_rows.length + input_cursor_row - visible_start
       cursor_col = 2 + [input_cursor_col, content_width - 1].min
@@ -2232,8 +2232,7 @@ module Kward
       "#{colored("│", :primary_green)} #{row[0, content_width].to_s.ljust(content_width)} #{colored("│", :primary_green)}"
     end
 
-    def footer_row(content_width)
-      text = footer_text
+    def footer_row(content_width, text = footer_text)
       return nil if text.empty?
 
       box_content_row(visible_truncate(text, content_width), content_width)
@@ -2261,9 +2260,7 @@ module Kward
       []
     end
 
-    def max_visible_input_rows(attachment_count = 0)
-      overlay_count = active_overlay_rows(screen_width).length
-      footer_count = footer_text.to_s.empty? ? 0 : 1
+    def max_visible_input_rows(attachment_count = 0, overlay_count = active_overlay_rows(screen_width).length, footer_count = footer_text.to_s.empty? ? 0 : 1)
       input_cap = [COMPOSER_MAX_INPUT_ROWS - attachment_count, 1].max
       [[input_cap, screen_height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
     end
