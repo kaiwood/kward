@@ -316,7 +316,7 @@ class TestCLI < KwardTestCase
       after_clear = output.string.split(TTY::Cursor.clear_screen).last
       refute_includes strip_ansi(after_clear), "You> hello"
       refute_includes strip_ansi(after_clear), "Kward>"
-      assert_includes strip_ansi(after_clear), "Started new session:"
+      refute_includes strip_ansi(after_clear), "Started new session:"
     ensure
       input&.close unless input&.closed?
     end

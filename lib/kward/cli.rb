@@ -560,7 +560,6 @@ module Kward
       @active_session.attach(conversation)
       clear_prompt_transcript
       print_visual_banner
-      @prompt.say("\nStarted new session: #{@active_session.path}\n")
       build_interactive_agent(conversation)
     end
 
