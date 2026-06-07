@@ -5,6 +5,8 @@ module Kward
       reset: 0,
       bold: 1,
       dim: 2,
+      italic: 3,
+      strikethrough: 9,
       red: 31,
       green: 32,
       yellow: 33,
@@ -70,10 +72,8 @@ module Kward
 
         if in_fence
           rendered << colorize("│ #{line}", :dim, enabled: enabled)
-        elsif line.match?(/\A\#{1,6}\s+/)
-          rendered << colorize(line, :bold, enabled: enabled)
         else
-          rendered << inline_code(line, enabled: enabled)
+          rendered << markdown_line(line, enabled: enabled)
         end
       end
 
@@ -117,7 +117,7 @@ module Kward
       private
 
       def fast_markdown?(text, final)
-        !final && !@in_fence && @pending.empty? && !text.include?("`")
+        !final && !@in_fence && @pending.empty? && !text.match?(/[`*~_\[\]>]/)
       end
 
       def render_line(line)
@@ -133,18 +133,87 @@ module Kward
           end
         elsif @in_fence
           ANSI.colorize("│ #{line}", :dim, enabled: @enabled)
-        elsif line.match?(/\A\#{1,6}\s+/)
-          ANSI.colorize(line, :bold, enabled: @enabled)
         else
-          ANSI.inline_code(line, enabled: @enabled)
+          ANSI.markdown_line(line, enabled: @enabled)
         end
       end
     end
 
-    def inline_code(line, enabled: enabled?)
-      line.gsub(/`([^`\n]+)`/) do
-        "`#{colorize(Regexp.last_match(1), :dim, enabled: enabled)}`"
+    def markdown_line(line, enabled: enabled?)
+      if (match = line.match(/\A(\#{1,6}\s+)(.+)\z/))
+        markdown_heading(match[1], match[2], enabled: enabled)
+      elsif (match = line.match(/\A(\s*)[-*]\s+\[([ xX])\]\s+(.+)\z/))
+        task_list_item(match[1], match[2], match[3], enabled: enabled)
+      elsif (match = line.match(/\A>\s?(.*)\z/))
+        blockquote(match[1], enabled: enabled)
+      else
+        inline_markdown(line, enabled: enabled)
       end
+    end
+
+    def markdown_heading(marker, text, enabled: enabled?)
+      "#{marker}#{colorize(text, :bold, enabled: enabled)}"
+    end
+
+    def task_list_item(indent, marker, text, enabled: enabled?)
+      checked = marker.downcase == "x"
+      box = checked ? colorize("☑", :green, enabled: enabled) : colorize("☐", :gray, enabled: enabled)
+      "#{indent}#{box} #{inline_markdown(text, enabled: enabled)}"
+    end
+
+    def blockquote(text, enabled: enabled?)
+      "#{colorize("│", :gray, enabled: enabled)} #{inline_markdown(text, enabled: enabled)}"
+    end
+
+    def inline_markdown(line, enabled: enabled?)
+      line.to_s.split(/(`[^`\n]+`)/).map do |part|
+        if part.start_with?("`") && part.end_with?("`") && part.length > 1
+          "`#{colorize(part[1...-1], :dim, enabled: enabled)}`"
+        else
+          inline_links(part, enabled: enabled)
+        end
+      end.join
+    end
+
+    def inline_links(text, enabled: enabled?)
+      text.split(/(\[[^\]\n]+\]\([^)\s\n]+\))/).map do |part|
+        if (match = part.match(/\A\[([^\]\n]+)\]\(([^)\s\n]+)\)\z/))
+          "#{colorize(match[1], :cyan, enabled: enabled)} (#{colorize(match[2], :dim, enabled: enabled)})"
+        else
+          inline_emphasis(part, enabled: enabled)
+        end
+      end.join
+    end
+
+    def inline_emphasis(text, enabled: enabled?)
+      rendered = inline_bold(text, enabled: enabled)
+      rendered = inline_strikethrough(rendered, enabled: enabled)
+      inline_italic(rendered, enabled: enabled)
+    end
+
+    def inline_bold(text, enabled: enabled?)
+      text.gsub(/\*\*([^\n]+?)\*\*/) do
+        colorize(Regexp.last_match(1), :bold, enabled: enabled)
+      end
+    end
+
+    def inline_strikethrough(text, enabled: enabled?)
+      text.gsub(/~~([^\n]+?)~~/) do
+        colorize(Regexp.last_match(1), :strikethrough, enabled: enabled)
+      end
+    end
+
+    def inline_italic(text, enabled: enabled?)
+      rendered = text.gsub(/(^|[\s\(\[{])\*([^*\n]+?)\*(?=$|[\s\)\]},.!?:;])/) do
+        "#{Regexp.last_match(1)}#{colorize(Regexp.last_match(2), :italic, enabled: enabled)}"
+      end
+      rendered.gsub(/(^|[\s\(\[{])_([^_\n]+?)_(?=$|[\s\)\]},.!?:;])/) do
+        "#{Regexp.last_match(1)}#{colorize(Regexp.last_match(2), :italic, enabled: enabled)}"
+      end
+    end
+
+    def inline_code(line, enabled: enabled?)
+      inline_markdown(line, enabled: enabled)
     end
 
     def forced_color?(env)

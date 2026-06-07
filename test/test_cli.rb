@@ -78,7 +78,7 @@ class TestCLI < KwardTestCase
 
     output = cli.one_shot("hello")
 
-    assert_includes output, "\e[1m# Plan\e[0m"
+    assert_includes output, "# \e[1mPlan\e[0m"
     assert_includes output, "`\e[2mbundle test\e[0m`"
   end
 
@@ -93,7 +93,7 @@ class TestCLI < KwardTestCase
       cli.send(:run_blocking_interactive_turn, agent, "hello")
     end.first
 
-    assert_includes output, "\e[1m# Plan\e[0m"
+    assert_includes output, "# \e[1mPlan\e[0m"
     assert_includes output, "\e[90m┌─ code ruby\e[0m"
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
@@ -108,6 +108,18 @@ class TestCLI < KwardTestCase
 
     assert_equal ["0123456789"], prompt.write_deltas
     assert_operator prompt.write_deltas.length, :<, events.length
+  end
+
+  def test_prompt_interface_interactive_turn_renders_streamed_inline_bold
+    prompt = BusyPrompt.new([])
+    events = [Kward::Events::ReasoningDelta.new(delta: "**Exploring key handling** -> Better Markdown")]
+    agent = EventAgent.new(events)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal ["\e[1mExploring key handling\e[0m -> Better Markdown"], prompt.write_deltas
   end
 
   def test_prompt_interface_interactive_turn_flushes_pending_delta_on_completion
@@ -190,7 +202,7 @@ class TestCLI < KwardTestCase
     cli.send(:render_transcript_block, "Assistant", "## Plan\nRun `bundle test`.\n")
 
     output = prompt.output.join("\n")
-    assert_includes output, "\e[1m## Plan\e[0m"
+    assert_includes output, "## \e[1mPlan\e[0m"
     assert_includes output, "`\e[2mbundle test\e[0m`"
   end
 
