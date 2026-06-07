@@ -75,6 +75,29 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_server_transcript_restores_reasoning_and_tools
+    Dir.mktmpdir do |dir|
+      server = build_server(dir)
+      conversation = server.instance_variable_get(:@conversation)
+      conversation.messages << {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "checking sensors" },
+          { type: "text", text: "ready" }
+        ],
+        tool_calls: [tool_call("read_file", path: "README.md")]
+      }
+      conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "README contents")
+
+      transcript = server.transcript_items
+
+      assert_includes transcript, { role: "reasoning", label: "Reasoning", text: "checking sensors" }
+      assert_includes transcript, { role: "assistant", label: "Assistant", text: "ready" }
+      assert_includes transcript, { role: "tool", label: "Tool", text: "read {\"path\":\"README.md\"}" }
+      assert_includes transcript, { role: "tool", label: "Tool output", text: "read: README contents" }
+    end
+  end
+
   def test_pan_server_queues_prompt_while_active
     Dir.mktmpdir do |dir|
       client = PanStreamingClient.new(["one", "two"], delay: 0.1)

@@ -9,6 +9,7 @@ require_relative "agent"
 require_relative "config_files"
 require_relative "events"
 require_relative "retry_message"
+require_relative "rpc/transcript_normalizer"
 require_relative "session_store"
 require_relative "tool_call"
 require_relative "tool_registry"
@@ -89,27 +90,7 @@ module Kward
     end
 
     def transcript_items
-      tool_calls_by_id = {}
-      @conversation.messages.filter_map do |message|
-        role = message_role(message)
-        next if role == "system"
-
-        case role
-        when "user"
-          { role: "user", text: message_content_text(message_content(message)) }
-        when "assistant"
-          Array(message_tool_calls(message)).each { |tool_call| tool_calls_by_id[tool_call_id(tool_call)] = tool_call }
-          text = message_content_text(message_content(message))
-          text.empty? ? nil : { role: "assistant", text: text }
-        when "tool"
-          tool_call = tool_calls_by_id[message_tool_call_id(message)]
-          { role: "tool", text: tool_result_text(tool_call, message_content(message).to_s), tool: message_name(message) }
-        when "compactionSummary"
-          { role: "system", text: message_summary(message), label: "Compaction summary" }
-        else
-          { role: role.to_s, text: message_content_text(message_content(message)) }
-        end
-      end
+      RPC::TranscriptNormalizer.new(@conversation.messages).normalize.flat_map { |message| pan_transcript_items(message) }
     end
 
     private
@@ -325,8 +306,71 @@ module Kward
       { name: tool_call_name(tool_call), content: content.to_s }
     end
 
-    def tool_result_text(tool_call, content)
-      name = tool_call ? tool_call_name(tool_call) : "tool"
+    def pan_transcript_items(message)
+      case message[:role] || message["role"]
+      when "user"
+        [{ role: "user", label: "You", text: normalized_content_text(message[:content] || message["content"]) }]
+      when "assistant"
+        assistant_items(message[:content] || message["content"])
+      when "toolResult"
+        [{ role: "tool", label: "Tool output", text: tool_result_text(message) }]
+      when "compactionSummary"
+        [{ role: "system", label: "Compaction summary", text: message[:summary] || message["summary"] }]
+      else
+        text = normalized_content_text(message[:content] || message["content"])
+        text.empty? ? [] : [{ role: (message[:role] || message["role"]).to_s, label: message[:role] || message["role"] || "Message", text: text }]
+      end
+    end
+
+    def assistant_items(content)
+      Array(content).filter_map do |part|
+        next unless part.is_a?(Hash)
+
+        case part[:type] || part["type"]
+        when "thinking"
+          text = part[:thinking] || part["thinking"]
+          text.to_s.empty? ? nil : { role: "reasoning", label: "Reasoning", text: text }
+        when "text"
+          text = part[:text] || part["text"]
+          text.to_s.empty? ? nil : { role: "assistant", label: "Assistant", text: text }
+        when "image"
+          { role: "assistant", label: "Assistant", text: image_part_text(part) }
+        when "toolCall"
+          { role: "tool", label: "Tool", text: tool_call_part_text(part) }
+        end
+      end
+    end
+
+    def normalized_content_text(content)
+      Array(content).filter_map do |part|
+        next part.to_s unless part.is_a?(Hash)
+
+        case part[:type] || part["type"]
+        when "text"
+          part[:text] || part["text"]
+        when "image"
+          image_part_text(part)
+        when "thinking"
+          part[:thinking] || part["thinking"]
+        end
+      end.join("\n")
+    end
+
+    def image_part_text(part)
+      alt = part[:alt] || part["alt"]
+      media_type = part[:mimeType] || part["mimeType"] || "image"
+      "[#{media_type}#{alt.to_s.empty? ? "" : ": #{alt}"}]"
+    end
+
+    def tool_call_part_text(part)
+      name = part[:name] || part["name"] || "unknown_tool"
+      arguments = part[:arguments] || part["arguments"] || {}
+      "#{name} #{JSON.generate(arguments)}"
+    end
+
+    def tool_result_text(message)
+      name = message[:toolName] || message["toolName"] || "tool"
+      content = normalized_content_text(message[:content] || message["content"])
       "#{name}: #{content}"
     end
 
@@ -336,53 +380,6 @@ module Kward
 
     def tool_call_args(tool_call)
       ToolCall.arguments(tool_call)
-    end
-
-    def message_role(message)
-      message["role"] || message[:role]
-    end
-
-    def message_content(message)
-      message["content"] || message[:content]
-    end
-
-    def message_summary(message)
-      message["summary"] || message[:summary] || message_content(message)
-    end
-
-    def message_name(message)
-      message["name"] || message[:name]
-    end
-
-    def message_tool_call_id(message)
-      message["tool_call_id"] || message[:tool_call_id]
-    end
-
-    def message_tool_calls(message)
-      value = message["tool_calls"] || message[:tool_calls]
-      value.is_a?(Array) ? value : []
-    end
-
-    def tool_call_id(tool_call)
-      tool_call["id"] || tool_call[:id]
-    end
-
-    def message_content_text(content)
-      case content
-      when Array
-        content.filter_map do |part|
-          type = part["type"] || part[:type]
-          if type == "text"
-            part["text"] || part[:text]
-          elsif type == "image"
-            path = part["path"] || part[:path]
-            media_type = part["media_type"] || part[:media_type] || "image"
-            "[#{media_type}#{path ? ": #{path}" : ""}]"
-          end
-        end.join("\n")
-      else
-        content.to_s
-      end
     end
 
     def reason_phrase(status)
