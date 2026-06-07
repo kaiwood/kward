@@ -136,6 +136,18 @@ module Kward
       end
     end
 
+    def say_visual(message)
+      @mutex.synchronize do
+        clear_prompt_for_output_locked
+        text = message.to_s
+        write_visual_transcript_text_locked(text)
+        write_visual_transcript_text_locked("\n") unless text.end_with?("\n")
+        @stream_block = nil
+        render_prompt_after_output_locked
+        @output_io.flush
+      end
+    end
+
     def ask(message = "You>")
       was_composing = @started && @asking
       start

@@ -1431,7 +1431,13 @@ module Kward
       parts = image_parts || Kward::ImageAttachments.image_parts_from_text(input)
       parts.each do |part|
         sequence = Kward::ImageAttachments.terminal_image_sequence(part)
-        @prompt.say(sequence) if sequence
+        next unless sequence
+
+        if @prompt.respond_to?(:say_visual)
+          @prompt.say_visual(sequence)
+        else
+          @prompt.say(sequence)
+        end
       end
     end
 

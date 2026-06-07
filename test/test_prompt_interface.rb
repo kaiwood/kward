@@ -1161,6 +1161,25 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "╭ You "
   end
 
+  def test_prompt_interface_visual_output_is_not_saved_for_redraw
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.say_visual("\e_Ginline=1:payload\e\\")
+
+    assert_includes output.string, "\e_Ginline=1:payload\e\\"
+    refute_includes prompt.instance_variable_get(:@transcript_buffer), "\e_G"
+    output.truncate(0)
+    output.rewind
+
+    prompt.redraw
+
+    refute_includes output.string, "\e_G"
+  end
+
   def test_prompt_interface_clears_between_old_and_new_composer_when_height_grows
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
