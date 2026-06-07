@@ -18,13 +18,13 @@ module Kward
 
     attr_reader :conversation
 
-    def ask(input, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, &block)
+    def ask(input, display_input: nil, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, &block)
       started_at = @telemetry_logger.monotonic_now
       status = "completed"
       error = nil
       cancellation&.raise_if_cancelled!
       @conversation.refresh_system_message_if_workspace_agents_changed!
-      @conversation.append_user(input)
+      @conversation.append_user(input, display_content: display_input)
       auto_compact_if_needed
       run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, &block)
     rescue StandardError => e

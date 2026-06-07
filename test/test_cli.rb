@@ -672,6 +672,75 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_prompt_slash_command_persists_original_display_content
+    Dir.mktmpdir do |dir|
+      Dir.mktmpdir do |home|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        prompts_dir = File.join(dir, "prompts")
+        FileUtils.mkdir_p(prompts_dir)
+        File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+        store = Kward::SessionStore.new(config_dir: dir, cwd: Dir.pwd)
+        prompt = FakePrompt.new(["/plan fix bug", "/exit"])
+        client = RecordingClient.new(["planned"])
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+          cli.interactive_loop
+        end
+
+        user_message = jsonl_records(Dir.glob(File.join(store.session_dir, "*.jsonl")).first).find do |record|
+          record["type"] == "message" && record.dig("message", "role") == "user"
+        end["message"]
+        assert_equal "Plan this:\nfix bug\n", user_message["content"]
+        assert_equal "/plan fix bug", user_message["display_content"]
+        assert_equal "/plan fix bug", store.recent.first.first_message
+      end
+    end
+  end
+
+  def test_prompt_interface_slash_command_displays_original_input
+    Dir.mktmpdir do |dir|
+      Dir.mktmpdir do |home|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        prompts_dir = File.join(dir, "prompts")
+        FileUtils.mkdir_p(prompts_dir)
+        File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+        prompt = BusyPrompt.new(["/plan fix bug", "/exit"])
+        client = RecordingClient.new(["planned"])
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+          cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+          cli.interactive_loop(agent: agent)
+        end
+
+        output = prompt.output.join("\n")
+        assert_includes output, "You> /plan fix bug"
+        refute_includes output, "Plan this:"
+        assert_equal "Plan this:\nfix bug\n", client.seen_messages[0][1][:content]
+      end
+    end
+  end
+
+  def test_transcript_and_export_show_original_slash_command_display_content
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("Plan this:\nfix bug\n", display_content: "/plan fix bug")
+    conversation.append_assistant("planned")
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+
+    cli.send(:render_conversation_transcript, conversation)
+    transcript_output = prompt.output.join("\n")
+    assert_includes transcript_output, "You> /plan fix bug"
+    refute_includes transcript_output, "Plan this:"
+
+    markdown = cli.send(:markdown_transcript, conversation)
+    assert_includes markdown, "/plan fix bug"
+    refute_includes markdown, "Plan this:"
+  end
+
   def test_interactive_prompt_slash_command_allows_empty_arguments
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |home|

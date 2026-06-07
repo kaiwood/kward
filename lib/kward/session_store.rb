@@ -414,8 +414,15 @@ module Kward
       message["content"] || message[:content]
     end
 
+    def message_display_content(message)
+      message["display_content"] || message[:display_content] || message["displayContent"] || message[:displayContent]
+    end
+
     def message_text(message)
       return (message["summary"] || message[:summary]).to_s.gsub(/\s+/, " ").strip.slice(0, 120) if message_role(message) == "compactionSummary"
+
+      display_content = message_display_content(message)
+      return display_content.to_s.gsub(/\s+/, " ").strip.slice(0, 120) unless display_content.nil?
 
       content = message_content(message)
       text = if content.is_a?(Array)

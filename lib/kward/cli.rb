@@ -170,9 +170,11 @@ module Kward
         agent = replacement_agent if replacement_agent
         next if handled
 
-        input = expand_prompt_template(input) || input
+        expanded_input = expand_prompt_template(input)
+        display_input = input if expanded_input
+        input = expanded_input || input
         @footer_conversation = agent.conversation
-        pending_inputs = run_interactive_turn(agent, input)
+        pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
         pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
       end
 
@@ -630,7 +632,7 @@ module Kward
 
         case role
         when "user"
-          print_user_transcript(message_content_text(message_content(message)))
+          print_user_transcript(message_display_text(message))
         when "assistant"
           render_reasoning(message)
           render_assistant_message(message)
@@ -770,6 +772,13 @@ module Kward
       end
     end
 
+    def message_display_text(message)
+      display_content = message["display_content"] || message[:display_content] || message["displayContent"] || message[:displayContent]
+      return display_content.to_s unless display_content.nil?
+
+      message_content_text(message_content(message))
+    end
+
     def synthetic_tool_call(name, id)
       {
         "id" => id || "restored_tool",
@@ -888,7 +897,13 @@ module Kward
         name = message["name"] || message[:name]
         lines << "Tool: `#{name}`" if role == "tool" && name
         lines << ""
-        content = role == "compactionSummary" ? (message["summary"] || message[:summary]) : (message["content"] || message[:content])
+        content = if role == "compactionSummary"
+                    message["summary"] || message[:summary]
+                  elsif role == "user"
+                    message_display_text(message)
+                  else
+                    message["content"] || message[:content]
+                  end
         lines << markdown_content(content)
         lines << ""
       end
@@ -1093,9 +1108,9 @@ module Kward
       "/#{entry[:name]}#{hint}#{description}"
     end
 
-    def run_interactive_turn(agent, input)
-      print_user_transcript(input) if prompt_interface?
-      return run_blocking_interactive_turn(agent, input) unless prompt_interface?
+    def run_interactive_turn(agent, input, display_input: nil)
+      print_user_transcript(display_input || input) if prompt_interface?
+      return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
 
       queued_inputs = []
       event_queue = Queue.new
@@ -1106,7 +1121,7 @@ module Kward
       @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
 
       worker = Thread.new do
-        answer = agent.ask(input) do |event|
+        answer = agent.ask(input, **agent_display_options(display_input)) do |event|
           event_queue << event
         end
       rescue StandardError => e
@@ -1214,10 +1229,10 @@ module Kward
       end
     end
 
-    def run_blocking_interactive_turn(agent, input)
+    def run_blocking_interactive_turn(agent, input, display_input: nil)
       streamed = false
       markdown_chunks = []
-      answer = agent.ask(input) do |event|
+      answer = agent.ask(input, **agent_display_options(display_input)) do |event|
         case event
         when Events::ReasoningDelta
           streamed = true
@@ -1247,6 +1262,10 @@ module Kward
     def print_user_transcript(input)
       @prompt.say("\n#{colored("You>", :blue, :bold)} #{input}\n")
       print_pasted_images(input)
+    end
+
+    def agent_display_options(display_input)
+      display_input.nil? ? {} : { display_input: display_input }
     end
 
     def print_pasted_images(input)

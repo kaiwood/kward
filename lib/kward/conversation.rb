@@ -32,9 +32,11 @@ module Kward
       @on_tool_execution = on_tool_execution
     end
 
-    def append_user(content)
+    def append_user(content, display_content: nil)
       content = ImageAttachments.content_from_text(content) unless content.is_a?(Array)
-      append_message({ role: "user", content: content })
+      message = { role: "user", content: content }
+      message[:display_content] = display_content.to_s unless display_content.nil?
+      append_message(message)
     end
 
     def append_assistant(message)
