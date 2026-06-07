@@ -61,8 +61,8 @@ class TestRPCServer < KwardTestCase
     assert_equal false, capabilities["events"]["tools"]["changedFiles"]
     assert_equal false, capabilities["events"]["sessionUpdates"]
     assert_equal true, capabilities["attachments"]["input"]["supported"]
-    assert_equal ["image/png", "image/jpeg", "image/gif", "image/webp"], capabilities["attachments"]["input"]["mimeTypes"]
-    assert_equal 10_485_760, capabilities["attachments"]["input"]["maxBytes"]
+    assert_equal Kward::RPC::SessionManager::RPC_IMAGE_MIME_TYPES, capabilities["attachments"]["input"]["mimeTypes"]
+    assert_equal Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES, capabilities["attachments"]["input"]["maxBytes"]
     assert_includes capabilities["models"]["methods"], "models/set"
     assert_equal false, capabilities["models"]["scopedModels"]
     assert_equal true, capabilities["runtime"]["supported"]
