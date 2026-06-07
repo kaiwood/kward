@@ -525,6 +525,62 @@ class TestCLI < KwardTestCase
     assert_includes research_output, "ruby: 1 result(s)"
   end
 
+  def test_interactive_tool_output_limit_keeps_10_line_summary_unchanged
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+    content = (1..10).map { |index| "line#{index}" }.join("\n")
+
+    output = capture_io do
+      cli.send(:print_tool_result, tool_call("custom_tool", {}), content, line_limit: Kward::CLI::INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
+    end.first
+
+    summary = output.split("Tool output>\n", 2).last
+    assert_equal 10, summary.lines.length
+    assert_includes output, "line10"
+    refute_includes output, "truncated"
+  end
+
+  def test_interactive_tool_output_limit_does_not_truncate_model_context
+    command = %q(ruby -e '12.times { |i| puts "line#{i + 1}" }')
+    prompt = FakePrompt.new(["show lines", "/exit"])
+    client = RecordingClient.new([assistant_tool_call("run_shell_command", command: command), "done"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    output = capture_io do
+      cli.interactive_loop
+    end.first
+
+    assert_includes output, "Tool output>"
+    assert_includes output, "...[truncated"
+    refute_includes output, "line12"
+    tool_message = client.seen_messages[1].find { |message| (message["role"] || message[:role]) == "tool" }
+    assert_includes tool_message[:content], "line12"
+  end
+
+  def test_resume_limits_restored_tool_output_to_10_lines
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("inspect restored output")
+      conversation.append_assistant({
+        "role" => "assistant",
+        "content" => nil,
+        "tool_calls" => [tool_call("custom_tool", {})]
+      })
+      conversation.append_tool(tool_call_id: "call_custom_tool", name: "custom_tool", content: (1..12).map { |index| "line#{index}" }.join("\n"))
+      prompt = FakePrompt.new(["/resume #{saved.path}", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      output = prompt.output.join("\n")
+      assert_includes output, "Tool output>\ncustom_tool: line1"
+      assert_includes output, "...[truncated 3 lines]"
+      refute_includes output, "line12"
+    end
+  end
+
   def test_session_commands_name_clone_and_export
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

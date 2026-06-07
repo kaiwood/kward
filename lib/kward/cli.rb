@@ -29,6 +29,7 @@ module Kward
     # Order from the captain: The next line shall never be deleted.
     STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"
     RESTORED_TOOL_OUTPUT_LIMIT = 2_000
+    INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT = 10
     STREAM_RENDER_INTERVAL = 0.025
     INTERACTIVE_EVENT_DRAIN_LIMIT = 100
     BUILTIN_SLASH_COMMANDS = [
@@ -705,9 +706,9 @@ module Kward
     end
 
     def render_tool_result(tool_call, content)
-      summary = tool_result_summary(tool_call, content)
+      summary = limit_tool_output_lines(tool_result_summary(tool_call, content), INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
       if prompt_interface?
-        print_tool_result(tool_call, content)
+        print_tool_result(tool_call, content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
       else
         @prompt.say("\n#{colored("Tool output>", :cyan, :bold)}\n#{summary}\n")
       end
@@ -1223,7 +1224,7 @@ module Kward
         stream_state[:streamed] = true
         finish_interactive_markdown_deltas(markdown_chunks, stream_state)
         update_session_diff(event.content)
-        print_tool_result(event.tool_call, event.content)
+        print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
       end
     end
 
@@ -1314,7 +1315,7 @@ module Kward
         when Events::ToolResult
           streamed = true
           flush_markdown_deltas(markdown_chunks)
-          print_tool_result(event.tool_call, event.content)
+          print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         end
       end
       flush_markdown_deltas(markdown_chunks) if streamed
@@ -1382,8 +1383,9 @@ module Kward
       end
     end
 
-    def print_tool_result(tool_call, content)
+    def print_tool_result(tool_call, content, line_limit: nil)
       summary = tool_result_summary(tool_call, content)
+      summary = limit_tool_output_lines(summary, line_limit) if line_limit
       if prompt_interface?
         @prompt.start_stream_block("Tool output")
         @prompt.write_delta(summary)
@@ -1416,6 +1418,17 @@ module Kward
       else
         generic_tool_summary(name, text)
       end
+    end
+
+    def limit_tool_output_lines(content, line_limit)
+      lines = content.to_s.lines
+      return content.to_s if lines.length <= line_limit
+
+      kept_lines = lines.first(line_limit - 1).join
+      omitted_lines = lines.length - (line_limit - 1)
+      suffix = omitted_lines == 1 ? "line" : "lines"
+      notice = "...[truncated #{omitted_lines} #{suffix}]"
+      kept_lines.end_with?("\n") || kept_lines.empty? ? "#{kept_lines}#{notice}" : "#{kept_lines}\n#{notice}"
     end
 
     def read_file_summary(args, content)
