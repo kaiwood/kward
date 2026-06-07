@@ -483,6 +483,51 @@ class TestPromptInterface < KwardTestCase
     assert_equal "hello", ask_prompt_with_input("hello\x04\r")
   end
 
+  def test_prompt_interface_ctrl_d_deletes_character_right_when_text_remains
+    assert_equal "ac", ask_prompt_with_input("abc\x01\x06\x04\r")
+    assert_equal "ac", ask_prompt_with_input("abc\e[H\e[C\e[3~\r")
+  end
+
+  def test_prompt_interface_handles_shell_style_line_movement_keys
+    assert_equal "ZabX", ask_prompt_with_input("ab\x01Z\x05X\r")
+    assert_equal "ZabX", ask_prompt_with_input("ab\e[HZ\e[FX\r")
+  end
+
+  def test_prompt_interface_handles_shell_style_character_movement_keys
+    assert_equal "aZbX", ask_prompt_with_input("ab\x02Z\x06X\r")
+    assert_equal "aZbX", ask_prompt_with_input("ab\e[DZ\e[CX\r")
+  end
+
+  def test_prompt_interface_handles_shell_style_word_movement_keys
+    assert_equal "one two ZthreeX", ask_prompt_with_input("one two three\ebZ\efX\r")
+    assert_equal "one two ZthreeX", ask_prompt_with_input("one two three\e[1;3DZ\e[1;3CX\r")
+  end
+
+  def test_prompt_interface_handles_shell_style_word_delete_keys
+    assert_equal "one two ", ask_prompt_with_input("one two three\x17\r")
+    assert_equal "one ", ask_prompt_with_input("one two\e\x7F\r")
+    assert_equal " two three", ask_prompt_with_input("one two three\x01\ed\r")
+  end
+
+  def test_prompt_interface_yanks_last_kill
+    assert_equal "hello world", ask_prompt_with_input("hello world\x15\x19\r")
+    assert_equal "hello world", ask_prompt_with_input("hello world\x01\x0B\x19\r")
+    assert_equal "one -two", ask_prompt_with_input("one two\x17-\x19\r")
+  end
+
+  def test_prompt_interface_ctrl_l_redraws_without_changing_input
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("hello\x0C\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "hello", prompt.ask("You>")
+    assert_includes output.string, TTY::Cursor.clear_screen
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_handles_cursor_movement_keys
     input, writer = IO.pipe
     output = StringIO.new

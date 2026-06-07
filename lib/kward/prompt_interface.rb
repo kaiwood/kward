@@ -56,6 +56,7 @@ module Kward
       @stream_pending_wrap = false
       @transcript_buffer = +""
       @pending_keys = []
+      @kill_buffer = ""
       @original_console_mode = nil
       @raw_mode_active = false
       @history = []
@@ -514,6 +515,9 @@ module Kward
         end
       end
 
+      binding_result = handle_composer_key_binding(key)
+      return binding_result unless binding_result == false
+
       key_name = @reader.console.keys[key]
       case key_name
       when :return, :enter
@@ -523,15 +527,33 @@ module Kward
       when :delete
         delete_at_cursor
       when :ctrl_d
-        exit_input if @input.empty?
+        delete_at_cursor_or_exit
+      when :ctrl_a
+        move_to_start_of_line
+      when :ctrl_e
+        move_to_end_of_line
+      when :ctrl_b
+        move_cursor_left
+      when :ctrl_f
+        move_cursor_right
+      when :ctrl_w
+        delete_word_before_cursor
+      when :ctrl_u
+        kill_line_before_cursor
+      when :ctrl_k
+        kill_line_after_cursor
+      when :ctrl_y
+        yank_kill_buffer
+      when :ctrl_l
+        redraw_screen_locked
       when :left
-        @cursor -= 1 if @cursor.positive?
+        move_cursor_left
       when :right
-        @cursor += 1 if @cursor < @input.length
+        move_cursor_right
       when :home
-        @cursor = 0
+        move_to_start_of_line
       when :end
-        @cursor = @input.length
+        move_to_end_of_line
       when :up
         slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
       when :down
@@ -545,7 +567,7 @@ module Kward
         when "\b", "\x7F"
           delete_before_cursor
         when "\x04"
-          exit_input if @input.empty?
+          delete_at_cursor_or_exit
         when "\e"
           handle_escape_sequence
         else
@@ -555,8 +577,13 @@ module Kward
     end
 
     def handle_escape_sequence
-      sequence = "\e#{read_pending_escape_sequence}"
+      full_sequence = "\e#{read_pending_escape_sequence}"
+      sequence = next_key_token(full_sequence)
+      queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
       return true if handle_shift_enter_key(sequence)
+
+      binding_result = handle_composer_key_binding(sequence)
+      return binding_result unless binding_result == false
 
       key_name = @reader.console.keys[sequence]
       case key_name
@@ -565,9 +592,15 @@ module Kward
       when :down
         slash_overlay_visible? ? select_next_slash_command : recall_next_history
       when :left
-        @cursor -= 1 if @cursor.positive?
+        move_cursor_left
       when :right
-        @cursor += 1 if @cursor < @input.length
+        move_cursor_right
+      when :home
+        move_to_start_of_line
+      when :end
+        move_to_end_of_line
+      when :delete
+        delete_at_cursor
       end
       true
     end
@@ -888,17 +921,68 @@ module Kward
       when 13
         modifier == 2 ? insert_string("\n") : submit_input
       when 8, 127
-        delete_before_cursor
+        alt_modifier?(modifier) ? delete_word_before_cursor : delete_before_cursor
         nil
       when 4
-        exit_input if @input.empty?
+        delete_at_cursor_or_exit
       else
-        ctrl_d_csi_u?(code, modifier) ? (exit_input if @input.empty?) : false
+        handle_modified_csi_u_key(code, modifier)
       end
     end
 
-    def ctrl_d_csi_u?(code, modifier)
-      [68, 100].include?(code) && ((modifier - 1) & 4).positive?
+    def handle_modified_csi_u_key(code, modifier)
+      return false unless ctrl_modifier?(modifier) || alt_modifier?(modifier)
+
+      normalized_code = code.to_i.chr.downcase.ord rescue code
+      if ctrl_modifier?(modifier)
+        case normalized_code
+        when 97
+          move_to_start_of_line
+        when 98
+          move_cursor_left
+        when 100
+          delete_at_cursor_or_exit
+        when 101
+          move_to_end_of_line
+        when 102
+          move_cursor_right
+        when 104
+          delete_before_cursor
+        when 107
+          kill_line_after_cursor
+        when 108
+          redraw_screen_locked
+        when 117
+          kill_line_before_cursor
+        when 119
+          delete_word_before_cursor
+        when 121
+          yank_kill_buffer
+        else
+          false
+        end
+      elsif alt_modifier?(modifier)
+        case normalized_code
+        when 98
+          move_to_previous_word
+        when 100
+          delete_word_after_cursor
+        when 102
+          move_to_next_word
+        else
+          false
+        end
+      else
+        false
+      end
+    end
+
+    def ctrl_modifier?(modifier)
+      ((modifier.to_i - 1) & 4).positive?
+    end
+
+    def alt_modifier?(modifier)
+      ((modifier.to_i - 1) & 2).positive?
     end
 
     def handle_shift_enter_key(key)
@@ -920,7 +1004,16 @@ module Kward
     end
 
     def next_key_token(keys)
-      keys.match(/\A\e\[[0-9;:]*[A-Za-z~]/)&.[](0) || keys[0, 1]
+      text = keys.to_s
+      text.match(/\A\e\[[0-9;:]*[A-Za-z~]/)&.[](0) ||
+        text.match(/\A\eO[A-Za-z]/)&.[](0) ||
+        shift_enter_sequence_for(text) ||
+        (text.start_with?("\e") && text.length > 1 && alt_key_sequence?(text[1]) ? text[0, 2] : text[0, 1])
+    end
+
+    def alt_key_sequence?(char)
+      char = char.to_s
+      char.match?(/[[:alpha:]]/) || char == "\b" || char == "\x7F"
     end
 
     def shift_enter_sequence_for(key)
@@ -931,6 +1024,9 @@ module Kward
 
     def read_pending_escape_sequence
       sequence = ""
+      until @pending_keys.empty?
+        sequence << @pending_keys.shift.to_s
+      end
       while (char = @reader.read_keypress(echo: false, raw: true, nonblock: true))
         sequence << char.to_s
       end
@@ -1150,6 +1246,155 @@ module Kward
       reset_slash_selection
       reset_history_navigation
       @input = @input[0...@cursor] + @input[(@cursor + 1)..]
+    end
+
+    def handle_composer_key_binding(key)
+      case key
+      when "\x01"
+        move_to_start_of_line
+      when "\x02"
+        move_cursor_left
+      when "\x04"
+        delete_at_cursor_or_exit
+      when "\x05"
+        move_to_end_of_line
+      when "\x06"
+        move_cursor_right
+      when "\x0B"
+        kill_line_after_cursor
+      when "\x0C"
+        redraw_screen_locked
+      when "\x15"
+        kill_line_before_cursor
+      when "\x17"
+        delete_word_before_cursor
+      when "\x19"
+        yank_kill_buffer
+      when "\e[D", "\eOD"
+        move_cursor_left
+      when "\e[C", "\eOC"
+        move_cursor_right
+      when "\e[H", "\eOH", "\e[1~", "\e[7~"
+        move_to_start_of_line
+      when "\e[F", "\eOF", "\e[4~", "\e[8~"
+        move_to_end_of_line
+      when "\e[3~"
+        delete_at_cursor
+      when "\eb", "\eB"
+        move_to_previous_word
+      when "\ef", "\eF"
+        move_to_next_word
+      when "\ed", "\eD"
+        delete_word_after_cursor
+      when "\e\b", "\e\x7F"
+        delete_word_before_cursor
+      else
+        handle_modified_ansi_key(key) || false
+      end
+    end
+
+    def handle_modified_ansi_key(key)
+      match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/)
+      if match
+        modifier = match[2].to_i
+        final = match[3]
+        return false unless alt_modifier?(modifier)
+
+        case final
+        when "C"
+          move_to_next_word
+        when "D"
+          move_to_previous_word
+        when "F"
+          move_to_end_of_line
+        when "H"
+          move_to_start_of_line
+        else
+          false
+        end
+      elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
+        alt_modifier?(match[1].to_i) ? delete_word_after_cursor : delete_at_cursor
+      else
+        false
+      end
+    end
+
+    def move_cursor_left
+      @cursor -= 1 if @cursor.positive?
+    end
+
+    def move_cursor_right
+      @cursor += 1 if @cursor < @input.length
+    end
+
+    def move_to_start_of_line
+      @cursor = 0
+    end
+
+    def move_to_end_of_line
+      @cursor = @input.length
+    end
+
+    def move_to_previous_word
+      @cursor = previous_word_boundary(@cursor)
+    end
+
+    def move_to_next_word
+      @cursor = next_word_boundary(@cursor)
+    end
+
+    def delete_at_cursor_or_exit
+      @input.empty? ? exit_input : delete_at_cursor
+    end
+
+    def delete_word_before_cursor
+      start_index = previous_word_boundary(@cursor)
+      kill_range(start_index, @cursor)
+    end
+
+    def delete_word_after_cursor
+      end_index = next_word_boundary(@cursor)
+      kill_range(@cursor, end_index)
+    end
+
+    def kill_line_before_cursor
+      kill_range(0, @cursor)
+    end
+
+    def kill_line_after_cursor
+      kill_range(@cursor, @input.length)
+    end
+
+    def kill_range(start_index, end_index)
+      return if start_index == end_index
+
+      reset_slash_selection
+      reset_history_navigation
+      @kill_buffer = @input[start_index...end_index].to_s
+      @input = @input[0...start_index].to_s + @input[end_index..].to_s
+      @cursor = start_index
+    end
+
+    def yank_kill_buffer
+      insert_string(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
+    end
+
+    def previous_word_boundary(index)
+      cursor = index
+      cursor -= 1 while cursor.positive? && word_separator?(@input[cursor - 1])
+      cursor -= 1 while cursor.positive? && !word_separator?(@input[cursor - 1])
+      cursor
+    end
+
+    def next_word_boundary(index)
+      cursor = index
+      cursor += 1 while cursor < @input.length && word_separator?(@input[cursor])
+      cursor += 1 while cursor < @input.length && !word_separator?(@input[cursor])
+      cursor
+    end
+
+    def word_separator?(char)
+      char.to_s.match?(/\s/)
     end
 
     def add_history(value)
