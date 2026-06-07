@@ -1,4 +1,5 @@
 require "json"
+require "thread"
 require "tty-prompt"
 require_relative "agent"
 require_relative "ansi"
@@ -26,6 +27,8 @@ module Kward
     # Order from the captain: The next line shall never be deleted.
     STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"
     RESTORED_TOOL_OUTPUT_LIMIT = 2_000
+    STREAM_RENDER_INTERVAL = 0.025
+    INTERACTIVE_EVENT_DRAIN_LIMIT = 100
     BUILTIN_SLASH_COMMANDS = [
       { name: "exit", description: "Exit the interactive session.", argument_hint: "" },
       { name: "quit", description: "Exit the interactive session.", argument_hint: "" },
@@ -707,14 +710,17 @@ module Kward
       end
     end
 
-    def flush_markdown_deltas(chunks)
+    def flush_markdown_deltas(chunks, finish: true)
+      wrote = false
       chunks.each do |label, content|
         next if content.empty?
 
         print_block_delta(label, render_markdown_transcript(content))
-        finish_stream_block
+        finish_stream_block if finish
+        wrote = true
       end
       chunks.clear
+      wrote
     end
 
     def message_reasoning(message)
@@ -1078,7 +1084,8 @@ module Kward
       return run_blocking_interactive_turn(agent, input) unless prompt_interface?
 
       queued_inputs = []
-      streamed = false
+      event_queue = Queue.new
+      stream_state = { streamed: false, last_flush: monotonic_now, stream_block_open: false }
       markdown_chunks = []
       answer = nil
       error = nil
@@ -1086,26 +1093,7 @@ module Kward
 
       worker = Thread.new do
         answer = agent.ask(input) do |event|
-          case event
-          when Events::ReasoningDelta
-            streamed = true
-            append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
-          when Events::AssistantDelta
-            streamed = true
-            append_markdown_delta(markdown_chunks, "Assistant", event.delta)
-          when Events::Retry
-            streamed = true
-            flush_markdown_deltas(markdown_chunks)
-            print_retry(event)
-          when Events::ToolCall
-            streamed = true
-            flush_markdown_deltas(markdown_chunks)
-            print_tool_call(event.tool_call)
-          when Events::ToolResult
-            streamed = true
-            flush_markdown_deltas(markdown_chunks)
-            print_tool_result(event.tool_call, event.content)
-          end
+          event_queue << event
         end
       rescue StandardError => e
         error = e
@@ -1113,16 +1101,78 @@ module Kward
 
       while worker.alive?
         collect_queued_input(queued_inputs)
-        sleep 0.02
+        drain_interactive_events(event_queue, markdown_chunks, stream_state)
+        sleep 0.01
       end
       worker.join
       drain_queued_input(queued_inputs)
+      drain_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
       raise error if error
 
-      flush_markdown_deltas(markdown_chunks) if streamed
-      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
+      @prompt.say("\n#{colored("Assistant>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       queued_inputs
+    end
+
+    def drain_interactive_events(event_queue, markdown_chunks, stream_state, force: false)
+      drained = 0
+      loop do
+        break if !force && drained >= INTERACTIVE_EVENT_DRAIN_LIMIT
+
+        event = event_queue.pop(true)
+        drained += 1
+        handle_interactive_event(event, markdown_chunks, stream_state)
+      rescue ThreadError
+        break
+      end
+
+      flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: force)
+    end
+
+    def handle_interactive_event(event, markdown_chunks, stream_state)
+      case event
+      when Events::ReasoningDelta
+        stream_state[:streamed] = true
+        append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
+      when Events::AssistantDelta
+        stream_state[:streamed] = true
+        append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+      when Events::Retry
+        stream_state[:streamed] = true
+        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+        print_retry(event)
+      when Events::ToolCall
+        stream_state[:streamed] = true
+        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+        print_tool_call(event.tool_call)
+      when Events::ToolResult
+        stream_state[:streamed] = true
+        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+        print_tool_result(event.tool_call, event.content)
+      end
+    end
+
+    def flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: false)
+      if force
+        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+        return
+      end
+      return if markdown_chunks.empty?
+      return unless monotonic_now - stream_state[:last_flush] >= STREAM_RENDER_INTERVAL
+
+      stream_state[:stream_block_open] = true if flush_markdown_deltas(markdown_chunks, finish: false)
+      stream_state[:last_flush] = monotonic_now
+    end
+
+    def finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+      wrote = flush_markdown_deltas(markdown_chunks)
+      finish_stream_block if stream_state[:stream_block_open] && !wrote
+      stream_state[:stream_block_open] = false
+      stream_state[:last_flush] = monotonic_now
+    end
+
+    def monotonic_now
+      Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
     def collect_queued_input(queued_inputs)

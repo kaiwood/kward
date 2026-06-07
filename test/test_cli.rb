@@ -15,12 +15,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class EventAgent
+    def initialize(events, answer: "")
+      @events = events
+      @answer = answer
+    end
+
+    def ask(_input)
+      @events.each { |event| yield event }
+      @answer
+    end
+  end
+
   class BusyPrompt < FakePrompt
-    attr_reader :events
+    attr_reader :events, :write_deltas
 
     def initialize(inputs)
       super(inputs)
       @events = []
+      @write_deltas = []
+      @stream_block = nil
     end
 
     def begin_busy_input(message)
@@ -36,14 +50,20 @@ class TestCLI < KwardTestCase
     end
 
     def start_stream_block(label)
+      return if @stream_block == label
+
+      @stream_block = label
       @events << [:start_stream_block, label]
     end
 
     def write_delta(delta)
+      @events << [:write_delta, delta]
+      @write_deltas << delta
       @output << delta
     end
 
     def finish_stream_block
+      @stream_block = nil
       @events << [:finish_stream_block]
     end
 
@@ -76,6 +96,64 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[1m# Plan\e[0m"
     assert_includes output, "\e[90m┌─ code ruby\e[0m"
     assert_includes output, "\e[2m│ puts :ok\e[0m"
+  end
+
+  def test_prompt_interface_interactive_turn_batches_streamed_deltas
+    prompt = BusyPrompt.new([])
+    events = 10.times.map { |index| Kward::Events::AssistantDelta.new(delta: index.to_s) }
+    agent = EventAgent.new(events)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal ["0123456789"], prompt.write_deltas
+    assert_operator prompt.write_deltas.length, :<, events.length
+  end
+
+  def test_prompt_interface_interactive_turn_flushes_pending_delta_on_completion
+    prompt = BusyPrompt.new([])
+    agent = EventAgent.new([Kward::Events::AssistantDelta.new(delta: "final")])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal ["final"], prompt.write_deltas
+  end
+
+  def test_prompt_interface_interactive_turn_keeps_stream_block_open_between_throttled_flushes
+    prompt = BusyPrompt.new([])
+    events = ["I am Commander K’", "warD, sir —", " your officer"].map do |chunk|
+      Kward::Events::AssistantDelta.new(delta: chunk)
+    end
+    agent = Object.new
+    agent.define_singleton_method(:ask) do |_input, &block|
+      events.each do |event|
+        block.call(event)
+        sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
+      end
+      ""
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal 1, prompt.events.count { |event| event == [:start_stream_block, "Assistant"] }
+    assert_equal ["I am Commander K’", "warD, sir —", " your officer"], prompt.write_deltas
+    assert_equal 1, prompt.events.count { |event| event == [:finish_stream_block] }
+  end
+
+  def test_prompt_interface_interactive_turn_flushes_deltas_before_tool_events
+    prompt = BusyPrompt.new([])
+    events = [
+      Kward::Events::AssistantDelta.new(delta: "before tool"),
+      Kward::Events::ToolCall.new(tool_call: tool_call("read_file", path: "README.md"))
+    ]
+    agent = EventAgent.new(events)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_order(prompt.events, [:start_stream_block, "Assistant"], [:write_delta, "before tool"], [:finish_stream_block], [:start_stream_block, "Tool"])
   end
 
   def test_transcript_block_renders_markdown_when_colored
