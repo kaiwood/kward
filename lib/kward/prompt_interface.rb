@@ -62,7 +62,6 @@ module Kward
       @stream_block = nil
       @rendered_rows = 0
       @cursor_rendered_row = 0
-      @prompt_gap_rows = 0
       @stream_col = 0
       @stream_pending_wrap = false
       @transcript_buffer = +""
@@ -1643,7 +1642,6 @@ module Kward
       clear_composer_region_locked
       @rendered_rows = 0
       @cursor_rendered_row = 0
-      @prompt_gap_rows = 0
       move_to_transcript_cursor_locked if @started
     end
 
@@ -2277,23 +2275,6 @@ module Kward
       @output_io.print("\e[#{row};#{col}H")
     end
 
-    def input_rows(width)
-      cursor_line, cursor_col = cursor_logical_position
-      input_lines.each_with_index.flat_map do |line, index|
-        prefix = input_prefix(index)
-        continuation_prefix = " " * prefix.length
-        available = input_text_width(width, prefix)
-        chunks = line.scan(/.{1,#{available}}/m)
-        chunks = [""] if chunks.empty?
-        if index == cursor_line && cursor_col == line.length && line.length.positive? && (line.length % available).zero?
-          chunks << ""
-        end
-        chunks.each_with_index.map do |chunk, chunk_index|
-          "#{chunk_index.zero? ? prefix : continuation_prefix}#{chunk}"
-        end
-      end
-    end
-
     def input_lines
       lines = @input.split("\n", -1)
       lines.empty? ? [""] : lines
@@ -2301,10 +2282,6 @@ module Kward
 
     def input_prefix(_index)
       ""
-    end
-
-    def input_text_width(width, prefix)
-      [width - prefix.length - 1, 1].max
     end
 
     def cursor_logical_position

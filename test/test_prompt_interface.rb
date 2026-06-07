@@ -1290,7 +1290,8 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
     prompt.instance_variable_set(:@input, "abcde")
-    assert prompt.send(:input_rows, 10).all? { |row| row.length < 10 }
+    rows, = prompt.send(:composer_layout, 10)
+    assert rows.all? { |row| Kward::ANSI.strip(row).length <= 10 }
 
     original_width = TTY::Screen.method(:width)
     TTY::Screen.define_singleton_method(:width) { 10 }
