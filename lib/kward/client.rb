@@ -168,6 +168,10 @@ module Kward
       build_context_parts(current_provider, messages, tools)
     end
 
+    def supports_in_flight_steer?
+      false
+    end
+
     def reload_config
       @config = load_config
     end

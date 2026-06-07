@@ -735,6 +735,19 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "streaming"
   end
 
+  def test_prompt_interface_shows_steered_status
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.set_steered_count(1)
+
+    assert_includes output.string, "╭ You · steered "
+    refute_includes output.string, "queued"
+  end
+
   def test_prompt_interface_keeps_terminal_backspace_between_busy_polls
     PTY.open do |master, slave|
       output = StringIO.new

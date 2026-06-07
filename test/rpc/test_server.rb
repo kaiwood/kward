@@ -3,6 +3,19 @@ require_relative "test_support"
 class TestRPCServer < KwardTestCase
   include KwardRPCTestSupport
 
+  def test_initialize_reports_native_steering_when_client_supports_it
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ], client: SteeringClient.new)
+
+    capabilities = messages[0]["result"]["capabilities"]
+    assert_equal "native", capabilities["turns"]["busyInput"]["steer"]
+    assert_equal "steer", capabilities["turns"]["busyInput"]["defaultWhenBusy"]
+    assert_equal true, capabilities["events"]["steering"]["supported"]
+    assert_equal "native", capabilities["events"]["steering"]["mode"]
+  end
+
   def test_initialize_and_shutdown
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },
@@ -36,10 +49,13 @@ class TestRPCServer < KwardTestCase
     assert_equal "unsupported", capabilities["turns"]["busyInput"]["steer"]
     assert_equal "queue", capabilities["turns"]["busyInput"]["followUp"]
     assert_equal "newTurn", capabilities["turns"]["busyInput"]["defaultWhenIdle"]
+    assert_equal "followUp", capabilities["turns"]["busyInput"]["defaultWhenBusy"]
     assert_equal "best-effort", capabilities["turns"]["cancellation"]["behavior"]
     assert_equal false, capabilities["turns"]["eventReplay"]["persisted"]
     assert_equal 1000, capabilities["turns"]["eventReplay"]["limit"]
     assert_equal "turn/event", capabilities["events"]["notification"]
+    assert_equal false, capabilities["events"]["steering"]["supported"]
+    assert_equal "turnSteered", capabilities["events"]["steering"]["event"]
     assert_equal true, capabilities["events"]["tools"]["normalizedMetadata"]
     assert_equal true, capabilities["events"]["tools"]["diffs"]
     assert_equal false, capabilities["events"]["tools"]["changedFiles"]

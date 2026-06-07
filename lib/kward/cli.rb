@@ -17,6 +17,7 @@ require_relative "plugin_registry"
 require_relative "prompt_commands"
 require_relative "rpc/server"
 require_relative "session_store"
+require_relative "steering"
 require_relative "tool_call"
 require_relative "tool_registry"
 require_relative "telemetry_stats"
@@ -1113,6 +1114,7 @@ module Kward
       return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
 
       queued_inputs = []
+      steering = steering_supported? ? Steering.new : nil
       event_queue = Queue.new
       stream_state = { streamed: false, last_flush: monotonic_now, stream_block_open: false, markdown_streams: {} }
       markdown_chunks = []
@@ -1121,7 +1123,9 @@ module Kward
       @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
 
       worker = Thread.new do
-        answer = agent.ask(input, **agent_display_options(display_input)) do |event|
+        options = agent_display_options(display_input)
+        options[:steering] = steering if steering
+        answer = agent.ask(input, **options) do |event|
           event_queue << event
         end
       rescue StandardError => e
@@ -1129,12 +1133,12 @@ module Kward
       end
 
       while worker.alive?
-        collect_queued_input(queued_inputs)
+        collect_busy_input(queued_inputs, steering)
         drain_interactive_events(event_queue, markdown_chunks, stream_state)
         sleep 0.01
       end
       worker.join
-      drain_queued_input(queued_inputs)
+      drain_busy_input(queued_inputs, steering)
       drain_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
       raise error if error
 
@@ -1205,13 +1209,22 @@ module Kward
     end
 
     def collect_queued_input(queued_inputs)
+      collect_busy_input(queued_inputs, nil)
+    end
+
+    def collect_busy_input(queued_inputs, steering)
       return nil if @prompt.respond_to?(:modal_active?) && @prompt.modal_active?
 
       poll_result = @prompt.poll_input
       case poll_result
       when String
-        queued_inputs << poll_result unless poll_result.strip.empty?
-        @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+        if steering && !poll_result.strip.empty?
+          steering.submit(poll_result)
+          @prompt.set_steered_count(1) if @prompt.respond_to?(:set_steered_count)
+        else
+          queued_inputs << poll_result unless poll_result.strip.empty?
+          @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+        end
       when PromptInterface::EXIT_INPUT
         queued_inputs << "/exit"
         @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
@@ -1220,13 +1233,21 @@ module Kward
     end
 
     def drain_queued_input(queued_inputs)
+      drain_busy_input(queued_inputs, nil)
+    end
+
+    def drain_busy_input(queued_inputs, steering)
       deadline = Time.now + 0.15
       loop do
-        poll_result = collect_queued_input(queued_inputs)
+        poll_result = collect_busy_input(queued_inputs, steering)
         break if Time.now > deadline && poll_result.nil?
 
         sleep 0.01
       end
+    end
+
+    def steering_supported?
+      @client.respond_to?(:supports_in_flight_steer?) && @client.supports_in_flight_steer?
     end
 
     def run_blocking_interactive_turn(agent, input, display_input: nil)

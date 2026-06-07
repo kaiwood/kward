@@ -86,6 +86,30 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_session_manager_steers_running_turn_when_provider_supports_it
+    Dir.mktmpdir do |config_dir|
+      server = RecordingServer.new
+      client = SteeringClient.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "first")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      steered = manager.start_turn(session_id: session[:id], input: "steer me")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      assert_equal turn[:id], steered[:id]
+      assert_equal ["steer me"], client.steered_inputs
+      assert_equal "completed", manager.turn_status(turn_id: turn[:id])[:status]
+      events = manager.turn_events(turn_id: turn[:id])[:events]
+      assert_equal 1, events.count { |event| event[:type] == "turnQueued" }
+      assert events.any? { |event| event[:type] == "turnSteered" && event[:payload][:input] == "steer me" }
+      assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta] == "before" }
+      assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta] == "after" }
+    end
+  end
+
   def test_turn_start_accepts_image_attachment_and_restores_transcript
     Dir.mktmpdir do |config_dir|
       png_data = "iVBORw0KGgo="

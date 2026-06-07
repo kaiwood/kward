@@ -44,6 +44,7 @@ module Kward
       @asking = false
       @busy = false
       @queued_count = 0
+      @steered_count = 0
       @spinner_frame_index = 0
       @last_spinner_tick = monotonic_now
       @last_footer_refresh = monotonic_now
@@ -253,6 +254,7 @@ module Kward
         @asking = true
         @busy = true
         @queued_count = 0
+        @steered_count = 0
         reset_spinner_locked
         reset_history_navigation
         render_prompt_locked
@@ -262,6 +264,15 @@ module Kward
     def set_queued_count(count)
       @mutex.synchronize do
         @queued_count = count.to_i
+        @steered_count = 0 if @queued_count.positive?
+        render_prompt_locked if @asking
+      end
+    end
+
+    def set_steered_count(count)
+      @mutex.synchronize do
+        @steered_count = count.to_i
+        @queued_count = 0 if @steered_count.positive?
         render_prompt_locked if @asking
       end
     end
@@ -270,6 +281,7 @@ module Kward
       @mutex.synchronize do
         @busy = false
         @queued_count = 0
+        @steered_count = 0
         @asking = true
         render_prompt_locked
       end
@@ -654,6 +666,7 @@ module Kward
         asking: @asking,
         busy: @busy,
         queued_count: @queued_count,
+        steered_count: @steered_count,
         pending_keys: @pending_keys.dup,
         select_state: @select_state
       }
@@ -669,6 +682,7 @@ module Kward
         @asking = saved_state[:asking]
         @busy = saved_state[:busy]
         @queued_count = saved_state[:queued_count]
+        @steered_count = saved_state[:steered_count]
         @pending_keys = saved_state[:pending_keys]
         render_prompt_locked if @started && @asking
         @output_io.flush
@@ -2050,6 +2064,8 @@ module Kward
       label = @prompt_label.delete_suffix(">")
       if @busy && @queued_count.positive?
         status_composer_text("#{label} · #{@queued_count} queued")
+      elsif @busy && @steered_count.to_i.positive?
+        status_composer_text("#{label} · steered")
       elsif @busy
         status_composer_text("#{label} · #{spinner_frame} streaming")
       else

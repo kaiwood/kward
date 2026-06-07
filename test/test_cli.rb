@@ -868,6 +868,31 @@ class TestCLI < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_interactive_turn_steers_prompt_during_streaming_when_supported
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    client = SteeringRecordingClient.new
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    writer_thread = Thread.new do
+      sleep 0.03
+      writer.write("steer this\r")
+      writer.close
+    end
+
+    queued = cli.send(:run_interactive_turn, agent, "first")
+
+    assert_empty queued
+    assert_equal ["steer this"], client.steered_inputs
+    assert_equal "first", client.seen_messages[0][1][:content]
+    assert_includes strip_ansi(output.string), "steered"
+  ensure
+    writer_thread&.join
+    input&.close unless input&.closed?
+  end
+
   def test_status_slash_command_prints_static_status_without_calling_client
     prompt = FakePrompt.new(["/status", "/exit"])
     client = RecordingClient.new([])

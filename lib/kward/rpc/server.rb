@@ -191,7 +191,7 @@ module Kward
           @session_manager.start_turn(
             session_id: params.fetch("sessionId"),
             input: params.fetch("input"),
-            streaming_behavior: params["streamingBehavior"] || "newTurn",
+            streaming_behavior: params["streamingBehavior"],
             attachments: params["attachments"] || []
           )
         when "turns/cancel"
@@ -249,9 +249,10 @@ module Kward
             mode: "async",
             perSessionConcurrency: 1,
             busyInput: {
-              steer: "unsupported",
+              steer: @session_manager.in_flight_steer_supported? ? "native" : "unsupported",
               followUp: "queue",
-              defaultWhenIdle: "newTurn"
+              defaultWhenIdle: "newTurn",
+              defaultWhenBusy: @session_manager.in_flight_steer_supported? ? "steer" : "followUp"
             },
             cancellation: {
               behavior: "best-effort",
@@ -265,6 +266,7 @@ module Kward
             assistantText: "assistantDelta",
             reasoning: { start: false, delta: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
+            steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
             tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false },
             errors: true,
             sessionUpdates: false

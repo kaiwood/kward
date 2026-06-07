@@ -4,6 +4,7 @@ require_relative "compactor"
 require_relative "context_overflow"
 require_relative "conversation"
 require_relative "events"
+require_relative "steering"
 require_relative "telemetry_logger"
 require_relative "tool_registry"
 
@@ -18,7 +19,7 @@ module Kward
 
     attr_reader :conversation
 
-    def ask(input, display_input: nil, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, &block)
+    def ask(input, display_input: nil, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, &block)
       started_at = @telemetry_logger.monotonic_now
       status = "completed"
       error = nil
@@ -26,7 +27,7 @@ module Kward
       @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input, display_content: display_input)
       auto_compact_if_needed
-      run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, &block)
+      run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, &block)
     rescue StandardError => e
       status = "failed"
       error = e
@@ -35,12 +36,12 @@ module Kward
       log_turn(duration_ms: @telemetry_logger.duration_ms(started_at), status: status, error: error)
     end
 
-    def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil)
+    def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil)
       overflow_retried = false
       loop do
         cancellation&.raise_if_cancelled!
         begin
-          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation) do |event|
+          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering) do |event|
             yield event if block_given?
           end
         rescue StandardError => e
@@ -133,7 +134,7 @@ module Kward
       nil
     end
 
-    def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil)
+    def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil)
       reasoning_delta = lambda do |delta|
         cancellation&.raise_if_cancelled!
         on_reasoning_delta&.call(delta)
@@ -149,6 +150,9 @@ module Kward
         on_retry&.call(event)
         yield event if block_given?
       end
+      steering&.on_submit do |steering_event|
+        yield Events::Steering.new(input: steering_event.input, created_at: steering_event.created_at) if block_given?
+      end
       ChatInvocation.call(
         @client,
         @conversation.messages,
@@ -157,7 +161,8 @@ module Kward
           on_reasoning_delta: reasoning_delta,
           on_assistant_delta: assistant_delta,
           on_retry: retry_callback,
-          cancellation: cancellation
+          cancellation: cancellation,
+          steering: steering
         }
       )
     end

@@ -16,6 +16,7 @@ require_relative "../model_info"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
 require_relative "../session_store"
+require_relative "../steering"
 require_relative "../tool_call"
 require_relative "../tool_registry"
 require_relative "../workspace"
@@ -33,7 +34,7 @@ module Kward
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
 
       def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
         @server = server
@@ -191,12 +192,13 @@ module Kward
         { session: session_payload(rpc_session), messages: TranscriptNormalizer.new(rpc_session.conversation.messages).normalize }
       end
 
-      def start_turn(session_id:, input:, streaming_behavior: "newTurn", attachments: [])
+      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [])
         rpc_session = fetch_session(session_id)
-        streaming_behavior = validate_streaming_behavior(streaming_behavior)
         normalized_attachments = normalize_attachments(attachments)
         plugin_command, plugin_arguments = plugin_command_turn(input, normalized_attachments)
         content = plugin_command ? input.to_s : user_turn_content(expand_prompt_input(input), normalized_attachments)
+        streaming_behavior = validate_streaming_behavior(default_streaming_behavior(rpc_session, streaming_behavior), rpc_session: rpc_session)
+        return steer_running_turn(rpc_session, content) if streaming_behavior == "steer"
         turn = Turn.new(
           id: SecureRandom.uuid,
           session_id: rpc_session.id,
@@ -303,6 +305,10 @@ module Kward
         normalize_model(provider: provider, id: model, model: model, reasoningEffort: reasoning, contextWindow: context_window, current: true)
       end
 
+      def in_flight_steer_supported?
+        supports_in_flight_steer?
+      end
+
       def runtime_state(session_id:)
         rpc_session = fetch_session(session_id)
         model = current_model
@@ -313,7 +319,7 @@ module Kward
           thinkingLevel: model[:reasoningEffort],
           isStreaming: streaming?(rpc_session),
           isCompacting: false,
-          steeringMode: "one-at-a-time",
+          steeringMode: supports_in_flight_steer? ? "in-flight" : "one-at-a-time",
           followUpMode: "one-at-a-time",
           sessionFile: session[:path],
           sessionId: session[:persistentId],
@@ -544,10 +550,23 @@ module Kward
         text.strip
       end
 
-      def validate_streaming_behavior(streaming_behavior)
+      def supports_in_flight_steer?
+        @client.respond_to?(:supports_in_flight_steer?) && @client.supports_in_flight_steer?
+      end
+
+      def default_streaming_behavior(rpc_session, streaming_behavior)
+        behavior = streaming_behavior.to_s
+        return behavior unless behavior.empty?
+        return "steer" if supports_in_flight_steer? && streaming?(rpc_session)
+
+        "newTurn"
+      end
+
+      def validate_streaming_behavior(streaming_behavior, rpc_session: nil)
         behavior = streaming_behavior.to_s.empty? ? "newTurn" : streaming_behavior.to_s
         raise ArgumentError, "Unsupported streamingBehavior: #{behavior}" unless STREAMING_BEHAVIORS.include?(behavior)
-        raise ArgumentError, "Unsupported streamingBehavior: steer" if behavior == "steer"
+        raise ArgumentError, "Unsupported streamingBehavior: steer" if behavior == "steer" && !supports_in_flight_steer?
+        raise ArgumentError, "Unsupported streamingBehavior: steer" if behavior == "steer" && (!rpc_session || !streaming?(rpc_session))
 
         behavior
       end
@@ -721,6 +740,7 @@ module Kward
 
       def run_turn(rpc_session, turn)
         rpc_session.running_turn_id = turn.id
+        turn.steering = build_steering(turn) if supports_in_flight_steer? && !turn.plugin_command_name
         turn.status = "running"
         turn.started_at = now
         emit_turn_event(turn, "turnStarted", { status: "running" })
@@ -733,7 +753,7 @@ module Kward
         if turn.plugin_command_name
           run_plugin_turn(rpc_session, turn)
         else
-          rpc_session.agent.ask(turn.input, cancellation: turn.cancellation) do |event|
+          rpc_session.agent.ask(turn.input, cancellation: turn.cancellation, steering: turn.steering) do |event|
             handle_agent_event(turn, event) unless turn.cancel_requested
           end
           finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
@@ -745,7 +765,21 @@ module Kward
         emit_turn_event(turn, "error", turn.error)
         finish_turn(turn, "failed")
       ensure
+        turn.steering = nil
         rpc_session.running_turn_id = nil
+      end
+
+      def build_steering(_turn)
+        Steering.new
+      end
+
+      def steer_running_turn(rpc_session, input)
+        turn_id = rpc_session.running_turn_id
+        turn = turn_id && fetch_turn(turn_id)
+        raise ArgumentError, "Unsupported streamingBehavior: steer" unless turn&.status == "running" && turn.steering
+
+        turn.steering.submit(input)
+        turn_payload(turn)
       end
 
       def run_plugin_turn(rpc_session, turn)
@@ -778,6 +812,8 @@ module Kward
           emit_turn_event(turn, "assistantMessage", { message: event.message })
         when Events::Retry
           emit_turn_event(turn, "modelRetry", retry_event_payload(event))
+        when Events::Steering
+          emit_turn_event(turn, "turnSteered", { input: event.input, createdAt: event.created_at })
         when Events::ToolCall
           emit_turn_event(turn, "toolCall", normalized_tool_event_payload(event.tool_call))
         when Events::ToolResult
