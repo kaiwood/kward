@@ -43,7 +43,7 @@ module Kward
       enabled = boolean_config_value("enabled")
       return enabled unless enabled.nil?
 
-      !config_value("provider").to_s.strip.empty? || %w[exa perplexity gemini].any? { |provider| api_key(provider) }
+      true
     end
 
     def search(args)
@@ -611,7 +611,14 @@ module Kward
     def config_value(key)
       snake = key.to_s
       camel = snake.gsub(/_([a-z])/) { Regexp.last_match(1).upcase }
-      web_config[snake] || web_config[camel] || config["web_research_#{snake}"] || config[snake] || config[camel]
+      prefixed = "web_research_#{snake}"
+      return web_config[snake] if web_config.key?(snake)
+      return web_config[camel] if web_config.key?(camel)
+      return config[prefixed] if config.key?(prefixed)
+      return config[snake] if config.key?(snake)
+      return config[camel] if config.key?(camel)
+
+      nil
     end
 
     def boolean_config_value(key)

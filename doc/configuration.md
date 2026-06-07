@@ -58,13 +58,12 @@ Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who
 
 ## Web research
 
-Web research works without an API key through Exa's public MCP endpoint, but the tool is only advertised to the model when enabled or configured. For keyless Exa/legacy search, enable it explicitly:
+Web research works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool, disable it explicitly:
 
 ```json
 {
   "web_research": {
-    "enabled": true,
-    "provider": "auto"
+    "enabled": false
   }
 }
 ```

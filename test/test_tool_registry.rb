@@ -36,14 +36,26 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_include_core_tools_only_by_default
+  def test_tool_schemas_include_web_research_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json"), "EXA_API_KEY" => nil, "PERPLEXITY_API_KEY" => nil, "GEMINI_API_KEY" => nil) do
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-        assert_equal ["list_directory", "read_file", "write_file", "edit_file", "run_shell_command"], tool_names
+        assert_includes tool_names, "web_research"
+      end
+    end
+  end
+
+  def test_tool_schemas_exclude_web_research_when_disabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({ "web_research" => { "enabled" => false } }))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        refute_includes tool_names, "web_research"
       end
     end
   end
