@@ -15,7 +15,11 @@ module Kward
     ].freeze
 
     OPENAI_CONTEXT_WINDOWS = [
-      [/\Agpt-5\.5\b/, 200_000],
+      [/\Agpt-5\.5/, 400_000],
+      [/\Agpt-5-codex/, 400_000],
+      [/\Agpt-5\.3-codex-spark/, 128_000],
+      [/\Agpt-5\.3-codex/, 400_000],
+      [/\Agpt-5\.2-codex/, 400_000],
       [/\Agpt-5/, 400_000],
       [/\Agpt-4\.1/, 1_047_576],
       [/\Agpt-4o/, 128_000],
