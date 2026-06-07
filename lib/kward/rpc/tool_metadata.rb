@@ -1,0 +1,80 @@
+require_relative "../tool_call"
+require_relative "../workspace"
+
+module Kward
+  module RPC
+    module ToolMetadata
+      module_function
+
+      def normalized_tool_fields(tool_call)
+        raw_name = ToolCall.name(tool_call)
+        args = ToolCall.arguments(tool_call)
+        {
+          toolCallId: ToolCall.id(tool_call),
+          toolName: normalize_tool_name(raw_name) || raw_name,
+          args: normalize_tool_args(raw_name, args)
+        }.compact
+      end
+
+      def normalize_tool_name(name)
+        ToolCall.normalized_name(name)
+      end
+
+      def normalize_tool_args(name, args)
+        case name.to_s
+        when "edit_file", "edit"
+          normalize_edit_args(args)
+        when "write_file", "write"
+          normalize_write_args(args)
+        when "run_shell_command", "bash"
+          normalize_bash_args(args)
+        else
+          ToolCall.camelize_args(args)
+        end
+      end
+
+      def normalize_edit_args(args)
+        result = {}
+        path = ToolCall.value(args, :path)
+        result[:path] = path if path
+        edits = Array(ToolCall.value(args, :edits)).filter_map do |edit|
+          next unless edit.is_a?(Hash)
+
+          {
+            oldText: ToolCall.value(edit, :oldText) || ToolCall.value(edit, :old_text),
+            newText: ToolCall.value(edit, :newText) || ToolCall.value(edit, :new_text)
+          }.compact
+        end
+        result[:edits] = edits if edits.any?
+        result
+      end
+
+      def normalize_write_args(args)
+        result = {}
+        path = ToolCall.value(args, :path)
+        content = ToolCall.value(args, :content)
+        result[:path] = path if path
+        result[:content] = content if content
+        result
+      end
+
+      def normalize_bash_args(args)
+        result = {}
+        command = ToolCall.value(args, :command)
+        timeout = ToolCall.value(args, :timeout) || ToolCall.value(args, :timeout_seconds) || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS
+        result[:command] = command if command
+        result[:timeout] = timeout if timeout
+        result
+      end
+
+      def extract_unified_diff(text)
+        index = text.to_s.index(/^--- /)
+        index ? text.to_s[index..] : nil
+      end
+
+      def error_result?(text)
+        text.to_s.start_with?("Error:", "Declined:", "Cancelled.")
+      end
+    end
+  end
+end

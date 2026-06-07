@@ -12,6 +12,7 @@ require_relative "../context_usage"
 require_relative "../conversation"
 require_relative "../crew_reporter"
 require_relative "../events"
+require_relative "../markdown_transcript"
 require_relative "../model_info"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
@@ -913,7 +914,7 @@ module Kward
       end
 
       def export_content(conversation, format)
-        markdown = markdown_transcript(conversation)
+        markdown = MarkdownTranscript.new(conversation).render
         return markdown if format == "markdown"
 
         html_transcript(markdown)
@@ -980,38 +981,6 @@ module Kward
         end
       end
 
-      def markdown_transcript(conversation)
-        lines = ["# Kward Session", ""]
-        conversation.messages.each do |message|
-          role = message["role"] || message[:role]
-          next if role == "system"
-
-          lines << "## #{role.to_s.capitalize}"
-          name = message["name"] || message[:name]
-          lines << "Tool: `#{name}`" if role == "tool" && name
-          lines << ""
-          content = role == "compactionSummary" ? (message["summary"] || message[:summary]) : (message["content"] || message[:content])
-          lines << markdown_content(content)
-          lines << ""
-        end
-        lines.join("\n")
-      end
-
-      def markdown_content(content)
-        case content
-        when Array
-          content.map do |part|
-            text = part["text"] || part[:text]
-            next text if text
-
-            path = part["path"] || part[:path]
-            media_type = part["mimeType"] || part[:mimeType] || part["media_type"] || part[:media_type] || "image"
-            "[#{media_type}#{path ? ": #{path}" : ""}]"
-          end.compact.join("\n")
-        else
-          content.to_s
-        end
-      end
 
       def now
         Time.now.utc.iso8601(3)

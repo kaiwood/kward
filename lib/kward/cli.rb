@@ -11,6 +11,7 @@ require_relative "context_usage"
 require_relative "crew_reporter"
 require_relative "events"
 require_relative "image_attachments"
+require_relative "markdown_transcript"
 require_relative "model_info"
 require_relative "openai_oauth"
 require_relative "pan_server"
@@ -994,42 +995,7 @@ module Kward
     end
 
     def markdown_transcript(conversation)
-      lines = ["# Kward Session", ""]
-      conversation.messages.each do |message|
-        role = message["role"] || message[:role]
-        next if role == "system"
-
-        lines << "## #{role.to_s.capitalize}"
-        name = message["name"] || message[:name]
-        lines << "Tool: `#{name}`" if role == "tool" && name
-        lines << ""
-        content = if role == "compactionSummary"
-                    message["summary"] || message[:summary]
-                  elsif role == "user"
-                    message_display_text(message)
-                  else
-                    message["content"] || message[:content]
-                  end
-        lines << markdown_content(content)
-        lines << ""
-      end
-      lines.join("\n")
-    end
-
-    def markdown_content(content)
-      case content
-      when Array
-        content.map do |part|
-          text = part["text"] || part[:text]
-          next text if text
-
-          path = part["path"] || part[:path]
-          media_type = part["media_type"] || part[:media_type] || "image"
-          "[#{media_type}#{path ? ": #{path}" : ""}]"
-        end.compact.join("\n")
-      else
-        content.to_s
-      end
+      MarkdownTranscript.new(conversation).render
     end
 
     def setup_interactive_prompt

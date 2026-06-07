@@ -1,4 +1,5 @@
 require_relative "../tool_call"
+require_relative "tool_metadata"
 
 module Kward
   module RPC
@@ -212,8 +213,7 @@ module Kward
       end
 
       def extract_unified_diff(text)
-        index = text.index(/^--- /)
-        index ? text[index..] : nil
+        ToolMetadata.extract_unified_diff(text)
       end
 
       def changed_files_from_result(text, matching_call)
@@ -231,7 +231,7 @@ module Kward
         return value(message, :isError) if has_key?(message, :isError)
         return value(message, :is_error) if has_key?(message, :is_error)
 
-        content_text(content).start_with?("Error:", "Declined:", "Cancelled.")
+        ToolMetadata.error_result?(content_text(content))
       end
 
       def content_text(content)
@@ -246,7 +246,7 @@ module Kward
       end
 
       def normalize_tool_name(name)
-        ToolCall.normalized_name(name)
+        ToolMetadata.normalize_tool_name(name)
       end
 
       def normalize_tool_arguments(name, arguments)
