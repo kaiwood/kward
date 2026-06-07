@@ -705,6 +705,15 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "╭ You · ⠋ streaming "
   end
 
+  def test_prompt_interface_renders_custom_busy_activity
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.begin_busy_input("You>", activity: "compacting")
+
+    assert_includes output.string, "╭ You · ⠋ compacting "
+  end
+
   def test_prompt_interface_advances_braille_spinner_while_busy
     input, writer = IO.pipe
     output = StringIO.new

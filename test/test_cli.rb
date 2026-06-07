@@ -37,8 +37,8 @@ class TestCLI < KwardTestCase
       @stream_block = nil
     end
 
-    def begin_busy_input(message)
-      @events << [:begin_busy_input, message]
+    def begin_busy_input(message, activity: "streaming")
+      @events << [:begin_busy_input, message, activity]
     end
 
     def finish_busy_input
@@ -981,10 +981,31 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal [:begin_busy_input, "You>"], prompt.events.first
+      assert_equal [:begin_busy_input, "You>", "streaming"], prompt.events.first
       assert_includes prompt.events, [:start_stream_block, "Crew"]
       assert_includes prompt.events, [:finish_busy_input]
       assert_operator prompt.events.index([:finish_busy_input]), :<, prompt.events.index([:close])
+    end
+  end
+
+  def test_compact_slash_command_keeps_busy_composer_visible_while_running
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({ "compaction" => { "keep_recent_tokens" => 20 } }))
+      prompt = BusyPrompt.new(["hello with enough detail to compact", "second turn before compaction", "/compact focus", "/exit"])
+      client = RecordingClient.new(["reply", "second reply", "summary"])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      compacting_index = prompt.events.index([:begin_busy_input, "You>", "compacting"])
+      assert compacting_index
+      finish_after_compacting = prompt.events[compacting_index..].index([:finish_busy_input])
+      assert finish_after_compacting
+      assert_includes prompt.output.join("\n"), "Compacted context:"
     end
   end
 

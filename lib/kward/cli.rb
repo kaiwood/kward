@@ -309,7 +309,12 @@ module Kward
         export_session(agent.conversation, argument)
         [true, nil]
       when "compact"
-        compact_context(agent, argument)
+        if prompt_interface?
+          queued_inputs = run_busy_local_command(activity: "compacting") { compact_context(agent, argument) }
+          queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+        else
+          compact_context(agent, argument)
+        end
         [true, nil]
       else
         return run_plugin_command(name, argument, agent) if plugin_command_for(name)
@@ -360,10 +365,16 @@ module Kward
       end
     end
 
-    def run_busy_local_command
+    def run_busy_local_command(activity: "streaming")
       queued_inputs = []
       error = nil
-      @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+      if @prompt.respond_to?(:begin_busy_input)
+        if activity == "streaming"
+          @prompt.begin_busy_input("You>")
+        else
+          @prompt.begin_busy_input("You>", activity: activity)
+        end
+      end
 
       worker = Thread.new do
         yield

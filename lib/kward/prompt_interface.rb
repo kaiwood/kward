@@ -43,6 +43,7 @@ module Kward
       @started = false
       @asking = false
       @busy = false
+      @busy_activity = "streaming"
       @queued_count = 0
       @steered_count = 0
       @spinner_frame_index = 0
@@ -244,10 +245,11 @@ module Kward
       end
     end
 
-    def begin_busy_input(message = "You>")
+    def begin_busy_input(message = "You>", activity: "streaming")
       start
       @mutex.synchronize do
         @prompt_label = message.to_s
+        @busy_activity = normalize_busy_activity(activity)
         @input = ""
         @cursor = 0
         @pending_keys.clear
@@ -280,6 +282,7 @@ module Kward
     def finish_busy_input
       @mutex.synchronize do
         @busy = false
+        @busy_activity = "streaming"
         @queued_count = 0
         @steered_count = 0
         @asking = true
@@ -427,6 +430,11 @@ module Kward
     def reset_spinner_locked
       @spinner_frame_index = 0
       @last_spinner_tick = monotonic_now
+    end
+
+    def normalize_busy_activity(activity)
+      text = activity.to_s.gsub(/\s+/, " ").strip
+      text.empty? ? "streaming" : text
     end
 
     def tick_spinner_locked
@@ -2067,7 +2075,7 @@ module Kward
       elsif @busy && @steered_count.to_i.positive?
         status_composer_text("#{label} · steered")
       elsif @busy
-        status_composer_text("#{label} · #{spinner_frame} streaming")
+        status_composer_text("#{label} · #{spinner_frame} #{@busy_activity}")
       else
         status_composer_text(label)
       end
