@@ -884,6 +884,22 @@ class TestPromptInterface < KwardTestCase
     refute_includes stripped, "╯Tool>"
   end
 
+  def test_prompt_interface_separates_open_stream_blocks
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.start_stream_block("Assistant")
+    prompt.write_delta("assistant text")
+    prompt.start_stream_block("Reasoning")
+    prompt.write_delta("reasoning text")
+
+    stripped = strip_ansi(output.string)
+    assert_includes stripped, "Kward>\r\nassistant text\r\n\r\nReasoning>\r\nreasoning text"
+  end
+
   def test_prompt_interface_advances_after_full_width_stream_chunk
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

@@ -420,7 +420,7 @@ module Kward
     def ensure_transcript_block_separator_locked
       return if @transcript_buffer.empty? || @transcript_buffer.end_with?("\n\n")
 
-      write_transcript_text_locked("\n")
+      write_transcript_text_locked(@transcript_buffer.end_with?("\n") ? "\n" : "\n\n")
     end
 
     def terminal_newlines(text)
