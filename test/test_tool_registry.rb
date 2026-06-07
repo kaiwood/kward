@@ -36,38 +36,50 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_include_web_research_by_default
+  def test_tool_schemas_include_web_search_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json"), "EXA_API_KEY" => nil, "PERPLEXITY_API_KEY" => nil, "GEMINI_API_KEY" => nil) do
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-        assert_includes tool_names, "web_research"
+        assert_includes tool_names, "web_search"
       end
     end
   end
 
-  def test_tool_schemas_exclude_web_research_when_disabled
+  def test_tool_schemas_exclude_web_search_when_disabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({ "web_search" => { "enabled" => false } }))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        refute_includes tool_names, "web_search"
+      end
+    end
+  end
+
+  def test_tool_schemas_include_web_search_when_enabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({ "web_search" => { "enabled" => true } }))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        assert_includes tool_names, "web_search"
+      end
+    end
+  end
+
+  def test_tool_schemas_exclude_web_search_with_legacy_disabled_config
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({ "web_research" => { "enabled" => false } }))
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-        refute_includes tool_names, "web_research"
-      end
-    end
-  end
-
-  def test_tool_schemas_include_web_research_when_enabled
-    Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "config.json"), JSON.dump({ "web_research" => { "enabled" => true } }))
-
-      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
-
-        assert_includes tool_names, "web_research"
+        refute_includes tool_names, "web_search"
       end
     end
   end
@@ -141,15 +153,15 @@ class TestToolRegistry < KwardTestCase
     assert_equal "Error: question 1 uses unsupported multiSelect.", unsupported
   end
 
-  def test_tool_registry_dispatches_web_research
-    research = FakeWebResearch.new("research result")
-    registry = Kward::ToolRegistry.new(web_research: research, web_research_enabled: true)
+  def test_tool_registry_dispatches_web_search
+    search = FakeWebSearch.new("research result")
+    registry = Kward::ToolRegistry.new(web_search: search, web_search_enabled: true)
     conversation = Kward::Conversation.new
 
-    result = registry.dispatch(tool_call("web_research", queries: ["ruby"]), conversation)
+    result = registry.dispatch(tool_call("web_search", queries: ["ruby"]), conversation)
 
     assert_equal "research result", result
-    assert_equal [{ "queries" => ["ruby"] }], research.calls
+    assert_equal [{ "queries" => ["ruby"] }], search.calls
   end
 
   def test_tool_registry_write_runs_without_confirmation

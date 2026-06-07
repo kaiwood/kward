@@ -99,7 +99,7 @@ class KwardTestCase < Minitest::Test
   end
 
   def fake_response(code, body)
-    Kward::WebResearch::NetHttpClient::Response.new(code: code, body: body)
+    Kward::WebSearch::NetHttpClient::Response.new(code: code, body: body)
   end
 
   class FakeHttpClient
@@ -133,7 +133,7 @@ class KwardTestCase < Minitest::Test
     end
   end
 
-  class FakeWebResearch
+  class FakeWebSearch
     attr_reader :calls
 
     def initialize(result)

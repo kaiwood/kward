@@ -403,9 +403,9 @@ class TestCLI < KwardTestCase
     assert_includes shell_output, "stderr (5 bytes):\nwarn"
 
     research_output = capture_io do
-      cli.send(:print_tool_result, tool_call("web_research", queries: ["ruby"]), "# Web research\n\n## Query: ruby\n1. Ruby\n   URL: https://ruby-lang.org\n")
+      cli.send(:print_tool_result, tool_call("web_search", queries: ["ruby"]), "# Web search\n\n## Query: ruby\n1. Ruby\n   URL: https://ruby-lang.org\n")
     end.first
-    assert_includes research_output, "web_research"
+    assert_includes research_output, "web_search"
     assert_includes research_output, "ruby: 1 result(s)"
   end
 

@@ -6,7 +6,7 @@ require "uri"
 require_relative "config_files"
 
 module Kward
-  class WebResearch
+  class WebSearch
     DEFAULT_MAX_RESULTS = 5
     MAX_MAX_RESULTS = 20
     MAX_QUERIES = 4
@@ -61,7 +61,7 @@ module Kward
         provider: provider
       }
 
-      sections = ["# Web research"]
+      sections = ["# Web search"]
       failures = []
       any_results = false
 
@@ -73,7 +73,7 @@ module Kward
       end
 
       unless any_results
-        return "Error: web_research found no results\n#{failures.map { |failure| "- #{failure}" }.join("\n")}".strip
+        return "Error: web_search found no results\n#{failures.map { |failure| "- #{failure}" }.join("\n")}".strip
       end
 
       truncate_output(sections.join("\n\n"))
@@ -604,17 +604,19 @@ module Kward
     end
 
     def web_config
-      value = config["web_research"] || config["webResearch"] || {}
+      value = config["web_search"] || config["webSearch"] || config["web_research"] || config["webResearch"] || {}
       value.is_a?(Hash) ? value : {}
     end
 
     def config_value(key)
       snake = key.to_s
       camel = snake.gsub(/_([a-z])/) { Regexp.last_match(1).upcase }
-      prefixed = "web_research_#{snake}"
+      prefixed = "web_search_#{snake}"
+      legacy_prefixed = "web_research_#{snake}"
       return web_config[snake] if web_config.key?(snake)
       return web_config[camel] if web_config.key?(camel)
       return config[prefixed] if config.key?(prefixed)
+      return config[legacy_prefixed] if config.key?(legacy_prefixed)
       return config[snake] if config.key?(snake)
       return config[camel] if config.key?(camel)
 

@@ -1265,8 +1265,8 @@ module Kward
         file_change_summary(name, args, text)
       when "run_shell_command"
         shell_command_summary(args, text)
-      when "web_research"
-        web_research_summary(args, text)
+      when "web_search"
+        web_search_summary(args, text)
       else
         generic_tool_summary(name, text)
       end
@@ -1295,15 +1295,15 @@ module Kward
       lines.join("\n")
     end
 
-    def web_research_summary(args, content)
+    def web_search_summary(args, content)
       queries = Array(args["queries"] || args[:queries]).map(&:to_s)
-      queries = web_research_queries_from_content(content) if queries.empty?
-      counts = web_research_result_counts(content)
-      lines = ["web_research"]
+      queries = web_search_queries_from_content(content) if queries.empty?
+      counts = web_search_result_counts(content)
+      lines = ["web_search"]
       queries.each do |query|
         lines << "#{query}: #{counts.fetch(query, 0)} result(s)"
       end
-      lines << "#{web_research_total_count(content)} result(s)" if queries.empty?
+      lines << "#{web_search_total_count(content)} result(s)" if queries.empty?
       lines.join("\n")
     end
 
@@ -1336,11 +1336,11 @@ module Kward
       match ? match[1] : ""
     end
 
-    def web_research_queries_from_content(content)
+    def web_search_queries_from_content(content)
       content.scan(/^## Query: (.+)$/).flatten
     end
 
-    def web_research_result_counts(content)
+    def web_search_result_counts(content)
       counts = {}
       current_query = nil
       content.each_line do |line|
@@ -1354,7 +1354,7 @@ module Kward
       counts
     end
 
-    def web_research_total_count(content)
+    def web_search_total_count(content)
       content.each_line.count { |line| line.match?(/^\d+\. /) }
     end
 

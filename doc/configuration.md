@@ -31,7 +31,7 @@ Overlay settings are stored under `overlay`:
 ## Environment fallback
 
 - Optional model env fallback: `OPENAI_ACCESS_TOKEN` or `OPENROUTER_API_KEY`.
-- Optional web research env fallback: `EXA_API_KEY`, `PERPLEXITY_API_KEY`, or `GEMINI_API_KEY`.
+- Optional web search env fallback: `EXA_API_KEY`, `PERPLEXITY_API_KEY`, or `GEMINI_API_KEY`.
 
 OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. `OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists.
 
@@ -56,13 +56,13 @@ Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `op
 
 Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who has the credentials. Use it only on trusted networks.
 
-## Web research
+## Web search
 
-Web research works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool, disable it explicitly:
+Web search works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool, disable it explicitly:
 
 ```json
 {
-  "web_research": {
+  "web_search": {
     "enabled": false
   }
 }
@@ -72,7 +72,7 @@ For higher limits or alternate providers, add your own keys using environment va
 
 ```json
 {
-  "web_research": {
+  "web_search": {
     "enabled": true,
     "provider": "auto",
     "allow_model_providers": false,

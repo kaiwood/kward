@@ -2,16 +2,16 @@ require_relative "base"
 
 module Kward
   module Tools
-    class WebResearch < Base
-      def initialize(web_research:)
-        @web_research = web_research
+    class WebSearch < Base
+      def initialize(web_search:)
+        @web_search = web_search
         super(
-          "web_research",
-          "Search the live web when web research is enabled or configured. Auto mode uses Exa first, optional model-backed providers only when allowed, then legacy DuckDuckGo/SearXNG.",
+          "web_search",
+          "Search the live web. Auto mode uses Exa first, optional model-backed providers only when allowed, then legacy DuckDuckGo/SearXNG.",
           properties: {
             queries: {
               type: "array",
-              description: "One to four distinct web research queries. Prefer varied angles over near-duplicates.",
+              description: "One to four distinct web search queries. Prefer varied angles over near-duplicates.",
               items: { type: "string" },
               minItems: 1,
               maxItems: 4
@@ -41,7 +41,7 @@ module Kward
       end
 
       def call(args, _conversation, cancellation: nil)
-        @web_research.search(args)
+        @web_search.search(args)
       end
     end
   end

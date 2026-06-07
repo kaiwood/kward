@@ -1,13 +1,13 @@
-# Web research
+# Web search
 
-Web research searches the live web. The `web_research` tool is advertised by default so the agent can use current sources when needed. In `auto` mode the provider fallback order is:
+Web search lets the agent search the live web. The `web_search` tool is advertised by default so the agent can use current sources when needed. In `auto` mode the provider fallback order is:
 
 1. Exa API when `EXA_API_KEY` is configured, otherwise keyless Exa MCP (`https://mcp.exa.ai/mcp`)
 2. Perplexity API when configured and `allow_model_providers` is true
 3. Gemini API with Google Search grounding when configured and `allow_model_providers` is true
 4. Legacy DuckDuckGo HTML search, then bundled public SearXNG instances
 
-Queries are sent over the network to the selected provider. API keys are never bundled with Kward; configure your own keys only if you want higher limits or alternate providers. Set `web_research.enabled` to `false` to hide the tool. Direct `provider: perplexity` or `provider: gemini` requests still use those providers when keys are configured.
+Queries are sent over the network to the selected provider. API keys are never bundled with Kward; configure your own keys only if you want higher limits or alternate providers. Set `web_search.enabled` to `false` to hide the tool. Direct `provider: perplexity` or `provider: gemini` requests still use those providers when keys are configured.
 
 Supported arguments:
 

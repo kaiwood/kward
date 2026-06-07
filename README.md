@@ -18,7 +18,7 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 - [Authentication](doc/authentication.md): OpenAI OAuth and API key fallback behavior.
 - [Configuration](doc/configuration.md): config files, models, environment variables, and color output.
 - [Extensibility](doc/extensibility.md): `AGENTS.md`, skills, and prompt templates.
-- [Web research](doc/web-research.md): search providers and network behavior.
+- [Web search](doc/web-search.md): search providers and network behavior.
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
 
 ## Run tests

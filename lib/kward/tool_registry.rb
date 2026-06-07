@@ -6,21 +6,21 @@ require_relative "tools/list_directory"
 require_relative "tools/read_file"
 require_relative "tools/read_skill"
 require_relative "tools/run_shell_command"
-require_relative "tools/web_research"
+require_relative "tools/web_search"
 require_relative "tools/write_file"
-require_relative "web_research"
+require_relative "web_search"
 require_relative "workspace"
 
 module Kward
   class ToolRegistry
     attr_reader :schemas
 
-    def initialize(workspace: Workspace.new, prompt: nil, web_research: WebResearch.new, skills: nil, web_research_enabled: nil, ask_user_question_enabled: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
       @workspace = workspace
       @prompt = prompt
-      @web_research = web_research
+      @web_search = web_search
       @skills = skills
-      @web_research_enabled = web_research_enabled
+      @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map(&:schema).freeze
@@ -57,7 +57,7 @@ module Kward
 
     def build_schema_tools
       tools = core_tools
-      tools << @tools["web_research"] if web_research_available?
+      tools << @tools["web_search"] if web_search_available?
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
       tools
@@ -65,7 +65,7 @@ module Kward
 
     def all_tools
       core_tools + [
-        Tools::WebResearch.new(web_research: @web_research),
+        Tools::WebSearch.new(web_search: @web_search),
         Tools::ReadSkill.new,
         Tools::AskUserQuestion.new(prompt: @prompt)
       ]
@@ -81,9 +81,9 @@ module Kward
       ]
     end
 
-    def web_research_available?
-      return @web_research_enabled unless @web_research_enabled.nil?
-      return @web_research.available? if @web_research.respond_to?(:available?)
+    def web_search_available?
+      return @web_search_enabled unless @web_search_enabled.nil?
+      return @web_search.available? if @web_search.respond_to?(:available?)
 
       true
     end
