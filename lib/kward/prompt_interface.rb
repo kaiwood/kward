@@ -1,3 +1,4 @@
+require "io/console"
 require "thread"
 require "tty-cursor"
 require "tty-reader"
@@ -55,6 +56,8 @@ module Kward
       @stream_pending_wrap = false
       @transcript_buffer = +""
       @pending_keys = []
+      @original_console_mode = nil
+      @raw_mode_active = false
       @history = []
       @history_index = nil
       @history_draft = nil
@@ -79,6 +82,7 @@ module Kward
       @mutex.synchronize do
         return if @started
 
+        enter_raw_mode_locked
         @started = true
         @asking = true
         @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
@@ -99,6 +103,7 @@ module Kward
         @output_io.puts
         @output_io.flush
         @started = false
+        restore_console_mode_locked
       end
     end
 
@@ -352,6 +357,30 @@ module Kward
     end
 
     private
+
+    def enter_raw_mode_locked
+      return unless @input_io.respond_to?(:tty?) && @input_io.tty?
+      return unless @input_io.respond_to?(:console_mode) && @input_io.respond_to?(:console_mode=)
+      return if @raw_mode_active
+
+      @original_console_mode = @input_io.console_mode
+      raw_mode = @input_io.console_mode.raw
+      raw_mode.echo = false
+      @input_io.console_mode = raw_mode
+      @raw_mode_active = true
+    rescue StandardError
+      @original_console_mode = nil
+      @raw_mode_active = false
+    end
+
+    def restore_console_mode_locked
+      return unless @raw_mode_active
+
+      @input_io.console_mode = @original_console_mode if @original_console_mode
+    ensure
+      @original_console_mode = nil
+      @raw_mode_active = false
+    end
 
     def write_transcript_text_locked(text)
       append_transcript_buffer(text.to_s)

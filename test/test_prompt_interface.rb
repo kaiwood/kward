@@ -1,4 +1,5 @@
 require_relative "test_helper"
+require "pty"
 
 class TestPromptInterface < KwardTestCase
   def bundled_test_banner_pixels
@@ -687,6 +688,39 @@ class TestPromptInterface < KwardTestCase
 
     assert_includes output.string, "╭ You · 1 queued "
     refute_includes output.string, "streaming"
+  end
+
+  def test_prompt_interface_keeps_terminal_backspace_between_busy_polls
+    PTY.open do |master, slave|
+      output = StringIO.new
+      prompt = Kward::PromptInterface.new(input: slave, output: output)
+      prompt.begin_busy_input("You>")
+      master.write("abcdef")
+      6.times { prompt.poll_input }
+      assert_equal "abcdef", prompt.instance_variable_get(:@input)
+
+      master.write("\x7F" * 3)
+      sleep 0.05
+      3.times { prompt.poll_input }
+
+      assert_equal "abc", prompt.instance_variable_get(:@input)
+    ensure
+      prompt&.close
+    end
+  end
+
+  def test_prompt_interface_restores_terminal_mode_on_close
+    PTY.open do |master, slave|
+      output = StringIO.new
+      prompt = Kward::PromptInterface.new(input: slave, output: output)
+      prompt.start
+      prompt.close
+
+      master.write("\x7F")
+      sleep 0.05
+
+      refute slave.wait_readable(0.05)
+    end
   end
 
   def test_prompt_interface_queues_input_while_busy
