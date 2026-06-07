@@ -1306,7 +1306,7 @@ class TestCLI < KwardTestCase
       assert_equal ["Default model"], prompt.select_messages
       assert_equal ["Models"], prompt.select_titles
       assert_includes prompt.select_choices.first, "Codex existing (current)"
-      assert_includes prompt.output.join("\n"), "Saved default model: Codex custom-model"
+      assert_empty prompt.output
       assert_equal 1, prompt.redraw_count
     end
   end
@@ -1399,7 +1399,7 @@ class TestCLI < KwardTestCase
       assert_equal ["Reasoning effort"], prompt.select_messages
       assert_equal ["Reasoning"], prompt.select_titles
       assert_equal ["Low", "Medium (current)", "High", "Extra High"], prompt.select_choices.first
-      assert_includes prompt.output.join("\n"), "Saved reasoning effort: xhigh"
+      assert_empty prompt.output
       assert_equal 1, prompt.redraw_count
     end
   end

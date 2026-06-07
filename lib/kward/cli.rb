@@ -464,7 +464,6 @@ module Kward
       ConfigFiles.update_config(ModelInfo.config_key_for_provider(provider) => model)
       reload_client_config
       refresh_conversation_runtime(conversation)
-      @prompt.say("\nSaved default model: #{provider} #{model}\n")
       @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
       @prompt.say("\nModel error: #{e.message}\n")
@@ -486,7 +485,6 @@ module Kward
       ConfigFiles.update_config("openai_reasoning_effort" => effort)
       reload_client_config
       refresh_conversation_runtime(conversation)
-      @prompt.say("\nSaved reasoning effort: #{effort}\n")
       @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
       @prompt.say("\nReasoning error: #{e.message}\n")
