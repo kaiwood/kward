@@ -155,7 +155,7 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "\e]1337;File="
   end
 
-  def test_prompt_interface_visual_banner_is_not_replayed_on_redraw
+  def test_prompt_interface_visual_banner_is_replayed_on_redraw
     output = StringIO.new
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
@@ -171,8 +171,104 @@ class TestPromptInterface < KwardTestCase
 
     prompt.redraw
 
+    assert_includes strip_ansi(output.string), "State your business."
+    assert_includes output.string, "\e[48;2;"
+  end
+
+  def test_prompt_interface_does_not_repaint_visual_banner_when_overlay_grows_composer
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 30 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      slash_commands: (1..8).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } },
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+    prompt.print_visual_banner
+    output.truncate(0)
+    output.rewind
+
+    prompt.instance_variable_set(:@input, "/")
+    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:render_prompt_locked)
+
     refute_includes strip_ansi(output.string), "State your business."
     refute_includes output.string, "\e[48;2;"
+    refute_includes output.string, TTY::Cursor.clear_screen
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_restores_visual_banner_after_overlay_resizes_composer
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 30 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      slash_commands: (1..8).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } },
+      banner_pixels: bundled_test_banner_pixels,
+      banner_message: Kward::PromptInterface::BANNER_MESSAGE
+    )
+
+    prompt.start
+    prompt.print_visual_banner
+    prompt.instance_variable_set(:@input, "/")
+    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:render_prompt_locked)
+    output.truncate(0)
+    output.rewind
+
+    prompt.instance_variable_set(:@input, "")
+    prompt.instance_variable_set(:@cursor, 0)
+    prompt.send(:render_prompt_locked)
+
+    assert_includes strip_ansi(output.string), "State your business."
+    assert_includes output.string, "\e[48;2;"
+    refute_includes output.string, TTY::Cursor.clear_screen
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_restores_transcript_text_after_overlay_resizes_composer
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 40 }
+    TTY::Screen.define_singleton_method(:height) { 12 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      slash_commands: (1..4).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } }
+    )
+
+    prompt.start
+    prompt.say((1..8).map { |index| "line#{index}" }.join("\n"))
+    prompt.instance_variable_set(:@input, "/")
+    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:render_prompt_locked)
+    output.truncate(0)
+    output.rewind
+
+    prompt.instance_variable_set(:@input, "")
+    prompt.instance_variable_set(:@cursor, 0)
+    prompt.send(:render_prompt_locked)
+
+    assert_includes output.string, "line8"
+    refute_includes output.string, TTY::Cursor.clear_screen
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
   def test_prompt_interface_renders_banner_from_pixel_data_without_decoding_png

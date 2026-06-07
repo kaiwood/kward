@@ -57,6 +57,8 @@ module Kward
       @stream_col = 0
       @stream_pending_wrap = false
       @transcript_buffer = +""
+      @visual_banner_count = 0
+      @transcript_viewport_rows = 0
       @pending_keys = []
       @kill_buffer = ""
       @original_console_mode = nil
@@ -309,11 +311,16 @@ module Kward
 
     def print_visual_banner
       @mutex.synchronize do
+        rows = banner_rows(screen_width)
+        return if rows.empty?
+
         prepare_transcript_output_locked
-        banner_rows(screen_width).each do |row|
+        rows.each do |row|
           write_visual_transcript_text_locked(row)
           write_visual_transcript_text_locked("\n")
         end
+        @visual_banner_count += 1
+        remember_transcript_viewport_locked
         @stream_block = nil
         restore_composer_cursor_locked
         @output_io.flush
@@ -364,6 +371,8 @@ module Kward
     def clear_transcript
       @mutex.synchronize do
         @transcript_buffer = +""
+        @visual_banner_count = 0
+        @transcript_viewport_rows = 0
         @stream_block = nil
         @stream_col = 0
         @stream_pending_wrap = false
@@ -400,6 +409,7 @@ module Kward
 
     def write_transcript_text_locked(text)
       append_transcript_buffer(text.to_s)
+      remember_transcript_viewport_locked unless text.to_s.empty?
       write_visual_transcript_text_locked(text)
     end
 
@@ -1524,8 +1534,8 @@ module Kward
       handle_resize_locked
       rows, cursor_row, cursor_col = composer_layout(screen_width)
       ensure_scroll_region_locked(rows.length)
-      render_composer_rows_locked(rows)
       @rendered_rows = rows.length
+      render_composer_rows_locked(rows)
       @cursor_rendered_row = cursor_row
       @last_width = screen_width
       @last_height = screen_height
@@ -1543,6 +1553,7 @@ module Kward
       clear_composer_region_locked
       @rendered_rows = 0
       @cursor_rendered_row = 0
+      redraw_transcript_locked
     end
 
     def clear_prompt_for_output_locked
@@ -1586,14 +1597,16 @@ module Kward
       ensure_scroll_region_locked(rows.length)
     end
 
-    def ensure_scroll_region_locked(row_count)
+    def ensure_scroll_region_locked(row_count, redraw_transcript: true)
       new_reserved_rows = [[row_count, 1].max, [screen_height - 1, 1].max].min
       return if @reserved_rows == new_reserved_rows && @last_height == screen_height
 
-      rows_to_clear = [@reserved_rows, new_reserved_rows].max
+      old_reserved_rows = @reserved_rows
+      rows_to_clear = [old_reserved_rows, new_reserved_rows].max
       @reserved_rows = new_reserved_rows
       @output_io.print("\e[1;#{transcript_bottom_row}r")
       clear_composer_region_locked(rows_to_clear)
+      redraw_transcript_locked if redraw_transcript && new_reserved_rows < old_reserved_rows
     end
 
     def handle_resize_locked
@@ -1673,10 +1686,10 @@ module Kward
       move_to_screen(1, 1)
       @reserved_rows = 0
       rows, cursor_row, cursor_col = composer_layout(screen_width)
-      ensure_scroll_region_locked(rows.length)
+      ensure_scroll_region_locked(rows.length, redraw_transcript: false)
       redraw_transcript_locked
-      render_composer_rows_locked(rows) if @asking
       @rendered_rows = @asking ? rows.length : 0
+      render_composer_rows_locked(rows) if @asking
       @cursor_rendered_row = @asking ? cursor_row : 0
       @last_width = screen_width
       @last_height = screen_height
@@ -1688,20 +1701,49 @@ module Kward
     end
 
     def redraw_transcript_locked
-      visible_text = transcript_viewport_text(transcript_bottom_row, screen_width)
-      return if visible_text.empty?
+      return unless transcript_renderable?
+
+      rows = transcript_viewport_rows(transcript_redraw_row_count, screen_width)
+      clear_screen_rows_locked(1, rows.length)
+      return if rows.empty?
 
       move_to_screen(1, 1)
-      @output_io.print(terminal_newlines(visible_text))
+      @output_io.print(terminal_newlines(rows.join("\n")))
     end
 
     def transcript_viewport_text(row_count, width)
-      return "" unless row_count.positive?
+      transcript_viewport_rows(row_count, width).join("\n")
+    end
 
-      transcript_display_rows(width).last(row_count).join("\n")
+    def transcript_viewport_rows(row_count, width)
+      return [] unless row_count.positive?
+
+      rows = transcript_display_rows(width).last(row_count)
+      rows = ([""] * (row_count - rows.length)) + rows if rows.length < row_count
+      rows
+    end
+
+    def transcript_redraw_row_count
+      [[@transcript_viewport_rows, transcript_bottom_row].max, screen_height].min
+    end
+
+    def remember_transcript_viewport_locked
+      @transcript_viewport_rows = transcript_bottom_row
+    end
+
+    def transcript_renderable?
+      @visual_banner_count.positive? || !@transcript_buffer.empty?
     end
 
     def transcript_display_rows(width)
+      rows = []
+      @visual_banner_count.times { rows.concat(banner_rows(width)) }
+      rows << "" if @visual_banner_count.positive? && @transcript_buffer.empty?
+      rows.concat(transcript_text_display_rows(width))
+      rows
+    end
+
+    def transcript_text_display_rows(width)
       line_width = [width - 1, 1].max
       @transcript_buffer.split(/\r\n|\r|\n/, -1).flat_map do |line|
         chunks = line.scan(/.{1,#{line_width}}/m)
