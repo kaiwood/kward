@@ -1349,7 +1349,9 @@ class TestCLI < KwardTestCase
           }
         }
       ))
-      store = Kward::SessionStore.new(config_dir: dir, cwd: Dir.pwd)
+      workspace_dir = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace_dir)
+      store = Kward::SessionStore.new(config_dir: dir, cwd: workspace_dir)
       prompt = FakeSettingsPrompt.new(["/name keep", "/model", "/exit"], ["gpt-5.5"])
       client = FakeClient.new([])
       client.model = "gpt-5.3-codex-spark"
@@ -1369,7 +1371,9 @@ class TestCLI < KwardTestCase
       refute_includes conversation.messages.first[:content], "Commander Spark"
 
       session_path = Dir.glob(File.join(store.session_dir, "*.jsonl")).first
-      _session, restored = store.load(session_path, workspace: Kward::Workspace.new(root: Dir.pwd), model: "fallback", reasoning_effort: "fallback")
+      _session, restored = with_env("KWARD_CONFIG_PATH" => config_path) do
+        store.load(session_path, workspace: Kward::Workspace.new(root: workspace_dir), model: "fallback", reasoning_effort: "fallback")
+      end
       assert_equal "gpt-5.5", restored.model
       assert_includes restored.messages.first[:content], "Commander K'warD"
       refute_includes restored.messages.first[:content], "Commander Spark"
