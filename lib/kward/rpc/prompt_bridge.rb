@@ -1,4 +1,5 @@
 require "securerandom"
+require_relative "../message_access"
 
 module Kward
   module RPC
@@ -71,7 +72,7 @@ module Kward
         answers.map do |answer|
           next answer unless answer.is_a?(Hash)
 
-          { question: value(answer, :question).to_s, answer: value(answer, :answer).to_s }
+          { question: MessageAccess.value(answer, :question).to_s, answer: MessageAccess.value(answer, :answer).to_s }
         end
       end
 
@@ -90,21 +91,13 @@ module Kward
       def validate_question(question, index)
         raise ArgumentError, "question #{index + 1} must be an object" unless question.is_a?(Hash)
 
-        options = value(question, :options)
+        options = MessageAccess.value(question, :options)
         raise ArgumentError, "question #{index + 1} options must be an array" unless options.is_a?(Array)
         unless options.length.between?(MIN_OPTIONS, MAX_OPTIONS)
           raise ArgumentError, "question #{index + 1} requires 2-4 options"
         end
-        raise ArgumentError, "question #{index + 1} multiSelect is unsupported" if value(question, :multiSelect) == true
-        raise ArgumentError, "question #{index + 1} preview is unsupported" if options.any? { |option| option.is_a?(Hash) && value(option, :preview) }
-      end
-
-      def value(object, key)
-        return nil unless object.respond_to?(:key?)
-        return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
-
-        nil
+        raise ArgumentError, "question #{index + 1} multiSelect is unsupported" if MessageAccess.value(question, :multiSelect) == true
+        raise ArgumentError, "question #{index + 1} preview is unsupported" if options.any? { |option| option.is_a?(Hash) && MessageAccess.value(option, :preview) }
       end
     end
   end

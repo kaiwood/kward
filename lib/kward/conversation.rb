@@ -1,5 +1,6 @@
 require "set"
 require_relative "image_attachments"
+require_relative "message_access"
 require_relative "prompts"
 
 module Kward
@@ -15,9 +16,9 @@ module Kward
       @reasoning_effort = reasoning_effort
       @messages = []
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        system_message = messages.any? { |message| message_role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort)
+        system_message = messages.any? { |message| MessageAccess.role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort)
       end
-      @system_message_enabled = !!(system_message || messages.find { |message| message_role(message) == "system" })
+      @system_message_enabled = !!(system_message || messages.find { |message| MessageAccess.role(message) == "system" })
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
         compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort) : nil
       end
@@ -61,7 +62,7 @@ module Kward
       return nil unless @system_message_enabled
 
       replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort)
-      index = @messages.index { |message| message_role(message) == "system" }
+      index = @messages.index { |message| MessageAccess.role(message) == "system" }
       index ? @messages[index] = replacement : @messages.unshift(replacement)
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)
       @workspace_agents_mtime = workspace_agents_mtime
@@ -94,7 +95,7 @@ module Kward
         message[:from_hook] = from_hook
         message[:details] = details || {}
       end
-      @messages = @messages.select { |item| message_role(item) == "system" }
+      @messages = @messages.select { |item| MessageAccess.role(item) == "system" }
       @messages << message
       @messages.concat(Array(keep_messages))
       @read_paths.clear
@@ -113,7 +114,7 @@ module Kward
 
     def last_file_change_result
       @messages.select do |message|
-        message_role(message) == "tool" && ["write_file", "edit_file"].include?(message_name(message))
+        MessageAccess.role(message) == "tool" && ["write_file", "edit_file"].include?(MessageAccess.name(message))
       end.last
     end
 
@@ -131,12 +132,5 @@ module Kward
       message
     end
 
-    def message_role(message)
-      message[:role] || message["role"]
-    end
-
-    def message_name(message)
-      message[:name] || message["name"]
-    end
   end
 end

@@ -1,4 +1,5 @@
 require "json"
+require_relative "message_access"
 
 module Kward
   class ContextUsage
@@ -50,15 +51,9 @@ module Kward
       return !input.to_s.empty? if parts.key?("input")
 
       messages = parts["messages"]
-      return messages.any? { |message| message_role(message) != "system" } if messages.is_a?(Array)
+      return messages.any? { |message| MessageAccess.role(message) != "system" } if messages.is_a?(Array)
 
       false
-    end
-
-    def message_role(message)
-      return nil unless message.respond_to?(:key?)
-
-      message[:role] || message["role"]
     end
 
     def contains_image?(value)
