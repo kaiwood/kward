@@ -26,4 +26,10 @@ class TestModelInfo < KwardTestCase
   def test_context_window_only_applies_to_codex_provider
     assert_nil Kward::ModelInfo.context_window("OpenRouter", "gpt-5.5")
   end
+
+  def test_supports_images_excludes_codex_spark
+    refute Kward::ModelInfo.supports_images?("Codex", "gpt-5.3-codex-spark")
+    refute Kward::ModelInfo.supports_images?("OpenRouter", "openai/gpt-5.3-codex-spark")
+    assert Kward::ModelInfo.supports_images?("Codex", "gpt-5.5")
+  end
 end

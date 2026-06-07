@@ -14,6 +14,10 @@ module Kward
       ["xhigh", "Extra High"]
     ].freeze
 
+    IMAGE_UNSUPPORTED_MODELS = [
+      /(?:\A|\/)gpt-5\.3-codex-spark\z/
+    ].freeze
+
     OPENAI_CONTEXT_WINDOWS = [
       [/\Agpt-5\.5/, 400_000],
       [/\Agpt-5-codex/, 400_000],
@@ -54,6 +58,10 @@ module Kward
 
       match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
       match&.last
+    end
+
+    def supports_images?(_provider, id)
+      IMAGE_UNSUPPORTED_MODELS.none? { |pattern| id.to_s.match?(pattern) }
     end
 
     def normalize(model, current_provider: nil, current_model: nil, current_reasoning_effort: nil)

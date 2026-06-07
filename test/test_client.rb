@@ -179,6 +179,20 @@ class TestClient < KwardTestCase
     assert_equal "Codex", provider
   end
 
+  def test_chat_rejects_images_for_model_without_image_support_before_request
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), model: "gpt-5.3-codex-spark", config_path: "missing_kward_config.json")
+    messages = [{ role: "user", content: [{ type: "text", text: "look" }, { type: "image", media_type: "image/png", data: Base64.strict_encode64("png") }] }]
+
+    with_fake_http([fake_net_response(200, "")]) do |http|
+      error = assert_raises(RuntimeError) do
+        client.chat(messages)
+      end
+
+      assert_empty http.requests
+      assert_equal "Model 'gpt-5.3-codex-spark' does not support image inputs. Switch to a vision-capable model or remove the image attachment.", error.message
+    end
+  end
+
   def test_codex_request_retries_transient_failure_and_reports_retry
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     retries = []

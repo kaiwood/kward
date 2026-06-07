@@ -77,6 +77,7 @@ module Kward
       raise AUTH_ERROR if token.nil? || token.empty?
 
       current_model = model_for(provider, override_model: model)
+      validate_image_support!(provider, current_model, messages)
       request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning) : request_payload(provider, messages, tools, max_tokens: max_tokens, model: model))
       with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         request_started_at = @telemetry_logger.monotonic_now
@@ -492,6 +493,20 @@ module Kward
       payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
       payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
+    end
+
+    def validate_image_support!(provider, model, messages)
+      return if ModelInfo.supports_images?(provider, model)
+      return unless messages_include_images?(messages)
+
+      raise "Model '#{model}' does not support image inputs. Switch to a vision-capable model or remove the image attachment."
+    end
+
+    def messages_include_images?(messages)
+      messages.any? do |message|
+        content = message[:content] || message["content"]
+        content.is_a?(Array) && content.any? { |part| (part[:type] || part["type"]).to_s == "image" }
+      end
     end
 
     def chat_messages(messages)
