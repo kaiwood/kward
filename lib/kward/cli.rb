@@ -16,6 +16,7 @@ require_relative "openai_oauth"
 require_relative "pan_server"
 require_relative "plugin_registry"
 require_relative "prompt_commands"
+require_relative "retry_message"
 require_relative "rpc/server"
 require_relative "session_diff"
 require_relative "session_store"
@@ -1494,9 +1495,7 @@ module Kward
     end
 
     def retry_message(event)
-      provider = event.provider.to_s.empty? ? "model" : event.provider
-      payload = event.request_bytes ? " with #{event.request_bytes} byte payload" : ""
-      "Retrying #{provider} request after transient failure (attempt #{event.attempt}/#{event.max_attempts}) in #{event.delay_seconds}s#{payload}: #{event.error}"
+      RetryMessage.format(event)
     end
 
     def print_tool_call(tool_call)

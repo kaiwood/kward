@@ -5,6 +5,7 @@ require "time"
 require_relative "config_files"
 require_relative "conversation"
 require_relative "rpc/tool_event_normalizer"
+require_relative "tool_call"
 require_relative "workspace"
 
 module Kward
@@ -358,10 +359,10 @@ module Kward
         role = message_role(message)
         if role == "assistant"
           tool_calls(message).each do |tool_call|
-            next unless tool_name(tool_call) == "read_file"
+            next unless ToolCall.name(tool_call) == "read_file"
 
-            path = tool_arguments(tool_call)["path"]
-            tool_paths[tool_call_id(tool_call)] = path if path
+            path = ToolCall.value(ToolCall.arguments(tool_call), :path)
+            tool_paths[ToolCall.id(tool_call)] = path if path
           end
         elsif role == "tool" && message_name(message) == "read_file"
           path = tool_paths[message_tool_call_id(message)]
@@ -376,26 +377,6 @@ module Kward
     def tool_calls(message)
       value = message["tool_calls"] || message[:tool_calls]
       value.is_a?(Array) ? value : []
-    end
-
-    def tool_call_id(tool_call)
-      tool_call["id"] || tool_call[:id]
-    end
-
-    def tool_name(tool_call)
-      function = tool_call["function"] || tool_call[:function] || {}
-      function["name"] || function[:name]
-    end
-
-    def tool_arguments(tool_call)
-      function = tool_call["function"] || tool_call[:function] || {}
-      arguments = function["arguments"] || function[:arguments]
-      return arguments if arguments.is_a?(Hash)
-      return {} if arguments.nil? || arguments.empty?
-
-      JSON.parse(arguments)
-    rescue JSON::ParserError
-      {}
     end
 
     def message_role(message)

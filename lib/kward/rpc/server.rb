@@ -276,8 +276,8 @@ module Kward
               supported: true,
               method: "turns/start",
               encoding: "base64",
-              mimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp"],
-              maxBytes: 10_485_760
+              mimeTypes: SessionManager::RPC_IMAGE_MIME_TYPES,
+              maxBytes: SessionManager::RPC_ATTACHMENT_MAX_BYTES
             }
           },
           models: {

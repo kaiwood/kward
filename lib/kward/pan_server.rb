@@ -8,6 +8,7 @@ require "uri"
 require_relative "agent"
 require_relative "config_files"
 require_relative "events"
+require_relative "retry_message"
 require_relative "session_store"
 require_relative "tool_call"
 require_relative "tool_registry"
@@ -313,9 +314,7 @@ module Kward
     end
 
     def retry_message(event)
-      provider = event.provider.to_s.empty? ? "model" : event.provider
-      payload = event.request_bytes ? " with #{event.request_bytes} byte payload" : ""
-      "Retrying #{provider} request after transient failure (attempt #{event.attempt}/#{event.max_attempts}) in #{event.delay_seconds}s#{payload}: #{event.error}"
+      RetryMessage.format(event)
     end
 
     def tool_call_payload(tool_call)

@@ -1,4 +1,3 @@
-require "json"
 require_relative "config_files"
 require_relative "tools/ask_user_question"
 require_relative "tools/edit_file"
@@ -8,6 +7,7 @@ require_relative "tools/read_skill"
 require_relative "tools/run_shell_command"
 require_relative "tools/web_search"
 require_relative "tools/write_file"
+require_relative "tool_call"
 require_relative "web_search"
 require_relative "workspace"
 
@@ -28,9 +28,8 @@ module Kward
 
     def dispatch(tool_call, conversation, cancellation: nil)
       cancellation&.raise_if_cancelled!
-      function = tool_call["function"] || tool_call[:function] || {}
-      name = function["name"] || function[:name]
-      args = parse_arguments(function["arguments"] || function[:arguments])
+      name = ToolCall.name(tool_call)
+      args = ToolCall.arguments(tool_call)
       tool = @tools[name]
 
       content = if tool
@@ -99,13 +98,5 @@ module Kward
       @prompt.respond_to?(:ask_user_question)
     end
 
-    def parse_arguments(arguments)
-      return {} if arguments.nil? || arguments.empty?
-      return arguments if arguments.is_a?(Hash)
-
-      JSON.parse(arguments)
-    rescue JSON::ParserError
-      {}
-    end
   end
 end
