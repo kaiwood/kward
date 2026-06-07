@@ -81,6 +81,66 @@ module Kward
       rendered.join("\n") + (string.end_with?("\n") ? "\n" : "")
     end
 
+    class MarkdownStream
+      def initialize(enabled: ANSI.enabled?)
+        @enabled = enabled
+        @pending = +""
+        @in_fence = false
+      end
+
+      def render(delta, final: false)
+        text = delta.to_s
+        return ANSI.markdown(text, enabled: @enabled) if fast_markdown?(text, final)
+
+        @pending << text
+        rendered = +""
+        while (match = @pending.match(/\r\n|\r|\n/))
+          line = @pending[0...match.begin(0)]
+          @pending = @pending[(match.end(0))..] || +""
+          rendered << render_line(line) << "\n"
+        end
+
+        if final && !@pending.empty?
+          rendered << render_line(@pending)
+          @pending.clear
+        end
+
+        if final && @in_fence
+          rendered << "\n" unless rendered.empty? || rendered.end_with?("\n")
+          rendered << ANSI.colorize("└" + "─" * 39, :gray, enabled: @enabled)
+          @in_fence = false
+        end
+
+        rendered
+      end
+
+      private
+
+      def fast_markdown?(text, final)
+        !final && !@in_fence && @pending.empty? && !text.include?("`")
+      end
+
+      def render_line(line)
+        if (match = line.match(/\A\s*```([^`]*)\s*\z/))
+          if @in_fence
+            @in_fence = false
+            ANSI.colorize("└" + "─" * 39, :gray, enabled: @enabled)
+          else
+            language = match[1].to_s.strip
+            label = language.empty? ? "code" : "code #{language}"
+            @in_fence = true
+            ANSI.colorize("┌─ #{label}", :gray, enabled: @enabled)
+          end
+        elsif @in_fence
+          ANSI.colorize("│ #{line}", :dim, enabled: @enabled)
+        elsif line.match?(/\A\#{1,6}\s+/)
+          ANSI.colorize(line, :bold, enabled: @enabled)
+        else
+          ANSI.inline_code(line, enabled: @enabled)
+        end
+      end
+    end
+
     def inline_code(line, enabled: enabled?)
       line.gsub(/`([^`\n]+)`/) do
         "`#{colorize(Regexp.last_match(1), :dim, enabled: enabled)}`"

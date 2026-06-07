@@ -156,6 +156,32 @@ class TestCLI < KwardTestCase
     assert_order(prompt.events, [:start_stream_block, "Assistant"], [:write_delta, "before tool"], [:finish_stream_block], [:start_stream_block, "Tool"])
   end
 
+  def test_prompt_interface_interactive_turn_keeps_markdown_fence_state_across_flushes
+    prompt = BusyPrompt.new([])
+    chunks = [
+      "```ruby\nKward::",
+      "Resources::AvatarKwardLogo::PIXELS\n```\n\ninstead of the missing PNG fixture:\n\n```ruby\nlib/kward/resources/avatar_k",
+      "ward_48x48.png\n```\n"
+    ]
+    agent = Object.new
+    agent.define_singleton_method(:ask) do |_input, &block|
+      chunks.each do |chunk|
+        block.call(Kward::Events::AssistantDelta.new(delta: chunk))
+        sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
+      end
+      chunks.join
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    output = prompt.write_deltas.join
+    assert_includes output, "│ Kward::Resources::AvatarKwardLogo::PIXELS\n└"
+    assert_includes output, "│ lib/kward/resources/avatar_kward_48x48.png\n└"
+    refute_includes output, "└───────────────────────────────────────Resources"
+    refute_includes output, "\nlib/kward/resources/avatar_kward_48x48.png\n┌─ code"
+  end
+
   def test_transcript_block_renders_markdown_when_colored
     prompt = FakePrompt.new([])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))

@@ -710,12 +710,27 @@ module Kward
       end
     end
 
-    def flush_markdown_deltas(chunks, finish: true)
+    def flush_markdown_deltas(chunks, finish: true, streams: nil)
       wrote = false
-      chunks.each do |label, content|
-        next if content.empty?
+      entries = chunks.dup
+      if finish && streams
+        streamed_labels = entries.map(&:first)
+        entries.concat(streams.keys.reject { |label| streamed_labels.include?(label) }.map { |label| [label, ""] })
+      end
 
-        print_block_delta(label, render_markdown_transcript(content))
+      entries.each do |label, content|
+        next if content.empty? && !(finish && streams&.key?(label))
+
+        rendered = if streams
+          streams[label] ||= ANSI::MarkdownStream.new(enabled: @color_enabled)
+          streams[label].render(content, final: finish)
+        else
+          render_markdown_transcript(content)
+        end
+        streams.delete(label) if finish && streams
+        next if rendered.empty?
+
+        print_block_delta(label, rendered)
         finish_stream_block if finish
         wrote = true
       end
@@ -1085,7 +1100,7 @@ module Kward
 
       queued_inputs = []
       event_queue = Queue.new
-      stream_state = { streamed: false, last_flush: monotonic_now, stream_block_open: false }
+      stream_state = { streamed: false, last_flush: monotonic_now, stream_block_open: false, markdown_streams: {} }
       markdown_chunks = []
       answer = nil
       error = nil
@@ -1160,12 +1175,12 @@ module Kward
       return if markdown_chunks.empty?
       return unless monotonic_now - stream_state[:last_flush] >= STREAM_RENDER_INTERVAL
 
-      stream_state[:stream_block_open] = true if flush_markdown_deltas(markdown_chunks, finish: false)
+      stream_state[:stream_block_open] = true if flush_markdown_deltas(markdown_chunks, finish: false, streams: stream_state[:markdown_streams])
       stream_state[:last_flush] = monotonic_now
     end
 
     def finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-      wrote = flush_markdown_deltas(markdown_chunks)
+      wrote = flush_markdown_deltas(markdown_chunks, streams: stream_state[:markdown_streams])
       finish_stream_block if stream_state[:stream_block_open] && !wrote
       stream_state[:stream_block_open] = false
       stream_state[:last_flush] = monotonic_now
