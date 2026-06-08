@@ -37,6 +37,8 @@ class TestRPCServer < KwardTestCase
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
     assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]
     assert_equal true, capabilities["sessions"]["list"]["supported"]
+    assert_equal true, capabilities["sessions"]["list"]["ancestry"]
+    assert_equal true, capabilities["sessions"]["list"]["treeFields"]
     assert_equal true, capabilities["sessions"]["fork"]["supported"]
     assert_equal ["sessions/forkMessages", "sessions/fork"], capabilities["sessions"]["fork"]["methods"]
     assert_equal true, capabilities["sessions"]["compact"]["supported"]

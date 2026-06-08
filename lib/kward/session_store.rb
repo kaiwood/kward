@@ -12,19 +12,21 @@ module Kward
   class SessionStore
     VERSION = 1
 
-    SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, keyword_init: true)
+    SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
 
     class Session
-      attr_reader :id, :path, :cwd, :created_at
+      attr_reader :id, :path, :cwd, :created_at, :parent_id, :parent_path
       attr_accessor :name
 
-      def initialize(store:, id:, path:, cwd:, created_at:, name: nil)
+      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil)
         @store = store
         @id = id
         @path = path
         @cwd = cwd
         @created_at = created_at
         @name = name
+        @parent_id = parent_id
+        @parent_path = parent_path
       end
 
       def attach(conversation)
@@ -85,7 +87,7 @@ module Kward
 
     attr_reader :cwd
 
-    def create(model: nil, reasoning_effort: nil)
+    def create(model: nil, reasoning_effort: nil, parent_id: nil, parent_path: nil)
       dir = session_dir
       FileUtils.mkdir_p(dir, mode: 0o700)
       created_at = Time.now.utc
@@ -98,7 +100,9 @@ module Kward
         timestamp: created_at.iso8601(3),
         cwd: @cwd,
         model: model.to_s,
-        reasoningEffort: reasoning_effort.to_s
+        reasoningEffort: reasoning_effort.to_s,
+        parentId: parent_id.to_s,
+        parentPath: parent_path.to_s
       }.delete_if { |_key, value| value.to_s.empty? }
 
       File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
@@ -107,27 +111,28 @@ module Kward
       end
       File.chmod(0o600, path)
 
-      Session.new(store: self, id: id, path: path, cwd: @cwd, created_at: created_at)
+      Session.new(store: self, id: id, path: path, cwd: @cwd, created_at: created_at, parent_id: parent_id, parent_path: parent_path)
     end
 
-    def create_from_conversation(conversation)
-      session = create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
+    def create_from_conversation(conversation, parent_session: nil)
+      session = create(model: conversation.model, reasoning_effort: conversation.reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
       persisted_messages(conversation).each { |message| session.append_message(message) }
       session.attach(conversation)
       session
     end
 
-    def create_independent_from_conversation(conversation)
+    def create_independent_from_conversation(conversation, parent_session: nil)
       create_independent_from_messages(
         persisted_messages(conversation),
         read_paths: Array(conversation.read_paths),
         model: conversation.model,
-        reasoning_effort: conversation.reasoning_effort
+        reasoning_effort: conversation.reasoning_effort,
+        parent_session: parent_session
       )
     end
 
-    def create_independent_from_messages(messages, read_paths: [], model: nil, reasoning_effort: nil)
-      session = create(model: model, reasoning_effort: reasoning_effort)
+    def create_independent_from_messages(messages, read_paths: [], model: nil, reasoning_effort: nil, parent_session: nil)
+      session = create(model: model, reasoning_effort: reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
       persisted = deep_copy(messages)
       persisted.each { |message| session.append_message(message) }
       conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd, model: model, reasoning_effort: reasoning_effort)
@@ -166,16 +171,20 @@ module Kward
         path: resolved_path,
         cwd: header["cwd"].to_s,
         created_at: parse_time(header["timestamp"]) || File.mtime(resolved_path),
-        name: name
+        name: name,
+        parent_id: header["parentId"],
+        parent_path: header["parentPath"]
       )
       session.attach(conversation)
       [session, conversation]
     end
 
     def recent(limit: 20)
-      Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
-        session_info(path)
-      end.sort_by { |info| info.modified_at || Time.at(0) }.reverse.first(limit)
+      recent_sessions.first(limit)
+    end
+
+    def recent_tree(limit: 20)
+      decorate_tree(recent_sessions.first(limit))
     end
 
     def delete_unused_session(session)
@@ -319,6 +328,40 @@ module Kward
       nil
     end
 
+    def recent_sessions
+      Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
+        session_info(path)
+      end.sort_by { |info| info.modified_at || Time.at(0) }.reverse
+    end
+
+    def decorate_tree(sessions)
+      by_parent = Hash.new { |hash, key| hash[key] = [] }
+      ids = sessions.map(&:id).to_h { |id| [id, true] }
+      sessions.each do |session|
+        parent_id = session.parent_id.to_s
+        key = parent_id.empty? || !ids[parent_id] ? nil : parent_id
+        by_parent[key] << session
+      end
+      by_parent.each_value { |children| children.sort_by! { |info| info.modified_at || Time.at(0) }.reverse! }
+
+      result = []
+      walk_tree(by_parent, nil, 0, [], result)
+      result
+    end
+
+    def walk_tree(by_parent, parent_id, depth, ancestor_continues, result)
+      children = by_parent[parent_id]
+      children.each_with_index do |session, index|
+        is_last = index == children.length - 1
+        session.depth = depth
+        session.is_last = is_last
+        session.ancestor_continues = ancestor_continues.dup
+        result << session
+        child_ancestor_continues = depth.zero? ? [] : ancestor_continues + [!is_last]
+        walk_tree(by_parent, session.id, depth + 1, child_ancestor_continues, result)
+      end
+    end
+
     def session_info(path)
       records = records_from_file(path)
       header = records.find { |record| record["type"] == "session" }
@@ -337,7 +380,12 @@ module Kward
         modified_at: stats.mtime,
         name: name,
         first_message: first_message ? message_text(first_message) : "",
-        message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult", "compactionSummary"].include?(message_role(message)) }
+        message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult", "compactionSummary"].include?(message_role(message)) },
+        parent_id: header["parentId"],
+        parent_path: header["parentPath"],
+        depth: 0,
+        is_last: true,
+        ancestor_continues: []
       )
     rescue StandardError
       nil

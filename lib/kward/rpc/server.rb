@@ -240,7 +240,7 @@ module Kward
             mode: "explicit",
             persistence: "jsonl",
             methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
-            list: { supported: true, source: "rpc" },
+            list: { supported: true, source: "rpc", ancestry: true, treeFields: true },
             fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "message-index", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: true, method: "sessions/compact", notification: "session/event", events: ["compactionStart", "compactionEnd"] },
             import: { supported: false },

@@ -73,6 +73,31 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_cloned_session_persists_parent_metadata_and_tree_shape
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      source.attach(conversation)
+      conversation.append_user("source prompt")
+
+      clone, _clone_conversation = store.create_independent_from_conversation(conversation, parent_session: source)
+      _loaded_clone, loaded_conversation = store.load(clone.path)
+      tree = store.recent_tree(limit: 10)
+      source_info = tree.find { |info| info.id == source.id }
+      clone_info = tree.find { |info| info.id == clone.id }
+
+      loaded_user_messages = loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      assert_equal ["source prompt"], loaded_user_messages.map { |message| message["content"] || message[:content] }
+      assert_equal source.id, clone.parent_id
+      assert_equal source.path, clone.parent_path
+      assert_equal source.id, clone_info.parent_id
+      assert_equal 0, source_info.depth
+      assert_equal 1, clone_info.depth
+      assert_equal [], clone_info.ancestor_continues
+    end
+  end
+
   def test_cloned_compacted_session_restores_tool_result_pair_for_codex
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

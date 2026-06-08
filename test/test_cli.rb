@@ -640,6 +640,8 @@ class TestCLI < KwardTestCase
       assert_includes output, "Input>\nreply"
       assert_includes File.read(export_path), "## User\n\nhello"
       assert_includes File.read(export_path), "## Assistant\n\nreply"
+      source, clone = files.map { |file| jsonl_records(file).find { |record| record["type"] == "session" } }.sort_by { |record| record.key?("parentId") ? 1 : 0 }
+      assert_equal source["id"], clone["parentId"]
     end
   end
 
@@ -711,6 +713,27 @@ class TestCLI < KwardTestCase
       assert_equal ["selected session — #{File.basename(saved.path)}"], prompt.select_choices.first
       assert_equal "selected session", client.seen_messages[0][1]["content"]
       assert_equal "again", client.seen_messages[0][3][:content]
+    end
+  end
+
+  def test_resume_picker_shows_cloned_sessions_as_tree
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      source.attach(conversation)
+      conversation.append_user("root session")
+      clone, clone_conversation = store.create_independent_from_conversation(conversation, parent_session: source)
+      clone.rename("clone session")
+      clone_conversation.append_user("clone session")
+      prompt = FakeSessionSelectPrompt.new(["/resume", "/exit"], "clone session")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal ["Session>"], prompt.select_messages
+      assert_includes prompt.select_choices.first, "root session — #{File.basename(source.path)}"
+      assert prompt.select_choices.first.any? { |choice| choice.include?("└─ clone session — #{File.basename(clone.path)}") }
     end
   end
 

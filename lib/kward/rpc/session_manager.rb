@@ -82,7 +82,7 @@ module Kward
         root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
         limit = limit.to_i <= 0 ? 20 : limit.to_i
-        store.recent(limit: limit + active_session_count(root))
+        store.recent_tree(limit: limit + active_session_count(root))
              .reject { |info| active_empty_unnamed_session_info?(info, root) }
              .first(limit)
              .map { |info| session_info_payload(info, workspace_root: root) }
@@ -96,7 +96,7 @@ module Kward
 
       def clone_session(session_id:)
         source = fetch_session(session_id)
-        session, conversation = source.store.create_independent_from_conversation(source.conversation)
+        session, conversation = source.store.create_independent_from_conversation(source.conversation, parent_session: source.session)
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
@@ -141,7 +141,8 @@ module Kward
         session, conversation = source.store.create_independent_from_messages(
           messages[0...index],
           model: source.conversation.model,
-          reasoning_effort: source.conversation.reasoning_effort
+          reasoning_effort: source.conversation.reasoning_effort,
+          parent_session: source.session
         )
 
         # ensure forked sessions retain the original persona context
@@ -380,7 +381,9 @@ module Kward
           cwd: rpc_session.session.cwd.to_s.empty? ? rpc_session.workspace_root : rpc_session.session.cwd,
           name: rpc_session.session.name,
           createdAt: rpc_session.session.created_at&.utc&.iso8601(3),
-          modifiedAt: session_modified_at(rpc_session.session)&.utc&.iso8601(3)
+          modifiedAt: session_modified_at(rpc_session.session)&.utc&.iso8601(3),
+          parentId: rpc_session.session.parent_id,
+          parentPath: rpc_session.session.parent_path
         }
       end
 
@@ -893,7 +896,12 @@ module Kward
           modifiedAt: info.modified_at&.utc&.iso8601(3),
           name: info.name,
           firstMessage: info.first_message.to_s,
-          messageCount: info.message_count.to_i
+          messageCount: info.message_count.to_i,
+          parentId: info.parent_id,
+          parentPath: info.parent_path,
+          depth: info.depth.to_i,
+          isLast: info.is_last,
+          ancestorContinues: Array(info.ancestor_continues)
         }
       end
 

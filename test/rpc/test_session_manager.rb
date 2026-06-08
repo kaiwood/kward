@@ -305,6 +305,8 @@ class TestRPCSessionManager < KwardTestCase
       refute_equal source[:persistentId], clone[:persistentId]
       refute_equal source[:path], clone[:path]
       refute_same source_rpc.conversation, clone_rpc.conversation
+      assert_equal source[:persistentId], clone[:parentId]
+      assert_equal source[:path], clone[:parentPath]
 
       clone_rpc.conversation.append_user("clone only")
       source_rpc.conversation.append_user("source only")
@@ -317,6 +319,15 @@ class TestRPCSessionManager < KwardTestCase
       assert_includes clone_records, "original prompt"
       assert_includes clone_records, "clone only"
       refute_includes clone_records, "source only"
+
+      listed = manager.list_sessions(workspace_root: workspace_root, limit: 10)
+      listed_source = listed.find { |item| item[:id] == source[:persistentId] }
+      listed_clone = listed.find { |item| item[:id] == clone[:persistentId] }
+      assert_equal source[:persistentId], listed_clone[:parentId]
+      assert_equal source[:path], listed_clone[:parentPath]
+      assert_equal 0, listed_source[:depth]
+      assert_equal 1, listed_clone[:depth]
+      assert_equal [], listed_clone[:ancestorContinues]
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end

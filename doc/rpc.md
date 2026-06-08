@@ -108,7 +108,7 @@ Params:
 - `workspaceRoot`: optional.
 - `limit`: optional, default `20`.
 
-Returns recent persisted sessions for that workspace, newest first. Each item includes absolute `path`, `cwd`, `workspaceRoot`, `createdAt`, `modifiedAt`, optional `name`, compact `firstMessage`, and `messageCount` excluding metadata records.
+Returns recent persisted sessions for that workspace. Existing sessions without ancestry are roots; cloned or forked sessions include parent metadata and tree display fields. Each item includes absolute `path`, `cwd`, `workspaceRoot`, `createdAt`, `modifiedAt`, optional `name`, compact `firstMessage`, `messageCount` excluding metadata records, optional `parentId`/`parentPath`, `depth`, `isLast`, and `ancestorContinues` for tree rendering.
 
 ### `sessions/rename`
 
@@ -125,7 +125,7 @@ Params:
 
 - `sessionId`
 
-Creates a new persisted session from the current conversation and returns a new independent RPC session. Future messages in the clone append only to the clone file; the source session remains unchanged.
+Creates a new persisted session from the current conversation and returns a new independent RPC session with `parentId`/`parentPath` pointing at the source session. Future messages in the clone append only to the clone file; the source session remains unchanged.
 
 ### `sessions/compact`
 

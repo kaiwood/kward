@@ -732,7 +732,7 @@ module Kward
       return say_sessions_unavailable unless session_store
 
       previous_session = @active_session
-      @active_session = track_session(session_store.create_from_conversation(agent.conversation))
+      @active_session = track_session(session_store.create_from_conversation(agent.conversation, parent_session: previous_session))
       reset_session_diff(@active_session.path)
       cleanup_replaced_session(previous_session)
       @prompt.say("\nCloned session: #{@active_session.path}\n")
@@ -1031,7 +1031,7 @@ module Kward
 
     def select_session_path(session_store)
       recent_limit = 20
-      sessions = session_store.recent(limit: recent_limit + 1)
+      sessions = session_store.recent_tree(limit: recent_limit + 1)
                               .reject { |session| active_empty_unnamed_session_info?(session) }
                               .first(recent_limit)
       if sessions.empty?
@@ -1069,7 +1069,17 @@ module Kward
       title = session.name.to_s.strip
       title = session.first_message.to_s.strip if title.empty?
       title = session.id if title.empty?
-      "#{title} — #{File.basename(session.path)}"
+      "#{session_tree_prefix(session)}#{title} — #{File.basename(session.path)}"
+    end
+
+    def session_tree_prefix(session)
+      depth = session.respond_to?(:depth) ? session.depth.to_i : 0
+      return "" if depth <= 0
+
+      ancestors = session.respond_to?(:ancestor_continues) ? Array(session.ancestor_continues) : []
+      prefix = ancestors.map { |continues| continues ? "│  " : "   " }.join
+      branch = session.respond_to?(:is_last) && session.is_last ? "└─ " : "├─ "
+      prefix + branch
     end
 
     def export_path(argument)
