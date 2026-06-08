@@ -89,6 +89,18 @@ class TestCodeSearch < KwardTestCase
     end
   end
 
+  def test_git_runner_allows_nil_chdir
+    Dir.mktmpdir do |dir|
+      git_path = File.join(dir, "git")
+      File.write(git_path, "#!/bin/sh\necho ok\n")
+      File.chmod(0o755, git_path)
+
+      with_env("PATH" => "#{dir}#{File::PATH_SEPARATOR}#{ENV["PATH"]}") do
+        assert_equal "ok\n", Kward::CodeSearch::GitRunner.new.run("--version")
+      end
+    end
+  end
+
   def test_refresh_cache_resets_cached_repo_to_fetched_head
     Dir.mktmpdir do |dir|
       repo = File.join(dir, "example__project")

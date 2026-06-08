@@ -67,7 +67,8 @@ module Kward
 
     class GitRunner
       def run(*args, chdir: nil)
-        stdout, stderr, status = Open3.capture3("git", *args, chdir: chdir)
+        command = ["git", *args]
+        stdout, stderr, status = chdir ? Open3.capture3(*command, chdir: chdir) : Open3.capture3(*command)
         raise "git #{args.join(" ")} failed: #{stderr.strip.empty? ? stdout.strip : stderr.strip}" unless status.success?
 
         stdout
