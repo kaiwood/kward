@@ -1,0 +1,169 @@
+require_relative "test_helper"
+
+class TestCLISettings < KwardTestCase
+  def test_settings_slash_command_reports_unavailable_without_tui_prompt
+    prompt = FakePrompt.new(["/settings", "/exit"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join("\n"), "Settings overlay is unavailable"
+    assert_empty client.seen_messages
+  end
+
+  def test_model_slash_command_reports_unavailable_without_tui_prompt
+    prompt = FakePrompt.new(["/model", "/exit"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join("\n"), "Model overlay is unavailable"
+    assert_empty client.seen_messages
+  end
+
+  def test_model_slash_command_persists_custom_model_and_reloads_config
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({ "openai_model" => "existing" }))
+      prompt = FakeSettingsPrompt.new(["/model", "/exit"], ["custom-model"])
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "existing"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "custom-model", config["openai_model"]
+      assert_equal 1, client.reload_count
+      assert_equal ["Default model"], prompt.select_messages
+      assert_equal ["Models"], prompt.select_titles
+      assert_includes prompt.select_choices.first, "Codex existing (current)"
+      assert_empty prompt.output
+      assert_equal 1, prompt.redraw_count
+    end
+  end
+
+  def test_model_slash_command_persists_selected_provider_model
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new(["/model", "/exit"], ["OpenRouter openai/gpt-5.5"])
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "gpt-5.5"
+      def client.available_models
+        [
+          { provider: "Codex", id: "gpt-5.5", current: true },
+          { provider: "OpenRouter", id: "openai/gpt-5.5", current: false }
+        ]
+      end
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "openai/gpt-5.5", config["openrouter_model"]
+      assert_equal 1, client.reload_count
+    end
+  end
+
+  def test_model_slash_command_refreshes_active_conversation_persona_and_session_runtime
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "openai_model" => "gpt-5.3-codex-spark",
+        "personas" => {
+          "models" => {
+            "gpt-5.3-codex-spark" => "Your name is Commander Spark.",
+            "gpt-5.5" => "Your name is Commander K'warD."
+          }
+        }
+      ))
+      workspace_dir = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace_dir)
+      store = Kward::SessionStore.new(config_dir: dir, cwd: workspace_dir)
+      prompt = FakeSettingsPrompt.new(["/name keep", "/model", "/exit"], ["gpt-5.5"])
+      client = FakeClient.new([])
+      client.model = "gpt-5.3-codex-spark"
+      client.instance_variable_set(:@config_path, config_path)
+      def client.reload_config
+        @reload_count += 1
+        @model = JSON.parse(File.read(@config_path))["openai_model"]
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      conversation = with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "gpt-5.5", conversation.model
+      assert_includes conversation.messages.first[:content], "Commander K'warD"
+      refute_includes conversation.messages.first[:content], "Commander Spark"
+
+      session_path = Dir.glob(File.join(store.session_dir, "*.jsonl")).first
+      _session, restored = with_env("KWARD_CONFIG_PATH" => config_path) do
+        store.load(session_path, workspace: Kward::Workspace.new(root: workspace_dir), model: "fallback", reasoning_effort: "fallback")
+      end
+      assert_equal "gpt-5.5", restored.model
+      assert_includes restored.messages.first[:content], "Commander K'warD"
+      refute_includes restored.messages.first[:content], "Commander Spark"
+    end
+  end
+
+  def test_reasoning_slash_command_persists_effort_and_reloads_config
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new(["/reasoning", "/exit"], ["Extra High"])
+      client = FakeClient.new([])
+      client.reasoning_effort = "medium"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "xhigh", config["openai_reasoning_effort"]
+      assert_equal 1, client.reload_count
+      assert_equal ["Reasoning effort"], prompt.select_messages
+      assert_equal ["Reasoning"], prompt.select_titles
+      assert_equal ["Low", "Medium (current)", "High", "Extra High"], prompt.select_choices.first
+      assert_empty prompt.output
+      assert_equal 1, prompt.redraw_count
+    end
+  end
+
+  def test_settings_slash_command_persists_overlay_settings
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({ "openai_model" => "existing" }))
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Right", "Maximum"])
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "existing", config["openai_model"]
+      assert_equal({ "alignment" => "right", "width" => "maximum" }, config["overlay"])
+      assert_equal [{ "alignment" => "right", "width" => "maximum" }, { "alignment" => "right", "width" => "maximum" }], prompt.overlay_settings_updates
+      assert_equal ["Overlay alignment", "Overlay width"], prompt.select_messages
+      assert_equal ["Settings", "Settings"], prompt.select_titles
+    end
+  end
+
+end
