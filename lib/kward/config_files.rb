@@ -38,6 +38,10 @@ module Kward
       File.join(cache_dir, "code_search")
     end
 
+    def news_cache_path
+      File.join(cache_dir, "news", "hacker_news.json")
+    end
+
     def read_config(path = config_path)
       path = File.expand_path(path)
       return {} unless File.exist?(path)

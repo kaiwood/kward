@@ -1117,6 +1117,42 @@ class TestCLI < KwardTestCase
     assert_empty client.seen_messages
   end
 
+  def test_news_slash_command_refreshes_cache_and_updates_system_prompt
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      prompt = FakePrompt.new(["/news", "/exit"])
+      client = RecordingClient.new([])
+      conversation = Kward::Conversation.new
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      http = FakeHttpClient.new(
+        Kward::NewsCache::TOP_STORIES_URL => fake_response(200, JSON.dump([1])),
+        format(Kward::NewsCache::ITEM_URL, id: 1) => fake_response(200, JSON.dump({
+          "id" => 1,
+          "type" => "story",
+          "title" => "HN cached story",
+          "url" => "https://example.com/hn",
+          "score" => 3,
+          "descendants" => 1
+        }))
+      )
+      original_new = Kward::NewsCache.method(:new)
+      Kward::NewsCache.define_singleton_method(:new) do |**kwargs|
+        original_new.call(**{ path: Kward::ConfigFiles.news_cache_path, http_client: http }.merge(kwargs))
+      end
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_includes prompt.output.join("\n"), "Refreshed Hacker News cache: 1 stories"
+      assert_includes conversation.messages.first[:content], "HN cached story"
+    ensure
+      Kward::NewsCache.define_singleton_method(:new, original_new) if original_new
+    end
+  end
+
   def test_crew_slash_command_prints_report_without_persisting_session_messages
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

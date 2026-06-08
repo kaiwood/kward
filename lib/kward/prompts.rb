@@ -1,4 +1,5 @@
 require_relative "config_files"
+require_relative "news_cache"
 
 module Kward
   module Prompts
@@ -14,6 +15,7 @@ module Kward
     def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now)
       parts = [base_prompt, config_agents_prompt]
       parts << persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now) if include_workspace_personality
+      parts << news_prompt if include_workspace_personality
       parts << skills_prompt
       parts << workspace_agents_prompt(workspace_root)
       parts
@@ -35,6 +37,13 @@ module Kward
 
     def workspace_agents_prompt(workspace_root = Dir.pwd)
       ConfigFiles.workspace_agents_prompt(workspace_root)
+    end
+
+    def news_prompt
+      NewsCache.new.prompt_context
+    rescue StandardError => e
+      warn "Warning: skipping Kward news cache: #{e.message}"
+      nil
     end
 
     def skills_prompt
