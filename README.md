@@ -24,5 +24,11 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 ## Run tests
 
 ```bash
+bundle exec rake test
+```
+
+Equivalent direct command:
+
+```bash
 ruby -Itest -e 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }'
 ```
