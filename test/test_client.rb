@@ -76,16 +76,16 @@ class TestClient < KwardTestCase
   end
 
   def test_codex_oauth_reads_model_and_reasoning_from_config
-    path = "kward_test_config.json"
-    File.write(path, JSON.dump("openai_model" => "gpt-config", "openai_reasoning_effort" => "high"))
-    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: path)
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("openai_model" => "gpt-config", "openai_reasoning_effort" => "high"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: path)
 
-    payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
+      payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
 
-    assert_equal "gpt-config", payload[:model]
-    assert_equal({ effort: "high", summary: "auto" }, payload[:reasoning])
-  ensure
-    File.delete(path) if path && File.exist?(path)
+      assert_equal "gpt-config", payload[:model]
+      assert_equal({ effort: "high", summary: "auto" }, payload[:reasoning])
+    end
   end
 
   def test_codex_payload_omits_unsupported_max_output_tokens
@@ -97,28 +97,28 @@ class TestClient < KwardTestCase
   end
 
   def test_config_model_and_thinking_level_apply_to_current_provider
-    path = "kward_test_config.json"
-    File.write(path, JSON.dump("model" => "configured-model", "thinking_level" => "low"))
-    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: path)
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("model" => "configured-model", "thinking_level" => "low"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: path)
 
-    payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
+      payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
 
-    assert_equal "configured-model", payload[:model]
-    assert_equal({ effort: "low", summary: "auto" }, payload[:reasoning])
-  ensure
-    File.delete(path) if path && File.exist?(path)
+      assert_equal "configured-model", payload[:model]
+      assert_equal({ effort: "low", summary: "auto" }, payload[:reasoning])
+    end
   end
 
   def test_openrouter_reads_model_from_config
-    path = "kward_test_config.json"
-    File.write(path, JSON.dump("openrouter_model" => "provider/configured"))
-    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("openrouter_model" => "provider/configured"))
+      client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
 
-    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
+      payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
 
-    assert_equal "provider/configured", payload[:model]
-  ensure
-    File.delete(path) if path && File.exist?(path)
+      assert_equal "provider/configured", payload[:model]
+    end
   end
 
   def test_available_models_include_openai_and_openrouter_picker_choices
