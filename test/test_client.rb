@@ -229,6 +229,51 @@ class TestClient < KwardTestCase
     refute_includes error.message, "Codex OAuth request failed"
   end
 
+  def test_codex_sse_server_error_retries_and_redacts_response_details
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    retries = []
+    failure_event = {
+      "type" => "response.failed",
+      "response" => {
+        "error" => { "code" => "server_error", "message" => "retry me" },
+        "instructions" => "secret prompt"
+      }
+    }
+    failure = fake_net_response(200, "data: #{JSON.dump(failure_event)}\n\n")
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+
+    disable_sleep(client)
+    with_fake_http([failure, success]) do |_http|
+      message = client.chat([{ role: "user", content: "hello" }], on_retry: ->(event) { retries << event })
+
+      assert_equal "ok", message["content"]
+    end
+
+    assert_equal 1, retries.length
+    assert_includes retries[0][:error], "Codex request failed: 500 response.failed: server_error: retry me"
+    refute_includes retries[0][:error], "secret prompt"
+    refute_includes retries[0][:error], "instructions"
+  end
+
+  def test_codex_sse_failure_error_is_concise
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    event = {
+      "type" => "response.failed",
+      "response" => {
+        "error" => { "code" => "bad_request", "message" => "bad input" },
+        "instructions" => "secret prompt"
+      }
+    }
+
+    error = assert_raises(Kward::Client::RequestError) do
+      client.send(:parse_codex_sse, "data: #{JSON.dump(event)}\n\n")
+    end
+
+    assert_includes error.message, "Codex request failed: 400 response.failed: bad_request: bad input"
+    refute_includes error.message, "secret prompt"
+    refute_includes error.message, "instructions"
+  end
+
   def test_openrouter_retries_429_and_does_not_retry_401
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     success_body = JSON.dump("choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }])

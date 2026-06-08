@@ -362,8 +362,21 @@ module Kward
           end
         end
       when "response.failed", "response.incomplete"
-        raise "Codex OAuth response #{event["type"]}: #{event["error"] || event["response"] || event}"
+        raise codex_sse_error(event)
       end
+    end
+
+    def codex_sse_error(event)
+      response = event["response"]
+      error = event["error"] || (response["error"] if response.is_a?(Hash)) || {}
+      message = if error.is_a?(Hash)
+                  [error["code"], error["message"]].compact.join(": ")
+                else
+                  error.to_s
+                end
+      message = event["type"].to_s if message.empty?
+      code = error.is_a?(Hash) && error["code"].to_s == "server_error" ? 500 : 400
+      RequestError.new(provider: "Codex", code: code, body: "#{event["type"]}: #{message}")
     end
 
     def codex_sse_message(state)
