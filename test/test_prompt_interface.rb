@@ -764,6 +764,22 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_escape_closes_slash_overlay_and_keeps_prompt_active
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/\e\t done\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(
+      input: input,
+      output: output,
+      slash_commands: [{ name: "plan", description: "Plan work.", argument_hint: "<task>" }]
+    )
+
+    assert_equal "/ done", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_slash_overlay_keeps_composer_visible_on_short_screens
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,

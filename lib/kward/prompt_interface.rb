@@ -77,6 +77,7 @@ module Kward
       @history_draft = nil
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
+      @slash_overlay_dismissed_input = nil
       @select_state = nil
       @question_state = nil
       @last_width = screen_width
@@ -646,9 +647,13 @@ module Kward
     end
 
     def handle_escape_sequence
-      full_sequence = "\e#{read_pending_escape_sequence}"
+      pending_sequence = read_pending_escape_sequence
+      return true if pending_sequence.empty? && dismiss_slash_overlay
+
+      full_sequence = "\e#{pending_sequence}"
       sequence = next_key_token(full_sequence)
       queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
+      return true if sequence == "\e" && dismiss_slash_overlay
       return true if handle_shift_enter_key(sequence)
 
       binding_result = handle_composer_key_binding(sequence)
@@ -991,6 +996,8 @@ module Kward
       case code
       when 13
         modifier == 2 ? insert_string("\n") : submit_input
+      when 27
+        dismiss_slash_overlay || false
       when 8, 127
         alt_modifier?(modifier) ? delete_word_before_cursor : delete_before_cursor
         nil
@@ -1298,6 +1305,7 @@ module Kward
 
       reset_slash_selection
       reset_history_navigation
+      @slash_overlay_dismissed_input = nil
       @input = @input[0...@cursor] + string + @input[@cursor..]
       @cursor += string.length
     end
@@ -1349,6 +1357,7 @@ module Kward
 
       reset_slash_selection
       reset_history_navigation
+      @slash_overlay_dismissed_input = nil
       @attachments.pop
     end
 
@@ -1357,6 +1366,7 @@ module Kward
 
       reset_slash_selection
       reset_history_navigation
+      @slash_overlay_dismissed_input = nil
       @input = @input[0...@cursor] + @input[(@cursor + 1)..]
     end
 
@@ -1551,6 +1561,14 @@ module Kward
       @slash_selection_index = 0
     end
 
+    def dismiss_slash_overlay
+      return false unless slash_overlay_visible?
+
+      @slash_overlay_dismissed_input = @input.dup
+      reset_slash_selection
+      true
+    end
+
     def normalize_slash_commands(commands)
       commands.map do |command|
         {
@@ -1570,7 +1588,7 @@ module Kward
     end
 
     def slash_overlay_visible?
-      @input.match?(%r{\A/[^\s/]*\z}) && !slash_overlay_matches.empty?
+      @input.match?(%r{\A/[^\s/]*\z}) && @slash_overlay_dismissed_input != @input && !slash_overlay_matches.empty?
     end
 
     def slash_overlay_matches
@@ -1579,6 +1597,8 @@ module Kward
     end
 
     def selected_slash_command
+      return nil unless slash_overlay_visible?
+
       matches = slash_overlay_matches
       return nil if matches.empty?
 
