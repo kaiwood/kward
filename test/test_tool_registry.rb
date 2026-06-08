@@ -165,45 +165,45 @@ class TestToolRegistry < KwardTestCase
   end
 
   def test_tool_registry_write_runs_without_confirmation
-    path = "kward_confirm_tool.txt"
-    prompt = FakePrompt.new([], confirmations: [false])
-    conversation = Kward::Conversation.new
-    registry = Kward::ToolRegistry.new(prompt: prompt)
+    Dir.mktmpdir do |dir|
+      path = "kward_confirm_tool.txt"
+      prompt = FakePrompt.new([], confirmations: [false])
+      conversation = Kward::Conversation.new
+      registry = Kward::ToolRegistry.new(prompt: prompt, workspace: Kward::Workspace.new(root: dir))
 
-    registry.dispatch(tool_call("write_file", path: path, content: "hello\n"), conversation)
+      registry.dispatch(tool_call("write_file", path: path, content: "hello\n"), conversation)
 
-    refute_includes prompt.output, "\nWrite request> #{path} (6 bytes)"
-    assert_equal "hello\n", File.read(path)
-  ensure
-    File.delete(path) if path && File.exist?(path)
+      refute_includes prompt.output, "\nWrite request> #{path} (6 bytes)"
+      assert_equal "hello\n", File.read(File.join(dir, path))
+    end
   end
 
   def test_tool_registry_read_file_passes_offset_and_limit
-    path = "kward_offset_read_tool.txt"
-    File.write(path, "one\ntwo\nthree")
-    conversation = Kward::Conversation.new
-    registry = Kward::ToolRegistry.new
+    Dir.mktmpdir do |dir|
+      path = "kward_offset_read_tool.txt"
+      File.write(File.join(dir, path), "one\ntwo\nthree")
+      conversation = Kward::Conversation.new
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir))
 
-    result = registry.dispatch(tool_call("read_file", path: path, offset: 2, limit: 1), conversation)
+      result = registry.dispatch(tool_call("read_file", path: path, offset: 2, limit: 1), conversation)
 
-    assert_equal "two\n\n[1 more lines in file. Use offset=3 to continue.]", result
-  ensure
-    File.delete(path) if path && File.exist?(path)
+      assert_equal "two\n\n[1 more lines in file. Use offset=3 to continue.]", result
+    end
   end
 
   def test_tool_registry_edit_file_updates_existing_read_file
-    path = "kward_edit_tool.txt"
-    File.write(path, "hello world\n")
-    conversation = Kward::Conversation.new
-    registry = Kward::ToolRegistry.new
+    Dir.mktmpdir do |dir|
+      path = "kward_edit_tool.txt"
+      File.write(File.join(dir, path), "hello world\n")
+      conversation = Kward::Conversation.new
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir))
 
-    registry.dispatch(tool_call("read_file", path: path), conversation)
-    result = registry.dispatch(tool_call("edit_file", path: path, edits: [{ old_text: "world", new_text: "there" }]), conversation)
+      registry.dispatch(tool_call("read_file", path: path), conversation)
+      result = registry.dispatch(tool_call("edit_file", path: path, edits: [{ old_text: "world", new_text: "there" }]), conversation)
 
-    assert_includes result, "Edited #{path}: replaced 1 block(s)"
-    assert_equal "hello there\n", File.read(path)
-  ensure
-    File.delete(path) if path && File.exist?(path)
+      assert_includes result, "Edited #{path}: replaced 1 block(s)"
+      assert_equal "hello there\n", File.read(File.join(dir, path))
+    end
   end
 
   def test_editing_workspace_agents_refreshes_system_prompt
