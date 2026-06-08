@@ -143,15 +143,6 @@ class TestPanServer < KwardTestCase
     right&.close unless right.closed?
   end
 
-  def wait_until(timeout: 1)
-    deadline = Time.now + timeout
-    until yield
-      raise "timed out" if Time.now > deadline
-
-      sleep 0.01
-    end
-  end
-
   def stop_worker(server)
     worker = server&.instance_variable_get(:@worker_thread)
     worker&.kill

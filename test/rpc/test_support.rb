@@ -30,13 +30,8 @@ module KwardRPCTestSupport
     read_framed_messages(output)
   end
 
-  def wait_until(timeout: 2)
-    deadline = Time.now + timeout
-    until yield
-      raise "timed out" if Time.now > deadline
-
-      sleep 0.01
-    end
+  def wait_until(timeout: 2, message: "timed out", &block)
+    super(timeout: timeout, message: message, &block)
   end
 
   class StaticContextUsage

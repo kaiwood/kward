@@ -26,15 +26,22 @@ class KwardTestCase < Minitest::Test
     input&.close unless input&.closed?
   end
 
-  def poll_prompt_until(prompt, timeout: 1)
+  def wait_until(timeout: 1, message: "timed out")
     deadline = Time.now + timeout
-    loop do
-      result = prompt.poll_input
-      return result if yield(result)
-      raise "timed out waiting for prompt input" if Time.now > deadline
+    until yield
+      raise message if Time.now > deadline
 
       sleep 0.01
     end
+  end
+
+  def poll_prompt_until(prompt, timeout: 1)
+    result = nil
+    wait_until(timeout: timeout, message: "timed out waiting for prompt input") do
+      result = prompt.poll_input
+      yield(result)
+    end
+    result
   end
 
   def strip_ansi(text)
