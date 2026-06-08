@@ -159,20 +159,6 @@ class KwardTestCase < Minitest::Test
     end
   end
 
-  class FakeResponse < Net::HTTPResponse
-    def initialize(code, body)
-      super("1.1", code.to_s, "")
-      @body = body
-    end
-
-    attr_reader :body
-
-    def read_body
-      yield body if block_given?
-      body
-    end
-  end
-
   class FakeClient
     def initialize(responses)
       @responses = responses
