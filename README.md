@@ -19,6 +19,7 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 - [Configuration](doc/configuration.md): config files, models, environment variables, and color output.
 - [Extensibility](doc/extensibility.md): `AGENTS.md`, skills, and prompt templates.
 - [Web search](doc/web-search.md): search providers and network behavior.
+- [Code search](doc/code-search.md): package/source discovery, cached GitHub clones, and external code reading.
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
 
 ## Run tests

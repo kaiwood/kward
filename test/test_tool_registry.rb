@@ -36,6 +36,12 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_tool_schemas_include_code_search
+    tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+    assert_includes tool_names, "code_search"
+  end
+
   def test_tool_schemas_include_web_search_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
@@ -162,6 +168,17 @@ class TestToolRegistry < KwardTestCase
 
     assert_equal "research result", result
     assert_equal [{ "queries" => ["ruby"] }], search.calls
+  end
+
+  def test_tool_registry_dispatches_code_search
+    search = FakeCodeSearch.new("code result")
+    registry = Kward::ToolRegistry.new(code_search: search)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+
+    assert_equal "code result", result
+    assert_equal [{ "action" => "list_cache" }], search.calls
   end
 
   def test_tool_registry_write_runs_without_confirmation

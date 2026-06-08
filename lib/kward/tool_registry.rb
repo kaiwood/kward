@@ -1,5 +1,7 @@
 require_relative "config_files"
+require_relative "code_search"
 require_relative "tools/ask_user_question"
+require_relative "tools/code_search"
 require_relative "tools/edit_file"
 require_relative "tools/list_directory"
 require_relative "tools/read_file"
@@ -15,10 +17,11 @@ module Kward
   class ToolRegistry
     attr_reader :schemas
 
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
+      @code_search = code_search
       @skills = skills
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
@@ -76,7 +79,8 @@ module Kward
         Tools::ReadFile.new(workspace: @workspace),
         Tools::WriteFile.new(workspace: @workspace),
         Tools::EditFile.new(workspace: @workspace),
-        Tools::RunShellCommand.new(workspace: @workspace)
+        Tools::RunShellCommand.new(workspace: @workspace),
+        Tools::CodeSearch.new(code_search: @code_search)
       ]
     end
 

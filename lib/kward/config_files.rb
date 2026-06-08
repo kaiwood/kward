@@ -30,6 +30,14 @@ module Kward
       File.expand_path(ENV["KWARD_CONFIG_PATH"] || File.join(config_dir, "config.json"))
     end
 
+    def cache_dir
+      File.join(config_dir, "cache")
+    end
+
+    def code_search_cache_dir
+      File.join(cache_dir, "code_search")
+    end
+
     def read_config(path = config_path)
       path = File.expand_path(path)
       return {} unless File.exist?(path)

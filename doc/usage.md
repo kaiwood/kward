@@ -1,6 +1,6 @@
 # Usage
 
-In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, run shell commands with `run_shell_command` after confirmation, search the web with `web_search`, and ask structured clarification questions with `ask_user_question`.
+In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, run shell commands with `run_shell_command` after confirmation, search the web with `web_search`, discover and read cached open-source repositories with `code_search`, and ask structured clarification questions with `ask_user_question`.
 
 Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Text file reads and edits are capped at 256 KiB per file to avoid accidentally loading very large files into context.
 

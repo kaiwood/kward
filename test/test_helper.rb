@@ -153,6 +153,20 @@ class KwardTestCase < Minitest::Test
     end
   end
 
+  class FakeCodeSearch
+    attr_reader :calls
+
+    def initialize(result)
+      @result = result
+      @calls = []
+    end
+
+    def call(args)
+      @calls << args
+      @result
+    end
+  end
+
   def fake_net_response(code, body)
     klass = Net::HTTPResponse::CODE_TO_OBJ.fetch(code.to_s, Net::HTTPUnknownResponse)
     klass.new("1.1", code.to_s, "").tap do |response|
