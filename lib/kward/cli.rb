@@ -165,6 +165,7 @@ module Kward
         agent ||= build_interactive_agent(new_conversation)
       end
 
+      update_assistant_prompt(agent.conversation)
       @footer_conversation = agent.conversation
 
       print_visual_banner
@@ -323,6 +324,27 @@ module Kward
       Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort)
     end
 
+    def update_assistant_prompt(conversation)
+      @assistant_prompt = assistant_prompt_label(conversation)
+      @prompt.update_assistant_label(assistant_prompt_name) if @prompt.respond_to?(:update_assistant_label)
+      @assistant_prompt
+    end
+
+    def assistant_prompt_label(conversation)
+      label = ConfigFiles.active_persona_label(workspace_root: conversation.workspace_root, model: conversation.model)
+      "#{label || "Assistant"}>"
+    rescue StandardError
+      "Assistant>"
+    end
+
+    def assistant_prompt_name
+      assistant_output_prompt.delete_suffix(">")
+    end
+
+    def assistant_output_prompt
+      @assistant_prompt || "Assistant>"
+    end
+
     def build_interactive_agent(conversation)
       workspace = Workspace.new(root: conversation.workspace_root)
       tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
@@ -397,12 +419,12 @@ module Kward
         lines << "Session: #{@active_session.name || @active_session.id}"
         lines << "File: #{@active_session.path}"
       end
-      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{lines.join("\n")}\n")
+      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{lines.join("\n")}\n")
     end
 
     def print_stats(argument)
       result = TelemetryStats.new.collect(argument)
-      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{TelemetryStats.format(result)}\n")
+      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{TelemetryStats.format(result)}\n")
     rescue ArgumentError => e
       message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
       @prompt.say("\n#{message}\n")
@@ -621,6 +643,7 @@ module Kward
 
       conversation.update_runtime_context!(model: current_model_id, reasoning_effort: current_reasoning_effort)
       @active_session.update_runtime(model: conversation.model, reasoning_effort: conversation.reasoning_effort) if @active_session&.respond_to?(:update_runtime)
+      update_assistant_prompt(conversation)
     end
 
     def overlay_alignment_choices(settings)
@@ -648,6 +671,7 @@ module Kward
       cleanup_replaced_session(previous_session)
       conversation = new_conversation(workspace_root: session_store.cwd)
       @active_session.attach(conversation)
+      update_assistant_prompt(conversation)
       clear_prompt_transcript
       print_visual_banner
       build_interactive_agent(conversation)
@@ -665,6 +689,7 @@ module Kward
       reset_session_diff(@active_session.path)
       track_session(@active_session)
       cleanup_replaced_session(previous_session)
+      update_assistant_prompt(conversation)
       @prompt.say("\nResumed session: #{@active_session.path}\n")
       render_conversation_transcript(conversation)
       agent = build_interactive_agent(conversation)
@@ -1275,7 +1300,7 @@ module Kward
       drain_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
       raise error if error
 
-      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
+      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       queued_inputs
     end
@@ -1410,7 +1435,7 @@ module Kward
         end
       end
       flush_markdown_deltas(markdown_chunks) if streamed
-      @prompt.say("\n#{colored("Kward>", :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
+      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
       []
     end
 
@@ -1698,7 +1723,7 @@ module Kward
     end
 
     def transcript_label(label)
-      label == "Assistant" ? "Kward" : label
+      label == "Assistant" ? assistant_prompt_name : label
     end
 
     def label_color(label)

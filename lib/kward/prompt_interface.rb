@@ -59,6 +59,7 @@ module Kward
       @last_spinner_tick = monotonic_now
       @last_footer_refresh = monotonic_now
       @prompt_label = "You>"
+      @assistant_label = "Assistant"
       @stream_block = nil
       @rendered_rows = 0
       @cursor_rendered_row = 0
@@ -333,6 +334,12 @@ module Kward
         result = handle_key(key)
         render_prompt_locked unless result == EXIT_INPUT
         result == EXIT_INPUT ? EXIT_INPUT : result
+      end
+    end
+
+    def update_assistant_label(label)
+      @mutex.synchronize do
+        @assistant_label = label.to_s.empty? ? "Assistant" : label.to_s
       end
     end
 
@@ -2332,7 +2339,7 @@ module Kward
     end
 
     def transcript_label(label)
-      label == "Assistant" ? "Kward" : label
+      label == "Assistant" ? @assistant_label : label
     end
 
     def label_color(label)

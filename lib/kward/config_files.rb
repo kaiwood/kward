@@ -126,6 +126,32 @@ module Kward
       text
     end
 
+    def active_persona_label(workspace_root:, model: nil, config: read_config)
+      personas = config["personas"]
+      return nil unless personas.is_a?(Hash)
+
+      labels = crew_character_labels(personas)
+      active_label = persona_label_for_key(personas["default"], labels) unless personas["default"].nil?
+
+      workspaces = personas["workspaces"]
+      if workspaces.is_a?(Hash)
+        root = canonical_workspace_root(workspace_root)
+        workspaces.each do |path, key|
+          next unless canonical_workspace_root(path) == root
+
+          active_label = persona_label_for_key(key, labels)
+          break
+        end
+      end
+
+      models = personas["models"]
+      if models.is_a?(Hash) && !model.to_s.empty? && models.key?(model.to_s)
+        active_label = persona_label_for_key(models[model.to_s], labels)
+      end
+
+      active_label
+    end
+
     def persona_entries(workspace_root:, model: nil, reasoning_effort: nil, now: Time.now, config: read_config, include_reasoning: true)
       personas = config["personas"]
       return [] unless personas.is_a?(Hash)
@@ -216,6 +242,19 @@ module Kward
       end
     end
 
+    def crew_character_labels(personas)
+      raw = personas["characters"] || personas["crew"]
+      return {} unless raw
+
+      if raw.is_a?(Hash)
+        parse_named_character_labels(raw)
+      elsif raw.is_a?(Array)
+        parse_named_character_labels_array(raw)
+      else
+        {}
+      end
+    end
+
     def resolved_persona_text(value, characters: {})
       return nil if value.nil?
 
@@ -226,6 +265,13 @@ module Kward
       return text unless text.to_s.empty?
 
       value
+    end
+
+    def persona_label_for_key(value, labels)
+      key = value.to_s.strip
+      return nil if key.empty?
+
+      presence(labels[key])
     end
 
     def parse_named_characters(raw)
@@ -257,6 +303,43 @@ module Kward
 
         mapping[char_key.to_s] = instruction
       end
+    end
+
+    def parse_named_character_labels(raw)
+      raw.each_with_object({}) do |(key, definition), mapping|
+        label = extract_character_label(definition)
+        next if label.nil?
+
+        mapping[key.to_s] = label
+      end
+    end
+
+    def parse_named_character_labels_array(raw)
+      raw.each_with_object({}) do |entry, mapping|
+        char_key = nil
+        definition = nil
+
+        if entry.is_a?(Hash) && entry.length == 1 && entry.keys.first.is_a?(String)
+          char_key = entry.keys.first
+          definition = entry.values.first
+        elsif entry.is_a?(Hash)
+          char_key = entry["key"] || entry[:key] || entry["id"] || entry[:id] || entry["name"] || entry[:name]
+          definition = entry
+        end
+
+        next if char_key.to_s.empty?
+
+        label = extract_character_label(definition)
+        next if label.to_s.empty?
+
+        mapping[char_key.to_s] = label
+      end
+    end
+
+    def extract_character_label(definition)
+      return nil unless definition.is_a?(Hash)
+
+      presence(definition["label"] || definition[:label])
     end
 
     def extract_character_instruction(definition)

@@ -1002,7 +1002,7 @@ class TestPromptInterface < KwardTestCase
     prompt.start_stream_block("Assistant")
     prompt.write_delta("hello")
 
-    assert_includes output.string, "Kward>"
+    assert_includes output.string, "Assistant>"
     assert_includes output.string, "hello"
     refute_includes strip_ansi(output.string), Kward::PromptInterface::HELP_TEXT
     refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT
@@ -1083,7 +1083,7 @@ class TestPromptInterface < KwardTestCase
     prompt.write_delta("reasoning text")
 
     stripped = strip_ansi(output.string)
-    assert_includes stripped, "Kward>\r\nassistant text\r\n\r\nReasoning>\r\nreasoning text"
+    assert_includes stripped, "Assistant>\r\nassistant text\r\n\r\nReasoning>\r\nreasoning text"
   end
 
   def test_prompt_interface_advances_after_full_width_stream_chunk

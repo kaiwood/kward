@@ -72,6 +72,47 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_response_prompt_uses_active_persona_label
+    Dir.mktmpdir do |config_dir|
+      File.write(File.join(config_dir, "config.json"), JSON.dump({
+        "personas" => {
+          "crew" => {
+            "spark" => { "label" => "Spark", "instruction" => "Speak brightly." }
+          },
+          "default" => "spark"
+        }
+      }))
+      prompt = FakePrompt.new(["hello", nil])
+      client = FakeClient.new([{ "role" => "assistant", "content" => "reply" }])
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        cli.interactive_loop(agent: Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new))
+      end
+
+      output = prompt.output.join
+      assert_includes output, "Spark> reply"
+      refute_includes output, "Kward>\nreply"
+    end
+  end
+
+  def test_interactive_response_prompt_falls_back_to_assistant_without_persona_label
+    Dir.mktmpdir do |config_dir|
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      prompt = FakePrompt.new(["hello", nil])
+      client = FakeClient.new([{ "role" => "assistant", "content" => "reply" }])
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        cli.interactive_loop(agent: Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new))
+      end
+
+      output = prompt.output.join
+      assert_includes output, "Assistant> reply"
+      refute_includes output, "Kward> reply"
+    end
+  end
+
   def test_one_shot_renders_markdown_without_streaming
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "# Plan\nRun `bundle test`.\n" }]))
     cli.instance_variable_set(:@color_enabled, true)
@@ -213,7 +254,7 @@ class TestCLI < KwardTestCase
       cli.send(:start_stream_block, "Assistant")
     end.first
 
-    assert_includes output, "\e[32;1mKward>\e[0m"
+    assert_includes output, "\e[32;1mAssistant>\e[0m"
   end
 
   def test_module_split_keeps_one_shot_mode_working
@@ -428,7 +469,7 @@ class TestCLI < KwardTestCase
       assert_equal 1, prompt.banner_count
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
-      assert_includes output, "Kward>\nreply"
+      assert_includes output, "Input>\nreply"
     end
   end
 
@@ -479,7 +520,7 @@ class TestCLI < KwardTestCase
       output = prompt.output.join("\n")
       assert_includes output, "You> inspect file"
       assert_includes output, "Reasoning>\nNeed to inspect the file."
-      assert_includes output, "Kward>\nI'll read it."
+      assert_includes output, "Input>\nI'll read it."
       assert_includes output, "Tool>\nread_file"
       assert_includes output, "Tool output>\nread_file: README.md"
       assert_includes output, "1 lines, 16 bytes"
@@ -596,7 +637,7 @@ class TestCLI < KwardTestCase
       assert files.any? { |file| jsonl_records(file).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" } }
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
-      assert_includes output, "Kward>\nreply"
+      assert_includes output, "Input>\nreply"
       assert_includes File.read(export_path), "## User\n\nhello"
       assert_includes File.read(export_path), "## Assistant\n\nreply"
     end
