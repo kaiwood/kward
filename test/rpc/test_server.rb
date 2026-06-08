@@ -112,8 +112,9 @@ class TestRPCServer < KwardTestCase
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
     assert_equal true, capabilities["logging"]["supported"]
     assert_equal false, capabilities["logging"]["defaultEnabled"]
-    assert_equal ["logging/stats"], capabilities["logging"]["methods"]
+    assert_equal ["logging/stats", "logging/tokenCsv"], capabilities["logging"]["methods"]
     assert_equal "1 week", capabilities["logging"]["stats"]["defaultRange"]
+    assert_equal true, capabilities["logging"]["usageCsv"]["supported"]
     assert_equal ["tokens", "performance", "tools", "errors"], capabilities["logging"]["categories"]
     assert_equal 10_485_760, capabilities["logging"]["rotation"]["maxBytes"]
     assert_equal "redacted-metadata-only", capabilities["logging"]["content"]
@@ -137,7 +138,7 @@ class TestRPCServer < KwardTestCase
     assert_equal ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"], capabilities["auth"]["methods"]
     assert_equal ["prompts/list", "prompts/expand"], capabilities["prompts"]["methods"]
     assert_equal ["config/read", "config/update"], capabilities["config"]["methods"]
-    assert_equal ["logging/stats"], capabilities["logging"]["methods"]
+    assert_equal ["logging/stats", "logging/tokenCsv"], capabilities["logging"]["methods"]
     assert_equal "tools/list", capabilities["tools"]["method"]
     assert_equal "commands/list", capabilities["commands"]["method"]
     assert_includes capabilities["commands"]["methods"], "commands/run"
@@ -180,6 +181,26 @@ class TestRPCServer < KwardTestCase
     message = read_framed_messages(output).first
     assert_equal(-32_602, message["error"]["code"])
     assert_includes message["error"]["message"], Kward::TelemetryStats::USAGE
+  end
+
+  def test_logging_token_csv_rpc_returns_csv
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("logging" => { "enabled" => true, "tokens" => true }))
+      log_dir = File.join(dir, "logs")
+      FileUtils.mkdir_p(log_dir)
+      File.write(File.join(log_dir, "#{Time.now.utc.strftime("%Y-%m-%d")}.jsonl"), JSON.generate("timestamp" => Time.now.utc.iso8601(3), "category" => "tokens", "event" => "model_usage", "provider" => "openrouter", "model" => "alpha", "usage" => { "total_tokens" => 11 }) + "\n")
+      output = StringIO.new
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: output, error_output: StringIO.new, client: FakeClient.new([]))
+        server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 1, "method" => "logging/tokenCsv", "params" => { "range" => "5 hours", "bucket" => "hour" } })
+      end
+
+      csv = read_framed_messages(output).first["result"]["csv"]
+      assert_includes csv, "bucket_start,bucket_end,provider,model,events,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,total_tokens"
+      assert_includes csv, "openrouter,alpha,1,0,0,0,0,11"
+    end
   end
 
   def test_turn_start_rpc_invalid_params_for_attachments_and_streaming_behavior

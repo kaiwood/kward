@@ -8,6 +8,8 @@ module Kward
     DEFAULT_RANGE = "1 week"
     UNITS = %w[minute hour day week month year].freeze
     USAGE = "Usage: /stats [N minutes|hours|days|weeks|months|years] (default: 1 week)".freeze
+    TOKEN_CSV_HEADER = %w[bucket_start bucket_end provider model events input_tokens output_tokens cache_read_tokens cache_write_tokens total_tokens].freeze
+    TOKEN_BUCKETS = %w[second minute hour day week month year].freeze
 
     Result = Struct.new(:range, :log_dir, :enabled_categories, :record_count, :records_by_category, :records_by_event, :tokens, :performance, :tools, :errors, keyword_init: true) do
       def to_h
@@ -52,6 +54,20 @@ module Kward
       range = self.class.parse_range(argument, now: @clock.now.utc)
       records = read_records(range[:start_at], range[:end_at], categories)
       build_result(range, categories, records)
+    end
+
+    def token_usage_csv(argument = "", bucket: nil)
+      categories = enabled_categories
+      raise ArgumentError, "Token telemetry logging is disabled. Enable logging and token logging before exporting token CSV." unless categories.include?("tokens")
+
+      range = self.class.parse_range(argument, now: @clock.now.utc)
+      bucket = self.class.normalize_bucket(bucket || range[:unit])
+      buckets = token_usage_buckets(range, bucket)
+      lines = [csv_row(TOKEN_CSV_HEADER)]
+      buckets.each do |_key, values|
+        lines << csv_row(TOKEN_CSV_HEADER.map { |column| token_csv_value(values, column) })
+      end
+      lines.join("\n") + "\n"
     end
 
     def self.parse_range(argument, now: Time.now.utc)
@@ -105,6 +121,14 @@ module Kward
       text = unit.to_s.downcase
       text = text.delete_suffix("s")
       UNITS.include?(text) ? text : nil
+    end
+
+    def self.normalize_bucket(bucket)
+      text = bucket.to_s.downcase.strip
+      text = text.delete_suffix("s")
+      raise ArgumentError, "Bucket must be one of: #{TOKEN_BUCKETS.join(", ")}" unless TOKEN_BUCKETS.include?(text)
+
+      text
     end
 
     def self.calendar_start(now, count, unit)
@@ -186,27 +210,165 @@ module Kward
     private
 
     def read_records(start_at, end_at, categories)
-      return [] unless Dir.exist?(log_dir)
+      records = []
+      each_record(start_at, end_at, categories) { |record, _timestamp| records << record }
+      records
+    end
+
+    def each_record(start_at, end_at, categories, reverse: false, stop_before_start: false)
+      return enum_for(:each_record, start_at, end_at, categories, reverse: reverse, stop_before_start: stop_before_start) unless block_given?
+      return unless Dir.exist?(log_dir)
 
       category_set = categories.each_with_object({}) { |category, result| result[category] = true }
-      Dir[File.join(log_dir, "*.jsonl")].sort.flat_map do |path|
-        File.readlines(path, chomp: true).filter_map do |line|
+      paths = log_paths_for_range(start_at, end_at)
+      paths = paths.reverse if reverse
+      paths.each do |path|
+        stop_file = false
+        each_line = reverse ? method(:reverse_each_line) : method(:forward_each_line)
+        each_line.call(path) do |line|
           record = JSON.parse(line)
           timestamp = parse_timestamp(record["timestamp"])
-          next unless timestamp && timestamp >= start_at && timestamp <= end_at
+          next unless timestamp
+          if stop_before_start && timestamp < start_at
+            stop_file = true
+            break
+          end
+          next unless timestamp >= start_at && timestamp <= end_at
           next unless category_set[record["category"].to_s]
 
-          record
+          yield record, timestamp
         rescue JSON::ParserError
           nil
         end
+        next if stop_file
       end
+    end
+
+    def forward_each_line(path, &block)
+      File.foreach(path, chomp: true, &block)
+    end
+
+    def reverse_each_line(path, chunk_size: 64 * 1024)
+      File.open(path, "rb") do |file|
+        position = file.size
+        buffer = +""
+        while position.positive?
+          read_size = [chunk_size, position].min
+          position -= read_size
+          file.seek(position)
+          buffer = file.read(read_size) + buffer
+          lines = buffer.split("\n", -1)
+          buffer = lines.shift
+          lines.pop if position + read_size == file.size && lines.last == ""
+          lines.reverse_each { |line| yield line.chomp }
+        end
+        yield buffer.chomp unless buffer.empty?
+      end
+    end
+
+    def log_paths_for_range(start_at, end_at)
+      return [] unless Dir.exist?(log_dir)
+
+      start_date = start_at.utc.strftime("%Y-%m-%d")
+      end_date = end_at.utc.strftime("%Y-%m-%d")
+      Dir[File.join(log_dir, "*.jsonl")].select do |path|
+        date = File.basename(path)[/\A\d{4}-\d{2}-\d{2}/]
+        date && date >= start_date && date <= end_date
+      end.sort
     end
 
     def parse_timestamp(value)
       Time.parse(value.to_s).utc
     rescue ArgumentError
       nil
+    end
+
+    def token_usage_buckets(range, bucket)
+      buckets = {}
+      each_record(range[:start_at], range[:end_at], ["tokens"], reverse: true, stop_before_start: true) do |record, timestamp|
+        next unless record["event"] == "model_usage"
+
+        usage = record["usage"]
+        next unless usage.is_a?(Hash)
+
+        start_at = bucket_start(timestamp, bucket)
+        end_at = bucket_end(start_at, bucket)
+        key = [start_at, record["provider"].to_s, record["model"].to_s]
+        values = buckets[key] ||= token_csv_bucket(start_at, end_at, record)
+        values["events"] += 1
+        %w[input_tokens output_tokens cache_read_tokens cache_write_tokens total_tokens].each do |column|
+          values[column] += usage[column].to_i if usage[column].is_a?(Numeric)
+        end
+      end
+      buckets.sort_by { |(start_at, provider, model), _values| [start_at, provider, model] }.to_h
+    end
+
+    def token_csv_bucket(start_at, end_at, record)
+      TOKEN_CSV_HEADER.each_with_object({}) do |column, result|
+        result[column] = 0
+      end.merge(
+        "bucket_start" => start_at.iso8601,
+        "bucket_end" => end_at.iso8601,
+        "provider" => record["provider"].to_s,
+        "model" => record["model"].to_s
+      )
+    end
+
+    def token_csv_value(values, column)
+      return values[column] if %w[bucket_start bucket_end provider model].include?(column)
+
+      values[column] || 0
+    end
+
+    def csv_row(values)
+      values.map { |value| csv_escape(value) }.join(",")
+    end
+
+    def csv_escape(value)
+      text = value.to_s
+      return text unless text.match?(/[",\n\r]/)
+
+      "\"#{text.gsub("\"", "\"\"")}\""
+    end
+
+    def bucket_start(timestamp, bucket)
+      case bucket
+      when "second"
+        Time.utc(timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.min, timestamp.sec)
+      when "minute"
+        Time.utc(timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.min)
+      when "hour"
+        Time.utc(timestamp.year, timestamp.month, timestamp.day, timestamp.hour)
+      when "day"
+        Time.utc(timestamp.year, timestamp.month, timestamp.day)
+      when "week"
+        Time.utc(timestamp.year, timestamp.month, timestamp.day) - ((timestamp.wday + 6) % 7 * 24 * 60 * 60)
+      when "month"
+        Time.utc(timestamp.year, timestamp.month, 1)
+      when "year"
+        Time.utc(timestamp.year, 1, 1)
+      else
+        raise ArgumentError, "Bucket must be one of: #{TOKEN_BUCKETS.join(", ")}"
+      end
+    end
+
+    def bucket_end(start_at, bucket)
+      case bucket
+      when "second"
+        start_at + 1
+      when "minute"
+        start_at + 60
+      when "hour"
+        start_at + (60 * 60)
+      when "day"
+        start_at + (24 * 60 * 60)
+      when "week"
+        start_at + (7 * 24 * 60 * 60)
+      when "month"
+        self.class.shift_month_start(start_at, 1)
+      when "year"
+        Time.utc(start_at.year + 1, 1, 1)
+      end
     end
 
     def build_result(range, categories, records)

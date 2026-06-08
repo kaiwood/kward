@@ -147,6 +147,8 @@ module Kward
           { path: @config_manager.config_path, config: @config_manager.update(params.fetch("values")) }
         when "logging/stats"
           logging_stats(params)
+        when "logging/tokenCsv"
+          logging_token_csv(params)
         when "auth/status"
           @auth_manager.status
         when "auth/providers"
@@ -331,8 +333,9 @@ module Kward
           logging: {
             supported: true,
             defaultEnabled: false,
-            methods: ["logging/stats"],
+            methods: ["logging/stats", "logging/tokenCsv"],
             stats: { supported: true, method: "logging/stats", defaultRange: TelemetryStats::DEFAULT_RANGE, units: %w[minutes hours days weeks months years] },
+            usageCsv: { supported: true, method: "logging/tokenCsv", defaultRange: TelemetryStats::DEFAULT_RANGE, buckets: %w[second minute hour day week month year] },
             config: "logging",
             envPrefix: "KWARD_LOGGING",
             directory: File.join(ConfigFiles.config_dir, "logs"),
@@ -409,6 +412,12 @@ module Kward
 
       def logging_stats(params)
         TelemetryStats.new.collect(params["range"].to_s).to_h
+      rescue ArgumentError => e
+        raise ArgumentError, e.message == TelemetryStats::USAGE ? e.message : "#{e.message} #{TelemetryStats::USAGE}"
+      end
+
+      def logging_token_csv(params)
+        { csv: TelemetryStats.new.token_usage_csv(params["range"].to_s, bucket: params["bucket"]) }
       rescue ArgumentError => e
         raise ArgumentError, e.message == TelemetryStats::USAGE ? e.message : "#{e.message} #{TelemetryStats::USAGE}"
       end
