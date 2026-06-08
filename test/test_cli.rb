@@ -473,6 +473,41 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_resume_prompt_interface_preserves_scrollback_with_synchronized_redraw
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      saved.attach(conversation)
+      1.upto(30) do |index|
+        conversation.append_user(format("turn %03d", index))
+      end
+      output = StringIO.new
+      input, writer = IO.pipe
+      writer.write("/resume #{saved.path}\r/exit\r")
+      writer.close
+      prompt = Kward::PromptInterface.new(input: input, output: output)
+      original_width = TTY::Screen.method(:width)
+      original_height = TTY::Screen.method(:height)
+      TTY::Screen.define_singleton_method(:width) { 80 }
+      TTY::Screen.define_singleton_method(:height) { 20 }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      rendered = strip_ansi(output.string)
+      assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE
+      assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+      assert_includes output.string, TTY::Cursor.clear_screen
+      assert_includes rendered, "turn 001\r\n"
+      assert_includes rendered, "turn 030"
+    ensure
+      TTY::Screen.define_singleton_method(:width, original_width) if original_width
+      TTY::Screen.define_singleton_method(:height, original_height) if original_height
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_resume_updates_composer_context_usage_source
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

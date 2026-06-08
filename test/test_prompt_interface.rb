@@ -1177,6 +1177,31 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "╭ You "
   end
 
+  def test_prompt_interface_restore_transcript_preserves_history_with_synchronized_redraw
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.restore_transcript do
+      1.upto(30) { |index| prompt.say("line #{index}") }
+    end
+
+    assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE
+    assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+    assert_includes output.string, TTY::Cursor.clear_screen
+    assert_includes strip_ansi(output.string), "line 1\r\n"
+    assert_includes strip_ansi(output.string), "line 30"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_prompt_interface_visual_output_is_not_saved_for_redraw
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

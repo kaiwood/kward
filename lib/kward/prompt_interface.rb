@@ -27,6 +27,8 @@ module Kward
     BRACKETED_PASTE_RESTORE = "\e[?2004l".freeze
     BRACKETED_PASTE_START = "\e[200~".freeze
     BRACKETED_PASTE_END = "\e[201~".freeze
+    SYNCHRONIZED_OUTPUT_ENABLE = "\e[?2026h".freeze
+    SYNCHRONIZED_OUTPUT_DISABLE = "\e[?2026l".freeze
     CURSOR_SHOW = "\e[?25h".freeze
     CURSOR_HIDE = "\e[?25l".freeze
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
@@ -68,6 +70,7 @@ module Kward
       @transcript_buffer = +""
       @visual_banner_count = 0
       @transcript_viewport_rows = 0
+      @restoring_transcript = false
       @pending_keys = []
       @attachments = []
       @kill_buffer = ""
@@ -127,8 +130,15 @@ module Kward
 
     def say(message)
       @mutex.synchronize do
-        clear_prompt_for_output_locked
         text = message.to_s
+        if @restoring_transcript
+          write_transcript_text_locked(text)
+          write_transcript_text_locked("\n") unless text.end_with?("\n")
+          @stream_block = nil
+          next
+        end
+
+        clear_prompt_for_output_locked
         write_transcript_text_locked(text)
         write_transcript_text_locked("\n") unless text.end_with?("\n")
         @stream_block = nil
@@ -139,12 +149,37 @@ module Kward
 
     def say_visual(message)
       @mutex.synchronize do
+        return if @restoring_transcript
+
         clear_prompt_for_output_locked
         text = message.to_s
         write_visual_transcript_text_locked(text)
         write_visual_transcript_text_locked("\n") unless text.end_with?("\n")
         @stream_block = nil
         render_prompt_after_output_locked
+        @output_io.flush
+      end
+    end
+
+    def restore_transcript
+      @mutex.synchronize do
+        clear_prompt_for_output_locked
+        @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
+        @transcript_buffer = +""
+        @visual_banner_count = 0
+        @transcript_viewport_rows = 0
+        @stream_block = nil
+        @stream_col = 0
+        @stream_pending_wrap = false
+        @restoring_transcript = true
+      end
+
+      yield
+    ensure
+      @mutex.synchronize do
+        @restoring_transcript = false
+        @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE)
+        redraw_screen_locked
         @output_io.flush
       end
     end
@@ -364,34 +399,34 @@ module Kward
     def start_stream_block(label)
       @mutex.synchronize do
         if @stream_block != label
-          prepare_transcript_output_locked
+          prepare_transcript_output_locked unless @restoring_transcript
           ensure_transcript_block_separator_locked
           write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
           @stream_block = label
         end
-        restore_composer_cursor_locked
-        @output_io.flush
+        restore_composer_cursor_locked unless @restoring_transcript
+        @output_io.flush unless @restoring_transcript
       end
     end
 
     def write_delta(delta)
       @mutex.synchronize do
-        prepare_transcript_output_locked
+        prepare_transcript_output_locked unless @restoring_transcript
         write_transcript_text_locked(delta.to_s)
-        restore_composer_cursor_locked
-        @output_io.flush
+        restore_composer_cursor_locked unless @restoring_transcript
+        @output_io.flush unless @restoring_transcript
       end
     end
 
     def finish_stream_block
       @mutex.synchronize do
-        prepare_transcript_output_locked
+        prepare_transcript_output_locked unless @restoring_transcript
         if @stream_block
           write_transcript_text_locked("\n")
         end
         @stream_block = nil
-        restore_composer_cursor_locked
-        @output_io.flush
+        restore_composer_cursor_locked unless @restoring_transcript
+        @output_io.flush unless @restoring_transcript
       end
     end
 

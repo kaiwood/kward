@@ -707,10 +707,12 @@ module Kward
       track_session(@active_session)
       cleanup_replaced_session(previous_session)
       update_assistant_prompt(conversation)
-      @prompt.say("\nResumed session: #{@active_session.path}\n")
-      render_conversation_transcript(conversation)
+      restore_prompt_transcript do
+        @prompt.say("\nResumed session: #{@active_session.path}\n")
+        render_conversation_transcript(conversation)
+      end
       agent = build_interactive_agent(conversation)
-      @prompt.redraw if @prompt.respond_to?(:redraw)
+      @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
       agent
     rescue StandardError => e
       @prompt.say("\nError: #{e.message}\n")
@@ -1027,6 +1029,14 @@ module Kward
 
     def clear_prompt_transcript
       @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
+    end
+
+    def restore_prompt_transcript(&block)
+      if @prompt.respond_to?(:restore_transcript)
+        @prompt.restore_transcript(&block)
+      else
+        block.call
+      end
     end
 
     def select_session_path(session_store)
