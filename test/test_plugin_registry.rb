@@ -105,4 +105,27 @@ class TestPluginRegistry < KwardTestCase
     assert_raises(FrozenError) { messages.first[:content] = "changed" }
     assert_equal "hi", conversation.messages.first[:content]
   end
+
+  def test_transcript_event_handlers_receive_read_only_event_payloads
+    registry = Kward::PluginRegistry.new
+    received = []
+    registry.evaluate do |plugin|
+      plugin.on_transcript_event do |event, ctx|
+        received << [event, ctx.transcript.messages.length]
+      end
+    end
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("hi")
+    context = Kward::PluginRegistry::Context.new(conversation: conversation)
+
+    registry.notify_transcript_event(Kward::Events::AssistantDelta.new(delta: "hello"), context)
+
+    event, message_count = received.first
+    assert_equal "assistant_delta", event.type
+    assert_equal({ delta: "hello" }, event.payload)
+    assert_equal 1, message_count
+    assert event.frozen?
+    assert event.payload.frozen?
+    assert_raises(FrozenError) { event.payload[:delta] = "changed" }
+  end
 end

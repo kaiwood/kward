@@ -1329,12 +1329,12 @@ module Kward
 
       while worker.alive?
         collect_busy_input(queued_inputs, steering)
-        drain_interactive_events(event_queue, markdown_chunks, stream_state)
+        drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
         sleep 0.01
       end
       worker.join
       drain_busy_input(queued_inputs, steering)
-      drain_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
+      drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
       raise error if error
 
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
@@ -1342,19 +1342,27 @@ module Kward
       queued_inputs
     end
 
-    def drain_interactive_events(event_queue, markdown_chunks, stream_state, force: false)
+    def drain_interactive_events(event_queue, markdown_chunks, stream_state, agent = nil, force: false)
       drained = 0
       loop do
         break if !force && drained >= INTERACTIVE_EVENT_DRAIN_LIMIT
 
         event = event_queue.pop(true)
         drained += 1
+        notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
         handle_interactive_event(event, markdown_chunks, stream_state)
       rescue ThreadError
         break
       end
 
       flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: force)
+    end
+
+    def notify_plugin_transcript_event(event, conversation)
+      return unless conversation
+      return if plugin_registry.transcript_event_handlers.empty?
+
+      plugin_registry.notify_transcript_event(event, plugin_context(conversation, ""))
     end
 
     def handle_interactive_event(event, markdown_chunks, stream_state)

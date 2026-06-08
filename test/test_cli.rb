@@ -173,6 +173,28 @@ class TestCLI < KwardTestCase
     assert_equal ["final"], prompt.write_deltas
   end
 
+  def test_prompt_interface_interactive_turn_notifies_plugin_transcript_events
+    prompt = BusyPrompt.new([])
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("hello")
+    agent = EventAgent.new([Kward::Events::AssistantDelta.new(delta: "live")])
+    agent.define_singleton_method(:conversation) { conversation }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    registry = Kward::PluginRegistry.new
+    received = []
+    registry.evaluate do |plugin|
+      plugin.on_transcript_event do |event, ctx|
+        received << [event.type, event.payload[:delta], ctx.transcript.messages.length]
+      end
+    end
+    cli.instance_variable_set(:@plugin_registry, registry)
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal [["assistant_delta", "live", 1]], received
+    assert_equal ["live"], prompt.write_deltas
+  end
+
   def test_prompt_interface_interactive_turn_keeps_stream_block_open_between_throttled_flushes
     prompt = BusyPrompt.new([])
     events = ["I am Commander K’", "warD, sir —", " your officer"].map do |chunk|

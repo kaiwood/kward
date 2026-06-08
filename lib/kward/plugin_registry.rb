@@ -10,6 +10,12 @@ module Kward
       end
     end
 
+    TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
+      def to_h
+        { type: type, payload: payload }
+      end
+    end
+
     class Transcript
       def initialize(conversation)
         @conversation = conversation
@@ -66,6 +72,10 @@ module Kward
       def footer(&block)
         @registry.register_footer(path: @path, &block)
       end
+
+      def on_transcript_event(&block)
+        @registry.register_transcript_event(path: @path, &block)
+      end
     end
 
     class << self
@@ -106,6 +116,7 @@ module Kward
       @commands = {}
       @footer = nil
       @footer_path = nil
+      @transcript_event_handlers = []
     end
 
     attr_reader :footer_path
@@ -120,6 +131,22 @@ module Kward
 
     def footer_renderer
       @footer
+    end
+
+    def transcript_event_handlers
+      @transcript_event_handlers.map { |entry| entry[:handler] }
+    end
+
+    def notify_transcript_event(event, context)
+      transcript_event = transcript_event_for(event)
+      return unless transcript_event
+
+      @transcript_event_handlers.each do |entry|
+        entry[:handler].call(transcript_event, context)
+      rescue StandardError => e
+        warn "Warning: Kward plugin transcript event error in #{entry[:path]}: #{e.message}"
+      end
+      nil
     end
 
     def load_file(path)
@@ -170,6 +197,51 @@ module Kward
       warn "Warning: replacing Kward plugin footer from #{@footer_path}: #{path}" if @footer
       @footer = renderer
       @footer_path = path
+    end
+
+    def register_transcript_event(path: nil, &handler)
+      raise "Plugin transcript event requires a handler" unless handler
+
+      @transcript_event_handlers << { path: path, handler: handler }
+    end
+
+    private
+
+    def transcript_event_for(event)
+      case event.class.name
+      when "Kward::Events::ReasoningDelta"
+        transcript_event("reasoning_delta", delta: event.delta)
+      when "Kward::Events::AssistantDelta"
+        transcript_event("assistant_delta", delta: event.delta)
+      when "Kward::Events::AssistantMessage"
+        transcript_event("assistant_message", message: event.message)
+      when "Kward::Events::Retry"
+        transcript_event(
+          "model_retry",
+          provider: event.provider,
+          model: event.model,
+          attempt: event.attempt,
+          max_attempts: event.max_attempts,
+          delay_seconds: event.delay_seconds,
+          error: event.error,
+          request_bytes: event.request_bytes
+        )
+      when "Kward::Events::Steering"
+        transcript_event("turn_steered", input: event.input, created_at: event.created_at)
+      when "Kward::Events::ToolCall"
+        transcript_event("tool_call", tool_call: event.tool_call)
+      when "Kward::Events::ToolResult"
+        transcript_event("tool_result", tool_call: event.tool_call, content: event.content)
+      when "Kward::Events::Answer"
+        transcript_event("answer", content: event.content)
+      end
+    end
+
+    def transcript_event(type, payload)
+      TranscriptEvent.new(
+        type: type,
+        payload: PluginRegistry.deep_freeze(PluginRegistry.deep_dup(payload))
+      ).freeze
     end
   end
 

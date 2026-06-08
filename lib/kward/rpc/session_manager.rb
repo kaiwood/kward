@@ -758,7 +758,10 @@ module Kward
           run_plugin_turn(rpc_session, turn)
         else
           rpc_session.agent.ask(turn.input, cancellation: turn.cancellation, steering: turn.steering) do |event|
-            handle_agent_event(turn, event) unless turn.cancel_requested
+            next if turn.cancel_requested
+
+            notify_plugin_transcript_event(rpc_session, event)
+            handle_agent_event(turn, event)
           end
           finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
         end
@@ -804,6 +807,18 @@ module Kward
           emit_turn_event(turn, "answer", { content: answer })
         end
         finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
+      end
+
+      def notify_plugin_transcript_event(rpc_session, event)
+        return if plugin_registry.transcript_event_handlers.empty?
+
+        context = PluginRegistry::Context.new(
+          conversation: rpc_session.conversation,
+          session: rpc_session.session,
+          workspace_root: rpc_session.workspace_root,
+          say_callback: lambda { |message| rpc_session.plugin_output << message.to_s }
+        )
+        plugin_registry.notify_transcript_event(event, context)
       end
 
       def handle_agent_event(turn, event)

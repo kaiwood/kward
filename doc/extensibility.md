@@ -126,7 +126,8 @@ $ARGUMENTS
 - `~/.kward/plugins/*.rb`: trusted top-level Ruby plugin files loaded from the user plugin directory only. Kward does not load plugins from the project/workspace directory or from a `KWARD_CONFIG_PATH` directory. If a custom config directory has a legacy `plugins` folder, Kward warns and ignores it. Plugins execute as local Ruby code in the Kward process, so install only plugins you trust.
 - Plugins can register slash commands and one custom footer renderer. Built-in commands and prompt-template commands are reserved.
 - Plugin slash commands are available in interactive slash completion and through RPC `commands/list`. RPC clients can execute plugin commands with `commands/run`.
-- Plugin command and footer contexts expose read-only transcript access through `ctx.transcript.messages`, plus session metadata and `ctx.say` for command output.
+- Plugin command, footer, and transcript-event contexts expose read-only transcript access through `ctx.transcript.messages`, plus session metadata and `ctx.say` for command output.
+- Plugins can observe live TUI transcript stream events with `plugin.on_transcript_event`. Handlers receive a read-only event with `event.type` and `event.payload`, plus the usual plugin context. Event types include `reasoning_delta`, `assistant_delta`, `assistant_message`, `model_retry`, `turn_steered`, `tool_call`, `tool_result`, and `answer`.
 
 Example plugin:
 
@@ -138,6 +139,14 @@ Kward.plugin do |plugin|
 
   plugin.footer do |ctx|
     "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
+  end
+
+  plugin.on_transcript_event do |event, ctx|
+    next unless event.type == "assistant_delta"
+
+    File.open(File.join(ctx.workspace_root, ".assistant-stream.log"), "a") do |file|
+      file.write(event.payload[:delta])
+    end
   end
 end
 ```
