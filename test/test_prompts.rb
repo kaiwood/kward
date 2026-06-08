@@ -114,7 +114,11 @@ class TestPrompts < KwardTestCase
         }))
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+          content = Kward::Conversation.new(
+            workspace_root: workspace,
+            model: "gpt-test",
+            reasoning_effort: "low"
+          ).messages.first[:content]
 
           assert_includes content, "Default persona."
           assert_includes content, "Workspace persona."
