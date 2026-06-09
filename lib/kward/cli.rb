@@ -48,6 +48,7 @@ module Kward
       { name: "compact", description: "Compact the current conversation context.", argument_hint: "[instructions]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
       { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
+      { name: "login", description: "Log in with an OAuth provider.", argument_hint: "" },
       { name: "model", description: "Select the default model.", argument_hint: "" },
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
@@ -384,6 +385,9 @@ module Kward
       when "settings"
         configure_settings
         [true, nil]
+      when "login"
+        login_interactively
+        [true, nil]
       when "model"
         configure_model(agent.conversation)
         [true, nil]
@@ -539,6 +543,22 @@ module Kward
       @prompt.say("\nSettings error: #{e.message}\n")
     end
 
+    def login_interactively
+      unless login_picker_available?
+        @prompt.say("\nLogin provider picker is unavailable in this prompt.\n")
+        return
+      end
+
+      selected = @prompt.select("OAuth provider", login_provider_choices, title: "Login")
+      provider = selected_login_provider(selected)
+      return unless provider
+
+      login(provider: provider)
+      reload_client_config
+    rescue StandardError => e
+      @prompt.say("\nLogin error: #{e.message}\n")
+    end
+
     def configure_model(conversation = nil)
       unless model_overlay_available?
         @prompt.say("\nModel overlay is unavailable in this prompt.\n")
@@ -580,6 +600,23 @@ module Kward
       @prompt.redraw if @prompt.respond_to?(:redraw)
     rescue StandardError => e
       @prompt.say("\nReasoning error: #{e.message}\n")
+    end
+
+    def login_picker_available?
+      @prompt.respond_to?(:select)
+    end
+
+    def login_provider_choices
+      ["OpenAI", "GitHub"]
+    end
+
+    def selected_login_provider(selected)
+      case selected.to_s.downcase
+      when /\Aopenai\b/
+        "openai"
+      when /\Agithub\b/
+        "github"
+      end
     end
 
     def model_overlay_available?

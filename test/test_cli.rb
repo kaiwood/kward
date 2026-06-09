@@ -39,6 +39,23 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class RecordingLoginCLI < Kward::CLI
+    attr_reader :login_providers
+
+    def initialize(*args, fail_login: false, **kwargs)
+      super(*args, **kwargs)
+      @fail_login = fail_login
+      @login_providers = []
+    end
+
+    def login(provider: nil, oauth: nil)
+      raise "OAuth timed out" if @fail_login
+
+      @login_providers << provider
+      @prompt.say("Saved #{provider} OAuth login")
+    end
+  end
+
   class BusyPrompt < FakePrompt
     attr_reader :events, :write_deltas
 
@@ -1216,6 +1233,50 @@ class TestCLI < KwardTestCase
   ensure
     writer_thread&.join
     input&.close unless input&.closed?
+  end
+
+  def test_login_is_builtin_slash_command
+    assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "login"
+  end
+
+  def test_login_slash_command_selects_openai_provider_without_calling_client
+    prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["OpenAI"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_equal ["openai"], cli.login_providers
+    assert_equal ["OpenAI", "GitHub"], prompt.select_choices.first
+    assert_equal "Login", prompt.select_titles.first
+    assert_empty client.seen_messages
+  end
+
+  def test_login_slash_command_selects_github_provider_without_calling_client
+    prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["GitHub"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    assert_equal ["github"], cli.login_providers
+    assert_empty client.seen_messages
+  end
+
+  def test_login_slash_command_reports_failure_and_continues_session
+    prompt = FakeSettingsPrompt.new(["/login", "/status", "/exit"], ["OpenAI"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, fail_login: true)
+
+    cli.interactive_loop(agent: agent)
+
+    output = prompt.output.join("\n")
+    assert_includes output, "Login error: OAuth timed out"
+    assert_includes output, Kward::CLI::STATUS_MESSAGE
+    assert_empty client.seen_messages
   end
 
   def test_status_slash_command_prints_static_status_without_calling_client
