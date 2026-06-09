@@ -286,7 +286,7 @@ module Kward
       if provider == "Codex"
         codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       elsif provider == "Copilot" && copilot_responses_model?(model)
-        copilot_responses_payload(messages, tools, max_tokens: max_tokens, model: model)
+        copilot_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       else
         request_payload(provider, messages, tools, max_tokens: max_tokens, model: model)
       end
@@ -353,7 +353,7 @@ module Kward
       id.to_s.strip unless id.to_s.strip.empty?
     end
 
-    def copilot_responses_payload(messages, tools, max_tokens: nil, model: nil)
+    def copilot_responses_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       parts = build_context_parts("CopilotResponses", messages, tools, model: model)
       payload = {
         model: parts[:model],
@@ -363,6 +363,7 @@ module Kward
         stream: true,
         store: false
       }
+      payload[:reasoning] = { effort: reasoning_effort, summary: "auto" } unless reasoning == false
       payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end

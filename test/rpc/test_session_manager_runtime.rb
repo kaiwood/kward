@@ -41,6 +41,41 @@ class TestRPCSessionManagerRuntime < KwardTestCase
     end
   end
 
+  def test_runtime_state_reports_reasoning_for_copilot_gpt_5_responses_models
+    Dir.mktmpdir do |config_dir|
+      client = FakeClient.new([])
+      client.provider = "Copilot"
+      client.model = "gpt-5-mini"
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd, name: "Work")
+
+      state = manager.runtime_state(session_id: session[:id])
+
+      assert_equal "Copilot", state[:model][:provider]
+      assert_equal "gpt-5-mini", state[:model][:id]
+      assert_equal true, state[:model][:reasoning]
+      assert_equal "medium", state[:model][:reasoningEffort]
+      assert_equal "medium", state[:thinkingLevel]
+    end
+  end
+
+  def test_runtime_state_keeps_reasoning_unavailable_for_copilot_chat_models
+    Dir.mktmpdir do |config_dir|
+      client = FakeClient.new([])
+      client.provider = "Copilot"
+      client.model = "gemini-2.5-pro"
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd, name: "Work")
+
+      state = manager.runtime_state(session_id: session[:id])
+
+      assert_equal "Copilot", state[:model][:provider]
+      assert_equal "gemini-2.5-pro", state[:model][:id]
+      assert_equal false, state[:model][:reasoning]
+      refute state[:model].key?(:reasoningEffort)
+    end
+  end
+
   def test_runtime_stats_counts_messages_and_tool_activity
     Dir.mktmpdir do |config_dir|
       context_usage = StaticContextUsage.new(tokens: 50)

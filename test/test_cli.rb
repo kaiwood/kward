@@ -1452,6 +1452,24 @@ class TestCLI < KwardTestCase
     assert_equal "Codex fake-model · medium", cli.send(:composer_status_text)
   end
 
+  def test_composer_status_shows_reasoning_for_copilot_gpt_5_responses_models
+    client = FakeClient.new([])
+    client.provider = "Copilot"
+    client.model = "gpt-5-mini"
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client)
+
+    assert_equal "Copilot gpt-5-mini · medium", cli.send(:composer_status_text)
+  end
+
+  def test_composer_status_keeps_reasoning_unavailable_for_copilot_chat_models
+    client = FakeClient.new([])
+    client.provider = "Copilot"
+    client.model = "gemini-2.5-pro"
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client)
+
+    assert_equal "Copilot gemini-2.5-pro · n/a", cli.send(:composer_status_text)
+  end
+
   def test_composer_status_shows_session_diff_before_context_percentage
     context_usage = Object.new
     def context_usage.call(**_kwargs)

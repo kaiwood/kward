@@ -307,9 +307,8 @@ module Kward
       def current_model
         provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
         model = @client.respond_to?(:current_model) ? @client.current_model : nil
-        reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
         context_window = @client.respond_to?(:current_context_window) ? @client.current_context_window : nil
-        normalize_model(provider: provider, id: model, model: model, reasoningEffort: reasoning, contextWindow: context_window, current: true)
+        normalize_model(provider: provider, id: model, model: model, contextWindow: context_window, current: true)
       end
 
       def in_flight_steer_supported?

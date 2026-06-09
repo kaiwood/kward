@@ -124,11 +124,15 @@ module Kward
       IMAGE_UNSUPPORTED_MODELS.none? { |pattern| id.to_s.match?(pattern) }
     end
 
+    def reasoning_supported?(provider, id)
+      provider == "Codex" || (provider == "Copilot" && id.to_s.match?(/\Agpt-5(?:\.|-|\z)/))
+    end
+
     def normalize(model, current_provider: nil, current_model: nil, current_reasoning_effort: nil)
       model = stringify_keys(model || {})
       provider = model["provider"]
       id = model["id"] || model["model"]
-      reasoning = boolean_value(model["reasoning"], default: provider == "Codex")
+      reasoning = boolean_value(model["reasoning"], default: reasoning_supported?(provider, id))
       reasoning_effort = model["reasoningEffort"] || model["reasoning_effort"] || (current_reasoning_effort if reasoning)
       {
         provider: provider,

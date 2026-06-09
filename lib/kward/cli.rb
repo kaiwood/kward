@@ -1263,7 +1263,7 @@ module Kward
       provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
       model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
       reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
-      reasoning = "n/a" if provider != "Codex" || reasoning.to_s.empty?
+      reasoning = "n/a" unless ModelInfo.reasoning_supported?(provider, model) && !reasoning.to_s.empty?
       text = "#{provider} #{model} · #{reasoning}"
       parts = []
       diff = composer_session_diff_text

@@ -176,8 +176,25 @@ class TestClient < KwardTestCase
         assert_equal "gpt-5-mini", payload.fetch("model")
         assert_equal true, payload.fetch("stream")
         assert_equal false, payload.fetch("store")
+        assert_equal({ "effort" => "medium", "summary" => "auto" }, payload.fetch("reasoning"))
       end
     end
+  end
+
+  def test_copilot_responses_payload_omits_reasoning_when_disabled
+    client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: "missing_kward_config.json")
+
+    payload = client.send(:request_body_payload, "Copilot", [{ role: "user", content: "hello" }], [], model: "gpt-5-mini", reasoning: false)
+
+    refute payload.key?(:reasoning)
+  end
+
+  def test_copilot_chat_payload_does_not_include_reasoning_for_gemini_models
+    client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: "missing_kward_config.json")
+
+    payload = client.send(:request_body_payload, "Copilot", [{ role: "user", content: "hello" }], [], model: "gemini-2.5-pro")
+
+    refute payload.key?(:reasoning)
   end
 
   def test_copilot_chat_uses_first_live_model_when_configured_model_is_unavailable
