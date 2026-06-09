@@ -7,13 +7,15 @@ Example `~/.kward/config.json`:
 ```json
 {
   "openai_oauth_client_id": "your-client-id",
+  "github_oauth_client_id": "your-github-client-id",
   "openai_model": "gpt-5.5",
   "openai_reasoning_effort": "medium",
-  "openrouter_model": "openai/gpt-5.5"
+  "openrouter_model": "openai/gpt-5.5",
+  "copilot_model": "gemini-3-flash-preview"
 }
 ```
 
-You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level.
+You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level. Set `provider` to `copilot` to select the GitHub Copilot provider.
 
 Overlay settings are stored under `overlay`:
 
@@ -30,12 +32,13 @@ Overlay settings are stored under `overlay`:
 
 ## Environment fallback
 
-- Optional model env fallback: `OPENAI_ACCESS_TOKEN` or `OPENROUTER_API_KEY`.
+- Optional model env fallback: `OPENAI_ACCESS_TOKEN`, `OPENROUTER_API_KEY`, or `COPILOT_GITHUB_TOKEN`.
+- Optional provider/model overrides: `KWARD_PROVIDER`, `OPENAI_MODEL`, `OPENROUTER_MODEL`, or `COPILOT_MODEL`.
 - Optional web search env fallback: `EXA_API_KEY`, `PERPLEXITY_API_KEY`, or `GEMINI_API_KEY`.
 
 OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. `OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists.
 
-Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, or the config file values above.
+Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`, Copilot `gemini-3-flash-preview`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, `COPILOT_MODEL`, or the config file values above.
 
 ## Pan mode
 

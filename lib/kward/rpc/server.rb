@@ -303,7 +303,8 @@ module Kward
             supported: true,
             providerFormat: "tauren-auth-v1",
             methods: ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"],
-            oauthProviders: ["openai"],
+            oauthProviders: ["openai", "github"],
+            unsupportedOAuthProviders: { github: "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet." },
             apiKeyProviders: ["openrouter"],
             logout: true
           },

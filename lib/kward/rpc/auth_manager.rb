@@ -1,6 +1,7 @@
 require "securerandom"
 require "thread"
 require_relative "../client"
+require_relative "../github_oauth"
 require_relative "../openai_oauth"
 require_relative "config_manager"
 
@@ -9,9 +10,10 @@ module Kward
     class AuthManager
       Login = Struct.new(:id, :oauth, :pkce, :state, :server, :redirect_uri, :status, :error, :thread, keyword_init: true)
 
-      def initialize(server:, oauth_factory: -> { OpenAIOAuth.new }, config_manager: ConfigManager.new)
+      def initialize(server:, oauth_factory: -> { OpenAIOAuth.new }, github_oauth_factory: -> { GithubOAuth.new }, config_manager: ConfigManager.new)
         @server = server
         @oauth_factory = oauth_factory
+        @github_oauth_factory = github_oauth_factory
         @config_manager = config_manager
         @logins = {}
         @mutex = Mutex.new
@@ -24,14 +26,15 @@ module Kward
           openaiOAuth: oauth.logged_in?,
           openaiAccountId: oauth.respond_to?(:account_id) ? oauth.account_id : nil,
           openrouterApiKey: !ENV["OPENROUTER_API_KEY"].to_s.empty? || !config["openrouter_api_key"].to_s.empty?,
-          openaiAccessToken: !ENV["OPENAI_ACCESS_TOKEN"].to_s.empty?
+          openaiAccessToken: !ENV["OPENAI_ACCESS_TOKEN"].to_s.empty?,
+          githubOAuth: @github_oauth_factory.call.logged_in?
         }
       rescue StandardError => e
         { openaiOAuth: false, error: e.message }
       end
 
       def providers
-        { providers: [openai_provider, openrouter_provider] }
+        { providers: [openai_provider, openrouter_provider, github_provider] }
       end
 
       def login_with_api_key(provider_id:, api_key:)
@@ -56,9 +59,14 @@ module Kward
 
       def login_with_oauth(provider_id:, timeout_seconds: 120)
         provider_id = provider_id.to_s
-        raise "Unsupported OAuth provider: #{provider_id}" unless provider_id == "openai"
-
-        start_openai_login(timeout_seconds: timeout_seconds)
+        case provider_id
+        when "openai"
+          start_openai_login(timeout_seconds: timeout_seconds)
+        when "github"
+          raise "GitHub OAuth is supported in the CLI with `ruby lib/main.rb login github`, but RPC browser login is not implemented yet."
+        else
+          raise "Unsupported OAuth provider: #{provider_id}"
+        end
       end
 
       def start_openai_login(timeout_seconds: 120)
@@ -154,10 +162,44 @@ module Kward
         provider
       end
 
+      def github_provider
+        oauth = @github_oauth_factory.call
+        env_configured = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].any? { |key| !ENV[key].to_s.empty? }
+        stored_configured = oauth.logged_in? && !env_configured
+        provider = {
+          id: "github",
+          name: "GitHub",
+          authType: "oauth",
+          configured: env_configured || stored_configured,
+          storedCredentialType: "oauth",
+          canLogout: stored_configured,
+          usesCallbackServer: false,
+          supported: false,
+          reason: "GitHub OAuth is available in the CLI for Copilot scaffolding; RPC login is not implemented yet."
+        }
+        provider[:source] = env_configured ? "environment" : "stored" if provider[:configured]
+        provider[:label] = provider[:configured] ? "Signed in" : "Not signed in"
+        provider
+      rescue StandardError
+        {
+          id: "github",
+          name: "GitHub",
+          authType: "oauth",
+          configured: false,
+          label: "Not signed in",
+          storedCredentialType: "oauth",
+          canLogout: false,
+          usesCallbackServer: false,
+          supported: false,
+          reason: "GitHub OAuth status unavailable."
+        }
+      end
+
       def provider_name(provider_id)
         case provider_id
         when "openrouter" then "OpenRouter"
         when "openai" then "OpenAI"
+        when "github" then "GitHub"
         else provider_id
         end
       end

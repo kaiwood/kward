@@ -4,9 +4,11 @@ module Kward
   module ModelInfo
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
     DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
+    DEFAULT_COPILOT_MODEL = "gemini-3-flash-preview"
     DEFAULT_REASONING_EFFORT = "medium"
     OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     OPENROUTER_MODEL_CHOICES = OPENAI_MODEL_CHOICES.map { |model| "openai/#{model}" }.freeze
+    COPILOT_MODEL_CHOICES = %w[gemini-3-flash-preview gemini-2.5-pro grok-code-fast-1].freeze
     REASONING_EFFORT_CHOICES = [
       ["low", "Low"],
       ["medium", "Medium"],
@@ -38,8 +40,11 @@ module Kward
     def model_for(provider, config:, override_model: nil, env: ENV)
       return override_model if override_model
 
-      if provider == "OpenRouter"
+      case provider
+      when "OpenRouter"
         env["OPENROUTER_MODEL"] || ConfigFiles.config_value(config, "openrouter_model", "model") || DEFAULT_OPENROUTER_MODEL
+      when "Copilot"
+        env["COPILOT_MODEL"] || ConfigFiles.config_value(config, "copilot_model", "model") || DEFAULT_COPILOT_MODEL
       else
         env["OPENAI_MODEL"] || ConfigFiles.config_value(config, "openai_model", "model") || DEFAULT_OPENAI_MODEL
       end
@@ -50,7 +55,11 @@ module Kward
     end
 
     def config_key_for_provider(provider)
-      provider.to_s == "OpenRouter" ? "openrouter_model" : "openai_model"
+      case provider.to_s
+      when "OpenRouter" then "openrouter_model"
+      when "Copilot" then "copilot_model"
+      else "openai_model"
+      end
     end
 
     def context_window(provider, id)

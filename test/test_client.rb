@@ -121,7 +121,7 @@ class TestClient < KwardTestCase
     end
   end
 
-  def test_available_models_include_openai_and_openrouter_picker_choices
+  def test_available_models_include_openai_openrouter_and_copilot_picker_choices
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
     models = client.available_models
@@ -131,6 +131,7 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Codex", id: "gpt-5.4-mini", current: false }
     assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
     assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+    assert_includes models, { provider: "Copilot", id: "gemini-3-flash-preview", current: false }
   end
 
   def test_openrouter_defaults_to_openai_gpt_5_5
@@ -168,6 +169,25 @@ class TestClient < KwardTestCase
     assert_equal Kward::Client::OPENROUTER_URL, url
     assert_equal "openrouter-token", token
     assert_equal "OpenRouter", provider
+  end
+
+  def test_copilot_provider_is_explicit_and_uses_copilot_chat_endpoint
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot"))
+      github_oauth = Object.new
+      github_oauth.define_singleton_method(:access_token) { "github-token" }
+      github_oauth.define_singleton_method(:base_url) { "https://api.individual.githubcopilot.com" }
+      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: "openai-token", oauth: FakeOAuth.new("oauth-token"), github_oauth: github_oauth, config_path: path)
+
+      url, token, provider = client.send(:credentials)
+
+      assert_equal URI("https://api.individual.githubcopilot.com/chat/completions"), url
+      assert_equal "github-token", token
+      assert_equal "Copilot", provider
+      assert_equal "Copilot", client.current_provider
+      assert_equal "gemini-3-flash-preview", client.current_model
+    end
   end
 
   def test_in_flight_steer_supported_for_codex_provider

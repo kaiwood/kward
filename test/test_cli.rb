@@ -135,6 +135,17 @@ class TestCLI < KwardTestCase
     assert_includes output, "`\e[2mbundle test\e[0m`"
   end
 
+  def test_login_github_uses_github_oauth_label
+    prompt = FakePrompt.new([])
+    oauth = Object.new
+    oauth.define_singleton_method(:login) { |prompt:| "/tmp/github_auth.json" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.login(provider: "github", oauth: oauth)
+
+    assert_includes prompt.output.join, "GitHub OAuth login to /tmp/github_auth.json"
+  end
+
   def test_streamed_interactive_turn_renders_markdown_after_buffering
     prompt = FakePrompt.new([])
     client = MarkdownStreamingClient.new(["# Pla", "n\n```ruby\n", "puts :ok\n```\n"])

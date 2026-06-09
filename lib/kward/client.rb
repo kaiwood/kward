@@ -4,6 +4,7 @@ require "uri"
 require_relative "cancellation"
 require_relative "config_files"
 require_relative "context_overflow"
+require_relative "github_oauth"
 require_relative "image_attachments"
 require_relative "model_info"
 require_relative "openai_oauth"
@@ -14,6 +15,7 @@ module Kward
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
+    COPILOT_UNSUPPORTED_ERROR = "GitHub Copilot direct HTTPS inference is unavailable. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
     DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
@@ -61,10 +63,11 @@ module Kward
     end
     TRANSIENT_NETWORK_ERRORS = [IOError, EOFError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout].freeze
 
-    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
+    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, github_oauth: GithubOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
       @openrouter_api_key = presence(api_key)
       @openai_access_token = presence(openai_access_token)
       @oauth = oauth
+      @github_oauth = github_oauth
       @model = model
       @config_path = File.expand_path(config_path)
       @config = load_config
@@ -77,6 +80,7 @@ module Kward
       raise AUTH_ERROR if token.nil? || token.empty?
 
       current_model = model_for(provider, override_model: model)
+
       validate_image_support!(provider, current_model, messages)
       request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning) : request_payload(provider, messages, tools, max_tokens: max_tokens, model: model))
       with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
@@ -87,6 +91,12 @@ module Kward
         begin
         if provider == "Codex"
           message = codex_chat(url, token, account_id, messages, tools, request_body: request_body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens)
+          message = attach_response_metadata(message, provider: provider, model: current_model)
+          next message
+        end
+
+        if provider == "Copilot"
+          message = copilot_chat(url, token, messages, tools, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
           message = attach_response_metadata(message, provider: provider, model: current_model)
           next message
         end
@@ -135,6 +145,8 @@ module Kward
       _url, _token, provider = credentials
       provider
     rescue StandardError
+      return "Copilot" if configured_provider == "copilot"
+
       openai_configured? ? "Codex" : "OpenRouter"
     end
 
@@ -154,14 +166,19 @@ module Kward
       provider = current_provider
       openai_model = model_for("Codex")
       openrouter_model = model_for("OpenRouter")
+      copilot_model = model_for("Copilot")
       models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
         { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
       end
       models += ModelInfo::OPENROUTER_MODEL_CHOICES.map do |id|
         { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
       end
+      models += ModelInfo::COPILOT_MODEL_CHOICES.map do |id|
+        { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
+      end
       models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
       models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless ModelInfo::OPENROUTER_MODEL_CHOICES.include?(openrouter_model)
+      models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless ModelInfo::COPILOT_MODEL_CHOICES.include?(copilot_model)
       models
     end
 
@@ -256,6 +273,95 @@ module Kward
 
         sleep([remaining, 0.1].min)
       end
+    end
+
+    def copilot_chat(url, token, messages, tools, request_body: nil, on_assistant_delta: nil, cancellation: nil)
+      request = Net::HTTP::Post.new(url)
+      request["Authorization"] = "Bearer #{token}"
+      request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
+      copilot_headers(messages).each { |key, value| request[key] = value }
+      request.body = request_body || JSON.dump(request_payload("Copilot", messages, tools))
+
+      response = Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request)
+      end
+      cancellation&.raise_if_cancelled!
+
+      unless response.is_a?(Net::HTTPSuccess)
+        raise RequestError.new(provider: "Copilot", code: response.code, body: redact(response.body, token))
+      end
+
+      parse_openai_chat_sse(response.body.to_s, on_assistant_delta: on_assistant_delta)
+    end
+
+    def parse_openai_chat_sse(body, on_assistant_delta: nil)
+      content = +""
+      tool_calls = []
+      usage = nil
+      body.split(/\r?\n\r?\n/).each do |block|
+        data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
+        next if data.empty? || data == "[DONE]"
+
+        event = JSON.parse(data)
+        usage ||= normalized_usage(event["usage"])
+        choice = Array(event["choices"]).first || {}
+        delta = choice["delta"] || {}
+        if delta["content"]
+          text = delta["content"].to_s
+          content << text
+          on_assistant_delta&.call(text)
+        end
+        Array(delta["tool_calls"]).each do |tool_call|
+          merge_streaming_tool_call(tool_calls, tool_call)
+        end
+        message = choice["message"] || {}
+        content << message["content"].to_s if content.empty? && message["content"]
+        Array(message["tool_calls"]).each { |tool_call| merge_streaming_tool_call(tool_calls, tool_call) }
+      end
+      result = { "role" => "assistant", "content" => content }
+      result["tool_calls"] = finalized_streaming_tool_calls(tool_calls) unless tool_calls.empty?
+      result["usage"] = usage if usage
+      result
+    rescue JSON::ParserError => e
+      raise "Copilot returned invalid SSE JSON: #{e.message}"
+    end
+
+    def merge_streaming_tool_call(tool_calls, delta)
+      index = (delta["index"] || tool_calls.length).to_i
+      tool_calls[index] ||= { "id" => nil, "type" => "function", "function" => { "name" => "", "arguments" => "" } }
+      current = tool_calls[index]
+      current["id"] = delta["id"] if delta["id"]
+      current["type"] = delta["type"] if delta["type"]
+      function = delta["function"] || {}
+      current["function"]["name"] << function["name"].to_s if function["name"]
+      current["function"]["arguments"] << function["arguments"].to_s if function["arguments"]
+    end
+
+    def finalized_streaming_tool_calls(tool_calls)
+      tool_calls.compact.each_with_index.map do |tool_call, index|
+        tool_call["id"] ||= "call_#{index}"
+        tool_call["type"] ||= "function"
+        tool_call["function"] ||= { "name" => "", "arguments" => "{}" }
+        tool_call["function"]["arguments"] = "{}" if tool_call["function"]["arguments"].to_s.empty?
+        tool_call
+      end
+    end
+
+    def copilot_headers(messages)
+      headers = GithubOAuth::COPILOT_HEADERS.dup
+      headers["X-Initiator"] = copilot_initiator(messages)
+      headers["Openai-Intent"] = "conversation-edits"
+      headers["Copilot-Vision-Request"] = "true" if messages_include_images?(messages)
+      headers
+    end
+
+    def copilot_initiator(messages)
+      last = messages.last || {}
+      role = last[:role] || last["role"]
+      role.to_s == "user" ? "user" : "agent"
     end
 
     def codex_chat(url, token, account_id, messages, tools, request_body: nil, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
@@ -493,6 +599,10 @@ module Kward
     end
 
     def credentials
+      if configured_provider == "copilot"
+        return [copilot_chat_url, github_access_token, "Copilot", nil]
+      end
+
       openai_token = @openai_access_token || @oauth.access_token
       if openai_token
         [CODEX_URL, openai_token, "Codex", @oauth.respond_to?(:account_id) ? @oauth.account_id : nil]
@@ -703,6 +813,20 @@ module Kward
 
     def openrouter_api_key
       @openrouter_api_key || config_value("openrouter_api_key")
+    end
+
+    def github_access_token
+      @github_oauth.access_token
+    end
+
+    def copilot_chat_url
+      URI("#{@github_oauth.base_url}/chat/completions")
+    end
+
+    def configured_provider
+      value = ENV["KWARD_PROVIDER"].to_s.strip
+      value = config_value("provider") if value.empty?
+      value.to_s.downcase
     end
 
     def config_value(*keys)

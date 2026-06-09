@@ -10,6 +10,7 @@ require_relative "config_files"
 require_relative "context_usage"
 require_relative "crew_reporter"
 require_relative "events"
+require_relative "github_oauth"
 require_relative "image_attachments"
 require_relative "markdown_transcript"
 require_relative "model_info"
@@ -86,8 +87,8 @@ module Kward
         return
       end
 
-      if ["login", "--login"].include?(@argv.first) && @argv.length == 1
-        login
+      if ["login", "--login"].include?(@argv.first) && @argv.length <= 2
+        login(provider: @argv[1])
         return
       end
 
@@ -145,9 +146,12 @@ module Kward
       assistant_streamed ? "" : render_markdown_transcript(answer)
     end
 
-    def login(oauth: OpenAIOAuth.new)
+    def login(provider: nil, oauth: nil)
+      provider = provider.to_s.downcase
+      oauth ||= provider == "github" ? GithubOAuth.new : OpenAIOAuth.new
       path = oauth.login(prompt: @prompt)
-      @prompt.say("#{colored("Saved", :green, :bold)} OpenAI OAuth login to #{path}")
+      name = provider == "github" ? "GitHub" : "OpenAI"
+      @prompt.say("#{colored("Saved", :green, :bold)} #{name} OAuth login to #{path}")
     end
 
     def interactive_loop(agent: nil)
@@ -623,7 +627,7 @@ module Kward
       return [known[:provider], known[:id]] if known
 
       provider, model = text.split(/\s+/, 2)
-      if ["Codex", "OpenRouter"].include?(provider) && !model.to_s.strip.empty?
+      if ["Codex", "OpenRouter", "Copilot"].include?(provider) && !model.to_s.strip.empty?
         [provider, model.strip]
       else
         [current_model_provider, text]
