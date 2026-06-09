@@ -77,20 +77,13 @@ module KwardRPCTestSupport
   end
 
   class SteeringClient
-    attr_reader :steered_inputs
-
-    def initialize
-      @steered_inputs = []
-    end
-
     def supports_in_flight_steer?
       true
     end
 
     def chat(_messages, tools: [], on_assistant_delta: nil, steering: nil)
       on_assistant_delta&.call("before")
-      event = steering.wait(timeout: 1)
-      @steered_inputs << event.input if event
+      steering.wait(timeout: 1)
       on_assistant_delta&.call("after")
       { "role" => "assistant", "content" => "beforeafter" }
     end

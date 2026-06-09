@@ -17,7 +17,9 @@ module Kward
       return unless block
 
       @mutex.synchronize { @listeners << block }
-      nil
+      lambda do
+        @mutex.synchronize { @listeners.delete(block) }
+      end
     end
 
     def submit(input)

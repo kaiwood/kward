@@ -1333,7 +1333,7 @@ module Kward
         sleep 0.01
       end
       worker.join
-      drain_busy_input(queued_inputs, steering)
+      drain_busy_input(queued_inputs, nil)
       drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
       raise error if error
 
@@ -1423,8 +1423,13 @@ module Kward
       case poll_result
       when String
         if steering && !poll_result.strip.empty?
-          steering.submit(poll_result)
-          @prompt.set_steered_count(1) if @prompt.respond_to?(:set_steered_count)
+          begin
+            steering.submit(poll_result)
+            @prompt.set_steered_count(1) if @prompt.respond_to?(:set_steered_count)
+          rescue StandardError
+            queued_inputs << poll_result
+            @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+          end
         else
           queued_inputs << poll_result unless poll_result.strip.empty?
           @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)

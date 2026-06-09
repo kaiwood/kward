@@ -47,6 +47,32 @@ class TestAgent < KwardTestCase
     end
   end
 
+  class SteeringContinuationClient
+    attr_reader :seen_messages
+
+    def initialize
+      @seen_messages = []
+      @first_call_started = Queue.new
+    end
+
+    def wait_for_first_call
+      @first_call_started.pop
+    end
+
+    def chat(messages, tools: [], on_assistant_delta: nil, steering: nil, **_kwargs)
+      @seen_messages << messages.map(&:dup)
+      if @seen_messages.length == 1
+        @first_call_started << true
+        on_assistant_delta&.call("initial")
+        sleep 0.08
+        return { "role" => "assistant", "content" => "initial" }
+      end
+
+      on_assistant_delta&.call("continued")
+      { "role" => "assistant", "content" => "continued" }
+    end
+  end
+
   def test_context_overflow_compacts_and_retries_once
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -79,6 +105,29 @@ class TestAgent < KwardTestCase
       agent.ask("hello")
     end
     assert_equal 1, client.calls
+  end
+
+  def test_agent_persists_steering_and_continues_same_turn
+    client = SteeringContinuationClient.new
+    conversation = Kward::Conversation.new(system_message: nil)
+    steering = Kward::Steering.new
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new, conversation: conversation)
+    events = []
+
+    worker = Thread.new do
+      agent.ask("first", steering: steering) { |event| events << event }
+    end
+    client.wait_for_first_call
+    steering.submit("steer one")
+    steering.submit("steer two")
+    answer = worker.value
+
+    assert_equal "continued", answer
+    assert_equal 2, client.seen_messages.length
+    assert_equal ["first", "steer one", "steer two"], conversation.messages.select { |message| message[:role] == "user" }.map { |message| message[:content] }
+    assert_equal ["first"], client.seen_messages.first.map { |message| message[:content] || message["content"] }
+    assert_equal ["first", "initial", "steer one", "steer two"], client.seen_messages.last.map { |message| message[:content] || message["content"] }
+    assert_equal ["steer one", "steer two"], events.grep(Kward::Events::Steering).map(&:input)
   end
 
   def test_agent_logs_tool_metadata_without_arguments_or_output

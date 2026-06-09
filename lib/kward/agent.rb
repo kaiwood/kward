@@ -38,6 +38,9 @@ module Kward
 
     def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil)
       overflow_retried = false
+      steering_state = build_steering_state(steering) do |event|
+        yield event if block_given?
+      end
       loop do
         cancellation&.raise_if_cancelled!
         begin
@@ -53,9 +56,12 @@ module Kward
         end
         yield Events::AssistantMessage.new(message: message) if block_given?
         @conversation.append_assistant(message)
+        steered_after_message = append_steering_events(steering_state)
 
         tool_calls = message["tool_calls"] || message[:tool_calls] || []
         if tool_calls.empty?
+          next if steered_after_message.positive?
+
           answer = safe_answer(message.fetch("content", message[:content] || ""))
           yield Events::Answer.new(content: answer) if block_given?
           return answer
@@ -80,10 +86,37 @@ module Kward
           cancellation&.raise_if_cancelled!
           yield Events::ToolResult.new(tool_call: tool_call, content: content) if block_given?
         end
+        append_steering_events(steering_state)
       end
+    ensure
+      steering_state&.fetch(:unsubscribe)&.call
     end
 
     private
+
+    def build_steering_state(steering)
+      return nil unless steering
+
+      state = { events: [], appended: 0, mutex: Mutex.new, unsubscribe: nil }
+      state[:unsubscribe] = steering.on_submit do |steering_event|
+        state[:mutex].synchronize { state[:events] << steering_event }
+        yield Events::Steering.new(input: steering_event.input, created_at: steering_event.created_at)
+      end
+      state
+    end
+
+    def append_steering_events(state)
+      return 0 unless state
+
+      events = state[:mutex].synchronize do
+        state[:events][state[:appended]..] || []
+      end
+      events.each do |event|
+        @conversation.append_user(event.input)
+      end
+      state[:mutex].synchronize { state[:appended] += events.length }
+      events.length
+    end
 
     def log_turn(duration_ms:, status:, error:)
       payload = { "duration_ms" => duration_ms, "status" => status }
@@ -149,9 +182,6 @@ module Kward
         event = Events::Retry.new(**retry_info)
         on_retry&.call(event)
         yield event if block_given?
-      end
-      steering&.on_submit do |steering_event|
-        yield Events::Steering.new(input: steering_event.input, created_at: steering_event.created_at) if block_given?
       end
       ChatInvocation.call(
         @client,

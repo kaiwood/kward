@@ -71,7 +71,7 @@ module Kward
       @telemetry_logger = telemetry_logger
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, max_tokens: nil, model: nil, reasoning: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, model: nil, reasoning: nil)
       cancellation&.raise_if_cancelled!
       url, token, provider, account_id = credentials
       raise AUTH_ERROR if token.nil? || token.empty?
@@ -170,6 +170,8 @@ module Kward
     end
 
     def supports_in_flight_steer?
+      current_provider == "Codex"
+    rescue StandardError
       false
     end
 

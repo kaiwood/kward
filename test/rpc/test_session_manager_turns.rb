@@ -100,7 +100,6 @@ class TestRPCSessionManagerTurns < KwardTestCase
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
 
       assert_equal turn[:id], steered[:id]
-      assert_equal ["steer me"], client.steered_inputs
       assert_equal "completed", manager.turn_status(turn_id: turn[:id])[:status]
       events = manager.turn_events(turn_id: turn[:id])[:events]
       assert_equal 1, events.count { |event| event[:type] == "turnQueued" }

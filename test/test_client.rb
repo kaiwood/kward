@@ -170,6 +170,18 @@ class TestClient < KwardTestCase
     assert_equal "OpenRouter", provider
   end
 
+  def test_in_flight_steer_supported_for_codex_provider
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil))
+
+    assert_equal true, client.supports_in_flight_steer?
+  end
+
+  def test_in_flight_steer_not_supported_for_openrouter_provider
+    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
+
+    assert_equal false, client.supports_in_flight_steer?
+  end
+
   def test_openai_access_token_takes_precedence_over_saved_oauth
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new("oauth-token"))
 

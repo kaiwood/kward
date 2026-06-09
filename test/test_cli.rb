@@ -27,6 +27,18 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class PollingPrompt < FakePrompt
+    def poll_input
+      @inputs.shift
+    end
+  end
+
+  class FailingSteering
+    def submit(_input)
+      raise "steering failed"
+    end
+  end
+
   class BusyPrompt < FakePrompt
     attr_reader :events, :write_deltas
 
@@ -1160,6 +1172,16 @@ class TestCLI < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_busy_input_queues_when_steering_submit_fails
+    prompt = PollingPrompt.new(["fallback"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    queued = []
+
+    cli.send(:collect_busy_input, queued, FailingSteering.new)
+
+    assert_equal ["fallback"], queued
+  end
+
   def test_interactive_turn_steers_prompt_during_streaming_when_supported
     input, writer = IO.pipe
     output = StringIO.new
@@ -1177,7 +1199,7 @@ class TestCLI < KwardTestCase
     queued = cli.send(:run_interactive_turn, agent, "first")
 
     assert_empty queued
-    assert_equal ["steer this"], client.steered_inputs
+    assert_equal ["first", "steer this"], agent.conversation.messages.select { |message| message[:role] == "user" }.map { |message| message[:content] }
     assert_equal "first", client.seen_messages[0][1][:content]
     assert_includes strip_ansi(output.string), "steered"
   ensure
