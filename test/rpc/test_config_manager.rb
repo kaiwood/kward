@@ -33,7 +33,44 @@ class TestRPCConfigManager < KwardTestCase
 
       config = JSON.parse(File.read(config_path))
       assert_equal "new-openai-model", config["openai_model"]
+      assert_equal "codex", config["provider"]
       assert_equal "high", config["openai_reasoning_effort"]
+    end
+  end
+
+  def test_model_rpc_set_switches_to_selected_copilot_provider_model
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("openai_model" => "gpt-5.5"))
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "models/set", params: { provider: "Copilot", model: "gemini-2.5-pro" } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "Copilot", messages[0]["result"]["provider"]
+      assert_equal "gemini-2.5-pro", messages[0]["result"]["id"]
+      config = JSON.parse(File.read(config_path))
+      assert_equal "copilot", config["provider"]
+      assert_equal "gemini-2.5-pro", config["copilot_model"]
+    end
+  end
+
+  def test_runtime_model_update_switches_to_selected_copilot_provider_model
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("openai_model" => "gpt-5.5"))
+      client = ReloadableFakeClient.new([], config_path)
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: client)
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+
+        server.send(:runtime_update_setting, "sessionId" => session[:id], "settingId" => "defaultModel", "value" => "Copilot/gemini-2.5-pro")
+
+        state = server.instance_variable_get(:@session_manager).runtime_state(session_id: session[:id])
+        assert_equal "Copilot", state[:model][:provider]
+        assert_equal "gemini-2.5-pro", state[:model][:id]
+      end
     end
   end
 

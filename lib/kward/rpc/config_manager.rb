@@ -25,7 +25,7 @@ module Kward
         model = model.to_s.strip
         raise "Model must be a non-empty string" if model.empty?
 
-        update(ModelInfo.config_key_for_provider(provider) => model)
+        update(ModelInfo.config_values_for_selection(provider, model))
       end
 
       def set_reasoning_effort(effort)

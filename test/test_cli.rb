@@ -179,6 +179,22 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
 
+  def test_interactive_loop_reports_turn_error_without_crashing
+    prompt = BusyPrompt.new(["hello", "/exit"])
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) do |_input, **_options|
+      raise Kward::Client::RequestError.new(provider: "Copilot", code: 400, body: JSON.dump("error" => { "code" => "model_not_supported" }))
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join, "Error: Copilot request failed: 400"
+    assert_includes prompt.events, [:finish_busy_input]
+  end
+
   def test_prompt_interface_interactive_turn_batches_streamed_deltas
     prompt = BusyPrompt.new([])
     events = 10.times.map { |index| Kward::Events::AssistantDelta.new(delta: index.to_s) }

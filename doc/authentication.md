@@ -28,4 +28,4 @@ Important: Kward's Copilot provider follows Pi Agent's direct HTTPS approach: it
 
 ## Fallback authentication
 
-`OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists. `OPENAI_ACCESS_TOKEN` can also be used as an environment fallback. If `provider` or `KWARD_PROVIDER` is set to `copilot`, Kward uses Copilot and does not fall back to OpenAI/OpenRouter.
+`OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists. `OPENAI_ACCESS_TOKEN` can also be used as an environment fallback. If `provider` or `KWARD_PROVIDER` is set to `openrouter` or `copilot`, Kward uses that provider and does not fall back to OpenAI/OpenRouter.

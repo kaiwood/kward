@@ -131,7 +131,88 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Codex", id: "gpt-5.4-mini", current: false }
     assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
     assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
-    assert_includes models, { provider: "Copilot", id: "gemini-3-flash-preview", current: false }
+    assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
+    refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "claude-sonnet-4.6" }
+    assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
+  end
+
+  def test_copilot_available_models_use_live_model_ids_when_available
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot", "copilot_model" => "stale-model"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+      body = JSON.dump("data" => [
+        { "id" => "gpt-5-mini-2025-08-07", "model_picker_enabled" => true },
+        { "id" => "hidden-model", "model_picker_enabled" => false },
+        { "id" => "gemini-3.1-pro-preview", "model_picker_enabled" => true }
+      ])
+
+      with_fake_http([fake_net_response(200, body)]) do |http|
+        models = client.available_models
+
+        assert_includes models, { provider: "Copilot", id: "gpt-5-mini-2025-08-07", current: false }
+        assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
+        refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "hidden-model" }
+        assert_includes models, { provider: "Copilot", id: "stale-model", current: true }
+        assert_equal URI("https://api.individual.githubcopilot.com/models"), http.requests.first.uri
+      end
+    end
+  end
+
+  def test_copilot_chat_uses_responses_endpoint_for_gpt_5_models
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot", "copilot_model" => "gpt-5-mini"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+      models_body = JSON.dump("data" => [{ "id" => "gpt-5-mini", "model_picker_enabled" => true }])
+      response_body = "data: #{JSON.dump("type" => "response.output_text.delta", "delta" => "ok")}\n\n"
+
+      with_fake_http([fake_net_response(200, models_body), fake_net_response(200, response_body)]) do |http|
+        message = client.chat([{ role: "user", content: "hello" }])
+
+        assert_equal "ok", message["content"]
+        assert_equal URI("https://api.individual.githubcopilot.com/responses"), http.requests.last.uri
+        payload = JSON.parse(http.requests.last.body)
+        assert_equal "gpt-5-mini", payload.fetch("model")
+        assert_equal true, payload.fetch("stream")
+        assert_equal false, payload.fetch("store")
+      end
+    end
+  end
+
+  def test_copilot_chat_uses_first_live_model_when_configured_model_is_unavailable
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot", "copilot_model" => "stale-model"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+      models_body = JSON.dump("data" => [{ "id" => "gemini-3.1-pro-preview", "model_picker_enabled" => true }])
+      chat_body = "data: #{JSON.dump("choices" => [{ "delta" => { "content" => "ok" } }])}\n\n"
+
+      with_fake_http([fake_net_response(200, models_body), fake_net_response(200, chat_body)]) do |http|
+        message = client.chat([{ role: "user", content: "hello" }])
+
+        assert_equal "ok", message["content"]
+        assert_equal URI("https://api.individual.githubcopilot.com/chat/completions"), http.requests.last.uri
+        assert_equal "gemini-3.1-pro-preview", JSON.parse(http.requests.last.body).fetch("model")
+      end
+    end
+  end
+
+  def test_copilot_chat_reports_when_only_unsupported_live_models_are_available
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot", "copilot_model" => "stale-model"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+      models_body = JSON.dump("data" => [{ "id" => "claude-sonnet-4.6", "model_picker_enabled" => true }])
+
+      with_fake_http([fake_net_response(200, models_body)]) do
+        error = assert_raises(RuntimeError) do
+          client.chat([{ role: "user", content: "hello" }])
+        end
+
+        assert_includes error.message, "No Copilot models supported by Kward are available"
+      end
+    end
   end
 
   def test_openrouter_defaults_to_openai_gpt_5_5
@@ -161,6 +242,22 @@ class TestClient < KwardTestCase
     assert_equal "Codex", provider
   end
 
+  def test_openrouter_provider_is_explicit_and_uses_openrouter_even_with_openai_token
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "openrouter", "openrouter_model" => "provider/configured"))
+      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: "openai-token", oauth: FakeOAuth.new("oauth-token"), config_path: path)
+
+      url, token, provider = client.send(:credentials)
+
+      assert_equal Kward::Client::OPENROUTER_URL, url
+      assert_equal "openrouter-token", token
+      assert_equal "OpenRouter", provider
+      assert_equal "OpenRouter", client.current_provider
+      assert_equal "provider/configured", client.current_model
+    end
+  end
+
   def test_openrouter_is_fallback_when_no_openai_oauth_exists
     client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
 
@@ -186,7 +283,7 @@ class TestClient < KwardTestCase
       assert_equal "github-token", token
       assert_equal "Copilot", provider
       assert_equal "Copilot", client.current_provider
-      assert_equal "gemini-3-flash-preview", client.current_model
+      assert_equal "gpt-5-mini", client.current_model
     end
   end
 

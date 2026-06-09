@@ -147,8 +147,23 @@ module KwardRPCTestSupport
       @reload_count = 0
     end
 
+    def current_provider
+      case config["provider"]
+      when "copilot" then "Copilot"
+      when "openrouter" then "OpenRouter"
+      else super
+      end
+    end
+
     def current_model
-      config["openai_model"] || super
+      case current_provider
+      when "Copilot"
+        config["copilot_model"] || super
+      when "OpenRouter"
+        config["openrouter_model"] || super
+      else
+        config["openai_model"] || super
+      end
     end
 
     def current_reasoning_effort

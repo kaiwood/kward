@@ -42,6 +42,7 @@ class TestCLISettings < KwardTestCase
 
       config = JSON.parse(File.read(config_path))
       assert_equal "custom-model", config["openai_model"]
+      assert_equal "codex", config["provider"]
       assert_equal 1, client.reload_count
       assert_equal ["Default model"], prompt.select_messages
       assert_equal ["Models"], prompt.select_titles
@@ -73,7 +74,48 @@ class TestCLISettings < KwardTestCase
 
       config = JSON.parse(File.read(config_path))
       assert_equal "openai/gpt-5.5", config["openrouter_model"]
+      assert_equal "openrouter", config["provider"]
       assert_equal 1, client.reload_count
+    end
+  end
+
+  def test_model_slash_command_switches_to_selected_copilot_provider_model
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("openai_model" => "gpt-5.5"))
+      prompt = FakeSettingsPrompt.new(["/model", "/exit"], ["Copilot gemini-2.5-pro"])
+      client = Kward::Client.new(api_key: nil, openai_access_token: "openai-token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: config_path)
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_PROVIDER" => nil, "COPILOT_MODEL" => nil) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "gemini-2.5-pro", config["copilot_model"]
+      assert_equal "copilot", config["provider"]
+      assert_equal "Copilot gemini-2.5-pro · n/a", cli.send(:composer_status_text)
+    end
+  end
+
+  def test_model_slash_command_switches_back_from_copilot_to_codex
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "copilot", "copilot_model" => "gemini-2.5-pro"))
+      prompt = FakeSettingsPrompt.new(["/model", "/exit"], ["Codex gpt-5.5"])
+      client = Kward::Client.new(api_key: nil, openai_access_token: "openai-token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: config_path)
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_PROVIDER" => nil, "OPENAI_MODEL" => nil) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "gpt-5.5", config["openai_model"]
+      assert_equal "codex", config["provider"]
+      assert_equal "Codex gpt-5.5 · medium", cli.send(:composer_status_text)
     end
   end
 

@@ -206,8 +206,12 @@ module Kward
         display_input = display_input || input if expanded_input
         input = expanded_input || input
         @footer_conversation = agent.conversation
-        pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
-        pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+        begin
+          pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
+          pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+        rescue StandardError => e
+          @prompt.say("\nError: #{e.message}\n")
+        end
       end
 
       agent.conversation
@@ -573,7 +577,7 @@ module Kward
       provider, model = selected_model(selected, models)
       raise "Model must be a non-empty string" if model.to_s.strip.empty?
 
-      ConfigFiles.update_config(ModelInfo.config_key_for_provider(provider) => model)
+      ConfigFiles.update_config(ModelInfo.config_values_for_selection(provider, model))
       reload_client_config
       refresh_conversation_runtime(conversation)
       @prompt.redraw if @prompt.respond_to?(:redraw)
@@ -1379,8 +1383,9 @@ module Kward
       raise error if error
 
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
-      @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       queued_inputs
+    ensure
+      @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
     end
 
     def drain_interactive_events(event_queue, markdown_chunks, stream_state, agent = nil, force: false)

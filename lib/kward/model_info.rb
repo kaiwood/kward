@@ -4,11 +4,28 @@ module Kward
   module ModelInfo
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
     DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
-    DEFAULT_COPILOT_MODEL = "gemini-3-flash-preview"
+    DEFAULT_COPILOT_MODEL = "gpt-5-mini"
     DEFAULT_REASONING_EFFORT = "medium"
     OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     OPENROUTER_MODEL_CHOICES = OPENAI_MODEL_CHOICES.map { |model| "openai/#{model}" }.freeze
-    COPILOT_MODEL_CHOICES = %w[gemini-3-flash-preview gemini-2.5-pro grok-code-fast-1].freeze
+    COPILOT_MODEL_CHOICES = %w[
+      gpt-5-mini
+      gpt-5.3-codex
+      gpt-5.4
+      gpt-5.4-mini
+      gpt-5.5
+      claude-haiku-4.5
+      claude-opus-4.5
+      claude-opus-4.7
+      claude-opus-4.8
+      claude-sonnet-4.5
+      claude-sonnet-4.6
+      gemini-2.5-pro
+      gemini-3-flash-preview
+      gemini-3.1-pro-preview
+      gemini-3.5-flash
+      oswe-vscode-prime
+    ].freeze
     REASONING_EFFORT_CHOICES = [
       ["low", "Low"],
       ["medium", "Medium"],
@@ -44,10 +61,29 @@ module Kward
       when "OpenRouter"
         env["OPENROUTER_MODEL"] || ConfigFiles.config_value(config, "openrouter_model", "model") || DEFAULT_OPENROUTER_MODEL
       when "Copilot"
-        env["COPILOT_MODEL"] || ConfigFiles.config_value(config, "copilot_model", "model") || DEFAULT_COPILOT_MODEL
+        normalize_copilot_model(env["COPILOT_MODEL"] || ConfigFiles.config_value(config, "copilot_model", "model") || DEFAULT_COPILOT_MODEL)
       else
         env["OPENAI_MODEL"] || ConfigFiles.config_value(config, "openai_model", "model") || DEFAULT_OPENAI_MODEL
       end
+    end
+
+    def normalize_copilot_model(id)
+      text = id.to_s.strip
+      return DEFAULT_COPILOT_MODEL if text.empty?
+      text = text.delete_prefix("copilot/")
+
+      {
+        "claude-haiku-4-5" => "claude-haiku-4.5",
+        "claude-opus-4-5" => "claude-opus-4.5",
+        "claude-opus-4-6" => "claude-opus-4.6",
+        "claude-opus-4-6-fast" => "claude-opus-4.6-fast",
+        "claude-opus-4-7" => "claude-opus-4.7",
+        "claude-opus-4-8" => "claude-opus-4.8",
+        "claude-sonnet-4-5" => "claude-sonnet-4.5",
+        "claude-sonnet-4-6" => "claude-sonnet-4.6",
+        "gemini-3.1-pro" => "gemini-3.1-pro-preview",
+        "gemini-3-flash" => "gemini-3-flash-preview"
+      }.fetch(text, text)
     end
 
     def reasoning_effort(config:, env: ENV)
@@ -60,6 +96,21 @@ module Kward
       when "Copilot" then "copilot_model"
       else "openai_model"
       end
+    end
+
+    def config_provider_for_provider(provider)
+      case provider.to_s
+      when "OpenRouter" then "openrouter"
+      when "Copilot" then "copilot"
+      else "codex"
+      end
+    end
+
+    def config_values_for_selection(provider, model)
+      {
+        config_key_for_provider(provider) => model,
+        "provider" => config_provider_for_provider(provider)
+      }
     end
 
     def context_window(provider, id)

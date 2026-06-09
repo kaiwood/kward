@@ -11,11 +11,11 @@ Example `~/.kward/config.json`:
   "openai_model": "gpt-5.5",
   "openai_reasoning_effort": "medium",
   "openrouter_model": "openai/gpt-5.5",
-  "copilot_model": "gemini-3-flash-preview"
+  "copilot_model": "gpt-5-mini"
 }
 ```
 
-You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level. Set `provider` to `copilot` to select the GitHub Copilot provider.
+You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level. Set `provider` to `codex`, `openrouter`, or `copilot` to select the active provider.
 
 Overlay settings are stored under `overlay`:
 
@@ -38,7 +38,7 @@ Overlay settings are stored under `overlay`:
 
 OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. `OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists.
 
-Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`, Copilot `gemini-3-flash-preview`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, `COPILOT_MODEL`, or the config file values above.
+Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`, Copilot `gpt-5-mini`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, `COPILOT_MODEL`, or the config file values above.
 
 ## Pan mode
 

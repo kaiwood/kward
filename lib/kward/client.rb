@@ -80,9 +80,10 @@ module Kward
       raise AUTH_ERROR if token.nil? || token.empty?
 
       current_model = model_for(provider, override_model: model)
+      current_model = resolved_copilot_chat_model(current_model) if provider == "Copilot" && model.nil?
 
       validate_image_support!(provider, current_model, messages)
-      request_body = JSON.dump(provider == "Codex" ? codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning) : request_payload(provider, messages, tools, max_tokens: max_tokens, model: model))
+      request_body = JSON.dump(request_body_payload(provider, messages, tools, max_tokens: max_tokens, model: current_model, reasoning: reasoning))
       with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         request_started_at = @telemetry_logger.monotonic_now
         message = nil
@@ -96,7 +97,11 @@ module Kward
         end
 
         if provider == "Copilot"
-          message = copilot_chat(url, token, messages, tools, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+          message = if copilot_responses_model?(current_model)
+                      copilot_responses_chat(token, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+                    else
+                      copilot_chat(url, token, messages, tools, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+                    end
           message = attach_response_metadata(message, provider: provider, model: current_model)
           next message
         end
@@ -146,6 +151,7 @@ module Kward
       provider
     rescue StandardError
       return "Copilot" if configured_provider == "copilot"
+      return "OpenRouter" if configured_provider == "openrouter"
 
       openai_configured? ? "Codex" : "OpenRouter"
     end
@@ -167,18 +173,19 @@ module Kward
       openai_model = model_for("Codex")
       openrouter_model = model_for("OpenRouter")
       copilot_model = model_for("Copilot")
+      copilot_choices = copilot_model_choices
       models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
         { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
       end
       models += ModelInfo::OPENROUTER_MODEL_CHOICES.map do |id|
         { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
       end
-      models += ModelInfo::COPILOT_MODEL_CHOICES.map do |id|
+      models += copilot_choices.map do |id|
         { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
       end
       models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
       models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless ModelInfo::OPENROUTER_MODEL_CHOICES.include?(openrouter_model)
-      models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless ModelInfo::COPILOT_MODEL_CHOICES.include?(copilot_model)
+      models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
       models
     end
 
@@ -273,6 +280,118 @@ module Kward
 
         sleep([remaining, 0.1].min)
       end
+    end
+
+    def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
+      if provider == "Codex"
+        codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
+      elsif provider == "Copilot" && copilot_responses_model?(model)
+        copilot_responses_payload(messages, tools, max_tokens: max_tokens, model: model)
+      else
+        request_payload(provider, messages, tools, max_tokens: max_tokens, model: model)
+      end
+    end
+
+    def copilot_responses_model?(model)
+      model.to_s.match?(/\Agpt-5(?:\.|-|\z)/)
+    end
+
+    def copilot_model_choices
+      live_models = fetch_copilot_models
+      choices = live_models.empty? ? ModelInfo::COPILOT_MODEL_CHOICES : live_models
+      choices.select { |model| copilot_supported_model?(model) }.uniq
+    end
+
+    def resolved_copilot_chat_model(configured_model)
+      choices = fetch_copilot_models
+      return configured_model if choices.empty? || choices.include?(configured_model)
+
+      supported = choices.find { |model| copilot_supported_model?(model) }
+      raise "No Copilot models supported by Kward are available for this account. Kward currently supports Copilot GPT-5 Responses and Gemini/GPT-4.1 chat models." unless supported
+
+      supported
+    end
+
+    def copilot_supported_model?(model)
+      text = model.to_s
+      copilot_responses_model?(text) || text.match?(/\A(?:gemini-|gpt-4\.1|oswe-)/)
+    end
+
+    def fetch_copilot_models
+      token = github_access_token.to_s
+      return [] if token.empty?
+
+      url = URI("#{@github_oauth.base_url}/models")
+      request = Net::HTTP::Get.new(url)
+      request["Authorization"] = "Bearer #{token}"
+      request["Accept"] = "application/json"
+      copilot_headers([]).each { |key, value| request[key] = value }
+
+      response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) { |http| http.request(request) }
+      return [] unless response.is_a?(Net::HTTPSuccess)
+
+      parse_copilot_models(response.body)
+    rescue StandardError
+      []
+    end
+
+    def parse_copilot_models(body)
+      data = JSON.parse(body.to_s)
+      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
+      Array(entries).filter_map do |entry|
+        copilot_model_id(entry)
+      end.uniq
+    rescue JSON::ParserError
+      []
+    end
+
+    def copilot_model_id(entry)
+      return entry.to_s.strip unless entry.is_a?(Hash)
+      return nil if entry.key?("model_picker_enabled") && entry["model_picker_enabled"] == false
+
+      id = entry["id"] || entry["model"] || entry["name"]
+      id.to_s.strip unless id.to_s.strip.empty?
+    end
+
+    def copilot_responses_payload(messages, tools, max_tokens: nil, model: nil)
+      parts = build_context_parts("CopilotResponses", messages, tools, model: model)
+      payload = {
+        model: parts[:model],
+        instructions: parts[:instructions],
+        input: parts[:input],
+        tools: parts[:tools],
+        stream: true,
+        store: false
+      }
+      payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
+      payload
+    end
+
+    def copilot_responses_chat(token, request_body:, on_assistant_delta: nil, cancellation: nil)
+      url = URI("#{@github_oauth.base_url}/responses")
+      request = Net::HTTP::Post.new(url)
+      request["Authorization"] = "Bearer #{token}"
+      request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
+      copilot_headers([]).each { |key, value| request[key] = value }
+      request.body = request_body
+
+      message = nil
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise RequestError.new(provider: "Copilot", code: response.code, body: redact(body, token))
+          end
+
+          message = parse_codex_sse_stream(response, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      message
     end
 
     def copilot_chat(url, token, messages, tools, request_body: nil, on_assistant_delta: nil, cancellation: nil)
@@ -603,6 +722,10 @@ module Kward
         return [copilot_chat_url, github_access_token, "Copilot", nil]
       end
 
+      if configured_provider == "openrouter"
+        return [OPENROUTER_URL, openrouter_api_key, "OpenRouter", nil]
+      end
+
       openai_token = @openai_access_token || @oauth.access_token
       if openai_token
         [CODEX_URL, openai_token, "Codex", @oauth.respond_to?(:account_id) ? @oauth.account_id : nil]
@@ -700,7 +823,16 @@ module Kward
     end
 
     def build_context_parts(provider, messages, tools, model: nil)
-      if provider == "Codex"
+      if provider == "CopilotResponses"
+        instructions, input = codex_messages(messages)
+        {
+          provider: provider,
+          model: model_for("Copilot", override_model: model),
+          instructions: instructions.empty? ? "You are a helpful assistant." : instructions,
+          input: input,
+          tools: tools.map { |tool| codex_tool_schema(tool) }
+        }
+      elsif provider == "Codex"
         instructions, input = codex_messages(messages)
         {
           provider: provider,
