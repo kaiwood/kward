@@ -16,7 +16,6 @@ require_relative "image_attachments"
 require_relative "markdown_transcript"
 require_relative "memory/manager"
 require_relative "model/model_info"
-require_relative "news_cache"
 require_relative "auth/openai_oauth"
 require_relative "pan_server"
 require_relative "plugin_registry"
@@ -56,7 +55,6 @@ module Kward
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
-      { name: "news", description: "Refresh the Hacker News daily news cache.", argument_hint: "" },
       { name: "crew", description: "Query all active personas and summarize the crew.", argument_hint: "" },
       { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|inspect|why|summarize]" }
     ].freeze
@@ -343,7 +341,7 @@ module Kward
     end
 
     def new_conversation(workspace_root: Dir.pwd)
-      Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort)
+      Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort, plugin_registry: plugin_registry)
     end
 
     def update_assistant_prompt(conversation)
@@ -368,6 +366,7 @@ module Kward
     end
 
     def build_interactive_agent(conversation)
+      conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
       workspace = Workspace.new(root: conversation.workspace_root)
       tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
       @footer_conversation = conversation
@@ -387,9 +386,6 @@ module Kward
         [true, nil]
       when "stats"
         print_stats(argument)
-        [true, nil]
-      when "news"
-        refresh_news(agent.conversation)
         [true, nil]
       when "crew"
         report_crew(argument)
@@ -491,18 +487,6 @@ module Kward
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{TelemetryStats.format(result)}\n")
     rescue ArgumentError => e
       message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
-      @prompt.say("\n#{message}\n")
-    end
-
-    def refresh_news(conversation)
-      cache = NewsCache.new
-      data = cache.refresh
-      conversation.refresh_system_message! if conversation&.respond_to?(:refresh_system_message!)
-      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Refreshed Hacker News cache: #{data["stories"].length} stories saved to #{cache.path}\n")
-    rescue StandardError => e
-      stale = NewsCache.new.read
-      message = "News refresh failed: #{e.message}"
-      message += "\nUsing stale Hacker News cache from #{stale["refreshed_at"]}." if stale
       @prompt.say("\n#{message}\n")
     end
 
@@ -1393,6 +1377,7 @@ module Kward
       command = plugin_command_for(name)
       return [false, nil] unless command
 
+      agent.conversation.plugin_registry ||= plugin_registry if agent.conversation.respond_to?(:plugin_registry)
       context = plugin_context(agent.conversation, argument)
       command.handler.call(argument, context)
       [true, nil]

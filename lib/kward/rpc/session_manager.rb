@@ -497,7 +497,8 @@ module Kward
         Conversation.new(
           workspace_root: workspace_root,
           model: (@client.current_model if @client.respond_to?(:current_model)),
-          reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+          reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort)),
+          plugin_registry: plugin_registry
         )
       end
 
@@ -764,6 +765,7 @@ module Kward
       end
 
       def build_rpc_session(store, session, conversation, workspace_root)
+        conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(server: @server, session_id: id)
         workspace = Workspace.new(root: workspace_root)

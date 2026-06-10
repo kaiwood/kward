@@ -39,10 +39,6 @@ module Kward
       File.join(cache_dir, "code_search")
     end
 
-    def news_cache_path
-      File.join(cache_dir, "news", "hacker_news.json")
-    end
-
     def memory_dir
       File.join(config_dir, "memory")
     end
@@ -101,14 +97,6 @@ module Kward
         return text if text
       end
       nil
-    end
-
-    def news_enabled?(config = read_config)
-      value = config.dig("news", "enabled") if config["news"].is_a?(Hash)
-      value = config["news_enabled"] if value.nil? && config.key?("news_enabled")
-      return value if value == true || value == false
-
-      true
     end
 
     def overlay_settings(config = read_config)

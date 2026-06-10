@@ -94,6 +94,43 @@ class TestPluginRegistry < KwardTestCase
     assert_includes warnings, "duplicate Kward plugin command /demo"
   end
 
+  def test_plugin_context_can_refresh_system_message
+    conversation = Kward::Conversation.new
+    original_content = conversation.messages.first[:content]
+    refreshed = false
+    conversation.define_singleton_method(:refresh_system_message!) do
+      refreshed = true
+      { role: "system", content: "refreshed" }
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: conversation)
+
+    assert_nil context.refresh_system_message!
+    assert refreshed
+    assert_equal original_content, conversation.messages.first[:content]
+  end
+
+  def test_prompt_context_renderers_are_joined
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.prompt_context { |_ctx| "First context." }
+      plugin.prompt_context { |_ctx| "" }
+      plugin.prompt_context { |_ctx| "Second context." }
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    assert_equal "First context.\n\nSecond context.", registry.prompt_context(context)
+  end
+
+  def test_plugin_can_register_news_command
+    registry = Kward::PluginRegistry.new(reserved_commands: Kward::PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES)
+
+    registry.evaluate do |plugin|
+      plugin.command("news") { |_args, _ctx| "ok" }
+    end
+
+    assert registry.command_for("news")
+  end
+
   def test_transcript_messages_are_read_only_copies
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("hi")

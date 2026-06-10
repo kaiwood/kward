@@ -57,6 +57,11 @@ module Kward
       def session_path
         @session&.path
       end
+
+      def refresh_system_message!
+        @conversation.refresh_system_message! if @conversation.respond_to?(:refresh_system_message!)
+        nil
+      end
     end
 
     class DSL
@@ -75,6 +80,10 @@ module Kward
 
       def on_transcript_event(&block)
         @registry.register_transcript_event(path: @path, &block)
+      end
+
+      def prompt_context(&block)
+        @registry.register_prompt_context(path: @path, &block)
       end
     end
 
@@ -117,6 +126,7 @@ module Kward
       @footer = nil
       @footer_path = nil
       @transcript_event_handlers = []
+      @prompt_context_renderers = []
     end
 
     attr_reader :footer_path
@@ -135,6 +145,21 @@ module Kward
 
     def transcript_event_handlers
       @transcript_event_handlers.map { |entry| entry[:handler] }
+    end
+
+    def prompt_context_renderers
+      @prompt_context_renderers.map { |entry| entry[:renderer] }
+    end
+
+    def prompt_context(context)
+      parts = []
+      @prompt_context_renderers.each do |entry|
+        rendered = entry[:renderer].call(context)
+        parts << rendered.to_s unless rendered.to_s.empty?
+      rescue StandardError => e
+        warn "Warning: Kward plugin prompt context error in #{entry[:path]}: #{e.message}"
+      end
+      parts.empty? ? nil : parts.join("\n\n")
     end
 
     def notify_transcript_event(event, context)
@@ -203,6 +228,12 @@ module Kward
       raise "Plugin transcript event requires a handler" unless handler
 
       @transcript_event_handlers << { path: path, handler: handler }
+    end
+
+    def register_prompt_context(path: nil, &renderer)
+      raise "Plugin prompt context requires a renderer" unless renderer
+
+      @prompt_context_renderers << { path: path, renderer: renderer }
     end
 
     private

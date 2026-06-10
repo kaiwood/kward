@@ -1,6 +1,7 @@
 require "set"
 require_relative "image_attachments"
 require_relative "message_access"
+require_relative "plugin_registry"
 require_relative "prompts"
 
 module Kward
@@ -8,15 +9,16 @@ module Kward
     DEFAULT_SYSTEM_MESSAGE = Object.new.freeze
 
     attr_reader :messages, :read_paths, :workspace_root, :compaction_system_message, :model, :reasoning_effort, :session_memories
-    attr_accessor :on_append, :on_compact, :on_tool_execution, :memory_context, :last_memory_retrieval
+    attr_accessor :on_append, :on_compact, :on_tool_execution, :memory_context, :last_memory_retrieval, :plugin_registry
 
-    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
       @model = model
       @reasoning_effort = reasoning_effort
+      @plugin_registry = plugin_registry
       @messages = []
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        system_message = messages.any? { |message| MessageAccess.role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context)
+        system_message = messages.any? { |message| MessageAccess.role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context, plugin_context: plugin_prompt_context)
       end
       @system_message_enabled = !!(system_message || messages.find { |message| MessageAccess.role(message) == "system" })
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
@@ -64,7 +66,7 @@ module Kward
     def refresh_system_message!
       return nil unless @system_message_enabled
 
-      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context)
+      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context, plugin_context: plugin_prompt_context)
       index = @messages.index { |message| MessageAccess.role(message) == "system" }
       index ? @messages[index] = replacement : @messages.unshift(replacement)
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)
@@ -84,6 +86,13 @@ module Kward
 
     def mark_read(path)
       @read_paths << path
+    end
+
+    def plugin_prompt_context
+      return nil unless plugin_registry
+
+      context = PluginRegistry::Context.new(conversation: self, workspace_root: @workspace_root)
+      plugin_registry.prompt_context(context)
     end
 
     def compact!(summary, compaction_summary: false, first_kept_entry_id: nil, tokens_before: nil, from_hook: false, details: {}, keep_messages: [])

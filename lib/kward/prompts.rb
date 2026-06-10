@@ -1,22 +1,21 @@
 require_relative "config_files"
-require_relative "news_cache"
 
 module Kward
   module Prompts
     module_function
 
-    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil)
+    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
       {
         role: "system",
-        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context).compact.join("\n\n")
+        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context).compact.join("\n\n")
       }
     end
 
-    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil)
+    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
       parts = [base_prompt, config_agents_prompt]
       parts << memory_context unless memory_context.to_s.empty?
       parts << persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now) if include_workspace_personality
-      parts << news_prompt if include_workspace_personality
+      parts << plugin_context unless plugin_context.to_s.empty? || !include_workspace_personality
       parts << skills_prompt
       parts << workspace_agents_prompt(workspace_root)
       parts
@@ -38,15 +37,6 @@ module Kward
 
     def workspace_agents_prompt(workspace_root = Dir.pwd)
       ConfigFiles.workspace_agents_prompt(workspace_root)
-    end
-
-    def news_prompt
-      return nil unless ConfigFiles.news_enabled?
-
-      NewsCache.new.prompt_context
-    rescue StandardError => e
-      warn "Warning: skipping Kward news cache: #{e.message}"
-      nil
     end
 
     def skills_prompt

@@ -2,7 +2,7 @@ require_relative "config_files"
 
 module Kward
   module PromptCommands
-    BUILTIN_RESERVED_COMMAND_NAMES = %w[exit quit new resume name clone export compact redraw settings login model openrouter/catalog reasoning status stats news crew].freeze
+    BUILTIN_RESERVED_COMMAND_NAMES = %w[exit quit new resume name clone export compact redraw settings login model openrouter/catalog reasoning status stats crew].freeze
     SLASH_COMMAND_PATTERN = %r{\A/(\S+)(?:\s+(.*))?\z}m
 
     module_function
