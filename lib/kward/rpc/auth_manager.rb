@@ -164,7 +164,7 @@ module Kward
 
       def github_provider
         oauth = @github_oauth_factory.call
-        env_configured = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].any? { |key| !ENV[key].to_s.empty? }
+        env_configured = !ENV["COPILOT_GITHUB_TOKEN"].to_s.empty?
         stored_configured = oauth.logged_in? && !env_configured
         provider = {
           id: "github",

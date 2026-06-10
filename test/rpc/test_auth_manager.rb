@@ -3,6 +3,22 @@ require_relative "test_support"
 class TestRPCAuthManager < KwardTestCase
   include KwardRPCTestSupport
 
+  def test_github_provider_ignores_general_github_tokens_for_copilot_auth
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      github_auth_path = File.join(config_dir, "github_auth.json")
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "auth/providers" },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path, "KWARD_GITHUB_AUTH_PATH" => github_auth_path, "GH_TOKEN" => "github-token", "GITHUB_TOKEN" => "github-token" })
+
+      github = messages[0]["result"]["providers"].find { |provider| provider["id"] == "github" }
+      assert_equal false, github["configured"]
+      assert_equal "Not signed in", github["label"]
+      refute github.key?("source")
+    end
+  end
+
   def test_auth_provider_cards_api_key_login_and_logout
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
