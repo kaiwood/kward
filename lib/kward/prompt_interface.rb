@@ -344,6 +344,14 @@ module Kward
       end
     end
 
+    def clear_steered_count
+      @mutex.synchronize do
+        @steered_count = 0
+        @busy_activity = "streaming"
+        render_prompt_locked if @asking
+      end
+    end
+
     def finish_busy_input
       @mutex.synchronize do
         @busy = false
@@ -2265,7 +2273,7 @@ module Kward
       if @busy && @queued_count.positive?
         status_composer_text("#{label} · #{@queued_count} queued")
       elsif @busy && @steered_count.to_i.positive?
-        status_composer_text("#{label} · steered")
+        status_composer_text("#{label} · #{spinner_frame} steering")
       elsif @busy
         status_composer_text("#{label} · #{spinner_frame} #{@busy_activity}")
       else

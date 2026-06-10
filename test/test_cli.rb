@@ -1241,9 +1241,12 @@ class TestCLI < KwardTestCase
     queued = cli.send(:run_interactive_turn, agent, "first")
 
     assert_empty queued
+    rendered = strip_ansi(output.string)
     assert_equal ["first", "steer this"], agent.conversation.messages.select { |message| message[:role] == "user" }.map { |message| message[:content] }
     assert_equal "first", client.seen_messages[0][1][:content]
-    assert_includes strip_ansi(output.string), "steered"
+    assert_includes rendered, "steering"
+    assert_includes rendered, "streaming"
+    refute_includes rendered, "steered"
   ensure
     writer_thread&.join
     input&.close unless input&.closed?

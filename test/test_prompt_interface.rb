@@ -930,7 +930,7 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "streaming"
   end
 
-  def test_prompt_interface_shows_steered_status
+  def test_prompt_interface_shows_steering_status_with_spinner
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.begin_busy_input("You>")
@@ -939,8 +939,24 @@ class TestPromptInterface < KwardTestCase
 
     prompt.set_steered_count(1)
 
-    assert_includes output.string, "╭ You · steered "
+    assert_includes output.string, "╭ You · ⠋ steering "
+    refute_includes output.string, "steered"
     refute_includes output.string, "queued"
+  end
+
+  def test_prompt_interface_returns_to_streaming_after_steering_clears
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    prompt.set_steered_count(1)
+    output.truncate(0)
+    output.rewind
+
+    prompt.clear_steered_count
+
+    assert_includes output.string, "╭ You · ⠋ streaming "
+    refute_includes output.string, "steering"
+    refute_includes output.string, "steered"
   end
 
   def test_prompt_interface_keeps_terminal_backspace_between_busy_polls

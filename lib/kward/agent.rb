@@ -57,6 +57,7 @@ module Kward
         yield Events::AssistantMessage.new(message: message) if block_given?
         @conversation.append_assistant(message)
         steered_after_message = append_steering_events(steering_state)
+        yield Events::SteeringApplied.new(count: steered_after_message) if block_given? && steered_after_message.positive?
 
         tool_calls = message["tool_calls"] || message[:tool_calls] || []
         if tool_calls.empty?
@@ -86,7 +87,8 @@ module Kward
           cancellation&.raise_if_cancelled!
           yield Events::ToolResult.new(tool_call: tool_call, content: content) if block_given?
         end
-        append_steering_events(steering_state)
+        steered_after_tools = append_steering_events(steering_state)
+        yield Events::SteeringApplied.new(count: steered_after_tools) if block_given? && steered_after_tools.positive?
       end
     ensure
       steering_state&.fetch(:unsubscribe)&.call
