@@ -19,6 +19,30 @@ class TestRPCAuthManager < KwardTestCase
     end
   end
 
+  def test_github_provider_does_not_offer_rpc_logout
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      github_auth_path = File.join(config_dir, "github_auth.json")
+      File.write(github_auth_path, JSON.pretty_generate(
+        "tokens" => {
+          "copilot_access_token" => "copilot-token",
+          "copilot_expires_at" => (Time.now.utc + 3600).iso8601
+        }
+      ))
+      File.chmod(0o600, github_auth_path)
+
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "auth/providers" },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path, "KWARD_GITHUB_AUTH_PATH" => github_auth_path })
+
+      github = messages[0]["result"]["providers"].find { |provider| provider["id"] == "github" }
+      assert_equal true, github["configured"]
+      assert_equal "stored", github["source"]
+      assert_equal false, github["canLogout"]
+    end
+  end
+
   def test_auth_provider_cards_api_key_login_and_logout
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

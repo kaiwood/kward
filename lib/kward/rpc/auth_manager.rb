@@ -172,7 +172,7 @@ module Kward
           authType: "oauth",
           configured: env_configured || stored_configured,
           storedCredentialType: "oauth",
-          canLogout: stored_configured,
+          canLogout: false,
           usesCallbackServer: false,
           supported: false,
           reason: "GitHub OAuth is available in the CLI for Copilot scaffolding; RPC login is not implemented yet."
