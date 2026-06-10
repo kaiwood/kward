@@ -2,6 +2,7 @@ require "fileutils"
 require "json"
 require "yaml"
 require_relative "private_file"
+require_relative "prompts/templates"
 require_relative "skills/registry"
 
 module Kward
@@ -422,30 +423,7 @@ module Kward
     end
 
     def prompt_templates(reserved_commands: [])
-      prompts_root = File.join(config_dir, "prompts")
-      return [] unless Dir.exist?(prompts_root)
-
-      reserved = reserved_commands.map(&:to_s)
-      seen = {}
-      Dir.glob(File.join(prompts_root, "*.md")).sort.filter_map do |path|
-        template = parse_prompt_template(path)
-        next unless template
-
-        if reserved.include?(template.command)
-          warn "Warning: skipping Kward prompt command /#{template.command}: reserved command"
-          next
-        end
-        if seen[template.command]
-          warn "Warning: skipping duplicate Kward prompt command /#{template.command}: #{path}"
-          next
-        end
-
-        seen[template.command] = true
-        template
-      end
-    rescue StandardError => e
-      warn "Warning: skipping Kward prompt templates in #{prompts_root}: #{e.message}"
-      []
+      prompt_template_registry.prompt_templates(reserved_commands: reserved_commands)
     end
 
     def read_skill_file(name, relative_path = nil)
@@ -462,24 +440,12 @@ module Kward
       )
     end
 
-    def parse_prompt_template(path)
-      command = File.basename(path, ".md")
-      unless command.match?(/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/)
-        warn "Warning: skipping Kward prompt template #{path}: invalid command name"
-        return nil
-      end
-
-      frontmatter, body = markdown_parts(path)
-      PromptTemplate.new(
-        command: command,
-        description: frontmatter.fetch("description", "").to_s.strip,
-        argument_hint: frontmatter.fetch("argument-hint", "").to_s.strip,
-        body: body,
-        path: path
+    def prompt_template_registry
+      Prompts::Templates.new(
+        config_dir: config_dir,
+        template_class: PromptTemplate,
+        markdown_parser: method(:markdown_parts)
       )
-    rescue StandardError => e
-      warn "Warning: skipping Kward prompt template #{path}: #{e.message}"
-      nil
     end
 
     def markdown_parts(path)
