@@ -1,8 +1,8 @@
 require "securerandom"
 require "thread"
-require_relative "../client"
-require_relative "../github_oauth"
-require_relative "../openai_oauth"
+require_relative "../auth/github_oauth"
+require_relative "../auth/openai_oauth"
+require_relative "../model/client"
 require_relative "config_manager"
 
 module Kward

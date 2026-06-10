@@ -1,6 +1,6 @@
+require_relative "../auth/openai_oauth"
 require_relative "../config_files"
 require_relative "../model_info"
-require_relative "../openai_oauth"
 require_relative "redactor"
 
 module Kward

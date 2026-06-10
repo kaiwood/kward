@@ -1,5 +1,5 @@
 require "json"
-require_relative "../client"
+require_relative "../model/client"
 require_relative "../config_files"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
