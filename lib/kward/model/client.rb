@@ -193,13 +193,15 @@ module Kward
       models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
       models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_choices.include?(openrouter_model)
       models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
-      models
+      
+      # Sort models by provider, then alphabetically by id
+      models.sort_by { |model| [model[:provider], model[:id]] }
     end
 
     def openrouter_catalog
       fetch_openrouter_models(full_catalog: true).map do |id|
         { provider: "OpenRouter", id: id, current: current_provider == "OpenRouter" && model_for("OpenRouter") == id }
-      end
+      end.sort_by { |model| model[:id] }
     end
 
     def current_context_parts(messages, tools)
