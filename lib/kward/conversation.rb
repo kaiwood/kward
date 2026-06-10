@@ -7,16 +7,16 @@ module Kward
   class Conversation
     DEFAULT_SYSTEM_MESSAGE = Object.new.freeze
 
-    attr_reader :messages, :read_paths, :workspace_root, :compaction_system_message, :model, :reasoning_effort
-    attr_accessor :on_append, :on_compact, :on_tool_execution
+    attr_reader :messages, :read_paths, :workspace_root, :compaction_system_message, :model, :reasoning_effort, :session_memories
+    attr_accessor :on_append, :on_compact, :on_tool_execution, :memory_context, :last_memory_retrieval
 
-    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, model: nil, reasoning_effort: nil)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
       @model = model
       @reasoning_effort = reasoning_effort
       @messages = []
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        system_message = messages.any? { |message| MessageAccess.role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort)
+        system_message = messages.any? { |message| MessageAccess.role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context)
       end
       @system_message_enabled = !!(system_message || messages.find { |message| MessageAccess.role(message) == "system" })
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
@@ -25,6 +25,9 @@ module Kward
       @compaction_system_message = compaction_system_message
       @workspace_agents_mtime = workspace_agents_mtime
       @last_entry_compaction = false
+      @memory_context = memory_context
+      @session_memories = Array(session_memories)
+      @last_memory_retrieval = last_memory_retrieval
       @messages << system_message unless system_message.nil?
       @messages.concat(messages)
       @read_paths = Set.new(read_paths)
@@ -61,7 +64,7 @@ module Kward
     def refresh_system_message!
       return nil unless @system_message_enabled
 
-      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort)
+      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context)
       index = @messages.index { |message| MessageAccess.role(message) == "system" }
       index ? @messages[index] = replacement : @messages.unshift(replacement)
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)

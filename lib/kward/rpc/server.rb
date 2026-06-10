@@ -1,6 +1,7 @@
 require "json"
 require_relative "../model/client"
 require_relative "../config_files"
+require_relative "../memory/manager"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
 require_relative "../tool_registry"
@@ -151,6 +152,28 @@ module Kward
           logging_stats(params)
         when "logging/tokenCsv"
           logging_token_csv(params)
+        when "memory/status"
+          @session_manager.memory_status
+        when "memory/enable"
+          @session_manager.memory_enable
+        when "memory/disable"
+          @session_manager.memory_disable
+        when "memory/list"
+          @session_manager.memory_list(include_inactive: params["includeInactive"] || false)
+        when "memory/add"
+          @session_manager.memory_add(text: params.fetch("text"), scope: params["scope"], tags: params["tags"] || [])
+        when "memory/addCore"
+          @session_manager.memory_add_core(text: params.fetch("text"), scope: params["scope"], tags: params["tags"] || [])
+        when "memory/forget"
+          @session_manager.memory_forget(id: params.fetch("id"))
+        when "memory/promote"
+          @session_manager.memory_promote(id: params.fetch("id"))
+        when "memory/inspect"
+          @session_manager.memory_inspect
+        when "memory/why"
+          @session_manager.memory_why(session_id: params["sessionId"])
+        when "memory/summarize"
+          @session_manager.memory_summarize(session_id: params.fetch("sessionId"))
         when "auth/status"
           @auth_manager.status
         when "auth/providers"
@@ -310,6 +333,7 @@ module Kward
             apiKeyProviders: ["openrouter"],
             logout: true
           },
+          memory: { supported: true, optIn: true, defaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/inspect", "memory/why", "memory/summarize"] },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           extensionUi: {

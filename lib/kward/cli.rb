@@ -14,6 +14,7 @@ require_relative "auth/github_oauth"
 require_relative "auth/openrouter_api_key"
 require_relative "image_attachments"
 require_relative "markdown_transcript"
+require_relative "memory/manager"
 require_relative "model/model_info"
 require_relative "news_cache"
 require_relative "auth/openai_oauth"
@@ -56,7 +57,8 @@ module Kward
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
       { name: "news", description: "Refresh the Hacker News daily news cache.", argument_hint: "" },
-      { name: "crew", description: "Query all active personas and summarize the crew.", argument_hint: "" }
+      { name: "crew", description: "Query all active personas and summarize the crew.", argument_hint: "" },
+      { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|core|add|list|forget|promote|inspect|why|summarize]" }
     ].freeze
     BUILTIN_SLASH_COMMAND_NAMES = BUILTIN_SLASH_COMMANDS.map { |command| command[:name] }.freeze
 
@@ -392,6 +394,9 @@ module Kward
       when "crew"
         report_crew(argument)
         [true, nil]
+      when "memory"
+        handle_memory_command(argument, agent)
+        [true, nil]
       when "redraw"
         @prompt.redraw if @prompt.respond_to?(:redraw)
         [true, nil]
@@ -480,6 +485,74 @@ module Kward
       end
     rescue StandardError => e
       @prompt.say("\nCrew command failed: #{e.message}\n")
+    end
+
+    def handle_memory_command(argument, agent)
+      subcommand, rest = argument.to_s.strip.split(/\s+/, 2)
+      manager = Memory::Manager.new
+      case subcommand
+      when "enable"
+        manager.enable
+        agent.conversation.refresh_system_message!
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory enabled.\n")
+      when "disable"
+        manager.disable
+        agent.conversation.memory_context = nil
+        agent.conversation.refresh_system_message!
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory disabled.\n")
+      when "core"
+        record = manager.add_core(unquote_argument(rest))
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Added core memory #{record["id"]}.\n")
+      when "add"
+        record = manager.add_soft(unquote_argument(rest), scope: "workspace:#{agent.conversation.workspace_root}")
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Added soft memory #{record["id"]}.\n")
+      when "list"
+        @prompt.say("\n#{format_memory_list(manager.list)}\n")
+      when "forget"
+        forgotten = manager.forget_memory(rest.to_s.strip)
+        @prompt.say("\n#{forgotten ? "Forgot #{rest.to_s.strip}." : "No memory found for #{rest.to_s.strip}."}\n")
+      when "promote"
+        record = manager.promote_soft_to_core(rest.to_s.strip)
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Promoted to core memory #{record["id"]}.\n")
+      when "inspect"
+        @prompt.say("\n#{JSON.pretty_generate(manager.inspect_memory)}\n")
+      when "why"
+        explanation = agent.conversation.last_memory_retrieval || manager.explain_retrieval
+        @prompt.say("\n#{format_memory_why(explanation)}\n")
+      when "summarize", "learn"
+        text = agent.conversation.messages.map { |message| message[:content] || message["content"] }.compact.join("\n")
+        records = manager.infer_soft_from_text(text, workspace_root: agent.conversation.workspace_root)
+        agent.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if agent.conversation.session_memories.respond_to?(:concat)
+        @active_session&.update_memory_state(session_memories: agent.conversation.session_memories, last_retrieval: agent.conversation.last_memory_retrieval)
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Learned #{records.length} soft #{records.length == 1 ? "memory" : "memories"}.\n")
+      else
+        @prompt.say("\nUsage: /memory enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|inspect|why|summarize\n")
+      end
+    rescue StandardError => e
+      @prompt.say("\nMemory command failed: #{e.message}\n")
+    end
+
+    def unquote_argument(text)
+      value = text.to_s.strip
+      value = value[1...-1] if value.length >= 2 && ((value.start_with?("\"") && value.end_with?("\"")) || (value.start_with?("'") && value.end_with?("'")))
+      value
+    end
+
+    def format_memory_list(memories)
+      lines = ["Core Memories:"]
+      Array(memories["core"]).each { |item| lines << "- #{item["id"]} [#{item["scope"]}] #{item["text"]}" }
+      lines << "- none" if Array(memories["core"]).empty?
+      lines << "Soft Memories:"
+      Array(memories["soft"]).each { |item| lines << "- #{item["id"]} [#{item["scope"]}] #{item["text"]}" }
+      lines << "- none" if Array(memories["soft"]).empty?
+      lines.join("\n")
+    end
+
+    def format_memory_why(explanation)
+      reasons = Array(explanation["reasons"])
+      return explanation["message"] || "No memories were retrieved." if reasons.empty?
+
+      (["Memory retrieval reasons:"] + reasons.map { |item| "- #{item["id"]} (#{item["layer"]}, score #{item["score"]}): #{Array(item["reasons"]).join("; ")}" }).join("\n")
     end
 
     def render_crew_report(argument = nil)
@@ -1381,6 +1454,7 @@ module Kward
     end
 
     def run_interactive_turn(agent, input, display_input: nil)
+      prepare_memory_context(agent.conversation, input) if agent.respond_to?(:conversation)
       print_user_transcript(input, display_input: display_input) if prompt_interface?
       return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
 
@@ -1414,6 +1488,7 @@ module Kward
       raise error if error
 
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
+      persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
       queued_inputs
     ensure
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
@@ -1563,7 +1638,25 @@ module Kward
       end
       flush_markdown_deltas(markdown_chunks) if streamed
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
+      persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
       []
+    end
+
+    def prepare_memory_context(conversation, input)
+      manager = Memory::Manager.new
+      retrieval = manager.retrieve_relevant(input: input, workspace_root: conversation.workspace_root)
+      conversation.last_memory_retrieval = retrieval
+      conversation.memory_context = manager.memory_block(retrieval)
+      conversation.refresh_system_message!
+    rescue StandardError => e
+      warn "Memory retrieval failed: #{e.message}"
+      nil
+    end
+
+    def persist_memory_state(conversation)
+      @active_session&.update_memory_state(session_memories: conversation.session_memories, last_retrieval: conversation.last_memory_retrieval)
+    rescue StandardError
+      nil
     end
 
     def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)

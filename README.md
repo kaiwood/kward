@@ -17,6 +17,7 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 - [Usage](doc/usage.md): chat mode, tools, sessions, composer keys, and image attachments.
 - [Authentication](doc/authentication.md): OpenAI OAuth and API key fallback behavior.
 - [Configuration](doc/configuration.md): config files, models, environment variables, and color output.
+- [Memory](doc/memory.md): opt-in core/soft/session memory, storage files, commands, and RPC methods.
 - [Extensibility](doc/extensibility.md): `AGENTS.md`, skills, and prompt templates.
 - [Web search](doc/web-search.md): search providers and network behavior.
 - [Code search](doc/code-search.md): package/source discovery, cached GitHub clones, and external code reading.

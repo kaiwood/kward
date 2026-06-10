@@ -13,6 +13,7 @@ require_relative "../conversation"
 require_relative "../crew_reporter"
 require_relative "../events"
 require_relative "../markdown_transcript"
+require_relative "../memory/manager"
 require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
@@ -262,6 +263,66 @@ module Kward
         return run_crew_command(session_id: session_id, arguments: arguments) if name == "crew"
 
         run_plugin_command(session_id: session_id, command: name, arguments: arguments)
+      end
+
+      def memory_manager
+        Memory::Manager.new(config_path: File.join(@config_dir, "config.json"), core_path: File.join(@config_dir, "memory", "core.json"), soft_path: File.join(@config_dir, "memory", "soft.jsonl"), events_path: File.join(@config_dir, "memory", "events.jsonl"))
+      end
+
+      def memory_status
+        manager = memory_manager
+        { enabled: manager.enabled?, paths: manager.paths }
+      end
+
+      def memory_enable
+        memory_manager.enable
+        { enabled: true }
+      end
+
+      def memory_disable
+        memory_manager.disable
+        { enabled: false }
+      end
+
+      def memory_list(include_inactive: false)
+        memory_manager.list(include_inactive: include_inactive)
+      end
+
+      def memory_add(text:, scope: nil, tags: [])
+        { memory: memory_manager.add_soft(text, scope: scope || "global", tags: tags) }
+      end
+
+      def memory_add_core(text:, scope: nil, tags: [])
+        { memory: memory_manager.add_core(text, scope: scope || "global", tags: tags) }
+      end
+
+      def memory_forget(id:)
+        { forgotten: memory_manager.forget_memory(id) }
+      end
+
+      def memory_promote(id:)
+        { memory: memory_manager.promote_soft_to_core(id) }
+      end
+
+      def memory_inspect
+        memory_manager.inspect_memory
+      end
+
+      def memory_why(session_id: nil)
+        if session_id
+          rpc_session = fetch_session(session_id)
+          return rpc_session.conversation.last_memory_retrieval || memory_manager.explain_retrieval
+        end
+        memory_manager.explain_retrieval
+      end
+
+      def memory_summarize(session_id:)
+        rpc_session = fetch_session(session_id)
+        text = rpc_session.conversation.messages.map { |message| message[:content] || message["content"] }.compact.join("\n")
+        records = memory_manager.infer_soft_from_text(text, workspace_root: rpc_session.workspace_root)
+        rpc_session.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") })
+        persist_memory_state(rpc_session)
+        { memories: records }
       end
 
       def run_crew_command(session_id:, arguments: "")
@@ -766,12 +827,14 @@ module Kward
         if turn.plugin_command_name
           run_plugin_turn(rpc_session, turn)
         else
+          prepare_memory_context(rpc_session.conversation, turn.input)
           rpc_session.agent.ask(turn.input, cancellation: turn.cancellation, steering: turn.steering) do |event|
             next if turn.cancel_requested
 
             notify_plugin_transcript_event(rpc_session, event)
             handle_agent_event(turn, event)
           end
+          persist_memory_state(rpc_session)
           finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
         end
       rescue Cancellation::CancelledError
@@ -787,6 +850,23 @@ module Kward
 
       def build_steering(_turn)
         Steering.new
+      end
+
+      def prepare_memory_context(conversation, input)
+        manager = Memory::Manager.new(config_path: File.join(@config_dir, "config.json"), core_path: File.join(@config_dir, "memory", "core.json"), soft_path: File.join(@config_dir, "memory", "soft.jsonl"), events_path: File.join(@config_dir, "memory", "events.jsonl"))
+        retrieval = manager.retrieve_relevant(input: input, workspace_root: conversation.workspace_root)
+        conversation.last_memory_retrieval = retrieval
+        conversation.memory_context = manager.memory_block(retrieval)
+        conversation.refresh_system_message!
+      rescue StandardError => e
+        @server.log_error(e)
+        nil
+      end
+
+      def persist_memory_state(rpc_session)
+        rpc_session.session.update_memory_state(session_memories: rpc_session.conversation.session_memories, last_retrieval: rpc_session.conversation.last_memory_retrieval)
+      rescue StandardError
+        nil
       end
 
       def steer_running_turn(rpc_session, input)

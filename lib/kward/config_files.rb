@@ -42,6 +42,22 @@ module Kward
       File.join(cache_dir, "news", "hacker_news.json")
     end
 
+    def memory_dir
+      File.join(config_dir, "memory")
+    end
+
+    def memory_core_path
+      File.join(memory_dir, "core.json")
+    end
+
+    def memory_soft_path
+      File.join(memory_dir, "soft.jsonl")
+    end
+
+    def memory_events_path
+      File.join(memory_dir, "events.jsonl")
+    end
+
     def read_config(path = config_path)
       path = File.expand_path(path)
       return {} unless File.exist?(path)

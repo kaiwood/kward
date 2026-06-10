@@ -56,6 +56,15 @@ module Kward
         @store.append_record(@path, RPC::ToolEventNormalizer.new(tool_call, content: content).execution_record)
       end
 
+      def update_memory_state(session_memories:, last_retrieval: nil)
+        @store.append_record(@path, {
+          type: "memory_state",
+          timestamp: Time.now.utc.iso8601(3),
+          sessionMemories: Array(session_memories),
+          lastRetrieval: last_retrieval
+        })
+      end
+
       def rename(name)
         @name = name.to_s.strip.empty? ? nil : name.to_s.strip
         @store.append_record(@path, {
@@ -155,6 +164,7 @@ module Kward
       messages = restored_messages(records)
       name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
+      memory_state = restored_memory_state(records)
 
       runtime = session_runtime(records, header)
       conversation = Conversation.new(
@@ -162,7 +172,9 @@ module Kward
         read_paths: read_paths,
         workspace_root: workspace.root,
         model: runtime["model"] || model,
-        reasoning_effort: runtime["reasoningEffort"] || reasoning_effort
+        reasoning_effort: runtime["reasoningEffort"] || reasoning_effort,
+        session_memories: memory_state["sessionMemories"],
+        last_memory_retrieval: memory_state["lastRetrieval"]
       )
       conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"
       session = Session.new(
@@ -272,6 +284,10 @@ module Kward
     def session_name(records)
       record = records.select { |item| item["type"] == "session_info" }.last
       record ? record["name"] : nil
+    end
+
+    def restored_memory_state(records)
+      records.reverse.find { |record| record["type"] == "memory_state" } || { "sessionMemories" => [], "lastRetrieval" => nil }
     end
 
     def session_runtime(records, header)

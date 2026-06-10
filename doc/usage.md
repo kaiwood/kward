@@ -22,6 +22,10 @@ Use `/new` to start fresh, `/resume` to pick a saved session, `/name <name>` to 
 
 Auto-compaction is enabled by default when Kward can determine the active context window. Configure it in `config.json` with `compaction.enabled`, `compaction.reserve_tokens`, and `compaction.keep_recent_tokens`; manual `/compact` still works when auto-compaction is disabled.
 
+## Memory
+
+Memory is disabled by default and only applies to interactive sessions. Use `/memory enable` to opt in, `/memory core <text>` for explicit high-trust memories, `/memory add <text>` for contextual soft memories, `/memory list` to inspect stored memories, `/memory why` to explain the most recent retrieval, and `/memory forget <id>` to remove a memory. See [Memory](memory.md) for storage locations, safety rules, and RPC methods.
+
 ## Composer keys
 
 - Enter sends.

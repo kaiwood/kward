@@ -52,6 +52,7 @@ Detailed capability fields include:
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: Tauren auth provider format, OpenAI OAuth, OpenRouter API-key login, and provider logout for stored credentials.
+- `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`; other UI primitives are explicitly unsupported.
@@ -377,6 +378,94 @@ Params:
 Accepted units are minutes, hours, days, weeks, months, and years. Ranges use UTC calendar periods: `1 month` means the current calendar month so far, and `2 months` means the previous month plus the current month so far. Invalid ranges return an invalid-params error with usage text.
 
 Returns structured stats for enabled categories only, including the requested range, log directory, record counts by category/event, `usageStats` token totals, performance duration summaries, tool call summaries, and error counts by event/class/provider/code. Error messages are not included in the stats response.
+
+## Memory methods
+
+Memory is disabled by default. RPC memory methods operate on the same local storage as the CLI: `<config-dir>/memory/core.json`, `<config-dir>/memory/soft.jsonl`, and `<config-dir>/memory/events.jsonl`. Retrieved memory is injected only for normal session turns when memory is enabled.
+
+### `memory/status`
+
+Returns `{ "enabled": boolean, "paths": { "core", "soft", "events" } }`.
+
+### `memory/enable`
+
+Enables memory in config and creates storage files if needed. Returns `{ "enabled": true }`.
+
+### `memory/disable`
+
+Disables memory prompt injection. Stored memories are left in place. Returns `{ "enabled": false }`.
+
+### `memory/list`
+
+Params:
+
+- `includeInactive`: optional boolean; includes forgotten soft memories when true.
+
+Returns `{ "core": [], "soft": [] }`.
+
+### `memory/add`
+
+Adds a manual soft memory.
+
+Params:
+
+- `text`: memory text.
+- `scope`: optional, defaults to `global`.
+- `tags`: optional array.
+
+Returns `{ "memory": {} }`.
+
+### `memory/addCore`
+
+Adds an explicit core memory.
+
+Params:
+
+- `text`: memory text.
+- `scope`: optional, defaults to `global`.
+- `tags`: optional array.
+
+Returns `{ "memory": {} }`.
+
+### `memory/forget`
+
+Params:
+
+- `id`: memory ID such as `core_001` or `soft_001`.
+
+Returns `{ "forgotten": true }` when a memory was removed or marked forgotten.
+
+### `memory/promote`
+
+Promotes an active soft memory to a new core memory and marks the soft memory forgotten.
+
+Params:
+
+- `id`: soft memory ID.
+
+Returns `{ "memory": {} }` for the new core memory.
+
+### `memory/inspect`
+
+Returns enabled status, storage paths, core memories, and soft memories including inactive records.
+
+### `memory/why`
+
+Params:
+
+- `sessionId`: optional active RPC session ID.
+
+Returns the most recent memory retrieval explanation for the session when provided, otherwise the manager's latest explanation/no-retrieval message.
+
+### `memory/summarize`
+
+Runs conservative heuristic soft-memory inference over the active session and persists any accepted soft memories.
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns `{ "memories": [] }`.
 
 ## Model methods
 

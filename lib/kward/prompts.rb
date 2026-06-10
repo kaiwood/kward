@@ -5,15 +5,16 @@ module Kward
   module Prompts
     module_function
 
-    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now)
+    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil)
       {
         role: "system",
-        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now).compact.join("\n\n")
+        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context).compact.join("\n\n")
       }
     end
 
-    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now)
+    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil)
       parts = [base_prompt, config_agents_prompt]
+      parts << memory_context unless memory_context.to_s.empty?
       parts << persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now) if include_workspace_personality
       parts << news_prompt if include_workspace_personality
       parts << skills_prompt

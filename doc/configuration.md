@@ -30,6 +30,18 @@ Overlay settings are stored under `overlay`:
 
 `alignment` can be `left`, `center`, or `right`. `width` can be `maximum` to match the composer width or `capped` for a compact card.
 
+Memory is off by default. `/memory enable` stores:
+
+```json
+{
+  "memory": {
+    "enabled": true
+  }
+}
+```
+
+Memory files are kept under `<config-dir>/memory`, which is `~/.kward/memory` by default or beside `KWARD_CONFIG_PATH` when that environment variable is set. See [Memory](memory.md).
+
 ## Environment fallback
 
 - Optional model env fallback: `OPENAI_ACCESS_TOKEN`, `OPENROUTER_API_KEY`, or `COPILOT_GITHUB_TOKEN`.
