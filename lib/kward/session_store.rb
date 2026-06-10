@@ -4,6 +4,7 @@ require "securerandom"
 require "time"
 require_relative "config_files"
 require_relative "conversation"
+require_relative "message_access"
 require_relative "rpc/tool_event_normalizer"
 require_relative "tool_call"
 require_relative "workspace"
@@ -439,32 +440,31 @@ module Kward
     end
 
     def tool_calls(message)
-      value = message["tool_calls"] || message[:tool_calls]
-      value.is_a?(Array) ? value : []
+      MessageAccess.tool_calls(message)
     end
 
     def message_role(message)
-      message["role"] || message[:role]
+      MessageAccess.role(message)
     end
 
     def message_name(message)
-      message["name"] || message[:name]
+      MessageAccess.name(message)
     end
 
     def message_tool_call_id(message)
-      message["tool_call_id"] || message[:tool_call_id]
+      MessageAccess.tool_call_id(message)
     end
 
     def message_content(message)
-      message["content"] || message[:content]
+      MessageAccess.content(message)
     end
 
     def message_display_content(message)
-      message["display_content"] || message[:display_content] || message["displayContent"] || message[:displayContent]
+      MessageAccess.display_content(message)
     end
 
     def message_text(message)
-      return (message["summary"] || message[:summary]).to_s.gsub(/\s+/, " ").strip.slice(0, 120) if message_role(message) == "compactionSummary"
+      return MessageAccess.summary(message).to_s.gsub(/\s+/, " ").strip.slice(0, 120) if message_role(message) == "compactionSummary"
 
       display_content = message_display_content(message)
       return display_content.to_s.gsub(/\s+/, " ").strip.slice(0, 120) unless display_content.nil?

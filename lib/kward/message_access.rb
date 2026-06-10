@@ -18,6 +18,14 @@ module Kward
       value(message, :content)
     end
 
+    def display_content(message)
+      value(message, :display_content) || value(message, :displayContent)
+    end
+
+    def summary(message)
+      value(message, :summary)
+    end
+
     def name(message)
       value(message, :name)
     end
