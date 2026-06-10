@@ -17,6 +17,24 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_oversized_config_agents_prompt_warns_and_skips
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      File.write(File.join(dir, "AGENTS.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        _stdout, stderr = capture_io do
+          content = Kward::Conversation.new.messages.first[:content]
+
+          refute_includes content, "xxx"
+        end
+
+        assert_includes stderr, "Warning: skipping Kward prompt file"
+        assert_includes stderr, "file too large"
+      end
+    end
+  end
+
   def test_cached_news_prompt_is_injected_after_personas
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
@@ -78,6 +96,21 @@ class TestPrompts < KwardTestCase
                        "Workspace instructions."
         end
       end
+    end
+  end
+
+  def test_oversized_workspace_agents_prompt_warns_and_skips
+    Dir.mktmpdir do |workspace|
+      File.write(File.join(workspace, "AGENTS.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
+
+      _stdout, stderr = capture_io do
+        content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+
+        refute_includes content, "xxx"
+      end
+
+      assert_includes stderr, "Warning: skipping workspace AGENTS.md"
+      assert_includes stderr, "file too large"
     end
   end
 

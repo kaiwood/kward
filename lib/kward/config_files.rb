@@ -6,6 +6,7 @@ require "yaml"
 module Kward
   module ConfigFiles
     MAX_SKILL_FILE_BYTES = 100_000
+    MAX_PROMPT_FILE_BYTES = 32 * 1024
     DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "maximum" }.freeze
     OVERLAY_ALIGNMENTS = %w[left center right].freeze
     OVERLAY_WIDTHS = %w[capped maximum].freeze
@@ -137,12 +138,7 @@ module Kward
 
     def agents_prompt
       path = File.join(config_dir, "AGENTS.md")
-      return nil unless File.exist?(path)
-
-      File.read(path)
-    rescue StandardError => e
-      warn "Warning: skipping Kward prompt file #{path}: #{e.message}"
-      nil
+      read_prompt_file(path, "Kward prompt file")
     end
 
     def persona_prompt(workspace_root, model: nil, reasoning_effort: nil, now: Time.now, config: read_config)
@@ -226,11 +222,21 @@ module Kward
     def workspace_agents_prompt(workspace_root)
       root = canonical_workspace_root(workspace_root)
       path = File.join(root, "AGENTS.md")
+      read_prompt_file(path, "workspace AGENTS.md")
+    end
+
+    def read_prompt_file(path, label)
       return nil unless File.exist?(path)
+
+      size = File.size(path)
+      if size > MAX_PROMPT_FILE_BYTES
+        warn "Warning: skipping #{label} #{path}: file too large (#{size} bytes; limit is #{MAX_PROMPT_FILE_BYTES} bytes)"
+        return nil
+      end
 
       File.read(path)
     rescue StandardError => e
-      warn "Warning: skipping workspace AGENTS.md #{path}: #{e.message}"
+      warn "Warning: skipping #{label} #{path}: #{e.message}"
       nil
     end
 

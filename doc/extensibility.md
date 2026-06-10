@@ -11,7 +11,7 @@ Kward separates repository guidance from workspace-specific agent personality.
 
 Use `AGENTS.md` for engineering instructions such as coding rules, project conventions, testing requirements, review expectations, and workflow guidance. Avoid putting personality, roleplay, or communication style there; configure those as personas instead.
 
-Workspace `AGENTS.md` is injected once when a conversation starts. Kward refreshes it only when the file changes or when the agent edits the workspace `AGENTS.md`.
+Workspace `AGENTS.md` is injected once when a conversation starts. Kward refreshes it only when the file changes or when the agent edits the workspace `AGENTS.md`. Config-directory and workspace `AGENTS.md` files are skipped with a warning if they exceed 32 KiB, because they are injected into every model request.
 
 ## Personas
 
