@@ -169,13 +169,54 @@ class TestCompactor < KwardTestCase
 
     result = Kward::Compactor.new(conversation: conversation, client: client, settings: settings).compact
 
-    assert_includes result.summary, "## Files"
+    assert_includes result.summary, "## Files & Code"
     assert_equal "message:2", result.first_kept_entry_id
     assert_equal ["compactionSummary", "user", "assistant"], conversation.messages.map { |message| message[:role] || message["role"] }
     summary = conversation.messages.first
     assert_equal "message:2", summary[:first_kept_entry_id]
     assert_equal false, summary[:from_hook]
     assert_equal({ read_files: [], modified_files: [] }, summary[:details])
+  end
+
+  def test_compaction_replaces_existing_files_code_sections
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("old request with enough detail to require compaction")
+    conversation.append_assistant({
+      role: "assistant",
+      content: "tool use",
+      tool_calls: [
+        tool_call("read_file", path: "lib/example.rb"),
+        tool_call("edit_file", path: "lib/example.rb", edits: [{ old_text: "old", new_text: "new" }])
+      ]
+    })
+    conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "content")
+    conversation.append_tool(tool_call_id: "call_edit_file", name: "edit_file", content: "Edited lib/example.rb")
+    conversation.append_user("recent")
+    conversation.append_assistant("recent reply")
+    settings = Kward::Compaction::Settings.new(keep_recent_tokens: 10)
+    summary = <<~SUMMARY
+      ## Goal
+      continue
+
+      ## Files & Code
+      ### Read
+      - stale.rb
+
+      ### Modified
+      - stale.rb
+
+      ### Important Ruby Objects
+      - Example
+    SUMMARY
+    client = RecordingClient.new([summary])
+
+    result = Kward::Compactor.new(conversation: conversation, client: client, settings: settings).compact
+
+    assert_equal 1, result.summary.scan(/^## Files & Code$/).length
+    assert_includes result.summary, "### Read\n- lib/example.rb"
+    assert_includes result.summary, "### Modified\n- lib/example.rb"
+    refute_includes result.summary, "stale.rb"
+    assert_includes result.summary, "### Important Ruby Objects\n- Example"
   end
 
   def test_auto_compaction_uses_last_provider_usage_plus_trailing_messages

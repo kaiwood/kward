@@ -948,12 +948,44 @@ module Kward
     def append_files_section(summary, file_ops)
       read_files = Array(file_ops[:read_files] || file_ops["read_files"])
       modified_files = Array(file_ops[:modified_files] || file_ops["modified_files"])
-      lines = [summary.to_s.rstrip, "", "## Files", "### Read"]
-      lines.concat(file_lines(read_files))
+      text = summary.to_s.rstrip
+      read_lines = file_lines(read_files)
+      modified_lines = file_lines(modified_files)
+
+      return update_files_code_section(text, read_lines, modified_lines) if text.include?("## Files & Code")
+
+      lines = [text, "", "## Files & Code", "### Read"]
+      lines.concat(read_lines)
       lines << ""
       lines << "### Modified"
-      lines.concat(file_lines(modified_files))
+      lines.concat(modified_lines)
       lines.join("\n")
+    end
+
+    def update_files_code_section(summary, read_lines, modified_lines)
+      lines = summary.lines(chomp: true)
+      heading_index = lines.index { |line| line.strip == "## Files & Code" }
+      return summary unless heading_index
+
+      section_end = ((heading_index + 1)...lines.length).find { |index| h2_heading?(lines[index]) } || lines.length
+      section = lines[(heading_index + 1)...section_end]
+      section = replace_subsection(section, "### Read", read_lines)
+      section = replace_subsection(section, "### Modified", modified_lines)
+      (lines[0..heading_index] + section + lines[section_end..].to_a).join("\n")
+    end
+
+    def replace_subsection(lines, heading, replacement_lines)
+      index = lines.index { |line| line.strip == heading }
+      return [heading, *replacement_lines, ""] + lines unless index
+
+      section_end = ((index + 1)...lines.length).find { |candidate| lines[candidate].start_with?("### ") || h2_heading?(lines[candidate]) } || lines.length
+      tail = lines[section_end..].to_a
+      tail.shift while tail.first == ""
+      lines[0...index] + [lines[index], *replacement_lines, ""] + tail
+    end
+
+    def h2_heading?(line)
+      line.start_with?("## ") && !line.start_with?("### ")
     end
 
     def file_lines(paths)
