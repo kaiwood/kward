@@ -1249,6 +1249,10 @@ class TestCLI < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_builtin_slash_commands_match_reserved_prompt_commands
+    assert_equal Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES.sort, Kward::PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES.sort
+  end
+
   def test_login_is_builtin_slash_command
     assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "login"
   end
