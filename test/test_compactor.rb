@@ -204,6 +204,29 @@ class TestCompactor < KwardTestCase
     assert_equal "compactionSummary", conversation.messages.first[:role]
   end
 
+  def test_auto_compaction_applies_protective_buffer_above_configured_reserve
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("short old request")
+    conversation.append_assistant({
+      "role" => "assistant",
+      "content" => "short reply",
+      "usage" => {
+        "input_tokens" => 90,
+        "output_tokens" => 5,
+        "total_tokens" => 95,
+        "estimated" => false
+      }
+    })
+    conversation.append_user("new request")
+
+    settings = Kward::Compaction::Settings.new(reserve_tokens: 20, keep_recent_tokens: 4)
+    client = RecordingClient.new(["## Goal\ncontinue"])
+    auto_compactor = Kward::Compactor.new(conversation: conversation, client: client, settings: settings)
+
+    assert_equal 12_000, auto_compactor.auto_compaction_reserve_tokens(context_window: 100)
+    assert_equal 12_000, auto_compactor.auto_compaction_reserve_tokens(context_window: 100_000)
+    assert_equal 30_000, auto_compactor.auto_compaction_reserve_tokens(context_window: 300_000)
+  end
   def test_summarizer_does_not_retry_argument_errors_from_custom_client
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("old request with enough detail to require compaction")

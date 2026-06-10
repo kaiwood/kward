@@ -458,12 +458,32 @@ module Kward
 
     def print_status
       lines = [STATUS_MESSAGE]
+      lines << ""
+      lines << auto_compaction_status_line
       if @active_session
-        lines << ""
         lines << "Session: #{@active_session.name || @active_session.id}"
         lines << "File: #{@active_session.path}"
       end
+      lines.compact!
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{lines.join("\n")}\n")
+    end
+
+    def auto_compaction_status_line
+      settings = Kward::Compaction::Settings.from_config
+      return "Auto-compaction: disabled" unless settings.enabled
+
+      context_window = composer_context_window
+      return "Auto-compaction: enabled, unknown context window" unless context_window.to_i.positive?
+
+      reserve_tokens = Kward::Compactor.auto_compaction_reserve_tokens(
+        context_window: context_window,
+        configured_reserve_tokens: settings.reserve_tokens
+      )
+      percent = ((reserve_tokens.to_f / context_window.to_i) * 100).round(1)
+      "Auto-compaction reserve: #{reserve_tokens} tokens (#{percent}% of #{context_window})"
+    rescue StandardError => e
+      warn "Auto-compaction status unavailable: #{e.message}"
+      nil
     end
 
     def print_stats(argument)
@@ -1411,8 +1431,15 @@ module Kward
       ANSI.colorize("#{value}%", color, enabled: @color_enabled)
     end
 
+    def composer_context_window
+      provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
+      model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
+      provider = ModelInfo.provider_label(provider)
+      @client.respond_to?(:current_context_window) ? @client.current_context_window : ModelInfo.context_window(provider, model)
+    end
+
     def composer_context_usage(provider, model)
-      context_window = @client.respond_to?(:current_context_window) ? @client.current_context_window : ModelInfo.context_window(provider, model)
+      context_window = composer_context_window
       context_parts = if @client.respond_to?(:current_context_parts)
                         @client.current_context_parts(current_footer_conversation.messages, footer_tool_schemas)
                       else

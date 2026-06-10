@@ -857,6 +857,9 @@ module Kward
     EmptySummary = Compaction::SummarizationFailed
     SummarizationFailed = Compaction::SummarizationFailed
 
+    AUTO_COMPACTION_GUARD_RATIO = 0.10
+    AUTO_COMPACTION_EXTRA_GUARD_CAP = 12_000
+
     def initialize(conversation:, client:, tool_result_summarizer: nil, settings: nil, summarizer: nil)
       @conversation = conversation
       @client = client
@@ -907,7 +910,8 @@ module Kward
       return nil unless context_window
 
       context_tokens ||= Compaction::TokenEstimator.new.context_tokens(@conversation.messages)
-      return nil unless context_tokens.to_i > context_window.to_i - @settings.reserve_tokens
+      reserve_tokens = auto_compaction_reserve_tokens(context_window: context_window.to_i)
+      return nil unless context_tokens.to_i > context_window.to_i - reserve_tokens
 
       compact(custom_instructions: custom_instructions)
     rescue Compaction::NothingToCompact, Compaction::AlreadyCompacted
@@ -915,6 +919,19 @@ module Kward
     rescue StandardError => e
       warn "Auto-compaction failed: #{e.message}"
       nil
+    end
+
+    def auto_compaction_reserve_tokens(context_window:)
+      self.class.auto_compaction_reserve_tokens(
+        context_window: context_window,
+        configured_reserve_tokens: @settings.reserve_tokens
+      )
+    end
+
+    def self.auto_compaction_reserve_tokens(context_window:, configured_reserve_tokens:)
+      context_window_i = context_window.to_i
+      dynamic_guard = (context_window_i * AUTO_COMPACTION_GUARD_RATIO).to_i
+      [configured_reserve_tokens.to_i, dynamic_guard, AUTO_COMPACTION_EXTRA_GUARD_CAP].max
     end
 
     def compaction_messages(custom_instructions = nil)

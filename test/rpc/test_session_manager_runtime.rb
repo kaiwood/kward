@@ -36,6 +36,7 @@ class TestRPCSessionManagerRuntime < KwardTestCase
       assert_equal "fake-model", state[:model][:id]
       assert_equal "fake-model", state[:model][:name]
       assert_equal true, state[:model][:reasoning]
+      assert_equal 20_000, state[:autoCompactionReserveTokens]
       assert_equal "medium", state[:thinkingLevel]
       assert_equal "Codex/fake-model", state[:defaultModel]
     end
@@ -102,6 +103,7 @@ class TestRPCSessionManagerRuntime < KwardTestCase
       assert_equal 4, stats[:totalMessages]
       assert_equal true, stats[:usingSubscription]
       assert_equal true, stats[:autoCompactionEnabled]
+      assert_equal 20_000, stats[:autoCompactionReserveTokens]
       assert_equal({ tokens: 50, contextWindow: 200_000, percent: 0.03 }, stats[:contextUsage])
       refute stats.key?(:tokens)
     end

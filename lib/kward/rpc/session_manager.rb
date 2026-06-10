@@ -385,6 +385,11 @@ module Kward
       def runtime_state(session_id:)
         rpc_session = fetch_session(session_id)
         model = current_model
+        compaction_settings = self.compaction_settings
+        auto_compaction_reserve_tokens = compaction_reserve_tokens(
+          context_window: model[:contextWindow],
+          compaction_settings: compaction_settings
+        )
         session = session_payload(rpc_session)
         pending_count = pending_turn_count(rpc_session.id)
         {
@@ -400,6 +405,7 @@ module Kward
           persistentSessionId: session[:persistentId],
           sessionName: session[:name],
           autoCompactionEnabled: compaction_settings.enabled,
+          autoCompactionReserveTokens: auto_compaction_reserve_tokens,
           autoRetryEnabled: false,
           defaultProvider: model[:provider],
           defaultModel: default_model_label(model),
@@ -421,6 +427,11 @@ module Kward
         session = session_payload(rpc_session)
         counts = message_stats(rpc_session.conversation)
         model = current_model
+        compaction_settings = self.compaction_settings
+        auto_compaction_reserve_tokens = compaction_reserve_tokens(
+          context_window: model[:contextWindow],
+          compaction_settings: compaction_settings
+        )
         {
           sessionFile: session[:path],
           sessionId: session[:persistentId],
@@ -434,6 +445,7 @@ module Kward
           totalMessages: counts[:totalMessages],
           usingSubscription: model[:provider] == "Codex",
           autoCompactionEnabled: compaction_settings.enabled,
+          autoCompactionReserveTokens: auto_compaction_reserve_tokens,
           contextUsage: context_usage(rpc_session, model)
         }.compact
       end
@@ -494,6 +506,16 @@ module Kward
         Kward::Compaction::Settings.from_config(ConfigFiles.read_config(path))
       rescue StandardError
         Kward::Compaction::Settings.new
+      end
+
+      def compaction_reserve_tokens(context_window:, compaction_settings:)
+        return nil unless compaction_settings&.enabled
+        return nil unless context_window
+
+        Kward::Compactor.auto_compaction_reserve_tokens(
+          context_window: context_window,
+          configured_reserve_tokens: compaction_settings&.reserve_tokens
+        )
       end
 
       def current_model_id

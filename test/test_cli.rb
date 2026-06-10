@@ -1302,7 +1302,26 @@ class TestCLI < KwardTestCase
     cli.interactive_loop(agent: agent)
 
     assert_includes prompt.output.join("\n"), Kward::CLI::STATUS_MESSAGE
+    assert_includes prompt.output.join("\n"), "Auto-compaction reserve:"
     assert_empty client.seen_messages
+  end
+
+  def test_status_shows_auto_compaction_disabled
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({ "compaction" => { "enabled" => false } }))
+
+      prompt = FakePrompt.new(["/status", "/exit"])
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_includes prompt.output.join("\n"), "Auto-compaction: disabled"
+    end
   end
 
   def test_news_slash_command_refreshes_cache_and_updates_system_prompt
