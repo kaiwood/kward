@@ -395,11 +395,6 @@ module Kward
       presence(definition)
     end
 
-    def add_persona_part(parts, value)
-      text = presence(value)
-      parts << text if text
-    end
-
     def time_of_day_bucket(now)
       hour = now.hour
       return "morning" if hour >= 5 && hour < 11

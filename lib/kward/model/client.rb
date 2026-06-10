@@ -494,14 +494,6 @@ module Kward
       ModelStreamParser.parse_openai_chat_sse(body, on_assistant_delta: on_assistant_delta, usage_normalizer: method(:normalized_usage))
     end
 
-    def merge_streaming_tool_call(tool_calls, delta)
-      ModelStreamParser.merge_streaming_tool_call(tool_calls, delta)
-    end
-
-    def finalized_streaming_tool_calls(tool_calls)
-      ModelStreamParser.finalized_streaming_tool_calls(tool_calls)
-    end
-
     def copilot_headers(messages)
       headers = GithubOAuth::COPILOT_HEADERS.dup
       headers["X-Initiator"] = copilot_initiator(messages)
@@ -562,22 +554,6 @@ module Kward
       nil
     end
 
-    def codex_sse_state
-      ModelStreamParser.codex_sse_state
-    end
-
-    def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_assistant_delta: nil)
-      ModelStreamParser.process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
-    end
-
-    def codex_sse_error(event)
-      ModelStreamParser.codex_sse_error(event, request_error_class: RequestError)
-    end
-
-    def codex_sse_message(state)
-      ModelStreamParser.codex_sse_message(state)
-    end
-
     def attach_response_metadata(message, provider:, model:, usage: nil)
       return message unless message.is_a?(Hash)
 
@@ -631,18 +607,6 @@ module Kward
     def positive_integer(value)
       integer = value.to_i
       integer.positive? ? integer : nil
-    end
-
-    def codex_tool_call(item)
-      ModelStreamParser.codex_tool_call(item)
-    end
-
-    def text_from_codex_items(items)
-      ModelStreamParser.text_from_codex_items(items)
-    end
-
-    def reasoning_summary_from_codex_items(items)
-      ModelStreamParser.reasoning_summary_from_codex_items(items)
     end
 
     def credentials
