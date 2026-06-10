@@ -90,6 +90,23 @@ module Kward
       env["OPENAI_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
     end
 
+    def provider_label(provider)
+      case provider.to_s.downcase
+      when "openrouter" then "OpenRouter"
+      when "copilot" then "Copilot"
+      when "codex", "openai" then "Codex"
+      else provider.to_s
+      end
+    end
+
+    def provider_config_value(provider)
+      case provider.to_s
+      when "OpenRouter" then "openrouter"
+      when "Copilot" then "copilot"
+      else "codex"
+      end
+    end
+
     def config_key_for_provider(provider)
       case provider.to_s
       when "OpenRouter" then "openrouter_model"
@@ -99,11 +116,7 @@ module Kward
     end
 
     def config_provider_for_provider(provider)
-      case provider.to_s
-      when "OpenRouter" then "openrouter"
-      when "Copilot" then "copilot"
-      else "codex"
-      end
+      provider_config_value(provider)
     end
 
     def config_values_for_selection(provider, model)

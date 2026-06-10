@@ -153,8 +153,8 @@ module Kward
       _url, _token, provider = credentials
       provider
     rescue StandardError
-      return "Copilot" if configured_provider == "copilot"
-      return "OpenRouter" if configured_provider == "openrouter"
+      label = ModelInfo.provider_label(configured_provider)
+      return label unless label.empty?
 
       openai_configured? ? "Codex" : "OpenRouter"
     end
@@ -590,12 +590,13 @@ module Kward
     end
 
     def credentials
-      if configured_provider == "copilot"
-        return [copilot_chat_url, github_access_token, "Copilot", nil]
+      provider = ModelInfo.provider_label(configured_provider)
+      if provider == "Copilot"
+        return [copilot_chat_url, github_access_token, provider, nil]
       end
 
-      if configured_provider == "openrouter"
-        return [OPENROUTER_URL, openrouter_api_key, "OpenRouter", nil]
+      if provider == "OpenRouter"
+        return [OPENROUTER_URL, openrouter_api_key, provider, nil]
       end
 
       openai_token = @openai_access_token || @oauth.access_token
