@@ -1,8 +1,8 @@
-require "fileutils"
 require "json"
 require "net/http"
 require "time"
 require "uri"
+require_relative "auth_file"
 require_relative "config_files"
 
 module Kward
@@ -78,7 +78,6 @@ module Kward
     end
 
     def save_auth(tokens: {})
-      FileUtils.mkdir_p(File.dirname(@auth_path), mode: 0o700)
       data = {
         "auth_mode" => "github_oauth",
         "tokens" => tokens,
@@ -86,11 +85,7 @@ module Kward
         "expires_at" => expires_at_for(tokens)
       }.compact
 
-      File.open(@auth_path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
-        file.write(JSON.pretty_generate(data))
-        file.write("\n")
-      end
-      File.chmod(0o600, @auth_path)
+      AuthFile.write_json(@auth_path, data)
     end
 
     private

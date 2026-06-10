@@ -1,12 +1,12 @@
 require "base64"
 require "digest"
-require "fileutils"
 require "json"
 require "net/http"
 require "securerandom"
 require "socket"
 require "time"
 require "uri"
+require_relative "auth_file"
 
 module Kward
   class OpenAIOAuth
@@ -130,7 +130,6 @@ module Kward
     end
 
     def save_auth(tokens: {})
-      FileUtils.mkdir_p(File.dirname(@auth_path), mode: 0o700)
       account_id = extract_account_id(tokens)
       data = {
         "auth_mode" => "openai_oauth",
@@ -140,11 +139,7 @@ module Kward
         "expires_at" => expires_at_for(tokens)
       }.compact
 
-      File.open(@auth_path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
-        file.write(JSON.pretty_generate(data))
-        file.write("\n")
-      end
-      File.chmod(0o600, @auth_path)
+      AuthFile.write_json(@auth_path, data)
     end
 
     def refresh!
