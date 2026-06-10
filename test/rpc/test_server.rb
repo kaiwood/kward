@@ -66,6 +66,7 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::SessionManager::RPC_IMAGE_MIME_TYPES, capabilities["attachments"]["input"]["mimeTypes"]
     assert_equal Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES, capabilities["attachments"]["input"]["maxBytes"]
     assert_includes capabilities["models"]["methods"], "models/set"
+    assert_includes capabilities["models"]["methods"], "openrouter/catalog"
     assert_equal false, capabilities["models"]["scopedModels"]
     assert_equal true, capabilities["runtime"]["supported"]
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
@@ -135,7 +136,7 @@ class TestRPCServer < KwardTestCase
     ])
     capabilities = messages[0]["result"]["capabilities"]
 
-    assert_equal ["models/list", "models/current", "models/set", "reasoning/set"], capabilities["models"]["methods"]
+    assert_equal ["models/list", "models/current", "models/set", "reasoning/set", "openrouter/catalog"], capabilities["models"]["methods"]
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"], capabilities["auth"]["methods"]

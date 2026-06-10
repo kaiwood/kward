@@ -14,6 +14,16 @@ In an interactive session, run `/login` and choose OpenAI from the provider pick
 
 OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account.
 
+## OpenRouter API key
+
+OpenRouter uses an API key, not OAuth. To save it in `~/.kward/config.json`, run:
+
+```bash
+ruby lib/main.rb login openrouter
+```
+
+In an interactive session, run `/login` and choose OpenRouter from the provider picker. You can also set `OPENROUTER_API_KEY` for a single run.
+
 ## GitHub OAuth for Copilot scaffolding
 
 Kward can store a GitHub OAuth token for future GitHub Copilot subscription support. Add `github_oauth_client_id` to `~/.kward/config.json`, then run:

@@ -1,5 +1,5 @@
 require_relative "config_files"
-require_relative "model_info"
+require_relative "model/model_info"
 
 module Kward
   class CrewReporter

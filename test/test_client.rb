@@ -136,6 +136,55 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
   end
 
+  def test_openrouter_available_models_use_live_model_ids_when_available
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "openrouter", "openrouter_model" => "stale/model"))
+      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+      body = JSON.dump("data" => [{ "id" => "anthropic/claude-sonnet-4.5" }, { "id" => "openai/gpt-5.5" }])
+
+      with_fake_http([fake_net_response(200, body)]) do |http|
+        models = client.available_models
+        cached_models = client.available_models
+
+        assert_equal models, cached_models
+        assert_includes models, { provider: "OpenRouter", id: "anthropic/claude-sonnet-4.5", current: false }
+        assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.5", current: false }
+        assert_includes models, { provider: "OpenRouter", id: "stale/model", current: true }
+        refute_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+        openrouter_requests = http.requests.select { |request| request.uri == URI("https://openrouter.ai/api/v1/models") }
+        assert_equal 1, openrouter_requests.length
+        assert_equal "Bearer openrouter-token", openrouter_requests.first["Authorization"]
+      end
+    end
+  end
+
+  def test_openrouter_available_models_fall_back_to_static_choices_when_fetch_fails
+    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+
+    with_fake_http([fake_net_response(500, "error")]) do
+      models = client.available_models
+
+      assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+    end
+  end
+
+  def test_openrouter_catalog_fetches_full_catalog_without_authorization_header
+    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    body = JSON.dump("data" => [{ "id" => "google/gemini-pro" }, { "slug" => "meta/llama" }])
+
+    with_fake_http([fake_net_response(200, body)]) do |http|
+      models = client.openrouter_catalog
+
+      assert_equal [
+        { provider: "OpenRouter", id: "google/gemini-pro", current: false },
+        { provider: "OpenRouter", id: "meta/llama", current: false }
+      ], models
+      assert_equal URI("https://openrouter.ai/api/v1/models"), http.requests.first.uri
+      assert_nil http.requests.first["Authorization"]
+    end
+  end
+
   def test_copilot_available_models_use_live_model_ids_when_available
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")
@@ -236,12 +285,35 @@ class TestClient < KwardTestCase
   end
 
   def test_openrouter_defaults_to_openai_gpt_5_5
+    with_env("OPENROUTER_MODEL" => nil) do
+      client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+
+      payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
+
+      assert_equal "openai/gpt-5.5", payload[:model]
+      assert_equal({ effort: "medium" }, payload[:reasoning])
+      refute payload.key?(:reasoning_effort)
+    end
+  end
+
+  def test_openrouter_payload_reads_reasoning_effort_from_config
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("openrouter_reasoning_effort" => "high"))
+      client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+
+      payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
+
+      assert_equal({ effort: "high" }, payload[:reasoning])
+    end
+  end
+
+  def test_openrouter_payload_omits_reasoning_when_disabled
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
 
-    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
+    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [], reasoning: false)
 
-    assert_equal "openai/gpt-5.5", payload[:model]
-    refute payload.key?(:reasoning_effort)
+    refute payload.key?(:reasoning)
   end
 
   def test_openrouter_payload_includes_max_tokens_when_limited

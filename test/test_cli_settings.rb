@@ -186,6 +186,27 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_reasoning_slash_command_persists_openrouter_effort_for_openrouter_provider
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "openrouter"))
+      prompt = FakeSettingsPrompt.new(["/reasoning", "/exit"], ["High"])
+      client = FakeClient.new([])
+      client.provider = "OpenRouter"
+      client.reasoning_effort = "medium"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "high", config["openrouter_reasoning_effort"]
+      refute config.key?("openai_reasoning_effort")
+    end
+  end
+
   def test_settings_slash_command_persists_overlay_settings
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

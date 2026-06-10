@@ -1,4 +1,4 @@
-require_relative "config_files"
+require_relative "../config_files"
 
 module Kward
   module ModelInfo
@@ -86,8 +86,13 @@ module Kward
       }.fetch(text, text)
     end
 
-    def reasoning_effort(config:, env: ENV)
-      env["OPENAI_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+    def reasoning_effort(config:, env: ENV, provider: nil)
+      case provider.to_s
+      when "OpenRouter"
+        env["OPENROUTER_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openrouter_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+      else
+        env["OPENAI_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+      end
     end
 
     def provider_label(provider)
@@ -115,6 +120,10 @@ module Kward
       end
     end
 
+    def reasoning_config_key_for_provider(provider)
+      provider.to_s == "OpenRouter" ? "openrouter_reasoning_effort" : "openai_reasoning_effort"
+    end
+
     def config_provider_for_provider(provider)
       provider_config_value(provider)
     end
@@ -138,7 +147,7 @@ module Kward
     end
 
     def reasoning_supported?(provider, id)
-      provider == "Codex" || (provider == "Copilot" && id.to_s.match?(/\Agpt-5(?:\.|-|\z)/))
+      provider == "Codex" || provider == "OpenRouter" || (provider == "Copilot" && id.to_s.match?(/\Agpt-5(?:\.|-|\z)/))
     end
 
     def normalize(model, current_provider: nil, current_model: nil, current_reasoning_effort: nil)

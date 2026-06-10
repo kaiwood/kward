@@ -36,9 +36,9 @@ Overlay settings are stored under `overlay`:
 - Optional provider/model overrides: `KWARD_PROVIDER`, `OPENAI_MODEL`, `OPENROUTER_MODEL`, or `COPILOT_MODEL`.
 - Optional web search env fallback: `EXA_API_KEY`, `PERPLEXITY_API_KEY`, or `GEMINI_API_KEY`.
 
-OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. `OPENROUTER_API_KEY` is only a fallback when no OpenAI OAuth/access token exists.
+Run `ruby lib/main.rb login openrouter` or choose OpenRouter from `/login` to save `openrouter_api_key` in config. OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` or `openrouter_api_key` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. OpenRouter is only a fallback when no OpenAI OAuth/access token exists unless `provider` or `KWARD_PROVIDER` is set to `openrouter`.
 
-Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`, Copilot `gpt-5-mini`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, `COPILOT_MODEL`, or the config file values above.
+Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`, Copilot `gpt-5-mini`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, `COPILOT_MODEL`, or the config file values above. The normal model picker prefers OpenRouter models available to the configured API key when Kward can fetch them; `/openrouter/catalog` and the RPC `openrouter/catalog` method list the full OpenRouter catalog separately.
 
 ## Pan mode
 

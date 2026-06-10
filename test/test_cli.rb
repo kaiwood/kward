@@ -139,6 +139,28 @@ class TestCLI < KwardTestCase
     assert_includes prompt.output.join, "GitHub OAuth login to /tmp/github_auth.json"
   end
 
+  def test_login_openrouter_stores_api_key_in_config
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      prompt = FakePrompt.new(["sk-or-test"])
+      auth = Kward::OpenRouterAPIKey.new(config_path: path)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.login(provider: "openrouter", oauth: auth)
+
+      assert_equal "sk-or-test", JSON.parse(File.read(path))["openrouter_api_key"]
+      assert_includes prompt.output.join, "OpenRouter API key to #{path}"
+      refute_includes prompt.output.join, "sk-or-test"
+    end
+  end
+
+  def test_login_picker_includes_openrouter
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+    assert_equal ["OpenAI", "OpenRouter", "GitHub"], cli.send(:login_provider_choices)
+    assert_equal "openrouter", cli.send(:selected_login_provider, "OpenRouter")
+  end
+
   def test_streamed_interactive_turn_renders_markdown_after_buffering
     prompt = FakePrompt.new([])
     client = MarkdownStreamingClient.new(["# Pla", "n\n```ruby\n", "puts :ok\n```\n"])
@@ -1240,7 +1262,7 @@ class TestCLI < KwardTestCase
     cli.interactive_loop(agent: agent)
 
     assert_equal ["openai"], cli.login_providers
-    assert_equal ["OpenAI", "GitHub"], prompt.select_choices.first
+    assert_equal ["OpenAI", "OpenRouter", "GitHub"], prompt.select_choices.first
     assert_equal "Login", prompt.select_titles.first
     assert_empty client.seen_messages
   end

@@ -7,13 +7,14 @@ require_relative "../cancellation"
 require_relative "../config_files"
 require_relative "../context_overflow"
 require_relative "../image_attachments"
-require_relative "../model_info"
+require_relative "model_info"
 require_relative "../telemetry_logger"
 require_relative "stream_parser"
 
 module Kward
   class Client
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
+    OPENROUTER_MODELS_URL = URI("https://openrouter.ai/api/v1/models")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
     OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouter_api_key to your Kward config."
@@ -75,6 +76,8 @@ module Kward
       @config = load_config
       @telemetry_logger = telemetry_logger
       @copilot_models = nil
+      @openrouter_models = nil
+      @openrouter_catalog = nil
     end
 
     def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, model: nil, reasoning: nil)
@@ -164,7 +167,7 @@ module Kward
     end
 
     def current_reasoning_effort
-      reasoning_effort
+      reasoning_effort(current_provider)
     end
 
     def current_context_window
@@ -176,20 +179,27 @@ module Kward
       openai_model = model_for("Codex")
       openrouter_model = model_for("OpenRouter")
       copilot_model = model_for("Copilot")
+      openrouter_choices = openrouter_model_choices
       copilot_choices = copilot_model_choices
       models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
         { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
       end
-      models += ModelInfo::OPENROUTER_MODEL_CHOICES.map do |id|
+      models += openrouter_choices.map do |id|
         { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
       end
       models += copilot_choices.map do |id|
         { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
       end
       models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
-      models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless ModelInfo::OPENROUTER_MODEL_CHOICES.include?(openrouter_model)
+      models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_choices.include?(openrouter_model)
       models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
       models
+    end
+
+    def openrouter_catalog
+      fetch_openrouter_models(full_catalog: true).map do |id|
+        { provider: "OpenRouter", id: id, current: current_provider == "OpenRouter" && model_for("OpenRouter") == id }
+      end
     end
 
     def current_context_parts(messages, tools)
@@ -205,6 +215,8 @@ module Kward
     def reload_config
       @config = load_config
       @copilot_models = nil
+      @openrouter_models = nil
+      @openrouter_catalog = nil
     end
 
     private
@@ -303,12 +315,54 @@ module Kward
       elsif provider == "Copilot" && copilot_responses_model?(model)
         copilot_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       else
-        request_payload(provider, messages, tools, max_tokens: max_tokens, model: model)
+        request_payload(provider, messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       end
     end
 
     def copilot_responses_model?(model)
       model.to_s.match?(/\Agpt-5(?:\.|-|\z)/)
+    end
+
+    def openrouter_model_choices
+      live_models = fetch_openrouter_models(full_catalog: false)
+      choices = live_models.empty? ? ModelInfo::OPENROUTER_MODEL_CHOICES : live_models
+      choices.uniq
+    end
+
+    def fetch_openrouter_models(full_catalog: false)
+      cache = full_catalog ? @openrouter_catalog : @openrouter_models
+      return cache if cache
+
+      token = openrouter_api_key.to_s
+      return [] if token.empty? && !full_catalog
+
+      request = Net::HTTP::Get.new(OPENROUTER_MODELS_URL)
+      request["Authorization"] = "Bearer #{token}" unless full_catalog || token.empty?
+      request["Accept"] = "application/json"
+
+      response = Net::HTTP.start(OPENROUTER_MODELS_URL.hostname, OPENROUTER_MODELS_URL.port, use_ssl: true) { |http| http.request(request) }
+      return [] unless response.is_a?(Net::HTTPSuccess)
+
+      models = parse_openrouter_models(response.body)
+      if full_catalog
+        @openrouter_catalog = models
+      else
+        @openrouter_models = models
+      end
+    rescue StandardError
+      []
+    end
+
+    def parse_openrouter_models(body)
+      data = JSON.parse(body.to_s)
+      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
+      Array(entries).filter_map do |entry|
+        if entry.is_a?(Hash)
+          entry["id"] || entry[:id] || entry["slug"] || entry[:slug]
+        else
+          entry
+        end
+      end.map(&:to_s).map(&:strip).reject(&:empty?).uniq
     end
 
     def copilot_model_choices
@@ -380,7 +434,7 @@ module Kward
         stream: true,
         store: false
       }
-      payload[:reasoning] = { effort: reasoning_effort, summary: "auto" } unless reasoning == false
+      payload[:reasoning] = { effort: reasoning_effort("Copilot"), summary: "auto" } unless reasoning == false
       payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end
@@ -609,9 +663,10 @@ module Kward
       end
     end
 
-    def request_payload(provider, messages, tools, max_tokens: nil, model: nil)
+    def request_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       parts = build_context_parts(provider, messages, tools, model: model)
       payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
+      payload[:reasoning] = { effort: reasoning_effort("OpenRouter") } if provider == "OpenRouter" && reasoning != false
       payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end
@@ -691,7 +746,7 @@ module Kward
         store: false,
         include: []
       }
-      payload[:reasoning] = { effort: reasoning_effort, summary: "auto" } unless reasoning == false
+      payload[:reasoning] = { effort: reasoning_effort("Codex"), summary: "auto" } unless reasoning == false
       payload
     end
 
@@ -806,8 +861,8 @@ module Kward
       ModelInfo.model_for(provider, config: @config, override_model: override_model || @model)
     end
 
-    def reasoning_effort
-      ModelInfo.reasoning_effort(config: @config)
+    def reasoning_effort(provider = nil)
+      ModelInfo.reasoning_effort(config: @config, provider: provider)
     end
 
     def openai_configured?

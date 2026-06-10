@@ -1,6 +1,6 @@
 require_relative "../auth/openai_oauth"
 require_relative "../config_files"
-require_relative "../model_info"
+require_relative "../model/model_info"
 require_relative "redactor"
 
 module Kward
@@ -28,11 +28,11 @@ module Kward
         update(ModelInfo.config_values_for_selection(provider, model))
       end
 
-      def set_reasoning_effort(effort)
+      def set_reasoning_effort(effort, provider: nil)
         effort = effort.to_s.strip
         raise "Reasoning effort must be a non-empty string" if effort.empty?
 
-        update("openai_reasoning_effort" => effort)
+        update(ModelInfo.reasoning_config_key_for_provider(provider) => effort)
       end
 
       def set_api_key(provider_id, api_key)

@@ -11,9 +11,10 @@ require_relative "context_usage"
 require_relative "crew_reporter"
 require_relative "events"
 require_relative "auth/github_oauth"
+require_relative "auth/openrouter_api_key"
 require_relative "image_attachments"
 require_relative "markdown_transcript"
-require_relative "model_info"
+require_relative "model/model_info"
 require_relative "news_cache"
 require_relative "auth/openai_oauth"
 require_relative "pan_server"
@@ -50,6 +51,7 @@ module Kward
       { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
       { name: "login", description: "Log in with an OAuth provider.", argument_hint: "" },
       { name: "model", description: "Select the default model.", argument_hint: "" },
+      { name: "openrouter/catalog", description: "List the full OpenRouter model catalog.", argument_hint: "" },
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
@@ -149,6 +151,13 @@ module Kward
 
     def login(provider: nil, oauth: nil)
       provider = provider.to_s.downcase
+      if provider == "openrouter"
+        auth = oauth || OpenRouterAPIKey.new
+        path = auth.login(prompt: @prompt)
+        @prompt.say("#{colored("Saved", :green, :bold)} OpenRouter API key to #{path}")
+        return
+      end
+
       oauth ||= provider == "github" ? GithubOAuth.new : OpenAIOAuth.new
       path = oauth.login(prompt: @prompt)
       name = provider == "github" ? "GitHub" : "OpenAI"
@@ -395,6 +404,9 @@ module Kward
       when "model"
         configure_model(agent.conversation)
         [true, nil]
+      when "openrouter/catalog"
+        print_openrouter_catalog
+        [true, nil]
       when "reasoning"
         configure_reasoning(agent.conversation)
         [true, nil]
@@ -585,6 +597,23 @@ module Kward
       @prompt.say("\nModel error: #{e.message}\n")
     end
 
+    def print_openrouter_catalog
+      unless @client.respond_to?(:openrouter_catalog)
+        @prompt.say("\nOpenRouter catalog is unavailable for this client.\n")
+        return
+      end
+
+      models = Array(@client.openrouter_catalog)
+      if models.empty?
+        @prompt.say("\nNo OpenRouter catalog models available.\n")
+      else
+        ids = models.map { |model| model[:id] || model["id"] || model }.map(&:to_s).reject(&:empty?)
+        @prompt.say("\nOpenRouter catalog:\n#{ids.join("\n")}\n")
+      end
+    rescue StandardError => e
+      @prompt.say("\nOpenRouter catalog error: #{e.message}\n")
+    end
+
     def configure_reasoning(conversation = nil)
       unless model_overlay_available?
         @prompt.say("\nReasoning overlay is unavailable in this prompt.\n")
@@ -598,7 +627,7 @@ module Kward
       effort, = choices.find { |_value, label| selected.to_s.downcase.start_with?(label.downcase) }
       raise "Reasoning effort must be low, medium, high, or extra high" unless effort
 
-      ConfigFiles.update_config("openai_reasoning_effort" => effort)
+      ConfigFiles.update_config(ModelInfo.reasoning_config_key_for_provider(current_model_provider) => effort)
       reload_client_config
       refresh_conversation_runtime(conversation)
       @prompt.redraw if @prompt.respond_to?(:redraw)
@@ -611,13 +640,15 @@ module Kward
     end
 
     def login_provider_choices
-      ["OpenAI", "GitHub"]
+      ["OpenAI", "OpenRouter", "GitHub"]
     end
 
     def selected_login_provider(selected)
       case selected.to_s.downcase
       when /\Aopenai\b/
         "openai"
+      when /\Aopenrouter\b/
+        "openrouter"
       when /\Agithub\b/
         "github"
       end

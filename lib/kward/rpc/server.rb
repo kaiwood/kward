@@ -121,6 +121,8 @@ module Kward
           prompts_expand(params)
         when "models/list"
           models_list
+        when "openrouter/catalog"
+          openrouter_catalog
         when "models/current"
           models_current
         when "models/set"
@@ -284,7 +286,7 @@ module Kward
           },
           models: {
             supported: true,
-            methods: ["models/list", "models/current", "models/set", "reasoning/set"],
+            methods: ["models/list", "models/current", "models/set", "reasoning/set", "openrouter/catalog"],
             fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
             scopedModels: false
           },
@@ -387,6 +389,10 @@ module Kward
         { models: @session_manager.available_models }
       end
 
+      def openrouter_catalog
+        { models: @session_manager.openrouter_catalog }
+      end
+
       def runtime_update_setting(params)
         session_id = params.fetch("sessionId")
         @session_manager.runtime_state(session_id: session_id)
@@ -397,7 +403,7 @@ module Kward
           provider, model = provider_model_from(value)
           @config_manager.set_model(model, provider: provider)
         when "defaultThinkingLevel"
-          @config_manager.set_reasoning_effort(value)
+          @config_manager.set_reasoning_effort(value, provider: @session_manager.current_model[:provider])
         else
           raise ArgumentError, "Unsupported runtime setting: #{setting_id}"
         end
@@ -511,7 +517,8 @@ module Kward
       end
 
       def reasoning_set(params)
-        @config_manager.set_reasoning_effort(params.fetch("effort"))
+        provider = params["provider"] || @session_manager.current_model[:provider]
+        @config_manager.set_reasoning_effort(params.fetch("effort"), provider: provider)
         @session_manager.refresh_client_config
         @session_manager.current_model
       end

@@ -38,6 +38,40 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_openrouter_catalog_rpc_returns_catalog_models
+    client = ReloadableFakeClient.new([], "missing_kward_config.json")
+    def client.openrouter_catalog
+      [{ provider: "OpenRouter", id: "anthropic/claude-sonnet-4.5", current: false }]
+    end
+
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "openrouter/catalog" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ], client: client)
+
+    model = messages[0]["result"]["models"].first
+    assert_equal "OpenRouter", model["provider"]
+    assert_equal "anthropic/claude-sonnet-4.5", model["id"]
+    assert_equal "anthropic/claude-sonnet-4.5", model["name"]
+  end
+
+  def test_model_rpc_set_switches_to_selected_openrouter_catalog_model
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "models/set", params: { provider: "OpenRouter", model: "anthropic/claude-sonnet-4.5" } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "OpenRouter", messages[0]["result"]["provider"]
+      assert_equal "anthropic/claude-sonnet-4.5", messages[0]["result"]["id"]
+      config = JSON.parse(File.read(config_path))
+      assert_equal "openrouter", config["provider"]
+      assert_equal "anthropic/claude-sonnet-4.5", config["openrouter_model"]
+    end
+  end
+
   def test_model_rpc_set_switches_to_selected_copilot_provider_model
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -146,7 +180,7 @@ class TestRPCConfigManager < KwardTestCase
         assert_equal({ ok: true, message: "Resources reloaded." }, reload_result)
         config = JSON.parse(File.read(config_path))
         assert_equal "anthropic/claude-sonnet", config["openrouter_model"]
-        assert_equal "high", config["openai_reasoning_effort"]
+        assert_equal "high", config["openrouter_reasoning_effort"]
         assert_equal 3, client.reload_count
 
         error = assert_raises(ArgumentError) do

@@ -13,7 +13,7 @@ require_relative "../conversation"
 require_relative "../crew_reporter"
 require_relative "../events"
 require_relative "../markdown_transcript"
-require_relative "../model_info"
+require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
 require_relative "../session_store"
@@ -302,6 +302,11 @@ module Kward
         current = current_model
         normalized << current if normalized.none? { |model| model[:provider] == current[:provider] && model[:id] == current[:id] }
         normalized
+      end
+
+      def openrouter_catalog
+        models = @client.respond_to?(:openrouter_catalog) ? Array(@client.openrouter_catalog) : []
+        models.map { |model| normalize_model(model) }
       end
 
       def current_model

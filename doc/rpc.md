@@ -48,7 +48,7 @@ Detailed capability fields include:
 - `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
-- `models`: model/reasoning RPC methods, exposed model fields, and no scoped model support.
+- `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: Tauren auth provider format, OpenAI OAuth, OpenRouter API-key login, and provider logout for stored credentials.
@@ -382,7 +382,11 @@ Returns structured stats for enabled categories only, including the requested ra
 
 ### `models/list`
 
-Returns known model entries from the current client/config backend. This is intentionally simple and may include only defaults/currently configured options. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`; legacy `model` is retained as an alias for older clients.
+Returns known model entries from the current client/config backend. OpenRouter entries prefer models available to the configured OpenRouter API key when they can be fetched; otherwise Kward falls back to defaults/currently configured options. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`; legacy `model` is retained as an alias for older clients.
+
+### `openrouter/catalog`
+
+Returns the full OpenRouter model catalog as model entries. This is separate from `models/list`, which prefers models available to the configured API key. Models returned here may still fail at request time if the active OpenRouter key cannot access them.
 
 ### `models/current`
 
