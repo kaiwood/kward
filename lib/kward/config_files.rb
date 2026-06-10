@@ -1,6 +1,7 @@
 require "fileutils"
 require "json"
 require "yaml"
+require_relative "private_file"
 require_relative "skills/registry"
 
 module Kward
@@ -65,13 +66,7 @@ module Kward
     end
 
     def write_config(config, path = config_path)
-      path = File.expand_path(path)
-      FileUtils.mkdir_p(File.dirname(path), mode: 0o700)
-      File.open(path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
-        file.write(JSON.pretty_generate(config))
-        file.write("\n")
-      end
-      File.chmod(0o600, path)
+      PrivateFile.write_json(path, config)
     end
 
     def update_config(values, path = config_path)
