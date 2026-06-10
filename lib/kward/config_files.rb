@@ -1,7 +1,7 @@
 require "fileutils"
 require "json"
-require "pathname"
 require "yaml"
+require_relative "skills/registry"
 
 module Kward
   module ConfigFiles
@@ -397,25 +397,7 @@ module Kward
     end
 
     def skills
-      skills_root = File.join(config_dir, "skills")
-      return [] unless Dir.exist?(skills_root)
-
-      seen = {}
-      Dir.glob(File.join(skills_root, "*", "SKILL.md")).sort.filter_map do |path|
-        skill = parse_skill(path)
-        next unless skill
-
-        if seen[skill.name]
-          warn "Warning: skipping duplicate Kward skill #{skill.name.inspect}: #{path}"
-          next
-        end
-
-        seen[skill.name] = true
-        skill
-      end
-    rescue StandardError => e
-      warn "Warning: skipping Kward skills in #{skills_root}: #{e.message}"
-      []
+      skills_registry.skills
     end
 
     def plugin_dir
@@ -472,40 +454,17 @@ module Kward
     end
 
     def read_skill_file(name, relative_path = nil)
-      skill = skills.find { |candidate| candidate.name == name.to_s }
-      return "Error: unknown skill: #{name}" unless skill
-
-      path = relative_path.to_s.empty? ? "SKILL.md" : relative_path.to_s
-      return "Error: skill path must be relative" if Pathname.new(path).absolute?
-
-      base = File.realpath(skill.folder)
-      target = File.expand_path(path, base)
-      real_target = File.realpath(target)
-      unless inside_directory?(real_target, base)
-        return "Error: skill path outside skill folder: #{path}"
-      end
-      return "Error: skill path is not a file: #{path}" unless File.file?(real_target)
-
-      size = File.size(real_target)
-      return "Error: skill file too large: #{path} (#{size} bytes)" if size > MAX_SKILL_FILE_BYTES
-
-      File.read(real_target)
-    rescue Errno::ENOENT
-      "Error: skill file not found: #{path}"
-    rescue StandardError => e
-      "Error: could not read skill file #{path}: #{e.message}"
+      skills_registry.read_skill_file(name, relative_path)
     end
 
-    def parse_skill(path)
-      frontmatter, = markdown_parts(path)
-      name = frontmatter.fetch("name", "").to_s.strip
-      name = File.basename(File.dirname(path)) if name.empty?
-      description = frontmatter.fetch("description", "").to_s.strip
-
-      Skill.new(name: name, description: description, folder: File.dirname(path), path: path)
-    rescue StandardError => e
-      warn "Warning: skipping Kward skill #{path}: #{e.message}"
-      nil
+    def skills_registry
+      Skills::Registry.new(
+        config_dir: config_dir,
+        skill_class: Skill,
+        max_file_bytes: MAX_SKILL_FILE_BYTES,
+        markdown_parser: method(:markdown_parts),
+        inside_directory: method(:inside_directory?)
+      )
     end
 
     def parse_prompt_template(path)
