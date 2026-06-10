@@ -74,6 +74,7 @@ module Kward
       @config_path = File.expand_path(config_path)
       @config = load_config
       @telemetry_logger = telemetry_logger
+      @copilot_models = nil
     end
 
     def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, model: nil, reasoning: nil)
@@ -203,6 +204,7 @@ module Kward
 
     def reload_config
       @config = load_config
+      @copilot_models = nil
     end
 
     private
@@ -331,6 +333,8 @@ module Kward
     end
 
     def fetch_copilot_models
+      return @copilot_models if @copilot_models
+
       token = github_access_token.to_s
       return [] if token.empty?
 
@@ -343,7 +347,7 @@ module Kward
       response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) { |http| http.request(request) }
       return [] unless response.is_a?(Net::HTTPSuccess)
 
-      parse_copilot_models(response.body)
+      @copilot_models = parse_copilot_models(response.body)
     rescue StandardError
       []
     end

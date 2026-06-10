@@ -149,11 +149,14 @@ class TestClient < KwardTestCase
 
       with_fake_http([fake_net_response(200, body)]) do |http|
         models = client.available_models
+        cached_models = client.available_models
 
+        assert_equal models, cached_models
         assert_includes models, { provider: "Copilot", id: "gpt-5-mini-2025-08-07", current: false }
         assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
         refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "hidden-model" }
         assert_includes models, { provider: "Copilot", id: "stale-model", current: true }
+        assert_equal 1, http.requests.length
         assert_equal URI("https://api.individual.githubcopilot.com/models"), http.requests.first.uri
       end
     end
