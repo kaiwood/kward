@@ -15,6 +15,7 @@ require_relative "auth/openrouter_api_key"
 require_relative "image_attachments"
 require_relative "markdown_transcript"
 require_relative "memory/manager"
+require_relative "message_access"
 require_relative "model/model_info"
 require_relative "auth/openai_oauth"
 require_relative "pan/server"
@@ -1092,14 +1093,14 @@ module Kward
     end
 
     def message_display_text(message)
-      display_content = message["display_content"] || message[:display_content] || message["displayContent"] || message[:displayContent]
+      display_content = MessageAccess.display_content(message)
       return display_content.to_s unless display_content.nil?
 
       message_content_text(message_content(message))
     end
 
     def message_user_display_text(message)
-      display_content = message["display_content"] || message[:display_content] || message["displayContent"] || message[:displayContent]
+      display_content = MessageAccess.display_content(message)
       return display_content.to_s unless display_content.nil?
 
       content = message_content(message)
@@ -1166,15 +1167,15 @@ module Kward
     end
 
     def message_role(message)
-      message["role"] || message[:role]
+      MessageAccess.role(message)
     end
 
     def message_content(message)
-      message["content"] || message[:content]
+      MessageAccess.content(message)
     end
 
     def message_summary(message)
-      message["summary"] || message[:summary] || message_content(message)
+      MessageAccess.summary(message) || message_content(message)
     end
 
     def messages_for_memory_summarization(conversation)
@@ -1182,16 +1183,15 @@ module Kward
     end
 
     def message_name(message)
-      message["name"] || message[:name]
+      MessageAccess.name(message)
     end
 
     def message_tool_call_id(message)
-      message["tool_call_id"] || message[:tool_call_id]
+      MessageAccess.tool_call_id(message)
     end
 
     def message_tool_calls(message)
-      value = message["tool_calls"] || message[:tool_calls]
-      value.is_a?(Array) ? value : []
+      MessageAccess.tool_calls(message)
     end
 
     def tool_call_id(tool_call)
