@@ -7,11 +7,11 @@ module Kward
         @workspace = workspace
         super(
           "read_file",
-          "Read a text file inside the current workspace. Output is truncated to 2000 lines or 50KB, whichever is hit first. Use offset/limit to continue through large files.",
+          "Read a workspace text file. Output is capped; use offset/limit to continue.",
           properties: {
-            path: { type: "string", description: "Workspace-relative file path." },
-            offset: { type: "integer", description: "Optional 1-indexed line number to start reading from." },
-            limit: { type: "integer", description: "Optional maximum number of lines to return." }
+            path: { type: "string", description: "Workspace-relative path." },
+            offset: { type: "integer", description: "1-indexed start line." },
+            limit: { type: "integer", description: "Maximum lines to return." }
           },
           required: ["path"]
         )

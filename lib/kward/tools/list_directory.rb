@@ -7,8 +7,8 @@ module Kward
         @workspace = workspace
         super(
           "list_directory",
-          "List files and directories inside the current workspace.",
-          properties: { path: { type: "string", description: "Workspace-relative directory path." } },
+          "List workspace directory entries.",
+          properties: { path: { type: "string", description: "Workspace-relative directory." } },
           required: ["path"]
         )
       end

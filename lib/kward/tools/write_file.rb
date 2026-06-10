@@ -7,10 +7,10 @@ module Kward
         @workspace = workspace
         super(
           "write_file",
-          "Write content to a file inside the current workspace. Existing files must be read first.",
+          "Write a workspace file. Existing files must be read first.",
           properties: {
-            path: { type: "string", description: "Workspace-relative file path." },
-            content: { type: "string", description: "Complete file content to write." }
+            path: { type: "string", description: "Workspace-relative path." },
+            content: { type: "string", description: "Complete file content." }
           },
           required: ["path", "content"]
         )

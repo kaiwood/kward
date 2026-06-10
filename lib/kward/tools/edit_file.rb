@@ -7,16 +7,16 @@ module Kward
         @workspace = workspace
         super(
           "edit_file",
-          "Edit an existing file inside the current workspace using exact text replacement. Existing files must be read first. Each old_text must match exactly once and edits must not overlap.",
+          "Edit a read workspace file by exact replacements. Each old_text must match once; edits must not overlap.",
           properties: {
-            path: { type: "string", description: "Workspace-relative file path." },
+            path: { type: "string", description: "Workspace-relative path." },
             edits: {
               type: "array",
-              description: "One or more non-overlapping replacements matched against the original file content.",
+              description: "Non-overlapping replacements against original content.",
               items: {
                 type: "object",
                 properties: {
-                  old_text: { type: "string", description: "Exact text to replace. Must be unique in the original file." },
+                  old_text: { type: "string", description: "Unique exact text to replace." },
                   new_text: { type: "string", description: "Replacement text." }
                 },
                 required: ["old_text", "new_text"],

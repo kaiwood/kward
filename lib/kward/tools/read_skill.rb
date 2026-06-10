@@ -7,10 +7,10 @@ module Kward
       def initialize
         super(
           "read_skill",
-          "Read configured skill instructions or related files from the Kward config skills directory.",
+          "Read configured skill instructions/files.",
           properties: {
-            name: { type: "string", description: "Configured skill name." },
-            path: { type: "string", description: "Optional path relative to the skill folder. Defaults to SKILL.md." }
+            name: { type: "string", description: "Skill name." },
+            path: { type: "string", description: "Path inside skill; default SKILL.md." }
           },
           required: ["name"]
         )

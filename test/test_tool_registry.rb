@@ -127,6 +127,13 @@ class TestToolRegistry < KwardTestCase
     assert_includes properties.keys, :limit
   end
 
+  def test_code_search_schema_advertises_canonical_ecosystems_only
+    code_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "code_search" }
+    ecosystem_enum = code_schema[:function][:parameters][:properties][:ecosystem][:enum]
+
+    assert_equal %w[rubygems npm pypi crates go], ecosystem_enum
+  end
+
   def test_ask_user_question_returns_prompt_answers_as_readable_text
     prompt = FakeQuestionPrompt.new([{ question: "Proceed?", answer: "Yes" }])
     conversation = Kward::Conversation.new

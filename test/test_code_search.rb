@@ -60,6 +60,21 @@ class TestCodeSearch < KwardTestCase
     assert_empty http.json_urls.grep(/api.github.com/)
   end
 
+  def test_package_search_still_accepts_ecosystem_aliases
+    http = FakeHttpClient.new(json: {
+      "https://rubygems.org/api/v1/gems/kward.json" => {
+        "name" => "kward",
+        "source_code_uri" => "https://github.com/example/kward"
+      }
+    })
+    search = Kward::CodeSearch.new(http_client: http, git_runner: FakeGitRunner.new)
+
+    result = search.call("action" => "package_search", "ecosystem" => "gem", "package" => "kward")
+
+    assert_includes result, "- Ecosystem: rubygems"
+    assert_includes result, "- Source: https://github.com/example/kward"
+  end
+
   def test_package_search_falls_back_to_github_when_source_missing
     http = FakeHttpClient.new(json: {
       "https://pypi.org/pypi/missing/json" => {

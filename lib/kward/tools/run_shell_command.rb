@@ -8,10 +8,10 @@ module Kward
         @workspace = workspace
         super(
           "run_shell_command",
-          "Run a shell command in the current workspace.",
+          "Run a shell command from the workspace root.",
           properties: {
-            command: { type: "string", description: "Shell command to run from the workspace root." },
-            timeout_seconds: { type: "integer", description: "Optional timeout in seconds. Defaults to 30." }
+            command: { type: "string", description: "Command to run." },
+            timeout_seconds: { type: "integer", description: "Timeout seconds; default 30." }
           },
           required: ["command"]
         )

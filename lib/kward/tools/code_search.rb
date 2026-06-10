@@ -7,21 +7,21 @@ module Kward
         @code_search = code_search
         super(
           "code_search",
-          "Find package source repos, cache public GitHub repos, and search or read bounded source snippets.",
+          "Find package repos, cache GitHub repos, and search/read bounded snippets.",
           properties: {
             action: {
               type: "string",
               enum: %w[package_search github_search repo_clone repo_search repo_read list_cache refresh_cache clear_cache],
-              description: "Operation to perform."
+              description: "Operation."
             },
             ecosystem: {
               type: "string",
-              enum: %w[rubygems npm pypi crates go ruby gem python rust crates.io],
+              enum: %w[rubygems npm pypi crates go],
               description: "Package ecosystem."
             },
             package: {
               type: "string",
-              description: "Package name."
+              description: "Package."
             },
             query: {
               type: "string",
@@ -33,7 +33,7 @@ module Kward
             },
             path: {
               type: "string",
-              description: "Repo-relative file path."
+              description: "Repo-relative path."
             },
             start_line: {
               type: "integer",
