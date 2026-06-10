@@ -14,6 +14,7 @@ require_relative "../crew_reporter"
 require_relative "../events"
 require_relative "../markdown_transcript"
 require_relative "../memory/manager"
+require_relative "../message_access"
 require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompt_commands"
@@ -621,16 +622,15 @@ module Kward
       end
 
       def tool_calls(message)
-        calls = message["tool_calls"] || message[:tool_calls]
-        calls.is_a?(Array) ? calls : []
+        MessageAccess.tool_calls(message)
       end
 
       def message_role(message)
-        message["role"] || message[:role]
+        MessageAccess.role(message)
       end
 
       def message_content(message)
-        message["content"] || message[:content]
+        MessageAccess.content(message)
       end
 
       def messages_for_memory_summarization(conversation)
