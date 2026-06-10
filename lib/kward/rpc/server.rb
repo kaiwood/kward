@@ -158,6 +158,10 @@ module Kward
           @session_manager.memory_enable
         when "memory/disable"
           @session_manager.memory_disable
+        when "memory/autoSummary/enable"
+          @session_manager.memory_auto_summary_enable
+        when "memory/autoSummary/disable"
+          @session_manager.memory_auto_summary_disable
         when "memory/list"
           @session_manager.memory_list(include_inactive: params["includeInactive"] || false)
         when "memory/add"
@@ -333,7 +337,7 @@ module Kward
             apiKeyProviders: ["openrouter"],
             logout: true
           },
-          memory: { supported: true, optIn: true, defaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/inspect", "memory/why", "memory/summarize"] },
+          memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable", "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/inspect", "memory/why", "memory/summarize"] },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           extensionUi: {

@@ -381,11 +381,11 @@ Returns structured stats for enabled categories only, including the requested ra
 
 ## Memory methods
 
-Memory is disabled by default. RPC memory methods operate on the same local storage as the CLI: `<config-dir>/memory/core.json`, `<config-dir>/memory/soft.jsonl`, and `<config-dir>/memory/events.jsonl`. Retrieved memory is injected only for normal session turns when memory is enabled.
+Memory is disabled by default. Auto-summary is also disabled by default. RPC memory methods operate on the same local storage as the CLI: `<config-dir>/memory/core.json`, `<config-dir>/memory/soft.jsonl`, and `<config-dir>/memory/events.jsonl`. Retrieved memory is injected only for normal session turns when memory is enabled.
 
 ### `memory/status`
 
-Returns `{ "enabled": boolean, "paths": { "core", "soft", "events" } }`.
+Returns `{ "enabled": boolean, "autoSummary": boolean, "paths": { "core", "soft", "events" } }`.
 
 ### `memory/enable`
 
@@ -394,6 +394,14 @@ Enables memory in config and creates storage files if needed. Returns `{ "enable
 ### `memory/disable`
 
 Disables memory prompt injection. Stored memories are left in place. Returns `{ "enabled": false }`.
+
+### `memory/autoSummary/enable`
+
+Enables quiet memory summarization after completed interactive turns. Auto-summary runs only when memory is also enabled. Returns `{ "autoSummary": true }`.
+
+### `memory/autoSummary/disable`
+
+Disables quiet memory summarization after completed interactive turns. Returns `{ "autoSummary": false }`.
 
 ### `memory/list`
 

@@ -86,6 +86,10 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["auth"]["methods"], "auth/loginWithApiKey"
     assert_includes capabilities["auth"]["methods"], "auth/logoutProvider"
     assert_includes capabilities["auth"]["methods"], "auth/loginWithOAuth"
+    assert_equal true, capabilities["memory"]["supported"]
+    assert_equal false, capabilities["memory"]["autoSummaryDefaultEnabled"]
+    assert_includes capabilities["memory"]["methods"], "memory/autoSummary/enable"
+    assert_includes capabilities["memory"]["methods"], "memory/autoSummary/disable"
     assert_equal true, capabilities["commands"]["supported"]
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]

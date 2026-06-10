@@ -58,7 +58,7 @@ module Kward
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
       { name: "news", description: "Refresh the Hacker News daily news cache.", argument_hint: "" },
       { name: "crew", description: "Query all active personas and summarize the crew.", argument_hint: "" },
-      { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|core|add|list|forget|promote|inspect|why|summarize]" }
+      { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|inspect|why|summarize]" }
     ].freeze
     BUILTIN_SLASH_COMMAND_NAMES = BUILTIN_SLASH_COMMANDS.map { |command| command[:name] }.freeze
 
@@ -530,6 +530,17 @@ module Kward
         agent.conversation.memory_context = nil
         agent.conversation.refresh_system_message!
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory disabled.\n")
+      when "auto-summary"
+        case rest.to_s.strip
+        when "enable", "on"
+          manager.auto_summary_enable
+          @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory auto-summary enabled.\n")
+        when "disable", "off"
+          manager.auto_summary_disable
+          @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory auto-summary disabled.\n")
+        else
+          @prompt.say("\nUsage: /memory auto-summary enable|disable\n")
+        end
       when "core"
         record = manager.add_core(unquote_argument(rest))
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Added core memory #{record["id"]}.\n")
@@ -550,17 +561,22 @@ module Kward
         explanation = agent.conversation.last_memory_retrieval || manager.explain_retrieval
         @prompt.say("\n#{format_memory_why(explanation)}\n")
       when "summarize", "learn"
-        text = messages_for_memory_summarization(agent.conversation).map { |message| message_content(message) }.compact.join("\n")
-        existing_texts = Array(agent.conversation.session_memories).map { |m| m["text"] }
-        records = manager.infer_soft_from_text(text, workspace_root: agent.conversation.workspace_root, client: @client, existing_texts: existing_texts)
-        agent.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if agent.conversation.session_memories.respond_to?(:concat)
-        @active_session&.update_memory_state(session_memories: agent.conversation.session_memories, last_retrieval: agent.conversation.last_memory_retrieval)
+        records = summarize_memory(agent.conversation, manager: manager)
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Learned #{records.length} soft #{records.length == 1 ? "memory" : "memories"}.\n")
       else
-        @prompt.say("\nUsage: /memory enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|inspect|why|summarize\n")
+        @prompt.say("\nUsage: /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|inspect|why|summarize\n")
       end
     rescue StandardError => e
       @prompt.say("\nMemory command failed: #{e.message}\n")
+    end
+
+    def summarize_memory(conversation, manager: Memory::Manager.new)
+      text = messages_for_memory_summarization(conversation).map { |message| message_content(message) }.compact.join("\n")
+      existing_texts = Array(conversation.session_memories).map { |m| m["text"] }
+      records = manager.infer_soft_from_text(text, workspace_root: conversation.workspace_root, client: @client, existing_texts: existing_texts)
+      conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if conversation.session_memories.respond_to?(:concat)
+      @active_session&.update_memory_state(session_memories: conversation.session_memories, last_retrieval: conversation.last_memory_retrieval)
+      records
     end
 
     def unquote_argument(text)
@@ -1531,6 +1547,7 @@ module Kward
 
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
       persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
+      auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && queued_inputs.empty?
       queued_inputs
     ensure
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
@@ -1681,6 +1698,7 @@ module Kward
       flush_markdown_deltas(markdown_chunks) if streamed
       @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
       persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
+      auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation)
       []
     end
 
@@ -1698,6 +1716,16 @@ module Kward
     def persist_memory_state(conversation)
       @active_session&.update_memory_state(session_memories: conversation.session_memories, last_retrieval: conversation.last_memory_retrieval)
     rescue StandardError
+      nil
+    end
+
+    def auto_summarize_memory(conversation)
+      manager = Memory::Manager.new
+      return unless manager.enabled? && manager.auto_summary_enabled?
+
+      summarize_memory(conversation, manager: manager)
+    rescue StandardError => e
+      warn "Memory auto-summary failed: #{e.message}"
       nil
     end
 

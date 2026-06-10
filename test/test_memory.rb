@@ -27,6 +27,21 @@ class MemoryManagerTest < KwardTestCase
     assert_equal "enable", jsonl_records(File.join(@dir, "memory", "events.jsonl")).first["type"]
   end
 
+  def test_auto_summary_is_disabled_by_default_and_can_be_toggled
+    refute @manager.auto_summary_enabled?
+
+    @manager.auto_summary_enable
+
+    assert @manager.auto_summary_enabled?
+    assert_equal true, JSON.parse(File.read(File.join(@dir, "config.json"))).dig("memory", "auto_summary")
+
+    @manager.auto_summary_disable
+
+    refute @manager.auto_summary_enabled?
+    refute JSON.parse(File.read(File.join(@dir, "config.json"))).fetch("memory").key?("auto_summary")
+    assert_equal ["auto_summary_enable", "auto_summary_disable"], jsonl_records(File.join(@dir, "memory", "events.jsonl")).map { |event| event["type"] }
+  end
+
   def test_adds_core_and_soft_memories_separately
     core = @manager.add_core("Prefer small focused patches", tags: ["workflow"])
     soft = @manager.add_soft("User usually asks for tests", scope: "workspace:/tmp/kward", tags: ["workflow"])

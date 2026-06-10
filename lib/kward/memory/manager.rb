@@ -55,6 +55,42 @@ module Kward
         true
       end
 
+      def auto_summary_enabled?
+        config = ConfigFiles.read_config(@config_path)
+        memory = config["memory"]
+        memory.is_a?(Hash) && memory["auto_summary"] == true
+      rescue StandardError
+        false
+      end
+
+      def auto_summary_enabled=(value)
+        set_auto_summary(value)
+      end
+
+      def set_auto_summary(value)
+        config = ConfigFiles.read_config(@config_path)
+        memory = config["memory"].is_a?(Hash) ? config["memory"].dup : {}
+        enabled = value ? true : false
+        previous = memory["auto_summary"] == true
+        if enabled
+          memory["auto_summary"] = true
+        else
+          memory.delete("auto_summary")
+        end
+        config["memory"] = memory
+        ConfigFiles.write_config(config, @config_path)
+        append_event(enabled ? "auto_summary_enable" : "auto_summary_disable", {}) unless previous == enabled
+        auto_summary_enabled?
+      end
+
+      def auto_summary_enable
+        set_auto_summary(true)
+      end
+
+      def auto_summary_disable
+        set_auto_summary(false)
+      end
+
       def add_core(text, scope: "global", tags: [], source: "explicit_user_instruction", pinned: true)
         record = {
           "id" => next_id("core", core_memories.map { |item| item["id"] }),

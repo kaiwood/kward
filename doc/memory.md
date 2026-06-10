@@ -25,6 +25,28 @@ Enabling memory stores this config in `~/.kward/config.json`:
 
 When memory is disabled, Kward does not inject retrieved memories into the prompt.
 
+## Auto-summary
+
+Memory auto-summary is off by default. When both memory and auto-summary are enabled, Kward quietly runs the same learning flow as `/memory summarize` after each completed interactive agent turn, when it is ready for the next user prompt:
+
+```text
+/memory auto-summary enable
+/memory auto-summary disable
+```
+
+The config value is stored as:
+
+```json
+{
+  "memory": {
+    "enabled": true,
+    "auto_summary": true
+  }
+}
+```
+
+Auto-summary does not run when memory is disabled and is not used for one-shot prompts.
+
 ## Memory layers
 
 ### Core memories
@@ -55,13 +77,13 @@ Soft memories are stored as JSON Lines in:
 ~/.kward/memory/soft.jsonl
 ```
 
-Kward can also infer soft memories, but only when you explicitly ask it to summarize/learn from the current session:
+Kward can also infer soft memories when auto-summary is enabled, or when you explicitly ask it to summarize/learn from the current session:
 
 ```text
 /memory summarize
 ```
 
-The v1 inference is conservative and heuristic-based. It does not use an extra model call. Kward refuses to automatically persist inferred emotional, intimate, romantic, or dependency-forming memories.
+The v1 inference is conservative and heuristic-based, with optional model-based reformulation when summarization has an available client. Kward refuses to automatically persist inferred emotional, intimate, romantic, or dependency-forming memories.
 
 ### Session memories
 
@@ -152,6 +174,8 @@ The experimental RPC backend exposes dedicated memory methods:
 - `memory/status`
 - `memory/enable`
 - `memory/disable`
+- `memory/autoSummary/enable`
+- `memory/autoSummary/disable`
 - `memory/list`
 - `memory/add`
 - `memory/addCore`

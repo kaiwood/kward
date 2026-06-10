@@ -271,7 +271,7 @@ module Kward
 
       def memory_status
         manager = memory_manager
-        { enabled: manager.enabled?, paths: manager.paths }
+        { enabled: manager.enabled?, autoSummary: manager.auto_summary_enabled?, paths: manager.paths }
       end
 
       def memory_enable
@@ -282,6 +282,16 @@ module Kward
       def memory_disable
         memory_manager.disable
         { enabled: false }
+      end
+
+      def memory_auto_summary_enable
+        memory_manager.auto_summary_enable
+        { autoSummary: true }
+      end
+
+      def memory_auto_summary_disable
+        memory_manager.auto_summary_disable
+        { autoSummary: false }
       end
 
       def memory_list(include_inactive: false)

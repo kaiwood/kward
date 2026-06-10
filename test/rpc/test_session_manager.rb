@@ -92,6 +92,20 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_memory_status_includes_auto_summary_and_toggles_setting
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+
+      refute manager.memory_status[:autoSummary]
+
+      manager.memory_auto_summary_enable
+      assert_equal true, manager.memory_status[:autoSummary]
+
+      manager.memory_auto_summary_disable
+      assert_equal false, manager.memory_status[:autoSummary]
+    end
+  end
+
   def test_memory_summarize_only_uses_user_messages_for_inference
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
