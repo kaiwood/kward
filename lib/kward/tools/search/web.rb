@@ -3,7 +3,7 @@ require "json"
 require "net/http"
 require "nokogiri"
 require "uri"
-require_relative "../config_files"
+require_relative "../../config_files"
 
 module Kward
   class WebSearch

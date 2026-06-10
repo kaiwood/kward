@@ -5,7 +5,7 @@ require "net/http"
 require "open3"
 require "pathname"
 require "uri"
-require_relative "../config_files"
+require_relative "../../config_files"
 
 module Kward
   class CodeSearch

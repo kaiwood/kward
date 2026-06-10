@@ -1,1 +1,1 @@
-require_relative "search/web"
+require_relative "tools/search/web"
