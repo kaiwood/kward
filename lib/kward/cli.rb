@@ -364,24 +364,20 @@ module Kward
       name, argument = parse_slash_command(command)
       case name
       when "status"
-        print_status
+        run_busy_local_command_and_requeue { print_status }
         [true, nil]
       when "stats"
-        print_stats(argument)
+        run_busy_local_command_and_requeue { print_stats(argument) }
         [true, nil]
       when "crew"
-        report_crew(argument)
+        run_busy_local_command_and_requeue { report_crew(argument) }
         [true, nil]
       when "memory"
-        if memory_summarize_command?(argument) && prompt_interface?
-          queued_inputs = run_busy_local_command(activity: "summarizing") { handle_memory_command(argument, agent) }
-          queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
-        else
-          handle_memory_command(argument, agent)
-        end
+        activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
+        run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
         [true, nil]
       when "redraw"
-        @prompt.redraw if @prompt.respond_to?(:redraw)
+        run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
         [true, nil]
       when "settings"
         configure_settings
@@ -390,33 +386,31 @@ module Kward
         login_interactively
         [true, nil]
       when "model"
-        configure_model(agent.conversation)
+        models = run_busy_local_command_and_requeue { normalized_available_models }
+        configure_model(agent.conversation, models: models)
         [true, nil]
       when "openrouter/catalog"
-        print_openrouter_catalog
+        run_busy_local_command_and_requeue { print_openrouter_catalog }
         [true, nil]
       when "reasoning"
         configure_reasoning(agent.conversation)
         [true, nil]
       when "new"
-        [true, start_new_session(session_store)]
+        [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
       when "resume"
-        [true, resume_session(session_store, argument)]
+        path = argument.to_s.strip
+        path = select_session_path(session_store) if session_store && path.empty?
+        [true, run_busy_local_command_and_requeue { resume_session(session_store, path) }]
       when "name"
-        rename_session(argument)
+        run_busy_local_command_and_requeue { rename_session(argument) }
         [true, nil]
       when "clone"
-        [true, clone_session(session_store, agent)]
+        [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]
       when "export"
-        export_session(agent.conversation, argument)
+        run_busy_local_command_and_requeue { export_session(agent.conversation, argument) }
         [true, nil]
       when "compact"
-        if prompt_interface?
-          queued_inputs = run_busy_local_command(activity: "compacting") { compact_context(agent, argument) }
-          queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
-        else
-          compact_context(agent, argument)
-        end
+        run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
         [true, nil]
       else
         return run_plugin_command(name, argument, agent) if plugin_command_for(name)
@@ -473,12 +467,7 @@ module Kward
     end
 
     def report_crew(argument = nil)
-      if prompt_interface?
-        queued_inputs = run_busy_local_command { render_crew_report(argument) }
-        queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
-      else
-        render_crew_report(argument)
-      end
+      render_crew_report(argument)
     rescue StandardError => e
       @prompt.say("\nCrew command failed: #{e.message}\n")
     end
@@ -577,19 +566,16 @@ module Kward
       end
     end
 
-    def run_busy_local_command(activity: "streaming")
+    def run_busy_local_command(activity: "loading")
+      return yield unless prompt_interface?
+
       queued_inputs = []
+      result = nil
       error = nil
-      if @prompt.respond_to?(:begin_busy_input)
-        if activity == "streaming"
-          @prompt.begin_busy_input("You>")
-        else
-          @prompt.begin_busy_input("You>", activity: activity)
-        end
-      end
+      @prompt.begin_busy_input("You>", activity: activity) if @prompt.respond_to?(:begin_busy_input)
 
       worker = Thread.new do
-        yield
+        result = yield
       rescue StandardError => e
         error = e
       end
@@ -602,9 +588,17 @@ module Kward
       drain_queued_input(queued_inputs)
       raise error if error
 
-      queued_inputs
+      [result, queued_inputs]
     ensure
-      @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+      @prompt.finish_busy_input if prompt_interface? && @prompt.respond_to?(:finish_busy_input)
+    end
+
+    def run_busy_local_command_and_requeue(activity: "loading")
+      return yield unless prompt_interface?
+
+      result, queued_inputs = run_busy_local_command(activity: activity) { yield }
+      queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+      result
     end
 
     def crew_report(argument = nil)
@@ -661,13 +655,13 @@ module Kward
       @prompt.say("\nLogin error: #{e.message}\n")
     end
 
-    def configure_model(conversation = nil)
+    def configure_model(conversation = nil, models: nil)
       unless model_overlay_available?
         @prompt.say("\nModel overlay is unavailable in this prompt.\n")
         return
       end
 
-      models = normalized_available_models
+      models ||= normalized_available_models
       choices = model_choices(models)
       selected = @prompt.select("Default model", choices, title: "Models", custom: true)
       return unless selected

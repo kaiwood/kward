@@ -101,6 +101,32 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class BusySelectPrompt < BusyPrompt
+    attr_reader :select_messages, :select_choices, :select_titles
+
+    def initialize(inputs, selections: [])
+      super(inputs)
+      @selections = selections
+      @select_messages = []
+      @select_choices = []
+      @select_titles = []
+    end
+
+    def select(message, choices, title: "Sessions", custom: false)
+      @select_messages << message
+      @select_choices << choices
+      @select_titles << title
+      @selections.empty? ? choices.first : @selections.shift
+    end
+  end
+
+  class SlowModelsClient < FakeClient
+    def available_models
+      sleep 0.05
+      super
+    end
+  end
+
   def test_interactive_response_prompt_falls_back_to_assistant_without_persona_label
     Dir.mktmpdir do |config_dir|
       File.write(File.join(config_dir, "config.json"), JSON.dump({}))
@@ -581,6 +607,26 @@ class TestCLI < KwardTestCase
       TTY::Screen.define_singleton_method(:width, original_width) if original_width
       TTY::Screen.define_singleton_method(:height, original_height) if original_height
       input&.close unless input&.closed?
+    end
+  end
+
+  def test_resume_slash_command_shows_loading_spinner
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("hello")
+      prompt = BusyPrompt.new(["/resume #{saved.path}", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      loading_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
+      assert loading_index
+      finish_after_loading = prompt.events[loading_index..].index([:finish_busy_input])
+      assert finish_after_loading
+      assert_includes prompt.output.join("\n"), "Resumed session:"
     end
   end
 
@@ -1460,10 +1506,31 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal [:begin_busy_input, "You>", "streaming"], prompt.events.first
+      assert_equal [:begin_busy_input, "You>", "loading"], prompt.events.first
       assert_includes prompt.events, [:start_stream_block, "Crew"]
       assert_includes prompt.events, [:finish_busy_input]
       assert_operator prompt.events.index([:finish_busy_input]), :<, prompt.events.index([:close])
+    end
+  end
+
+  def test_model_slash_command_shows_loading_spinner_before_overlay
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      prompt = BusySelectPrompt.new(["/model", "/exit"])
+      client = SlowModelsClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      loading_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
+      assert loading_index
+      finish_after_loading = prompt.events[loading_index..].index([:finish_busy_input])
+      assert finish_after_loading
+      assert_equal ["Default model"], prompt.select_messages
     end
   end
 
