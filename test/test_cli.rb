@@ -1367,7 +1367,10 @@ class TestCLI < KwardTestCase
   def test_memory_summarize_only_uses_user_messages_for_inference
     Dir.mktmpdir do |config_dir|
       prompt = FakePrompt.new(["I am starting the session", "/memory summarize", "/exit"])
-      client = FakeClient.new(["ok"])
+      client = FakeClient.new([
+        "ok",
+        { "content" => "The captain prefers concise and practical answers" }
+      ])
       conversation = Kward::Conversation.new
       conversation.append_user("I usually prefer concise and practical answers.")
       conversation.append_assistant("I always use assistant-generated summaries.")
@@ -1380,7 +1383,8 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal ["I usually prefer concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
+      # LLM summarization reformulates first-person to third-person
+      assert_equal ["The captain prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
       assert_equal ["soft_001"], conversation.session_memories.map { |memory| memory["id"] }
       refute_includes conversation.session_memories.map { |memory| memory["text"] }, "Prefer focused tests and always use minitest"
       refute_includes conversation.session_memories.map { |memory| memory["text"] }, "I always use assistant-generated summaries"
@@ -1429,6 +1433,31 @@ class TestCLI < KwardTestCase
       finish_after_compacting = prompt.events[compacting_index..].index([:finish_busy_input])
       assert finish_after_compacting
       assert_includes prompt.output.join("\n"), "Compacted context:"
+    end
+  end
+
+  def test_memory_summarize_keeps_busy_composer_visible_while_running
+    Dir.mktmpdir do |config_dir|
+      prompt = BusyPrompt.new(["I am starting the session", "/memory summarize", "/exit"])
+      client = FakeClient.new([
+        "ok",
+        { "content" => "The captain prefers concise and practical answers" }
+      ])
+      conversation = Kward::Conversation.new
+      conversation.append_user("I usually prefer concise and practical answers.")
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      config_path = File.join(config_dir, "config.json")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      summarizing_index = prompt.events.index([:begin_busy_input, "You>", "summarizing"])
+      assert summarizing_index
+      finish_after_summarizing = prompt.events[summarizing_index..].index([:finish_busy_input])
+      assert finish_after_summarizing
+      assert_equal ["The captain prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
     end
   end
 

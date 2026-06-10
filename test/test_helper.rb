@@ -192,7 +192,7 @@ class KwardTestCase < Minitest::Test
     attr_accessor :provider, :model, :reasoning_effort, :context_window
     attr_reader :reload_count
 
-    def chat(_messages, tools: [])
+    def chat(_messages, tools: [], **_opts)
       @responses.shift
     end
 

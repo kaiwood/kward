@@ -72,12 +72,21 @@ class MemoryManagerTest < KwardTestCase
   end
 
   def test_inferred_memory_requires_personal_or_explicit_memory_signal
-    records = @manager.infer_soft_from_text(<<~TEXT, workspace_root: @dir)
+    # Mock client returns the input unchanged (simulating no summarization change)
+    mock_client = Object.new
+    mock_client.define_singleton_method(:chat) do |messages, **opts|
+      # Extract the input text from the reformulate prompt
+      text = messages.last[:content].to_s.gsub(/^Reformulate this as a memory statement: /, "")
+      { "content" => text }
+    end
+
+    records = @manager.infer_soft_from_text(<<~TEXT, workspace_root: @dir, client: mock_client)
       Prefer evidence from code, tests, logs, docs, and reproducible commands
       Use concise sections as useful:
       Here is an important information: The Captain likes eating steak.
     TEXT
 
+    # The extraction still works, and the mock preserves the original text
     assert_equal ["The Captain likes eating steak"], records.map { |record| record["text"] }
   end
 
@@ -126,5 +135,126 @@ class MemoryManagerTest < KwardTestCase
   def test_strips_workspace_context_prefix
     core = @manager.add_core("[workspace:/Users/kwood/Repositories/github.com/kaiwood/kward] Use TDD from now on")
     assert_equal "Use TDD from now on", core["text"]
+  end
+
+  def test_summarize_text_uses_llm_when_client_provided
+    mock_client = Object.new
+    mock_client.define_singleton_method(:chat) do |messages, **opts|
+      # Return a response with content that reformulates the input
+      if messages.any? { |m| m[:content].to_s.include?("steak") }
+        { "content" => "The captain likes eating steak" }
+      else
+        { "content" => messages.last[:content].to_s.gsub(/^Reformulate this as a memory statement: /, "") }
+      end
+    end
+
+    result = @manager.summarize_text("I like to eat the most important meal today: steak", client: mock_client)
+    assert_equal "The captain likes eating steak", result
+  end
+
+  def test_summarize_text_returns_original_on_llm_failure
+    mock_client = Object.new
+    mock_client.define_singleton_method(:chat) { |*| raise StandardError, "LLM failed" }
+
+    result = @manager.summarize_text("I like steak", client: mock_client)
+    assert_equal "I like steak", result
+  end
+
+  def test_infer_soft_from_text_uses_summarized_text
+    mock_client = Object.new
+    mock_client.define_singleton_method(:chat) do |messages, **opts|
+      text = messages.last[:content].to_s.gsub(/^Reformulate this as a memory statement: /, "")
+      { "content" => "The captain likes eating steak" }
+    end
+
+    records = @manager.infer_soft_from_text(
+      "I like to eat the most important meal today: steak",
+      workspace_root: @dir,
+      client: mock_client
+    )
+
+    assert_equal 1, records.length
+    assert_equal "The captain likes eating steak", records.first["text"]
+  end
+
+  def test_summarize_text_passes_through_when_llm_not_available
+    # Test that summarize_text falls back to original text when LLM is not available
+    original_text = "I like steak"
+    # Force should_use_llm_summarization? to return false by creating manager without default_client
+    manager = Kward::Memory::Manager.new(
+      config_path: File.join(@dir, "config.json"),
+      core_path: File.join(@dir, "memory", "core.json"),
+      soft_path: File.join(@dir, "memory", "soft.jsonl"),
+      events_path: File.join(@dir, "memory", "events.jsonl")
+    )
+    # Override the check to simulate no credentials
+    manager.define_singleton_method(:should_use_llm_summarization?) { false }
+
+    result = manager.summarize_text(original_text)
+    assert_equal original_text, result
+  end
+
+  def test_infer_soft_from_text_skips_duplicates_in_existing_texts
+    # Disable LLM summarization to test exact duplicate detection
+    manager = Kward::Memory::Manager.new(
+      config_path: File.join(@dir, "config.json"),
+      core_path: File.join(@dir, "memory", "core.json"),
+      soft_path: File.join(@dir, "memory", "soft.jsonl"),
+      events_path: File.join(@dir, "memory", "events.jsonl")
+    )
+    manager.define_singleton_method(:should_use_llm_summarization?) { false }
+
+    records = manager.infer_soft_from_text(
+      "I like steak",
+      workspace_root: @dir,
+      existing_texts: ["I like steak"]
+    )
+    assert_empty records
+  end
+
+  def test_infer_soft_from_text_skips_duplicates_in_existing_soft_memories
+    # Disable LLM summarization
+    manager = Kward::Memory::Manager.new(
+      config_path: File.join(@dir, "config.json"),
+      core_path: File.join(@dir, "memory", "core.json"),
+      soft_path: File.join(@dir, "memory", "soft.jsonl"),
+      events_path: File.join(@dir, "memory", "events.jsonl")
+    )
+    manager.define_singleton_method(:should_use_llm_summarization?) { false }
+
+    # Add first memory
+    manager.add_soft("I like steak", scope: "workspace:#{@dir}")
+
+    # Try to add duplicate
+    records = manager.infer_soft_from_text(
+      "I like steak",
+      workspace_root: @dir
+    )
+
+    assert_empty records
+    assert_equal 1, manager.list["soft"].length
+  end
+
+  def test_infer_soft_from_text_skips_duplicates_after_normalization
+    # Disable LLM summarization
+    manager = Kward::Memory::Manager.new(
+      config_path: File.join(@dir, "config.json"),
+      core_path: File.join(@dir, "memory", "core.json"),
+      soft_path: File.join(@dir, "memory", "soft.jsonl"),
+      events_path: File.join(@dir, "memory", "events.jsonl")
+    )
+    manager.define_singleton_method(:should_use_llm_summarization?) { false }
+
+    # Add first memory
+    manager.add_soft("I like steak", scope: "workspace:#{@dir}")
+
+    # Try to add with slight variation (should normalize to same)
+    records = manager.infer_soft_from_text(
+      "I like  steak",
+      workspace_root: @dir
+    )
+
+    assert_empty records
+    assert_equal 1, manager.list["soft"].length
   end
 end

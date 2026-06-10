@@ -1,8 +1,10 @@
 require "fileutils"
 require "json"
 require "securerandom"
+require "set"
 require "time"
 require_relative "../config_files"
+require_relative "../model/client"
 
 module Kward
   module Memory
@@ -201,11 +203,85 @@ module Kward
         lines.join("\n")
       end
 
-      def infer_soft_from_text(text, workspace_root: Dir.pwd)
+      def infer_soft_from_text(text, workspace_root: Dir.pwd, client: nil, existing_texts: [])
         candidates = heuristic_candidates(text)
-        candidates.map do |candidate|
-          add_soft(candidate, scope: workspace_scope(workspace_root), tags: ["workflow"], confidence: 0.55, source: "inferred")
+        existing_set = Set.new(existing_texts.map { |t| normalize_for_comparison(t) })
+        candidates.filter_map do |candidate|
+          summarized = summarize_text(candidate, client: client)
+          normalized = normalize_for_comparison(summarized)
+          # Skip if this text already exists in provided list or existing soft memories
+          next if existing_set.include?(normalized)
+          next if soft_memories.any? { |m| normalize_for_comparison(m["text"]) == normalized }
+
+          add_soft(summarized, scope: workspace_scope(workspace_root), tags: ["workflow"], confidence: 0.55, source: "inferred")
         end
+      end
+
+      def summarize_text(text, client: nil)
+        summarizer_client = client
+        unless summarizer_client
+          return text unless should_use_llm_summarization?
+
+          summarizer_client = default_client
+        end
+
+        summary = llm_summarize(summarizer_client, text)
+        summary.empty? ? text : summary
+      rescue StandardError
+        text
+      end
+
+      def should_use_llm_summarization?
+        # Check if we have valid credentials to make LLM calls
+        client = default_client
+        return false unless client
+
+        token = client.instance_variable_get(:@openai_access_token) ||
+                       client.instance_variable_get(:@openrouter_api_key) ||
+                       client.send(:github_access_token)
+        token.to_s.length > 10
+      rescue StandardError
+        false
+      end
+
+      def default_client
+        @default_client ||= Kward::Client.new
+      rescue StandardError
+        nil
+      end
+
+      def llm_summarize(client, text)
+        messages = [
+          { role: "system", content: <<~SYSTEM },
+            You are a memory text reformulation assistant. Your task is to transform user-generated text into proper third-person descriptive memory statements.
+
+            Rules:
+            - Convert first-person statements ("I like", "we prefer") to third-person ("The captain likes", "The user prefers")
+            - Remove conversational filler, preambles, and action descriptions
+            - Keep only the factual preference or fact
+            - Use "The captain" or "The user" as the subject for personal preferences
+            - Preserve workflow-related technical preferences as-is
+            - Keep the text concise (under 100 characters)
+            - If the text is already a good memory statement, return it unchanged
+
+            Examples:
+            - "I like to eat the most important meal today: steak" → "The captain likes eating steak"
+            - "We should prefer TDD for this project" → "Prefer TDD for this project"
+            - "Remember that the user prefers minitest" → "The user prefers minitest"
+            - "But first we need to remember that we are using TDD" → "Use TDD"
+            - "The user usually asks for tests" → "The user usually asks for tests"
+            - "Prefer evidence from code, tests, logs" → "Prefer evidence from code, tests, logs"
+          SYSTEM
+          { role: "user", content: "Reformulate this as a memory statement: #{text}" }
+        ]
+
+        response = client.chat(messages, max_tokens: 100, reasoning: false)
+        content = response.dig("content") || response[:content]
+        return text unless content
+
+        content.strip
+      rescue StandardError
+        text
       end
 
       def paths
@@ -297,6 +373,10 @@ module Kward
 
       def clean_text(text)
         text.to_s.strip.gsub(/[\r\n]+/, " ")
+      end
+
+      def normalize_for_comparison(text)
+        text.to_s.strip.gsub(/\s+/, " ")
       end
 
       def clean_scope(scope)

@@ -395,7 +395,12 @@ module Kward
         report_crew(argument)
         [true, nil]
       when "memory"
-        handle_memory_command(argument, agent)
+        if memory_summarize_command?(argument) && prompt_interface?
+          queued_inputs = run_busy_local_command(activity: "summarizing") { handle_memory_command(argument, agent) }
+          queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+        else
+          handle_memory_command(argument, agent)
+        end
         [true, nil]
       when "redraw"
         @prompt.redraw if @prompt.respond_to?(:redraw)
@@ -444,6 +449,11 @@ module Kward
 
     def parse_slash_command(command)
       PromptCommands.parse(command) || [nil, ""]
+    end
+
+    def memory_summarize_command?(argument)
+      subcommand, = argument.to_s.strip.split(/\s+/, 2)
+      ["summarize", "learn"].include?(subcommand)
     end
 
     def print_status
@@ -521,7 +531,8 @@ module Kward
         @prompt.say("\n#{format_memory_why(explanation)}\n")
       when "summarize", "learn"
         text = messages_for_memory_summarization(agent.conversation).map { |message| message_content(message) }.compact.join("\n")
-        records = manager.infer_soft_from_text(text, workspace_root: agent.conversation.workspace_root)
+        existing_texts = Array(agent.conversation.session_memories).map { |m| m["text"] }
+        records = manager.infer_soft_from_text(text, workspace_root: agent.conversation.workspace_root, client: @client, existing_texts: existing_texts)
         agent.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if agent.conversation.session_memories.respond_to?(:concat)
         @active_session&.update_memory_state(session_memories: agent.conversation.session_memories, last_retrieval: agent.conversation.last_memory_retrieval)
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Learned #{records.length} soft #{records.length == 1 ? "memory" : "memories"}.\n")

@@ -319,7 +319,8 @@ module Kward
       def memory_summarize(session_id:)
         rpc_session = fetch_session(session_id)
         text = messages_for_memory_summarization(rpc_session.conversation).map { |message| message_content(message) }.compact.join("\n")
-        records = memory_manager.infer_soft_from_text(text, workspace_root: rpc_session.workspace_root)
+        existing_texts = Array(rpc_session.conversation.session_memories).map { |m| m["text"] }
+        records = memory_manager.infer_soft_from_text(text, workspace_root: rpc_session.workspace_root, client: @client, existing_texts: existing_texts)
         rpc_session.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") })
         persist_memory_state(rpc_session)
         { memories: records }
