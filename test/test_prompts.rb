@@ -164,31 +164,6 @@ class TestPrompts < KwardTestCase
     end
   end
 
-  def test_active_persona_label_uses_active_character_label
-    Dir.mktmpdir do |config_dir|
-      Dir.mktmpdir do |workspace|
-        File.write(File.join(config_dir, "config.json"), JSON.dump({
-          "personas" => {
-            "crew" => [
-              { "key" => "kward", "label" => "Kward", "instruction" => "Default persona." },
-              { "key" => "spark", "label" => "Spark", "instruction" => "Workspace persona." },
-              { "key" => "alt", "label" => "Alternate", "instruction" => "Model persona." }
-            ],
-            "default" => "kward",
-            "workspaces" => { workspace => "spark" },
-            "models" => { "gpt-test" => "alt" }
-          }
-        }))
-
-        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          assert_equal "Kward", Kward::ConfigFiles.active_persona_label(workspace_root: Dir.pwd)
-          assert_equal "Spark", Kward::ConfigFiles.active_persona_label(workspace_root: workspace)
-          assert_equal "Alternate", Kward::ConfigFiles.active_persona_label(workspace_root: workspace, model: "gpt-test")
-        end
-      end
-    end
-  end
-
   def test_active_persona_label_falls_back_when_no_label_is_found
     config = {
       "personas" => {

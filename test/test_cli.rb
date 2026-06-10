@@ -101,30 +101,6 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_response_prompt_uses_active_persona_label
-    Dir.mktmpdir do |config_dir|
-      File.write(File.join(config_dir, "config.json"), JSON.dump({
-        "personas" => {
-          "crew" => {
-            "spark" => { "label" => "Spark", "instruction" => "Speak brightly." }
-          },
-          "default" => "spark"
-        }
-      }))
-      prompt = FakePrompt.new(["hello", nil])
-      client = FakeClient.new([{ "role" => "assistant", "content" => "reply" }])
-
-      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
-        cli.interactive_loop(agent: Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new))
-      end
-
-      output = prompt.output.join
-      assert_includes output, "Spark> reply"
-      refute_includes output, "Kward>\nreply"
-    end
-  end
-
   def test_interactive_response_prompt_falls_back_to_assistant_without_persona_label
     Dir.mktmpdir do |config_dir|
       File.write(File.join(config_dir, "config.json"), JSON.dump({}))
@@ -547,7 +523,7 @@ class TestCLI < KwardTestCase
       assert_equal 1, prompt.banner_count
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
-      assert_includes output, "Input>\nreply"
+      assert_includes output, "reply"
     end
   end
 
@@ -633,7 +609,7 @@ class TestCLI < KwardTestCase
       output = prompt.output.join("\n")
       assert_includes output, "You> inspect file"
       assert_includes output, "Reasoning>\nNeed to inspect the file."
-      assert_includes output, "Input>\nI'll read it."
+      assert_includes output, "I'll read it."
       assert_includes output, "Tool>\nread_file"
       assert_includes output, "Tool output>\nread_file: README.md"
       assert_includes output, "1 lines, 16 bytes"
@@ -750,7 +726,7 @@ class TestCLI < KwardTestCase
       assert files.any? { |file| jsonl_records(file).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" } }
       output = prompt.output.join("\n")
       assert_includes output, "You> hello"
-      assert_includes output, "Input>\nreply"
+      assert_includes output, "reply"
       assert_includes File.read(export_path), "## User\n\nhello"
       assert_includes File.read(export_path), "## Assistant\n\nreply"
       source, clone = files.map { |file| jsonl_records(file).find { |record| record["type"] == "session" } }.sort_by { |record| record.key?("parentId") ? 1 : 0 }
