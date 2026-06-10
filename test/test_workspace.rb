@@ -185,6 +185,25 @@ class TestWorkspace < KwardTestCase
     end
   end
 
+  def test_edit_file_truncates_large_diff_output
+    with_temp_workspace do |workspace, dir|
+      path = "kward_edit_large_diff.txt"
+      old_text = (1..600).map { |index| "old #{index}" }.join("\n")
+      new_text = (1..600).map { |index| "new #{index}" }.join("\n")
+      File.write(File.join(dir, path), old_text)
+      conversation = Kward::Conversation.new
+      content = workspace.read_file(path)
+      conversation.mark_read(workspace.resolved_path(path)) unless content.start_with?("Error:")
+
+      result = workspace.edit_file(path, [{ "old_text" => old_text, "new_text" => new_text }], read_paths: conversation.read_paths)
+
+      assert_includes result, "Edited #{path}: replaced 1 block(s)"
+      assert_includes result, "diff truncated to #{Kward::Workspace::MAX_EDIT_DIFF_BYTES} bytes"
+      assert_operator result.bytesize, :<, Kward::Workspace::MAX_EDIT_DIFF_BYTES + 200
+      assert_equal new_text, File.read(File.join(dir, path))
+    end
+  end
+
   def test_edit_file_rejects_empty_duplicate_missing_and_overlapping_edits_without_changes
     with_temp_workspace do |workspace, dir|
       path = "kward_edit_invalid.txt"

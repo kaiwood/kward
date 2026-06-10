@@ -8,6 +8,7 @@ module Kward
     MAX_READ_OUTPUT_BYTES = 50 * 1024
     MAX_READ_OUTPUT_LINES = 2_000
     MAX_COMMAND_OUTPUT_BYTES = 20 * 1024
+    MAX_EDIT_DIFF_BYTES = 8 * 1024
     DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
 
     def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES)
@@ -73,7 +74,7 @@ module Kward
       return result[:error] if result[:error]
 
       File.write(resolved, result[:content])
-      "Edited #{path}: replaced #{result[:count]} block(s)\n#{unified_diff(path, content, result[:content])}"
+      "Edited #{path}: replaced #{result[:count]} block(s)\n#{truncated_diff(path, content, result[:content])}"
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end
@@ -287,6 +288,13 @@ module Kward
         offset = index + needle.length
       end
       indexes
+    end
+
+    def truncated_diff(path, old_content, new_content)
+      diff = unified_diff(path, old_content, new_content)
+      return diff if diff.bytesize <= MAX_EDIT_DIFF_BYTES
+
+      diff.byteslice(0, MAX_EDIT_DIFF_BYTES).to_s.scrub << "\n... diff truncated to #{MAX_EDIT_DIFF_BYTES} bytes; use read_file to inspect current content."
     end
 
     def unified_diff(path, old_content, new_content)
