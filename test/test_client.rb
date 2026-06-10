@@ -259,6 +259,34 @@ class TestClient < KwardTestCase
     assert_equal "Codex", provider
   end
 
+  def test_explicit_openrouter_reports_missing_openrouter_key
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "openrouter"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+
+      error = assert_raises(RuntimeError) do
+        client.chat([{ role: "user", content: "hello" }])
+      end
+
+      assert_equal Kward::Client::OPENROUTER_AUTH_ERROR, error.message
+    end
+  end
+
+  def test_explicit_copilot_reports_missing_copilot_login
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new(nil), config_path: path)
+
+      error = assert_raises(RuntimeError) do
+        client.chat([{ role: "user", content: "hello" }])
+      end
+
+      assert_equal Kward::Client::COPILOT_AUTH_ERROR, error.message
+    end
+  end
+
   def test_openrouter_provider_is_explicit_and_uses_openrouter_even_with_openai_token
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")

@@ -15,7 +15,8 @@ module Kward
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
-    COPILOT_UNSUPPORTED_ERROR = "GitHub Copilot direct HTTPS inference is unavailable. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
+    OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouter_api_key to your Kward config."
+    COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
     DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
@@ -77,7 +78,7 @@ module Kward
     def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, model: nil, reasoning: nil)
       cancellation&.raise_if_cancelled!
       url, token, provider, account_id = credentials
-      raise AUTH_ERROR if token.nil? || token.empty?
+      raise auth_error_for(provider) if token.nil? || token.empty?
 
       current_model = model_for(provider, override_model: model)
       current_model = resolved_copilot_chat_model(current_model) if provider == "Copilot" && model.nil?
@@ -204,6 +205,17 @@ module Kward
     end
 
     private
+
+    def auth_error_for(provider)
+      case provider
+      when "OpenRouter"
+        OPENROUTER_AUTH_ERROR
+      when "Copilot"
+        COPILOT_AUTH_ERROR
+      else
+        AUTH_ERROR
+      end
+    end
 
     def with_retries(provider, model, request_bytes: nil, on_retry: nil, cancellation: nil)
       attempts = RETRY_DELAYS.length + 1
