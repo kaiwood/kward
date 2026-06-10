@@ -53,6 +53,16 @@ class TestOpenAIOAuth < KwardTestCase
     end
   end
 
+  def test_openai_oauth_rejects_missing_state_when_expected
+    Dir.mktmpdir do |dir|
+      oauth = Kward::OpenAIOAuth.new(auth_path: File.join(dir, "auth.json"))
+
+      assert_raises(RuntimeError) do
+        oauth.authorization_code_from("http://localhost:1455/auth/callback?code=abc", expected_state: "right")
+      end
+    end
+  end
+
   def test_openai_oauth_rejects_state_mismatch
     Dir.mktmpdir do |dir|
       oauth = Kward::OpenAIOAuth.new(auth_path: File.join(dir, "auth.json"))

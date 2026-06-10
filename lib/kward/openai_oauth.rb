@@ -95,7 +95,7 @@ module Kward
       uri = URI.parse(value)
       params = URI.decode_www_form(uri.query.to_s).to_h
       if params.key?("code")
-        raise "OAuth state mismatch" if expected_state && params["state"] && params["state"] != expected_state
+        raise "OAuth state mismatch" if expected_state && params["state"] != expected_state
 
         return params["code"]
       end
