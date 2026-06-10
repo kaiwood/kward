@@ -56,6 +56,19 @@ class TestANSI < KwardTestCase
     assert_equal "┌─ code ruby\n│ puts :ok\n└───────────────────────────────────────\n", rendered
   end
 
+  def test_ansi_sanitizes_transcript_but_preserves_sgr_color
+    text = "\e[2J\e[31mred\e[0m\e_Ginline=1:payload\e\\\e]0;title\a"
+
+    assert_equal "\e[31mred\e[0m", Kward::ANSI.sanitize_transcript(text)
+  end
+
+  def test_ansi_wraps_visible_width_without_counting_sgr_color
+    rows = Kward::ANSI.wrap_visible("\e[31mabcdef\e[0m", 3)
+
+    assert_equal ["\e[31mabc", "def\e[0m"], rows
+    assert_equal ["abc", "def"], rows.map { |row| Kward::ANSI.strip(row) }
+  end
+
   def test_ansi_enablement_respects_environment_overrides
     output = FakeInput.new("", tty: false)
 

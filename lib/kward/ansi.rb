@@ -1,6 +1,9 @@
 module Kward
   module ANSI
     ESCAPE_PATTERN = /\e\[[0-9;?]*[ -\/]*[@-~]/.freeze
+    SGR_PATTERN = /\e\[[0-9;:]*m/.freeze
+    OSC_PATTERN = /\e\][^\a]*(?:\a|\e\\)/m.freeze
+    STRING_ESCAPE_PATTERN = /\e[P_X^][\s\S]*?\e\\/m.freeze
     STYLES = {
       reset: 0,
       bold: 1,
@@ -48,6 +51,47 @@ module Kward
 
     def strip(text)
       text.to_s.gsub(ESCAPE_PATTERN, "")
+    end
+
+    def sanitize_transcript(text)
+      string = text.to_s.gsub(OSC_PATTERN, "").gsub(STRING_ESCAPE_PATTERN, "")
+      string.gsub(/\e(?:\[[0-9;:?]*[ -\/]*[@-~]|.)/m) do |sequence|
+        sequence.match?(SGR_PATTERN) ? sequence : ""
+      end
+    end
+
+    def wrap_visible(text, width)
+      line_width = [width.to_i, 1].max
+      rows = []
+      current = +""
+      visible_width = 0
+      string = text.to_s
+      index = 0
+
+      while index < string.length
+        if string[index] == "\e" && (match = string[index..].match(/\A\e\[[0-9;:]*m/))
+          if current.empty? && rows.any?
+            rows[-1] << match[0]
+          else
+            current << match[0]
+          end
+          index += match[0].length
+          next
+        end
+
+        char = string[index]
+        current << char
+        visible_width += 1
+        index += 1
+        if visible_width >= line_width
+          rows << current
+          current = +""
+          visible_width = 0
+        end
+      end
+
+      rows << current unless current.empty?
+      rows
     end
 
     def markdown(text, enabled: enabled?)

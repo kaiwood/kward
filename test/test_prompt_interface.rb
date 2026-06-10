@@ -103,7 +103,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.start
 
-    assert_includes output.string, "╭ You "
+    assert_includes strip_ansi(output.string), "╭ You "
     refute_includes output.string, "│ You> "
     assert_includes output.string, "╰"
     assert_match(/\e\[1;\d+r/, output.string)
@@ -888,7 +888,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.begin_busy_input("You>")
 
-    assert_includes output.string, "╭ You · ⠋ streaming "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ streaming "
   end
 
   def test_prompt_interface_renders_custom_busy_activity
@@ -897,7 +897,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.begin_busy_input("You>", activity: "compacting")
 
-    assert_includes output.string, "╭ You · ⠋ compacting "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ compacting "
   end
 
   def test_prompt_interface_advances_braille_spinner_while_busy
@@ -911,7 +911,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.poll_input
 
-    assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, output.string)
+    assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
   ensure
     writer&.close unless writer&.closed?
     input&.close unless input&.closed?
@@ -926,7 +926,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.set_queued_count(1)
 
-    assert_includes output.string, "╭ You · 1 queued "
+    assert_includes strip_ansi(output.string), "╭ You · 1 queued "
     refute_includes output.string, "streaming"
   end
 
@@ -939,7 +939,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.set_steered_count(1)
 
-    assert_includes output.string, "╭ You · ⠋ steering "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ steering "
     refute_includes output.string, "steered"
     refute_includes output.string, "queued"
   end
@@ -954,7 +954,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.clear_steered_count
 
-    assert_includes output.string, "╭ You · ⠋ streaming "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ streaming "
     refute_includes output.string, "steering"
     refute_includes output.string, "steered"
   end
@@ -1158,7 +1158,7 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[r"
     assert_includes output.string, TTY::Cursor.clear_screen
     assert_match(/\e\[1;\d+r/, output.string)
-    assert_includes output.string, "╭ You "
+    assert_includes strip_ansi(output.string), "╭ You "
   ensure
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
@@ -1175,7 +1175,26 @@ class TestPromptInterface < KwardTestCase
 
     assert_includes output.string, TTY::Cursor.clear_screen
     assert_includes output.string, "first\r\nsecond"
-    assert_includes output.string, "╭ You "
+    assert_includes strip_ansi(output.string), "╭ You "
+  end
+
+  def test_prompt_interface_redraw_preserves_transcript_sgr_color
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@color_enabled, true)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.start_stream_block("Tool output")
+    prompt.write_delta("\e[31mred\e[0m\n")
+    output.truncate(0)
+    output.rewind
+
+    prompt.redraw
+
+    assert_includes output.string, "\e[36;1mTool output>\e[0m"
+    assert_includes output.string, "\e[31mred\e[0m"
   end
 
   def test_prompt_interface_clear_transcript_removes_visible_transcript
@@ -1190,7 +1209,7 @@ class TestPromptInterface < KwardTestCase
 
     assert_includes output.string, TTY::Cursor.clear_screen
     refute_includes output.string, "former transcript"
-    assert_includes output.string, "╭ You "
+    assert_includes strip_ansi(output.string), "╭ You "
   end
 
   def test_prompt_interface_restore_transcript_preserves_history_with_synchronized_redraw

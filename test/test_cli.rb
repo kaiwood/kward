@@ -138,7 +138,7 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new))
       end
 
-      output = prompt.output.join
+      output = strip_ansi(prompt.output.join)
       assert_includes output, "Assistant> reply"
       refute_includes output, "Kward> reply"
     end
@@ -330,7 +330,7 @@ class TestCLI < KwardTestCase
 
     cli.send(:run_interactive_turn, agent, "hello")
 
-    output = prompt.write_deltas.join
+    output = strip_ansi(prompt.write_deltas.join)
     assert_includes output, "│ Kward::Resources::AvatarKwardLogo::PIXELS\n└"
     assert_includes output, "│ lib/kward/resources/avatar_kward_48x48.png\n└"
     refute_includes output, "└───────────────────────────────────────Resources"
@@ -569,7 +569,7 @@ class TestCLI < KwardTestCase
       assert_equal "reply", client.seen_messages[0][2]["content"]
       assert_equal "again", client.seen_messages[0][3][:content]
       assert_equal 1, prompt.banner_count
-      output = prompt.output.join("\n")
+      output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "You> hello"
       assert_includes output, "reply"
     end
@@ -674,7 +674,7 @@ class TestCLI < KwardTestCase
 
       cli.interactive_loop
 
-      output = prompt.output.join("\n")
+      output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "You> inspect file"
       assert_includes output, "Reasoning>\nNeed to inspect the file."
       assert_includes output, "I'll read it."
@@ -731,7 +731,7 @@ class TestCLI < KwardTestCase
       cli.send(:print_tool_result, tool_call("custom_tool", {}), content, line_limit: Kward::CLI::INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
     end.first
 
-    summary = output.split("Tool output>\n", 2).last
+    summary = strip_ansi(output).split("Tool output>\n", 2).last
     assert_equal 10, summary.lines.length
     assert_includes output, "line10"
     refute_includes output, "truncated"
@@ -772,7 +772,7 @@ class TestCLI < KwardTestCase
 
       cli.interactive_loop
 
-      output = prompt.output.join("\n")
+      output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "Tool output>\ncustom_tool: line1"
       assert_includes output, "...[truncated 3 lines]"
       refute_includes output, "line12"
@@ -792,7 +792,7 @@ class TestCLI < KwardTestCase
       files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
       assert_equal 2, files.length
       assert files.any? { |file| jsonl_records(file).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" } }
-      output = prompt.output.join("\n")
+      output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "You> hello"
       assert_includes output, "reply"
       assert_includes File.read(export_path), "## User\n\nhello"
@@ -993,7 +993,7 @@ class TestCLI < KwardTestCase
           cli.interactive_loop(agent: agent)
         end
 
-        output = prompt.output.join("\n")
+        output = strip_ansi(prompt.output.join("\n"))
         assert_includes output, "You> /plan fix bug"
         refute_includes output, "Plan this:"
         assert_equal "Plan this:\nfix bug\n", client.seen_messages[0][1][:content]
@@ -1009,7 +1009,7 @@ class TestCLI < KwardTestCase
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
 
     cli.send(:render_conversation_transcript, conversation)
-    transcript_output = prompt.output.join("\n")
+    transcript_output = strip_ansi(prompt.output.join("\n"))
     assert_includes transcript_output, "You> /plan fix bug"
     refute_includes transcript_output, "Plan this:"
 
@@ -1042,8 +1042,9 @@ class TestCLI < KwardTestCase
     cli.send(:render_conversation_transcript, conversation)
 
     output = prompt.output.join("\n")
-    assert_includes output, "You> look"
-    refute_includes output, "You> look\ndata:image/png;base64"
+    stripped = strip_ansi(output)
+    assert_includes stripped, "You> look"
+    refute_includes stripped, "You> look\ndata:image/png;base64"
     assert_includes output, "[image] pasted image · image/png · 9 B"
     assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40:#{data}\e\\"
   ensure
@@ -1149,7 +1150,7 @@ class TestCLI < KwardTestCase
 
     cli.send(:print_user_transcript, "look #{path}")
 
-    assert_includes prompt.output.join("\n"), "You> look #{path}"
+    assert_includes strip_ansi(prompt.output.join("\n")), "You> look #{path}"
     assert_includes prompt.output.join("\n"), "[image] #{path} · image/png · 9 B"
     assert_includes prompt.output.join("\n"), "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
   ensure
@@ -1171,8 +1172,9 @@ class TestCLI < KwardTestCase
     cli.send(:print_user_transcript, "look\n#{path}", display_input: "look")
 
     output = prompt.output.join("\n")
-    assert_includes output, "You> look"
-    refute_includes output, "You> look\n#{path}"
+    stripped = strip_ansi(output)
+    assert_includes stripped, "You> look"
+    refute_includes stripped, "You> look\n#{path}"
     assert_includes output, "[image] #{path} · image/png · 9 B"
     assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
   ensure
@@ -1193,8 +1195,9 @@ class TestCLI < KwardTestCase
     cli.send(:print_user_transcript, "look\ndata:image/png;base64,#{data}", display_input: "look")
 
     output = prompt.output.join("\n")
-    assert_includes output, "You> look"
-    refute_includes output, "You> look\ndata:image/png;base64"
+    stripped = strip_ansi(output)
+    assert_includes stripped, "You> look"
+    refute_includes stripped, "You> look\ndata:image/png;base64"
     assert_includes output, "[image] pasted image · image/png · 9 B"
     assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40:#{data}\e\\"
   ensure
@@ -1648,7 +1651,7 @@ class TestCLI < KwardTestCase
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
     cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 700, deletions: 572))
 
-    assert_equal "+700|-572 · 42% · Codex fake-model · medium", cli.send(:composer_status_text)
+    assert_equal "+700|-572 · 42% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
   end
 
   def test_composer_status_colors_session_diff
@@ -1676,7 +1679,7 @@ class TestCLI < KwardTestCase
     cli.send(:run_interactive_turn, agent, "hello")
 
     assert_equal 1, prompt.redraw_count
-    assert_equal "+2|-1 · 10% · Codex fake-model · medium", cli.send(:composer_status_text)
+    assert_equal "+2|-1 · 10% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
   end
 
   def test_piped_prompt_reads_non_tty_input

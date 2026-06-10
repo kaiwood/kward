@@ -498,7 +498,7 @@ module Kward
     end
 
     def append_transcript_buffer(text)
-      @transcript_buffer << ANSI.strip(text)
+      @transcript_buffer << ANSI.sanitize_transcript(text)
       return if @transcript_buffer.length <= TRANSCRIPT_BUFFER_LIMIT
 
       @transcript_buffer = @transcript_buffer[-TRANSCRIPT_BUFFER_LIMIT, TRANSCRIPT_BUFFER_LIMIT]
@@ -1893,9 +1893,8 @@ module Kward
     end
 
     def transcript_text_display_rows(width)
-      line_width = [width, 1].max
       @transcript_buffer.split(/\r\n|\r|\n/, -1).flat_map do |line|
-        chunks = line.scan(/.{1,#{line_width}}/m)
+        chunks = ANSI.wrap_visible(line, width)
         chunks.empty? ? [""] : chunks
       end
     end
@@ -1903,7 +1902,7 @@ module Kward
     def reset_stream_position_from_transcript_locked
       width = screen_width
       rows = transcript_display_rows(width)
-      last_length = rows.empty? ? 0 : rows.last.length
+      last_length = rows.empty? ? 0 : ANSI.strip(rows.last).length
       if last_length >= width
         @stream_col = 0
         @stream_pending_wrap = true
