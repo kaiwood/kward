@@ -71,6 +71,18 @@ Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `op
 
 Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who has the credentials. Use it only on trusted networks.
 
+## Daily news context
+
+If the interactive `/news` command has cached Hacker News stories, Kward includes that daily news context in the system prompt by default. Disable it to save prompt tokens on coding-only sessions:
+
+```json
+{
+  "news": {
+    "enabled": false
+  }
+}
+```
+
 ## Web search
 
 Web search works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool, disable it explicitly:

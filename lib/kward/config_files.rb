@@ -103,6 +103,14 @@ module Kward
       nil
     end
 
+    def news_enabled?(config = read_config)
+      value = config.dig("news", "enabled") if config["news"].is_a?(Hash)
+      value = config["news_enabled"] if value.nil? && config.key?("news_enabled")
+      return value if value == true || value == false
+
+      true
+    end
+
     def overlay_settings(config = read_config)
       overlay = config["overlay"].is_a?(Hash) ? config["overlay"] : {}
       settings = DEFAULT_OVERLAY_SETTINGS.dup

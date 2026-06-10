@@ -41,6 +41,8 @@ module Kward
     end
 
     def news_prompt
+      return nil unless ConfigFiles.news_enabled?
+
       NewsCache.new.prompt_context
     rescue StandardError => e
       warn "Warning: skipping Kward news cache: #{e.message}"
