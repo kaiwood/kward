@@ -71,9 +71,60 @@ class MemoryManagerTest < KwardTestCase
     assert_equal "forgotten", @manager.list(include_inactive: true)["soft"].first["status"]
   end
 
+  def test_inferred_memory_requires_personal_or_explicit_memory_signal
+    records = @manager.infer_soft_from_text(<<~TEXT, workspace_root: @dir)
+      Prefer evidence from code, tests, logs, docs, and reproducible commands
+      Use concise sections as useful:
+      Here is an important information: The Captain likes eating steak.
+    TEXT
+
+    assert_equal ["The Captain likes eating steak"], records.map { |record| record["text"] }
+  end
+
   def test_refuses_unsafe_inferred_soft_memory
     assert_raises(ArgumentError) do
       @manager.add_soft("The user loves me", source: "inferred")
     end
+  end
+
+  # Text normalization tests (TDD)
+  def test_normalizes_verbose_preamble_from_memory_text
+    core = @manager.add_core("But first we always need to remember that we are using TDD from now on")
+    assert_equal "Use TDD from now on", core["text"]
+  end
+
+  def test_normalizes_remember_that_preamble
+    core = @manager.add_core("Remember that we should prefer small focused patches")
+    assert_equal "Prefer small focused patches", core["text"]
+  end
+
+  def test_normalizes_please_remember_preamble
+    core = @manager.add_core("Please remember to test everything thoroughly")
+    assert_equal "Test everything thoroughly", core["text"]
+  end
+
+  def test_normalizes_note_that_preamble
+    core = @manager.add_core("Note that the user prefers minitest over rspec")
+    assert_equal "The user prefers minitest over rspec", core["text"]
+  end
+
+  def test_normalizes_soft_memory_text
+    soft = @manager.add_soft("But first we always need to remember that testing is important")
+    assert_equal "Testing is important", soft["text"]
+  end
+
+  def test_preserves_text_without_preamble
+    core = @manager.add_core("Always use defensive coding")
+    assert_equal "Always use defensive coding", core["text"]
+  end
+
+  def test_preserves_text_with_unrecognized_preamble
+    core = @manager.add_core("Specifically we should validate all inputs")
+    assert_equal "Specifically we should validate all inputs", core["text"]
+  end
+
+  def test_strips_workspace_context_prefix
+    core = @manager.add_core("[workspace:/Users/kwood/Repositories/github.com/kaiwood/kward] Use TDD from now on")
+    assert_equal "Use TDD from now on", core["text"]
   end
 end

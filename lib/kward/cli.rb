@@ -520,7 +520,7 @@ module Kward
         explanation = agent.conversation.last_memory_retrieval || manager.explain_retrieval
         @prompt.say("\n#{format_memory_why(explanation)}\n")
       when "summarize", "learn"
-        text = agent.conversation.messages.map { |message| message[:content] || message["content"] }.compact.join("\n")
+        text = messages_for_memory_summarization(agent.conversation).map { |message| message_content(message) }.compact.join("\n")
         records = manager.infer_soft_from_text(text, workspace_root: agent.conversation.workspace_root)
         agent.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if agent.conversation.session_memories.respond_to?(:concat)
         @active_session&.update_memory_state(session_memories: agent.conversation.session_memories, last_retrieval: agent.conversation.last_memory_retrieval)
@@ -1144,6 +1144,10 @@ module Kward
 
     def message_summary(message)
       message["summary"] || message[:summary] || message_content(message)
+    end
+
+    def messages_for_memory_summarization(conversation)
+      conversation.messages.select { |message| message_role(message) == "user" }
     end
 
     def message_name(message)

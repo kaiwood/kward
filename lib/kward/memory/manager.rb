@@ -56,7 +56,7 @@ module Kward
       def add_core(text, scope: "global", tags: [], source: "explicit_user_instruction", pinned: true)
         record = {
           "id" => next_id("core", core_memories.map { |item| item["id"] }),
-          "text" => clean_text(text),
+          "text" => clean_text(normalize_memory_text(text)),
           "scope" => clean_scope(scope),
           "tags" => clean_tags(tags),
           "created_at" => timestamp,
@@ -76,7 +76,7 @@ module Kward
       def add_soft(text, scope: "global", tags: [], confidence: DEFAULT_SOFT_CONFIDENCE, ttl_days: DEFAULT_SOFT_TTL_DAYS, source: "manual")
         record = {
           "id" => next_id("soft", soft_memories(include_inactive: true).map { |item| item["id"] }),
-          "text" => clean_text(text),
+          "text" => clean_text(normalize_memory_text(text)),
           "scope" => clean_scope(scope),
           "tags" => clean_tags(tags),
           "confidence" => [[confidence.to_f, 0.0].max, 1.0].min,
@@ -358,14 +358,96 @@ module Kward
       end
 
       def heuristic_candidates(text)
-        lines = text.to_s.split(/[\n.;]/).map(&:strip)
-        lines.select do |line|
-          line.match?(/\b(prefer|usually|always|workflow|project|use|avoid)\b/i) && !unsafe_soft_text?(line)
-        end.map { |line| clean_text(line) }.reject(&:empty?).uniq.first(5)
+        lines = text.to_s.split(/[
+.;]/).map(&:strip)
+        lines.filter_map do |line|
+          # Skip lines that look like memory display output (e.g., "- soft_001 [workspace:...] text")
+          next if line.match?(/\A-\s*(core|soft)_\d+\s/)
+
+          candidate = explicit_memory_candidate(line) || personal_memory_candidate(line)
+          next if candidate.to_s.empty? || unsafe_soft_text?(candidate)
+
+          clean_text(candidate)
+        end.reject(&:empty?).uniq.first(5)
+      end
+      def explicit_memory_candidate(line)
+        line.to_s[/\b(?:important information|remember this|please remember|note that)\s*:\s*(.+)\z/i, 1]
+      end
+
+      def personal_memory_candidate(line)
+        text = line.to_s.strip
+        # Skip URL fragments like "com/kaiwood/kward]..."
+        return nil if text.match?(/\A[\w\/\.]+\]/)
+        return nil unless text.match?(/\b(?:i|we|user|captain)\b/i)
+        return nil unless text.match?(/\b(?:prefer|prefers|usually|always|workflow|project|use|uses|avoid|avoids|like|likes)\b/i)
+
+        text
       end
 
       def unsafe_soft_text?(text)
         text.to_s.match?(EMOTIONAL_PATTERN)
+      end
+
+      def normalize_memory_text(text)
+        normalized = text.to_s.strip
+
+        # Strip workspace context if it appears at the start: [workspace:/path/to/dir]
+        normalized = normalized.sub(/\A\[workspace:[^\]]*\]\s*/, '')
+        # Also strip any remaining fragment like "Com/kaiwood/kward]" that may be left over from malformed input
+        normalized = normalized.sub(/\A[\w\/\-\.]+\]\s*/, '') if normalized.match?(/\A[\w\/\-\.]+\]/)
+
+        # Only apply aggressive transformations if we detect a preamble pattern
+        has_preamble = normalized.match?(/\b(?:But\s+first|Remember\s+that|Please\s+remember|Note\s+that|I\s+should\s+remember)\b/i)
+
+        # Remove verbose preambles
+        preamble_patterns = [
+          /\bBut\s+first\s+we\s+always\s+need\s+to\s+remember\s+that\s+/i,
+          /\bRemember\s+that\s+/i,
+          /\bPlease\s+remember\s+to\s+/i,
+          /\bNote\s+that\s+/i,
+          /\bI\s+should\s+remember\s+that\s+/i
+        ]
+
+        if has_preamble
+          preamble_patterns.each do |pattern|
+            normalized = normalized.sub(pattern) { "" }
+          end
+
+          # Mapping from gerund (-ing form) to imperative base form
+          gerund_map = {
+            "using" => "Use",
+            "testing" => "Test",
+            "relying" => "Rely",
+            "preferring" => "Prefer",
+            "avoiding" => "Avoid",
+            "keeping" => "Keep",
+            "writing" => "Write",
+            "reading" => "Read",
+            "checking" => "Check",
+            "reviewing" => "Review",
+            "validating" => "Validate"
+          }
+
+          # Transform "we are X" to imperative: "we are using" -> "Use"
+          normalized = normalized.sub(/\bwe\s+are\s+(\w+ing)\b/i) do |_match|
+            gerund = Regexp.last_match(1).downcase
+            gerund_map[gerund] || gerund.capitalize
+          end
+
+          # Transform "we should X" to imperative: "we should prefer" -> "Prefer"
+          normalized = normalized.sub(/\bwe\s+should\s+(\w+)\b/i) do |_match|
+            word = Regexp.last_match(1)
+            word.capitalize
+          end
+
+          # Remove remaining "we" or "I" at the line start
+          normalized = normalized.sub(/\b(we|i)\s+/i, '')
+        end
+
+        # Capitalize first letter if lowercase
+        normalized = normalized.sub(/\A([a-z])/) { |m| m.upcase }
+
+        normalized.strip
       end
     end
   end

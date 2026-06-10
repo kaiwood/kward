@@ -1364,6 +1364,30 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_memory_summarize_only_uses_user_messages_for_inference
+    Dir.mktmpdir do |config_dir|
+      prompt = FakePrompt.new(["I am starting the session", "/memory summarize", "/exit"])
+      client = FakeClient.new(["ok"])
+      conversation = Kward::Conversation.new
+      conversation.append_user("I usually prefer concise and practical answers.")
+      conversation.append_assistant("I always use assistant-generated summaries.")
+      conversation.append_tool(tool_call_id: "skill_1", name: "read_skill", content: "Prefer focused tests and always use minitest.")
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      config_path = File.join(config_dir, "config.json")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal ["I usually prefer concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
+      assert_equal ["soft_001"], conversation.session_memories.map { |memory| memory["id"] }
+      refute_includes conversation.session_memories.map { |memory| memory["text"] }, "Prefer focused tests and always use minitest"
+      refute_includes conversation.session_memories.map { |memory| memory["text"] }, "I always use assistant-generated summaries"
+      assert_includes prompt.output.join, "Learned 1 soft memory."
+    end
+  end
+
   def test_crew_slash_command_keeps_busy_composer_visible_while_running
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

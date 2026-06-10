@@ -318,7 +318,7 @@ module Kward
 
       def memory_summarize(session_id:)
         rpc_session = fetch_session(session_id)
-        text = rpc_session.conversation.messages.map { |message| message[:content] || message["content"] }.compact.join("\n")
+        text = messages_for_memory_summarization(rpc_session.conversation).map { |message| message_content(message) }.compact.join("\n")
         records = memory_manager.infer_soft_from_text(text, workspace_root: rpc_session.workspace_root)
         rpc_session.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") })
         persist_memory_state(rpc_session)
@@ -593,6 +593,14 @@ module Kward
 
       def message_role(message)
         message["role"] || message[:role]
+      end
+
+      def message_content(message)
+        message["content"] || message[:content]
+      end
+
+      def messages_for_memory_summarization(conversation)
+        conversation.messages.select { |message| message_role(message) == "user" }
       end
 
       def entry_messages(conversation)
