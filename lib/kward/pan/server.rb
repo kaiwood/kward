@@ -5,15 +5,15 @@ require "socket"
 require "thread"
 require "time"
 require "uri"
-require_relative "agent"
-require_relative "config_files"
-require_relative "events"
-require_relative "retry_message"
-require_relative "rpc/transcript_normalizer"
-require_relative "session_store"
-require_relative "tool_call"
-require_relative "tool_registry"
-require_relative "workspace"
+require_relative "../agent"
+require_relative "../config_files"
+require_relative "../events"
+require_relative "../retry_message"
+require_relative "../rpc/transcript_normalizer"
+require_relative "../session_store"
+require_relative "../tool_call"
+require_relative "../tool_registry"
+require_relative "../workspace"
 
 module Kward
   class PanServer
@@ -264,7 +264,7 @@ module Kward
     def render_index
       @workspace_root = @workspace.root.to_s
       @session_path = @session.path
-      template = File.read(File.join(__dir__, "pan", "index.html.erb"))
+      template = File.read(File.join(__dir__, "index.html.erb"))
       ERB.new(template).result(binding)
     end
 
