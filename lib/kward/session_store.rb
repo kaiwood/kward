@@ -432,7 +432,13 @@ module Kward
         elsif role == "tool" && message_name(message) == "read_file"
           path = tool_paths[message_tool_call_id(message)]
           content = message_content(message).to_s
-          read_paths << workspace.resolved_path(path) if path && !content.start_with?("Error:")
+          next unless path && !content.start_with?("Error:")
+
+          begin
+            read_paths << workspace.resolved_path(path)
+          rescue Errno::ENOENT, SecurityError
+            next
+          end
         end
       end
 

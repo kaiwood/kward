@@ -22,6 +22,26 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_store_skips_missing_restored_read_paths
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        path = File.join(workspace_dir, "missing.txt")
+        File.write(path, "old\n")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new
+        session.attach(conversation)
+        conversation.append_assistant(assistant_tool_call("read_file", path: "missing.txt"))
+        conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "old\n")
+        File.delete(path)
+
+        _loaded_session, loaded_conversation = store.load(session.path, workspace: Kward::Workspace.new(root: workspace_dir))
+
+        assert_empty loaded_conversation.read_paths
+      end
+    end
+  end
+
   def test_session_store_persists_and_loads_compacted_history
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
