@@ -1143,7 +1143,7 @@ module Kward
     end
 
     def read_pending_escape_sequence
-      sequence = ""
+      sequence = +""
       until @pending_keys.empty?
         sequence << @pending_keys.shift.to_s
       end
