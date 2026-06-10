@@ -48,11 +48,12 @@ module Kward
     end
 
     def login(prompt:, open_browser: true, timeout_seconds: 120)
-      pkce = generate_pkce
-      state = random_urlsafe(32)
-      server = start_callback_server
-      redirect_uri = "http://localhost:#{server.addr[1]}#{CALLBACK_PATH}"
-      url = authorization_url(redirect_uri: redirect_uri, code_challenge: pkce[:challenge], state: state)
+      flow = start_login_flow
+      pkce = flow[:pkce]
+      state = flow[:state]
+      server = flow[:server]
+      redirect_uri = flow[:redirect_uri]
+      url = flow[:authorization_url]
 
       prompt.say("OpenAI login URL:\n#{url}\n")
       prompt.say("Waiting for browser login. If it does not complete, paste the callback URL when prompted.")
@@ -65,8 +66,7 @@ module Kward
       end
       raise "Missing authorization code" if code.to_s.empty?
 
-      tokens = exchange_code_for_tokens(code: code, redirect_uri: redirect_uri, code_verifier: pkce[:verifier])
-      save_auth(tokens: tokens)
+      complete_login_flow(code: code, redirect_uri: redirect_uri, code_verifier: pkce[:verifier])
       auth_path
     ensure
       server&.close unless server&.closed?
@@ -86,6 +86,30 @@ module Kward
         originator: "kward"
       )
       "#{@issuer}/oauth/authorize?#{query}"
+    end
+
+    def start_login_flow
+      pkce = generate_pkce
+      state = random_urlsafe(32)
+      server = start_callback_server
+      redirect_uri = "http://localhost:#{server.addr[1]}#{CALLBACK_PATH}"
+      {
+        pkce: pkce,
+        state: state,
+        server: server,
+        redirect_uri: redirect_uri,
+        authorization_url: authorization_url(redirect_uri: redirect_uri, code_challenge: pkce[:challenge], state: state)
+      }
+    end
+
+    def wait_for_login_callback(server, expected_state:, timeout_seconds:)
+      wait_for_callback(server, expected_state: expected_state, timeout_seconds: timeout_seconds)
+    end
+
+    def complete_login_flow(code:, redirect_uri:, code_verifier:)
+      tokens = exchange_code_for_tokens(code: code, redirect_uri: redirect_uri, code_verifier: code_verifier)
+      save_auth(tokens: tokens)
+      tokens
     end
 
     def authorization_code_from(input, expected_state: nil)
