@@ -25,7 +25,7 @@ Workspace `AGENTS.md` is injected once when a conversation starts. Kward refresh
 
 ## Personas
 
-Personas configure personality, role, and communication style without modifying repository files. Add them to `config.json` under `personas`:
+Personas configure personality, role, and communication style without modifying repository files. New configs include a single active `kward` character by default; edit or remove `personas.default` to change the first-run experience. Add custom personas to `config.json` under `personas`:
 
 ```json
 {

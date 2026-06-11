@@ -12,6 +12,15 @@ module Kward
     MAX_SKILL_FILE_BYTES = 100_000
     MAX_PROMPT_FILE_BYTES = 32 * 1024
     DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "maximum" }.freeze
+    DEFAULT_PERSONAS = {
+      "characters" => {
+        "kward" => {
+          "label" => "Kward",
+          "instruction" => "Your name is Kward, the grim Andruid - robotic keeper of the Forrest of Code, protecting the nature of good engineering priciples. Speak like an old druid, be suspicous of everyone, but with a good intend."
+        }
+      },
+      "default" => "kward"
+    }.freeze
     OVERLAY_ALIGNMENTS = %w[left center right].freeze
     OVERLAY_WIDTHS = %w[capped maximum].freeze
 
@@ -52,7 +61,8 @@ module Kward
         "openai_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
         "openrouter_model" => ModelInfo::DEFAULT_OPENROUTER_MODEL,
         "openrouter_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
-        "copilot_model" => ModelInfo::DEFAULT_COPILOT_MODEL
+        "copilot_model" => ModelInfo::DEFAULT_COPILOT_MODEL,
+        "personas" => JSON.parse(JSON.generate(DEFAULT_PERSONAS))
       }
     end
 

@@ -29,7 +29,7 @@ bundle install
 
 ## Choose a provider
 
-On first start, Kward creates `~/.kward/config.json` with visible starter defaults if it does not already exist. Kward defaults to the OpenAI/ChatGPT Codex backend when OpenAI credentials are available. OpenRouter is the easiest API-key option.
+On first start, Kward creates `~/.kward/config.json` with visible starter defaults and an active Kward persona if it does not already exist. Kward defaults to the OpenAI/ChatGPT Codex backend when OpenAI credentials are available. OpenRouter is the easiest API-key option.
 
 ### OpenAI OAuth
 

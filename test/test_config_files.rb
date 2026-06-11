@@ -1,7 +1,7 @@
 require_relative "test_helper"
 
 class TestConfigFiles < KwardTestCase
-  def test_ensure_default_config_creates_minimal_runtime_defaults
+  def test_ensure_default_config_creates_runtime_defaults_with_active_kward_persona
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
 
@@ -9,13 +9,13 @@ class TestConfigFiles < KwardTestCase
 
       assert_equal true, created
       config = JSON.parse(File.read(config_path))
-      assert_equal({
-        "openai_model" => Kward::ModelInfo::DEFAULT_OPENAI_MODEL,
-        "openai_reasoning_effort" => Kward::ModelInfo::DEFAULT_REASONING_EFFORT,
-        "openrouter_model" => Kward::ModelInfo::DEFAULT_OPENROUTER_MODEL,
-        "openrouter_reasoning_effort" => Kward::ModelInfo::DEFAULT_REASONING_EFFORT,
-        "copilot_model" => Kward::ModelInfo::DEFAULT_COPILOT_MODEL
-      }, config)
+      assert_equal Kward::ConfigFiles.default_config, config
+      personas = config.fetch("personas")
+      assert_equal "kward", personas["default"]
+      assert_equal ["characters", "default"], personas.keys
+      assert_equal ["kward"], personas.fetch("characters").keys
+      assert_equal "Kward", personas.dig("characters", "kward", "label")
+      assert_includes personas.dig("characters", "kward", "instruction"), "grim Andruid"
       refute config.key?("provider")
       refute config.key?("openai_oauth_client_id")
       refute config.key?("openrouter_api_key")
@@ -38,7 +38,8 @@ class TestConfigFiles < KwardTestCase
   def test_cli_run_creates_default_config_without_onboarding_output
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: RecordingClient.new(["reply"]))
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: client)
 
       out, err = with_env("KWARD_CONFIG_PATH" => config_path) do
         capture_io { cli.run }
@@ -47,7 +48,10 @@ class TestConfigFiles < KwardTestCase
       assert_equal "reply\n", out
       assert_equal "", err
       assert File.exist?(config_path)
-      assert_equal Kward::ConfigFiles.default_config, JSON.parse(File.read(config_path))
+      config = JSON.parse(File.read(config_path))
+      assert_equal Kward::ConfigFiles.default_config, config
+      assert_equal "kward", config.dig("personas", "default")
+      assert_includes client.seen_messages.first.first[:content], "grim Andruid"
     end
   end
 end
