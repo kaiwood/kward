@@ -1073,10 +1073,10 @@ module Kward
 
     def flush_markdown_deltas(chunks, finish: true, streams: nil)
       wrote = false
-      entries = chunks.dup
+      entries = ordered_markdown_entries(chunks.dup)
       if finish && streams
         streamed_labels = entries.map(&:first)
-        entries.concat(streams.keys.reject { |label| streamed_labels.include?(label) }.map { |label| [label, ""] })
+        entries = ordered_markdown_entries(entries.concat(streams.keys.reject { |label| streamed_labels.include?(label) }.map { |label| [label, ""] }))
       end
 
       entries.each do |label, content|
@@ -1097,6 +1097,23 @@ module Kward
       end
       chunks.clear
       wrote
+    end
+
+    def ordered_markdown_entries(entries)
+      labels = entries.map(&:first)
+      return entries unless labels.include?("Reasoning") && labels.include?("Assistant")
+
+      grouped = { "Reasoning" => +"", "Assistant" => +"" }
+      others = []
+      entries.each do |label, content|
+        if grouped.key?(label)
+          grouped[label] << content.to_s
+        else
+          others << [label, content]
+        end
+      end
+
+      [["Reasoning", grouped["Reasoning"]], ["Assistant", grouped["Assistant"]]] + others
     end
 
     def message_reasoning(message)
@@ -1547,7 +1564,14 @@ module Kward
       cancelled = false
       steering = steering_supported? ? Steering.new : nil
       event_queue = Queue.new
-      stream_state = { streamed: false, last_flush: monotonic_now, stream_block_open: false, markdown_streams: {} }
+      stream_state = {
+        streamed: false,
+        last_flush: monotonic_now,
+        stream_block_open: false,
+        markdown_streams: {},
+        reasoning_seen: false,
+        defer_assistant_streaming: defer_assistant_streaming?(agent)
+      }
       markdown_chunks = []
       answer = nil
       error = nil
@@ -1623,6 +1647,7 @@ module Kward
       case event
       when Events::ReasoningDelta
         stream_state[:streamed] = true
+        stream_state[:reasoning_seen] = true
         append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
       when Events::AssistantDelta
         stream_state[:streamed] = true
@@ -1653,7 +1678,15 @@ module Kward
       return if markdown_chunks.empty?
       return unless monotonic_now - stream_state[:last_flush] >= STREAM_RENDER_INTERVAL
 
-      stream_state[:stream_block_open] = true if flush_markdown_deltas(markdown_chunks, finish: false, streams: stream_state[:markdown_streams])
+      chunks_to_flush = markdown_chunks
+      if stream_state[:defer_assistant_streaming] && !stream_state[:reasoning_seen]
+        chunks_to_flush, delayed_chunks = split_deferred_assistant_entries(markdown_chunks)
+        return if chunks_to_flush.empty?
+
+        markdown_chunks.replace(delayed_chunks)
+      end
+
+      stream_state[:stream_block_open] = true if flush_markdown_deltas(chunks_to_flush, finish: false, streams: stream_state[:markdown_streams])
       stream_state[:last_flush] = monotonic_now
     end
 
@@ -1662,6 +1695,10 @@ module Kward
       finish_stream_block if stream_state[:stream_block_open] && !wrote
       stream_state[:stream_block_open] = false
       stream_state[:last_flush] = monotonic_now
+    end
+
+    def split_deferred_assistant_entries(markdown_chunks)
+      markdown_chunks.partition { |label, _content| label != "Assistant" }
     end
 
     def monotonic_now
@@ -1713,6 +1750,14 @@ module Kward
 
     def steering_supported?
       @client.respond_to?(:supports_in_flight_steer?) && @client.supports_in_flight_steer?
+    end
+
+    def defer_assistant_streaming?(agent)
+      return false unless agent.respond_to?(:conversation)
+
+      conversation = agent.conversation
+      model = conversation.respond_to?(:model) && conversation.model ? conversation.model : current_model_id
+      ModelInfo.reasoning_supported?(current_model_provider, model)
     end
 
     def run_blocking_interactive_turn(agent, input, display_input: nil)

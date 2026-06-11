@@ -300,6 +300,45 @@ class TestCLI < KwardTestCase
     assert_equal ["final"], prompt.write_deltas
   end
 
+  def test_prompt_interface_interactive_turn_renders_late_reasoning_before_assistant
+    prompt = BusyPrompt.new([])
+    conversation = Kward::Conversation.new(system_message: nil, model: "gpt-5")
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) do |_input, **_options, &block|
+      block.call(Kward::Events::AssistantDelta.new(delta: "answer"))
+      sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
+      block.call(Kward::Events::ReasoningDelta.new(delta: "thinking"))
+      "answer"
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_order(prompt.events, [:start_stream_block, "Reasoning"], [:start_stream_block, "Assistant"])
+    assert_equal ["thinking", "answer"], prompt.write_deltas
+  end
+
+  def test_prompt_interface_interactive_turn_streams_assistant_without_reasoning_on_non_reasoning_model
+    prompt = BusyPrompt.new([])
+    conversation = Kward::Conversation.new(system_message: nil, model: "gpt-4.1")
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) do |_input, **_options, &block|
+      block.call(Kward::Events::AssistantDelta.new(delta: "answer"))
+      sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
+      "answer"
+    end
+    client = FakeClient.new([])
+    client.provider = "Copilot"
+    client.model = "gpt-4.1"
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal ["answer"], prompt.write_deltas
+  end
+
   def test_prompt_interface_interactive_turn_notifies_plugin_transcript_events
     prompt = BusyPrompt.new([])
     conversation = Kward::Conversation.new(system_message: nil)
