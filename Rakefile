@@ -10,9 +10,11 @@ end
 
 RDoc::Task.new do |rdoc|
   rdoc.main = "README.md"
+  rdoc.rdoc_dir = "rdoc"
   rdoc.rdoc_files.include("README.md", "CHANGELOG.md", "LICENSE", "doc/**/*.md", "lib/**/*.rb")
 end
 
 YARD::Rake::YardocTask.new do |yard|
-  yard.files = ["README.md", "CHANGELOG.md", "LICENSE", "doc/**/*.md", "lib/**/*.rb"]
+  yard.files = ["lib/**/*.rb", "-", "README.md", "CHANGELOG.md", "LICENSE", "doc/**/*.md"]
+  yard.options = ["--readme", "README.md", "--output-dir", "_yardoc", "--markup", "markdown"]
 end

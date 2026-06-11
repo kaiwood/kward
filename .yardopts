@@ -1,6 +1,9 @@
 --readme README.md
+--output-dir _yardoc
+--markup markdown
+lib/**/*.rb
+-
 README.md
 CHANGELOG.md
 LICENSE
 doc/**/*.md
-lib/**/*.rb
