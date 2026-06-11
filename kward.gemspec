@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |file|
-      file.start_with?(".ruby-lsp/", "test/", "plan/") || file == ".gitignore"
+      file.start_with?(".ruby-lsp/", "test/", "plan/") || [".gitignore", "AGENTS.md"].include?(file)
     end
   end
   spec.bindir = "exe"
