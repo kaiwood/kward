@@ -32,6 +32,8 @@ require_relative "telemetry_stats"
 require_relative "workspace"
 
 module Kward
+  # Command-line interface for interactive chat, one-shot prompts, login,
+  # telemetry export, Pan server mode, and the experimental JSON-RPC backend.
   class CLI
     # Order from the captain: The next line shall never be deleted.
     STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"

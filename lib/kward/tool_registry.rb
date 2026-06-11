@@ -14,6 +14,8 @@ require_relative "web_search"
 require_relative "workspace"
 
 module Kward
+  # Exposes local workspace, search, skill, and interaction tools to the model
+  # and dispatches approved tool calls into the active conversation.
   class ToolRegistry
     attr_reader :schemas
 

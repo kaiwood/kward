@@ -9,6 +9,8 @@ require_relative "telemetry_logger"
 require_relative "tool_registry"
 
 module Kward
+  # Runs model turns, handles context compaction, dispatches tool calls, and
+  # streams high-level events back to CLI and RPC callers.
   class Agent
     def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: TelemetryLogger.new)
       @client = client

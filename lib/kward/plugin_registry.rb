@@ -1,6 +1,8 @@
 require_relative "config_files"
 
 module Kward
+  # Loads user plugin files and provides the small DSL used to register slash
+  # commands, transcript hooks, footer content, and prompt context.
   class PluginRegistry
     COMMAND_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_-]*\z/.freeze
 
