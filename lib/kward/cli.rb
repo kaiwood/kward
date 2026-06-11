@@ -404,9 +404,11 @@ module Kward
       when "new"
         [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
       when "resume"
-        path = argument.to_s.strip
-        path = select_session_path(session_store) if session_store && path.empty?
-        [true, run_busy_local_command_and_requeue { resume_session(session_store, path) }]
+        [true, run_busy_local_command_and_requeue do
+          path = argument.to_s.strip
+          path = select_session_path(session_store) if session_store && path.empty?
+          resume_session(session_store, path)
+        end]
       when "name"
         run_busy_local_command_and_requeue { rename_session(argument) }
         [true, nil]

@@ -665,6 +665,37 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_resume_picker_is_covered_by_loading_spinner
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("hello")
+      prompt = BusyPrompt.new(["/resume", "/exit"])
+      prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false|
+        events << [:select_session]
+        choices.first
+      end
+      store.define_singleton_method(:recent_tree) do |limit: 20|
+        prompt.events << [:recent_tree]
+        super(limit: limit)
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      loading_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
+      recent_index = prompt.events.index([:recent_tree])
+      select_index = prompt.events.index([:select_session])
+      assert loading_index
+      assert recent_index
+      assert select_index
+      assert_operator loading_index, :<, recent_index
+      assert_operator loading_index, :<, select_index
+    end
+  end
+
   def test_resume_updates_composer_context_usage_source
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
