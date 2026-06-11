@@ -1,11 +1,6 @@
 source "https://rubygems.org"
 
-gem "base64"
+gemspec
+
 gem "minitest"
-gem "nokogiri"
 gem "rake"
-gem "tiktoken_ruby"
-gem "tty-cursor"
-gem "tty-prompt"
-gem "tty-reader"
-gem "tty-screen"
