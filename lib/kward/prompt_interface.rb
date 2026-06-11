@@ -1733,8 +1733,15 @@ module Kward
 
     def prepare_transcript_output_locked
       handle_resize_locked
+      hide_cursor_for_transcript_output_locked
       reserve_composer_region_locked
       move_to_transcript_cursor_locked
+    end
+
+    def hide_cursor_for_transcript_output_locked
+      return unless @started && @asking
+
+      set_cursor_visible_locked(false)
     end
 
     def restore_composer_cursor_locked

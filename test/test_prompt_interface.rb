@@ -1086,17 +1086,20 @@ class TestPromptInterface < KwardTestCase
     output.rewind
 
     prompt.start_stream_block("Assistant")
-    assert_match(/\e\[19;3H\z/, output.string)
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+    assert_match(/\e\[19;3H#{Regexp.escape(Kward::PromptInterface::CURSOR_SHOW)}\z/, output.string)
 
     output.truncate(0)
     output.rewind
     prompt.write_delta("hello")
-    assert_match(/\e\[19;3H\z/, output.string)
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+    assert_match(/\e\[19;3H#{Regexp.escape(Kward::PromptInterface::CURSOR_SHOW)}\z/, output.string)
 
     output.truncate(0)
     output.rewind
     prompt.finish_stream_block
-    assert_match(/\e\[19;3H\z/, output.string)
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+    assert_match(/\e\[19;3H#{Regexp.escape(Kward::PromptInterface::CURSOR_SHOW)}\z/, output.string)
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
