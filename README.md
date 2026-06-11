@@ -33,6 +33,7 @@ ruby lib/main.rb "Explain this Ruby file" # single prompt
 - [Web search](doc/web-search.md): search providers and network behavior.
 - [Code search](doc/code-search.md): package/source discovery, cached GitHub clones, and external code reading.
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
+- [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
 
 ## Run tests
 
