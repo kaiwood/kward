@@ -1,6 +1,7 @@
 require "open3"
 require "pathname"
 require "timeout"
+require_relative "session_diff"
 
 module Kward
   class Workspace
@@ -297,7 +298,8 @@ module Kward
       diff = unified_diff(path, old_content, new_content)
       return diff if diff.bytesize <= MAX_EDIT_DIFF_BYTES
 
-      diff.byteslice(0, MAX_EDIT_DIFF_BYTES).to_s.scrub << "\n... diff truncated to #{MAX_EDIT_DIFF_BYTES} bytes; use read_file to inspect current content."
+      counts = SessionDiff.count(diff)
+      diff.byteslice(0, MAX_EDIT_DIFF_BYTES).to_s.scrub << "\n... diff truncated to #{MAX_EDIT_DIFF_BYTES} bytes; full diff stats: +#{counts[:additions]}|-#{counts[:deletions]}. Use read_file to inspect current content."
     end
 
     def unified_diff(path, old_content, new_content)

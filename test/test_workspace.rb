@@ -201,8 +201,9 @@ class TestWorkspace < KwardTestCase
       result = workspace.edit_file(path, [{ "old_text" => old_text, "new_text" => new_text }], read_paths: conversation.read_paths)
 
       assert_includes result, "Edited #{path}: replaced 1 block(s)"
-      assert_includes result, "diff truncated to #{Kward::Workspace::MAX_EDIT_DIFF_BYTES} bytes"
+      assert_includes result, "diff truncated to #{Kward::Workspace::MAX_EDIT_DIFF_BYTES} bytes; full diff stats: +600|-600"
       assert_operator result.bytesize, :<, Kward::Workspace::MAX_EDIT_DIFF_BYTES + 200
+      assert_equal({ additions: 600, deletions: 600 }, Kward::SessionDiff.count(result[/--- .*\z/m]))
       assert_equal new_text, File.read(File.join(dir, path))
     end
   end

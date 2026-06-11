@@ -57,6 +57,32 @@ class TestSessionDiff < KwardTestCase
     assert_equal({ additions: 1, deletions: 1 }, counts)
   end
 
+  def test_counts_truncated_diff_from_full_stats_marker
+    counts = Kward::SessionDiff.count(<<~DIFF)
+      --- file.txt
+      +++ file.txt
+      @@ -1,1000 +1,1000 @@
+      -old 1
+      -old 2
+      ... diff truncated to 8192 bytes; full diff stats: +12|-34. Use read_file to inspect current content.
+    DIFF
+
+    assert_equal({ additions: 12, deletions: 34 }, counts)
+  end
+
+  def test_ignores_legacy_truncated_diff_without_full_stats
+    counts = Kward::SessionDiff.count(<<~DIFF)
+      --- file.txt
+      +++ file.txt
+      @@ -1,1000 +1,1000 @@
+      -old 1
+      -old 2
+      ... diff truncated to 8192 bytes; use read_file to inspect current content.
+    DIFF
+
+    assert_equal({ additions: 0, deletions: 0 }, counts)
+  end
+
   def test_add_tool_result_ignores_errors_and_no_diff_content
     diff = Kward::SessionDiff.new
 

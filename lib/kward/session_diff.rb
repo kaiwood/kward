@@ -31,6 +31,12 @@ module Kward
     end
 
     def self.count(diff)
+      if (stats = truncated_diff_stats(diff))
+        return stats
+      elsif truncated_diff?(diff)
+        return { additions: 0, deletions: 0 }
+      end
+
       additions = 0
       deletions = 0
       removed = []
@@ -77,6 +83,17 @@ module Kward
     end
 
     private
+
+    def self.truncated_diff_stats(diff)
+      match = diff.to_s.match(/^\.\.\. diff truncated to \d+ bytes; full diff stats: \+(\d+)\|-(\d+)\./)
+      return nil unless match
+
+      { additions: match[1].to_i, deletions: match[2].to_i }
+    end
+
+    def self.truncated_diff?(diff)
+      diff.to_s.match?(/^\.\.\. diff truncated to \d+ bytes;/)
+    end
 
     def self.common_line_count(left, right)
       previous = Array.new(right.length + 1, 0)
