@@ -6,6 +6,36 @@ class TestPromptInterface < KwardTestCase
     Kward::PromptInterface::BANNER_LOGO_PIXELS
   end
 
+  def test_busy_ctrl_c_returns_cancel_input
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@busy, true)
+
+    assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\x03")
+  end
+
+  def test_busy_csi_u_ctrl_c_returns_cancel_input
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@busy, true)
+
+    assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\e[99;5u")
+  end
+
+  def test_non_busy_ctrl_c_raises_interrupt
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_raises(Interrupt) do
+      prompt.send(:handle_key, "\x03")
+    end
+  end
+
+  def test_non_busy_csi_u_ctrl_c_raises_interrupt
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_raises(Interrupt) do
+      prompt.send(:handle_key, "\e[99;5u")
+    end
+  end
+
   def test_prompt_interface_renders_empty_composer_before_typing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

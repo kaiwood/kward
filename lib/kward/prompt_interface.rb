@@ -10,7 +10,7 @@ require_relative "resources/avatar_kward_logo"
 module Kward
   class PromptInterface
     HELP_TEXT = "Enter sends • Shift+Enter inserts newline • ↑/↓ history • Ctrl+D exits empty prompt".freeze
-    BUSY_HELP_TEXT = "Streaming • type next prompt • Enter queues • Shift+Enter inserts newline".freeze
+    BUSY_HELP_TEXT = "Streaming • type next prompt • Enter queues • Ctrl+C cancels".freeze
     SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
     SPINNER_INTERVAL = 0.1
     FOOTER_REFRESH_INTERVAL = 1.0
@@ -33,6 +33,7 @@ module Kward
     CURSOR_HIDE = "\e[?25l".freeze
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
     EXIT_INPUT = :exit_input
+    CANCEL_INPUT = :cancel_input
     SELECT_CANCEL = :select_cancel
 
     class SubmittedInput < String
@@ -375,8 +376,8 @@ module Kward
         end
 
         result = handle_key(key)
-        render_prompt_locked unless result == EXIT_INPUT
-        result == EXIT_INPUT ? EXIT_INPUT : result
+        render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result)
+        [EXIT_INPUT, CANCEL_INPUT].include?(result) ? result : result
       end
     end
 
@@ -616,6 +617,8 @@ module Kward
       return pending if pending
 
       @reader.read_keypress(echo: false, raw: true, nonblock: nonblock)
+    rescue TTY::Reader::InputInterrupt
+      "\x03"
     rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
       nil
     end
@@ -648,6 +651,8 @@ module Kward
         delete_at_cursor
       when :ctrl_d
         delete_at_cursor_or_exit
+      when :ctrl_c
+        cancel_input_or_interrupt
       when :ctrl_a
         move_to_start_of_line
       when :ctrl_e
@@ -688,12 +693,20 @@ module Kward
           delete_before_cursor
         when "\x04"
           delete_at_cursor_or_exit
+        when "\x03"
+          cancel_input_or_interrupt
         when "\e"
           handle_escape_sequence
         else
           insert_key(key)
         end
       end
+    end
+
+    def cancel_input_or_interrupt
+      return CANCEL_INPUT if @busy
+
+      raise Interrupt
     end
 
     def handle_escape_sequence
@@ -1068,6 +1081,8 @@ module Kward
           move_to_start_of_line
         when 98
           move_cursor_left
+        when 99
+          cancel_input_or_interrupt
         when 100
           delete_at_cursor_or_exit
         when 101

@@ -14,7 +14,7 @@ When running from source, replace `kward` with `ruby lib/main.rb`.
 
 Interactive mode opens a terminal composer and saves the conversation as a per-workspace session. Use it when you want Kward to inspect files, make changes, run commands, or continue a conversation over time.
 
-The composer stays available while assistant and tool output streams. If you press Enter while a response is still running, Kward queues your next prompt and sends it after the current turn finishes.
+The composer stays available while assistant and tool output streams. If you press Enter while a response is still running, Kward queues your next prompt and sends it after the current turn finishes. Press Ctrl+C while a response is running to stop the current turn and return to the composer.
 
 ## One-shot prompts
 
@@ -131,6 +131,7 @@ See [Memory](memory.md) for storage locations, safety rules, auto-summary, and R
 - Shift+Enter inserts a newline.
 - Up/Down browse prompt history.
 - Ctrl+D exits from an empty prompt.
+- Ctrl+C stops the current response while assistant or tool output is running.
 - Backspace at the beginning of the prompt removes the most recent image attachment.
 
 Multiline input grows the composer up to a capped height.

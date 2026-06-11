@@ -1483,6 +1483,8 @@ module Kward
       return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
 
       queued_inputs = []
+      cancellation = Cancellation.new
+      cancelled = false
       steering = steering_supported? ? Steering.new : nil
       event_queue = Queue.new
       stream_state = { streamed: false, last_flush: monotonic_now, stream_block_open: false, markdown_streams: {} }
@@ -1493,6 +1495,7 @@ module Kward
 
       worker = Thread.new do
         options = agent_display_options(display_input)
+        options[:cancellation] = cancellation
         options[:steering] = steering if steering
         answer = agent.ask(input, **options) do |event|
           event_queue << event
@@ -1500,20 +1503,34 @@ module Kward
       rescue StandardError => e
         error = e
       end
+      worker.report_on_exception = false
 
       while worker.alive?
-        collect_busy_input(queued_inputs, steering)
+        begin
+          poll_result = collect_busy_input(queued_inputs, steering)
+          sleep 0.01
+        rescue Interrupt
+          poll_result = PromptInterface::CANCEL_INPUT
+        end
+        if poll_result == PromptInterface::CANCEL_INPUT && !cancelled
+          cancelled = true
+          cancellation.cancel!
+          worker.raise(Cancellation::CancelledError, "cancelled") if worker.alive?
+        end
         drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
-        sleep 0.01
       end
-      worker.join
-      drain_busy_input(queued_inputs, nil)
+      begin
+        worker.join
+      rescue Cancellation::CancelledError => e
+        error ||= e
+      end
+      drain_busy_input(queued_inputs, nil) unless cancelled
       drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
-      raise error if error
+      raise error if error && !error.is_a?(Cancellation::CancelledError)
 
-      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless stream_state[:streamed] || answer.to_s.empty?
+      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless cancelled || stream_state[:streamed] || answer.to_s.empty?
       persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
-      auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && queued_inputs.empty?
+      auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && queued_inputs.empty? && !cancelled
       queued_inputs
     ensure
       @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)

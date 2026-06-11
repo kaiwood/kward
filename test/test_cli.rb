@@ -21,7 +21,7 @@ class TestCLI < KwardTestCase
       @answer = answer
     end
 
-    def ask(_input)
+    def ask(_input, **_options)
       @events.each { |event| yield event }
       @answer
     end
@@ -243,6 +243,41 @@ class TestCLI < KwardTestCase
     assert_equal ["\e[1mExploring key handling\e[0m -> Better Markdown"], prompt.write_deltas
   end
 
+  def test_prompt_interface_interactive_turn_cancels_on_busy_ctrl_c
+    prompt = BusyPrompt.new([Kward::PromptInterface::CANCEL_INPUT])
+    prompt.define_singleton_method(:poll_input) { @inputs.shift }
+    assert_interactive_turn_cancels(prompt)
+  end
+
+  def test_prompt_interface_interactive_turn_cancels_on_interrupt_signal
+    poll_count = 0
+    prompt = BusyPrompt.new([])
+    prompt.define_singleton_method(:poll_input) do
+      poll_count += 1
+      raise Interrupt if poll_count > 1
+    end
+    assert_interactive_turn_cancels(prompt)
+  end
+
+  def assert_interactive_turn_cancels(prompt)
+    cancellation_seen = Queue.new
+    agent = Object.new
+    agent.define_singleton_method(:ask) do |_input, cancellation: nil, &block|
+      block.call(Kward::Events::AssistantDelta.new(delta: "partial"))
+      cancellation_seen << cancellation
+      sleep 10
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    queued = cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_empty queued
+    assert cancellation_seen.pop.cancelled?
+    assert_equal ["partial"], prompt.write_deltas
+    assert_includes prompt.events, [:finish_busy_input]
+    refute_includes prompt.output.join, "Error: cancelled"
+  end
+
   def test_prompt_interface_interactive_turn_flushes_pending_delta_on_completion
     prompt = BusyPrompt.new([])
     agent = EventAgent.new([Kward::Events::AssistantDelta.new(delta: "final")])
@@ -281,7 +316,7 @@ class TestCLI < KwardTestCase
       Kward::Events::AssistantDelta.new(delta: chunk)
     end
     agent = Object.new
-    agent.define_singleton_method(:ask) do |_input, &block|
+    agent.define_singleton_method(:ask) do |_input, **_options, &block|
       events.each do |event|
         block.call(event)
         sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
@@ -319,7 +354,7 @@ class TestCLI < KwardTestCase
       "ward_48x48.png\n```\n"
     ]
     agent = Object.new
-    agent.define_singleton_method(:ask) do |_input, &block|
+    agent.define_singleton_method(:ask) do |_input, **_options, &block|
       chunks.each do |chunk|
         block.call(Kward::Events::AssistantDelta.new(delta: chunk))
         sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
