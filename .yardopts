@@ -1,0 +1,6 @@
+--readme README.md
+README.md
+CHANGELOG.md
+LICENSE
+doc/**/*.md
+lib/**/*.rb
