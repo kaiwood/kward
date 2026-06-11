@@ -1,6 +1,6 @@
 # Kward
 
-Kward is a small Ruby CLI coding agent. It can chat with you about a project, inspect and edit files, run confirmed shell commands, search the web, look up public source code, and save local sessions.
+Kward is an extendable Ruby CLI coding agent. It can chat with you about a project, inspect and edit files, run confirmed shell commands, search the web, look up public source code, save local sessions, and load trusted Ruby plugins for custom workflows.
 
 It currently supports the OpenAI/ChatGPT Codex backend, OpenRouter, and experimental Copilot provider support.
 
@@ -46,7 +46,8 @@ exe/kward
 - Run shell commands after confirmation.
 - Search the live web and inspect cached public GitHub repositories.
 - Save, resume, clone, compact, and export sessions.
-- Use optional memory, personas, prompt templates, skills, and trusted local plugins.
+- Extend the Agent with trusted Ruby plugins for custom commands, footer UI, prompt context, and transcript-event observers.
+- Use optional memory, personas, prompt templates, and skills.
 - Serve an experimental JSON-RPC backend for UI clients.
 
 ## Documentation
@@ -61,7 +62,8 @@ Start here:
 Feature guides:
 
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
-- [Extensibility](doc/extensibility.md): `AGENTS.md`, personas, skills, prompt templates, and plugins.
+- [Extensibility](doc/extensibility.md): `AGENTS.md`, personas, skills, and prompt templates.
+- [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
 - [Web search](doc/web-search.md): live search providers and network behavior.
 - [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading.
 

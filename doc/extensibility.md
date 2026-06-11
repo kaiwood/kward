@@ -1,6 +1,16 @@
 # Extensibility
 
-Prompts and skills can live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead. Plugins are different: user plugins are loaded only from `~/.kward/plugins`, regardless of `KWARD_CONFIG_PATH` or the current project directory.
+Kward can be customized at several levels:
+
+- `AGENTS.md` for coding guidance and repository rules.
+- Personas for assistant personality and communication style.
+- Skills for reusable agent instructions the model can load on demand.
+- Prompt templates for reusable slash-command prompts.
+- Plugins for trusted Ruby extensions that add commands, footer UI, prompt context, transcript-event observers, and RPC-visible behavior.
+
+Prompts, skills, personas, and config-directory `AGENTS.md` live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead.
+
+Plugins are different: user plugins are loaded only from `~/.kward/plugins`, regardless of `KWARD_CONFIG_PATH` or the current project directory. See the dedicated [Plugins guide](plugins.md).
 
 ## Agent instructions
 
@@ -82,14 +92,23 @@ Prompt assembly order is:
 1. Kward built-in base prompt
 2. Config-directory `AGENTS.md`
 3. Evaluated persona text
-4. Skills listing
-5. Workspace `AGENTS.md`
+4. Plugin prompt context
+5. Skills listing
+6. Workspace `AGENTS.md`
 
 If no persona entries match, Kward simply omits that part. Conversation compaction uses a neutral prompt without workspace personality, so summaries stay continuation-focused and machine-oriented.
 
 ## Skills
 
-- `skills/<skill-name>/SKILL.md`: listed in the system instructions by frontmatter `name` and `description`. The assistant can call `read_skill` to load `SKILL.md` or related files inside that skill folder.
+Skills are reusable instruction packs the assistant can load when a task matches their description.
+
+Create a skill at:
+
+```text
+<config-dir>/skills/<skill-name>/SKILL.md
+```
+
+A skill is listed in the system instructions by its frontmatter `name` and `description`. The assistant can then call `read_skill` to load `SKILL.md` or related files inside that skill folder.
 
 Example skill:
 
@@ -106,7 +125,17 @@ Use this when planning a code change.
 
 ## Prompt templates
 
-- `prompts/<command>.md`: user-invocable prompt templates available as interactive slash commands, such as `/plan fix bug`. Prompt templates support `$ARGUMENTS`, replaced by the text after the command. Built-in commands like `/exit`, `/new`, `/resume`, `/name`, `/clone`, `/export`, `/redraw`, and `/status` are reserved.
+Prompt templates create user-invocable slash commands for reusable prompts.
+
+Create a template at:
+
+```text
+<config-dir>/prompts/<command>.md
+```
+
+For example, `prompts/plan.md` becomes `/plan` in interactive mode. Templates support `$ARGUMENTS`, replaced by the text after the command.
+
+Built-in commands such as `/exit`, `/new`, `/resume`, `/name`, `/clone`, `/export`, `/redraw`, and `/status` are reserved.
 
 Example prompt template:
 
@@ -123,35 +152,20 @@ $ARGUMENTS
 
 ## Plugins
 
-- `~/.kward/plugins/*.rb`: trusted top-level Ruby plugin files loaded from the user plugin directory only. Kward does not load plugins from the project/workspace directory or from a `KWARD_CONFIG_PATH` directory. If a custom config directory has a legacy `plugins` folder, Kward warns and ignores it. Plugins execute as local Ruby code in the Kward process, so install only plugins you trust.
-- Plugins can register slash commands, one custom footer renderer, and system prompt context. Built-in commands and prompt-template commands are reserved.
-- Plugin slash commands are available in interactive slash completion and through RPC `commands/list`. RPC clients can execute plugin commands with `commands/run`.
-- Plugin command, footer, prompt-context, and transcript-event contexts expose read-only transcript access through `ctx.transcript.messages`, plus session metadata and `ctx.say` for command output.
-- Plugins can add system prompt context with `plugin.prompt_context`. Returned text is injected after personas and before skills/workspace instructions. Use this for concise background context only; plugins are responsible for their own config, cache files, and refresh commands.
-- Plugins can observe live TUI transcript stream events with `plugin.on_transcript_event`. Handlers receive a read-only event with `event.type` and `event.payload`, plus the usual plugin context. Event types include `reasoning_delta`, `assistant_delta`, `assistant_message`, `model_retry`, `turn_steered`, `tool_call`, `tool_result`, and `answer`.
+Plugins are Kward's trusted Ruby extension layer. Use them when you need behavior rather than just instructions or reusable prompts.
 
-Example plugin:
+Plugins can add:
 
-```ruby
-Kward.plugin do |plugin|
-  plugin.command "last-message", description: "Show transcript size" do |_args, ctx|
-    ctx.say("Messages: #{ctx.transcript.messages.length}")
-  end
+- slash commands,
+- one custom terminal footer,
+- prompt context,
+- live transcript-event observers,
+- command behavior exposed to RPC clients.
 
-  plugin.footer do |ctx|
-    "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
-  end
+Plugin files live in:
 
-  plugin.prompt_context do |_ctx|
-    "Project background: prefer small, focused changes."
-  end
-
-  plugin.on_transcript_event do |event, ctx|
-    next unless event.type == "assistant_delta"
-
-    File.open(File.join(ctx.workspace_root, ".assistant-stream.log"), "a") do |file|
-      file.write(event.payload[:delta])
-    end
-  end
-end
+```text
+~/.kward/plugins/*.rb
 ```
+
+See [Plugins](plugins.md) for the full plugin API, examples, and security model.
