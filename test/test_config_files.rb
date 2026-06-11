@@ -1,0 +1,53 @@
+require_relative "test_helper"
+
+class TestConfigFiles < KwardTestCase
+  def test_ensure_default_config_creates_minimal_runtime_defaults
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+
+      created = Kward::ConfigFiles.ensure_default_config!(config_path)
+
+      assert_equal true, created
+      config = JSON.parse(File.read(config_path))
+      assert_equal({
+        "openai_model" => Kward::ModelInfo::DEFAULT_OPENAI_MODEL,
+        "openai_reasoning_effort" => Kward::ModelInfo::DEFAULT_REASONING_EFFORT,
+        "openrouter_model" => Kward::ModelInfo::DEFAULT_OPENROUTER_MODEL,
+        "openrouter_reasoning_effort" => Kward::ModelInfo::DEFAULT_REASONING_EFFORT,
+        "copilot_model" => Kward::ModelInfo::DEFAULT_COPILOT_MODEL
+      }, config)
+      refute config.key?("provider")
+      refute config.key?("openai_oauth_client_id")
+      refute config.key?("openrouter_api_key")
+    end
+  end
+
+  def test_ensure_default_config_does_not_modify_existing_config
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      content = JSON.dump("openai_model" => "custom-model")
+      File.write(config_path, content)
+
+      created = Kward::ConfigFiles.ensure_default_config!(config_path)
+
+      assert_equal false, created
+      assert_equal content, File.read(config_path)
+    end
+  end
+
+  def test_cli_run_creates_default_config_without_onboarding_output
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: RecordingClient.new(["reply"]))
+
+      out, err = with_env("KWARD_CONFIG_PATH" => config_path) do
+        capture_io { cli.run }
+      end
+
+      assert_equal "reply\n", out
+      assert_equal "", err
+      assert File.exist?(config_path)
+      assert_equal Kward::ConfigFiles.default_config, JSON.parse(File.read(config_path))
+    end
+  end
+end

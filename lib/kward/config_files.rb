@@ -44,6 +44,26 @@ module Kward
       File.join(config_dir, "cache")
     end
 
+    def default_config
+      require_relative "model/model_info"
+
+      {
+        "openai_model" => ModelInfo::DEFAULT_OPENAI_MODEL,
+        "openai_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
+        "openrouter_model" => ModelInfo::DEFAULT_OPENROUTER_MODEL,
+        "openrouter_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
+        "copilot_model" => ModelInfo::DEFAULT_COPILOT_MODEL
+      }
+    end
+
+    def ensure_default_config!(path = config_path)
+      path = File.expand_path(path)
+      return false if File.exist?(path)
+
+      write_config(default_config, path)
+      true
+    end
+
     def code_search_cache_dir
       File.join(cache_dir, "code_search")
     end

@@ -64,6 +64,8 @@ module Kward
     #
     # @return [void]
     def run
+      ConfigFiles.ensure_default_config!
+
       if @argv.first == "rpc" && @argv.length == 1
         Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
         return

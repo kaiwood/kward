@@ -1,6 +1,6 @@
 # Configuration
 
-Kward reads user configuration from `~/.kward/config.json` by default. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
+Kward reads user configuration from `~/.kward/config.json` by default. On first start, if the file does not exist, Kward creates a minimal starter config with the current runtime defaults so you can inspect and edit them. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
 
 Example:
 
