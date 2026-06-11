@@ -1284,6 +1284,7 @@ module Kward
         overlay_settings: ConfigFiles.overlay_settings,
         footer: prompt_footer_renderer,
         composer_status: method(:composer_status_text),
+        busy_help: ConfigFiles.composer_busy_help?,
         attachment_badges: method(:composer_attachment_badges),
         attachment_parser: method(:composer_attachment_parser),
         banner_pixels: Kward::PromptInterface::BANNER_LOGO_PIXELS,

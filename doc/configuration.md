@@ -144,6 +144,20 @@ Overlay settings control terminal picker/card layout:
 
 You can change these interactively with `/settings`.
 
+## Composer settings
+
+The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:
+
+```json
+{
+  "composer": {
+    "busy_help": false
+  }
+}
+```
+
+This only hides the hint text; Ctrl+C still stops the current running response.
+
 ## Memory
 
 Memory is off by default. Enabling it writes:

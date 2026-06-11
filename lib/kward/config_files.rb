@@ -129,6 +129,11 @@ module Kward
       settings
     end
 
+    def composer_busy_help?(config = read_config)
+      composer = config["composer"].is_a?(Hash) ? config["composer"] : {}
+      composer["busy_help"] != false
+    end
+
     def update_overlay_settings(values)
       raise "Overlay settings must be an object" unless values.is_a?(Hash)
 

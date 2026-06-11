@@ -1,6 +1,12 @@
 require_relative "test_helper"
 
 class TestPrompts < KwardTestCase
+  def test_composer_busy_help_defaults_on_and_can_be_disabled
+    assert_equal true, Kward::ConfigFiles.composer_busy_help?({})
+    assert_equal true, Kward::ConfigFiles.composer_busy_help?({ "composer" => {} })
+    assert_equal false, Kward::ConfigFiles.composer_busy_help?({ "composer" => { "busy_help" => false } })
+  end
+
   def test_config_agents_prompt_appends_from_config_dir
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |workspace|

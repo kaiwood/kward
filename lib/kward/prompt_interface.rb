@@ -45,7 +45,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, attachment_badges: nil, attachment_parser: nil, banner_pixels: nil, banner_message: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_pixels: nil, banner_message: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -93,6 +93,7 @@ module Kward
       @overlay_settings = normalize_overlay_settings(overlay_settings)
       @footer = footer
       @composer_status = composer_status
+      @busy_help = busy_help
       @attachment_badges = attachment_badges
       @attachment_parser = attachment_parser
       @banner_message = banner_message.to_s
@@ -2285,14 +2286,18 @@ module Kward
     def composer_title
       label = @prompt_label.delete_suffix(">")
       if @busy && @queued_count.positive?
-        status_composer_text("#{label} · #{@queued_count} queued · #{BUSY_HELP_TEXT}")
+        status_composer_text(busy_title("#{label} · #{@queued_count} queued"))
       elsif @busy && @steered_count.to_i.positive?
-        status_composer_text("#{label} · #{spinner_frame} steering · #{BUSY_HELP_TEXT}")
+        status_composer_text(busy_title("#{label} · #{spinner_frame} steering"))
       elsif @busy
-        status_composer_text("#{label} · #{spinner_frame} #{@busy_activity} · #{BUSY_HELP_TEXT}")
+        status_composer_text(busy_title("#{label} · #{spinner_frame} #{@busy_activity}"))
       else
         status_composer_text(label)
       end
+    end
+
+    def busy_title(text)
+      @busy_help ? "#{text} · #{BUSY_HELP_TEXT}" : text
     end
 
     def composer_status_text
