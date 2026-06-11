@@ -1,8 +1,19 @@
-# Ruby CLI Agent
+# Kward
 
-Minimal CLI coding agent using OpenRouter or OpenAI.
+Small Ruby CLI coding agent using OpenRouter or OpenAI.
 
-## Quick start
+## Install
+
+Kward is being prepared for a RubyGems release. Once published:
+
+```bash
+gem install kward
+kward login                    # sign in with OpenAI OAuth
+kward                          # start a multi-turn chat
+kward "Explain this Ruby file" # single prompt
+```
+
+## Run from source
 
 ```bash
 bundle install
@@ -33,4 +44,11 @@ Equivalent direct command:
 
 ```bash
 ruby -Itest -e 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }'
+```
+
+## Generate API documentation
+
+```bash
+bundle exec rake rdoc
+bundle exec yard doc
 ```
