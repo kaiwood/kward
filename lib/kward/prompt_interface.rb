@@ -10,7 +10,7 @@ require_relative "resources/avatar_kward_logo"
 module Kward
   class PromptInterface
     HELP_TEXT = "Enter sends • Shift+Enter inserts newline • ↑/↓ history • Ctrl+D exits empty prompt".freeze
-    BUSY_HELP_TEXT = "Streaming • type next prompt • Enter queues • Ctrl+C cancels".freeze
+    BUSY_HELP_TEXT = "Ctrl+C cancels".freeze
     SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
     SPINNER_INTERVAL = 0.1
     FOOTER_REFRESH_INTERVAL = 1.0
@@ -2285,11 +2285,11 @@ module Kward
     def composer_title
       label = @prompt_label.delete_suffix(">")
       if @busy && @queued_count.positive?
-        status_composer_text("#{label} · #{@queued_count} queued")
+        status_composer_text("#{label} · #{@queued_count} queued · #{BUSY_HELP_TEXT}")
       elsif @busy && @steered_count.to_i.positive?
-        status_composer_text("#{label} · #{spinner_frame} steering")
+        status_composer_text("#{label} · #{spinner_frame} steering · #{BUSY_HELP_TEXT}")
       elsif @busy
-        status_composer_text("#{label} · #{spinner_frame} #{@busy_activity}")
+        status_composer_text("#{label} · #{spinner_frame} #{@busy_activity} · #{BUSY_HELP_TEXT}")
       else
         status_composer_text(label)
       end

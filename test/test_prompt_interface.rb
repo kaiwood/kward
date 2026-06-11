@@ -930,6 +930,15 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "╭ You · ⠋ compacting "
   end
 
+  def test_prompt_interface_renders_busy_help_text
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.begin_busy_input("You>")
+
+    assert_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT
+  end
+
   def test_prompt_interface_advances_braille_spinner_while_busy
     input, writer = IO.pipe
     output = StringIO.new
