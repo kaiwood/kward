@@ -7,6 +7,7 @@ require_relative "ansi"
 require_relative "model/client"
 require_relative "compactor"
 require_relative "config_files"
+require_relative "clipboard"
 require_relative "context_usage"
 require_relative "crew_reporter"
 require_relative "events"
@@ -414,6 +415,9 @@ module Kward
         [true, nil]
       when "clone"
         [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]
+      when "copy"
+        run_busy_local_command_and_requeue { copy_session_text(agent.conversation, argument) }
+        [true, nil]
       when "export"
         run_busy_local_command_and_requeue { export_session(agent.conversation, argument) }
         [true, nil]
@@ -904,6 +908,57 @@ module Kward
       @prompt.say("\nCloned session: #{@active_session.path}\n")
       render_conversation_transcript(agent.conversation)
       agent
+    end
+
+    def copy_session_text(conversation, argument)
+      target = copy_target(argument)
+      unless target
+        @prompt.say("\nUsage: /copy [last|transcript]\n")
+        return
+      end
+
+      content = copy_target_content(conversation, target)
+      if content.to_s.empty?
+        @prompt.say("\nNothing to copy.\n")
+        return
+      end
+
+      result = Clipboard.new(output: $stdout).copy(content)
+      if result.success?
+        @prompt.say("\nCopied #{copy_target_label(target)}.\n")
+      else
+        @prompt.say("\nCopy failed: #{result.message}.\n")
+      end
+    end
+
+    def copy_target(argument)
+      target = argument.to_s.strip.downcase
+      target = "last" if target.empty?
+      return target if ["last", "transcript"].include?(target)
+
+      nil
+    end
+
+    def copy_target_content(conversation, target)
+      case target
+      when "last"
+        last_assistant_copy_text(conversation)
+      when "transcript"
+        markdown_transcript(conversation)
+      else
+        ""
+      end
+    end
+
+    def last_assistant_copy_text(conversation)
+      message = conversation.messages.reverse.find { |item| message_role(item) == "assistant" }
+      return "" unless message
+
+      message_content_text(message_content(message))
+    end
+
+    def copy_target_label(target)
+      target == "transcript" ? "transcript" : "last assistant response"
     end
 
     def compact_context(agent, argument)

@@ -115,6 +115,8 @@ class TestRPCServer < KwardTestCase
     }, capabilities["extensionUi"])
     assert_equal false, capabilities.dig("composer", "sessionDiff", "supported")
     assert_equal "interactiveComposerOnly", capabilities.dig("composer", "sessionDiff", "reason")
+    assert_equal false, capabilities.dig("composer", "copy", "supported")
+    assert_equal "clientClipboardOwnedByUi", capabilities.dig("composer", "copy", "reason")
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
     assert_equal "none", capabilities["security"]["toolApproval"]
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
@@ -262,9 +264,13 @@ class TestRPCServer < KwardTestCase
           assert_equal "skill:testing-verification", skill[:name]
           assert_equal "Testing and verification guidance", skill[:description]
           assert_equal File.join(skill_dir, "SKILL.md"), skill[:path]
-          builtin = commands.find { |command| command[:source] == "builtin" }
+          builtin = commands.find { |command| command[:name] == "crew" }
           assert_equal "crew", builtin[:name]
           assert_equal true, builtin[:executable]
+          copy_command = commands.find { |command| command[:name] == "copy" }
+          assert_equal false, copy_command[:executable]
+          assert_equal true, copy_command[:unsupported]
+          assert_equal "clientClipboardOwnedByUi", copy_command[:reason]
           plugin = commands.find { |command| command[:source] == "plugin" }
           assert_equal "hello", plugin[:name]
           assert_equal "Say hello", plugin[:description]
@@ -282,6 +288,23 @@ class TestRPCServer < KwardTestCase
           assert_equal ["/review"], sections.find { |section| section[:name] == "Prompts" }[:items]
           assert_equal ["/hello"], sections.find { |section| section[:name] == "Plugins" }[:items]
         end
+      end
+    end
+  end
+
+  def test_commands_run_reports_copy_unsupported
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+        result = server.send(:commands_run, "sessionId" => session[:id], "name" => "copy")
+
+        assert_equal false, result[:ok]
+        assert_equal "unsupported", result[:error]
+        assert_equal "clientClipboardOwnedByUi", result[:reason]
       end
     end
   end

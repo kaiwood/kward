@@ -9,6 +9,7 @@ module Kward
       { name: "resume", description: "Resume a saved session.", argument_hint: "[path]" },
       { name: "name", description: "Name or clear the current session.", argument_hint: "[name]" },
       { name: "clone", description: "Clone the current session.", argument_hint: "" },
+      { name: "copy", description: "Copy clean session text to the clipboard.", argument_hint: "[last|transcript]" },
       { name: "export", description: "Export the current session as Markdown.", argument_hint: "[path]" },
       { name: "compact", description: "Compact the current conversation context.", argument_hint: "[instructions]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },

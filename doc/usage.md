@@ -61,6 +61,7 @@ Use slash commands in interactive mode for local Kward actions:
 | `/resume [path]` | Resume a saved session, or pick one when no path is given. |
 | `/name [name]` | Name or clear the current session name. |
 | `/clone` | Duplicate the current session. |
+| `/copy [last\|transcript]` | Copy clean assistant text or the Markdown transcript to the clipboard. |
 | `/export [path]` | Export the transcript as Markdown. |
 | `/compact [instructions]` | Summarize older conversation into a checkpoint and keep recent context. |
 | `/model` | Choose or type the default model. |
@@ -84,6 +85,7 @@ Useful session commands:
 - `/resume` opens a picker for recent sessions.
 - `/name <name>` gives the current session a human-readable name.
 - `/clone` creates a new independent copy. Cloned sessions remember their parent and appear indented in the resume picker.
+- `/copy` and `/copy last` copy the latest assistant response without terminal borders or ANSI styling. `/copy transcript` copies the clean Markdown transcript. Mouse selection may still include terminal UI chrome.
 - `/export [path]` writes a Markdown transcript.
 - `/compact [instructions]` summarizes older conversation into a structured Ruby-aware checkpoint. Text after `/compact ` is freeform focus text, not parsed as flags.
 

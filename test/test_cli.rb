@@ -127,6 +127,18 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def with_clipboard_stub(copy_proc)
+    original_new = Kward::Clipboard.method(:new)
+    Kward::Clipboard.define_singleton_method(:new) do |**_kwargs|
+      Object.new.tap do |clipboard|
+        clipboard.define_singleton_method(:copy) { |text| copy_proc.call(text) }
+      end
+    end
+    yield
+  ensure
+    Kward::Clipboard.define_singleton_method(:new, original_new)
+  end
+
   def test_interactive_response_prompt_falls_back_to_assistant_without_persona_label
     Dir.mktmpdir do |config_dir|
       File.write(File.join(config_dir, "config.json"), JSON.dump({}))
@@ -424,6 +436,62 @@ class TestCLI < KwardTestCase
     assert_equal "reply 1", client.seen_messages[1][2]["content"]
     assert_equal "again", client.seen_messages[1][3][:content]
     assert_equal 5, conversation.messages.length
+  end
+
+  def test_copy_defaults_to_last_assistant_response
+    prompt = FakePrompt.new(["hello", "/copy", "/exit"])
+    client = RecordingClient.new(["reply"])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    copied = []
+    with_clipboard_stub(lambda { |text| copied << text; Kward::Clipboard::Result.new(success?: true, method: "test", message: "copied") }) do
+      cli.interactive_loop(agent: agent)
+    end
+
+    assert_equal ["reply"], copied
+    assert_includes prompt.output.join("\n"), "Copied last assistant response."
+  end
+
+  def test_copy_transcript_copies_markdown_transcript
+    prompt = FakePrompt.new(["hello", "/copy transcript", "/exit"])
+    client = RecordingClient.new(["reply"])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    copied = []
+    with_clipboard_stub(lambda { |text| copied << text; Kward::Clipboard::Result.new(success?: true, method: "test", message: "copied") }) do
+      cli.interactive_loop(agent: agent)
+    end
+
+    assert_equal 1, copied.length
+    assert_includes copied.first, "# Kward Session"
+    assert_includes copied.first, "## User\n\nhello"
+    assert_includes copied.first, "## Assistant\n\nreply"
+  end
+
+  def test_copy_rejects_composer_target
+    prompt = FakePrompt.new(["/copy composer", "/exit"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    copied = []
+    with_clipboard_stub(lambda { |text| copied << text; Kward::Clipboard::Result.new(success?: true, method: "test", message: "copied") }) do
+      cli.interactive_loop(agent: agent)
+    end
+
+    assert_empty copied
+    assert_includes prompt.output.join("\n"), "Usage: /copy [last|transcript]"
+  end
+
+  def test_copy_reports_clipboard_failure
+    prompt = FakePrompt.new(["hello", "/copy", "/exit"])
+    client = RecordingClient.new(["reply"])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    with_clipboard_stub(lambda { |_text| Kward::Clipboard::Result.new(success?: false, message: "no supported clipboard mechanism found") }) do
+      cli.interactive_loop(agent: agent)
+    end
+
+    assert_includes prompt.output.join("\n"), "Copy failed: no supported clipboard mechanism found."
   end
 
   def test_interactive_mode_persists_session_jsonl

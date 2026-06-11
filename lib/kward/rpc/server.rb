@@ -369,7 +369,8 @@ module Kward
             terminalInput: false
           },
           composer: {
-            sessionDiff: { supported: false, reason: "interactiveComposerOnly" }
+            sessionDiff: { supported: false, reason: "interactiveComposerOnly" },
+            copy: { supported: false, reason: "clientClipboardOwnedByUi" }
           },
           security: {
             workspaceMutationGuard: "none",
@@ -501,6 +502,15 @@ module Kward
             argumentHint: "",
             source: "builtin",
             executable: true
+          },
+          {
+            name: "copy",
+            description: "CLI-only clipboard copy; RPC clients own their clipboard.",
+            argumentHint: "[last|transcript]",
+            source: "builtin",
+            executable: false,
+            unsupported: true,
+            reason: "clientClipboardOwnedByUi"
           }
         ]
         plugins = @session_manager.plugin_commands.map do |command|
