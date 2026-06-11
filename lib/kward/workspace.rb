@@ -55,8 +55,11 @@ module Kward
         return "Declined: write_file was not approved for #{path}"
       end
 
+      old_content = File.exist?(resolved) ? File.read(resolved) : nil
       File.write(resolved, content)
-      "Wrote #{content.bytesize} bytes to #{path}"
+      output = "Wrote #{content.bytesize} bytes to #{path}"
+      output << "\n#{truncated_diff(path, old_content, content)}" if old_content && old_content != content
+      output
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end

@@ -128,7 +128,10 @@ class TestWorkspace < KwardTestCase
 
       result = workspace.write_file(path, "new\n", read_paths: conversation.read_paths) { true }
 
-      assert_equal "Wrote 4 bytes to #{path}", result
+      assert_includes result, "Wrote 4 bytes to #{path}"
+      assert_includes result, "--- #{path}"
+      assert_includes result, "-old"
+      assert_includes result, "+new"
       assert_equal "new\n", File.read(File.join(dir, path))
     end
   end

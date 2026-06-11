@@ -79,14 +79,19 @@ module Kward
     private
 
     def self.common_line_count(left, right)
-      remaining = Hash.new(0)
-      left.each { |line| remaining[line] += 1 }
-      right.count do |line|
-        next false unless remaining[line].positive?
-
-        remaining[line] -= 1
-        true
+      previous = Array.new(right.length + 1, 0)
+      left.each do |left_line|
+        current = Array.new(right.length + 1, 0)
+        right.each_with_index do |right_line, index|
+          current[index + 1] = if left_line == right_line
+                                 previous[index] + 1
+                               else
+                                 [current[index], previous[index + 1]].max
+                               end
+        end
+        previous = current
       end
+      previous.last
     end
 
     def self.parse_record(line)

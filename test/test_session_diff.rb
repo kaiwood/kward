@@ -41,6 +41,22 @@ class TestSessionDiff < KwardTestCase
     assert_equal({ additions: 2, deletions: 2 }, Kward::SessionDiff.count(diff))
   end
 
+  def test_counts_reordered_lines_as_changes
+    counts = Kward::SessionDiff.count(<<~DIFF)
+      --- file.txt
+      +++ file.txt
+      @@ -1,4 +1,4 @@
+       a
+      -b
+      -c
+      +c
+      +b
+       d
+    DIFF
+
+    assert_equal({ additions: 1, deletions: 1 }, counts)
+  end
+
   def test_add_tool_result_ignores_errors_and_no_diff_content
     diff = Kward::SessionDiff.new
 
