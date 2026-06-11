@@ -1,13 +1,13 @@
 # Configuration
 
-Prompt and skills can live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead.
+Kward reads user configuration from `~/.kward/config.json` by default. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
 
-Example `~/.kward/config.json`:
+Example:
 
 ```json
 {
+  "provider": "codex",
   "openai_oauth_client_id": "your-client-id",
-  "github_oauth_client_id": "your-github-client-id",
   "openai_model": "gpt-5.5",
   "openai_reasoning_effort": "medium",
   "openrouter_model": "openai/gpt-5.5",
@@ -15,9 +15,121 @@ Example `~/.kward/config.json`:
 }
 ```
 
-You can also use `model` for the currently active provider model and `reasoning_effort` or `thinking_level` for OpenAI/Codex thinking level. Set `provider` to `codex`, `openrouter`, or `copilot` to select the active provider.
+## Config directory
 
-Overlay settings are stored under `overlay`:
+By default, Kward stores user data under `~/.kward`:
+
+```text
+~/.kward/config.json
+~/.kward/auth.json
+~/.kward/github_auth.json
+~/.kward/sessions/
+~/.kward/memory/
+~/.kward/logs/
+~/.kward/cache/
+```
+
+When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files live beside that file instead. User plugins are the exception: they are loaded only from `~/.kward/plugins`.
+
+## Provider and model settings
+
+Set `provider` to choose the active backend:
+
+```json
+{
+  "provider": "codex"
+}
+```
+
+Supported values are:
+
+- `codex` for the OpenAI/ChatGPT Codex backend.
+- `openrouter` for OpenRouter.
+- `copilot` for experimental Copilot provider support.
+
+Model settings:
+
+```json
+{
+  "model": "gpt-5.5",
+  "openai_model": "gpt-5.5",
+  "openrouter_model": "openai/gpt-5.5",
+  "copilot_model": "gpt-5-mini",
+  "reasoning_effort": "medium",
+  "openai_reasoning_effort": "medium",
+  "openrouter_reasoning_effort": "medium",
+  "thinking_level": "medium"
+}
+```
+
+`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `openai_reasoning_effort` and `openrouter_reasoning_effort` are provider-specific forms.
+
+Defaults:
+
+- OpenAI/Codex: `gpt-5.5`
+- OpenRouter: `openai/gpt-5.5`
+- Copilot: `gpt-5-mini`
+- Reasoning effort: `medium`
+
+The interactive `/model` picker prefers OpenRouter models available to the configured API key when Kward can fetch them. `/openrouter/catalog` and RPC `openrouter/catalog` list the full OpenRouter catalog separately.
+
+## Environment overrides
+
+Use environment variables for one-off runs or local secrets that you do not want in config.
+
+Provider and model:
+
+- `KWARD_PROVIDER`
+- `OPENAI_MODEL`
+- `OPENAI_REASONING_EFFORT`
+- `OPENROUTER_MODEL`
+- `OPENROUTER_REASONING_EFFORT`
+- `COPILOT_MODEL`
+
+Credentials:
+
+- `OPENAI_ACCESS_TOKEN`
+- `OPENROUTER_API_KEY`
+- `COPILOT_GITHUB_TOKEN`
+- `GITHUB_TOKEN` or `GH_TOKEN` for authenticated GitHub API requests in `code_search`
+
+Web search:
+
+- `EXA_API_KEY`
+- `PERPLEXITY_API_KEY`
+- `GEMINI_API_KEY`
+
+Color and logging environment variables are covered below.
+
+## Authentication settings
+
+OpenAI OAuth needs an OAuth client ID:
+
+```json
+{
+  "openai_oauth_client_id": "your-client-id"
+}
+```
+
+Then run:
+
+```bash
+kward login
+```
+
+OpenRouter can be saved with:
+
+```bash
+kward login openrouter
+```
+
+Kward stores the resulting `openrouter_api_key` in config.
+
+OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` or `openrouter_api_key` is set. OpenAI OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the OpenAI Platform API. OpenRouter is only a fallback when no OpenAI OAuth/access token exists unless `provider` or `KWARD_PROVIDER` is set to `openrouter`.
+
+## Overlay settings
+
+Overlay settings control terminal picker/card layout:
 
 ```json
 {
@@ -30,7 +142,11 @@ Overlay settings are stored under `overlay`:
 
 `alignment` can be `left`, `center`, or `right`. `width` can be `maximum` to match the composer width or `capped` for a compact card.
 
-Memory is off by default. `/memory enable` stores:
+You can change these interactively with `/settings`.
+
+## Memory
+
+Memory is off by default. Enabling it writes:
 
 ```json
 {
@@ -40,17 +156,34 @@ Memory is off by default. `/memory enable` stores:
 }
 ```
 
-Memory files are kept under `<config-dir>/memory`, which is `~/.kward/memory` by default or beside `KWARD_CONFIG_PATH` when that environment variable is set. See [Memory](memory.md).
+Memory auto-summary can also be enabled:
 
-## Environment fallback
+```json
+{
+  "memory": {
+    "enabled": true,
+    "auto_summary": true
+  }
+}
+```
 
-- Optional model env fallback: `OPENAI_ACCESS_TOKEN`, `OPENROUTER_API_KEY`, or `COPILOT_GITHUB_TOKEN`.
-- Optional provider/model overrides: `KWARD_PROVIDER`, `OPENAI_MODEL`, `OPENROUTER_MODEL`, or `COPILOT_MODEL`.
-- Optional web search env fallback: `EXA_API_KEY`, `PERPLEXITY_API_KEY`, or `GEMINI_API_KEY`.
+Memory files live under `<config-dir>/memory`, usually `~/.kward/memory`. See [Memory](memory.md).
 
-Run `ruby lib/main.rb login openrouter` or choose OpenRouter from `/login` to save `openrouter_api_key` in config. OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` or `openrouter_api_key` is set. OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the Platform API, so they use your ChatGPT account. OpenRouter is only a fallback when no OpenAI OAuth/access token exists unless `provider` or `KWARD_PROVIDER` is set to `openrouter`.
+## Compaction
 
-Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `openai/gpt-5.5`, Copilot `gpt-5-mini`. Override with `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENROUTER_MODEL`, `COPILOT_MODEL`, or the config file values above. The normal model picker prefers OpenRouter models available to the configured API key when Kward can fetch them; `/openrouter/catalog` and the RPC `openrouter/catalog` method list the full OpenRouter catalog separately.
+Auto-compaction is enabled by default when Kward can determine the active context window. You can tune or disable it:
+
+```json
+{
+  "compaction": {
+    "enabled": true,
+    "reserve_tokens": 16384,
+    "keep_recent_tokens": 20000
+  }
+}
+```
+
+Manual `/compact [instructions]` works even when auto-compaction is disabled.
 
 ## Pan mode
 
@@ -67,13 +200,13 @@ Defaults: OpenAI `gpt-5.5` with `OPENAI_REASONING_EFFORT=medium`, OpenRouter `op
 }
 ```
 
-`host` defaults to `0.0.0.0` and `port` defaults to `8765`. Kward fails to start pan mode unless `username` and `password` are configured. These credentials are stored in plaintext config, so use a user-specific password and do not share the config file.
+`host` defaults to `0.0.0.0` and `port` defaults to `8765`. Kward fails to start pan mode unless `username` and `password` are configured.
 
-Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who has the credentials. Use it only on trusted networks.
+These credentials are stored in plaintext config. Use a private, user-specific password and do not share the config file. Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who has the credentials, so use it only on trusted networks.
 
 ## Web search
 
-Web search works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool, disable it explicitly:
+Web search works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool:
 
 ```json
 {
@@ -83,7 +216,7 @@ Web search works without an API key through Exa's public MCP endpoint and is adv
 }
 ```
 
-For higher limits or alternate providers, add your own keys using environment variables or config. Model-backed auto fallback to Perplexity/Gemini stays off unless `allow_model_providers` is true; direct provider requests still work when the matching key is configured.
+For higher limits or alternate providers, add user-specific keys. Model-backed auto fallback to Perplexity/Gemini stays off unless `allow_model_providers` is true; direct provider requests still work when the matching key is configured.
 
 ```json
 {
@@ -100,11 +233,11 @@ For higher limits or alternate providers, add your own keys using environment va
 }
 ```
 
-Do not put shared or published API keys in this file. Keys are account credentials and should be user-specific.
+Do not put shared or published API keys in this file.
 
-## Logging
+## Logging and stats
 
-Local telemetry logs are off by default. Enable logging with both the master flag and each category you want:
+Local telemetry logs are off by default. Enable logging with the master flag and each category you want:
 
 ```json
 {
@@ -118,16 +251,49 @@ Local telemetry logs are off by default. Enable logging with both the master fla
 }
 ```
 
-Environment variables override config for a single run: `KWARD_LOGGING`, `KWARD_LOGGING_TOKENS`, `KWARD_LOGGING_PERFORMANCE`, `KWARD_LOGGING_TOOLS`, and `KWARD_LOGGING_ERRORS`. Values `1`, `true`, `yes`, and `on` enable a flag; `0`, `false`, `no`, and `off` disable it.
+Environment variables override config for a single run:
 
-Logs are JSON Lines files in `<config-dir>/logs`, which is `~/.kward/logs` by default or beside `KWARD_CONFIG_PATH` when that environment variable is set. Files rotate after 10 MB using numbered suffixes, and Kward does not delete old rotated logs.
+- `KWARD_LOGGING`
+- `KWARD_LOGGING_TOKENS`
+- `KWARD_LOGGING_PERFORMANCE`
+- `KWARD_LOGGING_TOOLS`
+- `KWARD_LOGGING_ERRORS`
+
+Values `1`, `true`, `yes`, and `on` enable a flag. Values `0`, `false`, `no`, and `off` disable it.
+
+Logs are JSON Lines files in `<config-dir>/logs`, usually `~/.kward/logs`. Files rotate after 10 MB using numbered suffixes, and Kward does not delete old rotated logs.
 
 Logged data is redacted metadata only. Kward does not intentionally log prompts, assistant text, tool arguments, tool outputs, file contents, shell command text, API keys, or OAuth tokens. Logged fields can include provider/model names, token counts, byte counts, durations, retry attempts, tool names, statuses, and redacted error messages.
 
-Use `/stats [range]` in interactive mode to summarize enabled telemetry categories from the local logs. The range defaults to `1 week` and accepts values such as `5 hours`, `10 minutes`, `2 days`, or `1 year` with minutes, hours, days, weeks, months, and years. Ranges use UTC calendar periods; for example, `1 month` means the current calendar month so far, and `2 months` means the previous month plus the current month so far. If logging is disabled, `/stats` reports that logging must be enabled first. Invalid ranges print usage instead of falling back to the default.
+Use `/stats [range]` in interactive mode to summarize enabled telemetry categories. The range defaults to `1 week` and accepts values such as `5 hours`, `10 minutes`, `2 days`, or `1 year`.
 
-Export token usage as CSV with `kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]`. The range defaults to `1 week`; the bucket defaults to the range unit. For example, `kward stats tokens 5 hours --bucket hour --output token-usage.csv` writes one row per UTC hour/provider/model with event counts and token totals.
+Export token usage as CSV with:
+
+```bash
+kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]
+```
+
+Example:
+
+```bash
+kward stats tokens 5 hours --bucket hour --output token-usage.csv
+```
 
 ## Color output
 
-ANSI colors are enabled automatically on TTY output. Set `NO_COLOR=1`, `CLICOLOR=0`, or `KWARD_COLOR=never` to disable colors; set `KWARD_COLOR=always` or `FORCE_COLOR=1` to force them.
+ANSI colors are enabled automatically on TTY output.
+
+Disable colors:
+
+```bash
+NO_COLOR=1 kward
+CLICOLOR=0 kward
+KWARD_COLOR=never kward
+```
+
+Force colors:
+
+```bash
+KWARD_COLOR=always kward
+FORCE_COLOR=1 kward
+```

@@ -1,40 +1,165 @@
 # Usage
 
-In chat mode, the agent shows a boxed bottom composer. It can inspect the workspace with `list_directory` and `read_file`, safely write files with `write_file`, edit existing files with `edit_file`, run shell commands with `run_shell_command` after confirmation, search the web with `web_search`, discover and read cached open-source repositories with `code_search`, and ask structured clarification questions with `ask_user_question`.
-
-Existing files must be read in the current conversation before writing or editing, and every write asks for confirmation first. Text file reads and edits are capped at 256 KiB per file to avoid accidentally loading very large files into context.
-
-## Pan mode
-
-Start a minimal LAN web UI with:
+Kward has three main ways to run:
 
 ```bash
-ruby lib/main.rb --pan-mode --working-directory="/path/to/workspace"
+kward                          # interactive chat
+kward "Explain this project"   # one-shot prompt
+kward rpc                      # experimental JSON-RPC backend
 ```
 
-Pan mode serves a single authenticated page with a prompt textarea and transcript. It streams assistant output and tool calls, queues prompts submitted while a turn is running, and saves the conversation as a normal per-workspace session. Configure `pan_mode.username` and `pan_mode.password` first; see [Configuration](configuration.md).
+When running from source, replace `kward` with `ruby lib/main.rb`.
+
+## Interactive chat
+
+Interactive mode opens a terminal composer and saves the conversation as a per-workspace session. Use it when you want Kward to inspect files, make changes, run commands, or continue a conversation over time.
+
+The composer stays available while assistant and tool output streams. If you press Enter while a response is still running, Kward queues your next prompt and sends it after the current turn finishes.
+
+## One-shot prompts
+
+Pass a prompt as command-line text to ask once and exit:
+
+```bash
+kward "Summarize the changes in this repository"
+```
+
+Kward also accepts piped input:
+
+```bash
+git diff | kward "Review this diff"
+```
+
+One-shot prompts do not use Kward memory.
+
+## Workspace tools
+
+Kward can use these tools during a turn:
+
+- `list_directory` and `read_file` to inspect the workspace.
+- `write_file` and `edit_file` to create or change files.
+- `run_shell_command` to run confirmed local commands.
+- `web_search` to search the live web.
+- `code_search` to find packages, clone public GitHub repositories into cache, and read bounded source snippets.
+- `ask_user_question` to ask structured clarification questions.
+
+Safety rules:
+
+- Existing files must be read in the current conversation before Kward can write or edit them.
+- Every write, edit, and shell command asks for confirmation first.
+- Text file reads and edits are capped at 256 KiB per file.
+- When successful tool results include unified diffs, the composer status shows live session totals such as `+700|-572`.
+
+## Slash commands
+
+Use slash commands in interactive mode for local Kward actions:
+
+| Command | Purpose |
+| --- | --- |
+| `/exit`, `/quit` | Leave the session. |
+| `/new` | Start a fresh session. |
+| `/resume [path]` | Resume a saved session, or pick one when no path is given. |
+| `/name [name]` | Name or clear the current session name. |
+| `/clone` | Duplicate the current session. |
+| `/export [path]` | Export the transcript as Markdown. |
+| `/compact [instructions]` | Summarize older conversation into a checkpoint and keep recent context. |
+| `/model` | Choose or type the default model. |
+| `/openrouter/catalog` | List the full OpenRouter model catalog. |
+| `/reasoning` | Choose reasoning effort. |
+| `/settings` | Configure overlay alignment and width. |
+| `/login` | Log in from inside the session. |
+| `/status` | Show status and auto-compaction information. |
+| `/stats [range]` | Show local telemetry stats when logging is enabled. |
+| `/memory ...` | Manage opt-in memory. |
+| `/redraw` | Refresh the terminal after resize or drawing glitches. |
+
+Prompt templates can add more slash commands. Plugin commands can also appear when trusted local plugins are installed.
 
 ## Sessions
 
-Interactive chats are saved as per-workspace JSONL sessions under `~/.kward/sessions/`. Type `/exit` or `/quit` to leave.
+Interactive chats are stored as JSONL files under `~/.kward/sessions/`. Sessions are per workspace.
 
-Use `/new` to start fresh, `/resume` to pick a saved session, `/name <name>` to name the current session, `/clone` to duplicate it, `/export [path]` to write a Markdown transcript, `/compact [instructions]` to summarize older conversation into a structured Ruby-aware checkpoint while preserving recent messages, `/model` to choose or type a default model, `/reasoning` to choose reasoning effort, `/settings` to configure overlay alignment and width, and `/redraw` to refresh the visible terminal after resize glitches. Cloned sessions remember their parent and appear indented under it in the `/resume` picker. Text after `/compact ` is freeform focus text, not parsed as flags. After compaction, files may need to be re-read before future edits.
+Useful session commands:
 
-Auto-compaction is enabled by default when Kward can determine the active context window. Configure it in `config.json` with `compaction.enabled`, `compaction.reserve_tokens`, and `compaction.keep_recent_tokens`; manual `/compact` still works when auto-compaction is disabled.
+- `/resume` opens a picker for recent sessions.
+- `/name <name>` gives the current session a human-readable name.
+- `/clone` creates a new independent copy. Cloned sessions remember their parent and appear indented in the resume picker.
+- `/export [path]` writes a Markdown transcript.
+- `/compact [instructions]` summarizes older conversation into a structured Ruby-aware checkpoint. Text after `/compact ` is freeform focus text, not parsed as flags.
+
+After compaction, Kward may need to re-read files before future edits because compacting clears remembered read-file state.
+
+## Auto-compaction
+
+Auto-compaction is enabled by default when Kward can determine the active context window. It reserves part of the model context so conversations can continue longer without suddenly exceeding the limit.
+
+Configure it in `config.json`:
+
+```json
+{
+  "compaction": {
+    "enabled": true,
+    "reserve_tokens": 16384,
+    "keep_recent_tokens": 20000
+  }
+}
+```
+
+Manual `/compact` still works when auto-compaction is disabled.
 
 ## Memory
 
-Memory is disabled by default and only applies to interactive sessions. Use `/memory enable` to opt in, `/memory core <text>` for explicit high-trust memories, `/memory add <text>` for contextual soft memories, `/memory list` to inspect stored memories, `/memory why` to explain the most recent retrieval, and `/memory forget <id>` to remove a memory. See [Memory](memory.md) for storage locations, safety rules, and RPC methods.
+Memory is disabled by default and only applies to interactive sessions.
+
+Common commands:
+
+```text
+/memory enable
+/memory core <text>
+/memory add <text>
+/memory list
+/memory why
+/memory forget <id>
+/memory disable
+```
+
+See [Memory](memory.md) for storage locations, safety rules, auto-summary, and RPC methods.
 
 ## Composer keys
 
 - Enter sends.
 - Shift+Enter inserts a newline.
 - Up/Down browse prompt history.
-- Ctrl+D exits an empty prompt.
+- Ctrl+D exits from an empty prompt.
+- Backspace at the beginning of the prompt removes the most recent image attachment.
 
-While assistant/tool output is streaming, the composer stays pinned and editable; pressing Enter queues the next prompt and sends it after the current response finishes. When successful tool results include unified diffs, the composer status shows live session totals like `+700|-572` to the left of the context percentage. Multiline input grows the composer up to a capped height.
+Multiline input grows the composer up to a capped height.
 
 ## Image attachments
 
-Pasted image file paths, Markdown image links, file:// image URLs, and image data URLs are attached to the prompt when the active model supports images. In the interactive composer, pasted image references are shown as attachment badges instead of editable filename/base64 text. Press Backspace at the beginning of the prompt to remove the most recent attachment. Transcripts show attachment badges and render the image inline when the terminal advertises a supported inline image protocol, such as iTerm2 or Kitty/WezTerm.
+Kward can attach images when the active model supports images. It detects:
+
+- pasted image file paths,
+- Markdown image links,
+- `file://` image URLs,
+- image data URLs.
+
+In the interactive composer, pasted image references appear as attachment badges instead of editable filename or base64 text. Transcripts show attachment badges and render the image inline when the terminal advertises a supported inline image protocol, such as iTerm2 or Kitty/WezTerm.
+
+## Pan mode
+
+Pan mode starts a minimal LAN web UI with a prompt textarea and transcript:
+
+```bash
+kward --pan-mode --working-directory="/path/to/workspace"
+```
+
+From source:
+
+```bash
+ruby lib/main.rb --pan-mode --working-directory="/path/to/workspace"
+```
+
+Pan mode streams assistant output and tool calls, queues prompts submitted while a turn is running, and saves the conversation as a normal per-workspace session.
+
+Configure `pan_mode.username` and `pan_mode.password` before starting it; see [Configuration](configuration.md). Pan mode is reachable on the LAN, so use it only on trusted networks.
