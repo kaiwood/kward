@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.authors = ["Kai Wood"]
   spec.email = ["kai.wood@icloud.com"]
 
-  spec.summary = "A small Ruby CLI coding agent."
+  spec.summary = "An extendable Ruby CLI coding agent."
   spec.description = "Kward is a Ruby CLI coding agent with local workspace tools, configurable prompts, web search, sessions, and an experimental JSON-RPC backend."
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2"

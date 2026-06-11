@@ -6,7 +6,7 @@ This is a living document. If significant changes to the codebase, architecture,
 
 ## Project overview
 
-Kward is a small Ruby CLI coding agent. It supports interactive and one-shot chat, local workspace tools, configurable prompts/skills, image attachments, web search, OpenAI OAuth/API-key authentication, session persistence, and an experimental JSON-RPC backend for UI clients.
+Kward is an extendable Ruby CLI coding agent. It supports interactive and one-shot chat, local workspace tools, configurable prompts/skills, image attachments, web search, OpenAI OAuth/API-key authentication, session persistence, and an experimental JSON-RPC backend for UI clients.
 
 ## Working style
 
