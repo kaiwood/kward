@@ -546,7 +546,7 @@ class TestCLI < KwardTestCase
     assert_equal "tool", client.seen_messages[1][3][:role]
     assert_equal "call_read_file", client.seen_messages[1][3][:tool_call_id]
     assert_equal "read_file", client.seen_messages[1][3][:name]
-    assert_includes client.seen_messages[1][3][:content], "# Ruby CLI Agent"
+    assert_includes client.seen_messages[1][3][:content], "# Kward"
     assert_includes output, "Tool>"
     assert_includes output, "Tool output>"
   end

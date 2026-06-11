@@ -11,7 +11,7 @@ class TestWorkspace < KwardTestCase
     workspace = Kward::Workspace.new
 
     assert_includes workspace.list_directory("."), "README.md"
-    assert_includes workspace.read_file("README.md"), "# Ruby CLI Agent"
+    assert_includes workspace.read_file("README.md"), "# Kward"
   end
 
   def test_outside_workspace_reads_and_writes_are_rejected
