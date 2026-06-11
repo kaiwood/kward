@@ -6,6 +6,8 @@ require_relative "prompts/templates"
 require_relative "skills/registry"
 
 module Kward
+  # Resolves Kward configuration, cache, memory, prompt, skill, and plugin
+  # paths, and reads/writes the JSON config file used by the CLI and RPC server.
   module ConfigFiles
     MAX_SKILL_FILE_BYTES = 100_000
     MAX_PROMPT_FILE_BYTES = 32 * 1024
@@ -22,6 +24,10 @@ module Kward
 
     module_function
 
+    # Directory that contains Kward's user config and adjacent prompt/skill
+    # data. Defaults to `~/.kward`, or the directory of `KWARD_CONFIG_PATH`.
+    #
+    # @return [String] expanded config directory path
     def config_dir
       config_path = ENV["KWARD_CONFIG_PATH"]
       return File.expand_path(File.dirname(config_path)) if config_path && !config_path.empty?
@@ -29,6 +35,7 @@ module Kward
       File.expand_path("~/.kward")
     end
 
+    # @return [String] expanded JSON config file path
     def config_path
       File.expand_path(ENV["KWARD_CONFIG_PATH"] || File.join(config_dir, "config.json"))
     end
@@ -41,6 +48,7 @@ module Kward
       File.join(cache_dir, "code_search")
     end
 
+    # @return [String] directory containing structured memory files
     def memory_dir
       File.join(config_dir, "memory")
     end
@@ -57,6 +65,13 @@ module Kward
       File.join(memory_dir, "events.jsonl")
     end
 
+    # Reads the JSON config file.
+    #
+    # Missing files are treated as an empty config. Invalid JSON raises a
+    # user-facing error that includes the file path.
+    #
+    # @param path [String] config file path
+    # @return [Hash] parsed config object
     def read_config(path = config_path)
       path = File.expand_path(path)
       return {} unless File.exist?(path)
@@ -66,6 +81,10 @@ module Kward
       raise "Invalid Kward config JSON: #{path}"
     end
 
+    # Writes config JSON using private file permissions.
+    #
+    # @param config [Hash] config object to persist
+    # @param path [String] config file path
     def write_config(config, path = config_path)
       PrivateFile.write_json(path, config)
     end
@@ -95,6 +114,11 @@ module Kward
       nil
     end
 
+    # Returns validated overlay settings with defaults for missing or invalid
+    # values.
+    #
+    # @param config [Hash] parsed config object
+    # @return [Hash] overlay settings with `alignment` and `width`
     def overlay_settings(config = read_config)
       overlay = config["overlay"].is_a?(Hash) ? config["overlay"] : {}
       settings = DEFAULT_OVERLAY_SETTINGS.dup
@@ -128,11 +152,23 @@ module Kward
       overlay_settings(config)
     end
 
+    # Reads global agent instructions from the config directory.
+    #
+    # @return [String, nil] prompt text, or nil when absent/too large
     def agents_prompt
       path = File.join(config_dir, "AGENTS.md")
       read_prompt_file(path, "Kward prompt file")
     end
 
+    # Builds persona prompt text from default, workspace, model, reasoning,
+    # time-of-day, weekday, and suffix config entries.
+    #
+    # @param workspace_root [String] active workspace root
+    # @param model [String, nil] active model name
+    # @param reasoning_effort [String, nil] active reasoning effort
+    # @param now [Time] local time used for time-based modifiers
+    # @param config [Hash] parsed config object
+    # @return [String, nil] persona prompt text when entries match
     def persona_prompt(workspace_root, model: nil, reasoning_effort: nil, now: Time.now, config: read_config)
       text = persona_entries(workspace_root: workspace_root, model: model, reasoning_effort: reasoning_effort, now: now, config: config).map do |entry|
         entry[:prompt]
@@ -392,14 +428,24 @@ module Kward
       %w[sunday monday tuesday wednesday thursday friday saturday][now.wday]
     end
 
+    # Lists configured skills discovered under the config directory.
+    #
+    # @return [Array<Skill>] skill metadata available to the model
     def skills
       skills_registry.skills
     end
 
+    # @return [String] trusted user plugin directory
     def plugin_dir
       File.expand_path("~/.kward/plugins")
     end
 
+    # Finds trusted top-level plugin files.
+    #
+    # Plugins are intentionally loaded only from `~/.kward/plugins`, not from a
+    # workspace or custom `KWARD_CONFIG_PATH` directory.
+    #
+    # @return [Array<String>] sorted plugin file paths
     def plugin_paths
       plugins_root = plugin_dir
       warn_legacy_plugin_dir(plugins_root)
@@ -422,10 +468,19 @@ module Kward
       warn "Warning: ignoring Kward plugins in #{legacy_root}; plugins are only loaded from #{File.expand_path(plugins_root)}"
     end
 
+    # Lists prompt templates exposed as slash commands.
+    #
+    # @param reserved_commands [Array<String>] command names unavailable to templates
+    # @return [Array<PromptTemplate>] prompt template metadata and bodies
     def prompt_templates(reserved_commands: [])
       prompt_template_registry.prompt_templates(reserved_commands: reserved_commands)
     end
 
+    # Reads a skill file by skill name and optional relative path.
+    #
+    # @param name [String] configured skill name
+    # @param relative_path [String, nil] path inside the skill directory
+    # @return [String] file contents or an error string
     def read_skill_file(name, relative_path = nil)
       skills_registry.read_skill_file(name, relative_path)
     end

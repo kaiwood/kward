@@ -8,6 +8,12 @@ require_relative "../model/client"
 
 module Kward
   module Memory
+    # Manages Kward's opt-in structured memory store.
+    #
+    # Core memories are explicit, high-trust instructions. Soft memories are
+    # confidence-scored contextual hints. Session memory is handled by session
+    # persistence, while this manager owns global/workspace JSON and JSONL files
+    # plus the audit event log.
     class Manager
       CORE_LIMIT = 6
       SOFT_LIMIT = 6
@@ -15,6 +21,7 @@ module Kward
       DEFAULT_SOFT_CONFIDENCE = 0.65
       EMOTIONAL_PATTERN = /\b(love|loves|romantic|intimate|dependency|depend on me|need me|flirty|crush)\b/i
 
+      # Details for the most recent retrieval, used by `/memory why`.
       attr_reader :last_retrieval
 
       def initialize(config_path: ConfigFiles.config_path, core_path: ConfigFiles.memory_core_path, soft_path: ConfigFiles.memory_soft_path, events_path: ConfigFiles.memory_events_path, now: nil)
@@ -26,6 +33,7 @@ module Kward
         @last_retrieval = nil
       end
 
+      # @return [Boolean] whether memory prompt injection is enabled
       def enabled?
         config = ConfigFiles.read_config(@config_path)
         memory = config["memory"]
@@ -91,6 +99,12 @@ module Kward
         set_auto_summary(false)
       end
 
+      # Stores an explicit high-trust memory.
+      #
+      # @param text [String] memory text
+      # @param scope [String] `global` or `workspace:<path>` scope
+      # @param tags [Array<String>] searchable tags
+      # @return [Hash] stored memory record
       def add_core(text, scope: "global", tags: [], source: "explicit_user_instruction", pinned: true)
         record = {
           "id" => next_id("core", core_memories.map { |item| item["id"] }),
@@ -111,6 +125,14 @@ module Kward
         record
       end
 
+      # Stores a contextual hint with confidence and optional expiry.
+      #
+      # @param text [String] memory text
+      # @param scope [String] `global` or `workspace:<path>` scope
+      # @param tags [Array<String>] searchable tags
+      # @param confidence [Numeric] confidence clamped between 0.0 and 1.0
+      # @param ttl_days [Integer, nil] time-to-live in days
+      # @return [Hash] stored memory record
       def add_soft(text, scope: "global", tags: [], confidence: DEFAULT_SOFT_CONFIDENCE, ttl_days: DEFAULT_SOFT_TTL_DAYS, source: "manual")
         record = {
           "id" => next_id("soft", soft_memories(include_inactive: true).map { |item| item["id"] }),
@@ -177,6 +199,15 @@ module Kward
         list(include_inactive: true).merge("enabled" => enabled?, "paths" => paths)
       end
 
+      # Selects bounded core and soft memories relevant to an interactive turn.
+      #
+      # Retrieval is scoped to global and workspace memories, prefers core
+      # memories, and scores soft memories by text/tag overlap, confidence, and
+      # expiry.
+      #
+      # @param input [String] current user input
+      # @param workspace_root [String] active workspace root
+      # @return [Hash] retrieval result for prompt injection and explanation
       def retrieve_relevant(input:, workspace_root: Dir.pwd, max_core: CORE_LIMIT, max_soft: SOFT_LIMIT)
         unless enabled?
           @last_retrieval = { "enabled" => false, "core" => [], "soft" => [], "reasons" => [] }
@@ -212,6 +243,7 @@ module Kward
         @last_retrieval
       end
 
+      # @return [Hash] explanation data for the most recent retrieval
       def explain_retrieval
         @last_retrieval || { "enabled" => enabled?, "core" => [], "soft" => [], "reasons" => [], "message" => "No memory retrieval has run yet." }
       end

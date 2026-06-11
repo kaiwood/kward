@@ -1,33 +1,45 @@
 require_relative "config_files"
 
 module Kward
-  # Loads user plugin files and provides the small DSL used to register slash
-  # commands, transcript hooks, footer content, and prompt context.
+  # Loads trusted user plugin files and provides the plugin DSL.
+  #
+  # Plugins live in the user plugin directory, run as local Ruby code, and can
+  # register slash commands, one footer renderer, prompt context, and live
+  # transcript-event observers for CLI and RPC frontends.
   class PluginRegistry
     COMMAND_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_-]*\z/.freeze
 
+    # Registered slash command exposed in completion, RPC command listings, and
+    # interactive command dispatch.
     Command = Struct.new(:name, :description, :argument_hint, :path, :handler, keyword_init: true) do
       def entry
         { name: name, description: description, argument_hint: argument_hint }
       end
     end
 
+    # Read-only event passed to plugin transcript observers.
     TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
       def to_h
         { type: type, payload: payload }
       end
     end
 
+    # Read-only transcript view exposed to plugin code.
     class Transcript
       def initialize(conversation)
         @conversation = conversation
       end
 
+      # Returns a deep-frozen copy of the active conversation messages.
+      #
+      # @return [Array<Hash>] immutable transcript message data
       def messages
         PluginRegistry.deep_freeze(PluginRegistry.deep_dup(@conversation.messages))
       end
     end
 
+    # Runtime context passed to plugin commands, footers, prompt context
+    # renderers, and transcript event handlers.
     class Context
       attr_reader :args, :workspace_root
 
@@ -39,10 +51,15 @@ module Kward
         @say_callback = say_callback
       end
 
+      # @return [Transcript] read-only transcript wrapper
       def transcript
         Transcript.new(@conversation)
       end
 
+      # Emits command output to the active frontend when available.
+      #
+      # @param message [#to_s] message to display
+      # @return [nil]
       def say(message)
         @say_callback&.call(message.to_s)
         nil
@@ -60,30 +77,52 @@ module Kward
         @session&.path
       end
 
+      # Requests that the conversation rebuild its system message after plugin
+      # state changes that affect prompt context.
+      #
+      # @return [nil]
       def refresh_system_message!
         @conversation.refresh_system_message! if @conversation.respond_to?(:refresh_system_message!)
         nil
       end
     end
 
+    # DSL object yielded by `Kward.plugin` blocks.
     class DSL
       def initialize(registry, path)
         @registry = registry
         @path = path
       end
 
+      # Registers a slash command.
+      #
+      # @param name [String, #to_s] command name without the leading slash
+      # @param description [String] short text shown in command listings
+      # @param argument_hint [String] optional usage hint for arguments
+      # @yieldparam args [String] text after the command name
+      # @yieldparam ctx [Context] plugin execution context
       def command(name, description: "", argument_hint: "", &block)
         @registry.register_command(name, description: description, argument_hint: argument_hint, path: @path, &block)
       end
 
+      # Registers or replaces the custom footer renderer.
+      #
+      # @yieldparam ctx [Context] plugin execution context
       def footer(&block)
         @registry.register_footer(path: @path, &block)
       end
 
+      # Registers a live transcript event observer.
+      #
+      # @yieldparam event [TranscriptEvent] normalized transcript event
+      # @yieldparam ctx [Context] plugin execution context
       def on_transcript_event(&block)
         @registry.register_transcript_event(path: @path, &block)
       end
 
+      # Registers prompt context text injected into future system prompts.
+      #
+      # @yieldparam ctx [Context] plugin execution context
       def prompt_context(&block)
         @registry.register_prompt_context(path: @path, &block)
       end

@@ -21,6 +21,12 @@ module Kward
 
     attr_reader :conversation
 
+    # Adds a user message, compacts context when needed, and runs the turn.
+    #
+    # @param input [String] text sent to the model
+    # @param display_input [String, nil] alternate text kept for transcripts
+    # @yieldparam event [Object] streamed turn event for frontends
+    # @return [String] final assistant answer
     def ask(input, display_input: nil, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, &block)
       started_at = @telemetry_logger.monotonic_now
       status = "completed"
@@ -38,6 +44,11 @@ module Kward
       log_turn(duration_ms: @telemetry_logger.duration_ms(started_at), status: status, error: error)
     end
 
+    # Runs model calls until the assistant returns an answer without pending
+    # tool calls, including tool dispatch and one context-overflow retry.
+    #
+    # @yieldparam event [Object] streamed turn event for frontends
+    # @return [String] final assistant answer
     def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil)
       overflow_retried = false
       steering_state = build_steering_state(steering) do |event|

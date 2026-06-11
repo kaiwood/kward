@@ -16,6 +16,12 @@ require_relative "transport"
 
 module Kward
   module RPC
+    # Experimental JSON-RPC backend for UI clients.
+    #
+    # The server speaks LSP-style Content-Length framing over stdin/stdout,
+    # exposes capabilities during `initialize`, redacts secrets in errors and
+    # notifications, and coordinates auth, config, sessions, turns, tools,
+    # memory, commands, and startup resources.
     class Server
       PROTOCOL_VERSION = 1
       JSONRPC_VERSION = "2.0"
@@ -38,6 +44,9 @@ module Kward
         @shutdown = false
       end
 
+      # Reads framed JSON-RPC messages until shutdown or EOF.
+      #
+      # @return [void]
       def run
         until @shutdown
           begin
@@ -55,10 +64,18 @@ module Kward
         @session_manager.cleanup_unused_sessions
       end
 
+      # Sends a redacted JSON-RPC notification to the client.
+      #
+      # @param method [String] notification method name
+      # @param params [Hash] notification params
       def notify(method, params = {})
         @transport.write_message({ jsonrpc: JSONRPC_VERSION, method: method, params: Redactor.redact(params) })
       end
 
+      # Builds redacted diagnostics suitable for JSON-RPC error data.
+      #
+      # @param error [Exception]
+      # @return [Hash]
       def error_payload(error)
         Redactor.redact({
           code: error.class.name,

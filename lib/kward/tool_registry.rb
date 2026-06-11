@@ -17,6 +17,9 @@ module Kward
   # Exposes local workspace, search, skill, and interaction tools to the model
   # and dispatches approved tool calls into the active conversation.
   class ToolRegistry
+    # Tool schemas advertised to the model for the current frontend and config.
+    #
+    # @return [Array<Hash>]
     attr_reader :schemas
 
     def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
@@ -31,6 +34,12 @@ module Kward
       @schemas = build_schema_tools.map(&:schema).freeze
     end
 
+    # Executes a model-requested tool call and appends the result to the
+    # conversation transcript.
+    #
+    # @param tool_call [Hash] model tool call payload
+    # @param conversation [Conversation] active conversation
+    # @return [String] tool output content appended to the conversation
     def dispatch(tool_call, conversation, cancellation: nil)
       cancellation&.raise_if_cancelled!
       name = ToolCall.name(tool_call)

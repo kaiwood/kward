@@ -58,6 +58,10 @@ module Kward
       @color_enabled = ANSI.enabled?($stdout)
     end
 
+    # Dispatches command-line modes, including RPC, login, stats export, Pan
+    # mode, one-shot prompts, and interactive chat.
+    #
+    # @return [void]
     def run
       if @argv.first == "rpc" && @argv.length == 1
         Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
