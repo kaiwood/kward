@@ -141,6 +141,53 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+
+  def test_session_tree_persists_entry_ids_labels_and_leaf_navigation
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first")
+      first_id = session.leaf_id
+      conversation.append_assistant("reply")
+      reply_id = session.leaf_id
+      session.append_label_change(first_id, "start")
+      session.branch(first_id)
+      conversation.append_user("alternate")
+
+      records = jsonl_records(session.path)
+      tree = store.session_tree(session.path)
+      _loaded_session, loaded_conversation = store.load(session.path)
+      loaded_messages = loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+
+      assert records.any? { |record| record["type"] == "message" && record["id"] == first_id && record.dig("message", "id") == first_id }
+      assert_equal first_id, records.find { |record| record["id"] == reply_id }["parentId"]
+      assert_equal "alternate", loaded_messages.last["content"]
+      assert_equal "start", tree.first["label"]
+      assert_equal session.leaf_id, store.current_leaf(session.path)
+    end
+  end
+
+  def test_session_loads_legacy_linear_records_as_tree
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      File.open(session.path, "a") do |file|
+        file.puts(JSON.generate({ type: "message", timestamp: Time.now.utc.iso8601(3), message: { role: "user", content: "legacy" } }))
+        file.puts(JSON.generate({ type: "message", timestamp: Time.now.utc.iso8601(3), message: { role: "assistant", content: "reply" } }))
+      end
+
+      tree = store.session_tree(session.path)
+      _loaded_session, loaded_conversation = store.load(session.path)
+
+      assert_equal "message:0", tree.first["entry"]["id"]
+      assert_equal "message:0", tree.first["children"].first["entry"]["parentId"]
+      loaded_messages = loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      assert_equal ["legacy", "reply"], loaded_messages.map { |message| message["content"] || message[:content] }
+    end
+  end
+
   def test_session_persists_normalized_edit_tool_execution_record
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|

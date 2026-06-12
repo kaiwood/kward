@@ -108,6 +108,105 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+
+  def test_session_tree_returns_labels_and_navigation_editor_text
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("first")
+      rpc_session.conversation.append_assistant("reply")
+      first_id = manager.session_tree(session_id: session[:id])[:items].first[:entryId]
+
+      manager.set_tree_label(session_id: session[:id], entry_id: first_id, label: "start")
+      tree = manager.session_tree(session_id: session[:id])[:items]
+      result = manager.navigate_tree(session_id: session[:id], entry_id: first_id)
+      rpc_session = manager.send(:fetch_session, session[:id])
+
+      assert_equal ["user", "assistant"], tree.map { |item| item[:role] }
+      assert_equal [true, false], tree.map { |item| item[:selectable] }
+      assert_equal "start", tree.first[:label]
+      assert tree.first[:labelTimestamp]
+      assert_equal "first", result[:editorText]
+      assert_nil rpc_session.session.leaf_id
+      assert_empty rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+    end
+  end
+
+  def test_session_tree_navigation_can_create_branch_summary
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([{ "role" => "assistant", "content" => "branch summary" }]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("first")
+      rpc_session.conversation.append_assistant("reply")
+      first_id = manager.session_tree(session_id: session[:id])[:items].first[:entryId]
+
+      manager.navigate_tree(session_id: session[:id], entry_id: first_id, summarize: true, custom_instructions: "focus")
+      tree = manager.session_tree(session_id: session[:id])[:items]
+
+      assert tree.any? { |item| item[:role] == "summary" && item[:selectable] == false && item[:text] == "branch summary" }
+      assert jsonl_records(session[:path]).any? { |record| record["type"] == "branch_summary" && record["summary"] == "branch summary" }
+    end
+  end
+
+
+  def test_session_tree_keeps_single_child_user_turns_flat
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("first")
+      rpc_session.conversation.append_assistant("reply")
+      rpc_session.conversation.append_user("second")
+      rpc_session.conversation.append_assistant("reply")
+      rpc_session.conversation.append_user("third")
+
+      tree = manager.session_tree(session_id: session[:id])[:items]
+
+      user_items = tree.select { |item| item[:role] == "user" }
+      assert_equal ["first", "second", "third"], user_items.map { |item| item[:text] }
+      assert_equal [0, 0, 0], user_items.map { |item| item[:depth] }
+      assert_equal [true], user_items.map { |item| item[:selectable] }.uniq
+      assert tree.any? { |item| item[:role] == "assistant" && item[:selectable] == false }
+    end
+  end
+
+  def test_session_tree_matches_pi_style_for_active_branches_and_tool_results
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("root prompt")
+      rpc_session.conversation.append_assistant("root reply")
+      root_reply_id = rpc_session.session.leaf_id
+      rpc_session.conversation.append_user("active branch")
+      rpc_session.conversation.append_assistant({
+        "role" => "assistant",
+        "content" => nil,
+        "tool_calls" => [tool_call("read_file", path: "README.md", offset: 2, limit: 3)]
+      })
+      rpc_session.conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "README contents")
+      active_leaf_id = rpc_session.session.leaf_id
+      rpc_session.session.branch(root_reply_id)
+      rpc_session.conversation.append_user("side branch")
+      rpc_session.conversation.append_assistant("side reply")
+      rpc_session.session.branch(active_leaf_id)
+
+      tree = manager.session_tree(session_id: session[:id])[:items]
+      active_item = tree.find { |item| item[:text] == "active branch" }
+      side_item = tree.find { |item| item[:text] == "side branch" }
+
+      refute tree.any? { |item| item[:role] == "assistant" && item[:text].empty? }
+      assert tree.any? { |item| item[:role] == "tool" && item[:text] == "[read: README.md:2-4]" }
+      assert_equal "├⊟ ", active_item[:prefix]
+      assert_equal true, active_item[:activePath]
+      assert_equal "└⊟ ", side_item[:prefix]
+      refute side_item[:activePath]
+      assert_operator tree.index(active_item), :<, tree.index(side_item)
+    end
+  end
+
   def test_memory_status_includes_auto_summary_and_toggles_setting
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
@@ -458,7 +557,7 @@ class TestRPCSessionManager < KwardTestCase
       result = manager.compact_session(session_id: session[:id], custom_instructions: "focus")
 
       assert_includes result[:summary], "summary"
-      assert_equal "message:2", result[:firstKeptEntryId]
+      assert_match /\A(?:message:\d+|[0-9a-f]{8})\z/, result[:firstKeptEntryId]
       assert_includes client.seen_messages.last.last[:content], "Additional focus: focus"
       live_messages = rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
       assert_equal ["compactionSummary", "user", "assistant"], live_messages.map { |message| message[:role] || message["role"] }
@@ -492,10 +591,11 @@ class TestRPCSessionManager < KwardTestCase
       rpc_session.conversation.append_user("third prompt")
       after = manager.fork_messages(session_id: session[:id])[:messages]
 
-      assert_equal ["message:0", "message:2"], before.map { |message| message[:entryId] }
+      assert_equal 2, before.length
+      assert before.all? { |message| message[:entryId].to_s.match?(/\A[0-9a-f]{8}\z/) }
       assert_equal "first prompt with spaces", before.first[:text]
       assert_equal before.map { |message| message[:entryId] }, after.first(2).map { |message| message[:entryId] }
-      assert_equal "message:3", after.last[:entryId]
+      assert after.last[:entryId].to_s.match?(/\A[0-9a-f]{8}\z/)
     end
   end
 

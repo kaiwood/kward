@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Added Session Tree support with a CLI `/tree` command plus RPC persisted entry IDs, labels, label timestamps, and branch navigation.
+- Changed session tree rendering to match Pi's active-path-first branch display, markers, tool rows, and connector prefixes.
 - Added RPC `ui/footer` notifications for Kward plugin footers.
 - Fixed RPC model selection to accept lowercase provider IDs from UI clients.
 - Added `!` shell commands in the interactive CLI composer.

@@ -301,13 +301,14 @@ class KwardTestCase < Minitest::Test
   end
 
   class FakePrompt
-    attr_reader :output, :redraw_count
+    attr_reader :output, :redraw_count, :prefilled_inputs
 
     def initialize(inputs, confirmations: [])
       @inputs = inputs
       @confirmations = confirmations
       @output = []
       @redraw_count = 0
+      @prefilled_inputs = []
     end
 
     def ask(_message)
@@ -324,6 +325,10 @@ class KwardTestCase < Minitest::Test
 
     def redraw
       @redraw_count += 1
+    end
+
+    def prefill_input(value)
+      @prefilled_inputs << value
     end
   end
 
@@ -395,6 +400,14 @@ class KwardTestCase < Minitest::Test
       @select_choices << choices
       @select_titles << title
       choices.find { |choice| choice.include?(@selected_text) } || choices.first
+    end
+  end
+
+  class FakeSessionSelectNoPrefillPrompt < FakeSessionSelectPrompt
+    def respond_to?(name, include_private = false)
+      return false if name == :prefill_input
+
+      super
     end
   end
 

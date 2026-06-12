@@ -1159,6 +1159,112 @@ class TestCLI < KwardTestCase
     end
   end
 
+
+  def test_tree_slash_command_selects_user_entry_and_prefills_prompt
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      conversation.append_user("edit this prompt")
+      conversation.append_assistant("future reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "edit this prompt")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+      loaded_session, loaded_conversation = store.load(session.path)
+
+      assert_equal ["Tree>"], prompt.select_messages.last(1)
+      assert_equal ["edit this prompt"], prompt.prefilled_inputs
+      assert_equal "first reply", loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["content"]
+      assert_equal loaded_session.leaf_id, loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["id"]
+    end
+  end
+
+  def test_tree_slash_command_shows_non_user_entries_but_does_not_select_them
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("visible reply")
+      conversation.append_user("future prompt")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "visible reply")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      choices = prompt.select_choices.last
+      assert choices.any? { |choice| choice.include?("user: first prompt") }
+      assert choices.any? { |choice| choice.include?("assistant: visible reply") }
+      assert_empty prompt.prefilled_inputs
+      assert_includes prompt.output.join("
+"), "Only user turns can be edited from the session tree."
+    end
+  end
+
+  def test_tree_slash_command_uses_pi_style_active_path_branch_prefixes_and_tool_results
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("root prompt")
+      conversation.append_assistant("root reply")
+      root_reply_id = session.leaf_id
+      conversation.append_user("active branch")
+      conversation.append_assistant({
+        "role" => "assistant",
+        "content" => nil,
+        "tool_calls" => [tool_call("read_file", path: "README.md", offset: 2, limit: 3)]
+      })
+      conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "README contents")
+      active_leaf_id = session.leaf_id
+      session.branch(root_reply_id)
+      conversation.append_user("side branch")
+      conversation.append_assistant("side reply")
+      session.branch(active_leaf_id)
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "active branch")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      choices = prompt.select_choices.last
+      active_choice = choices.find { |choice| choice.include?("active branch") }
+      side_choice = choices.find { |choice| choice.include?("side branch") }
+      refute choices.any? { |choice| choice.include?("assistant: ") && choice.include?("(no content)") }
+      assert choices.any? { |choice| choice.include?("[read: README.md:2-4]") }
+      assert_includes active_choice, "├⊟ • user: active branch"
+      assert_includes side_choice, "└⊟ user: side branch"
+      assert_operator choices.index(active_choice), :<, choices.index(side_choice)
+    end
+  end
+
+  def test_tree_slash_command_without_composer_prefill_does_not_auto_run_selected_text
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      conversation.append_user("edit this prompt")
+      prompt = FakeSessionSelectNoPrefillPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "edit this prompt")
+      client = RecordingClient.new(["should not be used"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_empty client.seen_messages
+      assert_includes prompt.output.join("
+"), "Selected text for editing:
+edit this prompt"
+    end
+  end
+
   def test_resume_picker_shows_cloned_sessions_as_tree
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

@@ -11,15 +11,15 @@ require_relative "workspace"
 
 module Kward
   class SessionStore
-    VERSION = 1
+    VERSION = 2
 
     SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
 
     class Session
       attr_reader :id, :path, :cwd, :created_at, :parent_id, :parent_path
-      attr_accessor :name
+      attr_accessor :name, :leaf_id
 
-      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil)
+      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil, leaf_id: nil)
         @store = store
         @id = id
         @path = path
@@ -28,6 +28,7 @@ module Kward
         @name = name
         @parent_id = parent_id
         @parent_path = parent_path
+        @leaf_id = leaf_id
       end
 
       def attach(conversation)
@@ -38,19 +39,15 @@ module Kward
       end
 
       def append_message(message)
-        @store.append_record(@path, {
-          type: "message",
-          timestamp: Time.now.utc.iso8601(3),
-          message: message
-        })
+        record = @store.build_tree_record(@path, "message", @leaf_id, message: message)
+        @leaf_id = record[:id]
+        @store.append_record(@path, record)
       end
 
       def compact(message)
-        @store.append_record(@path, {
-          type: "compaction",
-          timestamp: Time.now.utc.iso8601(3),
-          message: message
-        })
+        record = @store.build_tree_record(@path, "compaction", @leaf_id, message: message)
+        @leaf_id = record[:id]
+        @store.append_record(@path, record)
       end
 
       def append_tool_execution(tool_call, content)
@@ -73,6 +70,26 @@ module Kward
           timestamp: Time.now.utc.iso8601(3),
           name: @name
         })
+      end
+
+      def branch(entry_id)
+        @leaf_id = entry_id.to_s.empty? ? nil : entry_id.to_s
+        @store.append_leaf_change(@path, @leaf_id)
+      end
+
+      def reset_leaf
+        branch(nil)
+      end
+
+      def append_label_change(entry_id, label)
+        @store.append_label_change(@path, entry_id, label)
+      end
+
+      def append_branch_summary(parent_id, from_id:, summary:, details: {})
+        record = @store.build_tree_record(@path, "branch_summary", parent_id, fromId: from_id, summary: summary, details: details || {})
+        @leaf_id = record[:id]
+        @store.append_record(@path, record)
+        record[:id]
       end
 
       def update_runtime(model:, reasoning_effort:)
@@ -121,7 +138,7 @@ module Kward
       end
       File.chmod(0o600, path)
 
-      Session.new(store: self, id: id, path: path, cwd: @cwd, created_at: created_at, parent_id: parent_id, parent_path: parent_path)
+      Session.new(store: self, id: id, path: path, cwd: @cwd, created_at: created_at, parent_id: parent_id, parent_path: parent_path, leaf_id: nil)
     end
 
     def create_from_conversation(conversation, parent_session: nil)
@@ -164,6 +181,7 @@ module Kward
       records = records_from_file(resolved_path)
       header = session_header(records, resolved_path)
 
+      leaf_id = current_leaf_id(records)
       messages = restored_messages(records)
       name = session_name(records)
       read_paths = restored_read_paths(messages, workspace)
@@ -188,7 +206,8 @@ module Kward
         created_at: parse_time(header["timestamp"]) || File.mtime(resolved_path),
         name: name,
         parent_id: header["parentId"],
-        parent_path: header["parentPath"]
+        parent_path: header["parentPath"],
+        leaf_id: leaf_id
       )
       session.attach(conversation)
       [session, conversation]
@@ -217,6 +236,63 @@ module Kward
       File.join(@config_dir, "sessions", self.class.safe_cwd(@cwd))
     end
 
+
+    def build_tree_record(path, type, parent_id, fields = {})
+      message = fields[:message]
+      id = message_entry_id(message) || next_entry_id(path)
+      assign_message_entry_id(message, id) if message.is_a?(Hash)
+      {
+        type: type,
+        id: id,
+        parentId: parent_id,
+        timestamp: Time.now.utc.iso8601(3)
+      }.merge(fields).delete_if { |_key, value| value.nil? }
+    end
+
+    def append_leaf_change(path, leaf_id)
+      append_record(path, {
+        type: "leaf",
+        timestamp: Time.now.utc.iso8601(3),
+        targetId: leaf_id
+      })
+    end
+
+    def append_label_change(path, entry_id, label)
+      append_record(path, {
+        type: "label",
+        id: next_entry_id(path),
+        timestamp: Time.now.utc.iso8601(3),
+        targetId: entry_id.to_s,
+        label: label.to_s.strip.empty? ? nil : label.to_s.strip
+      })
+    end
+
+    def session_tree(path)
+      records = records_from_file(resolve_session_path(path))
+      build_session_tree(records)
+    end
+
+    def session_entries(path)
+      records = records_from_file(resolve_session_path(path))
+      labels = labels_by_target(records)
+      timestamps = label_timestamps_by_target(records)
+      records.select { |record| tree_entry_record?(record) }.map do |record|
+        id = record["id"].to_s
+        record.dup.tap do |copy|
+          copy["resolvedLabel"] = labels[id] if labels.key?(id)
+          copy["labelTimestamp"] = timestamps[id] if timestamps.key?(id)
+        end
+      end
+    end
+
+    def session_entry(path, entry_id)
+      session_entries(path).find { |record| record["id"].to_s == entry_id.to_s }
+    end
+
+    def current_leaf(path)
+      current_leaf_id(records_from_file(resolve_session_path(path)))
+    end
+
     def append_record(path, record)
       File.open(path, "a", 0o600) do |file|
         file.write(JSON.generate(record))
@@ -239,11 +315,27 @@ module Kward
     end
 
     def records_from_file(path)
-      File.readlines(path, chomp: true).filter_map do |line|
+      records = File.readlines(path, chomp: true).filter_map do |line|
         JSON.parse(line)
       rescue JSON::ParserError
         nil
       end
+      normalize_tree_records(records)
+    end
+
+    def normalize_tree_records(records)
+      parent_id = nil
+      entry_index = 0
+      records.each do |record|
+        next unless tree_entry_record?(record)
+
+        record["id"] = "message:#{entry_index}" if record["id"].to_s.empty?
+        record["parentId"] = parent_id unless record.key?("parentId")
+        assign_message_entry_id(record["message"], record["id"]) if record["message"].is_a?(Hash) && message_entry_id(record["message"]).to_s.empty?
+        parent_id = record["id"]
+        entry_index += 1
+      end
+      records
     end
 
     def session_header(records, path)
@@ -308,15 +400,129 @@ module Kward
     end
 
     def restored_messages(records)
-      records.each_with_object([]) do |record, messages|
+      branch_records(records).each_with_object([]) do |record, messages|
         message = record["message"]
         case record["type"]
         when "message"
           messages << message if message.is_a?(Hash)
         when "compaction"
           messages.replace(rebuilt_compacted_messages(message, messages)) if message.is_a?(Hash)
+        when "branch_summary"
+          messages << { "role" => "branchSummary", "content" => record["summary"].to_s, "id" => record["id"] }
         end
       end
+    end
+
+
+    def build_session_tree(records)
+      entries = records.select { |record| tree_entry_record?(record) }
+      labels = labels_by_target(records)
+      label_timestamps = label_timestamps_by_target(records)
+      nodes = entries.each_with_object({}) do |entry, map|
+        id = entry["id"].to_s
+        next if id.empty?
+
+        node = { "entry" => decorate_tree_entry(entry), "children" => [] }
+        node["label"] = labels[id] if labels.key?(id)
+        node["labelTimestamp"] = label_timestamps[id] if label_timestamps.key?(id)
+        map[id] = node
+      end
+      roots = []
+      entries.each do |entry|
+        id = entry["id"].to_s
+        node = nodes[id]
+        next unless node
+
+        parent = nodes[entry["parentId"].to_s]
+        parent ? parent["children"] << node : roots << node
+      end
+      roots
+    end
+
+    def decorate_tree_entry(entry)
+      entry.dup
+    end
+
+    def branch_records(records)
+      return legacy_branch_records(records) unless records.any? { |record| tree_entry_record?(record) && !record["id"].to_s.empty? }
+
+      entries = records.select { |record| tree_entry_record?(record) }
+      by_id = entries.to_h { |record| [record["id"].to_s, record] }
+      leaf_id = current_leaf_id(records)
+      return [] if leaf_id.nil?
+
+      branch = []
+      seen = {}
+      current = by_id[leaf_id.to_s]
+      while current && !seen[current["id"].to_s]
+        seen[current["id"].to_s] = true
+        branch << current
+        parent_id = current["parentId"]
+        current = parent_id ? by_id[parent_id.to_s] : nil
+      end
+      branch.reverse
+    end
+
+    def legacy_branch_records(records)
+      records.select { |record| ["message", "compaction"].include?(record["type"]) }
+    end
+
+    def current_leaf_id(records)
+      latest = records.reverse.find { |record| record["type"] == "leaf" || (tree_entry_record?(record) && !record["id"].to_s.empty?) }
+      return nil unless latest
+      return latest["targetId"] if latest["type"] == "leaf"
+
+      latest["id"]
+    end
+
+    def tree_entry_record?(record)
+      ["message", "compaction", "branch_summary"].include?(record["type"])
+    end
+
+    def labels_by_target(records)
+      records.each_with_object({}) do |record, labels|
+        next unless record["type"] == "label"
+
+        target = record["targetId"].to_s
+        next if target.empty?
+
+        label = record["label"].to_s.strip
+        label.empty? ? labels.delete(target) : labels[target] = label
+      end
+    end
+
+    def label_timestamps_by_target(records)
+      records.each_with_object({}) do |record, timestamps|
+        next unless record["type"] == "label"
+
+        target = record["targetId"].to_s
+        next if target.empty?
+
+        if record["label"].to_s.strip.empty?
+          timestamps.delete(target)
+        else
+          timestamps[target] = record["timestamp"]
+        end
+      end
+    end
+
+    def next_entry_id(path)
+      existing = records_from_file(path).filter_map { |record| record["id"].to_s unless record["id"].to_s.empty? }.to_h { |id| [id, true] }
+      loop do
+        id = SecureRandom.hex(4)
+        return id unless existing[id]
+      end
+    end
+
+    def message_entry_id(message)
+      return nil unless message.respond_to?(:key?)
+
+      message["id"] || message[:id]
+    end
+
+    def assign_message_entry_id(message, id)
+      message["id"] = id
+      message.delete(:id) if message.key?(:id)
     end
 
     def rebuilt_compacted_messages(compaction_message, previous_messages)

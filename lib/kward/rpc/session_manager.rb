@@ -128,37 +128,83 @@ module Kward
       def fork_messages(session_id:)
         rpc_session = fetch_session(session_id)
         {
-          messages: entry_messages(rpc_session.conversation).each_with_index.filter_map do |message, index|
-            next unless message_role(message) == "user"
+          messages: tree_entries(rpc_session).filter_map do |record|
+            message = record["message"]
+            next unless message.is_a?(Hash) && message_role(message) == "user"
 
-            { entryId: entry_id(index), text: display_message_text(message) }
+            { entryId: record["id"], text: display_message_text(message) }
           end
         }
       end
 
       def fork_session(session_id:, entry_id:)
         source = fetch_session(session_id)
-        index = entry_index(entry_id)
-        messages = entry_messages(source.conversation)
-        selected = messages[index] || raise(ArgumentError, "Unknown fork entryId: #{entry_id}")
-        raise ArgumentError, "Entry is not forkable: #{entry_id}" unless message_role(selected) == "user"
+        entries = tree_entries(source)
+        resolved_entry_id = resolve_tree_entry_id(entries, entry_id)
+        selected_index = entries.index { |record| record["id"].to_s == resolved_entry_id.to_s }
+        selected = selected_index && entries[selected_index]
+        raise ArgumentError, "Unknown fork entryId: #{entry_id}" unless selected
+
+        message = selected["message"]
+        raise ArgumentError, "Entry is not forkable: #{entry_id}" unless message.is_a?(Hash) && message_role(message) == "user"
 
         session, conversation = source.store.create_independent_from_messages(
-          messages[0...index],
+          entries[0...selected_index].filter_map { |record| record["message"] },
           model: source.conversation.model,
           reasoning_effort: source.conversation.reasoning_effort,
           parent_session: source.session
         )
 
-        # ensure forked sessions retain the original persona context
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
         {
           session: session_payload(rpc_session),
-          text: full_message_text(selected),
+          text: full_message_text(message),
           cancelled: false
         }
+      end
+
+      def session_tree(session_id:)
+        rpc_session = fetch_session(session_id)
+        { items: flatten_session_tree(rpc_session) }
+      end
+
+      def set_tree_label(session_id:, entry_id:, label: nil)
+        rpc_session = fetch_session(session_id)
+        rpc_session.session.append_label_change(entry_id, label)
+        { ok: true }
+      end
+
+      def navigate_tree(session_id:, entry_id:, summarize: false, custom_instructions: nil)
+        rpc_session = fetch_session(session_id)
+        entries = tree_entries(rpc_session)
+        resolved_entry_id = resolve_tree_entry_id(entries, entry_id)
+        entry = rpc_session.store.session_entry(rpc_session.session.path, resolved_entry_id)
+        raise ArgumentError, "Unknown tree entryId: #{entry_id}" unless entry
+
+        message = entry["message"]
+        user_entry = message.is_a?(Hash) && message_role(message) == "user"
+        raise ArgumentError, "Tree navigation only supports user turns: #{entry_id}" unless user_entry
+
+        target_leaf = entry["parentId"]
+        editor_text = full_message_text(message)
+        previous_leaf = rpc_session.session.leaf_id
+
+        if summarize
+          summary = summarize_branch(rpc_session, from_id: previous_leaf, to_id: target_leaf, custom_instructions: custom_instructions)
+          target_leaf = rpc_session.session.append_branch_summary(target_leaf, from_id: previous_leaf, summary: summary, details: {})
+        else
+          target_leaf ? rpc_session.session.branch(target_leaf) : rpc_session.session.reset_leaf
+        end
+
+        reload_rpc_session(rpc_session)
+        {
+          session: session_payload(rpc_session),
+          editorText: editor_text,
+          cancelled: false,
+          aborted: false
+        }.compact
       end
 
       def export_session(session_id:, path: nil, format: nil)
@@ -646,23 +692,297 @@ module Kward
         MessageAccess.content(message)
       end
 
-      def entry_messages(conversation)
-        conversation.messages.reject { |message| message_role(message) == "system" }
+      def tree_entries(rpc_session)
+        rpc_session.store.session_entries(rpc_session.session.path)
       end
 
-      def entry_id(index)
-        "message:#{index}"
+      def resolve_tree_entry_id(entries, entry_id)
+        id = entry_id.to_s
+        return id if entries.any? { |record| record["id"].to_s == id }
+
+        match = id.match(/\Amessage:(\d+)\z/)
+        return entries[match[1].to_i]&.dig("id") if match
+
+        id
       end
 
-      def entry_index(entry_id)
-        match = entry_id.to_s.match(/\Amessage:(\d+)\z/)
-        raise ArgumentError, "Invalid entryId: #{entry_id}" unless match
+      def reload_rpc_session(rpc_session)
+        session, conversation = rpc_session.store.load(
+          rpc_session.session.path,
+          workspace: Workspace.new(root: rpc_session.workspace_root),
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort
+        )
+        conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
+        rpc_session.session = session
+        rpc_session.conversation = conversation
+        rebuild_session_tools(rpc_session)
+        emit_footer_update(rpc_session)
+      end
 
-        match[1].to_i
+      def flatten_session_tree(rpc_session)
+        roots = rpc_session.store.session_tree(rpc_session.session.path)
+        current_leaf = rpc_session.session.leaf_id || rpc_session.store.current_leaf(rpc_session.session.path)
+        active_path = tree_active_path(roots, current_leaf)
+        tool_calls_by_id = tree_tool_calls(roots)
+        visible_roots = roots.flat_map { |root| visible_tree_nodes(root, current_leaf) }
+        multiple_roots = visible_roots.length > 1
+        result = []
+
+        walk = lambda do |node, indent, just_branched, show_connector, is_last, gutters, virtual_root_child|
+          entry = node[:source]["entry"] || {}
+          entry_id = entry["id"].to_s
+          formatted = tree_entry_display(entry, tool_calls_by_id)
+          display_indent = multiple_roots ? [indent - 1, 0].max : indent
+          result << {
+            entryId: entry_id,
+            parentId: entry["parentId"],
+            role: formatted[:role],
+            text: formatted[:text],
+            current: !current_leaf.to_s.empty? && entry_id == current_leaf.to_s,
+            depth: display_indent,
+            isLast: is_last,
+            ancestorContinues: gutters.map { |gutter| gutter[:show] },
+            activePath: active_path.include?(entry_id),
+            selectable: formatted[:role] == "user",
+            label: node[:source]["label"] || entry["resolvedLabel"],
+            labelTimestamp: node[:source]["labelTimestamp"],
+            prefix: tree_prefix(display_indent, gutters, show_connector && !virtual_root_child, is_last, !node[:children].empty?)
+          }.compact
+
+          children = node[:children].sort_by { |child| tree_contains_active_path?(child, active_path) ? 0 : 1 }
+          multiple_children = children.length > 1
+          child_indent = if multiple_children
+                           indent + 1
+                         elsif just_branched && indent.positive?
+                           indent + 1
+                         else
+                           indent
+                         end
+          connector_position = [display_indent - 1, 0].max
+          child_gutters = show_connector && !virtual_root_child ? gutters + [{ position: connector_position, show: !is_last }] : gutters
+          children.each_with_index do |child, index|
+            walk.call(child, child_indent, multiple_children, multiple_children, index == children.length - 1, child_gutters, false)
+          end
+        end
+
+        visible_roots.sort_by { |root| tree_contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index do |root, index|
+          walk.call(root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == visible_roots.length - 1, [], multiple_roots)
+        end
+        result
+      end
+
+      def user_tree_entry?(entry)
+        message = entry["message"]
+        message.is_a?(Hash) && message_role(message) == "user"
+      end
+
+      def nearest_visible_parent_by_id(user_entries, entries)
+        user_ids = user_entries.map { |entry| entry["id"].to_s }.to_h { |id| [id, true] }
+        by_id = entries.to_h { |entry| [entry["id"].to_s, entry] }
+        user_entries.each_with_object({}) do |entry, parents|
+          parent_id = entry["parentId"]
+          while parent_id && by_id[parent_id.to_s] && !user_ids[parent_id.to_s]
+            parent_id = by_id[parent_id.to_s]["parentId"]
+          end
+          parents[entry["id"].to_s] = user_ids[parent_id.to_s] ? parent_id.to_s : nil
+        end
+      end
+
+      def active_path_ids(entries, leaf_id)
+        by_id = entries.to_h { |entry| [entry["id"].to_s, entry] }
+        ids = []
+        current = by_id[leaf_id.to_s]
+        while current
+          ids << current["id"].to_s
+          current = by_id[current["parentId"].to_s]
+        end
+        ids
+      end
+
+      def tree_active_path(roots, leaf_id)
+        by_id = tree_entries_by_id(roots)
+        ids = []
+        current = by_id[leaf_id.to_s]
+        while current
+          ids << current["id"].to_s
+          current = by_id[current["parentId"].to_s]
+        end
+        ids
+      end
+
+      def tree_entries_by_id(roots)
+        roots.each_with_object({}) do |root, map|
+          stack = [root]
+          until stack.empty?
+            node = stack.pop
+            entry = node["entry"] || {}
+            map[entry["id"].to_s] = entry unless entry["id"].to_s.empty?
+            stack.concat(Array(node["children"]))
+          end
+        end
+      end
+
+      def visible_tree_nodes(node, current_leaf)
+        children = Array(node["children"]).flat_map { |child| visible_tree_nodes(child, current_leaf) }
+        return children if hidden_tree_entry?(node["entry"] || {}, current_leaf)
+
+        [{ source: node, children: children }]
+      end
+
+      def hidden_tree_entry?(entry, current_leaf)
+        return false if current_leaf && entry["id"].to_s == current_leaf.to_s
+        return false unless entry["type"] == "message"
+
+        message = entry["message"]
+        return false unless message.is_a?(Hash) && message_role(message) == "assistant"
+
+        content = message_content(message)
+        content_tool_calls = content.is_a?(Array) && content.any? { |part| tree_content_part_value(part, :type) == "toolCall" }
+        (content_tool_calls && !tree_text_content?(content)) || (!tool_calls(message).empty? && full_message_text(message).empty?)
+      end
+
+      def tree_text_content?(content)
+        Array(content).any? { |part| tree_content_part_value(part, :type) == "text" && tree_content_part_value(part, :text).to_s.strip != "" }
+      end
+
+      def tree_content_part_value(part, key)
+        return nil unless part.respond_to?(:key?)
+        return part[key] if part.key?(key)
+        return part[key.to_s] if part.key?(key.to_s)
+
+        nil
+      end
+
+      def tree_contains_active_path?(node, active_path)
+        entry_id = (node[:source]["entry"] || {})["id"].to_s
+        active_path.include?(entry_id) || node[:children].any? { |child| tree_contains_active_path?(child, active_path) }
+      end
+
+      def tree_tool_calls(roots)
+        roots.each_with_object({}) do |root, tool_calls_by_id|
+          stack = [root]
+          until stack.empty?
+            node = stack.pop
+            entry = node["entry"] || {}
+            message = entry["message"]
+            if entry["type"] == "message" && message.is_a?(Hash) && message_role(message) == "assistant"
+              tool_calls(message).each { |tool_call| tool_calls_by_id[ToolCall.id(tool_call).to_s] = tool_call }
+            end
+            stack.concat(Array(node["children"]))
+          end
+        end
+      end
+
+      def tree_entry_display(entry, tool_calls_by_id = {})
+        case entry["type"]
+        when "message"
+          message = entry["message"] || {}
+          role = message_role(message).to_s
+          return { role: "tool", text: format_tool_result(message, tool_calls_by_id) } if ["tool", "toolResult"].include?(role)
+          return { role: role.empty? ? "message" : role, text: display_message_text(message) }
+        when "compaction"
+          return { role: "compaction", text: display_message_text(entry["message"] || {}) }
+        when "branch_summary"
+          return { role: "summary", text: truncate_tree_text(entry["summary"]) }
+        end
+
+        { role: entry["type"].to_s.empty? ? "entry" : entry["type"].to_s, text: entry["type"].to_s }
+      end
+
+      def tree_prefix(display_indent, gutters, show_connector, is_last, foldable)
+        return "" if display_indent.to_i <= 0
+
+        connector_position = show_connector ? display_indent - 1 : -1
+        (0...(display_indent * 3)).map do |index|
+          level = index / 3
+          position = index % 3
+          gutter = gutters.find { |candidate| candidate[:position] == level }
+
+          if gutter
+            position.zero? && gutter[:show] ? "│" : " "
+          elsif show_connector && level == connector_position
+            if position.zero?
+              is_last ? "└" : "├"
+            elsif position == 1
+              foldable ? "⊟" : "─"
+            else
+              " "
+            end
+          else
+            " "
+          end
+        end.join
+      end
+
+      def format_tool_result(message, tool_calls_by_id)
+        tool_call = tool_calls_by_id[tree_message_tool_call_id(message).to_s]
+        return format_tool_call(tool_call) if tool_call
+
+        name = tree_message_tool_name(message).to_s
+        name = "tool" if name.empty?
+        "[#{name}]"
+      end
+
+      def tree_message_tool_call_id(message)
+        MessageAccess.tool_call_id(message) || MessageAccess.value(message, :toolCallId)
+      end
+
+      def tree_message_tool_name(message)
+        MessageAccess.name(message) || MessageAccess.value(message, :toolName)
+      end
+
+      def format_tool_call(tool_call)
+        name = ToolCall.display_name(tool_call)
+        args = ToolCall.arguments(tool_call)
+        case name
+        when "read"
+          path = args["path"] || args[:path] || args["file_path"] || args[:file_path]
+          offset = args["offset"] || args[:offset]
+          limit = args["limit"] || args[:limit]
+          display = path.to_s
+          if offset || limit
+            start_line = offset || 1
+            end_line = limit ? start_line.to_i + limit.to_i - 1 : nil
+            display += ":#{start_line}#{end_line ? "-#{end_line}" : ""}"
+          end
+          "[read: #{display}]"
+        when "write", "edit"
+          path = args["path"] || args[:path] || args["file_path"] || args[:file_path]
+          "[#{name}: #{path}]"
+        when "bash"
+          command = (args["command"] || args[:command]).to_s.gsub(/[\n\t]/, " ").strip
+          "[bash: #{command.length > 50 ? "#{command.slice(0, 50)}..." : command}]"
+        else
+          serialized = JSON.dump(args)
+          "[#{name}: #{serialized.length > 40 ? "#{serialized.slice(0, 40)}..." : serialized}]"
+        end
+      end
+
+      def summarize_branch(rpc_session, from_id:, to_id:, custom_instructions: nil)
+        entries = tree_entries(rpc_session)
+        active = active_path_ids(entries, from_id)
+        target = active_path_ids(entries, to_id)
+        target_lookup = target.to_h { |id| [id, true] }
+        abandoned = active.reject { |id| target_lookup[id] }
+        messages = entries.select { |entry| abandoned.include?(entry["id"].to_s) }.filter_map { |entry| entry["message"] }
+        source_text = messages.map { |message| "#{message_role(message)}: #{full_message_text(message)}" }.join("\n\n")
+        prompt = [
+          { role: "system", content: "Summarize the abandoned conversation branch concisely for future context." },
+          { role: "user", content: [custom_instructions.to_s.strip, source_text].reject(&:empty?).join("\n\n") }
+        ]
+        response = @client.chat(prompt, tools: [])
+        text = full_message_text(response)
+        text.empty? ? "Branch summary unavailable." : text
       end
 
       def display_message_text(message)
-        full_message_text(message).gsub(/\s+/, " ").strip.slice(0, 120).to_s
+        truncate_tree_text(full_message_text(message))
+      end
+
+      def truncate_tree_text(text)
+        normalized = text.to_s.gsub(/\s+/, " ").strip
+        normalized.length > 120 ? "#{normalized.slice(0, 117)}..." : normalized
       end
 
       def full_message_text(message)

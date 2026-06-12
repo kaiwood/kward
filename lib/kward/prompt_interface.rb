@@ -80,6 +80,7 @@ module Kward
       @history = []
       @history_index = nil
       @history_draft = nil
+      @prefill_input = nil
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
@@ -193,8 +194,9 @@ module Kward
         preserve_input = was_composing && !@busy && !@input.empty?
         @prompt_label = message.to_s
         unless preserve_input
-          @input = ""
-          @cursor = 0
+          @input = @prefill_input.to_s
+          @prefill_input = nil
+          @cursor = @input.length
           @attachments.clear
           reset_history_navigation
         end
@@ -1616,6 +1618,12 @@ module Kward
     def replace_input(value)
       @input = value.to_s
       @cursor = @input.length
+    end
+
+    def prefill_input(value)
+      @mutex.synchronize do
+        @prefill_input = value.to_s
+      end
     end
 
     def reset_history_navigation
