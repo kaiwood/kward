@@ -346,7 +346,8 @@ class TestRPCSessionManager < KwardTestCase
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
-      source = manager.create_session(workspace_root: workspace_root)
+      source = manager.create_session(workspace_root: workspace_root, name: "Draft")
+      manager.rename_session(session_id: source[:id], name: "Useful")
       source_rpc = manager.send(:fetch_session, source[:id])
       source_rpc.conversation.append_user("original prompt")
       source_rpc.conversation.append_assistant("original reply")
@@ -359,6 +360,7 @@ class TestRPCSessionManager < KwardTestCase
       refute_same source_rpc.conversation, clone_rpc.conversation
       assert_equal source[:persistentId], clone[:parentId]
       assert_equal source[:path], clone[:parentPath]
+      assert_equal "Useful", clone[:name]
 
       clone_rpc.conversation.append_user("clone only")
       source_rpc.conversation.append_user("source only")
@@ -377,6 +379,7 @@ class TestRPCSessionManager < KwardTestCase
       listed_clone = listed.find { |item| item[:id] == clone[:persistentId] }
       assert_equal source[:persistentId], listed_clone[:parentId]
       assert_equal source[:path], listed_clone[:parentPath]
+      assert_equal "Useful", listed_clone[:name]
       assert_equal 0, listed_source[:depth]
       assert_equal 1, listed_clone[:depth]
       assert_equal [], listed_clone[:ancestorContinues]

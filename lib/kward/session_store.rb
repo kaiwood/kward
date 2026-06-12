@@ -126,6 +126,7 @@ module Kward
 
     def create_from_conversation(conversation, parent_session: nil)
       session = create(model: conversation.model, reasoning_effort: conversation.reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
+      session.rename(parent_session.name) unless parent_session&.name.to_s.strip.empty?
       persisted_messages(conversation).each { |message| session.append_message(message) }
       session.attach(conversation)
       session
@@ -143,6 +144,7 @@ module Kward
 
     def create_independent_from_messages(messages, read_paths: [], model: nil, reasoning_effort: nil, parent_session: nil)
       session = create(model: model, reasoning_effort: reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
+      session.rename(parent_session.name) unless parent_session&.name.to_s.strip.empty?
       persisted = deep_copy(messages)
       persisted.each { |message| session.append_message(message) }
       conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd, model: model, reasoning_effort: reasoning_effort)

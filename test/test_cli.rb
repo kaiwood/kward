@@ -1004,7 +1004,7 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       export_path = File.join(store.session_dir, "session.md")
-      prompt = FakePrompt.new(["hello", "/name Useful", "/clone", "/export #{export_path}", "/exit"])
+      prompt = FakePrompt.new(["hello", "/name Draft", "/name Useful", "/clone", "/export #{export_path}", "/exit"])
       client = RecordingClient.new(["reply"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
@@ -1018,8 +1018,12 @@ class TestCLI < KwardTestCase
       assert_includes output, "reply"
       assert_includes File.read(export_path), "## User\n\nhello"
       assert_includes File.read(export_path), "## Assistant\n\nreply"
-      source, clone = files.map { |file| jsonl_records(file).find { |record| record["type"] == "session" } }.sort_by { |record| record.key?("parentId") ? 1 : 0 }
+      source_path, clone_path = files.sort_by { |file| jsonl_records(file).find { |record| record["type"] == "session" }.key?("parentId") ? 1 : 0 }
+      source = jsonl_records(source_path).find { |record| record["type"] == "session" }
+      clone = jsonl_records(clone_path).find { |record| record["type"] == "session" }
+      clone_name = jsonl_records(clone_path).select { |record| record["type"] == "session_info" }.last
       assert_equal source["id"], clone["parentId"]
+      assert_equal "Useful", clone_name["name"]
     end
   end
 
