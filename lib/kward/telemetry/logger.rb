@@ -1,8 +1,8 @@
 require "fileutils"
 require "json"
 require "time"
-require_relative "config_files"
-require_relative "rpc/redactor"
+require_relative "../config_files"
+require_relative "../rpc/redactor"
 
 module Kward
   class TelemetryLogger

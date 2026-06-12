@@ -31,7 +31,7 @@ require_relative "starter_pack_installer"
 require_relative "steering"
 require_relative "tool_call"
 require_relative "tool_registry"
-require_relative "telemetry_stats"
+require_relative "telemetry/stats"
 require_relative "workspace"
 
 module Kward

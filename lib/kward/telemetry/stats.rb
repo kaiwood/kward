@@ -1,7 +1,7 @@
 require "json"
 require "time"
-require_relative "config_files"
-require_relative "telemetry_logger"
+require_relative "../config_files"
+require_relative "logger"
 
 module Kward
   class TelemetryStats

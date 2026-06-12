@@ -8,7 +8,7 @@ require_relative "../config_files"
 require_relative "../context_overflow"
 require_relative "../image_attachments"
 require_relative "model_info"
-require_relative "../telemetry_logger"
+require_relative "../telemetry/logger"
 require_relative "stream_parser"
 
 module Kward

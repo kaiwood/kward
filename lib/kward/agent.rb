@@ -5,7 +5,7 @@ require_relative "context_overflow"
 require_relative "conversation"
 require_relative "events"
 require_relative "steering"
-require_relative "telemetry_logger"
+require_relative "telemetry/logger"
 require_relative "tool_registry"
 
 module Kward
