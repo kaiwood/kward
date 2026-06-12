@@ -77,6 +77,30 @@ class TestRPCSessionManagerRuntime < KwardTestCase
     end
   end
 
+  def test_refresh_client_config_rebuilds_active_session_tool_registry
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({ "web_search" => { "enabled" => false } }))
+      client = ToolRecordingClient.new
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+        session = manager.create_session(workspace_root: Dir.pwd)
+
+        turn = manager.start_turn(session_id: session[:id], input: "before")
+        wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+        refute_includes client.seen_tools.first.map { |tool| tool[:function][:name] }, "web_search"
+
+        File.write(config_path, JSON.dump({ "web_search" => { "enabled" => true } }))
+        manager.refresh_client_config
+        turn = manager.start_turn(session_id: session[:id], input: "after")
+        wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+        assert_includes client.seen_tools.last.map { |tool| tool[:function][:name] }, "web_search"
+      end
+    end
+  end
+
   def test_runtime_stats_counts_messages_and_tool_activity
     Dir.mktmpdir do |config_dir|
       context_usage = StaticContextUsage.new(tokens: 50)

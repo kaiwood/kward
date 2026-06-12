@@ -138,6 +138,20 @@ module KwardRPCTestSupport
     end
   end
 
+  class ToolRecordingClient < KwardTestCase::FakeClient
+    attr_reader :seen_tools
+
+    def initialize
+      super([])
+      @seen_tools = []
+    end
+
+    def chat(_messages, tools: [], **_opts)
+      @seen_tools << tools
+      { "role" => "assistant", "content" => "ok" }
+    end
+  end
+
   class ReloadableFakeClient < KwardTestCase::FakeClient
     attr_reader :reload_count
 

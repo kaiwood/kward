@@ -164,7 +164,7 @@ module Kward
         when "config/read"
           { path: @config_manager.config_path, config: @config_manager.read(redacted: params.fetch("redacted", true)) }
         when "config/update"
-          { path: @config_manager.config_path, config: @config_manager.update(params.fetch("values")) }
+          config_update(params)
         when "logging/stats"
           logging_stats(params)
         when "logging/tokenCsv"
@@ -438,6 +438,12 @@ module Kward
 
       def openrouter_catalog
         { models: @session_manager.openrouter_catalog }
+      end
+
+      def config_update(params)
+        config = @config_manager.update(params.fetch("values"))
+        @session_manager.refresh_client_config
+        { path: @config_manager.config_path, config: config }
       end
 
       def runtime_update_setting(params)

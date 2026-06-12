@@ -465,6 +465,7 @@ module Kward
       def refresh_client_config
         @client.reload_config if @client.respond_to?(:reload_config)
         refresh_session_runtime_contexts
+        refresh_session_tool_registries
       end
 
       def session_payload(rpc_session)
@@ -512,6 +513,21 @@ module Kward
           rpc_session.conversation.update_runtime_context!(model: model, reasoning_effort: reasoning_effort)
           rpc_session.session.update_runtime(model: model, reasoning_effort: reasoning_effort)
         end
+      end
+
+      def refresh_session_tool_registries
+        sessions = @mutex.synchronize { @sessions.values }
+        sessions.each { |rpc_session| rebuild_session_tools(rpc_session) }
+      end
+
+      def rebuild_session_tools(rpc_session)
+        tool_registry = build_tool_registry(rpc_session.workspace_root, rpc_session.prompt)
+        rpc_session.tool_registry = tool_registry
+        rpc_session.agent = Agent.new(
+          client: @client,
+          tool_registry: tool_registry,
+          conversation: rpc_session.conversation
+        )
       end
 
       def compaction_settings
@@ -769,8 +785,7 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(server: @server, session_id: id)
-        workspace = Workspace.new(root: workspace_root)
-        tool_registry = ToolRegistry.new(workspace: workspace, prompt: prompt)
+        tool_registry = build_tool_registry(workspace_root, prompt)
         agent = Agent.new(
           client: @client,
           tool_registry: tool_registry,
@@ -790,6 +805,10 @@ module Kward
           worker: nil,
           running_turn_id: nil
         )
+      end
+
+      def build_tool_registry(workspace_root, prompt)
+        ToolRegistry.new(workspace: Workspace.new(root: workspace_root), prompt: prompt)
       end
 
       def remember_session(rpc_session)

@@ -154,6 +154,20 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_config_update_refreshes_active_runtime
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "config/update", params: { values: { web_search: { enabled: true } } } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal true, messages[0]["result"]["config"]["web_search"]["enabled"]
+      assert_equal 1, client.reload_count
+    end
+  end
+
   def test_rpc_redactor_preserves_numeric_token_counts_but_redacts_secret_tokens
     redacted = Kward::RPC::Redactor.redact("total_tokens" => 12, "access_token" => "secret", "authorization" => "Bearer secret-token")
 
