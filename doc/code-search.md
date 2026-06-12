@@ -2,6 +2,16 @@
 
 Kward exposes a `code_search` tool so the agent can inspect public open-source code for implementation guidance.
 
+Use code search when you want Kward to learn from real packages before changing your project. It is useful for checking library APIs, finding examples, comparing implementation patterns, or understanding how another project solved a similar problem.
+
+Example prompts:
+
+```text
+Look up how tty-prompt handles key bindings before changing our composer.
+Find examples of Faraday retry middleware usage.
+Inspect how Rails structures this kind of generator test.
+```
+
 The tool can:
 
 - look up packages from RubyGems, npm, PyPI, crates.io, and Go package documentation

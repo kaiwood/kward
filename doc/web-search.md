@@ -1,6 +1,16 @@
 # Web search
 
-Web search lets the agent search the live web. The `web_search` tool is advertised by default so the agent can use current sources when needed. In `auto` mode the provider fallback order is:
+Web search lets the agent search the live web. Use it when you need current facts, official docs, release notes, bug reports, pricing pages, or recent announcements.
+
+Example prompts:
+
+```text
+Research the current Rails release notes and summarize migration risks.
+Find the official OpenRouter docs for model configuration.
+Check whether this dependency has a recent security advisory.
+```
+
+The `web_search` tool is advertised by default so the agent can use current sources when needed. In `auto` mode the provider fallback order is:
 
 1. Exa API when `EXA_API_KEY` is configured, otherwise keyless Exa MCP (`https://mcp.exa.ai/mcp`)
 2. Perplexity API when configured and `allow_model_providers` is true

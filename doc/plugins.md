@@ -12,6 +12,8 @@ A plugin can:
 
 Plugins are plain Ruby files. They run inside the Kward process with your local user permissions, so install only plugins you trust.
 
+Use a prompt template when reusable text is enough. Use a skill when you need reusable instructions. Use a plugin when you need local Ruby behavior, file or network integration, custom commands, or transcript observers.
+
 ## Where plugins live
 
 Kward loads top-level Ruby files from:
@@ -26,7 +28,13 @@ If a legacy plugin directory exists beside a custom config path, Kward warns and
 
 ## A first plugin
 
-Create `~/.kward/plugins/hello.rb`:
+Create the plugin directory:
+
+```bash
+mkdir -p ~/.kward/plugins
+```
+
+Then create `~/.kward/plugins/hello.rb`:
 
 ```ruby
 Kward.plugin do |plugin|

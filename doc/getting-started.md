@@ -8,10 +8,7 @@ This page gets you to a first working chat. For day-to-day features after that, 
 
 - Ruby 3.2 or newer.
 - Bundler when running from source.
-- Provider credentials for at least one model backend:
-  - OpenAI/ChatGPT OAuth credentials, or
-  - an OpenRouter API key, or
-  - a GitHub token/OAuth setup for experimental Copilot provider support.
+- Credentials for at least one model provider. You can add them with `/login` inside Kward or with `kward login` from your shell.
 
 ## Install
 
@@ -21,57 +18,24 @@ Kward is being prepared for a RubyGems release. Once published:
 gem install kward
 ```
 
-Until then, run it from a repository checkout:
+Optionally install the starter pack:
+
+```bash
+kward --install-starter-pack
+```
+
+The starter pack adds useful default prompts and a base `AGENTS.md` to your config directory. It is helpful for a first setup, but safe to skip if you want to write your own instructions. Existing files are not overwritten.
+
+Until the gem is published, run Kward from a repository checkout:
 
 ```bash
 bundle install
+ruby lib/main.rb --install-starter-pack   # optional
 ```
 
-## Choose a provider
+## Start Kward and sign in
 
-On first start, Kward creates `~/.kward/config.json` with visible starter defaults and an active Kward persona if it does not already exist. Kward defaults to the OpenAI/ChatGPT Codex backend when OpenAI credentials are available. OpenRouter is the easiest API-key option.
-
-### OpenAI OAuth
-
-Add an OAuth client ID to `~/.kward/config.json`:
-
-```json
-{
-  "openai_oauth_client_id": "your-client-id"
-}
-```
-
-Then log in:
-
-```bash
-kward login
-```
-
-From source, use:
-
-```bash
-ruby lib/main.rb login
-```
-
-### OpenRouter API key
-
-To save an OpenRouter API key:
-
-```bash
-kward login openrouter
-```
-
-From source, use:
-
-```bash
-ruby lib/main.rb login openrouter
-```
-
-For all authentication options and fallback rules, see [Authentication](authentication.md).
-
-## Start chatting
-
-Interactive mode starts a saved multi-turn session:
+Start an interactive session:
 
 ```bash
 kward
@@ -83,7 +47,29 @@ From source:
 ruby lib/main.rb
 ```
 
-Ask a one-shot question and exit:
+When Kward needs credentials, sign in from inside the session:
+
+```text
+/login
+```
+
+You can also sign in from your shell before starting a chat:
+
+```bash
+kward login
+```
+
+From source:
+
+```bash
+ruby lib/main.rb login
+```
+
+For provider-specific login options, such as OpenRouter API keys or experimental Copilot support, see [Authentication](authentication.md).
+
+## Ask one question and exit
+
+Pass a prompt as command-line text:
 
 ```bash
 kward "Explain this project"
@@ -98,20 +84,23 @@ ruby lib/main.rb "Explain this project"
 You can also pipe input:
 
 ```bash
-cat README.md | kward
+git diff | kward "Review this diff"
 ```
+
+One-shot prompts do not use Kward memory.
 
 ## Useful first commands
 
 Inside an interactive session:
 
 ```text
-/status              show current session and compaction status
-/model               choose the default model
-/reasoning           choose reasoning effort
-/resume              resume a saved session
-/export notes.md     export the current session as Markdown
-/exit                leave the session
+/login              sign in or save provider credentials
+/status             show current session and compaction status
+/model              choose the default model
+/reasoning          choose reasoning effort
+/resume             resume a saved session
+/export notes.md    export the current session as Markdown
+/exit               leave the session
 ```
 
 Kward saves interactive sessions under `~/.kward/sessions/`.

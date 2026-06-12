@@ -2,7 +2,9 @@
 
 Kward has an opt-in structured memory system for interactive sessions. Memory is designed to be inspectable, explainable, and removable. It is disabled by default.
 
-Memory is not used for one-shot prompts such as `ruby lib/main.rb "..."`.
+Memory is not used for one-shot prompts such as `kward "..."`.
+
+Use memory when you want Kward to remember stable preferences, recurring project facts, or personal workflow habits across interactive sessions. Leave it disabled when you want every session to start clean.
 
 ## Enable or disable memory
 

@@ -1,18 +1,23 @@
 # Configuration
 
-Kward reads user configuration from `~/.kward/config.json` by default. On first start, if the file does not exist, Kward creates a starter config with the current runtime defaults and an active Kward persona so you can inspect and edit them. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
+Kward reads user configuration from `~/.kward/config.json` by default. Most users do not need to edit this file by hand at first: use `/login`, `/model`, `/reasoning`, and `/settings` from inside Kward when possible.
 
-Example:
+On first start, if the file does not exist, Kward creates a starter config with the current runtime defaults and an active Kward persona so you can inspect and edit them. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
+
+Small examples:
 
 ```json
 {
-  "provider": "codex",
-  "openai_oauth_client_id": "your-client-id",
-  "openai_model": "gpt-5.5",
-  "openai_reasoning_effort": "medium",
-  "openrouter_model": "openai/gpt-5.5",
-  "copilot_model": "gpt-5-mini",
-  "copilot_reasoning_effort": "medium"
+  "provider": "openrouter",
+  "openrouter_model": "openai/gpt-5.5"
+}
+```
+
+```json
+{
+  "memory": {
+    "enabled": true
+  }
 }
 ```
 
@@ -106,29 +111,18 @@ Color and logging environment variables are covered below.
 
 ## Authentication settings
 
-OpenAI OAuth needs an OAuth client ID:
+The friendliest way to configure credentials is `/login` inside Kward, or `kward login` from your shell. See [Authentication](authentication.md) for the full provider flow.
+
+Credential settings can also live in config:
 
 ```json
 {
-  "openai_oauth_client_id": "your-client-id"
+  "openai_oauth_client_id": "your-client-id",
+  "openrouter_api_key": "sk-or-v1-..."
 }
 ```
 
-Then run:
-
-```bash
-kward login
-```
-
-OpenRouter can be saved with:
-
-```bash
-kward login openrouter
-```
-
-Kward stores the resulting `openrouter_api_key` in config.
-
-OpenAI OAuth is used by default after login, even if `OPENROUTER_API_KEY` or `openrouter_api_key` is set. OpenAI OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the OpenAI Platform API. OpenRouter is only a fallback when no OpenAI OAuth/access token exists unless `provider` or `KWARD_PROVIDER` is set to `openrouter`.
+Use environment variables for temporary or local-only secrets when possible. If both OpenAI and OpenRouter credentials are available, OpenAI OAuth is used by default unless `provider` or `KWARD_PROVIDER` selects another backend.
 
 ## Overlay settings
 

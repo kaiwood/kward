@@ -2,7 +2,15 @@
 
 Kward RPC is an experimental backend protocol for UI clients. It is versioned as protocol version `1`, but method names and payloads may still change while the UI integration is built.
 
+This page is for people building UI clients or integrations. If you use Kward from the terminal, you can skip it.
+
 ## Launch
+
+```bash
+kward rpc
+```
+
+From source:
 
 ```bash
 ruby lib/main.rb rpc

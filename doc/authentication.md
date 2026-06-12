@@ -1,6 +1,8 @@
 # Authentication
 
-Kward needs credentials for a model provider before it can answer prompts. It supports:
+Kward needs credentials for a model provider before it can answer prompts. The easiest path is to start Kward and run `/login`.
+
+Kward supports:
 
 - OpenAI/ChatGPT OAuth for the Codex backend.
 - OpenRouter API keys.
@@ -8,21 +10,35 @@ Kward needs credentials for a model provider before it can answer prompts. It su
 
 If you installed the gem, use `kward` in the examples below. When running from source, use `ruby lib/main.rb` instead.
 
-## OpenAI OAuth
+## Quick login
 
-OpenAI OAuth is the default provider path when credentials are available. First add an OAuth client ID to `~/.kward/config.json`:
+Inside an interactive session:
 
-```json
-{
-  "openai_oauth_client_id": "your-client-id"
-}
+```text
+/login
 ```
 
-Then run:
+Kward opens a provider picker and saves the selected credentials.
+
+From your shell, you can also run:
+
+```bash
+kward login              # OpenAI/ChatGPT OAuth
+kward login openrouter   # save an OpenRouter API key
+kward login github       # GitHub OAuth for experimental Copilot support
+```
+
+## OpenAI OAuth
+
+OpenAI OAuth is the default provider path when credentials are available. It uses your ChatGPT account and sends requests to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the OpenAI Platform API.
+
+To start the browser login from your shell:
 
 ```bash
 kward login
 ```
+
+In an interactive session, run `/login` and choose OpenAI.
 
 Complete the browser redirect flow. Tokens are saved to:
 
@@ -32,19 +48,27 @@ Complete the browser redirect flow. Tokens are saved to:
 
 The auth file is written with file mode `0600`.
 
-In an interactive session, run `/login` and choose OpenAI from the provider picker to start the same flow.
+OpenAI OAuth requires an OAuth client ID in `~/.kward/config.json`:
 
-OpenAI OAuth requests go to the ChatGPT/Codex backend (`chatgpt.com/backend-api/codex/responses`), not the OpenAI Platform API, so they use your ChatGPT account.
+```json
+{
+  "openai_oauth_client_id": "your-client-id"
+}
+```
+
+If it is missing, Kward tells you which config file to update.
 
 ## OpenRouter API key
 
-OpenRouter uses an API key rather than OAuth. To save it in `~/.kward/config.json`, run:
+OpenRouter uses an API key rather than OAuth. To save it from your shell:
 
 ```bash
 kward login openrouter
 ```
 
-In an interactive session, run `/login` and choose OpenRouter. You can also set `OPENROUTER_API_KEY` for a single run.
+In an interactive session, run `/login` and choose OpenRouter.
+
+Kward saves the key as `openrouter_api_key` in `~/.kward/config.json`. You can also set `OPENROUTER_API_KEY` for a single run without saving it.
 
 ## GitHub OAuth for Copilot provider support
 
