@@ -1,4 +1,4 @@
-require_relative "../tool_call"
+require_relative "../tools/tool_call"
 require_relative "tool_metadata"
 
 module Kward

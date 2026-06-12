@@ -1,5 +1,5 @@
 require "json"
-require_relative "chat_invocation"
+require_relative "model/chat_invocation"
 require_relative "config_files"
 require_relative "prompts"
 

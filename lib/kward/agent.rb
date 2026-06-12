@@ -1,12 +1,12 @@
 require_relative "cancellation"
-require_relative "chat_invocation"
+require_relative "model/chat_invocation"
 require_relative "compactor"
-require_relative "context_overflow"
+require_relative "model/context_overflow"
 require_relative "conversation"
 require_relative "events"
 require_relative "steering"
 require_relative "telemetry/logger"
-require_relative "tool_registry"
+require_relative "tools/registry"
 
 module Kward
   # Runs model turns, handles context compaction, dispatches tool calls, and

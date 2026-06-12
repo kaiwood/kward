@@ -1,5 +1,5 @@
 require "json"
-require_relative "message_access"
+require_relative "../message_access"
 
 module Kward
   class ContextUsage

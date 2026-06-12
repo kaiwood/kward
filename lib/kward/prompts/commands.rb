@@ -1,4 +1,4 @@
-require_relative "config_files"
+require_relative "../config_files"
 
 module Kward
   module PromptCommands

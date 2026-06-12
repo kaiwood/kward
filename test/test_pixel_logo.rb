@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/pixel_logo"
+require_relative "../lib/kward/resources/pixel_logo"
 require_relative "../lib/kward/resources/avatar_kward_logo"
 
 class TestPixelLogo < KwardTestCase

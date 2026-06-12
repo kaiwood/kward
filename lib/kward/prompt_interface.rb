@@ -4,7 +4,7 @@ require "tty-cursor"
 require "tty-reader"
 require "tty-screen"
 require_relative "ansi"
-require_relative "pixel_logo"
+require_relative "resources/pixel_logo"
 require_relative "resources/avatar_kward_logo"
 
 module Kward

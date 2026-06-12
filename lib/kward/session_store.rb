@@ -6,7 +6,7 @@ require_relative "config_files"
 require_relative "conversation"
 require_relative "message_access"
 require_relative "rpc/tool_event_normalizer"
-require_relative "tool_call"
+require_relative "tools/tool_call"
 require_relative "workspace"
 
 module Kward

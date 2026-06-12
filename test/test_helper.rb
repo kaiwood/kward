@@ -9,7 +9,7 @@ require_relative "../lib/kward/crew_reporter"
 require_relative "../lib/kward/cli"
 require_relative "../lib/kward/plugin_registry"
 require_relative "../lib/kward/prompt_interface"
-require_relative "../lib/kward/tool_registry"
+require_relative "../lib/kward/tools/registry"
 require_relative "../lib/kward/workspace"
 
 class KwardTestCase < Minitest::Test

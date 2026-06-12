@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/context_usage"
+require_relative "../lib/kward/model/context_usage"
 
 class TestContextUsage < KwardTestCase
   class CountingTokenCounter
