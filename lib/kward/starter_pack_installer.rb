@@ -13,7 +13,7 @@ module Kward
     VERSION = "v1.0.0"
     ARCHIVE_URL = "https://codeload.github.com/kaiwood/kward-starter-pack/tar.gz/refs/tags/#{VERSION}".freeze
     ALLOWED_FILES = ["AGENTS.md"].freeze
-    ALLOWED_PREFIXES = ["prompts/"].freeze
+    ALLOWED_PREFIXES = ["prompts/", "skills/"].freeze
     Result = Struct.new(:installed, :skipped, keyword_init: true)
 
     def self.install(**kwargs)

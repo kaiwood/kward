@@ -13,17 +13,19 @@ class TestStarterPackInstaller < KwardTestCase
         "kward-starter-pack-1.0.0/AGENTS.md" => "agents",
         "kward-starter-pack-1.0.0/prompts/plan.md" => "starter plan",
         "kward-starter-pack-1.0.0/prompts/research.md" => "research",
+        "kward-starter-pack-1.0.0/skills/testing-verification/SKILL.md" => "testing",
         "kward-starter-pack-1.0.0/README.md" => "readme",
         "kward-starter-pack-1.0.0/LICENSE" => "license"
       )
 
       result = Kward::StarterPackInstaller.new(config_dir: config_dir, downloader: ->(_url) { archive }).install
 
-      assert_equal ["AGENTS.md", "prompts/research.md"], result.installed.sort
+      assert_equal ["AGENTS.md", "prompts/research.md", "skills/testing-verification/SKILL.md"], result.installed.sort
       assert_equal ["prompts/plan.md"], result.skipped
       assert_equal "agents", File.read(File.join(config_dir, "AGENTS.md"))
       assert_equal "mine", File.read(existing)
       assert_equal "research", File.read(File.join(config_dir, "prompts", "research.md"))
+      assert_equal "testing", File.read(File.join(config_dir, "skills", "testing-verification", "SKILL.md"))
       refute_path_exists File.join(config_dir, "README.md")
       refute_path_exists File.join(config_dir, "LICENSE")
     end
