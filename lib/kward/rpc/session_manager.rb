@@ -406,6 +406,7 @@ module Kward
           defaultProvider: model[:provider],
           defaultModel: default_model_label(model),
           defaultThinkingLevel: model[:reasoningEffort],
+          activePersonaLabel: active_persona_label(rpc_session),
           hideThinkingBlock: false,
           quietStartup: false,
           transport: "kward-rpc",
@@ -552,6 +553,13 @@ module Kward
         return nil if model[:provider].to_s.empty? || model[:id].to_s.empty?
 
         "#{model[:provider]}/#{model[:id]}"
+      end
+
+      def active_persona_label(rpc_session)
+        ConfigFiles.active_persona_label(
+          workspace_root: rpc_session.workspace_root,
+          model: rpc_session.conversation.model
+        ) || "Assistant"
       end
 
       def streaming?(rpc_session)

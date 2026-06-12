@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Added the active persona label to RPC `runtime/state` responses.
 - Fixed cloned sessions to keep the current session name after renaming.
 
 ## 0.66.0 - 2026-06-12 - Codename: Order

@@ -16,29 +16,83 @@ class TestRPCSessionManagerRuntime < KwardTestCase
 
   def test_runtime_state_returns_session_and_model_info
     Dir.mktmpdir do |config_dir|
-      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
-      session = manager.create_session(workspace_root: Dir.pwd, name: "Work")
-      rpc_session = manager.send(:fetch_session, session[:id])
-      rpc_session.conversation.append_user("hello")
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({}))
 
-      state = manager.runtime_state(session_id: session[:id])
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+        session = manager.create_session(workspace_root: Dir.pwd, name: "Work")
+        rpc_session = manager.send(:fetch_session, session[:id])
+        rpc_session.conversation.append_user("hello")
 
-      assert_equal session[:path], state[:sessionFile]
-      assert_equal session[:persistentId], state[:sessionId]
-      assert_equal session[:id], state[:rpcSessionId]
-      assert_equal session[:persistentId], state[:persistentSessionId]
-      assert_equal "Work", state[:sessionName]
-      assert_equal "kward-rpc", state[:transport]
-      assert_equal false, state[:isStreaming]
-      assert_equal 1, state[:messageCount]
-      assert_equal 0, state[:pendingMessageCount]
-      assert_equal "Codex", state[:model][:provider]
-      assert_equal "fake-model", state[:model][:id]
-      assert_equal "fake-model", state[:model][:name]
-      assert_equal true, state[:model][:reasoning]
-      assert_equal 20_000, state[:autoCompactionReserveTokens]
-      assert_equal "medium", state[:thinkingLevel]
-      assert_equal "Codex/fake-model", state[:defaultModel]
+        state = manager.runtime_state(session_id: session[:id])
+
+        assert_equal session[:path], state[:sessionFile]
+        assert_equal session[:persistentId], state[:sessionId]
+        assert_equal session[:id], state[:rpcSessionId]
+        assert_equal session[:persistentId], state[:persistentSessionId]
+        assert_equal "Work", state[:sessionName]
+        assert_equal "kward-rpc", state[:transport]
+        assert_equal false, state[:isStreaming]
+        assert_equal 1, state[:messageCount]
+        assert_equal 0, state[:pendingMessageCount]
+        assert_equal "Codex", state[:model][:provider]
+        assert_equal "fake-model", state[:model][:id]
+        assert_equal "fake-model", state[:model][:name]
+        assert_equal true, state[:model][:reasoning]
+        assert_equal 20_000, state[:autoCompactionReserveTokens]
+        assert_equal "medium", state[:thinkingLevel]
+        assert_equal "Codex/fake-model", state[:defaultModel]
+        assert_equal "Assistant", state[:activePersonaLabel]
+      end
+    end
+  end
+
+  def test_runtime_state_returns_active_persona_label
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({
+        "personas" => {
+          "characters" => [
+            { "key" => "kward", "label" => "Kward", "instruction" => "Default persona." }
+          ],
+          "default" => "kward"
+        }
+      }))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+        session = manager.create_session(workspace_root: Dir.pwd)
+
+        state = manager.runtime_state(session_id: session[:id])
+
+        assert_equal "Kward", state[:activePersonaLabel]
+      end
+    end
+  end
+
+  def test_runtime_state_returns_model_specific_active_persona_label
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({
+        "personas" => {
+          "characters" => [
+            { "key" => "kward", "label" => "Kward", "instruction" => "Default persona." },
+            { "key" => "sam", "label" => "Samantha", "instruction" => "Model persona." }
+          ],
+          "default" => "kward",
+          "models" => { "fake-model" => "sam" }
+        }
+      }))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+        session = manager.create_session(workspace_root: Dir.pwd)
+
+        state = manager.runtime_state(session_id: session[:id])
+
+        assert_equal "Samantha", state[:activePersonaLabel]
+      end
     end
   end
 
