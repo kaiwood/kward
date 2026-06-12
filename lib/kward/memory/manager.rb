@@ -191,6 +191,10 @@ module Kward
         records.each do |item|
           next unless item["id"] == id && item["status"] != "forgotten"
 
+          item["text"] = "[forgotten]"
+          item["tags"] = []
+          item["confidence"] = 0.0
+          item["hits"] = 0
           item["status"] = "forgotten"
           item["updated_at"] = timestamp
           found = true
@@ -230,7 +234,9 @@ module Kward
         core = core_memories.select { |item| scopes.include?(item["scope"]) }.first(max_core)
         core_reasons = core.map { |item| reason_for(item, layer: "core", score: 1.0, reasons: ["scope match", "core memories are preferred"]) }
 
-        soft_scored = soft_memories.filter_map do |item|
+        soft_records_all = soft_memories(include_inactive: true)
+        soft_scored = soft_records_all.filter_map do |item|
+          next unless item["status"] == "active"
           next unless scopes.include?(item["scope"])
           next if expired?(item)
 
@@ -241,6 +247,7 @@ module Kward
         end
         soft = soft_scored.sort_by { |item, score, _reasons| [-score, -item["confidence"].to_f, item["id"].to_s] }.first(max_soft)
         soft_records = soft.map(&:first)
+        touch_soft_records(soft_records_all, soft_records)
         soft_reasons = soft.map { |item, score, reasons| reason_for(item, layer: "soft", score: score, reasons: reasons) }
 
         @last_retrieval = {
@@ -492,22 +499,42 @@ module Kward
       end
 
       def soft_score(item, terms)
-        score = item["confidence"].to_f
         reasons = ["scope match"]
         text_terms = terms_for(item["text"])
         overlap = terms & text_terms
+        tags = Array(item["tags"]).map(&:to_s)
+        tag_overlap = terms & tags
+        return [0, reasons] if overlap.empty? && tag_overlap.empty?
+
+        score = item["confidence"].to_f
         if overlap.any?
           score += [overlap.length * 0.15, 0.45].min
           reasons << "text overlap: #{overlap.first(5).join(", ")}"
         end
-        tags = Array(item["tags"]).map(&:to_s)
-        tag_overlap = terms & tags
         if tag_overlap.any?
           score += 0.25
           reasons << "tag overlap: #{tag_overlap.join(", ")}"
         end
         reasons << "confidence #{format("%.2f", item["confidence"].to_f)}"
         [score, reasons]
+      end
+
+      def touch_soft_records(all_records, selected_records)
+        ids = Set.new(selected_records.map { |item| item["id"] })
+        return if ids.empty?
+
+        now = timestamp
+        changed = false
+        all_records.each do |item|
+          next unless ids.include?(item["id"])
+          next unless item["status"] == "active"
+
+          item["hits"] = item["hits"].to_i + 1
+          item["last_seen_at"] = now
+          item["updated_at"] = now
+          changed = true
+        end
+        write_soft(all_records) if changed
       end
 
       def reason_for(item, layer:, score:, reasons:)
@@ -519,7 +546,7 @@ module Kward
         return false if ttl <= 0
 
         last_seen = Time.parse(item["last_seen_at"].to_s)
-        last_seen < Time.now.utc - (ttl * 86_400)
+        last_seen < (@now || Time.now.utc).utc - (ttl * 86_400)
       rescue StandardError
         false
       end

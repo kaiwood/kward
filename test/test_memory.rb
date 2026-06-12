@@ -76,6 +76,41 @@ class MemoryManagerTest < KwardTestCase
     assert_includes @manager.memory_block(retrieval), "Soft memories are contextual hints"
   end
 
+  def test_retrieval_requires_soft_memory_text_or_tag_overlap
+    @manager.enable
+    @manager.add_soft("User prefers minitest workflow", scope: "workspace:#{File.realpath(@dir)}", tags: ["workflow"])
+
+    retrieval = @manager.retrieve_relevant(input: "Please inspect authentication", workspace_root: @dir)
+
+    assert_empty retrieval["soft"]
+  end
+
+  def test_retrieval_updates_soft_memory_hits_and_last_seen_at
+    created_at = Time.utc(2024, 1, 1, 12, 0, 0)
+    manager = Kward::Memory::Manager.new(
+      config_path: File.join(@dir, "config.json"),
+      core_path: File.join(@dir, "memory", "core.json"),
+      soft_path: File.join(@dir, "memory", "soft.jsonl"),
+      events_path: File.join(@dir, "memory", "events.jsonl"),
+      now: created_at
+    )
+    manager.enable
+    soft = manager.add_soft("User prefers minitest workflow", scope: "workspace:#{File.realpath(@dir)}", tags: ["workflow"])
+
+    retrieval_manager = Kward::Memory::Manager.new(
+      config_path: File.join(@dir, "config.json"),
+      core_path: File.join(@dir, "memory", "core.json"),
+      soft_path: File.join(@dir, "memory", "soft.jsonl"),
+      events_path: File.join(@dir, "memory", "events.jsonl"),
+      now: created_at + 60
+    )
+    retrieval_manager.retrieve_relevant(input: "minitest coverage", workspace_root: @dir)
+
+    reloaded = retrieval_manager.list["soft"].find { |item| item["id"] == soft["id"] }
+    assert_equal 1, reloaded["hits"]
+    assert_equal (created_at + 60).utc.iso8601(3), reloaded["last_seen_at"]
+  end
+
   def test_promote_soft_to_core_forgets_soft_record
     soft = @manager.add_soft("Use Minitest for this project")
 
@@ -83,7 +118,21 @@ class MemoryManagerTest < KwardTestCase
 
     assert_equal "Use Minitest for this project", core["text"]
     assert_empty @manager.list["soft"]
-    assert_equal "forgotten", @manager.list(include_inactive: true)["soft"].first["status"]
+    forgotten = @manager.list(include_inactive: true)["soft"].first
+    assert_equal "forgotten", forgotten["status"]
+    assert_equal "[forgotten]", forgotten["text"]
+  end
+
+  def test_forget_soft_memory_redacts_stored_text_and_tags
+    soft = @manager.add_soft("The user prefers private details", tags: ["private"])
+
+    assert @manager.forget_memory(soft["id"])
+
+    forgotten = @manager.list(include_inactive: true)["soft"].first
+    assert_equal "forgotten", forgotten["status"]
+    assert_equal "[forgotten]", forgotten["text"]
+    assert_empty forgotten["tags"]
+    assert_equal 0.0, forgotten["confidence"]
   end
 
   def test_inferred_memory_requires_personal_or_explicit_memory_signal

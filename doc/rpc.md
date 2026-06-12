@@ -441,7 +441,7 @@ Params:
 
 - `id`: memory ID such as `core_001` or `soft_001`.
 
-Returns `{ "forgotten": true }` when a memory was removed or marked forgotten.
+Returns `{ "forgotten": true }` when a memory was removed or marked forgotten. Core memories are removed. Soft memories are marked inactive and their stored text, tags, confidence, and hit count are redacted.
 
 ### `memory/promote`
 

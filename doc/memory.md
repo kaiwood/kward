@@ -116,6 +116,8 @@ Forget a memory:
 /memory forget soft_001
 ```
 
+For core memories, forget removes the record. For soft memories, forget marks the record inactive and redacts its stored text, tags, confidence, and hit count so inactive audit metadata can remain without retaining the memory content.
+
 Promote a soft memory to a core memory:
 
 ```text
@@ -130,9 +132,9 @@ For each interactive turn, Kward selectively retrieves memories using:
 
 - scope: `global` and `workspace:<canonical path>`
 - core memories first
-- soft-memory text and tag overlap with the current input
+- soft-memory text or tag overlap with the current input; soft memories without overlap are not injected
 - soft-memory confidence
-- soft-memory recency/TTL
+- soft-memory recency/TTL, updated when a soft memory is retrieved
 - hard limits on injected memory count
 
 Retrieved memories are injected into the system prompt as a bounded block similar to:
@@ -163,7 +165,7 @@ Default files:
 ~/.kward/memory/events.jsonl
 ```
 
-`events.jsonl` records minimal audit events such as enable, disable, add, forget, promote, retrieve, and summarize. Audit events use IDs, scopes, tags, and timestamps rather than full memory text where practical.
+`events.jsonl` records minimal audit events such as enable, disable, add, forget, promote, retrieve, and summarize. Audit events use IDs, scopes, tags, and timestamps rather than full memory text where practical. Forgotten soft memories keep inactive metadata in `soft.jsonl`, but their stored text is replaced with `[forgotten]`.
 
 If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead of under `~/.kward`.
 
