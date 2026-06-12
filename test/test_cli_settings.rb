@@ -207,6 +207,27 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_reasoning_slash_command_persists_copilot_effort_for_copilot_provider
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "copilot", "openai_reasoning_effort" => "low"))
+      prompt = FakeSettingsPrompt.new(["/reasoning", "/exit"], ["High"])
+      client = FakeClient.new([])
+      client.provider = "Copilot"
+      client.reasoning_effort = "medium"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "high", config["copilot_reasoning_effort"]
+      assert_equal "low", config["openai_reasoning_effort"]
+    end
+  end
+
   def test_settings_slash_command_persists_overlay_settings
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

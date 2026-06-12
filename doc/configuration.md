@@ -11,7 +11,8 @@ Example:
   "openai_model": "gpt-5.5",
   "openai_reasoning_effort": "medium",
   "openrouter_model": "openai/gpt-5.5",
-  "copilot_model": "gpt-5-mini"
+  "copilot_model": "gpt-5-mini",
+  "copilot_reasoning_effort": "medium"
 }
 ```
 
@@ -58,11 +59,12 @@ Model settings:
   "reasoning_effort": "medium",
   "openai_reasoning_effort": "medium",
   "openrouter_reasoning_effort": "medium",
+  "copilot_reasoning_effort": "medium",
   "thinking_level": "medium"
 }
 ```
 
-`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `openai_reasoning_effort` and `openrouter_reasoning_effort` are provider-specific forms.
+`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `openai_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
 
 Defaults:
 
@@ -85,6 +87,7 @@ Provider and model:
 - `OPENROUTER_MODEL`
 - `OPENROUTER_REASONING_EFFORT`
 - `COPILOT_MODEL`
+- `COPILOT_REASONING_EFFORT`
 
 Credentials:
 

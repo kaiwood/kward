@@ -32,4 +32,20 @@ class TestModelInfo < KwardTestCase
     refute Kward::ModelInfo.supports_images?("OpenRouter", "openai/gpt-5.3-codex-spark")
     assert Kward::ModelInfo.supports_images?("Codex", "gpt-5.5")
   end
+
+  def test_reasoning_config_key_is_provider_specific
+    assert_equal "openai_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Codex")
+    assert_equal "openrouter_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("OpenRouter")
+    assert_equal "copilot_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Copilot")
+  end
+
+  def test_copilot_reasoning_effort_uses_copilot_config_and_env
+    config = {
+      "openai_reasoning_effort" => "low",
+      "copilot_reasoning_effort" => "high"
+    }
+
+    assert_equal "high", Kward::ModelInfo.reasoning_effort(config: config, provider: "Copilot", env: {})
+    assert_equal "xhigh", Kward::ModelInfo.reasoning_effort(config: config, provider: "Copilot", env: { "COPILOT_REASONING_EFFORT" => "xhigh" })
+  end
 end

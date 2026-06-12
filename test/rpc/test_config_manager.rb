@@ -108,6 +108,24 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_reasoning_rpc_set_persists_copilot_effort_for_copilot_provider
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "copilot", "copilot_model" => "gpt-5-mini", "openai_reasoning_effort" => "low"))
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "reasoning/set", params: { provider: "Copilot", effort: "high" } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "Copilot", messages[0]["result"]["provider"]
+      assert_equal "high", messages[0]["result"]["reasoningEffort"]
+      config = JSON.parse(File.read(config_path))
+      assert_equal "high", config["copilot_reasoning_effort"]
+      assert_equal "low", config["openai_reasoning_effort"]
+    end
+  end
+
   def test_runtime_model_update_refreshes_active_conversation_persona_and_session_runtime
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

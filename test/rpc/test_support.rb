@@ -181,7 +181,14 @@ module KwardRPCTestSupport
     end
 
     def current_reasoning_effort
-      config["openai_reasoning_effort"] || super
+      case current_provider
+      when "Copilot"
+        config["copilot_reasoning_effort"] || super
+      when "OpenRouter"
+        config["openrouter_reasoning_effort"] || super
+      else
+        config["openai_reasoning_effort"] || super
+      end
     end
 
     def reload_config

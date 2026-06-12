@@ -90,6 +90,8 @@ module Kward
       case provider.to_s
       when "OpenRouter"
         env["OPENROUTER_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openrouter_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+      when "Copilot"
+        env["COPILOT_REASONING_EFFORT"] || ConfigFiles.config_value(config, "copilot_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
       else
         env["OPENAI_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
       end
@@ -121,7 +123,11 @@ module Kward
     end
 
     def reasoning_config_key_for_provider(provider)
-      provider.to_s == "OpenRouter" ? "openrouter_reasoning_effort" : "openai_reasoning_effort"
+      case provider.to_s
+      when "OpenRouter" then "openrouter_reasoning_effort"
+      when "Copilot" then "copilot_reasoning_effort"
+      else "openai_reasoning_effort"
+      end
     end
 
     def config_provider_for_provider(provider)
