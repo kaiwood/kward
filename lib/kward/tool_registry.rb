@@ -1,5 +1,4 @@
 require_relative "config_files"
-require_relative "code_search"
 require_relative "tools/ask_user_question"
 require_relative "tools/code_search"
 require_relative "tools/edit_file"
@@ -9,8 +8,9 @@ require_relative "tools/read_skill"
 require_relative "tools/run_shell_command"
 require_relative "tools/web_search"
 require_relative "tools/write_file"
+require_relative "tools/search/code"
+require_relative "tools/search/web"
 require_relative "tool_call"
-require_relative "web_search"
 require_relative "workspace"
 
 module Kward
