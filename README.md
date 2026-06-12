@@ -12,15 +12,24 @@ Kward is being prepared for a RubyGems release. Once published, install it with:
 gem install kward
 ```
 
-Then start with one of these commands:
+Optionally install the starter pack after installation:
 
 ```bash
-kward login                    # sign in or save provider credentials
+kward --install-starter-pack
+```
+
+This downloads Kward's default prompts and base `AGENTS.md` into your config directory. It is useful for a first setup, but safe to skip if you prefer to create your own instructions. Existing files are left untouched.
+
+Then start Kward and sign in when needed:
+
+```bash
 kward                          # start an interactive chat
+/login                         # from inside Kward: sign in or save provider credentials
+kward login                    # from your shell: sign in or save provider credentials
 kward "Explain this project"   # run one prompt and exit
 ```
 
-OpenAI OAuth requires an `openai_oauth_client_id` in your config first. If you prefer OpenRouter, use `kward login openrouter` and paste an API key. See [Authentication](doc/authentication.md) for the details.
+See [Authentication](doc/authentication.md) for more details about sign-in options and provider credentials.
 
 ## Run from source
 
