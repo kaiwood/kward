@@ -1586,7 +1586,6 @@ module Kward
         last_flush: monotonic_now,
         stream_block_open: false,
         markdown_streams: {},
-        reasoning_seen: false,
         defer_assistant_streaming: defer_assistant_streaming?(agent)
       }
       markdown_chunks = []
@@ -1664,7 +1663,6 @@ module Kward
       case event
       when Events::ReasoningDelta
         stream_state[:streamed] = true
-        stream_state[:reasoning_seen] = true
         append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
       when Events::AssistantDelta
         stream_state[:streamed] = true
@@ -1696,7 +1694,7 @@ module Kward
       return unless monotonic_now - stream_state[:last_flush] >= STREAM_RENDER_INTERVAL
 
       chunks_to_flush = markdown_chunks
-      if stream_state[:defer_assistant_streaming] && !stream_state[:reasoning_seen]
+      if stream_state[:defer_assistant_streaming]
         chunks_to_flush, delayed_chunks = split_deferred_assistant_entries(markdown_chunks)
         return if chunks_to_flush.empty?
 
