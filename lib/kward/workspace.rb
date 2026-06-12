@@ -339,17 +339,39 @@ module Kward
       deadline = Time.now + timeout_seconds
       loop do
         cancellation&.raise_if_cancelled!
-        return wait_thread.value if wait_thread.join(0.05)
+        if wait_thread.join(0.05)
+          cancellation&.raise_if_cancelled!
+          return wait_thread.value
+        end
         raise Timeout::Error if Time.now >= deadline
       end
     end
 
     def terminate_process(pid)
-      Process.kill("TERM", pid)
-      sleep 0.2
-      Process.kill("KILL", pid)
+      return unless signal_process("TERM", pid)
+
+      deadline = Time.now + 0.2
+      while Time.now < deadline
+        return unless process_running?(pid)
+
+        sleep 0.02
+      end
+
+      signal_process("KILL", pid)
+    end
+
+    def process_running?(pid)
+      Process.kill(0, pid)
+      true
     rescue Errno::ESRCH
-      nil
+      false
+    end
+
+    def signal_process(signal, pid)
+      Process.kill(signal, pid)
+      true
+    rescue Errno::ESRCH
+      false
     end
   end
 end

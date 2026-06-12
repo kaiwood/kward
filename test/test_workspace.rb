@@ -1,4 +1,5 @@
 require_relative "test_helper"
+require_relative "../lib/kward/cancellation"
 
 class TestWorkspace < KwardTestCase
   def with_temp_workspace
@@ -255,6 +256,25 @@ class TestWorkspace < KwardTestCase
     output = Kward::Workspace.new.run_shell_command("ruby -e 'sleep 2'", timeout_seconds: 1)
 
     assert_equal "Error: command timed out after 1 seconds", output
+  end
+
+  def test_run_shell_command_cancelled_raises_cancellation
+    cancellation = Kward::Cancellation.new
+    error = nil
+    worker = Thread.new do
+      Kward::Workspace.new.run_shell_command("ruby -e 'sleep 10'", cancellation: cancellation)
+    rescue StandardError => e
+      error = e
+    end
+
+    sleep 0.1
+    cancellation.cancel!
+    worker.join(2)
+
+    refute worker.alive?, "expected cancelled command to finish"
+    assert_instance_of Kward::Cancellation::CancelledError, error
+  ensure
+    worker&.kill if worker&.alive?
   end
 
 end
