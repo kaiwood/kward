@@ -89,7 +89,7 @@ The v1 inference is conservative and heuristic-based, with optional model-based 
 
 ### Session memories
 
-Session memories are temporary working memory for the current conversation. They are stored with the session JSONL file so resuming a session can restore them, but they are not automatically promoted into core memories.
+Session memories record memories learned during the current conversation so Kward can avoid learning the same item again when summarizing or resuming the session. They are stored with the session JSONL file, but they are not injected into the prompt as a separate memory layer and are not automatically promoted into core memories.
 
 ## Inspect, explain, and remove memory
 
