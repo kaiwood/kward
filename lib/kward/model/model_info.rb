@@ -107,25 +107,25 @@ module Kward
     end
 
     def provider_config_value(provider)
-      case provider.to_s
-      when "OpenRouter" then "openrouter"
-      when "Copilot" then "copilot"
+      case provider.to_s.downcase
+      when "openrouter" then "openrouter"
+      when "copilot" then "copilot"
       else "codex"
       end
     end
 
     def config_key_for_provider(provider)
-      case provider.to_s
-      when "OpenRouter" then "openrouter_model"
-      when "Copilot" then "copilot_model"
+      case provider.to_s.downcase
+      when "openrouter" then "openrouter_model"
+      when "copilot" then "copilot_model"
       else "openai_model"
       end
     end
 
     def reasoning_config_key_for_provider(provider)
-      case provider.to_s
-      when "OpenRouter" then "openrouter_reasoning_effort"
-      when "Copilot" then "copilot_reasoning_effort"
+      case provider.to_s.downcase
+      when "openrouter" then "openrouter_reasoning_effort"
+      when "copilot" then "copilot_reasoning_effort"
       else "openai_reasoning_effort"
       end
     end

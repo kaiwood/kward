@@ -72,6 +72,24 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_model_rpc_set_accepts_lowercase_provider_id
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "models/set", params: { provider: "openrouter", model: "anthropic/claude-sonnet-4.5" } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "OpenRouter", messages[0]["result"]["provider"]
+      assert_equal "anthropic/claude-sonnet-4.5", messages[0]["result"]["id"]
+      config = JSON.parse(File.read(config_path))
+      assert_equal "openrouter", config["provider"]
+      assert_equal "anthropic/claude-sonnet-4.5", config["openrouter_model"]
+      refute config.key?("openai_model")
+    end
+  end
+
   def test_model_rpc_set_switches_to_selected_copilot_provider_model
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
