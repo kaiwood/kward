@@ -16,7 +16,17 @@ class TestConfigFiles < KwardTestCase
       assert_equal ["kward"], personas.fetch("characters").map { |entry| entry["key"] }
       assert_equal "Kward", personas.dig("characters", 0, "label")
       assert_includes personas.dig("characters", 0, "instruction"), "grim Andruid"
+      assert_equal false, config.dig("memory", "enabled")
+      assert_equal false, config.dig("memory", "auto_summary")
+      assert_equal true, config.dig("composer", "busy_help")
       refute config.key?("provider")
+      refute config.key?("model")
+      refute config.key?("openai_model")
+      refute config.key?("openai_reasoning_effort")
+      refute config.key?("openrouter_model")
+      refute config.key?("openrouter_reasoning_effort")
+      refute config.key?("copilot_model")
+      refute config.key?("copilot_reasoning_effort")
       refute config.key?("openai_oauth_client_id")
       refute config.key?("openrouter_api_key")
     end

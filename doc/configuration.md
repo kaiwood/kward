@@ -2,7 +2,7 @@
 
 Kward reads user configuration from `~/.kward/config.json` by default. Most users do not need to edit this file by hand at first: use `/login`, `/model`, `/reasoning`, and `/settings` from inside Kward when possible.
 
-On first start, if the file does not exist, Kward creates a starter config with the current runtime defaults and an active Kward persona so you can inspect and edit them. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
+On first start, if the file does not exist, Kward creates a starter config with an active Kward persona, explicit disabled memory settings, and the default composer busy-help setting so you can inspect and edit them. Provider-specific model defaults are added only when you choose a provider/model. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
 
 Small examples:
 

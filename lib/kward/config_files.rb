@@ -55,16 +55,15 @@ module Kward
     end
 
     def default_config
-      require_relative "model/model_info"
-
       {
-        "openai_model" => ModelInfo::DEFAULT_OPENAI_MODEL,
-        "openai_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
-        "openrouter_model" => ModelInfo::DEFAULT_OPENROUTER_MODEL,
-        "openrouter_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
-        "copilot_model" => ModelInfo::DEFAULT_COPILOT_MODEL,
-        "copilot_reasoning_effort" => ModelInfo::DEFAULT_REASONING_EFFORT,
-        "personas" => JSON.parse(JSON.generate(DEFAULT_PERSONAS))
+        "personas" => JSON.parse(JSON.generate(DEFAULT_PERSONAS)),
+        "memory" => {
+          "enabled" => false,
+          "auto_summary" => false
+        },
+        "composer" => {
+          "busy_help" => true
+        }
       }
     end
 
