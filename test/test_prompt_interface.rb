@@ -495,6 +495,25 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_is_modal_while_active
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    selected = nil
+    thread = Thread.new { selected = prompt.select("Session>", ["first", "second"]) }
+    wait_until { prompt.modal_active? }
+
+    writer.write("\r")
+    writer.close
+    thread.join(1)
+
+    assert_equal "first", selected
+    refute prompt.modal_active?
+  ensure
+    thread&.kill if thread&.alive?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_filters_choices
     input, writer = IO.pipe
     output = StringIO.new

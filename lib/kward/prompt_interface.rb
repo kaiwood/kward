@@ -301,7 +301,7 @@ module Kward
     end
 
     def modal_active?
-      @mutex.synchronize { !@question_state.nil? }
+      @mutex.synchronize { !@question_state.nil? || !@select_state.nil? }
     end
 
     def update_overlay_settings(settings)
