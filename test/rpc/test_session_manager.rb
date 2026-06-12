@@ -227,6 +227,29 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_rpc_plugin_footer_notifications_include_session_text
+    Dir.mktmpdir do |config_dir|
+      registry = Kward::PluginRegistry.new
+      registry.evaluate do |plugin|
+        plugin.footer do |ctx|
+          "#{ctx.session_name || "unnamed"} #{ctx.transcript.messages.length} messages"
+        end
+      end
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
+      manager.instance_variable_set(:@plugin_registry, registry)
+
+      session = manager.create_session(workspace_root: Dir.pwd, name: "Bridge")
+      create_footer = manager.instance_variable_get(:@server).notifications.find { |notification| notification[:method] == "ui/footer" }
+      assert_equal({ sessionId: session[:id], text: "Bridge 1 messages" }, create_footer[:params])
+
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      footer_notifications = manager.instance_variable_get(:@server).notifications.select { |notification| notification[:method] == "ui/footer" }
+      assert_equal({ sessionId: session[:id], text: "Bridge 3 messages" }, footer_notifications.last[:params])
+    end
+  end
+
   def test_session_close_deletes_empty_unnamed_session
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

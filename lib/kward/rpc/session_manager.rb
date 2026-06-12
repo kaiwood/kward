@@ -58,6 +58,7 @@ module Kward
         rpc_session = build_rpc_session(store, session, conversation, workspace_root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
+        emit_footer_update(rpc_session)
         session_payload(rpc_session)
       end
 
@@ -76,6 +77,7 @@ module Kward
         rpc_session = build_rpc_session(store, session, conversation, root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
+        emit_footer_update(rpc_session)
         session_payload(rpc_session)
       end
 
@@ -101,6 +103,7 @@ module Kward
         rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
+        emit_footer_update(rpc_session)
         session_payload(rpc_session)
       end
 
@@ -1002,6 +1005,28 @@ module Kward
         turn.status = status
         turn.finished_at = now
         emit_turn_event(turn, "turnFinished", { status: status, error: turn.error })
+        rpc_session = @mutex.synchronize { @sessions[turn.session_id] }
+        emit_footer_update(rpc_session) if rpc_session
+      end
+
+      def emit_footer_update(rpc_session)
+        renderer = plugin_registry.footer_renderer
+        return unless renderer
+
+        text = begin
+          context = PluginRegistry::Context.new(
+            conversation: rpc_session.conversation,
+            session: rpc_session.session,
+            workspace_root: rpc_session.workspace_root,
+            say_callback: lambda { |message| rpc_session.plugin_output << message.to_s }
+          )
+          renderer.call(context).to_s.gsub(/\s+/, " ").strip
+        rescue StandardError => e
+          warn "Warning: Kward plugin footer error: #{e.message}"
+          ""
+        end
+
+        @server.notify("ui/footer", { sessionId: rpc_session.id, text: text })
       end
 
       def emit_turn_event(turn, type, payload)

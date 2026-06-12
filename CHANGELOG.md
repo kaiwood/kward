@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Added RPC `ui/footer` notifications for Kward plugin footers.
 - Fixed RPC model selection to accept lowercase provider IDs from UI clients.
 - Added `!` shell commands in the interactive CLI composer.
 - Added the active persona label to RPC `runtime/state` responses.

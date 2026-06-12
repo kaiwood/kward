@@ -111,7 +111,10 @@ class TestRPCServer < KwardTestCase
       "input" => false,
       "editor" => false,
       "widgets" => false,
-      "footer" => false,
+      "footer" => {
+        "supported" => true,
+        "notification" => "ui/footer"
+      },
       "custom" => false,
       "terminalInput" => false
     }, capabilities["extensionUi"])
@@ -224,11 +227,11 @@ class TestRPCServer < KwardTestCase
     server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 2, "method" => "turns/start", "params" => { "sessionId" => session[:id], "input" => "large", "attachments" => [{ "type" => "image", "data" => "YQ==", "mimeType" => "image/png", "sizeBytes" => Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES + 1 }] } })
     server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 3, "method" => "turns/start", "params" => { "sessionId" => session[:id], "input" => "steer", "streamingBehavior" => "steer" } })
 
-    messages = read_framed_messages(output)
-    assert_equal [-32_602, -32_602, -32_602], messages.map { |message| message["error"]["code"] }
-    assert_equal "Unsupported image MIME type: image/svg+xml", messages[0]["error"]["message"]
-    assert_equal "Image attachment is too large", messages[1]["error"]["message"]
-    assert_equal "Unsupported streamingBehavior: steer", messages[2]["error"]["message"]
+    errors = read_framed_messages(output).select { |message| message["error"] }
+    assert_equal [-32_602, -32_602, -32_602], errors.map { |message| message["error"]["code"] }
+    assert_equal "Unsupported image MIME type: image/svg+xml", errors[0]["error"]["message"]
+    assert_equal "Image attachment is too large", errors[1]["error"]["message"]
+    assert_equal "Unsupported streamingBehavior: steer", errors[2]["error"]["message"]
   end
 
   def test_commands_list_and_startup_resources_return_prompts_and_skills
@@ -341,7 +344,7 @@ class TestRPCServer < KwardTestCase
         { jsonrpc: "2.0", id: 1, method: "sessions/create", params: { workspaceRoot: workspace_root } },
         { jsonrpc: "2.0", id: 2, method: "shutdown" }
       ], env: { "KWARD_CONFIG_PATH" => config_path })
-      session_path = messages[0]["result"]["path"]
+      session_path = messages.find { |message| message["id"] == 1 }["result"]["path"]
 
       refute_path_exists session_path
     ensure

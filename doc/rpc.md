@@ -63,7 +63,7 @@ Detailed capability fields include:
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
-- `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`; other UI primitives are explicitly unsupported.
+- `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
 - `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
@@ -315,7 +315,7 @@ Examples:
 
 ## UI question bridge
 
-Kward's only supported extension-style UI surface is the structured question bridge. The `extensionUi` capability reports `question.supported: true` with `notification: "ui/question"`, `method: "ui/answerQuestion"`, `maxQuestions: 4`, `multiSelect: false`, and `preview: false`. Other Pi-style extension UI primitives (`select`, `confirm`, `input`, `editor`, `widgets`, `footer`, `custom`, and `terminalInput`) are explicitly reported as unsupported until Kward has a real plugin/extension consumer for them.
+Kward supports the structured question bridge and plugin footer updates over RPC. The `extensionUi` capability reports `question.supported: true` with `notification: "ui/question"`, `method: "ui/answerQuestion"`, `maxQuestions: 4`, `multiSelect: false`, and `preview: false`. It also reports `footer.supported: true` with `notification: "ui/footer"`. Other Pi-style extension UI primitives (`select`, `confirm`, `input`, `editor`, `widgets`, `custom`, and `terminalInput`) are explicitly reported as unsupported until Kward has a real plugin/extension consumer for them.
 
 Question requests are validated before notification. Kward accepts 1-4 questions, each with 2-4 options, and rejects unsupported `multiSelect` or option `preview` requests.
 
@@ -328,6 +328,17 @@ When the model calls `ask_user_question`, RPC emits a `ui/question` notification
   "questions": []
 }
 ```
+
+When a loaded Kward plugin registers a footer, RPC emits `ui/footer` after session creation/resume/clone and after each completed turn:
+
+```json
+{
+  "sessionId": "...",
+  "text": "custom footer text"
+}
+```
+
+An empty `text` value clears the client footer.
 
 The UI must respond with `ui/answerQuestion`:
 

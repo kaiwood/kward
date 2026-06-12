@@ -365,7 +365,7 @@ module Kward
             input: false,
             editor: false,
             widgets: false,
-            footer: false,
+            footer: { supported: true, notification: "ui/footer" },
             custom: false,
             terminalInput: false
           },
