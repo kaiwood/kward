@@ -197,7 +197,7 @@ Future messages in the fork append only to the fork file; the source session rem
 Params:
 
 - `sessionId`
-- `path`: optional output path.
+- `path`: optional output path. Explicit paths are resolved relative to the session workspace and must stay inside the workspace or Kward session directory.
 - `format`: optional export format, `markdown` or `html`; defaults to `markdown`. `md` is accepted as an alias for `markdown`.
 
 Exports the transcript. Markdown preserves the previous default behavior. HTML is a minimal escaped `<pre>` transcript wrapper.

@@ -1003,7 +1003,7 @@ class TestCLI < KwardTestCase
   def test_session_commands_name_clone_and_export
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
-      export_path = File.join(config_dir, "session.md")
+      export_path = File.join(store.session_dir, "session.md")
       prompt = FakePrompt.new(["hello", "/name Useful", "/clone", "/export #{export_path}", "/exit"])
       client = RecordingClient.new(["reply"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
@@ -1024,15 +1024,27 @@ class TestCLI < KwardTestCase
   end
 
   def test_export_renders_compaction_summary_content
+    export_path = File.join(Dir.pwd, "tmp-cli-export.md")
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.compact!("summary content", compaction_summary: true)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+
+    cli.send(:export_session, conversation, export_path)
+
+    assert_includes File.read(export_path), "## Compactionsummary\n\nsummary content"
+  ensure
+    File.delete(export_path) if export_path && File.exist?(export_path)
+  end
+
+  def test_export_rejects_explicit_path_outside_workspace_or_session_directory
     Dir.mktmpdir do |config_dir|
-      export_path = File.join(config_dir, "session.md")
-      conversation = Kward::Conversation.new(system_message: nil)
-      conversation.compact!("summary content", compaction_summary: true)
-      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      outside_path = File.join(Dir.mktmpdir, "session.md")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]), session_store: store)
 
-      cli.send(:export_session, conversation, export_path)
-
-      assert_includes File.read(export_path), "## Compactionsummary\n\nsummary content"
+      assert_raises(ArgumentError) { cli.send(:export_path, outside_path) }
+    ensure
+      FileUtils.remove_entry(File.dirname(outside_path)) if outside_path && File.exist?(File.dirname(outside_path))
     end
   end
 

@@ -42,6 +42,22 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_session_export_rejects_path_outside_workspace_or_session_directory
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      outside_dir = Dir.mktmpdir
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+
+      assert_raises(ArgumentError) do
+        manager.export_session(session_id: session[:id], path: File.join(outside_dir, "session.md"))
+      end
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+      FileUtils.remove_entry(outside_dir) if outside_dir && File.exist?(outside_dir)
+    end
+  end
+
   def test_session_list_returns_rpc_metadata_message_counts_and_newest_first
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

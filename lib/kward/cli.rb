@@ -11,6 +11,7 @@ require_relative "clipboard"
 require_relative "context_usage"
 require_relative "crew_reporter"
 require_relative "events"
+require_relative "export_path"
 require_relative "auth/github_oauth"
 require_relative "auth/openrouter_api_key"
 require_relative "image_attachments"
@@ -1351,14 +1352,14 @@ module Kward
     end
 
     def export_path(argument)
-      explicit = argument.to_s.strip
-      return File.expand_path(explicit, Dir.pwd) unless explicit.empty?
+      default_path = if @active_session
+                       @active_session.path.sub(/\.jsonl\z/, ".md")
+                     else
+                       File.expand_path("kward-session-#{Time.now.utc.iso8601(3).tr(':', '-')}.md", Dir.pwd)
+                     end
+      session_dir = @session_store&.session_dir || (@active_session && File.dirname(@active_session.path))
 
-      if @active_session
-        return @active_session.path.sub(/\.jsonl\z/, ".md")
-      end
-
-      File.expand_path("kward-session-#{Time.now.utc.iso8601(3).tr(':', '-')}.md", Dir.pwd)
+      ExportPath.resolve(argument, workspace_root: Dir.pwd, default_path: default_path, session_dir: session_dir)
     end
 
     def markdown_transcript(conversation)

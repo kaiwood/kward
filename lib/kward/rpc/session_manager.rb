@@ -12,6 +12,7 @@ require_relative "../context_usage"
 require_relative "../conversation"
 require_relative "../crew_reporter"
 require_relative "../events"
+require_relative "../export_path"
 require_relative "../markdown_transcript"
 require_relative "../memory/manager"
 require_relative "../message_access"
@@ -1075,11 +1076,9 @@ module Kward
       end
 
       def export_path(rpc_session, path, format)
-        explicit = path.to_s.strip
-        return File.expand_path(explicit, rpc_session.workspace_root) unless explicit.empty?
-
         extension = format == "html" ? ".html" : ".md"
-        rpc_session.session.path.sub(/\.jsonl\z/, extension)
+        default_path = rpc_session.session.path.sub(/\.jsonl\z/, extension)
+        ExportPath.resolve(path, workspace_root: rpc_session.workspace_root, default_path: default_path, session_dir: rpc_session.store.session_dir)
       end
 
       def export_format(format)
