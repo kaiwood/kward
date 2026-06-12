@@ -250,6 +250,37 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_rpc_plugin_footer_refreshes_on_interval
+    original_interval = Kward::RPC::SessionManager::FOOTER_REFRESH_INTERVAL
+    Kward::RPC::SessionManager.send(:remove_const, :FOOTER_REFRESH_INTERVAL)
+    Kward::RPC::SessionManager.const_set(:FOOTER_REFRESH_INTERVAL, 0.01)
+
+    Dir.mktmpdir do |config_dir|
+      count = 0
+      registry = Kward::PluginRegistry.new
+      registry.evaluate do |plugin|
+        plugin.footer do |_ctx|
+          count += 1
+          "tick #{count}"
+        end
+      end
+      server = RecordingServer.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: FakeClient.new([]), config_dir: config_dir)
+      manager.instance_variable_set(:@plugin_registry, registry)
+
+      session = manager.create_session(workspace_root: Dir.pwd)
+      wait_until { server.notifications.count { |notification| notification[:method] == "ui/footer" } >= 2 }
+
+      footer_notifications = server.notifications.select { |notification| notification[:method] == "ui/footer" }
+      assert_equal({ sessionId: session[:id], text: "tick 1" }, footer_notifications.first[:params])
+      assert_equal({ sessionId: session[:id], text: "tick 2" }, footer_notifications[1][:params])
+      manager.close_session(session_id: session[:id])
+    end
+  ensure
+    Kward::RPC::SessionManager.send(:remove_const, :FOOTER_REFRESH_INTERVAL)
+    Kward::RPC::SessionManager.const_set(:FOOTER_REFRESH_INTERVAL, original_interval)
+  end
+
   def test_session_close_deletes_empty_unnamed_session
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

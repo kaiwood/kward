@@ -33,9 +33,10 @@ module Kward
       RPC_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
       RPC_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
+      FOOTER_REFRESH_INTERVAL = 1.0
       WORKER_STOP = Object.new.freeze
 
-      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, keyword_init: true)
+      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
 
       def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
@@ -804,6 +805,7 @@ module Kward
 
       def remember_session(rpc_session)
         @mutex.synchronize { @sessions[rpc_session.id] = rpc_session }
+        start_footer_worker(rpc_session)
       end
 
       def fetch_session(session_id)
@@ -823,6 +825,7 @@ module Kward
       def close_rpc_session(rpc_session)
         @mutex.synchronize { @sessions.delete(rpc_session.id) }
         stop_worker(rpc_session)
+        stop_footer_worker(rpc_session)
         rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
       end
 
@@ -837,6 +840,7 @@ module Kward
 
           @mutex.synchronize { @sessions.delete(rpc_session.id) }
           stop_worker(rpc_session)
+          stop_footer_worker(rpc_session)
         end
       end
 
@@ -846,6 +850,34 @@ module Kward
         return if worker == Thread.current
 
         rpc_session.queue << WORKER_STOP
+      end
+
+      def start_footer_worker(rpc_session)
+        return unless plugin_registry.footer_renderer
+        return if rpc_session.footer_worker&.alive?
+
+        rpc_session.footer_worker = Thread.new do
+          loop do
+            sleep FOOTER_REFRESH_INTERVAL
+            break unless @mutex.synchronize { @sessions[rpc_session.id] == rpc_session }
+
+            emit_footer_update(rpc_session)
+          end
+        rescue StandardError => e
+          @server.log_error(e)
+        ensure
+          rpc_session.footer_worker = nil if rpc_session.footer_worker == Thread.current
+        end
+      end
+
+      def stop_footer_worker(rpc_session)
+        worker = rpc_session.footer_worker
+        rpc_session.footer_worker = nil
+        return unless worker&.alive?
+        return if worker == Thread.current
+
+        worker.kill
+        worker.join(0.1)
       end
 
       def worker_loop(rpc_session)
@@ -1025,7 +1057,9 @@ module Kward
           warn "Warning: Kward plugin footer error: #{e.message}"
           ""
         end
+        return if rpc_session.last_footer_text == text
 
+        rpc_session.last_footer_text = text
         @server.notify("ui/footer", { sessionId: rpc_session.id, text: text })
       end
 
