@@ -15,8 +15,8 @@ require_relative "export_path"
 require_relative "auth/github_oauth"
 require_relative "auth/openrouter_api_key"
 require_relative "image_attachments"
-require_relative "markdown_transcript"
 require_relative "memory/manager"
+require_relative "transcript_export"
 require_relative "message_access"
 require_relative "model/model_info"
 require_relative "auth/openai_oauth"
@@ -1356,7 +1356,7 @@ module Kward
     end
 
     def markdown_transcript(conversation)
-      MarkdownTranscript.new(conversation).render
+      TranscriptExport.content(conversation)
     end
 
     def setup_interactive_prompt

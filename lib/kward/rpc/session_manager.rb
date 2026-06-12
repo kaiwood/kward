@@ -1,5 +1,4 @@
 require "base64"
-require "cgi"
 require "securerandom"
 require "thread"
 require "time"
@@ -13,7 +12,6 @@ require_relative "../conversation"
 require_relative "../crew_reporter"
 require_relative "../events"
 require_relative "../export_path"
-require_relative "../markdown_transcript"
 require_relative "../memory/manager"
 require_relative "../message_access"
 require_relative "../model/model_info"
@@ -23,6 +21,7 @@ require_relative "../session_store"
 require_relative "../steering"
 require_relative "../tool_call"
 require_relative "../tool_registry"
+require_relative "../transcript_export"
 require_relative "../workspace"
 require_relative "prompt_bridge"
 require_relative "tool_event_normalizer"
@@ -1075,34 +1074,11 @@ module Kward
       end
 
       def export_format(format)
-        value = format.to_s.strip.downcase
-        value = "markdown" if value.empty? || value == "md"
-        raise "Unsupported export format: #{format}" unless ["markdown", "html"].include?(value)
-
-        value
+        TranscriptExport.format(format)
       end
 
       def export_content(conversation, format)
-        markdown = MarkdownTranscript.new(conversation).render
-        return markdown if format == "markdown"
-
-        html_transcript(markdown)
-      end
-
-      def html_transcript(markdown)
-        escaped = CGI.escapeHTML(markdown)
-        <<~HTML
-          <!doctype html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Kward Session</title>
-          </head>
-          <body>
-          <pre>#{escaped}</pre>
-          </body>
-          </html>
-        HTML
+        TranscriptExport.content(conversation, format: format)
       end
 
       def normalized_tool_event_payload(tool_call)
