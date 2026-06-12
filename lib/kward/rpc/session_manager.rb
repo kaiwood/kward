@@ -9,7 +9,6 @@ require_relative "../compactor"
 require_relative "../config_files"
 require_relative "../model/context_usage"
 require_relative "../conversation"
-require_relative "../crew_reporter"
 require_relative "../events"
 require_relative "../export_path"
 require_relative "../memory/manager"
@@ -261,7 +260,7 @@ module Kward
 
       def run_command(session_id:, command:, arguments: "")
         name = command.to_s.delete_prefix("/")
-        return run_crew_command(session_id: session_id, arguments: arguments) if name == "crew"
+        return { ok: false, error: "unsupported", reason: "notImplemented" } if name == "crew"
         return { ok: false, error: "unsupported", reason: "clientClipboardOwnedByUi" } if name == "copy"
 
         run_plugin_command(session_id: session_id, command: name, arguments: arguments)
@@ -333,18 +332,6 @@ module Kward
         records = memory_manager.summarize_conversation(rpc_session.conversation, client: @client)
         persist_memory_state(rpc_session)
         { memories: records }
-      end
-
-      def run_crew_command(session_id:, arguments: "")
-        rpc_session = fetch_session(session_id)
-        report = CrewReporter.new(
-          client: @client,
-          workspace_root: rpc_session.workspace_root,
-          model: current_model_id,
-          reasoning_effort: current_reasoning_effort,
-          config: ConfigFiles.read_config
-        ).report(instructions: arguments.to_s)
-        { command: "crew", output: [report.output], result: report.output, personas: report.personas || [], status: report.status.to_s }
       end
 
       def run_plugin_command(session_id:, command:, arguments: "")

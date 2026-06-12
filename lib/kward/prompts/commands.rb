@@ -20,7 +20,7 @@ module Kward
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
-      { name: "crew", description: "Query all active personas and summarize the crew.", argument_hint: "" },
+      { name: "crew", description: "Reserved for future crew commands.", argument_hint: "" },
       { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|inspect|why|summarize]" }
     ].freeze
     BUILTIN_RESERVED_COMMAND_NAMES = BUILTIN_COMMANDS.map { |command| command[:name] }.freeze

@@ -13,9 +13,9 @@ class TestConfigFiles < KwardTestCase
       personas = config.fetch("personas")
       assert_equal "kward", personas["default"]
       assert_equal ["characters", "default"], personas.keys
-      assert_equal ["kward"], personas.fetch("characters").keys
-      assert_equal "Kward", personas.dig("characters", "kward", "label")
-      assert_includes personas.dig("characters", "kward", "instruction"), "grim Andruid"
+      assert_equal ["kward"], personas.fetch("characters").map { |entry| entry["key"] }
+      assert_equal "Kward", personas.dig("characters", 0, "label")
+      assert_includes personas.dig("characters", 0, "instruction"), "grim Andruid"
       refute config.key?("provider")
       refute config.key?("openai_oauth_client_id")
       refute config.key?("openrouter_api_key")

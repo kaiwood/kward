@@ -9,7 +9,6 @@ require_relative "compactor"
 require_relative "config_files"
 require_relative "clipboard"
 require_relative "model/context_usage"
-require_relative "crew_reporter"
 require_relative "events"
 require_relative "export_path"
 require_relative "auth/github_oauth"
@@ -397,7 +396,7 @@ module Kward
         run_busy_local_command_and_requeue { print_stats(argument) }
         [true, nil]
       when "crew"
-        run_busy_local_command_and_requeue { report_crew(argument) }
+        @prompt.say("\nThe /crew command is not implemented yet.\n")
         [true, nil]
       when "memory"
         activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
@@ -498,12 +497,6 @@ module Kward
       @prompt.say("\n#{message}\n")
     end
 
-    def report_crew(argument = nil)
-      render_crew_report(argument)
-    rescue StandardError => e
-      @prompt.say("\nCrew command failed: #{e.message}\n")
-    end
-
     def handle_memory_command(argument, agent)
       subcommand, rest = argument.to_s.strip.split(/\s+/, 2)
       manager = Memory::Manager.new
@@ -586,15 +579,6 @@ module Kward
       (["Memory retrieval reasons:"] + reasons.map { |item| "- #{item["id"]} (#{item["layer"]}, score #{item["score"]}): #{Array(item["reasons"]).join("; ")}" }).join("\n")
     end
 
-    def render_crew_report(argument = nil)
-      result = crew_report(argument)
-      if result.success?
-        render_transcript_block("Crew", result.summary)
-      else
-        @prompt.say("\n#{result.message}\n")
-      end
-    end
-
     def run_busy_local_command(activity: "loading")
       return yield unless prompt_interface?
 
@@ -628,15 +612,6 @@ module Kward
       result, queued_inputs = run_busy_local_command(activity: activity) { yield }
       queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
       result
-    end
-
-    def crew_report(argument = nil)
-      CrewReporter.new(
-        client: @client,
-        workspace_root: current_workspace_root,
-        model: current_model_id,
-        reasoning_effort: current_reasoning_effort
-      ).report(instructions: argument.to_s)
     end
 
     def current_workspace_root

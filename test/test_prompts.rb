@@ -191,6 +191,23 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_characters_alias_resolves_persona_text_and_label
+    config = {
+      "personas" => {
+        "characters" => {
+          "kward" => {
+            "label" => "Kward",
+            "instruction" => "Default persona."
+          }
+        },
+        "default" => "kward"
+      }
+    }
+
+    assert_equal "Default persona.", Kward::ConfigFiles.persona_prompt(Dir.pwd, config: config)
+    assert_equal "Kward", Kward::ConfigFiles.active_persona_label(workspace_root: Dir.pwd, config: config)
+  end
+
   def test_active_persona_label_falls_back_when_no_label_is_found
     config = {
       "personas" => {

@@ -13,12 +13,13 @@ module Kward
     MAX_PROMPT_FILE_BYTES = 32 * 1024
     DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "maximum" }.freeze
     DEFAULT_PERSONAS = {
-      "characters" => {
-        "kward" => {
+      "characters" => [
+        {
+          "key" => "kward",
           "label" => "Kward",
           "instruction" => "Your name is Kward, the grim Andruid - robotic keeper of the Forrest of Code, protecting the nature of good engineering priciples. Speak like an old druid, be suspicous of everyone, but with a good intend."
         }
-      },
+      ],
       "default" => "kward"
     }.freeze
     OVERLAY_ALIGNMENTS = %w[left center right].freeze

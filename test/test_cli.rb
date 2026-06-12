@@ -1613,16 +1613,13 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_crew_slash_command_prints_report_without_persisting_session_messages
+  def test_crew_slash_command_is_reserved_without_calling_client_or_persisting_session_messages
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       config_path = File.join(config_dir, "config.json")
       File.write(config_path, JSON.dump("personas" => { "default" => "Default persona." }))
       prompt = FakePrompt.new(["/crew", "/exit"])
-      client = FakeClient.new([
-        { "role" => "assistant", "content" => "Default identity" },
-        { "role" => "assistant", "content" => "## Crew\n- Default identity" }
-      ])
+      client = RecordingClient.new([])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
       with_env("KWARD_CONFIG_PATH" => config_path) do
@@ -1630,8 +1627,8 @@ class TestCLI < KwardTestCase
       end
 
       output = prompt.output.join("\n")
-      assert_includes output, "Crew>"
-      assert_includes output, "Default identity"
+      assert_includes output, "The /crew command is not implemented yet."
+      assert_empty client.seen_messages
       assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
     end
   end
@@ -1723,29 +1720,6 @@ class TestCLI < KwardTestCase
       end
 
       assert_empty conversation.session_memories
-    end
-  end
-
-  def test_crew_slash_command_keeps_busy_composer_visible_while_running
-    Dir.mktmpdir do |config_dir|
-      config_path = File.join(config_dir, "config.json")
-      File.write(config_path, JSON.dump("personas" => { "default" => "Default persona." }))
-      prompt = BusyPrompt.new(["/crew", "/exit"])
-      client = FakeClient.new([
-        { "role" => "assistant", "content" => "Default identity" },
-        { "role" => "assistant", "content" => "## Crew\n- Default identity" }
-      ])
-      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
-      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
-
-      with_env("KWARD_CONFIG_PATH" => config_path) do
-        cli.interactive_loop(agent: agent)
-      end
-
-      assert_equal [:begin_busy_input, "You>", "loading"], prompt.events.first
-      assert_includes prompt.events, [:start_stream_block, "Crew"]
-      assert_includes prompt.events, [:finish_busy_input]
-      assert_operator prompt.events.index([:finish_busy_input]), :<, prompt.events.index([:close])
     end
   end
 

@@ -91,19 +91,20 @@ Use this when planning a code change.
 
 ## Personas
 
-Personas configure personality, role, and communication style without modifying repository files. New configs include a single active `kward` character by default; edit or remove `personas.default` to change the first-run experience.
+Personas configure personality, role, and communication style without modifying repository files. New configs include a single active `kward` character by default; edit or remove `personas.default` to change the first-run experience. `personas.crew` is still accepted as an alias for `personas.characters`.
 
 A small persona config looks like this:
 
 ```json
 {
   "personas": {
-    "characters": {
-      "kward": {
+    "characters": [
+      {
+        "key": "kward",
         "label": "Kward",
         "instruction": "Be concise, practical, and friendly. Prefer small, safe changes."
       }
-    },
+    ],
     "default": "kward"
   }
 }
@@ -114,16 +115,18 @@ You can also target personas by workspace, model, reasoning effort, time of day,
 ```json
 {
   "personas": {
-    "characters": {
-      "reviewer": {
+    "characters": [
+      {
+        "key": "reviewer",
         "label": "Reviewer",
         "instruction": "Be skeptical and focus on correctness, tests, and maintainability."
       },
-      "coach": {
+      {
+        "key": "coach",
         "label": "Coach",
         "instruction": "Explain tradeoffs and teach as you go."
       }
-    },
+    ],
     "default": "reviewer",
     "workspaces": {
       "/Users/kwood/Repositories/github.com/kaiwood/tauren": "coach"

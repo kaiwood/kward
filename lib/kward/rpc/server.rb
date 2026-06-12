@@ -505,10 +505,12 @@ module Kward
         builtins = [
           {
             name: "crew",
-            description: "Query all active personas and summarize the crew.",
+            description: "Reserved for future crew commands.",
             argumentHint: "",
             source: "builtin",
-            executable: true
+            executable: false,
+            unsupported: true,
+            reason: "notImplemented"
           },
           {
             name: "copy",
