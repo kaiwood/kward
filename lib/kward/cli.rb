@@ -26,6 +26,7 @@ require_relative "retry_message"
 require_relative "rpc/server"
 require_relative "session_diff"
 require_relative "session_store"
+require_relative "starter_pack_installer"
 require_relative "steering"
 require_relative "tool_call"
 require_relative "tool_registry"
@@ -65,6 +66,11 @@ module Kward
     # @return [void]
     def run
       ConfigFiles.ensure_default_config!
+
+      if @argv == ["--install-starter-pack"]
+        install_starter_pack
+        return
+      end
 
       if @argv.first == "rpc" && @argv.length == 1
         Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
@@ -233,6 +239,17 @@ module Kward
     end
 
     private
+
+    def install_starter_pack
+      result = StarterPackInstaller.install
+      installed_count = result.installed.length
+      skipped_count = result.skipped.length
+      @prompt.say("Installed #{installed_count} starter pack file#{installed_count == 1 ? "" : "s"}.")
+      @prompt.say("Skipped #{skipped_count} existing starter pack file#{skipped_count == 1 ? "" : "s"}.") if skipped_count.positive?
+    rescue StandardError => e
+      warn "Failed to install starter pack: #{e.message}"
+      exit 1
+    end
 
     def pan_mode?
       @argv.include?("--pan-mode")

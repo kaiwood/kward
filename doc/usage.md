@@ -6,9 +6,20 @@ Kward has three main ways to run:
 kward                          # interactive chat
 kward "Explain this project"   # one-shot prompt
 kward rpc                      # experimental JSON-RPC backend
+kward --install-starter-pack   # install default prompts and AGENTS.md
 ```
 
 When running from source, replace `kward` with `ruby lib/main.rb`.
+
+## Starter pack
+
+Install Kward's starter prompts and base `AGENTS.md` into the config directory:
+
+```bash
+kward --install-starter-pack
+```
+
+The installer downloads the pinned `kaiwood/kward-starter-pack` `v1.0.0` release, creates the config directory and base `config.json` if needed, and copies only starter-pack instruction/prompt files. It preserves the starter-pack layout under `.kward` and skips files that already exist.
 
 ## Interactive chat
 

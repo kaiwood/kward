@@ -357,6 +357,7 @@ module Kward
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable", "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/inspect", "memory/why", "memory/summarize"] },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
+          starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
           extensionUi: {
             question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
             select: false,

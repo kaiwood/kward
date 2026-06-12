@@ -95,6 +95,8 @@ class TestRPCServer < KwardTestCase
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
     assert_equal "commands/run", capabilities["commands"]["runMethod"]
     assert_equal true, capabilities["startupResources"]["supported"]
+    assert_equal false, capabilities.dig("starterPack", "supported")
+    assert_equal "cliOnlyInstallCommand", capabilities.dig("starterPack", "reason")
     assert_equal({
       "question" => {
         "supported" => true,

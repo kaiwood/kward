@@ -139,6 +139,30 @@ class TestCLI < KwardTestCase
     Kward::Clipboard.define_singleton_method(:new, original_new)
   end
 
+  def test_install_starter_pack_flag_creates_default_config_and_reports_result
+    Dir.mktmpdir do |config_dir|
+      prompt = FakePrompt.new([])
+      calls = []
+      original_install = Kward::StarterPackInstaller.method(:install)
+      Kward::StarterPackInstaller.define_singleton_method(:install) do
+        calls << true
+        Kward::StarterPackInstaller::Result.new(installed: ["AGENTS.md"], skipped: ["prompts/plan.md"])
+      end
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      end
+
+      assert_equal [true], calls
+      assert_path_exists File.join(config_dir, "config.json")
+      output = prompt.output.join("\n")
+      assert_includes output, "Installed 1 starter pack file."
+      assert_includes output, "Skipped 1 existing starter pack file."
+    ensure
+      Kward::StarterPackInstaller.define_singleton_method(:install, original_install) if original_install
+    end
+  end
+
   def test_interactive_response_prompt_falls_back_to_assistant_without_persona_label
     Dir.mktmpdir do |config_dir|
       File.write(File.join(config_dir, "config.json"), JSON.dump({}))
