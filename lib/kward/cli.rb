@@ -207,6 +207,7 @@ module Kward
           agent = replacement_agent if replacement_agent
         end
         next if handled
+        next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
 
         expanded_input = expand_prompt_template(input)
         display_input = display_input || input if expanded_input
@@ -384,6 +385,31 @@ module Kward
         tool_registry: tool_registry,
         conversation: conversation
       )
+    end
+
+    def handle_interactive_shell_command(input, agent)
+      command = input.to_s.sub(/\A!\s*/, "")
+      if command.strip.empty?
+        @prompt.say("\nShell command is required after !\n")
+        return true
+      end
+
+      run_busy_local_command_and_requeue(activity: "running") do
+        result = Workspace.new(root: interactive_workspace_root(agent)).run_shell_command(command)
+        @prompt.say("\n#{colored("Shell>", :green, :bold)} #{command}\n#{result}\n")
+      end
+      true
+    end
+
+    def shell_command_input?(input)
+      input.to_s.start_with?("!")
+    end
+
+    def interactive_workspace_root(agent)
+      conversation = agent.conversation if agent.respond_to?(:conversation)
+      return conversation.workspace_root if conversation&.respond_to?(:workspace_root)
+
+      current_workspace_root
     end
 
     def handle_local_slash_command(command, agent, session_store)

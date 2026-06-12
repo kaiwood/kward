@@ -239,6 +239,55 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
 
+  def test_interactive_loop_runs_bang_shell_command_without_model_turn
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["!echo hello", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.interactive_loop(agent: agent)
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "Shell> echo hello"
+      assert_includes output, "Exit status: 0"
+      assert_includes output, "STDOUT:\nhello"
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_runs_bang_shell_command_from_workspace_root
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["!pwd", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.interactive_loop(agent: agent)
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "STDOUT:\n#{File.realpath(dir)}"
+    end
+  end
+
+  def test_interactive_loop_reports_empty_bang_shell_command
+    prompt = FakePrompt.new(["!", "/exit"])
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join, "Shell command is required after !"
+    assert_empty conversation.messages
+  end
+
   def test_interactive_loop_reports_turn_error_without_crashing
     prompt = BusyPrompt.new(["hello", "/exit"])
     conversation = Kward::Conversation.new(system_message: nil)

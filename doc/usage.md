@@ -27,6 +27,12 @@ Interactive mode opens a terminal composer and saves the conversation as a per-w
 
 The composer stays available while assistant and tool output streams. If you press Enter while a response is still running, Kward queues your next prompt and sends it after the current turn finishes. Press Ctrl+C while a response is running to stop the current turn and return to the composer.
 
+Prefix input with `!` to run a local shell command from the workspace root without sending it to the model:
+
+```text
+!git status --short
+```
+
 ## One-shot prompts
 
 Pass a prompt as command-line text to ask once and exit:
