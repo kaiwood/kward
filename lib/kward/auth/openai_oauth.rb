@@ -15,6 +15,7 @@ module Kward
     DEFAULT_PORT = 1455
     CALLBACK_PATH = "/auth/callback"
     SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke"
+    DEFAULT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 
     attr_reader :auth_path
 
@@ -184,11 +185,11 @@ module Kward
       value = load_config.fetch("openai_oauth_client_id", "").to_s.strip
       return value unless value.empty?
 
-      raise "OpenAI OAuth client_id is not configured. Add openai_oauth_client_id to #{@config_path}."
+      DEFAULT_CLIENT_ID
     end
 
     def load_config
-      raise "Kward config not found: #{@config_path}" unless File.exist?(@config_path)
+      return {} unless File.exist?(@config_path)
 
       JSON.parse(File.read(@config_path))
     rescue JSON::ParserError

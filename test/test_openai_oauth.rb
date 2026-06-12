@@ -5,17 +5,19 @@ class TestOpenAIOAuth < KwardTestCase
     assert_includes Kward::OpenAIOAuth.new.auth_path, ".kward/auth.json"
   end
 
-  def test_openai_oauth_requires_external_config_file_for_client_id
+  def test_openai_oauth_uses_default_client_id_without_config_file
     Dir.mktmpdir do |dir|
       auth_path = File.join(dir, "auth.json")
       config_path = File.join(dir, "missing_kward_config.json")
       oauth = Kward::OpenAIOAuth.new(auth_path: auth_path, config_path: config_path)
+      url = URI.parse(oauth.authorization_url(
+        redirect_uri: "http://localhost:1455/auth/callback",
+        code_challenge: "challenge",
+        state: "state-123"
+      ))
+      params = URI.decode_www_form(url.query).to_h
 
-      error = assert_raises(RuntimeError) do
-        oauth.authorization_url(redirect_uri: "http://localhost:1455/auth/callback", code_challenge: "challenge", state: "state-123")
-      end
-
-      assert_equal "Kward config not found: #{config_path}", error.message
+      assert_equal Kward::OpenAIOAuth::DEFAULT_CLIENT_ID, params["client_id"]
     end
   end
 
