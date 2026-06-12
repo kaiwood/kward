@@ -4,6 +4,7 @@ require "securerandom"
 require "set"
 require "time"
 require_relative "../config_files"
+require_relative "../message_access"
 require_relative "../model/client"
 
 module Kward
@@ -23,6 +24,16 @@ module Kward
 
       # Details for the most recent retrieval, used by `/memory why`.
       attr_reader :last_retrieval
+
+      def self.for_config_dir(config_dir, now: nil)
+        new(
+          config_path: File.join(config_dir, "config.json"),
+          core_path: File.join(config_dir, "memory", "core.json"),
+          soft_path: File.join(config_dir, "memory", "soft.jsonl"),
+          events_path: File.join(config_dir, "memory", "events.jsonl"),
+          now: now
+        )
+      end
 
       def initialize(config_path: ConfigFiles.config_path, core_path: ConfigFiles.memory_core_path, soft_path: ConfigFiles.memory_soft_path, events_path: ConfigFiles.memory_events_path, now: nil)
         @config_path = config_path
@@ -271,6 +282,14 @@ module Kward
         lines.join("\n")
       end
 
+      def summarize_conversation(conversation, client: nil)
+        text = messages_for_summarization(conversation).map { |message| MessageAccess.content(message) }.compact.join("\n")
+        existing_texts = Array(conversation.session_memories).map { |memory| memory["text"] }
+        records = infer_soft_from_text(text, workspace_root: conversation.workspace_root, client: client, existing_texts: existing_texts)
+        conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if conversation.session_memories.respond_to?(:concat)
+        records
+      end
+
       def infer_soft_from_text(text, workspace_root: Dir.pwd, client: nil, existing_texts: [])
         candidates = heuristic_candidates(text)
         existing_set = Set.new(existing_texts.map { |t| normalize_for_comparison(t) })
@@ -357,6 +376,10 @@ module Kward
       end
 
       private
+
+      def messages_for_summarization(conversation)
+        conversation.messages.select { |message| MessageAccess.role(message) == "user" }
+      end
 
       def ensure_storage!
         FileUtils.mkdir_p(File.dirname(@core_path), mode: 0o700)

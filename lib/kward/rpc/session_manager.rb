@@ -269,7 +269,7 @@ module Kward
       end
 
       def memory_manager
-        Memory::Manager.new(config_path: File.join(@config_dir, "config.json"), core_path: File.join(@config_dir, "memory", "core.json"), soft_path: File.join(@config_dir, "memory", "soft.jsonl"), events_path: File.join(@config_dir, "memory", "events.jsonl"))
+        Memory::Manager.for_config_dir(@config_dir)
       end
 
       def memory_status
@@ -331,10 +331,7 @@ module Kward
 
       def memory_summarize(session_id:)
         rpc_session = fetch_session(session_id)
-        text = messages_for_memory_summarization(rpc_session.conversation).map { |message| message_content(message) }.compact.join("\n")
-        existing_texts = Array(rpc_session.conversation.session_memories).map { |m| m["text"] }
-        records = memory_manager.infer_soft_from_text(text, workspace_root: rpc_session.workspace_root, client: @client, existing_texts: existing_texts)
-        rpc_session.conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") })
+        records = memory_manager.summarize_conversation(rpc_session.conversation, client: @client)
         persist_memory_state(rpc_session)
         { memories: records }
       end
@@ -651,10 +648,6 @@ module Kward
         MessageAccess.content(message)
       end
 
-      def messages_for_memory_summarization(conversation)
-        conversation.messages.select { |message| message_role(message) == "user" }
-      end
-
       def entry_messages(conversation)
         conversation.messages.reject { |message| message_role(message) == "system" }
       end
@@ -917,7 +910,7 @@ module Kward
       end
 
       def prepare_memory_context(conversation, input)
-        manager = Memory::Manager.new(config_path: File.join(@config_dir, "config.json"), core_path: File.join(@config_dir, "memory", "core.json"), soft_path: File.join(@config_dir, "memory", "soft.jsonl"), events_path: File.join(@config_dir, "memory", "events.jsonl"))
+        manager = memory_manager
         retrieval = manager.retrieve_relevant(input: input, workspace_root: conversation.workspace_root)
         conversation.last_memory_retrieval = retrieval
         conversation.memory_context = manager.memory_block(retrieval)

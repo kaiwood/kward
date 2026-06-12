@@ -558,10 +558,7 @@ module Kward
     end
 
     def summarize_memory(conversation, manager: Memory::Manager.new)
-      text = messages_for_memory_summarization(conversation).map { |message| message_content(message) }.compact.join("\n")
-      existing_texts = Array(conversation.session_memories).map { |m| m["text"] }
-      records = manager.infer_soft_from_text(text, workspace_root: conversation.workspace_root, client: @client, existing_texts: existing_texts)
-      conversation.session_memories.concat(records.map { |record| record.slice("id", "text", "scope", "tags") }) if conversation.session_memories.respond_to?(:concat)
+      records = manager.summarize_conversation(conversation, client: @client)
       @active_session&.update_memory_state(session_memories: conversation.session_memories, last_retrieval: conversation.last_memory_retrieval)
       records
     end
@@ -1251,10 +1248,6 @@ module Kward
 
     def message_summary(message)
       MessageAccess.summary(message) || message_content(message)
-    end
-
-    def messages_for_memory_summarization(conversation)
-      conversation.messages.select { |message| message_role(message) == "user" }
     end
 
     def message_name(message)

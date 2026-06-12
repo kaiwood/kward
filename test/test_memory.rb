@@ -227,6 +227,24 @@ class MemoryManagerTest < KwardTestCase
     assert_empty records
   end
 
+  def test_for_config_dir_uses_standard_memory_paths
+    manager = Kward::Memory::Manager.for_config_dir(@dir)
+
+    assert_equal File.join(@dir, "memory", "core.json"), manager.paths["core"]
+    assert_equal File.join(@dir, "memory", "soft.jsonl"), manager.paths["soft"]
+    assert_equal File.join(@dir, "memory", "events.jsonl"), manager.paths["events"]
+  end
+
+  def test_summarize_conversation_persists_session_memories_from_user_messages
+    conversation = Kward::Conversation.new(messages: [{ role: "user", content: "I like steak" }], workspace_root: @dir, session_memories: [])
+    @manager.define_singleton_method(:should_use_llm_summarization?) { false }
+
+    records = @manager.summarize_conversation(conversation)
+
+    assert_equal ["I like steak"], records.map { |record| record["text"] }
+    assert_equal [{ "id" => "soft_001", "text" => "I like steak", "scope" => "workspace:#{File.realpath(@dir)}", "tags" => ["workflow"] }], conversation.session_memories
+  end
+
   def test_infer_soft_from_text_skips_duplicates_in_existing_soft_memories
     # Disable LLM summarization
     manager = Kward::Memory::Manager.new(
