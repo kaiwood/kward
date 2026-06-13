@@ -1464,32 +1464,7 @@ module Kward
       end
 
       def tool_metadata(tool_call)
-        name = ToolCall.name(tool_call)
-        args = ToolCall.arguments(tool_call)
-
-        case name
-        when "edit_file"
-          edits = Array(args["edits"] || args[:edits]).map do |edit|
-            {
-              oldText: edit["old_text"] || edit[:old_text],
-              newText: edit["new_text"] || edit[:new_text]
-            }.compact
-          end
-          first_edit = edits.first || {}
-          {
-            kind: "edit",
-            path: args["path"] || args[:path],
-            edits: edits,
-            oldText: first_edit[:oldText],
-            newText: first_edit[:newText]
-          }.compact
-        when "write_file"
-          { kind: "write", path: args["path"] || args[:path] }.compact
-        when "run_shell_command"
-          { kind: "shell", command: args["command"] || args[:command] }.compact
-        else
-          nil
-        end
+        ToolMetadata.legacy_tool_fields(tool_call)
       end
 
 
