@@ -444,7 +444,6 @@ module Kward
           steeringMode: supports_in_flight_steer? ? "in-flight" : "one-at-a-time",
           followUpMode: "one-at-a-time",
           sessionFile: session[:path],
-          sessionId: session[:persistentId],
           rpcSessionId: session[:id],
           persistentSessionId: session[:persistentId],
           sessionName: session[:name],
@@ -479,7 +478,6 @@ module Kward
         )
         {
           sessionFile: session[:path],
-          sessionId: session[:persistentId],
           rpcSessionId: session[:id],
           persistentSessionId: session[:persistentId],
           sessionName: session[:name],
@@ -1431,11 +1429,11 @@ module Kward
       end
 
       def normalized_tool_event_payload(tool_call)
-        ToolEventNormalizer.new(tool_call).call_payload(legacy_tool: tool_metadata(tool_call))
+        ToolEventNormalizer.new(tool_call).call_payload
       end
 
       def normalized_tool_result_event_payload(tool_call, content)
-        ToolEventNormalizer.new(tool_call, content: content).result_payload(legacy_tool: tool_metadata(tool_call))
+        ToolEventNormalizer.new(tool_call, content: content).result_payload
       end
 
       def turn_error_payload(error)
@@ -1444,10 +1442,6 @@ module Kward
           code: error.class.name,
           fatal: false
         }
-      end
-
-      def tool_metadata(tool_call)
-        ToolMetadata.legacy_tool_fields(tool_call)
       end
 
 

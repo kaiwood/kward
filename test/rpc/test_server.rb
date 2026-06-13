@@ -136,9 +136,9 @@ class TestRPCServer < KwardTestCase
     assert_equal 10_485_760, capabilities["logging"]["rotation"]["maxBytes"]
     assert_equal "redacted-metadata-only", capabilities["logging"]["content"]
 
-    assert_equal true, capabilities["asyncTurns"]
-    assert_equal "explicit", capabilities["session"]["mode"]
-    assert_equal true, capabilities["config"]["supported"]
+    refute capabilities.key?("asyncTurns")
+    refute capabilities.key?("session")
+    refute capabilities.key?("config")
     assert_equal true, messages[1]["result"]["ok"]
   end
 
@@ -153,10 +153,7 @@ class TestRPCServer < KwardTestCase
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"], capabilities["auth"]["methods"]
-    assert_equal ["prompts/list", "prompts/expand"], capabilities["prompts"]["methods"]
-    assert_equal ["config/read", "config/update"], capabilities["config"]["methods"]
     assert_equal ["logging/stats", "logging/tokenCsv"], capabilities["logging"]["methods"]
-    assert_equal "tools/list", capabilities["tools"]["method"]
     assert_equal "commands/list", capabilities["commands"]["method"]
     assert_includes capabilities["commands"]["methods"], "commands/run"
     assert_equal "resources/startup", capabilities["startupResources"]["method"]

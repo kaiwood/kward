@@ -10,19 +10,16 @@ module Kward
         @fields = ToolMetadata.normalized_tool_fields(@tool_call)
       end
 
-      def call_payload(legacy_tool: nil)
+      def call_payload
         {
-          toolCall: @tool_call,
-          rawToolCall: @tool_call,
-          tool: legacy_tool,
           toolCallId: @fields[:toolCallId],
           toolName: @fields[:toolName],
           args: @fields[:args]
         }.compact
       end
 
-      def result_payload(legacy_tool: nil)
-        call_payload(legacy_tool: legacy_tool).merge(
+      def result_payload
+        call_payload.merge(
           content: @content,
           result: normalized_result
         )

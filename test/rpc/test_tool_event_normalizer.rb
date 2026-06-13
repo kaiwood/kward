@@ -36,7 +36,9 @@ class TestRPCToolEventNormalizer < KwardTestCase
           { oldText: "old one", newText: "new one" },
           { oldText: "old two", newText: "new two" }
         ], tool_event[:payload][:args][:edits]
-        assert_equal "test.txt", tool_event[:payload][:tool][:path]
+        refute tool_event[:payload].key?(:tool)
+        refute tool_event[:payload].key?(:toolCall)
+        refute tool_event[:payload].key?(:rawToolCall)
       end
       result = tool_events.find { |event| event[:type] == "toolResult" }[:payload][:result]
       assert_equal false, result[:isError]

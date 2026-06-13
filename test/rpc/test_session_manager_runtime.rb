@@ -28,7 +28,7 @@ class TestRPCSessionManagerRuntime < KwardTestCase
         state = manager.runtime_state(session_id: session[:id])
 
         assert_equal session[:path], state[:sessionFile]
-        assert_equal session[:persistentId], state[:sessionId]
+        refute state.key?(:sessionId)
         assert_equal session[:id], state[:rpcSessionId]
         assert_equal session[:persistentId], state[:persistentSessionId]
         assert_equal "Work", state[:sessionName]
@@ -170,7 +170,7 @@ class TestRPCSessionManagerRuntime < KwardTestCase
       stats = manager.runtime_stats(session_id: session[:id])
 
       assert_equal session[:path], stats[:sessionFile]
-      assert_equal session[:persistentId], stats[:sessionId]
+      refute stats.key?(:sessionId)
       assert_equal session[:id], stats[:rpcSessionId]
       assert_equal session[:persistentId], stats[:persistentSessionId]
       assert_equal "Stats", stats[:sessionName]

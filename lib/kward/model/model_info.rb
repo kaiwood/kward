@@ -166,7 +166,6 @@ module Kward
         provider: provider,
         id: id,
         name: model["name"] || id,
-        model: model["model"] || id,
         reasoning: reasoning,
         reasoningEffort: reasoning_effort,
         contextWindow: model["contextWindow"] || model["context_window"] || context_window(provider, id),

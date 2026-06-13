@@ -47,7 +47,7 @@ Result fields:
 - `protocolVersion`: currently `1`.
 - `serverName`: `"kward"`.
 - `experimental`: `true`.
-- `capabilities`: includes detailed Tauren-compatible capability groups. Some legacy simple fields remain for older clients, but `sessions` is now the detailed session capability object.
+- `capabilities`: includes Tauren-compatible capability groups.
 
 Detailed capability fields include:
 
@@ -67,8 +67,6 @@ Detailed capability fields include:
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
 - `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
-
-Legacy compatibility fields still present include `asyncTurns`, `turnCancellation`, `turnEventReplay`, `uiQuestions`, `authLogin`, `configUpdate`, `session`, `cancellation`, `eventReplay`, `uiQuestion`, `prompts`, `skills`, `tools`, and `config`.
 
 ### `shutdown`
 
@@ -302,8 +300,6 @@ Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFi
 - `toolCallId`: tool call ID.
 - `toolName`: normalized tool name, such as `read`, `edit`, `write`, or `bash`.
 - `args`: normalized arguments. Edit replacements use `oldText`/`newText`; shell timeout is `timeout`.
-- `rawToolCall` and `toolCall`: original model tool call for compatibility.
-- `tool`: legacy normalized metadata retained for older clients.
 
 `toolResult` additionally includes `result` with `content`, `isError`, optional unified `diff`, optional `changedFiles`, and `images`. Failed or declined tools set `isError: true`.
 
@@ -356,7 +352,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns Tauren-compatible runtime state for the session, including session file, persisted session ID/name, active `rpcSessionId`, `persistentSessionId`, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. The legacy `sessionId` field remains the persisted session ID; clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. Unsupported runtime settings are returned as false or omitted.
+Returns Tauren-compatible runtime state for the session, including session file, persisted session ID/name, active `rpcSessionId`, `persistentSessionId`, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. Clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. Unsupported runtime settings are returned as false or omitted.
 
 ### `runtime/stats`
 
@@ -364,7 +360,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns session file/id/name, active `rpcSessionId`, `persistentSessionId`, message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. The legacy `sessionId` field remains the persisted session ID; clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. For OpenAI/Codex sessions with a known model context window and text-only non-empty conversation context, also returns `contextUsage` with estimated current next-request context tokens, context window, percent used, and `estimated: true`. Fresh sessions with no non-system content omit `contextUsage` because only static prompt/tool overhead would be measurable. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
+Returns session file/id/name, active `rpcSessionId`, `persistentSessionId`, message-count stats: user messages, assistant messages, tool calls, tool results, and total non-system messages. Clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. For OpenAI/Codex sessions with a known model context window and text-only non-empty conversation context, also returns `contextUsage` with estimated current next-request context tokens, context window, percent used, and `estimated: true`. Fresh sessions with no non-system content omit `contextUsage` because only static prompt/tool overhead would be measurable. Cumulative token and cost fields are omitted until Kward tracks provider usage responses.
 
 ### `runtime/updateSetting`
 
@@ -498,7 +494,7 @@ Returns `{ "memories": [] }`.
 
 ### `models/list`
 
-Returns known model entries from the current client/config backend. OpenRouter entries prefer models available to the configured OpenRouter API key when they can be fetched; otherwise Kward falls back to defaults/currently configured options. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`; legacy `model` is retained as an alias for older clients.
+Returns known model entries from the current client/config backend. OpenRouter entries prefer models available to the configured OpenRouter API key when they can be fetched; otherwise Kward falls back to defaults/currently configured options. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`.
 
 ### `openrouter/catalog`
 
@@ -506,7 +502,7 @@ Returns the full OpenRouter model catalog as model entries. This is separate fro
 
 ### `models/current`
 
-Returns the current model entry with `id`, `name`, `reasoning`, `reasoningEffort`, and legacy `model` alias where available.
+Returns the current model entry with `provider`, `id`, `name`, `reasoning`, `reasoningEffort`, `contextWindow`, and `current` where available.
 
 ### `models/set`
 

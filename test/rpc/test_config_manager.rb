@@ -17,7 +17,7 @@ class TestRPCConfigManager < KwardTestCase
 
       assert_equal "Codex", messages[0]["result"]["provider"]
       assert_equal "fake-model", messages[0]["result"]["id"]
-      assert_equal "fake-model", messages[0]["result"]["model"]
+      refute messages[0]["result"].key?("model")
       assert_equal "fake-model", messages[0]["result"]["name"]
       assert_equal true, messages[0]["result"]["reasoning"]
       list_model = messages[1]["result"]["models"].find { |model| model["provider"] == "Codex" }
@@ -27,7 +27,7 @@ class TestRPCConfigManager < KwardTestCase
       assert_equal "medium", list_model["reasoningEffort"]
       assert_equal 200_000, list_model["contextWindow"]
       assert_equal "new-openai-model", messages[2]["result"]["id"]
-      assert_equal "new-openai-model", messages[2]["result"]["model"]
+      refute messages[2]["result"].key?("model")
       assert_equal "high", messages[3]["result"]["reasoningEffort"]
       assert_equal 2, client.reload_count
 

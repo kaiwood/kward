@@ -273,12 +273,6 @@ module Kward
       def capabilities
         {
           framing: "content-length",
-          asyncTurns: true,
-          turnCancellation: "best-effort",
-          turnEventReplay: true,
-          uiQuestions: true,
-          authLogin: true,
-          configUpdate: true,
           transcript: {
             format: "tauren-transcript-v1",
             messagesNormalized: true,
@@ -399,15 +393,7 @@ module Kward
             categories: ["tokens", "performance", "tools", "errors"],
             rotation: { maxBytes: TelemetryLogger::DEFAULT_MAX_BYTES, retention: "manual" },
             content: "redacted-metadata-only"
-          },
-          session: { mode: "explicit", persistence: "jsonl" },
-          cancellation: { behavior: "best-effort", queuedTurns: "cancel-before-run", runningTurns: "stop-emitting-events-when-possible" },
-          eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT },
-          uiQuestion: { supported: true, method: "ui/answerQuestion", notification: "ui/question", maxQuestions: 4, multiSelect: false },
-          prompts: { supported: true, methods: ["prompts/list", "prompts/expand"] },
-          skills: { supported: true, tool: "read_skill" },
-          tools: { supported: true, method: "tools/list", eventMetadata: true },
-          config: { supported: true, methods: ["config/read", "config/update"] }
+          }
         }
       end
 

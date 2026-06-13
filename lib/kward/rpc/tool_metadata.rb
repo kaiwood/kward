@@ -16,22 +16,6 @@ module Kward
         }.compact
       end
 
-      def legacy_tool_fields(tool_call)
-        name = ToolCall.name(tool_call)
-        args = ToolCall.arguments(tool_call)
-
-        case name
-        when "edit_file"
-          legacy_edit_fields(args)
-        when "write_file"
-          { kind: "write", path: ToolCall.value(args, :path) }.compact
-        when "run_shell_command"
-          { kind: "shell", command: ToolCall.value(args, :command) }.compact
-        else
-          nil
-        end
-      end
-
       def normalize_tool_name(name)
         ToolCall.normalized_name(name)
       end
@@ -81,25 +65,6 @@ module Kward
         result[:command] = command if command
         result[:timeout] = timeout if timeout
         result
-      end
-
-      def legacy_edit_fields(args)
-        edits = Array(ToolCall.value(args, :edits)).map do |edit|
-          next {} unless edit.is_a?(Hash)
-
-          {
-            oldText: ToolCall.value(edit, :oldText) || ToolCall.value(edit, :old_text),
-            newText: ToolCall.value(edit, :newText) || ToolCall.value(edit, :new_text)
-          }.compact
-        end
-        first_edit = edits.first || {}
-        {
-          kind: "edit",
-          path: ToolCall.value(args, :path),
-          edits: edits,
-          oldText: first_edit[:oldText],
-          newText: first_edit[:newText]
-        }.compact
       end
 
       def extract_unified_diff(text)

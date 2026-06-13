@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Removed the obsolete `/crew` command reservation and unreleased RPC compatibility aliases.
 - Added Session Tree support with a CLI `/tree` command plus RPC persisted entry IDs, labels, label timestamps, and branch navigation.
 - Changed session tree rendering to match Pi's active-path-first branch display, markers, tool rows, and connector prefixes.
 - Changed session tree navigation so all persisted entry points are selectable without automatically running anything.
