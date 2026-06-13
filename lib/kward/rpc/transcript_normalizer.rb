@@ -253,38 +253,20 @@ module Kward
         args = ToolCall.parse_arguments(arguments)
         case name.to_s
         when "edit_file", "edit"
-          normalize_edit_args(args)
+          ToolMetadata.normalize_tool_args(name, args)
         when "run_shell_command", "bash"
           normalize_bash_args(args)
         else
-          camelize_tool_args(args)
+          ToolCall.camelize_args(args)
         end
-      end
-
-      def normalize_edit_args(args)
-        normalized = camelize_tool_args(args)
-        edits = Array(value(args, :edits)).filter_map do |edit|
-          next unless edit.is_a?(Hash)
-
-          {
-            oldText: value(edit, :oldText) || value(edit, :old_text),
-            newText: value(edit, :newText) || value(edit, :new_text)
-          }.compact
-        end
-        normalized[:edits] = edits if edits.any?
-        normalized
       end
 
       def normalize_bash_args(args)
-        normalized = camelize_tool_args(args)
+        normalized = ToolCall.camelize_args(args)
         timeout = value(args, :timeoutSeconds) || value(args, :timeout_seconds)
         normalized[:timeoutSeconds] = timeout if timeout
         normalized.delete(:timeout_seconds)
         normalized
-      end
-
-      def camelize_tool_args(args)
-        ToolCall.camelize_args(args)
       end
 
       def normalize_mime_type(mime_type)
