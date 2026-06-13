@@ -1035,6 +1035,10 @@ class TestCLI < KwardTestCase
       assert_equal "hello", second_client.seen_messages[0][1]["content"]
       assert_equal "reply", second_client.seen_messages[0][2]["content"]
       assert_equal "again", second_client.seen_messages[0][3][:content]
+      output = strip_ansi(second_prompt.output.join("\n"))
+      assert_includes output, "Resumed session:"
+      assert_includes output, "You> hello"
+      assert_includes output, "reply"
     end
   end
 

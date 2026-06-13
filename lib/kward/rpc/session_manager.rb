@@ -52,9 +52,14 @@ module Kward
         @mutex = Mutex.new
       end
 
-      def create_session(workspace_root: Dir.pwd, name: nil)
+      def create_session(workspace_root: Dir.pwd, name: nil, resume_last: false)
         workspace_root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: workspace_root)
+        if resume_last && name.to_s.strip.empty?
+          path = store.remembered_last_session_path
+          return resume_session(path: path, workspace_root: workspace_root) if path
+        end
+
         conversation = new_conversation(workspace_root: workspace_root)
         session = store.create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
         session.rename(name) unless name.to_s.strip.empty?
@@ -1090,6 +1095,7 @@ module Kward
 
       def remember_session(rpc_session)
         @mutex.synchronize { @sessions[rpc_session.id] = rpc_session }
+        rpc_session.store.remember_last_session(rpc_session.session) if rpc_session.store.respond_to?(:remember_last_session)
         start_footer_worker(rpc_session)
       end
 

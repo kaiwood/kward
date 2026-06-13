@@ -94,6 +94,28 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_create_session_can_resume_remembered_last_session
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      first_manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      first = first_manager.create_session(workspace_root: workspace_root)
+      first_rpc = first_manager.send(:fetch_session, first[:id])
+      first_rpc.conversation.append_user("hello")
+      first_rpc.conversation.append_assistant("reply")
+
+      second_manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      resumed = second_manager.create_session(workspace_root: workspace_root, resume_last: true)
+      resumed_rpc = second_manager.send(:fetch_session, resumed[:id])
+
+      assert_equal first[:persistentId], resumed[:persistentId]
+      assert_equal first[:path], resumed[:path]
+      messages = resumed_rpc.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      assert_equal ["hello", "reply"], messages.map { |message| message["content"] || message[:content] }
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_list_returns_rpc_metadata_message_counts_and_newest_first
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

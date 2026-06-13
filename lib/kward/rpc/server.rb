@@ -214,7 +214,7 @@ module Kward
         when "auth/loginStatus"
           @auth_manager.login_status(login_id: params.fetch("loginId"))
         when "sessions/create"
-          @session_manager.create_session(workspace_root: params["workspaceRoot"] || Dir.pwd, name: params["name"])
+          @session_manager.create_session(workspace_root: params["workspaceRoot"] || Dir.pwd, name: params["name"], resume_last: params["resumeLast"] != false)
         when "sessions/resume"
           @session_manager.resume_session(path: params.fetch("path"), workspace_root: params["workspaceRoot"])
         when "sessions/list"
@@ -288,6 +288,7 @@ module Kward
             mode: "explicit",
             persistence: "jsonl",
             methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
+            startupResume: { supported: true, method: "sessions/create", parameter: "resumeLast", default: true },
             list: { supported: true, source: "rpc", ancestry: true, treeFields: true },
             fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: true, method: "sessions/compact", notification: "session/event", events: ["compactionStart", "compactionEnd"] },

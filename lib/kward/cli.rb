@@ -299,6 +299,7 @@ module Kward
     def interactive_loop(agent: nil)
       setup_interactive_prompt
       session_store = interactive_session_store(agent)
+      @resumed_last_session = false
       if session_store && agent.nil?
         agent = resume_last_session(session_store) || build_new_session_agent(session_store)
       elsif session_store
@@ -313,6 +314,7 @@ module Kward
       @footer_conversation = agent.conversation
 
       print_visual_banner
+      render_resumed_last_session_transcript(agent.conversation) if @resumed_last_session
 
       @pending_inputs = []
 
@@ -359,10 +361,10 @@ module Kward
       agent&.conversation
     ensure
       begin
-        @active_session&.then { |session| session_store&.remember_last_session(session) if session_store&.respond_to?(:remember_last_session) }
         @prompt.close if prompt_interface?
       ensure
         cleanup_unused_sessions
+        remember_active_session(session_store)
       end
     end
 
@@ -749,9 +751,24 @@ module Kward
       @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
       reset_session_diff(@active_session.path)
       track_session(@active_session)
+      @resumed_last_session = true
       build_interactive_agent(conversation)
     rescue StandardError
       nil
+    end
+
+    def render_resumed_last_session_transcript(conversation)
+      restore_prompt_transcript do
+        @prompt.say("\nResumed session: #{@active_session.path}\n")
+        render_conversation_transcript(conversation)
+      end
+    end
+
+    def remember_active_session(session_store)
+      return unless session_store&.respond_to?(:remember_last_session)
+      return unless @active_session&.path && File.file?(@active_session.path)
+
+      session_store.remember_last_session(@active_session)
     end
 
     def build_new_session_agent(session_store)
