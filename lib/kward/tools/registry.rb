@@ -69,7 +69,9 @@ module Kward
     end
 
     def build_schema_tools
-      tools = core_tools
+      tools = @tools.values_at(
+        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search"
+      )
       tools << @tools["web_search"] if web_search_available?
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
