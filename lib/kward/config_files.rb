@@ -328,28 +328,14 @@ module Kward
     end
 
     def crew_characters(personas)
-      raw = personas["characters"] || personas["crew"]
-      return {} unless raw
-
-      if raw.is_a?(Hash)
-        parse_named_characters(raw)
-      elsif raw.is_a?(Array)
-        parse_named_characters_array(raw)
-      else
-        {}
+      named_character_values(personas) do |_key, definition|
+        extract_character_instruction(definition)
       end
     end
 
     def crew_character_labels(personas)
-      raw = personas["characters"] || personas["crew"]
-      return {} unless raw
-
-      if raw.is_a?(Hash)
-        parse_named_character_labels(raw)
-      elsif raw.is_a?(Array)
-        parse_named_character_labels_array(raw)
-      else
-        {}
+      named_character_values(personas) do |_key, definition|
+        extract_character_label(definition)
       end
     end
 
@@ -372,65 +358,34 @@ module Kward
       presence(labels[key])
     end
 
-    def parse_named_characters(raw)
-      raw.each_with_object({}) do |(key, definition), mapping|
-        instruction = extract_character_instruction(definition)
-        next if instruction.nil?
+    def named_character_values(personas)
+      character_entries(personas["characters"] || personas["crew"]).each_with_object({}) do |(key, definition), mapping|
+        value = yield(key, definition)
+        next if value.to_s.empty?
 
-        mapping[key.to_s] = instruction
+        mapping[key.to_s] = value
       end
     end
 
-    def parse_named_characters_array(raw)
-      raw.each_with_object({}) do |entry, mapping|
-        char_key = nil
-        definition = nil
-
-        if entry.is_a?(Hash) && entry.length == 1 && entry.keys.first.is_a?(String)
-          char_key = entry.keys.first
-          definition = entry.values.first
-        elsif entry.is_a?(Hash)
-          char_key = entry["key"] || entry[:key] || entry["id"] || entry[:id] || entry["name"] || entry[:name]
-          definition = entry
-        end
-
-        next if char_key.to_s.empty?
-
-        instruction = extract_character_instruction(definition)
-        next if instruction.to_s.empty?
-
-        mapping[char_key.to_s] = instruction
+    def character_entries(raw)
+      case raw
+      when Hash
+        raw.map { |key, definition| [key, definition] }
+      when Array
+        raw.filter_map { |entry| character_entry(entry) }
+      else
+        []
       end
     end
 
-    def parse_named_character_labels(raw)
-      raw.each_with_object({}) do |(key, definition), mapping|
-        label = extract_character_label(definition)
-        next if label.nil?
+    def character_entry(entry)
+      return nil unless entry.is_a?(Hash)
 
-        mapping[key.to_s] = label
-      end
-    end
-
-    def parse_named_character_labels_array(raw)
-      raw.each_with_object({}) do |entry, mapping|
-        char_key = nil
-        definition = nil
-
-        if entry.is_a?(Hash) && entry.length == 1 && entry.keys.first.is_a?(String)
-          char_key = entry.keys.first
-          definition = entry.values.first
-        elsif entry.is_a?(Hash)
-          char_key = entry["key"] || entry[:key] || entry["id"] || entry[:id] || entry["name"] || entry[:name]
-          definition = entry
-        end
-
-        next if char_key.to_s.empty?
-
-        label = extract_character_label(definition)
-        next if label.to_s.empty?
-
-        mapping[char_key.to_s] = label
+      if entry.length == 1 && entry.keys.first.is_a?(String)
+        [entry.keys.first, entry.values.first]
+      else
+        key = entry["key"] || entry[:key] || entry["id"] || entry[:id] || entry["name"] || entry[:name]
+        key.to_s.empty? ? nil : [key, entry]
       end
     end
 
