@@ -1,5 +1,6 @@
 require "json"
 require_relative "model/chat_invocation"
+require_relative "compaction/file_operation_tracker"
 require_relative "config_files"
 require_relative "prompts"
 require_relative "tools/tool_call"
@@ -342,71 +343,6 @@ module Kward
       def parse_tool_arguments(arguments)
         return {} if arguments.nil? || arguments.empty?
         return arguments if arguments.is_a?(Hash)
-
-        JSON.parse(arguments)
-      rescue JSON::ParserError
-        {}
-      end
-    end
-
-    class FileOperationTracker
-      def call(messages, previous_details: {})
-        read_files = Array(path_values(previous_details, "read_files", :read_files))
-        modified_files = Array(path_values(previous_details, "modified_files", :modified_files))
-
-        Array(messages).each do |message|
-          next unless message_role(message) == "assistant"
-
-          message_tool_calls(message).each do |tool_call|
-            name = tool_call_name(tool_call)
-            args = tool_call_args(tool_call)
-            path = args["path"] || args[:path]
-            case name
-            when "read_file"
-              read_files << path if path
-            when "write_file", "edit_file"
-              modified_files << path if path
-            end
-          end
-        end
-
-        {
-          read_files: sorted_paths(read_files),
-          modified_files: sorted_paths(modified_files)
-        }
-      end
-
-      private
-
-      def sorted_paths(paths)
-        paths.map(&:to_s).reject(&:empty?).uniq.sort
-      end
-
-      def path_values(hash, string_key, symbol_key)
-        return [] unless hash.respond_to?(:key?)
-
-        hash[string_key] || hash[symbol_key] || []
-      end
-
-      def message_role(message)
-        message["role"] || message[:role]
-      end
-
-      def message_tool_calls(message)
-        value = message["tool_calls"] || message[:tool_calls]
-        value.is_a?(Array) ? value : []
-      end
-
-      def tool_call_name(tool_call)
-        function = tool_call["function"] || tool_call[:function] || {}
-        function["name"] || function[:name]
-      end
-
-      def tool_call_args(tool_call)
-        function = tool_call["function"] || tool_call[:function] || {}
-        arguments = function["arguments"] || function[:arguments]
-        return arguments if arguments.is_a?(Hash)
-        return {} if arguments.nil? || arguments.empty?
 
         JSON.parse(arguments)
       rescue JSON::ParserError
