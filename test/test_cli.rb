@@ -141,7 +141,7 @@ class TestCLI < KwardTestCase
     Kward::Clipboard.define_singleton_method(:new, original_new)
   end
 
-  def test_install_starter_pack_flag_creates_default_config_and_reports_result
+  def test_init_command_creates_default_config_and_reports_result
     Dir.mktmpdir do |config_dir|
       prompt = FakePrompt.new([])
       calls = []
@@ -152,7 +152,7 @@ class TestCLI < KwardTestCase
       end
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+        Kward::CLI.new(argv: ["init"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
       end
 
       assert_equal [true], calls
@@ -160,6 +160,26 @@ class TestCLI < KwardTestCase
       output = prompt.output.join("\n")
       assert_includes output, "Installed 1 starter pack file."
       assert_includes output, "Skipped 1 existing starter pack file."
+    ensure
+      Kward::StarterPackInstaller.define_singleton_method(:install, original_install) if original_install
+    end
+  end
+
+  def test_install_starter_pack_flag_remains_as_compatibility_alias
+    Dir.mktmpdir do |config_dir|
+      prompt = FakePrompt.new([])
+      calls = []
+      original_install = Kward::StarterPackInstaller.method(:install)
+      Kward::StarterPackInstaller.define_singleton_method(:install) do
+        calls << true
+        Kward::StarterPackInstaller::Result.new(installed: [], skipped: [])
+      end
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      end
+
+      assert_equal [true], calls
     ensure
       Kward::StarterPackInstaller.define_singleton_method(:install, original_install) if original_install
     end
@@ -561,8 +581,10 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[32;1mKward\e[0m - an extendable CLI coding agent"
     assert_includes output, "\e[34;1mUsage\e[0m"
     assert_includes output, "\e[32;1mkward login\e[0m"
+    assert_includes output, "\e[32;1mkward init\e[0m"
     assert_includes output, "\e[32;1mkward pan\e[0m"
     assert_includes output, "\e[36m\"Review this diff\"\e[0m"
+    refute_includes output, "--install-starter-pack"
     refute_includes output, "--pan-mode"
     assert_includes output, "Command names take precedence. Anything else is sent as a one-shot prompt."
   end

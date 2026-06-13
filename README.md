@@ -15,7 +15,7 @@ gem install kward
 Optionally install the starter pack after installation:
 
 ```bash
-kward --install-starter-pack
+kward init
 ```
 
 This downloads Kward's default prompts and base `AGENTS.md` into your config directory. It is useful for a first setup, but safe to skip if you prefer to create your own instructions. Existing files are left untouched.

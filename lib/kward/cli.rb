@@ -91,6 +91,17 @@ module Kward
 
       ConfigFiles.ensure_default_config!
 
+      if @argv.first == "init"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("init")
+          return
+        end
+        raise ArgumentError, command_usage("init") unless @argv.length == 1
+
+        install_starter_pack
+        return
+      end
+
       if @argv == ["--install-starter-pack"]
         install_starter_pack
         return
@@ -330,6 +341,7 @@ module Kward
           #{command.call("kward")}                              Start an interactive chat
           #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
           #{command.call("kward login")}                        Sign in or save provider credentials
+          #{command.call("kward init")}                         Install starter prompts and AGENTS.md
           #{command.call("kward pan")}                          Start Pan mode web UI
           #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
 
@@ -337,13 +349,13 @@ module Kward
           #{command.call("help")}                               Show this help
           #{command.call("version")}                            Show the installed Kward version
           #{command.call("login")} [openrouter|github]           Sign in with OpenAI, OpenRouter, or GitHub
+          #{command.call("init")}                               Install starter prompts and AGENTS.md
           #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
           #{command.call("pan")}                                Start Pan mode web UI
           #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
 
         #{heading.call("Options")}
           #{option.call("--working-directory=PATH")}             Run Kward from PATH
-          #{option.call("--install-starter-pack")}               Install starter prompts and AGENTS.md
           #{option.call("--help")}, #{option.call("-h")}                         Show this help
           #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
 
@@ -374,6 +386,11 @@ module Kward
           usage: "kward login [openrouter|github]",
           description: "Sign in with OpenAI, OpenRouter, or GitHub.",
           examples: ["kward login", "kward login openrouter", "kward login github"]
+        },
+        "init" => {
+          usage: "kward init",
+          description: "Install starter prompts and base AGENTS.md into your config directory.",
+          examples: ["kward init"]
         },
         "stats" => {
           usage: "kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]",
