@@ -124,12 +124,31 @@ class TestRPCSessionManager < KwardTestCase
       rpc_session = manager.send(:fetch_session, session[:id])
 
       assert_equal ["user", "assistant"], tree.map { |item| item[:role] }
-      assert_equal [true, false], tree.map { |item| item[:selectable] }
+      assert_equal [true, true], tree.map { |item| item[:selectable] }
       assert_equal "start", tree.first[:label]
       assert tree.first[:labelTimestamp]
       assert_equal "first", result[:editorText]
       assert_nil rpc_session.session.leaf_id
       assert_empty rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+    end
+  end
+
+  def test_session_tree_navigation_selects_assistant_entry_without_editor_text
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("first")
+      rpc_session.conversation.append_assistant("reply")
+      assistant_id = rpc_session.session.leaf_id
+      rpc_session.conversation.append_user("future prompt")
+
+      result = manager.navigate_tree(session_id: session[:id], entry_id: assistant_id)
+      rpc_session = manager.send(:fetch_session, session[:id])
+
+      assert_equal assistant_id, rpc_session.session.leaf_id
+      refute_includes result.keys, :editorText
+      assert_equal ["user", "assistant"], rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.map { |message| message["role"] || message[:role] }
     end
   end
 
@@ -145,7 +164,7 @@ class TestRPCSessionManager < KwardTestCase
       manager.navigate_tree(session_id: session[:id], entry_id: first_id, summarize: true, custom_instructions: "focus")
       tree = manager.session_tree(session_id: session[:id])[:items]
 
-      assert tree.any? { |item| item[:role] == "summary" && item[:selectable] == false && item[:text] == "branch summary" }
+      assert tree.any? { |item| item[:role] == "summary" && item[:selectable] == true && item[:text] == "branch summary" }
       assert jsonl_records(session[:path]).any? { |record| record["type"] == "branch_summary" && record["summary"] == "branch summary" }
     end
   end
@@ -168,7 +187,7 @@ class TestRPCSessionManager < KwardTestCase
       assert_equal ["first", "second", "third"], user_items.map { |item| item[:text] }
       assert_equal [0, 0, 0], user_items.map { |item| item[:depth] }
       assert_equal [true], user_items.map { |item| item[:selectable] }.uniq
-      assert tree.any? { |item| item[:role] == "assistant" && item[:selectable] == false }
+      assert tree.any? { |item| item[:role] == "assistant" && item[:selectable] == true }
     end
   end
 

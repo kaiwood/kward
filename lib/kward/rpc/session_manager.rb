@@ -183,12 +183,12 @@ module Kward
         entry = rpc_session.store.session_entry(rpc_session.session.path, resolved_entry_id)
         raise ArgumentError, "Unknown tree entryId: #{entry_id}" unless entry
 
-        message = entry["message"]
-        user_entry = message.is_a?(Hash) && message_role(message) == "user"
-        raise ArgumentError, "Tree navigation only supports user turns: #{entry_id}" unless user_entry
+        raise ArgumentError, "Tree entry is not selectable: #{entry_id}" unless selectable_tree_entry?(entry)
 
-        target_leaf = entry["parentId"]
-        editor_text = full_message_text(message)
+        message = entry["message"]
+        user_entry = user_tree_entry?(entry)
+        target_leaf = user_entry ? entry["parentId"] : entry["id"]
+        editor_text = user_entry ? full_message_text(message) : nil
         previous_leaf = rpc_session.session.leaf_id
 
         if summarize
@@ -744,7 +744,7 @@ module Kward
             isLast: is_last,
             ancestorContinues: gutters.map { |gutter| gutter[:show] },
             activePath: active_path.include?(entry_id),
-            selectable: formatted[:role] == "user",
+            selectable: selectable_tree_entry?(entry),
             label: node[:source]["label"] || entry["resolvedLabel"],
             labelTimestamp: node[:source]["labelTimestamp"],
             prefix: tree_prefix(display_indent, gutters, show_connector && !virtual_root_child, is_last, !node[:children].empty?)
@@ -775,6 +775,10 @@ module Kward
       def user_tree_entry?(entry)
         message = entry["message"]
         message.is_a?(Hash) && message_role(message) == "user"
+      end
+
+      def selectable_tree_entry?(entry)
+        !entry["id"].to_s.empty? && ["message", "compaction", "branch_summary"].include?(entry["type"])
       end
 
       def nearest_visible_parent_by_id(user_entries, entries)

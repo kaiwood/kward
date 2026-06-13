@@ -929,11 +929,6 @@ module Kward
       entry = tree_items.find { |item| item[:entry]["id"].to_s == entry_id }&.fetch(:entry)
       return nil unless entry
 
-      unless user_tree_entry?(entry)
-        @prompt.say("\nOnly user turns can be edited from the session tree.\n")
-        return nil
-      end
-
       selected_text = apply_session_tree_entry(entry)
       @prompt.say("\nMoved session tree position to #{entry["id"]}.\n")
       if selected_text && !selected_text.empty?
@@ -988,11 +983,6 @@ module Kward
         render_conversation_transcript(conversation)
       end
       build_interactive_agent(conversation)
-    end
-
-    def user_tree_entry?(entry)
-      message = entry["message"]
-      message.is_a?(Hash) && message_role(message) == "user"
     end
 
     def session_tree_items(session_store)

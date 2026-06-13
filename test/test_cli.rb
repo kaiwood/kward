@@ -1183,7 +1183,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_tree_slash_command_shows_non_user_entries_but_does_not_select_them
+  def test_tree_slash_command_selects_assistant_entry_without_prefill_or_autorun
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       session = store.create
@@ -1193,16 +1193,21 @@ class TestCLI < KwardTestCase
       conversation.append_assistant("visible reply")
       conversation.append_user("future prompt")
       prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "visible reply")
-      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      client = RecordingClient.new(["should not be used"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
       cli.interactive_loop
+      loaded_session, loaded_conversation = store.load(session.path)
 
       choices = prompt.select_choices.last
       assert choices.any? { |choice| choice.include?("user: first prompt") }
       assert choices.any? { |choice| choice.include?("assistant: visible reply") }
       assert_empty prompt.prefilled_inputs
-      assert_includes prompt.output.join("
+      assert_empty client.seen_messages
+      refute_includes prompt.output.join("
 "), "Only user turns can be edited from the session tree."
+      assert_equal "visible reply", loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["content"]
+      assert_equal loaded_session.leaf_id, loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["id"]
     end
   end
 
