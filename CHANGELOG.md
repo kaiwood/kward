@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Changed automatic session naming to persist the first visible user turn, keeping slash prompt names unexpanded while still saving expanded prompt content.
 - Added `banner.enabled: false` config support for hiding the interactive terminal banner.
 - Added colored CLI help/version commands, command-specific help, and stricter command precedence over one-shot prompts.
 - Added `--working-directory PATH` as a global option for running any CLI mode from another workspace.

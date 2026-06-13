@@ -349,6 +349,7 @@ module Kward
         input = expanded_input || input
         @footer_conversation = agent.conversation
         begin
+          auto_name_active_session(display_input || input)
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e
@@ -1975,6 +1976,18 @@ module Kward
       hint = entry[:argument_hint].to_s.empty? ? "" : " #{entry[:argument_hint]}"
       description = entry[:description].to_s.empty? ? "" : " - #{entry[:description]}"
       "/#{entry[:name]}#{hint}#{description}"
+    end
+
+    def auto_name_active_session(input)
+      return unless @active_session
+      return unless @active_session.name.to_s.strip.empty?
+
+      name = default_session_name(input)
+      @active_session.rename(name) unless name.empty?
+    end
+
+    def default_session_name(input)
+      input.to_s.gsub(/\s+/, " ").strip.slice(0, 120).to_s
     end
 
     def run_interactive_turn(agent, input, display_input: nil)

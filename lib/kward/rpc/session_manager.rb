@@ -38,7 +38,7 @@ module Kward
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
 
       def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
         @server = server
@@ -249,6 +249,7 @@ module Kward
         rpc_session = fetch_session(session_id)
         normalized_attachments = normalize_attachments(attachments)
         plugin_command, plugin_arguments = plugin_command_turn(input, normalized_attachments)
+        display_input = input.to_s if input.is_a?(String)
         content = plugin_command ? input.to_s : user_turn_content(expand_prompt_input(input), normalized_attachments)
         streaming_behavior = validate_streaming_behavior(default_streaming_behavior(rpc_session, streaming_behavior), rpc_session: rpc_session)
         if streaming_behavior == "steer"
@@ -261,6 +262,7 @@ module Kward
           id: SecureRandom.uuid,
           session_id: rpc_session.id,
           input: content,
+          display_input: display_input,
           status: "queued",
           cancel_requested: false,
           cancellation: Cancellation.new,
@@ -1169,8 +1171,9 @@ module Kward
         if turn.plugin_command_name
           run_plugin_turn(rpc_session, turn)
         else
+          auto_name_session(rpc_session, turn.display_input || turn.input)
           prepare_memory_context(rpc_session.conversation, turn.input)
-          rpc_session.agent.ask(turn.input, cancellation: turn.cancellation, steering: turn.steering) do |event|
+          rpc_session.agent.ask(turn.input, display_input: turn_display_input(turn), cancellation: turn.cancellation, steering: turn.steering) do |event|
             next if turn.cancel_requested
 
             notify_plugin_transcript_event(rpc_session, event)
@@ -1192,6 +1195,24 @@ module Kward
 
       def build_steering(_turn)
         Steering.new
+      end
+
+      def auto_name_session(rpc_session, input)
+        return unless rpc_session.session.name.to_s.strip.empty?
+
+        name = default_session_name(input)
+        rpc_session.session.rename(name) unless name.empty?
+      end
+
+      def default_session_name(input)
+        input.to_s.gsub(/\s+/, " ").strip.slice(0, 120).to_s
+      end
+
+      def turn_display_input(turn)
+        return nil if turn.display_input.nil?
+        return nil if turn.display_input == turn.input
+
+        turn.display_input
       end
 
       def prepare_memory_context(conversation, input)

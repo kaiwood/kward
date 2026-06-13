@@ -93,6 +93,63 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_rpc_prompt_template_turn_persists_original_display_content_and_session_name
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      prompts_dir = File.join(config_dir, "prompts")
+      FileUtils.mkdir_p(prompts_dir)
+      File.write(File.join(prompts_dir, "plan.md"), "Plan this:\n$ARGUMENTS\n")
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["planned"]), config_dir: config_dir)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        session = manager.create_session(workspace_root: workspace_root)
+        turn = manager.start_turn(session_id: session[:id], input: "/plan fix bug")
+        wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+        records = jsonl_records(session[:path])
+        user_message = records.find { |record| record["type"] == "message" && record.dig("message", "role") == "user" }["message"]
+        assert_equal "Plan this:\nfix bug\n", user_message["content"]
+        assert_equal "/plan fix bug", user_message["display_content"]
+        assert_equal "/plan fix bug", manager.send(:fetch_session, session[:id]).session.name
+        assert_equal "/plan fix bug", manager.list_sessions(workspace_root: workspace_root).first[:name]
+      end
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_rpc_first_plain_input_persists_session_name_without_display_content
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+      turn = manager.start_turn(session_id: session[:id], input: "Something is not working")
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      user_message = jsonl_records(session[:path]).find { |record| record["type"] == "message" && record.dig("message", "role") == "user" }["message"]
+      assert_equal "Something is not working", user_message["content"]
+      refute user_message.key?("display_content")
+      assert_equal "Something is not working", manager.send(:fetch_session, session[:id]).session.name
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_rpc_explicit_session_name_is_not_overwritten_by_first_turn
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root, name: "Explicit")
+      turn = manager.start_turn(session_id: session[:id], input: "Something is not working")
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      assert_equal "Explicit", manager.send(:fetch_session, session[:id]).session.name
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_list_deletes_empty_unnamed_sessions
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

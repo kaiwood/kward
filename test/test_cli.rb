@@ -998,8 +998,9 @@ class TestCLI < KwardTestCase
       assert_equal 1, files.length
       records = jsonl_records(files.first)
       assert_equal "session", records[0]["type"]
-      assert_equal "hello", records[1]["message"]["content"]
-      assert_equal "reply", records[2]["message"]["content"]
+      messages = records.select { |record| record["type"] == "message" }.map { |record| record["message"] }
+      assert_equal "hello", messages[0]["content"]
+      assert_equal "reply", messages[1]["content"]
     end
   end
 
@@ -1766,7 +1767,7 @@ edit this prompt"
     end
   end
 
-  def test_interactive_prompt_slash_command_persists_original_display_content
+  def test_interactive_prompt_slash_command_persists_original_display_content_and_session_name
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |home|
         File.write(File.join(dir, "config.json"), JSON.dump({}))
@@ -1788,8 +1789,22 @@ edit this prompt"
         end["message"]
         assert_equal "Plan this:\nfix bug\n", user_message["content"]
         assert_equal "/plan fix bug", user_message["display_content"]
+        assert_equal "/plan fix bug", store.recent.first.name
         assert_equal "/plan fix bug", store.recent.first.first_message
       end
+    end
+  end
+
+  def test_interactive_first_plain_input_persists_session_name
+    Dir.mktmpdir do |dir|
+      store = Kward::SessionStore.new(config_dir: dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["Something is not working", "/exit"])
+      client = RecordingClient.new(["done"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal "Something is not working", store.recent.first.name
     end
   end
 
