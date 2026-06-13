@@ -232,7 +232,10 @@ class TestCLISettings < KwardTestCase
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       File.write(config_path, JSON.dump({ "openai_model" => "existing" }))
-      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Right", "Maximum"])
+      prompt = FakeSettingsPrompt.new(
+        ["/settings", "/exit"],
+        ["Interface", "Overlay alignment", "Right", "Interface", "Overlay width", "Maximum", "Done"]
+      )
       client = RecordingClient.new([])
       agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
@@ -245,8 +248,58 @@ class TestCLISettings < KwardTestCase
       assert_equal "existing", config["openai_model"]
       assert_equal({ "alignment" => "right", "width" => "maximum" }, config["overlay"])
       assert_equal [{ "alignment" => "right", "width" => "maximum" }, { "alignment" => "right", "width" => "maximum" }], prompt.overlay_settings_updates
-      assert_equal ["Overlay alignment", "Overlay width"], prompt.select_messages
-      assert_equal ["Settings", "Settings"], prompt.select_titles
+      assert_equal ["Settings category", "Interface", "Overlay alignment", "Settings category", "Interface", "Overlay width", "Settings category"], prompt.select_messages
+      assert_equal ["Settings", "Settings", "Settings", "Settings", "Settings", "Settings", "Settings"], prompt.select_titles
+    end
+  end
+
+  def test_settings_slash_command_toggles_memory_web_search_compaction_and_logging
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      prompt = FakeSettingsPrompt.new(
+        ["/settings", "/exit"],
+        [
+          "Memory", "Enable memory",
+          "Tools & Search", "Disable web search",
+          "Context & Compaction", "Disable auto-compaction",
+          "Logging", "Enable local logging",
+          "Done"
+        ]
+      )
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal true, config.dig("memory", "enabled")
+      assert_equal false, config.dig("web_search", "enabled")
+      assert_equal false, config.dig("compaction", "enabled")
+      assert_equal true, config.dig("logging", "enabled")
+    end
+  end
+
+  def test_settings_slash_command_updates_provider_and_reloads_runtime
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Model & Reasoning", "Provider", "OpenRouter", "Done"])
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "openrouter", config["provider"]
+      assert_equal 1, client.reload_count
+      assert_equal 1, prompt.redraw_count
     end
   end
 

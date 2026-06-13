@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Expanded the interactive `/settings` command into categorized settings for model, accounts, memory, interface, tools, compaction, personalization, logging, and advanced config info.
 - Fixed RPC session deletion so empty unnamed sessions are explicitly deleted instead of being consumed by unused-session cleanup first.
 - Added `/reload` and RPC runtime reload support for reloading installed plugins without restarting Kward.
 - Changed RPC session deletion to use the OS trash/recycle bin when available before falling back to permanent file deletion.
