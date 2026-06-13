@@ -421,9 +421,6 @@ module Kward
       when "stats"
         run_busy_local_command_and_requeue { print_stats(argument) }
         [true, nil]
-      when "crew"
-        @prompt.say("\nThe /crew command is not implemented yet.\n")
-        [true, nil]
       when "memory"
         activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
         run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
