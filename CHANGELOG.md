@@ -8,6 +8,7 @@ All notable changes to Kward will be documented in this file.
 - Added `--working-directory PATH` as a global option for running any CLI mode from another workspace.
 - Changed Pan mode to start with the `kward pan` command; `--pan-mode` remains as a compatibility alias.
 - Added `kward init` for installing the starter pack; `--install-starter-pack` remains as a compatibility alias.
+- Added `kward doctor` to check local config, workspace, auth hints, Pan credentials, and writable directories.
 - Changed memory retrieval and listing to use a global core, workspace core, workspace soft hierarchy, and added `/memory relax` for downgrading global core memories to the current workspace.
 - Removed the obsolete `/crew` command reservation and unreleased RPC compatibility aliases.
 - Added Session Tree support with a CLI `/tree` command plus RPC persisted entry IDs, labels, label timestamps, and branch navigation.

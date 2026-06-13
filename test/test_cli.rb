@@ -621,6 +621,40 @@ class TestCLI < KwardTestCase
     assert_includes prompt.output.join("\n"), "Usage\n  kward pan"
   end
 
+  def test_doctor_reports_local_setup
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        config_path = File.join(config_dir, "config.json")
+        File.write(config_path, JSON.dump({ "openrouter_api_key" => "sk-test", "pan_mode" => { "username" => "u", "password" => "p" } }))
+        prompt = FakePrompt.new([])
+        cli = Kward::CLI.new(argv: ["--working-directory", workspace_dir, "doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+        with_env("KWARD_CONFIG_PATH" => config_path) do
+          cli.run
+        end
+
+        output = strip_ansi(prompt.output.join("\n"))
+        assert_includes output, "Kward Doctor"
+        assert_includes output, "Config: #{config_path}"
+        assert_includes output, "Config JSON: valid"
+        assert_includes output, "Workspace: #{File.expand_path(workspace_dir)}"
+        assert_includes output, "Model: Codex / fake-model"
+        assert_includes output, "Auth:"
+        assert_includes output, "OpenRouter API key"
+        assert_includes output, "Pan mode: credentials configured"
+      end
+    end
+  end
+
+  def test_doctor_help_is_available
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["doctor", "--help"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.run
+
+    assert_includes prompt.output.join("\n"), "Usage\n  kward doctor"
+  end
+
   def test_known_command_with_invalid_arguments_does_not_run_one_shot
     Dir.mktmpdir do |config_dir|
       client = Object.new
