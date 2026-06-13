@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.67.0] - 2026-06-13
+
 ### Added
 
 - Added optional startup resume for the last active session in each workspace through `sessions.auto_resume: true`, including immediate restored transcript/persona data for RPC clients.
