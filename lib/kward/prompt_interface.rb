@@ -185,7 +185,8 @@ module Kward
       @mutex.synchronize do
         @restoring_transcript = false
         @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE)
-        redraw_screen_locked
+        width, height = screen_size
+        redraw_screen_locked(width: width, height: height)
         @output_io.flush
       end
     end
@@ -397,7 +398,8 @@ module Kward
 
     def print_visual_banner
       @mutex.synchronize do
-        rows = banner_rows(screen_width)
+        width, height = screen_size
+        rows = banner_rows(width)
         return if rows.empty?
 
         with_synchronized_output_locked do
@@ -408,7 +410,7 @@ module Kward
           end
           @visual_banner_count += 1
           invalidate_transcript_display_rows_cache
-          remember_transcript_viewport_locked
+          remember_transcript_viewport_locked(height)
           @stream_block = nil
           restore_composer_cursor_locked
         end
@@ -442,7 +444,8 @@ module Kward
 
     def redraw
       @mutex.synchronize do
-        with_synchronized_output_locked { redraw_screen_locked }
+        width, height = screen_size
+        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         @output_io.flush
       end
     end
@@ -456,7 +459,8 @@ module Kward
         @stream_block = nil
         @stream_col = 0
         @stream_pending_wrap = false
-        with_synchronized_output_locked { redraw_screen_locked }
+        width, height = screen_size
+        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         @output_io.flush
       end
     end
@@ -527,10 +531,11 @@ module Kward
     end
 
     def write_visual_transcript_text_locked(text)
+      width, height = screen_size
       output_text = terminal_newlines(text.to_s)
-      advance_pending_stream_wrap_locked(output_text)
+      advance_pending_stream_wrap_locked(output_text, width: width, height: height)
       @output_io.print(output_text)
-      update_stream_position(output_text)
+      update_stream_position(output_text, width: width)
     end
 
     def append_transcript_buffer(text)
@@ -1744,14 +1749,15 @@ module Kward
       return unless @started && @asking
 
       handle_resize_locked
-      rows, cursor_row, cursor_col = composer_layout(screen_width)
-      ensure_scroll_region_locked(rows.length)
+      width, height = screen_size
+      rows, cursor_row, cursor_col = composer_layout(width, height)
+      ensure_scroll_region_locked(rows.length, width: width, height: height)
       @rendered_rows = rows.length
-      render_composer_rows_locked(rows)
+      render_composer_rows_locked(rows, height: height)
       @cursor_rendered_row = cursor_row
-      @last_width = screen_width
-      @last_height = screen_height
-      move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
+      @last_width = width
+      @last_height = height
+      move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
       render_cursor_visibility_locked
       @output_io.flush
     end
@@ -1762,26 +1768,29 @@ module Kward
 
     def clear_prompt_locked
       handle_resize_locked
-      clear_composer_region_locked
+      width, height = screen_size
+      clear_composer_region_locked(height: height)
       @rendered_rows = 0
       @cursor_rendered_row = 0
-      redraw_transcript_locked
+      redraw_transcript_locked(width: width, height: height)
     end
 
     def clear_prompt_for_output_locked
       handle_resize_locked
-      reserve_composer_region_locked if @started && @asking
-      clear_composer_region_locked
+      width, height = screen_size
+      reserve_composer_region_locked(width: width, height: height) if @started && @asking
+      clear_composer_region_locked(height: height)
       @rendered_rows = 0
       @cursor_rendered_row = 0
-      move_to_transcript_cursor_locked if @started
+      move_to_transcript_cursor_locked(width: width, height: height) if @started
     end
 
     def prepare_transcript_output_locked
       handle_resize_locked
+      width, height = screen_size
       hide_cursor_for_transcript_output_locked
-      reserve_composer_region_locked
-      move_to_transcript_cursor_locked
+      reserve_composer_region_locked(width: width, height: height)
+      move_to_transcript_cursor_locked(width: width, height: height)
     end
 
     def hide_cursor_for_transcript_output_locked
@@ -1793,8 +1802,9 @@ module Kward
     def restore_composer_cursor_locked
       return unless @started && @asking
 
-      _rows, cursor_row, cursor_col = composer_layout(screen_width)
-      move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
+      width, height = screen_size
+      _rows, cursor_row, cursor_col = composer_layout(width, height)
+      move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
       render_cursor_visibility_locked
     end
 
@@ -1810,26 +1820,25 @@ module Kward
       @cursor_visible = visible
     end
 
-    def reserve_composer_region_locked
-      rows, = composer_layout(screen_width)
-      ensure_scroll_region_locked(rows.length)
+    def reserve_composer_region_locked(width: screen_width, height: screen_height)
+      rows, = composer_layout(width, height)
+      ensure_scroll_region_locked(rows.length, width: width, height: height)
     end
 
-    def ensure_scroll_region_locked(row_count, redraw_transcript: true)
-      new_reserved_rows = [[row_count, 1].max, [screen_height - 1, 1].max].min
-      return if @reserved_rows == new_reserved_rows && @last_height == screen_height
+    def ensure_scroll_region_locked(row_count, redraw_transcript: true, width: screen_width, height: screen_height)
+      new_reserved_rows = [[row_count, 1].max, [height - 1, 1].max].min
+      return if @reserved_rows == new_reserved_rows && @last_height == height
 
       old_reserved_rows = @reserved_rows
       rows_to_clear = [old_reserved_rows, new_reserved_rows].max
       @reserved_rows = new_reserved_rows
-      @output_io.print("\e[1;#{transcript_bottom_row}r")
-      clear_composer_region_locked(rows_to_clear)
-      redraw_transcript_locked if redraw_transcript && new_reserved_rows < old_reserved_rows
+      @output_io.print("\e[1;#{transcript_bottom_row(height)}r")
+      clear_composer_region_locked(rows_to_clear, height: height)
+      redraw_transcript_locked(width: width, height: height) if redraw_transcript && new_reserved_rows < old_reserved_rows
     end
 
     def handle_resize_locked
-      current_width = screen_width
-      current_height = screen_height
+      current_width, current_height = screen_size
       return false if current_width == @last_width && current_height == @last_height
 
       old_width = @last_width
@@ -1841,7 +1850,7 @@ module Kward
       @reserved_rows = 0
       @last_width = current_width
       @last_height = current_height
-      redraw_screen_locked
+      redraw_screen_locked(width: current_width, height: current_height)
       true
     end
 
@@ -1850,8 +1859,8 @@ module Kward
       @reserved_rows = 0
     end
 
-    def render_composer_rows_locked(rows)
-      top = composer_top_row
+    def render_composer_rows_locked(rows, height: screen_height)
+      top = composer_top_row(height)
       max_rows = [@last_composer_rows.length, rows.length].max
       rows_to_clear = [@reserved_rows - rows.length, 0].max
 
@@ -1873,9 +1882,9 @@ module Kward
       @last_composer_rows = rows.dup
     end
 
-    def clear_composer_region_locked(rows_to_clear = nil)
+    def clear_composer_region_locked(rows_to_clear = nil, height: screen_height)
       rows_to_clear ||= [@reserved_rows, @rendered_rows].max
-      clear_bottom_rows_locked(screen_height, rows_to_clear)
+      clear_bottom_rows_locked(height, rows_to_clear)
       @last_composer_rows = []
     end
 
@@ -1899,7 +1908,7 @@ module Kward
     def clear_bottom_rows_locked(height, rows_to_clear)
       return unless rows_to_clear.positive?
 
-      bottom = [height, screen_height].min
+      bottom = height
       top = [bottom - rows_to_clear + 1, 1].max
       clear_screen_rows_locked(top, bottom)
     end
@@ -1911,7 +1920,7 @@ module Kward
       end
     end
 
-    def redraw_screen_locked
+    def redraw_screen_locked(width: screen_width, height: screen_height)
       return unless @started
 
       restore_scroll_region_locked
@@ -1919,25 +1928,25 @@ module Kward
       move_to_screen(1, 1)
       @reserved_rows = 0
       @last_composer_rows = []
-      rows, cursor_row, cursor_col = composer_layout(screen_width)
-      ensure_scroll_region_locked(rows.length, redraw_transcript: false)
-      redraw_transcript_locked
+      rows, cursor_row, cursor_col = composer_layout(width, height)
+      ensure_scroll_region_locked(rows.length, redraw_transcript: false, width: width, height: height)
+      redraw_transcript_locked(width: width, height: height)
       @rendered_rows = @asking ? rows.length : 0
-      render_composer_rows_locked(rows) if @asking
+      render_composer_rows_locked(rows, height: height) if @asking
       @cursor_rendered_row = @asking ? cursor_row : 0
-      @last_width = screen_width
-      @last_height = screen_height
-      reset_stream_position_from_transcript_locked
+      @last_width = width
+      @last_height = height
+      reset_stream_position_from_transcript_locked(width)
       if @asking
-        move_to_screen(composer_top_row + cursor_row, cursor_col + 1)
+        move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
         render_cursor_visibility_locked
       end
     end
 
-    def redraw_transcript_locked
+    def redraw_transcript_locked(width: screen_width, height: screen_height)
       return unless transcript_renderable?
 
-      rows = transcript_viewport_rows(transcript_redraw_row_count, screen_width)
+      rows = transcript_viewport_rows(transcript_redraw_row_count(height), width)
       clear_screen_rows_locked(1, rows.length)
       return if rows.empty?
 
@@ -1957,12 +1966,12 @@ module Kward
       rows
     end
 
-    def transcript_redraw_row_count
-      [[@transcript_viewport_rows, transcript_bottom_row].max, screen_height].min
+    def transcript_redraw_row_count(height = screen_height)
+      [[@transcript_viewport_rows, transcript_bottom_row(height)].max, height].min
     end
 
-    def remember_transcript_viewport_locked
-      @transcript_viewport_rows = transcript_bottom_row
+    def remember_transcript_viewport_locked(height = screen_height)
+      @transcript_viewport_rows = transcript_bottom_row(height)
     end
 
     def transcript_renderable?
@@ -1987,8 +1996,7 @@ module Kward
       end
     end
 
-    def reset_stream_position_from_transcript_locked
-      width = screen_width
+    def reset_stream_position_from_transcript_locked(width = screen_width)
       rows = transcript_display_rows(width)
       last_length = rows.empty? ? 0 : ANSI.strip(rows.last).length
       if last_length >= width
@@ -2000,34 +2008,34 @@ module Kward
       end
     end
 
-    def move_to_transcript_cursor_locked
+    def move_to_transcript_cursor_locked(width: screen_width, height: screen_height)
       if @stream_pending_wrap
-        move_to_screen(transcript_bottom_row, screen_width)
+        move_to_screen(transcript_bottom_row(height), width)
       else
-        move_to_screen(transcript_bottom_row, [@stream_col + 1, screen_width].min)
+        move_to_screen(transcript_bottom_row(height), [@stream_col + 1, width].min)
       end
     end
 
-    def advance_pending_stream_wrap_locked(output_text)
+    def advance_pending_stream_wrap_locked(output_text, width: screen_width, height: screen_height)
       return unless @stream_pending_wrap
       return if output_text.empty? || output_text.start_with?("\r", "\n")
 
-      move_to_screen(transcript_bottom_row, screen_width)
+      move_to_screen(transcript_bottom_row(height), width)
       @output_io.print("\r\n")
       @stream_col = 0
       @stream_pending_wrap = false
     end
 
-    def composer_layout(width)
-      return compact_composer_layout(width) if screen_height < 4
-      return question_composer_layout(width) if @question_state
+    def composer_layout(width, height = screen_height)
+      return compact_composer_layout(width) if height < 4
+      return question_composer_layout(width, height) if @question_state
 
       content_width = [width - 4, 1].max
       input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
       attachment_rows = attachment_badge_rows(content_width)
-      overlay_rows = active_overlay_rows(width)
+      overlay_rows = active_overlay_rows(width, height: height)
       footer_text = footer_text()
-      max_input_rows = max_visible_input_rows(attachment_rows.length, overlay_rows.length, footer_text.empty? ? 0 : 1)
+      max_input_rows = max_visible_input_rows(attachment_rows.length, overlay_rows.length, footer_text.empty? ? 0 : 1, height: height)
       visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
       visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
       rows = overlay_rows + [top_border(width)]
@@ -2040,20 +2048,20 @@ module Kward
       [rows, cursor_row, cursor_col]
     end
 
-    def question_composer_layout(width)
+    def question_composer_layout(width, height = screen_height)
       content_width = [width - 4, 1].max
-      overlay_rows = active_overlay_rows(width)
+      overlay_rows = active_overlay_rows(width, height: height)
       rows = overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
       return [rows, question_custom_cursor_row, question_custom_cursor_col(width)] if selected_question_choice&.fetch(:custom, false)
 
       [rows, overlay_rows.length + 1, 2]
     end
 
-    def active_overlay_rows(width)
+    def active_overlay_rows(width, height: screen_height)
       return question_overlay_rows(width) if @question_state
-      return selection_overlay_rows(width) if @select_state
+      return selection_overlay_rows(width, height: height) if @select_state
 
-      slash_overlay_rows(width)
+      slash_overlay_rows(width, height: height)
     end
 
     def banner_rows(width)
@@ -2078,10 +2086,10 @@ module Kward
       overlay_card_rows(title, lines, width)
     end
 
-    def slash_overlay_rows(width)
+    def slash_overlay_rows(width, height: screen_height)
       return [] unless slash_overlay_visible?
 
-      visible = visible_slash_overlay_matches(slash_overlay_matches)
+      visible = visible_slash_overlay_matches(slash_overlay_matches, height: height)
       start_index = visible[:start]
       lines = visible[:commands].each_with_index.map do |command, offset|
         index = start_index + offset
@@ -2092,13 +2100,13 @@ module Kward
       overlay_card_rows("Slash commands", lines, width)
     end
 
-    def visible_slash_overlay_matches(matches)
-      max_rows = [[screen_height - 7, 1].max, 8].min
+    def visible_slash_overlay_matches(matches, height: screen_height)
+      max_rows = [[height - 7, 1].max, 8].min
       start = [[@slash_selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
       { start: start, commands: matches[start, max_rows] || [] }
     end
 
-    def selection_overlay_rows(width)
+    def selection_overlay_rows(width, height: screen_height)
       matches = selection_matches
       lines = [overlay_text_line("↑/↓ select · Enter open · Esc cancel", :muted), overlay_blank_line]
       if matches.empty?
@@ -2110,7 +2118,7 @@ module Kward
         return overlay_card_rows(selection_overlay_title, lines, width)
       end
 
-      visible = visible_selection_matches(matches)
+      visible = visible_selection_matches(matches, height: height)
       start_index = visible[:start]
       visible[:choices].each_with_index do |choice, offset|
         index = start_index + offset
@@ -2124,8 +2132,8 @@ module Kward
       title && !title.empty? ? title : "Sessions"
     end
 
-    def visible_selection_matches(matches)
-      max_rows = [[screen_height - 7, 1].max, 8].min
+    def visible_selection_matches(matches, height: screen_height)
+      max_rows = [[height - 7, 1].max, 8].min
       start = [[selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
       { start: start, choices: matches[start, max_rows] || [] }
     end
@@ -2372,17 +2380,17 @@ module Kward
       []
     end
 
-    def max_visible_input_rows(attachment_count = 0, overlay_count = active_overlay_rows(screen_width).length, footer_count = footer_text.to_s.empty? ? 0 : 1)
+    def max_visible_input_rows(attachment_count = 0, overlay_count = active_overlay_rows(screen_width).length, footer_count = footer_text.to_s.empty? ? 0 : 1, height: screen_height)
       input_cap = [COMPOSER_MAX_INPUT_ROWS - attachment_count, 1].max
-      [[input_cap, screen_height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
+      [[input_cap, height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
     end
 
-    def composer_top_row
-      [screen_height - @reserved_rows + 1, 1].max
+    def composer_top_row(height = screen_height)
+      [height - @reserved_rows + 1, 1].max
     end
 
-    def transcript_bottom_row
-      [screen_height - @reserved_rows, 1].max
+    def transcript_bottom_row(height = screen_height)
+      [height - @reserved_rows, 1].max
     end
 
     def move_to_screen(row, col)
@@ -2403,8 +2411,7 @@ module Kward
       [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
     end
 
-    def update_stream_position(text)
-      width = screen_width
+    def update_stream_position(text, width: screen_width)
       ANSI.strip(text).each_char do |char|
         case char
         when "\n", "\r"
@@ -2442,6 +2449,10 @@ module Kward
       else
         :blue
       end
+    end
+
+    def screen_size
+      [screen_width, screen_height]
     end
 
     def screen_width
