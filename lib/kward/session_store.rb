@@ -5,6 +5,7 @@ require "time"
 require_relative "config_files"
 require_relative "conversation"
 require_relative "message_access"
+require_relative "private_file"
 require_relative "rpc/tool_event_normalizer"
 require_relative "tools/tool_call"
 require_relative "workspace"
@@ -12,6 +13,7 @@ require_relative "workspace"
 module Kward
   class SessionStore
     VERSION = 2
+    LAST_SESSION_FILENAME = "last_session.json"
 
     SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
 
@@ -215,6 +217,28 @@ module Kward
 
     def recent(limit: 20)
       limit ? recent_sessions.first(limit) : recent_sessions
+    end
+
+    def remember_last_session(session)
+      return unless session&.path
+
+      FileUtils.mkdir_p(session_dir, mode: 0o700)
+      PrivateFile.write_json(last_session_path, { "path" => File.expand_path(session.path), "timestamp" => Time.now.utc.iso8601(3) })
+    end
+
+    def last_session_path
+      File.join(session_dir, LAST_SESSION_FILENAME)
+    end
+
+    def remembered_last_session_path
+      return nil unless File.file?(last_session_path)
+
+      path = JSON.parse(File.read(last_session_path))["path"].to_s
+      return nil if path.empty? || !File.file?(path)
+
+      path
+    rescue JSON::ParserError
+      nil
     end
 
     def recent_tree(limit: 20)

@@ -300,11 +300,7 @@ module Kward
       setup_interactive_prompt
       session_store = interactive_session_store(agent)
       if session_store && agent.nil?
-        @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
-        reset_session_diff
-        conversation = new_conversation(workspace_root: session_store.cwd)
-        @active_session.attach(conversation)
-        agent = build_interactive_agent(conversation)
+        agent = resume_last_session(session_store) || build_new_session_agent(session_store)
       elsif session_store
         @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
         reset_session_diff
@@ -363,6 +359,7 @@ module Kward
       agent&.conversation
     ensure
       begin
+        @active_session&.then { |session| session_store&.remember_last_session(session) if session_store&.respond_to?(:remember_last_session) }
         @prompt.close if prompt_interface?
       ensure
         cleanup_unused_sessions
@@ -743,6 +740,26 @@ module Kward
       return nil if agent
 
       SessionStore.new
+    end
+
+    def resume_last_session(session_store)
+      path = session_store.remembered_last_session_path if session_store.respond_to?(:remembered_last_session_path)
+      return nil if path.to_s.empty?
+
+      @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
+      reset_session_diff(@active_session.path)
+      track_session(@active_session)
+      build_interactive_agent(conversation)
+    rescue StandardError
+      nil
+    end
+
+    def build_new_session_agent(session_store)
+      @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
+      reset_session_diff
+      conversation = new_conversation(workspace_root: session_store.cwd)
+      @active_session.attach(conversation)
+      build_interactive_agent(conversation)
     end
 
     def track_session(session)

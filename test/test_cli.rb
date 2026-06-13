@@ -1019,6 +1019,25 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_mode_resumes_last_session_on_startup
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      first_prompt = FakePrompt.new(["hello", "/exit"])
+      first_client = RecordingClient.new(["reply"])
+      Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: first_prompt, client: first_client, session_store: store).interactive_loop
+
+      assert_path_exists store.last_session_path
+
+      second_prompt = FakePrompt.new(["again", "/exit"])
+      second_client = RecordingClient.new(["second"])
+      Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: second_prompt, client: second_client, session_store: store).interactive_loop
+
+      assert_equal "hello", second_client.seen_messages[0][1]["content"]
+      assert_equal "reply", second_client.seen_messages[0][2]["content"]
+      assert_equal "again", second_client.seen_messages[0][3][:content]
+    end
+  end
+
   def test_interactive_mode_prints_visual_banner_once_without_persisting_it
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
