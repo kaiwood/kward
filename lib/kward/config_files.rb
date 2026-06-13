@@ -63,6 +63,9 @@ module Kward
         },
         "composer" => {
           "busy_help" => true
+        },
+        "tools" => {
+          "workspace_guardrails" => true
         }
       }
     end
@@ -168,6 +171,11 @@ module Kward
     def banner_enabled?(config = read_config)
       banner = config["banner"].is_a?(Hash) ? config["banner"] : {}
       banner["enabled"] != false
+    end
+
+    def workspace_guardrails_enabled?(config = read_config)
+      tools = config["tools"].is_a?(Hash) ? config["tools"] : {}
+      tools["workspace_guardrails"] != false
     end
 
     def update_overlay_settings(values)

@@ -23,6 +23,20 @@ class TestWorkspace < KwardTestCase
     assert_match(/Error: path outside workspace:/, workspace.edit_file("../Gemfile", [{ "old_text" => "x", "new_text" => "y" }], read_paths: []))
   end
 
+  def test_disabled_guardrails_allow_file_tools_outside_workspace
+    Dir.mktmpdir do |parent|
+      root = File.join(parent, "workspace")
+      Dir.mkdir(root)
+      outside = File.join(parent, "outside.txt")
+      File.write(outside, "outside\n")
+      workspace = Kward::Workspace.new(root: root, guardrails: false)
+
+      assert_equal "outside\n", workspace.read_file(outside)
+      assert_match(/Wrote 8 bytes to #{Regexp.escape(File.join(parent, "new.txt"))}/, workspace.write_file(File.join(parent, "new.txt"), "created\n", read_paths: []))
+      assert_equal "created\n", File.read(File.join(parent, "new.txt"))
+    end
+  end
+
   def test_file_at_size_limit_is_accepted_but_read_output_is_capped
     with_temp_workspace do |workspace, dir|
       path = File.join(dir, "max_size_test_file.tmp")

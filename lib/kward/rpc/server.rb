@@ -132,7 +132,7 @@ module Kward
         when "workspace/info"
           workspace_info(params["workspaceRoot"] || Dir.pwd)
         when "tools/list"
-          { tools: ToolRegistry.new.schemas }
+          { tools: ToolRegistry.new(workspace: configured_workspace).schemas }
         when "prompts/list"
           prompts_list
         when "prompts/expand"
@@ -317,7 +317,7 @@ module Kward
             reasoning: { start: false, delta: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
             steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
-            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false },
+            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false, workspaceGuardrails: workspace_guardrails_enabled? },
             errors: true,
             sessionUpdates: false
           },
@@ -592,6 +592,14 @@ module Kward
         when "defaultThinkingLevel"
           "Thinking level updated for this session."
         end
+      end
+
+      def configured_workspace(root = Dir.pwd)
+        Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
+      end
+
+      def workspace_guardrails_enabled?
+        ConfigFiles.workspace_guardrails_enabled?(@config_manager.read(redacted: false))
       end
 
       def write_result(id, result)

@@ -12,8 +12,9 @@ module Kward
     MAX_EDIT_DIFF_BYTES = 8 * 1024
     DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
 
-    def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES)
+    def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES, guardrails: true)
       @root = Pathname.new(root).realpath
+      @guardrails = guardrails
       @max_file_bytes = max_file_bytes
       @max_read_output_bytes = max_read_output_bytes
       @max_read_output_lines = max_read_output_lines
@@ -124,10 +125,10 @@ module Kward
       target = @root.join(target) unless target.absolute?
 
       expanded = target.expand_path
-      raise SecurityError, "path outside workspace: #{path}" unless inside_workspace?(expanded)
+      raise SecurityError, "path outside workspace: #{path}" if guardrails_enabled? && !inside_workspace?(expanded)
 
       resolved = target.realpath
-      raise SecurityError, "path outside workspace: #{path}" unless inside_workspace?(resolved)
+      raise SecurityError, "path outside workspace: #{path}" if guardrails_enabled? && !inside_workspace?(resolved)
 
       resolved.to_s
     end
@@ -137,14 +138,18 @@ module Kward
       target = @root.join(target) unless target.absolute?
 
       expanded = target.expand_path
-      raise SecurityError, "path outside workspace: #{path}" unless inside_workspace?(expanded)
+      raise SecurityError, "path outside workspace: #{path}" if guardrails_enabled? && !inside_workspace?(expanded)
 
       return workspace_path(path) if File.exist?(expanded) || File.symlink?(expanded)
 
       parent = expanded.dirname.realpath
-      raise SecurityError, "path outside workspace: #{path}" unless inside_workspace?(parent)
+      raise SecurityError, "path outside workspace: #{path}" if guardrails_enabled? && !inside_workspace?(parent)
 
       expanded.to_s
+    end
+
+    def guardrails_enabled?
+      @guardrails != false
     end
 
     def inside_workspace?(path)

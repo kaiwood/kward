@@ -74,7 +74,7 @@ module Kward
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
         session, conversation = store.load(
           location[:path],
-          workspace: Workspace.new(root: root),
+          workspace: configured_workspace(root),
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )
@@ -453,7 +453,8 @@ module Kward
           active_persona_label: active_persona_label(rpc_session),
           message_count: message_count(rpc_session.conversation),
           pending_count: pending_turn_count(rpc_session.id),
-          compaction_enabled: compaction_settings.enabled
+          compaction_enabled: compaction_settings.enabled,
+          workspace_guardrails_enabled: workspace_guardrails_enabled?
         )
       end
 
@@ -548,8 +549,7 @@ module Kward
       end
 
       def compaction_settings
-        path = File.join(@config_dir, "config.json")
-        Kward::Compaction::Settings.from_config(ConfigFiles.read_config(path))
+        Kward::Compaction::Settings.from_config(ConfigFiles.read_config(config_path))
       rescue StandardError
         Kward::Compaction::Settings.new
       end
@@ -674,7 +674,7 @@ module Kward
       def reload_rpc_session(rpc_session)
         session, conversation = rpc_session.store.load(
           rpc_session.session.path,
-          workspace: Workspace.new(root: rpc_session.workspace_root),
+          workspace: configured_workspace(rpc_session.workspace_root),
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )
@@ -1073,7 +1073,19 @@ module Kward
       end
 
       def build_tool_registry(workspace_root, prompt)
-        ToolRegistry.new(workspace: Workspace.new(root: workspace_root), prompt: prompt)
+        ToolRegistry.new(workspace: configured_workspace(workspace_root), prompt: prompt)
+      end
+
+      def configured_workspace(root)
+        Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
+      end
+
+      def workspace_guardrails_enabled?
+        ConfigFiles.workspace_guardrails_enabled?(ConfigFiles.read_config(config_path))
+      end
+
+      def config_path
+        File.join(@config_dir, "config.json")
       end
 
       def remember_session(rpc_session)

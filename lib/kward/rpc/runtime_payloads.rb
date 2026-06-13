@@ -3,7 +3,7 @@ module Kward
     module RuntimePayloads
       module_function
 
-      def state(session:, model:, streaming:, steering_supported:, auto_compaction_reserve_tokens:, active_persona_label:, message_count:, pending_count:, compaction_enabled:)
+      def state(session:, model:, streaming:, steering_supported:, auto_compaction_reserve_tokens:, active_persona_label:, message_count:, pending_count:, compaction_enabled:, workspace_guardrails_enabled:)
         {
           model: model,
           thinkingLevel: model[:reasoningEffort],
@@ -17,6 +17,7 @@ module Kward
           sessionName: session[:name],
           autoCompactionEnabled: compaction_enabled,
           autoCompactionReserveTokens: auto_compaction_reserve_tokens,
+          workspaceGuardrailsEnabled: workspace_guardrails_enabled,
           autoRetryEnabled: false,
           defaultProvider: model[:provider],
           defaultModel: default_model_label(model),

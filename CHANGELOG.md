@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `tools.workspace_guardrails: false` config support for allowing file tools to access paths outside the active workspace.
 - Added `banner.enabled: false` config support for hiding the interactive terminal banner.
 - Added colored CLI help/version commands, command-specific help, and stricter command precedence over one-shot prompts.
 - Added `--working-directory PATH` as a global option for running any CLI mode from another workspace.

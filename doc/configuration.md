@@ -260,6 +260,20 @@ For higher limits or alternate providers, add user-specific keys. Model-backed a
 
 Do not put shared or published API keys in this file.
 
+## Tool workspace guardrails
+
+Workspace guardrails are enabled by default. File tools such as `read_file`, `write_file`, `edit_file`, and `list_directory` are limited to the active workspace. To allow those file tools to access paths outside the workspace:
+
+```json
+{
+  "tools": {
+    "workspace_guardrails": false
+  }
+}
+```
+
+This is not a sandbox setting. Shell commands already run as your OS user from the workspace directory and can access anything that user can access.
+
 ## Logging and stats
 
 Local telemetry logs are off by default. Enable logging with the master flag and each category you want:

@@ -203,7 +203,7 @@ module Kward
       conversation = new_conversation
       agent = Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(prompt: @prompt),
+        tool_registry: ToolRegistry.new(workspace: configured_workspace, prompt: @prompt),
         conversation: conversation
       )
       answer = agent.ask(input) do |event|
@@ -806,7 +806,7 @@ module Kward
 
     def build_interactive_agent(conversation)
       conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
-      workspace = Workspace.new(root: conversation.workspace_root)
+      workspace = configured_workspace(root: conversation.workspace_root)
       tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
       @footer_conversation = conversation
       @footer_tool_registry = tool_registry
@@ -825,7 +825,7 @@ module Kward
       end
 
       run_busy_local_command_and_requeue(activity: "running") do
-        result = Workspace.new(root: interactive_workspace_root(agent)).run_shell_command(command)
+        result = configured_workspace(root: interactive_workspace_root(agent)).run_shell_command(command)
         @prompt.say("\n#{colored("Shell>", :green, :bold)} #{command}\n#{result}\n")
       end
       true
@@ -833,6 +833,14 @@ module Kward
 
     def shell_command_input?(input)
       input.to_s.start_with?("!")
+    end
+
+    def configured_workspace(root: current_workspace_root)
+      Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
+    end
+
+    def workspace_guardrails_enabled?
+      ConfigFiles.workspace_guardrails_enabled?(safely_read_config.to_h)
     end
 
     def interactive_workspace_root(agent)
@@ -1340,6 +1348,9 @@ module Kward
       when /\Aallow model-provider/, /\Adisallow model-provider/
         set_web_search_allow_model_providers(!web_search_allow_model_providers?)
         @prompt.say("\nModel-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.\n")
+      when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
+        set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
+        @prompt.say("\nWorkspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.\n")
       end
     end
 
@@ -1348,6 +1359,7 @@ module Kward
         "#{web_search_enabled? ? "Disable" : "Enable"} web search (currently #{on_off(web_search_enabled?)})",
         "Web search provider (#{web_search_provider})",
         "#{web_search_allow_model_providers? ? "Disallow" : "Allow"} model-provider web search (currently #{on_off(web_search_allow_model_providers?)})",
+        "#{workspace_guardrails_enabled? ? "Disable" : "Enable"} workspace guardrails (currently #{on_off(workspace_guardrails_enabled?)})",
         "Back"
       ]
     end
@@ -1385,6 +1397,10 @@ module Kward
 
     def set_web_search_allow_model_providers(enabled)
       update_nested_config("web_search", "allow_model_providers" => enabled)
+    end
+
+    def set_workspace_guardrails_enabled(enabled)
+      update_nested_config("tools", "workspace_guardrails" => enabled)
     end
 
     def configure_context_settings
@@ -1753,7 +1769,7 @@ module Kward
       return nil if path.to_s.empty?
 
       previous_session = @active_session
-      @active_session, conversation = session_store.load(path, workspace: Workspace.new(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
+      @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
       reset_session_diff(@active_session.path)
       track_session(@active_session)
       cleanup_replaced_session(previous_session)
@@ -1837,7 +1853,7 @@ module Kward
     def reload_active_session(session_store)
       @active_session, conversation = session_store.load(
         @active_session.path,
-        workspace: Workspace.new(root: session_store.cwd),
+        workspace: configured_workspace(root: session_store.cwd),
         model: current_model_id,
         reasoning_effort: current_reasoning_effort
       )
