@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Changed memory retrieval and listing to use a global core, workspace core, workspace soft hierarchy, and added `/memory relax` for downgrading global core memories to the current workspace.
 - Removed the obsolete `/crew` command reservation and unreleased RPC compatibility aliases.
 - Added Session Tree support with a CLI `/tree` command plus RPC persisted entry IDs, labels, label timestamps, and branch navigation.
 - Changed session tree rendering to match Pi's active-path-first branch display, markers, tool rows, and connector prefixes.

@@ -344,8 +344,8 @@ module Kward
         { autoSummary: false }
       end
 
-      def memory_list(include_inactive: false)
-        memory_manager.list(include_inactive: include_inactive)
+      def memory_list(include_inactive: false, workspace_root: Dir.pwd)
+        memory_manager.hierarchy(include_inactive: include_inactive, workspace_root: workspace_root)
       end
 
       def memory_add(text:, scope: nil, tags: [])
@@ -361,7 +361,11 @@ module Kward
       end
 
       def memory_promote(id:)
-        { memory: memory_manager.promote_soft_to_core(id) }
+        { memory: memory_manager.promote_memory(id) }
+      end
+
+      def memory_relax(id:, workspace_root: Dir.pwd)
+        { memory: memory_manager.relax_core(id, workspace_root: workspace_root) }
       end
 
       def memory_inspect

@@ -180,7 +180,7 @@ module Kward
         when "memory/autoSummary/disable"
           @session_manager.memory_auto_summary_disable
         when "memory/list"
-          @session_manager.memory_list(include_inactive: params["includeInactive"] || false)
+          @session_manager.memory_list(include_inactive: params["includeInactive"] || false, workspace_root: params["workspaceRoot"] || Dir.pwd)
         when "memory/add"
           @session_manager.memory_add(text: params.fetch("text"), scope: params["scope"], tags: params["tags"] || [])
         when "memory/addCore"
@@ -189,6 +189,8 @@ module Kward
           @session_manager.memory_forget(id: params.fetch("id"))
         when "memory/promote"
           @session_manager.memory_promote(id: params.fetch("id"))
+        when "memory/relax"
+          @session_manager.memory_relax(id: params.fetch("id"), workspace_root: params["workspaceRoot"] || Dir.pwd)
         when "memory/inspect"
           @session_manager.memory_inspect
         when "memory/why"
@@ -354,7 +356,7 @@ module Kward
             apiKeyProviders: ["openrouter"],
             logout: true
           },
-          memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable", "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/inspect", "memory/why", "memory/summarize"] },
+          memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable", "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/relax", "memory/inspect", "memory/why", "memory/summarize"] },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },

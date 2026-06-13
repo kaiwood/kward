@@ -76,6 +76,34 @@ class MemoryManagerTest < KwardTestCase
     assert_includes @manager.memory_block(retrieval), "Soft memories are contextual hints"
   end
 
+  def test_retrieval_ranks_global_core_before_workspace_core
+    @manager.enable
+    workspace_core = @manager.add_core("Use workspace workflow", scope: "workspace:#{File.realpath(@dir)}")
+    global_core = @manager.add_core("Use global workflow")
+
+    retrieval = @manager.retrieve_relevant(input: "workflow", workspace_root: @dir)
+
+    assert_equal [global_core["id"], workspace_core["id"]], retrieval["core"].map { |item| item["id"] }
+    block = @manager.memory_block(retrieval)
+    assert_operator block.index("Global Core Memories:"), :<, block.index("Workspace Core Memories:")
+  end
+
+  def test_hierarchy_only_returns_current_workspace_stages
+    global_core = @manager.add_core("Use global workflow")
+    workspace_core = @manager.add_core("Use workspace workflow", scope: "workspace:#{File.realpath(@dir)}")
+    other_core = @manager.add_core("Use other workflow", scope: "workspace:/tmp/other")
+    workspace_soft = @manager.add_soft("User prefers minitest workflow", scope: "workspace:#{File.realpath(@dir)}", tags: ["workflow"])
+    other_soft = @manager.add_soft("Other workspace uses rspec", scope: "workspace:/tmp/other", tags: ["workflow"])
+
+    hierarchy = @manager.hierarchy(workspace_root: @dir)
+
+    assert_equal [global_core["id"]], hierarchy["global_core"].map { |item| item["id"] }
+    assert_equal [workspace_core["id"]], hierarchy["workspace_core"].map { |item| item["id"] }
+    assert_equal [workspace_soft["id"]], hierarchy["workspace_soft"].map { |item| item["id"] }
+    refute_includes hierarchy.values.flatten.map { |item| item["id"] }, other_core["id"]
+    refute_includes hierarchy.values.flatten.map { |item| item["id"] }, other_soft["id"]
+  end
+
   def test_retrieval_requires_soft_memory_text_or_tag_overlap
     @manager.enable
     @manager.add_soft("User prefers minitest workflow", scope: "workspace:#{File.realpath(@dir)}", tags: ["workflow"])
@@ -114,13 +142,33 @@ class MemoryManagerTest < KwardTestCase
   def test_promote_soft_to_core_forgets_soft_record
     soft = @manager.add_soft("Use Minitest for this project")
 
-    core = @manager.promote_soft_to_core(soft["id"])
+    core = @manager.promote_memory(soft["id"])
 
     assert_equal "Use Minitest for this project", core["text"]
     assert_empty @manager.list["soft"]
     forgotten = @manager.list(include_inactive: true)["soft"].first
     assert_equal "forgotten", forgotten["status"]
     assert_equal "[forgotten]", forgotten["text"]
+  end
+
+  def test_promote_workspace_core_to_global_core
+    core = @manager.add_core("Use Minitest for this project", scope: "workspace:#{File.realpath(@dir)}")
+
+    promoted = @manager.promote_memory(core["id"])
+
+    assert_equal core["id"], promoted["id"]
+    assert_equal "global", promoted["scope"]
+    assert_equal "global", @manager.list["core"].find { |item| item["id"] == core["id"] }["scope"]
+  end
+
+  def test_relax_global_core_to_current_workspace_core
+    core = @manager.add_core("Use Minitest for this project")
+
+    relaxed = @manager.relax_core(core["id"], workspace_root: @dir)
+
+    assert_equal core["id"], relaxed["id"]
+    assert_equal "workspace:#{File.realpath(@dir)}", relaxed["scope"]
+    assert_equal "workspace:#{File.realpath(@dir)}", @manager.list["core"].find { |item| item["id"] == core["id"] }["scope"]
   end
 
   def test_forget_soft_memory_redacts_stored_text_and_tags

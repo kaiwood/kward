@@ -554,13 +554,16 @@ module Kward
         record = manager.add_soft(unquote_argument(rest), scope: "workspace:#{agent.conversation.workspace_root}")
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Added soft memory #{record["id"]}.\n")
       when "list"
-        @prompt.say("\n#{format_memory_list(manager.list)}\n")
+        @prompt.say("\n#{format_memory_list(manager.hierarchy(workspace_root: agent.conversation.workspace_root))}\n")
       when "forget"
         forgotten = manager.forget_memory(rest.to_s.strip)
         @prompt.say("\n#{forgotten ? "Forgot #{rest.to_s.strip}." : "No memory found for #{rest.to_s.strip}."}\n")
       when "promote"
-        record = manager.promote_soft_to_core(rest.to_s.strip)
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Promoted to core memory #{record["id"]}.\n")
+        record = manager.promote_memory(rest.to_s.strip)
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Promoted memory #{record["id"]}.\n")
+      when "relax"
+        record = manager.relax_core(rest.to_s.strip, workspace_root: agent.conversation.workspace_root)
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Relaxed memory #{record["id"]}.\n")
       when "inspect"
         @prompt.say("\n#{JSON.pretty_generate(manager.inspect_memory)}\n")
       when "why"
@@ -570,7 +573,7 @@ module Kward
         records = summarize_memory(agent.conversation, manager: manager)
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Learned #{records.length} soft #{records.length == 1 ? "memory" : "memories"}.\n")
       else
-        @prompt.say("\nUsage: /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|inspect|why|summarize\n")
+        @prompt.say("\nUsage: /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize\n")
       end
     rescue StandardError => e
       @prompt.say("\nMemory command failed: #{e.message}\n")
@@ -589,13 +592,18 @@ module Kward
     end
 
     def format_memory_list(memories)
-      lines = ["Core Memories:"]
-      Array(memories["core"]).each { |item| lines << "- #{item["id"]} [#{item["scope"]}] #{item["text"]}" }
-      lines << "- none" if Array(memories["core"]).empty?
-      lines << "Soft Memories:"
-      Array(memories["soft"]).each { |item| lines << "- #{item["id"]} [#{item["scope"]}] #{item["text"]}" }
-      lines << "- none" if Array(memories["soft"]).empty?
-      lines.join("\n")
+      sections = [
+        ["Global Core Memories:", Array(memories["global_core"])],
+        ["Workspace Core Memories:", Array(memories["workspace_core"])],
+        ["Workspace Soft Memories:", Array(memories["workspace_soft"])]
+      ]
+
+      sections.flat_map do |heading, records|
+        lines = [heading]
+        records.each { |item| lines << "- #{item["id"]} [#{item["scope"]}] #{item["text"]}" }
+        lines << "- none" if records.empty?
+        lines
+      end.join("\n")
     end
 
     def format_memory_why(explanation)

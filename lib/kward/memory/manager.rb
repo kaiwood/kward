@@ -167,13 +167,35 @@ module Kward
         record
       end
 
+      def promote_memory(id)
+        id = id.to_s
+        core = core_memories.find { |item| item["id"] == id }
+        return promote_core_to_global(core) if core
+
+        promote_soft_to_core(id)
+      end
+
       def promote_soft_to_core(id)
         soft = soft_memories.find { |item| item["id"] == id.to_s }
-        raise ArgumentError, "Unknown active soft memory: #{id}" unless soft
+        raise ArgumentError, "Unknown active soft memory or workspace core memory: #{id}" unless soft
 
         core = add_core(soft["text"], scope: soft["scope"], tags: soft["tags"], source: "promoted_soft_memory", pinned: true)
         forget_memory(id)
         append_event("promote", { "from_id" => soft["id"], "to_id" => core["id"] })
+        core
+      end
+
+      def relax_core(id, workspace_root: Dir.pwd)
+        id = id.to_s
+        memories = core_memories
+        core = memories.find { |item| item["id"] == id }
+        raise ArgumentError, "Unknown core memory: #{id}" unless core
+        raise ArgumentError, "Only global core memories can be relaxed" unless core["scope"] == "global"
+
+        core["scope"] = workspace_scope(workspace_root)
+        core["updated_at"] = timestamp
+        write_core(memories)
+        append_event("relax", event_ref(core, layer: "core"))
         core
       end
 
@@ -210,6 +232,16 @@ module Kward
         { "core" => core_memories, "soft" => soft_memories(include_inactive: include_inactive) }
       end
 
+      def hierarchy(workspace_root: Dir.pwd, include_inactive: false)
+        workspace = workspace_scope(workspace_root)
+        core = core_memories
+        {
+          "global_core" => core.select { |item| item["scope"] == "global" },
+          "workspace_core" => core.select { |item| item["scope"] == workspace },
+          "workspace_soft" => soft_memories(include_inactive: include_inactive).select { |item| item["scope"] == workspace }
+        }
+      end
+
       def inspect_memory
         list(include_inactive: true).merge("enabled" => enabled?, "paths" => paths)
       end
@@ -230,14 +262,15 @@ module Kward
         end
 
         scopes = scopes_for(workspace_root)
+        workspace = workspace_scope(workspace_root)
         terms = terms_for(input)
-        core = core_memories.select { |item| scopes.include?(item["scope"]) }.first(max_core)
+        core = ranked_core_memories(workspace).first(max_core)
         core_reasons = core.map { |item| reason_for(item, layer: "core", score: 1.0, reasons: ["scope match", "core memories are preferred"]) }
 
         soft_records_all = soft_memories(include_inactive: true)
         soft_scored = soft_records_all.filter_map do |item|
           next unless item["status"] == "active"
-          next unless scopes.include?(item["scope"])
+          next unless item["scope"] == workspace
           next if expired?(item)
 
           score, reasons = soft_score(item, terms)
@@ -271,14 +304,22 @@ module Kward
         soft = Array(retrieval["soft"])
         return nil if core.empty? && soft.empty?
 
+        global_core = core.select { |item| item["scope"] == "global" }
+        workspace_core = core.reject { |item| item["scope"] == "global" }
+
         lines = ["<kward_memory>"]
-        unless core.empty?
-          lines << "Core Memories:"
-          core.each { |item| lines << "- [#{item["id"]}] #{item["text"]}" }
+        unless global_core.empty?
+          lines << "Global Core Memories:"
+          global_core.each { |item| lines << "- [#{item["id"]}] #{item["text"]}" }
+          lines << ""
+        end
+        unless workspace_core.empty?
+          lines << "Workspace Core Memories:"
+          workspace_core.each { |item| lines << "- [#{item["id"]}] #{item["text"]}" }
           lines << ""
         end
         unless soft.empty?
-          lines << "Relevant Soft Memories:"
+          lines << "Workspace Soft Memories:"
           soft.each { |item| lines << "- [#{item["id"]}] #{item["text"]}" }
           lines << ""
         end
@@ -488,6 +529,24 @@ module Kward
 
       def scopes_for(workspace_root)
         ["global", workspace_scope(workspace_root)]
+      end
+
+      def ranked_core_memories(workspace)
+        memories = core_memories
+        memories.select { |item| item["scope"] == "global" } + memories.select { |item| item["scope"] == workspace }
+      end
+
+      def promote_core_to_global(core)
+        raise ArgumentError, "Only workspace core memories can be promoted" if core["scope"] == "global"
+        raise ArgumentError, "Only workspace core memories can be promoted" unless core["scope"].to_s.start_with?("workspace:")
+
+        memories = core_memories
+        record = memories.find { |item| item["id"] == core["id"] }
+        record["scope"] = "global"
+        record["updated_at"] = timestamp
+        write_core(memories)
+        append_event("promote", event_ref(record, layer: "core"))
+        record
       end
 
       def workspace_scope(workspace_root)

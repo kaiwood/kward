@@ -21,7 +21,7 @@ module Kward
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
-      { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|inspect|why|summarize]" }
+      { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|relax|inspect|why|summarize]" }
     ].freeze
     BUILTIN_RESERVED_COMMAND_NAMES = BUILTIN_COMMANDS.map { |command| command[:name] }.freeze
     SLASH_COMMAND_PATTERN = %r{\A/(\S+)(?:\s+(.*))?\z}m

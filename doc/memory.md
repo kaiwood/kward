@@ -53,7 +53,13 @@ Auto-summary does not run when memory is disabled and is not used for one-shot p
 
 ### Core memories
 
-Core memories are explicit user instructions. They are high-trust and persistent until removed. Add them only when you intentionally want Kward to remember something:
+Memory is organized as a hierarchy for the active workspace:
+
+1. Global core memories
+2. Workspace core memories
+3. Workspace soft memories
+
+Global core memories are explicit user instructions. They are high-trust, apply everywhere, and are ranked before workspace-specific memory. Add them only when you intentionally want Kward to remember something globally:
 
 ```text
 /memory core "Prefer small, focused patches with tests."
@@ -65,9 +71,11 @@ Core memories are stored as human-readable JSON in:
 ~/.kward/memory/core.json
 ```
 
+Workspace core memories are core memories scoped to a specific workspace. They usually come from promoting workspace soft memories.
+
 ### Soft memories
 
-Soft memories are contextual hints, such as workflow preferences or recurring project facts. They are confidence-based and treated as non-authoritative. Add one manually with:
+Soft memories are workspace-scoped contextual hints, such as workflow preferences or recurring project facts. They are confidence-based and treated as non-authoritative. Add one manually with:
 
 ```text
 /memory add "This workspace usually uses Minitest."
@@ -93,11 +101,13 @@ Session memories record memories learned during the current conversation so Kwar
 
 ## Inspect, explain, and remove memory
 
-List memories:
+List memories for the active workspace hierarchy:
 
 ```text
 /memory list
 ```
+
+The list is grouped as global core, workspace core, and workspace soft. Memories from other workspaces are not shown in this hierarchy view.
 
 Inspect memory state and file paths:
 
@@ -120,21 +130,29 @@ Forget a memory:
 
 For core memories, forget removes the record. For soft memories, forget marks the record inactive and redacts its stored text, tags, confidence, and hit count so inactive audit metadata can remain without retaining the memory content.
 
-Promote a soft memory to a core memory:
+Promote a memory:
 
 ```text
 /memory promote soft_001
+/memory promote core_001
 ```
 
-Promotion creates a new core memory and marks the soft memory forgotten.
+Promoting a soft memory creates a new workspace core memory and marks the soft memory forgotten. Promoting a workspace core memory upgrades it to global core.
+
+Relax a global core memory back to the current workspace:
+
+```text
+/memory relax core_001
+```
 
 ## Retrieval behavior
 
 For each interactive turn, Kward selectively retrieves memories using:
 
 - scope: `global` and `workspace:<canonical path>`
-- core memories first
-- soft-memory text or tag overlap with the current input; soft memories without overlap are not injected
+- global core memories first
+- workspace core memories second
+- workspace soft-memory text or tag overlap with the current input; soft memories without overlap are not injected
 - soft-memory confidence
 - soft-memory recency/TTL, updated when a soft memory is retrieved
 - hard limits on injected memory count
@@ -143,10 +161,13 @@ Retrieved memories are injected into the system prompt as a bounded block simila
 
 ```text
 <kward_memory>
-Core Memories:
+Global Core Memories:
 - [core_001] ...
 
-Relevant Soft Memories:
+Workspace Core Memories:
+- [core_002] ...
+
+Workspace Soft Memories:
 - [soft_001] ...
 
 Rules:
@@ -185,6 +206,7 @@ The experimental RPC backend exposes dedicated memory methods:
 - `memory/addCore`
 - `memory/forget`
 - `memory/promote`
+- `memory/relax`
 - `memory/inspect`
 - `memory/why`
 - `memory/summarize`

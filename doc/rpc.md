@@ -423,8 +423,9 @@ Disables quiet memory summarization after completed interactive turns. Returns `
 Params:
 
 - `includeInactive`: optional boolean; includes forgotten soft memories when true.
+- `workspaceRoot`: optional workspace root for hierarchy filtering; defaults to the server process workspace.
 
-Returns `{ "core": [], "soft": [] }`.
+Returns `{ "global_core": [], "workspace_core": [], "workspace_soft": [] }`.
 
 ### `memory/add`
 
@@ -460,13 +461,24 @@ Returns `{ "forgotten": true }` when a memory was removed or marked forgotten. C
 
 ### `memory/promote`
 
-Promotes an active soft memory to a new core memory and marks the soft memory forgotten.
+Promotes an active soft memory to a new workspace core memory and marks the soft memory forgotten, or promotes a workspace core memory to global core.
 
 Params:
 
-- `id`: soft memory ID.
+- `id`: soft memory ID or workspace core memory ID.
 
-Returns `{ "memory": {} }` for the new core memory.
+Returns `{ "memory": {} }`.
+
+### `memory/relax`
+
+Downgrades a global core memory to the current workspace hierarchy.
+
+Params:
+
+- `id`: global core memory ID.
+- `workspaceRoot`: optional workspace root for the relaxed scope; defaults to the server process workspace.
+
+Returns `{ "memory": {} }`.
 
 ### `memory/inspect`
 

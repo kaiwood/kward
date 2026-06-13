@@ -138,6 +138,8 @@ Common commands:
 /memory add <text>
 /memory list
 /memory why
+/memory promote <id>
+/memory relax <id>
 /memory forget <id>
 /memory disable
 ```
