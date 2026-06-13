@@ -4,8 +4,7 @@ require "tty-cursor"
 require "tty-reader"
 require "tty-screen"
 require_relative "ansi"
-require_relative "resources/pixel_logo"
-require_relative "resources/avatar_kward_logo"
+require_relative "prompt_interface/banner"
 
 module Kward
   class PromptInterface
@@ -16,11 +15,8 @@ module Kward
     FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_MAX_INPUT_ROWS = 6
     TRANSCRIPT_BUFFER_LIMIT = 200_000
-    BANNER_LOGO_WIDTH = 32
-    BANNER_LOGO_PIXEL_HEIGHT = 32
-    BANNER_MIN_LOGO_HEIGHT = 4
-    BANNER_LOGO_PIXELS = Kward::Resources::AvatarKwardLogo::PIXELS
-    BANNER_MESSAGE = "State your business.".freeze
+    BANNER_LOGO_PIXELS = Banner::LOGO_PIXELS
+    BANNER_MESSAGE = Banner::MESSAGE
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
@@ -97,9 +93,7 @@ module Kward
       @busy_help = busy_help
       @attachment_badges = attachment_badges
       @attachment_parser = attachment_parser
-      @banner_message = banner_message.to_s
-      @banner_logo_pixels = banner_pixels
-      @banner_logo_cache = {}
+      @banner = Banner.new(message: banner_message, pixels: banner_pixels, screen_height: method(:screen_height))
     end
 
     def start
@@ -2002,58 +1996,11 @@ module Kward
     end
 
     def banner_rows(width)
-      return [] unless banner_visible?
-
-      rows = []
-      if banner_image_visible?
-        rows.concat(centered_banner_image_rows(width))
-      end
-      rows << align_plain_row(@banner_message, width) unless @banner_message.empty?
-      rows << ""
-      rows
-    end
-
-    def banner_visible?
-      !@banner_message.empty? || banner_image_visible?
-    end
-
-    def banner_image_visible?
-      !banner_logo_rows.empty?
-    end
-
-    def centered_banner_image_rows(width)
-      logo_width, = banner_logo_dimensions(width)
-      padding = [[(width - logo_width) / 2, 0].max, width - 1].min
-      banner_logo_rows.map { |row| (" " * padding) + row }
+      @banner.rows(width)
     end
 
     def banner_logo_rows
-      logo_width, logo_height = banner_logo_dimensions(screen_width)
-      return [] unless @banner_logo_pixels && max_banner_logo_height >= BANNER_MIN_LOGO_HEIGHT
-
-      key = [logo_width, logo_height]
-      @banner_logo_cache[key] ||= Kward::PixelLogo.half_block_rows_from_pixels(@banner_logo_pixels, width: logo_width, pixel_height: logo_height)
-    end
-
-    def banner_logo_dimensions(width)
-      logo_width = [BANNER_LOGO_WIDTH, [width - 2, 1].max].min
-      logo_height = [BANNER_LOGO_PIXEL_HEIGHT, max_banner_logo_height * 2].min
-      [logo_width, logo_height]
-    end
-
-    def max_banner_logo_height
-      message_rows = @banner_message.empty? ? 0 : 1
-      blank_after_banner = 1
-      minimum_composer_rows = 3
-      transcript_row = 1
-      reserved_rows = message_rows + blank_after_banner + minimum_composer_rows + transcript_row
-      [screen_height - reserved_rows, 0].max
-    end
-
-    def align_plain_row(text, width)
-      plain_length = ANSI.strip(text).length
-      padding = [width - plain_length, 0].max / 2
-      (" " * padding) + text.to_s
+      @banner.logo_rows(screen_width)
     end
 
     def question_overlay_rows(width)
