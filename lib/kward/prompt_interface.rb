@@ -87,6 +87,7 @@ module Kward
       @reserved_rows = 0
       @color_enabled = ANSI.enabled?(output)
       @cursor_visible = true
+      @synchronized_output_depth = 0
       @overlay_settings = normalize_overlay_settings(overlay_settings)
       @footer = footer
       @composer_status = composer_status
@@ -475,17 +476,36 @@ module Kward
     end
 
     def write_stream_block_locked(label, delta, finish: false)
-      prepare_transcript_output_locked unless @restoring_transcript
-      if label && @stream_block != label
-        ensure_transcript_block_separator_locked
-        write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
-        @stream_block = label
+      with_synchronized_output_locked do
+        prepare_transcript_output_locked unless @restoring_transcript
+        if label && @stream_block != label
+          ensure_transcript_block_separator_locked
+          write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
+          @stream_block = label
+        end
+        write_transcript_text_locked(delta) unless delta.empty?
+        write_transcript_text_locked("\n") if finish && @stream_block
+        @stream_block = nil if finish
+        restore_composer_cursor_locked unless @restoring_transcript
       end
-      write_transcript_text_locked(delta) unless delta.empty?
-      write_transcript_text_locked("\n") if finish && @stream_block
-      @stream_block = nil if finish
-      restore_composer_cursor_locked unless @restoring_transcript
       @output_io.flush unless @restoring_transcript
+    end
+
+    def with_synchronized_output_locked
+      if @restoring_transcript || @synchronized_output_depth.positive?
+        yield
+        return
+      end
+
+      synchronized = true
+      @synchronized_output_depth += 1
+      @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
+      yield
+    ensure
+      if synchronized
+        @synchronized_output_depth -= 1
+        @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE) if @synchronized_output_depth.zero?
+      end
     end
 
     def write_transcript_text_locked(text)
