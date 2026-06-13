@@ -979,6 +979,21 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT
   end
 
+  def test_prompt_interface_redraws_only_changed_composer_rows
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    prompt.instance_variable_set(:@last_spinner_tick, prompt.send(:monotonic_now) - Kward::PromptInterface::SPINNER_INTERVAL)
+    output.truncate(0)
+    output.rewind
+
+    prompt.send(:tick_spinner_locked)
+    prompt.send(:render_prompt_locked)
+
+    assert_equal 1, output.string.scan(TTY::Cursor.clear_line).length
+    assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
+  end
+
   def test_prompt_interface_advances_braille_spinner_while_busy
     input, writer = IO.pipe
     output = StringIO.new

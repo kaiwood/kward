@@ -61,6 +61,7 @@ module Kward
       @assistant_label = "Assistant"
       @stream_block = nil
       @rendered_rows = 0
+      @last_composer_rows = []
       @cursor_rendered_row = 0
       @stream_col = 0
       @stream_pending_wrap = false
@@ -1833,17 +1834,32 @@ module Kward
     end
 
     def render_composer_rows_locked(rows)
-      clear_composer_region_locked
       top = composer_top_row
-      rows.each_with_index do |row, index|
+      max_rows = [@last_composer_rows.length, rows.length].max
+      rows_to_clear = [@reserved_rows - rows.length, 0].max
+
+      max_rows.times do |index|
+        row = rows[index]
+        previous = @last_composer_rows[index]
+        next if row == previous
+
         move_to_screen(top + index, 1)
-        @output_io.print(row) unless row.empty?
+        @output_io.print(TTY::Cursor.clear_line)
+        @output_io.print(row) unless row.to_s.empty?
       end
+
+      rows.length.upto(rows.length + rows_to_clear - 1) do |index|
+        move_to_screen(top + index, 1)
+        @output_io.print(TTY::Cursor.clear_line)
+      end
+
+      @last_composer_rows = rows.dup
     end
 
     def clear_composer_region_locked(rows_to_clear = nil)
       rows_to_clear ||= [@reserved_rows, @rendered_rows].max
       clear_bottom_rows_locked(screen_height, rows_to_clear)
+      @last_composer_rows = []
     end
 
     def resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)
@@ -1885,6 +1901,7 @@ module Kward
       @output_io.print(TTY::Cursor.clear_screen)
       move_to_screen(1, 1)
       @reserved_rows = 0
+      @last_composer_rows = []
       rows, cursor_row, cursor_col = composer_layout(screen_width)
       ensure_scroll_region_locked(rows.length, redraw_transcript: false)
       redraw_transcript_locked
