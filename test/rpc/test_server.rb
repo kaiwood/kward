@@ -92,6 +92,7 @@ class TestRPCServer < KwardTestCase
     assert_equal false, capabilities["memory"]["autoSummaryDefaultEnabled"]
     assert_includes capabilities["memory"]["methods"], "memory/autoSummary/enable"
     assert_includes capabilities["memory"]["methods"], "memory/autoSummary/disable"
+    assert_includes capabilities["memory"]["methods"], "memory/relax"
     assert_equal true, capabilities["commands"]["supported"]
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
@@ -154,12 +155,80 @@ class TestRPCServer < KwardTestCase
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"], capabilities["auth"]["methods"]
     assert_equal ["logging/stats", "logging/tokenCsv"], capabilities["logging"]["methods"]
+    assert_equal ["memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable", "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/relax", "memory/inspect", "memory/why", "memory/summarize"], capabilities["memory"]["methods"]
     assert_equal "commands/list", capabilities["commands"]["method"]
     assert_includes capabilities["commands"]["methods"], "commands/run"
     assert_equal "resources/startup", capabilities["startupResources"]["method"]
     assert_includes capabilities["sessions"]["methods"], "sessions/compact"
     assert_includes capabilities["sessions"]["methods"], "sessions/delete"
     assert_includes capabilities["sessions"]["methods"], "sessions/close"
+  end
+
+  def test_memory_rpc_methods_manage_hierarchy
+    Dir.mktmpdir do |dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      other_workspace = File.realpath(Dir.mktmpdir)
+      config_path = File.join(dir, "config.json")
+      workspace_scope = "workspace:#{workspace_root}"
+      other_scope = "workspace:#{other_workspace}"
+
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "memory/enable" },
+        { jsonrpc: "2.0", id: 2, method: "memory/status" },
+        { jsonrpc: "2.0", id: 3, method: "memory/addCore", params: { text: "Use global workflow" } },
+        { jsonrpc: "2.0", id: 4, method: "memory/addCore", params: { text: "Use workspace workflow", scope: workspace_scope } },
+        { jsonrpc: "2.0", id: 5, method: "memory/add", params: { text: "Workspace prefers minitest", scope: workspace_scope, tags: ["workflow"] } },
+        { jsonrpc: "2.0", id: 6, method: "memory/addCore", params: { text: "Use other workflow", scope: other_scope } },
+        { jsonrpc: "2.0", id: 7, method: "memory/add", params: { text: "Other prefers rspec", scope: other_scope, tags: ["workflow"] } },
+        { jsonrpc: "2.0", id: 8, method: "memory/list", params: { workspaceRoot: workspace_root } },
+        { jsonrpc: "2.0", id: 9, method: "memory/promote", params: { id: "core_002" } },
+        { jsonrpc: "2.0", id: 10, method: "memory/relax", params: { id: "core_002", workspaceRoot: workspace_root } },
+        { jsonrpc: "2.0", id: 11, method: "memory/promote", params: { id: "soft_001" } },
+        { jsonrpc: "2.0", id: 12, method: "memory/forget", params: { id: "core_004" } },
+        { jsonrpc: "2.0", id: 13, method: "memory/inspect" },
+        { jsonrpc: "2.0", id: 14, method: "memory/why" },
+        { jsonrpc: "2.0", id: 15, method: "memory/disable" },
+        { jsonrpc: "2.0", id: 16, method: "memory/status" },
+        { jsonrpc: "2.0", id: 17, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_empty messages.select { |message| message["error"] }
+      assert_equal true, messages.find { |message| message["id"] == 2 }.dig("result", "enabled")
+
+      hierarchy = messages.find { |message| message["id"] == 8 }["result"]
+      assert_equal ["core_001"], hierarchy["global_core"].map { |item| item["id"] }
+      assert_equal ["core_002"], hierarchy["workspace_core"].map { |item| item["id"] }
+      assert_equal ["soft_001"], hierarchy["workspace_soft"].map { |item| item["id"] }
+
+      assert_equal "global", messages.find { |message| message["id"] == 9 }.dig("result", "memory", "scope")
+      assert_equal workspace_scope, messages.find { |message| message["id"] == 10 }.dig("result", "memory", "scope")
+      assert_equal workspace_scope, messages.find { |message| message["id"] == 11 }.dig("result", "memory", "scope")
+      assert_equal true, messages.find { |message| message["id"] == 12 }.dig("result", "forgotten")
+      assert_equal "No memory retrieval has run yet.", messages.find { |message| message["id"] == 14 }.dig("result", "message")
+      assert_equal false, messages.find { |message| message["id"] == 16 }.dig("result", "enabled")
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+      FileUtils.remove_entry(other_workspace) if other_workspace && File.exist?(other_workspace)
+    end
+  end
+
+  def test_memory_summarize_rpc_route_learns_from_session
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      output = StringIO.new
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: output, error_output: StringIO.new, client: FakeClient.new([]))
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+        rpc_session = server.instance_variable_get(:@session_manager).send(:fetch_session, session[:id])
+        rpc_session.conversation.append_user("I prefer concise answers")
+        server.send(:handle_message, { "jsonrpc" => "2.0", "id" => 1, "method" => "memory/summarize", "params" => { "sessionId" => session[:id] } })
+      end
+
+      result = read_framed_messages(output).find { |message| message["id"] == 1 }["result"]
+      assert_equal ["I prefer concise answers"], result["memories"].map { |memory| memory["text"] }
+      assert_equal ["soft_001"], result["memories"].map { |memory| memory["id"] }
+    end
   end
 
   def test_logging_stats_rpc_returns_structured_summary
