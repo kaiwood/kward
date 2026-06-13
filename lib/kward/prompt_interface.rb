@@ -406,35 +406,25 @@ module Kward
 
     def start_stream_block(label)
       @mutex.synchronize do
-        if @stream_block != label
-          prepare_transcript_output_locked unless @restoring_transcript
-          ensure_transcript_block_separator_locked
-          write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
-          @stream_block = label
-        end
-        restore_composer_cursor_locked unless @restoring_transcript
-        @output_io.flush unless @restoring_transcript
+        write_stream_block_locked(label, "", finish: false)
       end
     end
 
     def write_delta(delta)
       @mutex.synchronize do
-        prepare_transcript_output_locked unless @restoring_transcript
-        write_transcript_text_locked(delta.to_s)
-        restore_composer_cursor_locked unless @restoring_transcript
-        @output_io.flush unless @restoring_transcript
+        write_stream_block_locked(nil, delta.to_s, finish: false)
       end
     end
 
     def finish_stream_block
       @mutex.synchronize do
-        prepare_transcript_output_locked unless @restoring_transcript
-        if @stream_block
-          write_transcript_text_locked("\n")
-        end
-        @stream_block = nil
-        restore_composer_cursor_locked unless @restoring_transcript
-        @output_io.flush unless @restoring_transcript
+        write_stream_block_locked(nil, "", finish: true)
+      end
+    end
+
+    def write_stream_block(label, delta, finish: false)
+      @mutex.synchronize do
+        write_stream_block_locked(label, delta.to_s, finish: finish)
       end
     end
 
@@ -482,6 +472,20 @@ module Kward
     ensure
       @original_console_mode = nil
       @raw_mode_active = false
+    end
+
+    def write_stream_block_locked(label, delta, finish: false)
+      prepare_transcript_output_locked unless @restoring_transcript
+      if label && @stream_block != label
+        ensure_transcript_block_separator_locked
+        write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
+        @stream_block = label
+      end
+      write_transcript_text_locked(delta) unless delta.empty?
+      write_transcript_text_locked("\n") if finish && @stream_block
+      @stream_block = nil if finish
+      restore_composer_cursor_locked unless @restoring_transcript
+      @output_io.flush unless @restoring_transcript
     end
 
     def write_transcript_text_locked(text)

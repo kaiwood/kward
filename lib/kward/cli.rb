@@ -2839,9 +2839,13 @@ module Kward
     def print_retry(event)
       message = retry_message(event)
       if prompt_interface?
-        @prompt.start_stream_block("Retry")
-        @prompt.write_delta("#{message}\n")
-        @prompt.finish_stream_block
+        if @prompt.respond_to?(:write_stream_block)
+          @prompt.write_stream_block("Retry", "#{message}\n", finish: true)
+        else
+          @prompt.start_stream_block("Retry")
+          @prompt.write_delta("#{message}\n")
+          @prompt.finish_stream_block
+        end
       else
         start_stream_block("Retry")
         puts message
@@ -2856,9 +2860,13 @@ module Kward
 
     def print_tool_call(tool_call)
       if prompt_interface?
-        @prompt.start_stream_block("Tool")
-        @prompt.write_delta("#{tool_command(tool_call)}\n")
-        @prompt.finish_stream_block
+        if @prompt.respond_to?(:write_stream_block)
+          @prompt.write_stream_block("Tool", "#{tool_command(tool_call)}\n", finish: true)
+        else
+          @prompt.start_stream_block("Tool")
+          @prompt.write_delta("#{tool_command(tool_call)}\n")
+          @prompt.finish_stream_block
+        end
       else
         start_stream_block("Tool")
         puts tool_command(tool_call)
@@ -2871,10 +2879,14 @@ module Kward
       summary = tool_result_summary(tool_call, content)
       summary = limit_tool_output_lines(summary, line_limit) if line_limit
       if prompt_interface?
-        @prompt.start_stream_block("Tool output")
-        @prompt.write_delta(summary)
-        @prompt.write_delta("\n") unless summary.end_with?("\n")
-        @prompt.finish_stream_block
+        summary = summary.end_with?("\n") ? summary : "#{summary}\n"
+        if @prompt.respond_to?(:write_stream_block)
+          @prompt.write_stream_block("Tool output", summary, finish: true)
+        else
+          @prompt.start_stream_block("Tool output")
+          @prompt.write_delta(summary)
+          @prompt.finish_stream_block
+        end
       else
         start_stream_block("Tool output")
         print summary
