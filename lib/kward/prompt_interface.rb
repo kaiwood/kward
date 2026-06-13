@@ -66,6 +66,8 @@ module Kward
       @stream_col = 0
       @stream_pending_wrap = false
       @transcript_buffer = +""
+      @transcript_display_rows_cache_width = nil
+      @transcript_display_rows_cache = nil
       @visual_banner_count = 0
       @transcript_viewport_rows = 0
       @restoring_transcript = false
@@ -165,6 +167,7 @@ module Kward
         clear_prompt_for_output_locked
         @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
         @transcript_buffer = +""
+        invalidate_transcript_display_rows_cache
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
         @stream_block = nil
@@ -399,6 +402,7 @@ module Kward
           write_visual_transcript_text_locked("\n")
         end
         @visual_banner_count += 1
+        invalidate_transcript_display_rows_cache
         remember_transcript_viewport_locked
         @stream_block = nil
         restore_composer_cursor_locked
@@ -440,6 +444,7 @@ module Kward
     def clear_transcript
       @mutex.synchronize do
         @transcript_buffer = +""
+        invalidate_transcript_display_rows_cache
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
         @stream_block = nil
@@ -524,9 +529,15 @@ module Kward
 
     def append_transcript_buffer(text)
       @transcript_buffer << ANSI.sanitize_transcript(text)
+      invalidate_transcript_display_rows_cache
       return if @transcript_buffer.length <= TRANSCRIPT_BUFFER_LIMIT
 
       @transcript_buffer = @transcript_buffer[-TRANSCRIPT_BUFFER_LIMIT, TRANSCRIPT_BUFFER_LIMIT]
+    end
+
+    def invalidate_transcript_display_rows_cache
+      @transcript_display_rows_cache_width = nil
+      @transcript_display_rows_cache = nil
     end
 
     def ensure_transcript_block_separator_locked
@@ -1953,11 +1964,14 @@ module Kward
     end
 
     def transcript_display_rows(width)
+      return @transcript_display_rows_cache if @transcript_display_rows_cache_width == width && @transcript_display_rows_cache
+
       rows = []
       @visual_banner_count.times { rows.concat(banner_rows(width)) }
       rows << "" if @visual_banner_count.positive? && @transcript_buffer.empty?
       rows.concat(transcript_text_display_rows(width))
-      rows
+      @transcript_display_rows_cache_width = width
+      @transcript_display_rows_cache = rows
     end
 
     def transcript_text_display_rows(width)

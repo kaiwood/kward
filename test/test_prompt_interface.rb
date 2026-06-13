@@ -1260,6 +1260,20 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_prompt_interface_reuses_transcript_display_rows_until_transcript_changes
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.say("first")
+
+    rows = prompt.send(:transcript_display_rows, 80)
+    assert_same rows, prompt.send(:transcript_display_rows, 80)
+
+    prompt.say("second")
+
+    refute_same rows, prompt.send(:transcript_display_rows, 80)
+  end
+
   def test_prompt_interface_redraw_replays_visible_transcript_and_composer
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
