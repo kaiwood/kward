@@ -45,6 +45,13 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_banner_enabled_defaults_to_true_and_only_false_disables_it
+    assert_equal true, Kward::ConfigFiles.banner_enabled?({})
+    assert_equal true, Kward::ConfigFiles.banner_enabled?("banner" => {})
+    assert_equal true, Kward::ConfigFiles.banner_enabled?("banner" => { "enabled" => true })
+    assert_equal false, Kward::ConfigFiles.banner_enabled?("banner" => { "enabled" => false })
+  end
+
   def test_cli_run_creates_default_config_without_onboarding_output
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

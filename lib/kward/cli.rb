@@ -1777,6 +1777,7 @@ module Kward
       prompt_interface = load_prompt_interface
       return unless prompt_interface
 
+      banner_enabled = ConfigFiles.banner_enabled?
       @prompt = prompt_interface.new(
         slash_commands: slash_command_entries,
         overlay_settings: ConfigFiles.overlay_settings,
@@ -1785,8 +1786,8 @@ module Kward
         busy_help: ConfigFiles.composer_busy_help?,
         attachment_badges: method(:composer_attachment_badges),
         attachment_parser: method(:composer_attachment_parser),
-        banner_pixels: Kward::PromptInterface::BANNER_LOGO_PIXELS,
-        banner_message: Kward::PromptInterface::BANNER_MESSAGE
+        banner_pixels: banner_enabled ? Kward::PromptInterface::BANNER_LOGO_PIXELS : nil,
+        banner_message: banner_enabled ? Kward::PromptInterface::BANNER_MESSAGE : nil
       )
       @prompt.start
     end

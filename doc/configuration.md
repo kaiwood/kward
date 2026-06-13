@@ -141,6 +141,20 @@ Overlay settings control terminal picker/card layout:
 
 You can change these interactively with `/settings`.
 
+## Banner settings
+
+The interactive terminal banner shows the avatar Kward logo and the “State your business.” message by default. To hide the full banner:
+
+```json
+{
+  "banner": {
+    "enabled": false
+  }
+}
+```
+
+This only affects the interactive terminal UI.
+
 ## Composer settings
 
 The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:

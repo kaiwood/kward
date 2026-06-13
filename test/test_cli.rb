@@ -1,6 +1,26 @@
 require_relative "test_helper"
 
 class TestCLI < KwardTestCase
+  class RecordingPromptInterface < FakePrompt
+    attr_reader :options, :started
+
+    def initialize(**options)
+      super([])
+      @options = options
+      @started = false
+    end
+
+    def start
+      @started = true
+    end
+  end
+
+  class RecordingPromptInterfaceCLI < Kward::CLI
+    def load_prompt_interface
+      RecordingPromptInterface
+    end
+  end
+
   class BannerPrompt < FakePrompt
     attr_reader :banner_count
 
@@ -1012,6 +1032,22 @@ class TestCLI < KwardTestCase
       files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
       assert_equal 1, files.length
       refute_includes File.read(files.first), "visual banner"
+    end
+  end
+
+  def test_setup_interactive_prompt_disables_banner_from_config
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("banner" => { "enabled" => false }))
+      cli = RecordingPromptInterfaceCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TTY::Prompt.new)
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:setup_interactive_prompt)
+      end
+
+      prompt = cli.instance_variable_get(:@prompt)
+      assert_equal true, prompt.started
+      assert_nil prompt.options[:banner_pixels]
+      assert_nil prompt.options[:banner_message]
     end
   end
 

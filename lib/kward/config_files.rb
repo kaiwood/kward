@@ -165,6 +165,11 @@ module Kward
       composer["busy_help"] != false
     end
 
+    def banner_enabled?(config = read_config)
+      banner = config["banner"].is_a?(Hash) ? config["banner"] : {}
+      banner["enabled"] != false
+    end
+
     def update_overlay_settings(values)
       raise "Overlay settings must be an object" unless values.is_a?(Hash)
 
