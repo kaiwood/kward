@@ -101,7 +101,7 @@ Useful session commands:
 
 - `/resume` opens a picker for recent sessions.
 - `/name <name>` gives the current session a human-readable name.
-- `/clone` creates a new independent copy. Cloned sessions remember their parent and appear indented in the resume picker.
+- `/clone` creates a new independent copy. Cloned sessions remember their parent and appear in the recent session picker by modification time.
 - `/copy` and `/copy last` copy the latest assistant response without terminal borders or ANSI styling. `/copy transcript` copies the clean Markdown transcript. Mouse selection may still include terminal UI chrome.
 - `/export [path]` writes a Markdown transcript. Explicit paths are resolved relative to the current workspace and must stay inside the workspace or Kward session directory.
 - `/compact [instructions]` summarizes older conversation into a structured Ruby-aware checkpoint. Text after `/compact ` is freeform focus text, not parsed as flags.

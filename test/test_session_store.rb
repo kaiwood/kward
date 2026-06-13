@@ -93,6 +93,40 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_recent_deletes_empty_unnamed_sessions
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      empty = store.create
+      saved = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      saved.attach(conversation)
+      conversation.append_user("saved prompt")
+
+      recent = store.recent(limit: 10)
+
+      assert_equal [saved.id], recent.map(&:id)
+      refute_path_exists empty.path
+    end
+  end
+
+  def test_recent_without_limit_returns_all_sessions
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      sessions = 25.times.map do |index|
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil)
+        session.attach(conversation)
+        conversation.append_user("saved prompt #{index}")
+        session
+      end
+
+      recent = store.recent(limit: nil)
+
+      assert_equal sessions.length, recent.length
+      assert_equal sessions.map(&:id).sort, recent.map(&:id).sort
+    end
+  end
+
   def test_cloned_session_persists_parent_metadata_and_tree_shape
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

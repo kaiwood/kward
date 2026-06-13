@@ -93,16 +93,36 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
-  def test_session_list_hides_active_empty_unnamed_session
+  def test_session_list_deletes_empty_unnamed_sessions
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
-      session = manager.create_session(workspace_root: workspace_root)
+      empty = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_root).create
+      saved = manager.create_session(workspace_root: workspace_root, name: "Keep me")
 
       sessions = manager.list_sessions(workspace_root: workspace_root, limit: 10)
 
-      assert_empty sessions
-      assert_path_exists session[:path]
+      assert_equal [saved[:persistentId]], sessions.map { |session| session[:id] }
+      refute_path_exists empty.path
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_session_list_without_limit_returns_all_sessions
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      sessions = 25.times.map do |index|
+        session = manager.create_session(workspace_root: workspace_root)
+        manager.send(:fetch_session, session[:id]).conversation.append_user("saved prompt #{index}")
+        session
+      end
+
+      listed = manager.list_sessions(workspace_root: workspace_root)
+
+      assert_equal sessions.length, listed.length
+      assert_equal sessions.map { |session| session[:persistentId] }.sort, listed.map { |session| session[:id] }.sort
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
@@ -259,6 +279,29 @@ class TestRPCSessionManager < KwardTestCase
       assert_equal ["soft_001"], memories.map { |memory| memory["id"] }
       refute_includes memories.map { |memory| memory["text"] }, "Prefer focused tests and always use minitest"
       refute_includes memories.map { |memory| memory["text"] }, "I always use assistant-generated summaries"
+    end
+  end
+
+  def test_session_list_keeps_cloned_sessions_in_newest_first_order
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      parent = manager.create_session(workspace_root: workspace_root)
+      parent_rpc = manager.send(:fetch_session, parent[:id])
+      parent_rpc.conversation.append_user("parent prompt")
+      clone = manager.clone_session(session_id: parent[:id])
+      clone_rpc = manager.send(:fetch_session, clone[:id])
+      clone_rpc.conversation.append_user("clone prompt")
+      old_time = Time.now - 60
+      File.utime(old_time, old_time, parent[:path])
+      File.utime(Time.now, Time.now, clone[:path])
+
+      sessions = manager.list_sessions(workspace_root: workspace_root, limit: 10)
+
+      assert_equal [clone[:persistentId], parent[:persistentId]], sessions.map { |session| session[:id] }
+      assert_equal parent[:persistentId], sessions.first[:parentId]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
   end
 
@@ -553,7 +596,7 @@ class TestRPCSessionManager < KwardTestCase
       assert_equal source[:path], listed_clone[:parentPath]
       assert_equal "Useful", listed_clone[:name]
       assert_equal 0, listed_source[:depth]
-      assert_equal 1, listed_clone[:depth]
+      assert_equal 0, listed_clone[:depth]
       assert_equal [], listed_clone[:ancestorContinues]
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)

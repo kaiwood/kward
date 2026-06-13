@@ -881,8 +881,8 @@ class TestCLI < KwardTestCase
         events << [:select_session]
         choices.first
       end
-      store.define_singleton_method(:recent_tree) do |limit: 20|
-        prompt.events << [:recent_tree]
+      store.define_singleton_method(:recent) do |limit: 20|
+        prompt.events << [:recent, limit]
         super(limit: limit)
       end
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
@@ -890,7 +890,7 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       loading_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
-      recent_index = prompt.events.index([:recent_tree])
+      recent_index = prompt.events.index([:recent, nil])
       select_index = prompt.events.index([:select_session])
       assert loading_index
       assert recent_index
@@ -1011,17 +1011,20 @@ class TestCLI < KwardTestCase
     command = %q(ruby -e '12.times { |i| puts "line#{i + 1}" }')
     prompt = FakePrompt.new(["show lines", "/exit"])
     client = RecordingClient.new([assistant_tool_call("run_shell_command", command: command), "done"])
-    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
-    output = capture_io do
-      cli.interactive_loop
-    end.first
+      output = capture_io do
+        cli.interactive_loop
+      end.first
 
-    assert_includes output, "Tool output>"
-    assert_includes output, "...[truncated"
-    refute_includes output, "line12"
-    tool_message = client.seen_messages[1].find { |message| (message["role"] || message[:role]) == "tool" }
-    assert_includes tool_message[:content], "line12"
+      assert_includes output, "Tool output>"
+      assert_includes output, "...[truncated"
+      refute_includes output, "line12"
+      tool_message = client.seen_messages[1].find { |message| (message["role"] || message[:role]) == "tool" }
+      assert_includes tool_message[:content], "line12"
+    end
   end
 
   def test_resume_limits_restored_tool_output_to_10_lines
@@ -1270,7 +1273,7 @@ edit this prompt"
     end
   end
 
-  def test_resume_picker_shows_cloned_sessions_as_tree
+  def test_resume_picker_shows_cloned_sessions_newest_first
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
@@ -1280,18 +1283,41 @@ edit this prompt"
       clone, clone_conversation = store.create_independent_from_conversation(conversation, parent_session: source)
       clone.rename("clone session")
       clone_conversation.append_user("clone session")
+      old_time = Time.now - 60
+      File.utime(old_time, old_time, source.path)
+      File.utime(Time.now, Time.now, clone.path)
       prompt = FakeSessionSelectPrompt.new(["/resume", "/exit"], "clone session")
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
 
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
+      assert_equal "clone session — #{File.basename(clone.path)}", prompt.select_choices.first.first
       assert_includes prompt.select_choices.first, "root session — #{File.basename(source.path)}"
-      assert prompt.select_choices.first.any? { |choice| choice.include?("└─ clone session — #{File.basename(clone.path)}") }
+      refute prompt.select_choices.first.any? { |choice| choice.include?("└─ clone session") }
     end
   end
 
-  def test_resume_picker_hides_active_empty_unnamed_session
+  def test_resume_picker_deletes_empty_unnamed_sessions
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      empty = store.create
+      saved = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      saved.attach(conversation)
+      conversation.append_user("saved session")
+      prompt = FakeSessionSelectPrompt.new(["/resume", "/exit"], "saved session")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal ["Session>"], prompt.select_messages
+      assert_includes prompt.select_choices.first, "saved session — #{File.basename(saved.path)}"
+      refute_path_exists empty.path
+    end
+  end
+
+  def test_resume_picker_reports_no_saved_sessions_when_only_empty_unnamed_session_exists
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       prompt = FakePrompt.new(["/resume", "/exit"])

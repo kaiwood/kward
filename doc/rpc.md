@@ -115,9 +115,9 @@ Loads a persisted session and returns a new RPC session ID.
 Params:
 
 - `workspaceRoot`: optional.
-- `limit`: optional, default `20`.
+- `limit`: optional; omitted or non-positive values return all sessions.
 
-Returns recent persisted sessions for that workspace. Existing sessions without ancestry are roots; cloned or forked sessions include parent metadata and tree display fields. Each item includes absolute `path`, `cwd`, `workspaceRoot`, `createdAt`, `modifiedAt`, optional `name`, compact `firstMessage`, `messageCount` excluding metadata records, optional `parentId`/`parentPath`, `depth`, `isLast`, and `ancestorContinues` for tree rendering.
+Returns recent persisted sessions for that workspace in modification-time order. Empty unnamed sessions are deleted during listing. Cloned or forked sessions include parent metadata. Each item includes absolute `path`, `cwd`, `workspaceRoot`, `createdAt`, `modifiedAt`, optional `name`, compact `firstMessage`, `messageCount` excluding metadata records, optional `parentId`/`parentPath`, `depth`, `isLast`, and `ancestorContinues` fields.
 
 ### `sessions/rename`
 

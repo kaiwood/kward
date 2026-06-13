@@ -1601,10 +1601,7 @@ module Kward
     end
 
     def select_session_path(session_store)
-      recent_limit = 20
-      sessions = session_store.recent_tree(limit: recent_limit + 1)
-                              .reject { |session| active_empty_unnamed_session_info?(session) }
-                              .first(recent_limit)
+      sessions = session_store.recent(limit: nil)
       if sessions.empty?
         @prompt.say("\nNo saved sessions found.\n")
         return nil
@@ -1627,13 +1624,6 @@ module Kward
       else
         answer
       end
-    end
-
-    def active_empty_unnamed_session_info?(session)
-      return false unless @active_session
-      return false unless File.expand_path(session.path) == File.expand_path(@active_session.path)
-
-      session.name.to_s.strip.empty? && session.message_count.to_i.zero?
     end
 
     def session_label(session)

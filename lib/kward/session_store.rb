@@ -214,11 +214,12 @@ module Kward
     end
 
     def recent(limit: 20)
-      recent_sessions.first(limit)
+      limit ? recent_sessions.first(limit) : recent_sessions
     end
 
     def recent_tree(limit: 20)
-      decorate_tree(recent_sessions.first(limit))
+      sessions = limit ? recent_sessions.first(limit) : recent_sessions
+      decorate_tree(sessions)
     end
 
     def delete_unused_session(session)
@@ -555,8 +556,21 @@ module Kward
 
     def recent_sessions
       Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
-        session_info(path)
+        info = session_info(path)
+        next unless info
+        next if delete_empty_unnamed_session_info(info)
+
+        info
       end.sort_by { |info| info.modified_at || Time.at(0) }.reverse
+    end
+
+    def delete_empty_unnamed_session_info(info)
+      return false unless info.name.to_s.strip.empty? && info.message_count.to_i.zero?
+
+      File.delete(info.path)
+      true
+    rescue StandardError
+      false
     end
 
     def decorate_tree(sessions)

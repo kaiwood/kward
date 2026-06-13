@@ -82,13 +82,12 @@ module Kward
         session_payload(rpc_session)
       end
 
-      def list_sessions(workspace_root: Dir.pwd, limit: 20)
+      def list_sessions(workspace_root: Dir.pwd, limit: nil)
         root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
-        limit = limit.to_i <= 0 ? 20 : limit.to_i
-        store.recent_tree(limit: limit + active_session_count(root))
-             .reject { |info| active_empty_unnamed_session_info?(info, root) }
-             .first(limit)
+        requested_limit = limit.to_i if limit
+        requested_limit = nil unless requested_limit&.positive?
+        store.recent(limit: requested_limit)
              .map { |info| session_info_payload(info, workspace_root: root) }
       end
 
@@ -631,17 +630,6 @@ module Kward
 
       def active_session_count(workspace_root)
         @mutex.synchronize { @sessions.values.count { |rpc_session| rpc_session.workspace_root == workspace_root } }
-      end
-
-      def active_empty_unnamed_session_info?(info, workspace_root)
-        rpc_sessions = @mutex.synchronize { @sessions.values.dup }
-        rpc_sessions.any? do |rpc_session|
-          rpc_session.workspace_root == workspace_root &&
-            File.expand_path(rpc_session.session.path) == File.expand_path(info.path) &&
-            session_idle?(rpc_session) &&
-            info.name.to_s.strip.empty? &&
-            info.message_count.to_i.zero?
-        end
       end
 
       def message_count(conversation)
