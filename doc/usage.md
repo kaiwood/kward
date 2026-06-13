@@ -7,6 +7,7 @@ kward                          # interactive chat
 kward help                     # command overview and examples
 kward "Explain this project"   # one-shot prompt
 kward --install-starter-pack   # optional first-time setup
+kward pan                      # Pan mode web UI
 kward rpc                      # experimental JSON-RPC backend
 ```
 
@@ -43,6 +44,7 @@ Use `--working-directory PATH` with any mode to run Kward from a different works
 ```bash
 kward --working-directory ~/code/project
 kward --working-directory ~/code/project "Summarize this project"
+kward --working-directory ~/code/project pan
 kward --working-directory ~/code/project rpc
 ```
 
@@ -187,13 +189,13 @@ In the interactive composer, pasted image references appear as attachment badges
 Pan mode starts a minimal LAN web UI with a prompt textarea and transcript:
 
 ```bash
-kward --working-directory="/path/to/workspace" --pan-mode
+kward --working-directory="/path/to/workspace" pan
 ```
 
 From source:
 
 ```bash
-ruby lib/main.rb --working-directory="/path/to/workspace" --pan-mode
+ruby lib/main.rb --working-directory="/path/to/workspace" pan
 ```
 
 Pan mode streams assistant output and tool calls, queues prompts submitted while a turn is running, and saves the conversation as a normal per-workspace session.

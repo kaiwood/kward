@@ -288,6 +288,7 @@ module Kward
           #{command.call("kward")}                              Start an interactive chat
           #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
           #{command.call("kward login")}                        Sign in or save provider credentials
+          #{command.call("kward pan")}                          Start Pan mode web UI
           #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
 
         #{heading.call("Commands")}
@@ -295,12 +296,12 @@ module Kward
           #{command.call("version")}                            Show the installed Kward version
           #{command.call("login")} [openrouter|github]           Sign in with OpenAI, OpenRouter, or GitHub
           #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
+          #{command.call("pan")}                                Start Pan mode web UI
           #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
 
         #{heading.call("Options")}
           #{option.call("--working-directory=PATH")}             Run Kward from PATH
           #{option.call("--install-starter-pack")}               Install starter prompts and AGENTS.md
-          #{option.call("--pan-mode")}                           Start Pan mode web UI
           #{option.call("--help")}, #{option.call("-h")}                         Show this help
           #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
 
@@ -331,7 +332,7 @@ module Kward
     end
 
     def pan_mode?
-      @argv.include?("--pan-mode")
+      @argv == ["pan"] || @argv == ["--pan-mode"]
     end
 
     def export_token_stats(arguments)

@@ -561,7 +561,9 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[32;1mKward\e[0m - an extendable CLI coding agent"
     assert_includes output, "\e[34;1mUsage\e[0m"
     assert_includes output, "\e[32;1mkward login\e[0m"
+    assert_includes output, "\e[32;1mkward pan\e[0m"
     assert_includes output, "\e[36m\"Review this diff\"\e[0m"
+    refute_includes output, "--pan-mode"
     assert_includes output, "Command names take precedence. Anything else is sent as a one-shot prompt."
   end
 
@@ -644,6 +646,49 @@ class TestCLI < KwardTestCase
 
       assert_includes stderr, "Missing value for --working-directory"
       assert_includes stderr, "Run `kward help` for available commands."
+    end
+  end
+
+  def test_pan_command_starts_pan_server_with_working_directory
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        calls = []
+        original_new = Kward::PanServer.method(:new)
+        Kward::PanServer.define_singleton_method(:new) do |client:, working_directory:|
+          calls << { client: client, working_directory: working_directory }
+          Object.new.tap { |server| server.define_singleton_method(:run) { calls << :run } }
+        end
+        client = FakeClient.new([])
+        cli = Kward::CLI.new(argv: ["--working-directory", workspace_dir, "pan"], stdin: FakeInput.new("", tty: true), client: client)
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          cli.run
+        end
+
+        assert_equal [{ client: client, working_directory: File.expand_path(workspace_dir) }, :run], calls
+      ensure
+        Kward::PanServer.define_singleton_method(:new, original_new) if original_new
+      end
+    end
+  end
+
+  def test_legacy_pan_mode_flag_still_starts_pan_server
+    Dir.mktmpdir do |config_dir|
+      calls = []
+      original_new = Kward::PanServer.method(:new)
+      Kward::PanServer.define_singleton_method(:new) do |client:, working_directory:|
+        calls << working_directory
+        Object.new.tap { |server| server.define_singleton_method(:run) { calls << :run } }
+      end
+      cli = Kward::CLI.new(argv: ["--pan-mode"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        cli.run
+      end
+
+      assert_equal [Dir.pwd, :run], calls
+    ensure
+      Kward::PanServer.define_singleton_method(:new, original_new) if original_new
     end
   end
 

@@ -198,7 +198,7 @@ Manual `/compact [instructions]` works even when auto-compaction is disabled.
 
 ## Pan mode
 
-`--pan-mode` starts a LAN-reachable web UI and requires HTTP Basic Auth. Configure credentials before starting it:
+`kward pan` starts a LAN-reachable web UI and requires HTTP Basic Auth. Configure credentials before starting it:
 
 ```json
 {
