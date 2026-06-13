@@ -45,8 +45,10 @@ module Kward
         is_error = ToolMetadata.error_result?(text)
         result = { content: text, isError: is_error, images: [] }
         unless is_error
-          diff = ToolMetadata.extract_unified_diff(text)
-          result[:diff] = diff if diff
+          if mutation_tool?
+            diff = ToolMetadata.extract_unified_diff(text)
+            result[:diff] = diff if diff
+          end
 
           files = changed_files
           result[:changedFiles] = files if files.any?
@@ -55,10 +57,14 @@ module Kward
       end
 
       def changed_files
-        return [] unless ["edit", "write"].include?(@fields[:toolName])
+        return [] unless mutation_tool?
 
         path = @fields.dig(:args, :path)
         path.to_s.empty? ? [] : [path]
+      end
+
+      def mutation_tool?
+        ["edit", "write"].include?(@fields[:toolName])
       end
     end
   end

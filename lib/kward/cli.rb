@@ -753,10 +753,15 @@ module Kward
       @session_diff = path ? SessionDiff.from_session_file(path) : SessionDiff.new
     end
 
-    def update_session_diff(content)
+    def update_session_diff(content, tool_call: nil)
+      return unless mutation_tool_call?(tool_call)
       return unless @session_diff&.add_tool_result(content)
 
       @prompt.redraw if @prompt.respond_to?(:redraw)
+    end
+
+    def mutation_tool_call?(tool_call)
+      ["edit_file", "write_file", "edit", "write"].include?(ToolCall.name(tool_call).to_s)
     end
 
     def cleanup_unused_sessions
@@ -2080,7 +2085,7 @@ module Kward
       when Events::ToolResult
         stream_state[:streamed] = true
         finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-        update_session_diff(event.content)
+        update_session_diff(event.content, tool_call: event.tool_call)
         print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
       end
     end

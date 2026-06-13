@@ -2417,6 +2417,18 @@ edit this prompt"
     assert_equal "+2|-1 · 10% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
   end
 
+  def test_prompt_interface_ignores_non_mutation_tool_result_diff_text
+    prompt = BusyPrompt.new([])
+    content = "Exit status: 0\n\nSTDOUT:\n--- file.txt\n+++ file.txt\n@@ -1,25 +0,0 @@\n" + (1..25).map { |index| "-line #{index}\n" }.join
+    agent = EventAgent.new([Kward::Events::ToolResult.new(tool_call: tool_call("run_shell_command", command: "git diff"), content: content)])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal 0, prompt.redraw_count
+    assert_equal "Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
+  end
+
   def test_piped_prompt_reads_non_tty_input
     cli = Kward::CLI.new(stdin: FakeInput.new("hello from stdin\n", tty: false), client: FakeClient.new([]))
 

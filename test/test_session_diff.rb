@@ -108,4 +108,13 @@ class TestSessionDiff < KwardTestCase
       assert_equal 1, diff.deletions
     end
   end
+
+  def test_normalized_non_mutation_tool_result_does_not_store_diff
+    content = "Exit status: 0\n\nSTDOUT:\n--- file.txt\n+++ file.txt\n@@ -1,25 +0,0 @@\n" + (1..25).map { |index| "-line #{index}\n" }.join
+    normalizer = Kward::RPC::ToolEventNormalizer.new(tool_call("run_shell_command", command: "git diff"), content: content)
+
+    record = normalizer.execution_record
+
+    refute record[:result].key?(:diff)
+  end
 end
