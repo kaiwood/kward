@@ -21,6 +21,24 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_delete_session_uses_explicit_deletion_for_empty_unnamed_sessions
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      deleted_paths = []
+      session_trash = FakeSessionTrash.new { |path| deleted_paths << path }
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir, session_trash: session_trash)
+      session = manager.create_session(workspace_root: workspace_root)
+
+      result = manager.delete_session(session_id: session[:id])
+
+      assert_equal true, result[:deleted]
+      assert_equal [session[:path]], deleted_paths
+      refute_path_exists session[:path]
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_export_supports_markdown_default_and_html
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
@@ -773,4 +791,17 @@ class TestRPCSessionManager < KwardTestCase
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end
   end
+
+  class FakeSessionTrash
+    def initialize(&block)
+      @block = block
+    end
+
+    def delete(path)
+      @block.call(path)
+      File.delete(path)
+      true
+    end
+  end
+
 end

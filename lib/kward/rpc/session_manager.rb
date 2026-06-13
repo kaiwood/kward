@@ -41,11 +41,12 @@ module Kward
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
 
-      def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new)
+      def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, context_usage: ContextUsage.new, session_trash: SessionTrash.new)
         @server = server
         @client = client
         @config_dir = config_dir
         @context_usage = context_usage
+        @session_trash = session_trash
         @sessions = {}
         @turns = {}
         @mutex = Mutex.new
@@ -220,9 +221,9 @@ module Kward
       def delete_session(session_id:)
         rpc_session = fetch_session(session_id)
         path = rpc_session.session.path
-        close_session(session_id: session_id)
-        SessionTrash.new.delete(path)
-        { deleted: true, path: path }
+        close_rpc_session(rpc_session, delete_unused: false)
+        deleted = @session_trash.delete(path)
+        { deleted: deleted, path: path }
       end
 
       def close_session(session_id:)
@@ -1094,11 +1095,11 @@ module Kward
         rpc_session.worker = Thread.new { worker_loop(rpc_session) }
       end
 
-      def close_rpc_session(rpc_session)
+      def close_rpc_session(rpc_session, delete_unused: true)
         @mutex.synchronize { @sessions.delete(rpc_session.id) }
         stop_worker(rpc_session)
         stop_footer_worker(rpc_session)
-        rpc_session.session.delete_if_unused if rpc_session.session.respond_to?(:delete_if_unused)
+        rpc_session.session.delete_if_unused if delete_unused && rpc_session.session.respond_to?(:delete_if_unused)
       end
 
       def cleanup_other_unused_sessions(current_session)
