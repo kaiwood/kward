@@ -64,7 +64,7 @@ ruby lib/main.rb "Explain this project"
 - This project uses Minitest. Add or update focused tests for behavior changes.
 - Network/auth behavior should be easy to test without real external calls; follow existing test patterns and stubs.
 - Keep CLI output stable unless the task is explicitly about UX copy.
-- Add user-facing changes to the `CHANGELOG.md` Unreleased section.
+- Add user-facing changes to the `CHANGELOG.md` `[Unreleased]` section using grouped `### Added`, `### Changed`, `### Fixed`, or `### Removed` subsections.
 - When adding configuration, document default behavior and environment variable interactions.
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
 - When changing prompt/skill behavior, update `doc/extensibility.md` and prompt-related tests as needed.
