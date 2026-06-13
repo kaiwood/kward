@@ -3,6 +3,24 @@ require_relative "test_support"
 class TestRPCSessionManager < KwardTestCase
   include KwardRPCTestSupport
 
+  def test_delete_session_removes_persisted_session_file
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+      manager.send(:fetch_session, session[:id]).conversation.append_user("keep me")
+
+      result = manager.delete_session(session_id: session[:id])
+
+      assert_equal true, result[:deleted]
+      assert_equal session[:path], result[:path]
+      refute File.exist?(session[:path])
+      assert_empty manager.list_sessions(workspace_root: workspace_root, limit: nil)
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_export_supports_markdown_default_and_html
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

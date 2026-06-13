@@ -4,6 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
+- Changed RPC session deletion to use the OS trash/recycle bin when available before falling back to permanent file deletion.
 - Changed automatic session naming to persist the first visible user turn, keeping slash prompt names unexpanded while still saving expanded prompt content.
 - Added `banner.enabled: false` config support for hiding the interactive terminal banner.
 - Added colored CLI help/version commands, command-specific help, and stricter command precedence over one-shot prompts.

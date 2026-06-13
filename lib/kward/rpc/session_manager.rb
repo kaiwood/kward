@@ -17,6 +17,7 @@ require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../session_store"
+require_relative "../session_trash"
 require_relative "../steering"
 require_relative "../tools/tool_call"
 require_relative "../tools/registry"
@@ -220,7 +221,7 @@ module Kward
         rpc_session = fetch_session(session_id)
         path = rpc_session.session.path
         close_session(session_id: session_id)
-        File.delete(path) if File.exist?(path)
+        SessionTrash.new.delete(path)
         { deleted: true, path: path }
       end
 
