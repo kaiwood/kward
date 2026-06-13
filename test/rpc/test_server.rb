@@ -45,10 +45,12 @@ class TestRPCServer < KwardTestCase
   end
 
   def test_initialize_and_shutdown
+    config_dir = Dir.mktmpdir
+    config_path = File.join(config_dir, "config.json")
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },
       { jsonrpc: "2.0", id: 2, method: "shutdown" }
-    ])
+    ], env: { "KWARD_CONFIG_PATH" => config_path })
 
     assert_equal 1, messages[0]["result"]["protocolVersion"]
     capabilities = messages[0]["result"]["capabilities"]
@@ -174,6 +176,8 @@ class TestRPCServer < KwardTestCase
     refute capabilities.key?("session")
     refute capabilities.key?("config")
     assert_equal true, messages[1]["result"]["ok"]
+  ensure
+    FileUtils.remove_entry(config_dir) if config_dir && Dir.exist?(config_dir)
   end
 
   def test_initialize_capability_method_lists_match_rpc_methods
