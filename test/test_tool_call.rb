@@ -25,6 +25,11 @@ class TestToolCall < KwardTestCase
     assert_equal({}, Kward::ToolCall.parse_arguments("not-json"))
   end
 
+  def test_value_preserves_falsey_values
+    assert_equal false, Kward::ToolCall.value({ active: false }, :active)
+    assert_equal 0, Kward::ToolCall.value({ "count" => 0 }, :count)
+  end
+
   def test_normalizes_names_and_camelizes_nested_arguments
     assert_equal "edit", Kward::ToolCall.normalized_name("edit_file")
     assert_equal({ timeoutSeconds: 7, nestedValue: [{ oldText: "old" }] }, Kward::ToolCall.camelize_args({ "timeout_seconds" => 7, "nested_value" => [{ "old_text" => "old" }] }))

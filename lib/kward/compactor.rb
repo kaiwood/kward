@@ -2,6 +2,7 @@ require "json"
 require_relative "model/chat_invocation"
 require_relative "config_files"
 require_relative "prompts"
+require_relative "tools/tool_call"
 
 module Kward
   module Compaction
@@ -163,9 +164,7 @@ module Kward
       end
 
       def value(object, key)
-        return nil unless object.respond_to?(:key?)
-
-        object[key] || object[key.to_s]
+        ToolCall.value(object, key)
       end
     end
 
