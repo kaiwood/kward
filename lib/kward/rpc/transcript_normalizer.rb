@@ -21,7 +21,7 @@ module Kward
       def normalize_message(message)
         return nil unless message.is_a?(Hash)
 
-        case value(message, :role).to_s
+        case ToolCall.value(message, :role).to_s
         when "system"
           nil
         when "user"
@@ -42,9 +42,9 @@ module Kward
       end
 
       def normalize_compaction_summary(message)
-        summary = value(message, :summary) || value(message, :content)
+        summary = ToolCall.value(message, :summary) || ToolCall.value(message, :content)
         result = { role: "compactionSummary", summary: summary.to_s }
-        tokens_before = value(message, :tokensBefore) || value(message, :tokens_before)
+        tokens_before = ToolCall.value(message, :tokensBefore) || ToolCall.value(message, :tokens_before)
         result[:tokensBefore] = tokens_before if tokens_before
         result
       end
@@ -52,12 +52,12 @@ module Kward
       def normalize_user_message(message)
         {
           role: "user",
-          content: normalize_content(value(message, :content))
+          content: normalize_content(ToolCall.value(message, :content))
         }
       end
 
       def normalize_assistant_message(message)
-        content = reasoning_first_content(normalize_content(value(message, :content), preserve_thinking: true))
+        content = reasoning_first_content(normalize_content(ToolCall.value(message, :content), preserve_thinking: true))
         reasoning = normalize_reasoning_summary(message)
         content.unshift(reasoning) if reasoning && !thinking_content?(content)
         tool_calls(message).each do |tool_call|
@@ -69,17 +69,17 @@ module Kward
         end
 
         result = { role: "assistant", content: content }
-        error_message = value(message, :errorMessage) || value(message, :error_message)
+        error_message = ToolCall.value(message, :errorMessage) || ToolCall.value(message, :error_message)
         result[:errorMessage] = error_message unless error_message.to_s.empty?
         result
       end
 
       def normalize_tool_result_message(message)
-        tool_call_id = value(message, :toolCallId) || value(message, :tool_call_id)
+        tool_call_id = ToolCall.value(message, :toolCallId) || ToolCall.value(message, :tool_call_id)
         matching_call = @tool_calls_by_id[tool_call_id]
-        raw_name = value(message, :toolName) || value(message, :tool_name) || value(message, :name)
+        raw_name = ToolCall.value(message, :toolName) || ToolCall.value(message, :tool_name) || ToolCall.value(message, :name)
         tool_name = normalize_tool_name(raw_name) || raw_name || matching_call&.dig(:name)
-        content = normalize_content(value(message, :content))
+        content = normalize_content(ToolCall.value(message, :content))
 
         result = {
           role: "toolResult",
@@ -120,10 +120,10 @@ module Kward
       def normalize_content_part(part, preserve_thinking: false)
         return { type: "text", text: part.to_s } unless part.is_a?(Hash)
 
-        type = value(part, :type).to_s
+        type = ToolCall.value(part, :type).to_s
         case type
         when "text"
-          text = value(part, :text)
+          text = ToolCall.value(part, :text)
           text.nil? ? nil : { type: "text", text: text.to_s }
         when "image"
           normalize_image_part(part)
@@ -137,17 +137,17 @@ module Kward
       end
 
       def normalize_unknown_content_part(part)
-        text = value(part, :text)
+        text = ToolCall.value(part, :text)
         text.nil? ? nil : { type: "text", text: text.to_s }
       end
 
       def normalize_thinking_part(part)
-        thinking = value(part, :thinking) || value(part, :reasoning) || value(part, :text)
+        thinking = ToolCall.value(part, :thinking) || ToolCall.value(part, :reasoning) || ToolCall.value(part, :text)
         thinking.nil? ? nil : { type: "thinking", thinking: thinking.to_s }
       end
 
       def normalize_reasoning_summary(message)
-        summary = value(message, :reasoning_summary) || value(message, :reasoningSummary)
+        summary = ToolCall.value(message, :reasoning_summary) || ToolCall.value(message, :reasoningSummary)
         summary.to_s.empty? ? nil : { type: "thinking", thinking: summary.to_s }
       end
 
@@ -161,36 +161,36 @@ module Kward
       end
 
       def thinking_content_part?(part)
-        part.is_a?(Hash) && value(part, :type) == "thinking"
+        part.is_a?(Hash) && ToolCall.value(part, :type) == "thinking"
       end
 
       def normalize_image_part(part)
-        mime_type = value(part, :mimeType) || value(part, :mime_type) || value(part, :media_type)
+        mime_type = ToolCall.value(part, :mimeType) || ToolCall.value(part, :mime_type) || ToolCall.value(part, :media_type)
         mime_type = normalize_mime_type(mime_type)
         return nil unless IMAGE_MIME_TYPES.include?(mime_type)
 
-        data = value(part, :data)
+        data = ToolCall.value(part, :data)
         return nil if data.to_s.empty?
 
         result = { type: "image", data: data, mimeType: mime_type }
-        alt = value(part, :alt) || image_alt_from_path(value(part, :path))
+        alt = ToolCall.value(part, :alt) || image_alt_from_path(ToolCall.value(part, :path))
         result[:alt] = alt unless alt.to_s.empty?
         result
       end
 
       def normalize_existing_tool_call_part(part)
-        raw_name = value(part, :name)
-        arguments = value(part, :arguments) || {}
+        raw_name = ToolCall.value(part, :name)
+        arguments = ToolCall.value(part, :arguments) || {}
         {
           type: "toolCall",
-          id: value(part, :id),
+          id: ToolCall.value(part, :id),
           name: normalize_tool_name(raw_name) || raw_name,
           arguments: normalize_tool_arguments(raw_name, arguments)
         }.compact
       end
 
       def tool_result_details(message, matching_call, content)
-        explicit_details = value(message, :details)
+        explicit_details = ToolCall.value(message, :details)
         details = explicit_details.is_a?(Hash) ? safe_details(explicit_details) : {}
         text = content_text(content)
 
@@ -205,9 +205,9 @@ module Kward
 
       def safe_details(details)
         allowed = {}
-        diff = value(details, :diff)
+        diff = ToolCall.value(details, :diff)
         allowed[:diff] = diff if diff
-        changed_files = value(details, :changedFiles) || value(details, :changed_files)
+        changed_files = ToolCall.value(details, :changedFiles) || ToolCall.value(details, :changed_files)
         allowed[:changedFiles] = changed_files if changed_files.is_a?(Array)
         allowed
       end
@@ -228,8 +228,8 @@ module Kward
       end
 
       def error_tool_result?(message, content)
-        return value(message, :isError) if has_key?(message, :isError)
-        return value(message, :is_error) if has_key?(message, :is_error)
+        return ToolCall.value(message, :isError) if has_key?(message, :isError)
+        return ToolCall.value(message, :is_error) if has_key?(message, :is_error)
 
         ToolMetadata.error_result?(content_text(content))
       end
@@ -241,7 +241,7 @@ module Kward
       end
 
       def tool_calls(message)
-        calls = value(message, :tool_calls) || value(message, :toolCalls)
+        calls = ToolCall.value(message, :tool_calls) || ToolCall.value(message, :toolCalls)
         calls.is_a?(Array) ? calls : []
       end
 
@@ -263,7 +263,7 @@ module Kward
 
       def normalize_bash_args(args)
         normalized = ToolCall.camelize_args(args)
-        timeout = value(args, :timeoutSeconds) || value(args, :timeout_seconds)
+        timeout = ToolCall.value(args, :timeoutSeconds) || ToolCall.value(args, :timeout_seconds)
         normalized[:timeoutSeconds] = timeout if timeout
         normalized.delete(:timeout_seconds)
         normalized
@@ -275,10 +275,6 @@ module Kward
 
       def image_alt_from_path(path)
         path ? File.basename(path.to_s) : nil
-      end
-
-      def value(object, key)
-        ToolCall.value(object, key)
       end
 
       def has_key?(object, key)

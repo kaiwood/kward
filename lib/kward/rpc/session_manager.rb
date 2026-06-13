@@ -830,20 +830,12 @@ module Kward
         return false unless message.is_a?(Hash) && message_role(message) == "assistant"
 
         content = message_content(message)
-        content_tool_calls = content.is_a?(Array) && content.any? { |part| tree_content_part_value(part, :type) == "toolCall" }
+        content_tool_calls = content.is_a?(Array) && content.any? { |part| ToolCall.value(part, :type) == "toolCall" }
         (content_tool_calls && !tree_text_content?(content)) || (!tool_calls(message).empty? && full_message_text(message).empty?)
       end
 
       def tree_text_content?(content)
-        Array(content).any? { |part| tree_content_part_value(part, :type) == "text" && tree_content_part_value(part, :text).to_s.strip != "" }
-      end
-
-      def tree_content_part_value(part, key)
-        return nil unless part.respond_to?(:key?)
-        return part[key] if part.key?(key)
-        return part[key.to_s] if part.key?(key.to_s)
-
-        nil
+        Array(content).any? { |part| ToolCall.value(part, :type) == "text" && ToolCall.value(part, :text).to_s.strip != "" }
       end
 
       def tree_contains_active_path?(node, active_path)
@@ -917,11 +909,11 @@ module Kward
       end
 
       def tree_message_tool_call_id(message)
-        MessageAccess.tool_call_id(message) || MessageAccess.value(message, :toolCallId)
+        MessageAccess.tool_call_id(message) || ToolCall.value(message, :toolCallId)
       end
 
       def tree_message_tool_name(message)
-        MessageAccess.name(message) || MessageAccess.value(message, :toolName)
+        MessageAccess.name(message) || ToolCall.value(message, :toolName)
       end
 
       def format_tool_call(tool_call)
@@ -1040,23 +1032,23 @@ module Kward
       def normalize_attachment(attachment)
         raise ArgumentError, "attachment must be an object" unless attachment.is_a?(Hash)
 
-        type = value(attachment, :type).to_s
+        type = ToolCall.value(attachment, :type).to_s
         raise ArgumentError, "Unsupported attachment type: #{type.empty? ? "unknown" : type}" unless type == "image"
 
-        mime_type = normalize_attachment_mime_type(value(attachment, :mimeType) || value(attachment, :mime_type) || value(attachment, :media_type))
+        mime_type = normalize_attachment_mime_type(ToolCall.value(attachment, :mimeType) || ToolCall.value(attachment, :mime_type) || ToolCall.value(attachment, :media_type))
         raise ArgumentError, "Unsupported image MIME type: #{mime_type.empty? ? "unknown" : mime_type}" unless RPC_IMAGE_MIME_TYPES.include?(mime_type)
 
-        data = value(attachment, :data).to_s
+        data = ToolCall.value(attachment, :data).to_s
         raise ArgumentError, "Image attachment data must be valid base64" if data.empty?
         raise ArgumentError, "Image attachment data must be raw base64" if data.start_with?("data:")
-        declared_size = value(attachment, :sizeBytes) || value(attachment, :size_bytes)
+        declared_size = ToolCall.value(attachment, :sizeBytes) || ToolCall.value(attachment, :size_bytes)
         raise ArgumentError, "Image attachment is too large" if declared_size && declared_size.to_i > RPC_ATTACHMENT_MAX_BYTES
 
         decoded_size = Base64.strict_decode64(data).bytesize
         raise ArgumentError, "Image attachment is too large" if decoded_size > RPC_ATTACHMENT_MAX_BYTES
 
         result = { type: "image", data: data, mimeType: mime_type }
-        name = value(attachment, :name)
+        name = ToolCall.value(attachment, :name)
         result[:alt] = name.to_s unless name.to_s.empty?
         result
       rescue ArgumentError => e
@@ -1067,14 +1059,6 @@ module Kward
 
       def normalize_attachment_mime_type(mime_type)
         mime_type.to_s.downcase
-      end
-
-      def value(object, key)
-        return nil unless object.respond_to?(:key?)
-        return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
-
-        nil
       end
 
       def plugin_registry
