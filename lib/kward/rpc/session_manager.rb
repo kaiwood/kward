@@ -23,6 +23,7 @@ require_relative "../tools/registry"
 require_relative "../transcript_export"
 require_relative "../workspace"
 require_relative "prompt_bridge"
+require_relative "runtime_payloads"
 require_relative "tool_event_normalizer"
 require_relative "transcript_normalizer"
 
@@ -435,35 +436,17 @@ module Kward
           compaction_settings: compaction_settings
         )
         session = session_payload(rpc_session)
-        pending_count = pending_turn_count(rpc_session.id)
-        {
+        RuntimePayloads.state(
+          session: session,
           model: model,
-          thinkingLevel: model[:reasoningEffort],
-          isStreaming: streaming?(rpc_session),
-          isCompacting: false,
-          steeringMode: supports_in_flight_steer? ? "in-flight" : "one-at-a-time",
-          followUpMode: "one-at-a-time",
-          sessionFile: session[:path],
-          rpcSessionId: session[:id],
-          persistentSessionId: session[:persistentId],
-          sessionName: session[:name],
-          autoCompactionEnabled: compaction_settings.enabled,
-          autoCompactionReserveTokens: auto_compaction_reserve_tokens,
-          autoRetryEnabled: false,
-          defaultProvider: model[:provider],
-          defaultModel: default_model_label(model),
-          defaultThinkingLevel: model[:reasoningEffort],
-          activePersonaLabel: active_persona_label(rpc_session),
-          hideThinkingBlock: false,
-          quietStartup: false,
-          transport: "kward-rpc",
-          imageAutoResize: false,
-          blockImages: false,
-          enabledModels: [],
-          enableSkillCommands: true,
-          messageCount: message_count(rpc_session.conversation),
-          pendingMessageCount: pending_count
-        }.compact
+          streaming: streaming?(rpc_session),
+          steering_supported: supports_in_flight_steer?,
+          auto_compaction_reserve_tokens: auto_compaction_reserve_tokens,
+          active_persona_label: active_persona_label(rpc_session),
+          message_count: message_count(rpc_session.conversation),
+          pending_count: pending_turn_count(rpc_session.id),
+          compaction_enabled: compaction_settings.enabled
+        )
       end
 
       def runtime_stats(session_id:)
@@ -476,21 +459,14 @@ module Kward
           context_window: model[:contextWindow],
           compaction_settings: compaction_settings
         )
-        {
-          sessionFile: session[:path],
-          rpcSessionId: session[:id],
-          persistentSessionId: session[:persistentId],
-          sessionName: session[:name],
-          userMessages: counts[:userMessages],
-          assistantMessages: counts[:assistantMessages],
-          toolCalls: counts[:toolCalls],
-          toolResults: counts[:toolResults],
-          totalMessages: counts[:totalMessages],
-          usingSubscription: model[:provider] == "Codex",
-          autoCompactionEnabled: compaction_settings.enabled,
-          autoCompactionReserveTokens: auto_compaction_reserve_tokens,
-          contextUsage: context_usage(rpc_session, model)
-        }.compact
+        RuntimePayloads.stats(
+          session: session,
+          counts: counts,
+          model: model,
+          auto_compaction_reserve_tokens: auto_compaction_reserve_tokens,
+          context_usage: context_usage(rpc_session, model),
+          compaction_enabled: compaction_settings.enabled
+        )
       end
 
       def refresh_client_config
@@ -500,18 +476,7 @@ module Kward
       end
 
       def session_payload(rpc_session)
-        {
-          id: rpc_session.id,
-          persistentId: rpc_session.session.id,
-          path: rpc_session.session.path,
-          workspaceRoot: rpc_session.workspace_root,
-          cwd: rpc_session.session.cwd.to_s.empty? ? rpc_session.workspace_root : rpc_session.session.cwd,
-          name: rpc_session.session.name,
-          createdAt: rpc_session.session.created_at&.utc&.iso8601(3),
-          modifiedAt: session_modified_at(rpc_session.session)&.utc&.iso8601(3),
-          parentId: rpc_session.session.parent_id,
-          parentPath: rpc_session.session.parent_path
-        }
+        RuntimePayloads.session(rpc_session, modified_at: session_modified_at(rpc_session.session))
       end
 
       def session_modified_at(session)
@@ -593,12 +558,6 @@ module Kward
           current_model: (@client.current_model if @client.respond_to?(:current_model)),
           current_reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
         )
-      end
-
-      def default_model_label(model)
-        return nil if model[:provider].to_s.empty? || model[:id].to_s.empty?
-
-        "#{model[:provider]}/#{model[:id]}"
       end
 
       def active_persona_label(rpc_session)
