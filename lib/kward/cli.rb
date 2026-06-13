@@ -78,14 +78,16 @@ module Kward
 
     def dispatch
       if help_command?
-        print_help
+        print_command_help(@argv[1])
         return
       end
+      raise ArgumentError, command_usage("help") if ["help", "--help", "-h"].include?(@argv.first)
 
       if version_command?
         print_version
         return
       end
+      raise ArgumentError, command_usage("version") if ["version", "--version", "-v"].include?(@argv.first)
 
       ConfigFiles.ensure_default_config!
 
@@ -94,22 +96,46 @@ module Kward
         return
       end
 
-      if @argv.first == "rpc" && @argv.length == 1
+      if @argv.first == "rpc"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("rpc")
+          return
+        end
+        raise ArgumentError, command_usage("rpc") unless @argv.length == 1
+
         Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
         return
       end
 
-      if @argv[0, 2] == ["stats", "tokens"]
+      if @argv.first == "stats"
+        if @argv[1] == "tokens" && help_option_arguments?(@argv[2..] || [])
+          print_command_help("stats")
+          return
+        end
+        raise ArgumentError, command_usage("stats") unless @argv[1] == "tokens"
+
         export_token_stats(@argv[2..] || [])
         return
       end
 
       if pan_mode?
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("pan")
+          return
+        end
+        raise ArgumentError, command_usage("pan") unless @argv.length == 1
+
         PanServer.new(client: @client, working_directory: current_workspace_root).run
         return
       end
 
-      if ["login", "--login"].include?(@argv.first) && @argv.length <= 2
+      if ["login", "--login"].include?(@argv.first)
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("login")
+          return
+        end
+        raise ArgumentError, command_usage("login") unless @argv.length <= 2
+
         login(provider: @argv[1])
         return
       end
@@ -264,16 +290,32 @@ module Kward
     private
 
     def help_command?
-      ["help", "--help", "-h"].include?(@argv.first) && @argv.length == 1
+      ["help", "--help", "-h"].include?(@argv.first) && @argv.length <= 2
     end
 
     def version_command?
       ["version", "--version", "-v"].include?(@argv.first) && @argv.length == 1
     end
 
+    def help_option_arguments?(arguments)
+      arguments.length == 1 && ["help", "--help", "-h"].include?(arguments.first)
+    end
+
     def one_shot_prompt_argument
       prompt = @argv.join(" ").strip
       prompt.empty? ? nil : prompt
+    end
+
+    def print_command_help(command_name = nil)
+      if command_name.to_s.empty? || ["--help", "-h"].include?(command_name)
+        print_help
+        return
+      end
+
+      help = command_help[command_name]
+      raise ArgumentError, "Unknown command: #{command_name}" unless help
+
+      @prompt.say render_command_help(command_name, help)
     end
 
     def print_help
@@ -316,6 +358,64 @@ module Kward
       HELP
     end
 
+    def command_help
+      {
+        "help" => {
+          usage: "kward help [command]",
+          description: "Show the top-level command overview or help for one command.",
+          examples: ["kward help", "kward help pan"]
+        },
+        "version" => {
+          usage: "kward version",
+          description: "Show the installed Kward version.",
+          examples: ["kward version", "kward --version"]
+        },
+        "login" => {
+          usage: "kward login [openrouter|github]",
+          description: "Sign in with OpenAI, OpenRouter, or GitHub.",
+          examples: ["kward login", "kward login openrouter", "kward login github"]
+        },
+        "stats" => {
+          usage: "kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]",
+          description: "Export local token telemetry as CSV.",
+          examples: ["kward stats tokens today", "kward stats tokens today --bucket hour", "kward stats tokens week --output tokens.csv"]
+        },
+        "pan" => {
+          usage: "kward pan",
+          description: "Start Pan mode, a minimal LAN web UI with a prompt textarea and transcript.",
+          examples: ["kward pan", "kward --working-directory ~/code/project pan"]
+        },
+        "rpc" => {
+          usage: "kward rpc",
+          description: "Start the experimental JSON-RPC backend for UI clients.",
+          examples: ["kward rpc", "kward --working-directory ~/code/project rpc"]
+        }
+      }
+    end
+
+    def render_command_help(name, help)
+      heading = ->(text) { colored(text, :blue, :bold) }
+      command = ->(text) { colored(text, :green, :bold) }
+
+      lines = [
+        "#{command.call(name)} - #{help.fetch(:description)}",
+        "",
+        heading.call("Usage"),
+        "  #{command.call(help.fetch(:usage))}"
+      ]
+      examples = help.fetch(:examples, [])
+      if examples.any?
+        lines << ""
+        lines << heading.call("Examples")
+        examples.each { |example| lines << "  #{command.call(example)}" }
+      end
+      lines.join("\n")
+    end
+
+    def command_usage(name)
+      "Usage: #{command_help.fetch(name).fetch(:usage)}"
+    end
+
     def print_version
       @prompt.say "kward #{VERSION}"
     end
@@ -332,7 +432,7 @@ module Kward
     end
 
     def pan_mode?
-      @argv == ["pan"] || @argv == ["--pan-mode"]
+      ["pan", "--pan-mode"].include?(@argv.first)
     end
 
     def export_token_stats(arguments)

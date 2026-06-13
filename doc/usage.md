@@ -37,7 +37,7 @@ Prefix input with `!` to run a local shell command from the workspace root witho
 
 ## Shell commands
 
-Use `kward help` or `kward --help` to print a colored overview of available commands and examples. Use `kward version` or `kward --version` to print the installed version.
+Use `kward help` or `kward --help` to print a colored overview of available commands and examples. Use `kward help <command>` or `<command> --help` for command-specific help. Use `kward version` or `kward --version` to print the installed version.
 
 Use `--working-directory PATH` with any mode to run Kward from a different workspace:
 
@@ -50,7 +50,7 @@ kward --working-directory ~/code/project rpc
 
 ## One-shot prompts
 
-Command names take precedence. Anything else passed as command-line text is sent as a one-shot prompt:
+Command names take precedence. Invalid arguments for known commands show usage instead of becoming prompts. Anything else passed as command-line text is sent as a one-shot prompt:
 
 ```bash
 kward "Summarize the changes in this repository"

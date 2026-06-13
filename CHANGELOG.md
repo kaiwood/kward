@@ -4,7 +4,7 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
-- Added colored CLI help/version commands and examples, with command names taking precedence over one-shot prompts.
+- Added colored CLI help/version commands, command-specific help, and stricter command precedence over one-shot prompts.
 - Added `--working-directory PATH` as a global option for running any CLI mode from another workspace.
 - Changed Pan mode to start with the `kward pan` command; `--pan-mode` remains as a compatibility alias.
 - Changed memory retrieval and listing to use a global core, workspace core, workspace soft hierarchy, and added `/memory relax` for downgrading global core memories to the current workspace.

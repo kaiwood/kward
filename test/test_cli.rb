@@ -576,6 +576,58 @@ class TestCLI < KwardTestCase
     assert_equal ["kward #{Kward::VERSION}"], prompt.output
   end
 
+  def test_command_specific_help_prints_usage_and_examples
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["help", "pan"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+
+    cli.run
+
+    output = prompt.output.join("\n")
+    assert_includes output, "\e[32;1mpan\e[0m - Start Pan mode"
+    assert_includes output, "\e[34;1mUsage\e[0m"
+    assert_includes output, "\e[32;1mkward pan\e[0m"
+    assert_includes output, "\e[32;1mkward --working-directory ~/code/project pan\e[0m"
+  end
+
+  def test_command_help_option_prints_command_help
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["pan", "--help"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.run
+
+    assert_includes prompt.output.join("\n"), "Usage\n  kward pan"
+  end
+
+  def test_known_command_with_invalid_arguments_does_not_run_one_shot
+    Dir.mktmpdir do |config_dir|
+      client = Object.new
+      client.define_singleton_method(:chat) { |_messages, **_opts| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: ["pan", "extra"], stdin: FakeInput.new("", tty: true), client: client)
+
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          assert_raises(SystemExit) { cli.run }
+        end.last
+      end
+
+      assert_includes stderr, "Usage: kward pan"
+      assert_includes stderr, "Run `kward help` for available commands."
+    end
+  end
+
+  def test_help_with_too_many_arguments_reports_usage
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["help", "pan", "extra"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    stderr = capture_io do
+      assert_raises(SystemExit) { cli.run }
+    end.last
+
+    assert_includes stderr, "Usage: kward help [command]"
+    assert_empty prompt.output
+  end
+
   def test_multi_argument_input_runs_as_one_shot_prompt
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["summary"])
