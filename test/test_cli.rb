@@ -562,7 +562,7 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[34;1mUsage\e[0m"
     assert_includes output, "\e[32;1mkward login\e[0m"
     assert_includes output, "\e[36m\"Review this diff\"\e[0m"
-    assert_includes output, "One-shot prompts must be passed as a single shell argument."
+    assert_includes output, "Command names take precedence. Anything else is sent as a one-shot prompt."
   end
 
   def test_version_command_prints_version
@@ -574,20 +574,17 @@ class TestCLI < KwardTestCase
     assert_equal ["kward #{Kward::VERSION}"], prompt.output
   end
 
-  def test_multi_argument_prompt_is_rejected_as_unknown_command
+  def test_multi_argument_input_runs_as_one_shot_prompt
     Dir.mktmpdir do |config_dir|
-      client = Object.new
-      client.define_singleton_method(:chat) { |_messages, **_opts| raise "model should not be called" }
+      client = RecordingClient.new(["summary"])
       cli = Kward::CLI.new(argv: ["Explain", "this", "project"], stdin: FakeInput.new("", tty: true), client: client)
 
-      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        capture_io do
-          assert_raises(SystemExit) { cli.run }
-        end.last
+      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }.first
       end
 
-      assert_includes strip_ansi(stderr), "Unknown command: Explain this project"
-      assert_includes stderr, "Run `kward help` for available commands."
+      assert_includes stdout, "summary"
+      assert_equal "Explain this project", client.seen_messages.first.last[:content]
     end
   end
 
@@ -600,6 +597,53 @@ class TestCLI < KwardTestCase
       end
 
       assert_includes stdout, "summary"
+    end
+  end
+
+  def test_working_directory_option_sets_one_shot_workspace
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(workspace_dir, "AGENTS.md"), "Workspace marker from option")
+        client = RecordingClient.new(["ok"])
+        cli = Kward::CLI.new(argv: ["--working-directory", workspace_dir, "hello"], stdin: FakeInput.new("", tty: true), client: client)
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          capture_io { cli.run }
+        end
+
+        system_message = client.seen_messages.first.first[:content]
+        assert_includes system_message, "Workspace marker from option"
+      end
+    end
+  end
+
+  def test_working_directory_option_can_follow_prompt_words
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        client = RecordingClient.new(["ok"])
+        cli = Kward::CLI.new(argv: ["Explain", "this", "--working-directory=#{workspace_dir}", "project"], stdin: FakeInput.new("", tty: true), client: client)
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          capture_io { cli.run }
+        end
+
+        assert_equal "Explain this project", client.seen_messages.first.last[:content]
+      end
+    end
+  end
+
+  def test_missing_working_directory_option_value_exits_with_error
+    Dir.mktmpdir do |config_dir|
+      cli = Kward::CLI.new(argv: ["--working-directory"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          assert_raises(SystemExit) { cli.run }
+        end.last
+      end
+
+      assert_includes stderr, "Missing value for --working-directory"
+      assert_includes stderr, "Run `kward help` for available commands."
     end
   end
 

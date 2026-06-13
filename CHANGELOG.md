@@ -4,7 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## Unreleased
 
-- Added colored CLI help/version commands and examples, and changed unquoted multi-word CLI input to report an unknown command instead of running as a one-shot prompt.
+- Added colored CLI help/version commands and examples, with command names taking precedence over one-shot prompts.
+- Added `--working-directory PATH` as a global option for running any CLI mode from another workspace.
 - Changed memory retrieval and listing to use a global core, workspace core, workspace soft hierarchy, and added `/memory relax` for downgrading global core memories to the current workspace.
 - Removed the obsolete `/crew` command reservation and unreleased RPC compatibility aliases.
 - Added Session Tree support with a CLI `/tree` command plus RPC persisted entry IDs, labels, label timestamps, and branch navigation.

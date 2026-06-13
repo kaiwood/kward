@@ -59,6 +59,7 @@ module Kward
       @session_diff = SessionDiff.new
       @cleanup_sessions = []
       @plugin_registry = nil
+      @working_directory = nil
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -67,6 +68,15 @@ module Kward
     #
     # @return [void]
     def run
+      @argv = extract_global_options(@argv)
+      with_working_directory { dispatch }
+    rescue ArgumentError => e
+      warn e.message
+      warn "Run `kward help` for available commands."
+      exit 1
+    end
+
+    def dispatch
       if help_command?
         print_help
         return
@@ -95,7 +105,7 @@ module Kward
       end
 
       if pan_mode?
-        PanServer.new(client: @client, working_directory: pan_working_directory).run
+        PanServer.new(client: @client, working_directory: current_workspace_root).run
         return
       end
 
@@ -276,7 +286,7 @@ module Kward
 
         #{heading.call("Usage")}
           #{command.call("kward")}                              Start an interactive chat
-          #{command.call("kward")} #{option.call('"Explain this project"')}       Run one quoted one-shot prompt
+          #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
           #{command.call("kward login")}                        Sign in or save provider credentials
           #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
 
@@ -288,9 +298,9 @@ module Kward
           #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
 
         #{heading.call("Options")}
+          #{option.call("--working-directory=PATH")}             Run Kward from PATH
           #{option.call("--install-starter-pack")}               Install starter prompts and AGENTS.md
           #{option.call("--pan-mode")}                           Start Pan mode web UI
-          #{option.call("--working-directory=PATH")}             Workspace for Pan mode
           #{option.call("--help")}, #{option.call("-h")}                         Show this help
           #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
 
@@ -368,17 +378,42 @@ module Kward
       { range: remaining.join(" "), bucket: bucket, output: output }
     end
 
-    def pan_working_directory
-      value = option_value("--working-directory")
-      value.to_s.strip.empty? ? Dir.pwd : value
+    def extract_global_options(arguments)
+      remaining = []
+      index = 0
+      while index < arguments.length
+        argument = arguments[index]
+        case argument
+        when "--working-directory"
+          index += 1
+          raise ArgumentError, "Missing value for --working-directory" if index >= arguments.length
+
+          @working_directory = expanded_working_directory(arguments[index])
+        when /\A--working-directory=(.*)\z/
+          @working_directory = expanded_working_directory(Regexp.last_match(1))
+        else
+          remaining << argument
+        end
+        index += 1
+      end
+      remaining
     end
 
-    def option_value(name)
-      @argv.each_with_index do |argument, index|
-        return argument.split("=", 2).last if argument.start_with?("#{name}=")
-        return @argv[index + 1] if argument == name
-      end
-      nil
+    def expanded_working_directory(path)
+      value = path.to_s.strip
+      raise ArgumentError, "Missing value for --working-directory" if value.empty?
+
+      expanded = File.expand_path(value)
+      raise ArgumentError, "Working directory does not exist: #{expanded}" unless Dir.exist?(expanded)
+      raise ArgumentError, "Working directory is not a directory: #{expanded}" unless File.directory?(expanded)
+
+      expanded
+    end
+
+    def with_working_directory
+      return yield unless @working_directory
+
+      Dir.chdir(@working_directory) { yield }
     end
 
     def interactive_session_store(agent)
@@ -417,7 +452,7 @@ module Kward
       previous_session.delete_if_unused if previous_session.respond_to?(:delete_if_unused)
     end
 
-    def new_conversation(workspace_root: Dir.pwd)
+    def new_conversation(workspace_root: current_workspace_root)
       Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort, plugin_registry: plugin_registry)
     end
 
@@ -717,6 +752,7 @@ module Kward
 
     def current_workspace_root
       return @active_session.cwd.to_s unless @active_session&.cwd.to_s.empty?
+      return @working_directory if @working_directory
 
       Dir.pwd
     end

@@ -38,18 +38,21 @@ Prefix input with `!` to run a local shell command from the workspace root witho
 
 Use `kward help` or `kward --help` to print a colored overview of available commands and examples. Use `kward version` or `kward --version` to print the installed version.
 
+Use `--working-directory PATH` with any mode to run Kward from a different workspace:
+
+```bash
+kward --working-directory ~/code/project
+kward --working-directory ~/code/project "Summarize this project"
+kward --working-directory ~/code/project rpc
+```
+
 ## One-shot prompts
 
-Pass a prompt as a single shell argument to ask once and exit. Use quotes for prompts with spaces:
+Command names take precedence. Anything else passed as command-line text is sent as a one-shot prompt:
 
 ```bash
 kward "Summarize the changes in this repository"
-```
-
-Unquoted multi-word input is treated as an unknown command instead of a prompt:
-
-```bash
-kward Summarize the changes      # invalid
+kward Summarize the changes in this repository
 ```
 
 Kward also accepts piped input:
@@ -184,13 +187,13 @@ In the interactive composer, pasted image references appear as attachment badges
 Pan mode starts a minimal LAN web UI with a prompt textarea and transcript:
 
 ```bash
-kward --pan-mode --working-directory="/path/to/workspace"
+kward --working-directory="/path/to/workspace" --pan-mode
 ```
 
 From source:
 
 ```bash
-ruby lib/main.rb --pan-mode --working-directory="/path/to/workspace"
+ruby lib/main.rb --working-directory="/path/to/workspace" --pan-mode
 ```
 
 Pan mode streams assistant output and tool calls, queues prompts submitted while a turn is running, and saves the conversation as a normal per-workspace session.
