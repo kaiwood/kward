@@ -94,8 +94,9 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
-  def test_create_session_can_resume_remembered_last_session
+  def test_create_session_can_resume_remembered_last_session_when_enabled
     Dir.mktmpdir do |config_dir|
+      File.write(File.join(config_dir, "config.json"), JSON.dump("sessions" => { "auto_resume" => true }))
       workspace_root = File.realpath(Dir.mktmpdir)
       first_manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
       first = first_manager.create_session(workspace_root: workspace_root)
@@ -109,8 +110,30 @@ class TestRPCSessionManager < KwardTestCase
 
       assert_equal first[:persistentId], resumed[:persistentId]
       assert_equal first[:path], resumed[:path]
+      assert_equal true, resumed[:resumed]
+      assert !resumed[:activePersonaLabel].to_s.empty?
+      assert_equal ["user", "assistant"], resumed[:messages].map { |message| message[:role] }
       messages = resumed_rpc.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
       assert_equal ["hello", "reply"], messages.map { |message| message["content"] || message[:content] }
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
+  def test_create_session_does_not_resume_when_auto_resume_disabled
+    Dir.mktmpdir do |config_dir|
+      File.write(File.join(config_dir, "config.json"), JSON.dump("sessions" => { "auto_resume" => false }))
+      workspace_root = File.realpath(Dir.mktmpdir)
+      first_manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      first = first_manager.create_session(workspace_root: workspace_root)
+      first_rpc = first_manager.send(:fetch_session, first[:id])
+      first_rpc.conversation.append_user("hello")
+
+      second_manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      fresh = second_manager.create_session(workspace_root: workspace_root, resume_last: true)
+
+      refute_equal first[:persistentId], fresh[:persistentId]
+      refute_equal first[:path], fresh[:path]
     ensure
       FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
     end

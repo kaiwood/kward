@@ -55,9 +55,9 @@ module Kward
       def create_session(workspace_root: Dir.pwd, name: nil, resume_last: false)
         workspace_root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: workspace_root)
-        if resume_last && name.to_s.strip.empty?
+        if resume_last && session_auto_resume_enabled? && name.to_s.strip.empty?
           path = store.remembered_last_session_path
-          return resume_session(path: path, workspace_root: workspace_root) if path
+          return resume_session(path: path, workspace_root: workspace_root, include_transcript: true) if path
         end
 
         conversation = new_conversation(workspace_root: workspace_root)
@@ -71,7 +71,7 @@ module Kward
         session_payload(rpc_session)
       end
 
-      def resume_session(path:, workspace_root: nil)
+      def resume_session(path:, workspace_root: nil, include_transcript: false)
         root = validate_workspace_root(workspace_root || Dir.pwd)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
         location = store.session_location(path)
@@ -87,7 +87,10 @@ module Kward
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
         emit_footer_update(rpc_session)
-        session_payload(rpc_session)
+        payload = session_payload(rpc_session)
+        payload[:messages] = TranscriptNormalizer.new(rpc_session.conversation.messages).normalize if include_transcript
+        payload[:resumed] = true
+        payload
       end
 
       def list_sessions(workspace_root: Dir.pwd, limit: nil)
@@ -503,7 +506,11 @@ module Kward
       end
 
       def session_payload(rpc_session)
-        RuntimePayloads.session(rpc_session, modified_at: session_modified_at(rpc_session.session))
+        RuntimePayloads.session(
+          rpc_session,
+          modified_at: session_modified_at(rpc_session.session),
+          active_persona_label: active_persona_label(rpc_session)
+        )
       end
 
       def session_modified_at(session)
@@ -1087,6 +1094,10 @@ module Kward
 
       def workspace_guardrails_enabled?
         ConfigFiles.workspace_guardrails_enabled?(ConfigFiles.read_config(config_path))
+      end
+
+      def session_auto_resume_enabled?
+        ConfigFiles.session_auto_resume_enabled?(ConfigFiles.read_config(config_path))
       end
 
       def config_path

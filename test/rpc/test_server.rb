@@ -16,6 +16,34 @@ class TestRPCServer < KwardTestCase
     assert_equal "native", capabilities["events"]["steering"]["mode"]
   end
 
+  def test_initialize_reports_auto_resume_enabled_config
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("sessions" => { "auto_resume" => true }))
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "initialize" },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+      capabilities = messages[0]["result"]["capabilities"]
+      assert_equal true, capabilities["sessions"].dig("startupResume", "default")
+    end
+  end
+
+  def test_initialize_reports_auto_resume_disabled_config
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("sessions" => { "auto_resume" => false }))
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "initialize" },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+      capabilities = messages[0]["result"]["capabilities"]
+      assert_equal false, capabilities["sessions"].dig("startupResume", "default")
+    end
+  end
+
   def test_initialize_and_shutdown
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },
@@ -37,8 +65,10 @@ class TestRPCServer < KwardTestCase
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
     assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]
     assert_equal true, capabilities["sessions"].dig("startupResume", "supported")
-    assert_equal true, capabilities["sessions"].dig("startupResume", "default")
+    assert_equal false, capabilities["sessions"].dig("startupResume", "default")
     assert_equal "resumeLast", capabilities["sessions"].dig("startupResume", "parameter")
+    assert_equal true, capabilities["sessions"].dig("startupResume", "immediateTranscript")
+    assert_equal true, capabilities["sessions"].dig("startupResume", "sessionActivePersonaLabel")
     assert_equal true, capabilities["sessions"]["list"]["supported"]
     assert_equal true, capabilities["sessions"]["list"]["ancestry"]
     assert_equal true, capabilities["sessions"]["list"]["treeFields"]

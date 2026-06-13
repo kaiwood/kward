@@ -64,6 +64,9 @@ module Kward
         "composer" => {
           "busy_help" => true
         },
+        "sessions" => {
+          "auto_resume" => false
+        },
         "tools" => {
           "workspace_guardrails" => true
         }
@@ -176,6 +179,11 @@ module Kward
     def workspace_guardrails_enabled?(config = read_config)
       tools = config["tools"].is_a?(Hash) ? config["tools"] : {}
       tools["workspace_guardrails"] != false
+    end
+
+    def session_auto_resume_enabled?(config = read_config)
+      sessions = config["sessions"].is_a?(Hash) ? config["sessions"] : {}
+      sessions["auto_resume"] == true
     end
 
     def update_overlay_settings(values)

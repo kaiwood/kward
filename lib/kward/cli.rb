@@ -313,7 +313,7 @@ module Kward
       update_assistant_prompt(agent.conversation)
       @footer_conversation = agent.conversation
 
-      print_visual_banner
+      print_visual_banner unless @resumed_last_session
       render_resumed_last_session_transcript(agent.conversation) if @resumed_last_session
 
       @pending_inputs = []
@@ -745,6 +745,8 @@ module Kward
     end
 
     def resume_last_session(session_store)
+      return nil unless session_auto_resume_enabled?
+
       path = session_store.remembered_last_session_path if session_store.respond_to?(:remembered_last_session_path)
       return nil if path.to_s.empty?
 
@@ -1341,6 +1343,9 @@ module Kward
       when /\Ashow startup banner/, /\Ahide startup banner/
         set_banner_enabled(!banner_enabled?)
         @prompt.say("\nStartup banner #{banner_enabled? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.\n")
+      when /\Aenable session auto-resume/, /\Adisable session auto-resume/
+        set_session_auto_resume_enabled(!session_auto_resume_enabled?)
+        @prompt.say("\nSession auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.\n")
       end
     end
 
@@ -1351,6 +1356,7 @@ module Kward
         "Overlay width (#{settings["width"]})",
         "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
         "#{banner_enabled? ? "Hide" : "Show"} startup banner (currently #{on_off(banner_enabled?)})",
+        "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
         "Back"
       ]
     end
@@ -1363,12 +1369,20 @@ module Kward
       ConfigFiles.banner_enabled?(safely_read_config.to_h)
     end
 
+    def session_auto_resume_enabled?
+      ConfigFiles.session_auto_resume_enabled?(safely_read_config.to_h)
+    end
+
     def set_composer_busy_help(enabled)
       update_nested_config("composer", "busy_help" => enabled)
     end
 
     def set_banner_enabled(enabled)
       update_nested_config("banner", "enabled" => enabled)
+    end
+
+    def set_session_auto_resume_enabled(enabled)
+      update_nested_config("sessions", "auto_resume" => enabled)
     end
 
     def configure_tools_settings

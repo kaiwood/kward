@@ -52,7 +52,7 @@ Result fields:
 Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
-- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, RPC list support, supported linear-session fork methods, supported compaction, and explicit unsupported import/tree/update features.
+- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, and explicit unsupported import/tree/update features.
 - `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, configured workspace guardrail status, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
@@ -96,8 +96,9 @@ Params:
 
 - `workspaceRoot`: optional existing directory; defaults to launch cwd.
 - `name`: optional session name.
+- `resumeLast`: optional boolean. Defaults to the configured `sessions.auto_resume` behavior when omitted by clients that use `sessions/create` for startup. `false` forces a fresh session.
 
-Creates a persisted Kward session and returns session metadata.
+Creates a persisted Kward session and returns session metadata. The response includes `activePersonaLabel` so clients can render the correct avatar immediately. When `resumeLast` is enabled, no `name` is provided, and `sessions.auto_resume` is `true`, Kward resumes the remembered last session for the workspace instead of creating a fresh file; that auto-resume response also includes `resumed: true` and normalized `messages` so clients do not need to briefly render a fresh avatar while fetching transcript state.
 
 ### `sessions/resume`
 

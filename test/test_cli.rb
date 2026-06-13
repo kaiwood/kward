@@ -1019,26 +1019,58 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_mode_resumes_last_session_on_startup
+  def test_interactive_mode_resumes_last_session_on_startup_when_enabled
     Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("sessions" => { "auto_resume" => true }))
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       first_prompt = FakePrompt.new(["hello", "/exit"])
       first_client = RecordingClient.new(["reply"])
-      Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: first_prompt, client: first_client, session_store: store).interactive_loop
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: first_prompt, client: first_client, session_store: store).interactive_loop
+      end
 
       assert_path_exists store.last_session_path
 
-      second_prompt = FakePrompt.new(["again", "/exit"])
+      second_prompt = BannerPrompt.new(["again", "/exit"])
       second_client = RecordingClient.new(["second"])
-      Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: second_prompt, client: second_client, session_store: store).interactive_loop
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: second_prompt, client: second_client, session_store: store).interactive_loop
+      end
 
       assert_equal "hello", second_client.seen_messages[0][1]["content"]
       assert_equal "reply", second_client.seen_messages[0][2]["content"]
       assert_equal "again", second_client.seen_messages[0][3][:content]
+      assert_equal 0, second_prompt.banner_count
       output = strip_ansi(second_prompt.output.join("\n"))
       assert_includes output, "Resumed session:"
       assert_includes output, "You> hello"
       assert_includes output, "reply"
+    end
+  end
+
+  def test_interactive_mode_starts_new_session_when_auto_resume_disabled
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("sessions" => { "auto_resume" => false }))
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      first_prompt = FakePrompt.new(["hello", "/exit"])
+      first_client = RecordingClient.new(["reply"])
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: first_prompt, client: first_client, session_store: store).interactive_loop
+      end
+
+      second_prompt = FakePrompt.new(["again", "/exit"])
+      second_client = RecordingClient.new(["second"])
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: second_prompt, client: second_client, session_store: store).interactive_loop
+      end
+
+      message = second_client.seen_messages[0][1]
+      assert_equal "again", message["content"] || message[:content]
+      output = strip_ansi(second_prompt.output.join("\n"))
+      refute_includes output, "Resumed session:"
+      refute_includes output, "You> hello"
     end
   end
 

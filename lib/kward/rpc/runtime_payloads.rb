@@ -53,7 +53,7 @@ module Kward
         }.compact
       end
 
-      def session(rpc_session, modified_at:)
+      def session(rpc_session, modified_at:, active_persona_label: nil)
         {
           id: rpc_session.id,
           persistentId: rpc_session.session.id,
@@ -64,8 +64,9 @@ module Kward
           createdAt: rpc_session.session.created_at&.utc&.iso8601(3),
           modifiedAt: modified_at&.utc&.iso8601(3),
           parentId: rpc_session.session.parent_id,
-          parentPath: rpc_session.session.parent_path
-        }
+          parentPath: rpc_session.session.parent_path,
+          activePersonaLabel: active_persona_label
+        }.compact
       end
 
       def default_model_label(model)

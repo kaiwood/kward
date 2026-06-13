@@ -169,6 +169,20 @@ The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:
 
 This only hides the hint text; Ctrl+C still stops the current running response.
 
+## Session settings
+
+Interactive CLI and RPC clients start fresh by default. To automatically resume the last active session for the current workspace:
+
+```json
+{
+  "sessions": {
+    "auto_resume": true
+  }
+}
+```
+
+The `/resume` command and RPC `sessions/resume` work regardless of this automatic resume setting.
+
 ## Memory
 
 Memory is off by default. Enabling it writes:

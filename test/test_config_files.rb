@@ -19,6 +19,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal false, config.dig("memory", "enabled")
       assert_equal false, config.dig("memory", "auto_summary")
       assert_equal true, config.dig("composer", "busy_help")
+      assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal true, config.dig("tools", "workspace_guardrails")
       refute config.key?("provider")
       refute config.key?("model")
@@ -58,6 +59,13 @@ class TestConfigFiles < KwardTestCase
     assert_equal true, Kward::ConfigFiles.workspace_guardrails_enabled?("tools" => {})
     assert_equal true, Kward::ConfigFiles.workspace_guardrails_enabled?("tools" => { "workspace_guardrails" => true })
     assert_equal false, Kward::ConfigFiles.workspace_guardrails_enabled?("tools" => { "workspace_guardrails" => false })
+  end
+
+  def test_session_auto_resume_enabled_defaults_to_false_and_only_true_enables_it
+    assert_equal false, Kward::ConfigFiles.session_auto_resume_enabled?({})
+    assert_equal false, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => {})
+    assert_equal true, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => { "auto_resume" => true })
+    assert_equal false, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => { "auto_resume" => false })
   end
 
   def test_cli_run_creates_default_config_without_onboarding_output

@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added automatic interactive startup resume for the last active session in each workspace.
+- Added optional startup resume for the last active session in each workspace through `sessions.auto_resume: true`, including immediate restored transcript/persona data for RPC clients.
 - Added `tools.workspace_guardrails: false` config support for allowing file tools to access paths outside the active workspace.
 - Added `banner.enabled: false` config support for hiding the interactive terminal banner.
 - Added colored CLI help/version commands, command-specific help, and stricter command precedence over one-shot prompts.

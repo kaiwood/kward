@@ -288,7 +288,7 @@ module Kward
             mode: "explicit",
             persistence: "jsonl",
             methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
-            startupResume: { supported: true, method: "sessions/create", parameter: "resumeLast", default: true },
+            startupResume: { supported: true, method: "sessions/create", parameter: "resumeLast", default: session_auto_resume_enabled?, immediateTranscript: true, sessionActivePersonaLabel: true },
             list: { supported: true, source: "rpc", ancestry: true, treeFields: true },
             fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: true, method: "sessions/compact", notification: "session/event", events: ["compactionStart", "compactionEnd"] },
@@ -601,6 +601,10 @@ module Kward
 
       def workspace_guardrails_enabled?
         ConfigFiles.workspace_guardrails_enabled?(@config_manager.read(redacted: false))
+      end
+
+      def session_auto_resume_enabled?
+        ConfigFiles.session_auto_resume_enabled?(@config_manager.read(redacted: false))
       end
 
       def write_result(id, result)
