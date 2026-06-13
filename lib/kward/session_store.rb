@@ -507,12 +507,8 @@ module Kward
       end
     end
 
-    def next_entry_id(path)
-      existing = records_from_file(path).filter_map { |record| record["id"].to_s unless record["id"].to_s.empty? }.to_h { |id| [id, true] }
-      loop do
-        id = SecureRandom.hex(4)
-        return id unless existing[id]
-      end
+    def next_entry_id(_path)
+      SecureRandom.hex(4)
     end
 
     def message_entry_id(message)
