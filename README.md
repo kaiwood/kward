@@ -24,9 +24,10 @@ Then start Kward and sign in when needed:
 
 ```bash
 kward                          # start an interactive chat
+kward help                     # show available commands and examples
 /login                         # from inside Kward: sign in or save provider credentials
 kward login                    # from your shell: sign in or save provider credentials
-kward "Explain this project"   # run one prompt and exit
+kward "Explain this project"   # run one quoted prompt and exit
 ```
 
 See [Authentication](doc/authentication.md) for more details about sign-in options and provider credentials.
@@ -39,7 +40,8 @@ If you are working from a checkout:
 bundle install
 ruby lib/main.rb login                    # sign in or save provider credentials
 ruby lib/main.rb                          # start an interactive chat
-ruby lib/main.rb "Explain this project"   # run one prompt and exit
+ruby lib/main.rb help                     # show available commands and examples
+ruby lib/main.rb "Explain this project"   # run one quoted prompt and exit
 ```
 
 You can also use the executable directly after installing dependencies:

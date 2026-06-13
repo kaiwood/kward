@@ -550,6 +550,59 @@ class TestCLI < KwardTestCase
     assert_equal "hi", cli.one_shot("hello")
   end
 
+  def test_help_command_prints_colored_command_overview
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["--help"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+
+    cli.run
+
+    output = prompt.output.join("\n")
+    assert_includes output, "\e[32;1mKward\e[0m - an extendable CLI coding agent"
+    assert_includes output, "\e[34;1mUsage\e[0m"
+    assert_includes output, "\e[32;1mkward login\e[0m"
+    assert_includes output, "\e[36m\"Review this diff\"\e[0m"
+    assert_includes output, "One-shot prompts must be passed as a single shell argument."
+  end
+
+  def test_version_command_prints_version
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["version"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.run
+
+    assert_equal ["kward #{Kward::VERSION}"], prompt.output
+  end
+
+  def test_multi_argument_prompt_is_rejected_as_unknown_command
+    Dir.mktmpdir do |config_dir|
+      client = Object.new
+      client.define_singleton_method(:chat) { |_messages, **_opts| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: ["Explain", "this", "project"], stdin: FakeInput.new("", tty: true), client: client)
+
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          assert_raises(SystemExit) { cli.run }
+        end.last
+      end
+
+      assert_includes strip_ansi(stderr), "Unknown command: Explain this project"
+      assert_includes stderr, "Run `kward help` for available commands."
+    end
+  end
+
+  def test_single_argument_prompt_still_runs_one_shot
+    Dir.mktmpdir do |config_dir|
+      cli = Kward::CLI.new(argv: ["Explain this project"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "summary" }]))
+
+      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }.first
+      end
+
+      assert_includes stdout, "summary"
+    end
+  end
+
   def test_rpc_subcommand_starts_rpc_server
     initialize_body = JSON.generate({ jsonrpc: "2.0", id: 1, method: "initialize" })
     shutdown_body = JSON.generate({ jsonrpc: "2.0", id: 2, method: "shutdown" })

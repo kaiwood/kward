@@ -3,6 +3,7 @@ require "thread"
 require "tty-prompt"
 require_relative "agent"
 require_relative "ansi"
+require_relative "version"
 require_relative "model/client"
 require_relative "compactor"
 require_relative "config_files"
@@ -66,6 +67,16 @@ module Kward
     #
     # @return [void]
     def run
+      if help_command?
+        print_help
+        return
+      end
+
+      if version_command?
+        print_version
+        return
+      end
+
       ConfigFiles.ensure_default_config!
 
       if @argv == ["--install-starter-pack"]
@@ -93,8 +104,8 @@ module Kward
         return
       end
 
-      first_prompt = @argv.join(" ").strip
-      unless first_prompt.empty?
+      first_prompt = one_shot_prompt_argument
+      if first_prompt
         answer = one_shot(first_prompt)
         puts answer unless answer.empty?
         return
@@ -241,6 +252,62 @@ module Kward
     end
 
     private
+
+    def help_command?
+      ["help", "--help", "-h"].include?(@argv.first) && @argv.length == 1
+    end
+
+    def version_command?
+      ["version", "--version", "-v"].include?(@argv.first) && @argv.length == 1
+    end
+
+    def one_shot_prompt_argument
+      prompt = @argv.join(" ").strip
+      prompt.empty? ? nil : prompt
+    end
+
+    def print_help
+      command = ->(text) { colored(text, :green, :bold) }
+      option = ->(text) { colored(text, :cyan) }
+      heading = ->(text) { colored(text, :blue, :bold) }
+
+      @prompt.say <<~HELP.rstrip
+        #{colored("Kward", :green, :bold)} - an extendable CLI coding agent
+
+        #{heading.call("Usage")}
+          #{command.call("kward")}                              Start an interactive chat
+          #{command.call("kward")} #{option.call('"Explain this project"')}       Run one quoted one-shot prompt
+          #{command.call("kward login")}                        Sign in or save provider credentials
+          #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
+
+        #{heading.call("Commands")}
+          #{command.call("help")}                               Show this help
+          #{command.call("version")}                            Show the installed Kward version
+          #{command.call("login")} [openrouter|github]           Sign in with OpenAI, OpenRouter, or GitHub
+          #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
+          #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
+
+        #{heading.call("Options")}
+          #{option.call("--install-starter-pack")}               Install starter prompts and AGENTS.md
+          #{option.call("--pan-mode")}                           Start Pan mode web UI
+          #{option.call("--working-directory=PATH")}             Workspace for Pan mode
+          #{option.call("--help")}, #{option.call("-h")}                         Show this help
+          #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
+
+        #{heading.call("Examples")}
+          #{command.call("kward")}
+          #{command.call("kward")} #{option.call('"Review this diff"')}
+          #{command.call("git diff | kward")} #{option.call('"Review this diff"')}
+          #{command.call("kward login openrouter")}
+          #{command.call("kward stats tokens today --bucket hour")}
+
+        Command names take precedence. Anything else is sent as a one-shot prompt.
+      HELP
+    end
+
+    def print_version
+      @prompt.say "kward #{VERSION}"
+    end
 
     def install_starter_pack
       result = StarterPackInstaller.install

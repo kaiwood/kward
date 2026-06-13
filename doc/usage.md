@@ -4,6 +4,7 @@ Kward's most common commands are:
 
 ```bash
 kward                          # interactive chat
+kward help                     # command overview and examples
 kward "Explain this project"   # one-shot prompt
 kward --install-starter-pack   # optional first-time setup
 kward rpc                      # experimental JSON-RPC backend
@@ -33,12 +34,22 @@ Prefix input with `!` to run a local shell command from the workspace root witho
 !git status --short
 ```
 
+## Shell commands
+
+Use `kward help` or `kward --help` to print a colored overview of available commands and examples. Use `kward version` or `kward --version` to print the installed version.
+
 ## One-shot prompts
 
-Pass a prompt as command-line text to ask once and exit:
+Pass a prompt as a single shell argument to ask once and exit. Use quotes for prompts with spaces:
 
 ```bash
 kward "Summarize the changes in this repository"
+```
+
+Unquoted multi-word input is treated as an unknown command instead of a prompt:
+
+```bash
+kward Summarize the changes      # invalid
 ```
 
 Kward also accepts piped input:
