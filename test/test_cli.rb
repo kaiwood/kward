@@ -742,6 +742,32 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_prompt_delimiter_preserves_option_like_prompt_text
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["ok"])
+      cli = Kward::CLI.new(argv: ["--", "explain", "--working-directory", "option"], stdin: FakeInput.new("", tty: true), client: client)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }
+      end
+
+      assert_equal "explain --working-directory option", client.seen_messages.first.last[:content]
+    end
+  end
+
+  def test_prompt_delimiter_preserves_command_like_prompt_text
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["ok"])
+      cli = Kward::CLI.new(argv: ["--", "pan", "extra"], stdin: FakeInput.new("", tty: true), client: client)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }
+      end
+
+      assert_equal "pan extra", client.seen_messages.first.last[:content]
+    end
+  end
+
   def test_missing_working_directory_option_value_exits_with_error
     Dir.mktmpdir do |config_dir|
       cli = Kward::CLI.new(argv: ["--working-directory"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))

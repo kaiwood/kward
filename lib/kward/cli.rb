@@ -61,6 +61,7 @@ module Kward
       @cleanup_sessions = []
       @plugin_registry = nil
       @working_directory = nil
+      @prompt_delimited = false
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -78,6 +79,12 @@ module Kward
     end
 
     def dispatch
+      if @prompt_delimited
+        ConfigFiles.ensure_default_config!
+        run_prompt_or_interactive
+        return
+      end
+
       if help_command?
         print_command_help(@argv[1])
         return
@@ -163,6 +170,10 @@ module Kward
         return
       end
 
+      run_prompt_or_interactive
+    end
+
+    def run_prompt_or_interactive
       first_prompt = one_shot_prompt_argument
       if first_prompt
         answer = one_shot(first_prompt)
@@ -630,6 +641,10 @@ module Kward
       while index < arguments.length
         argument = arguments[index]
         case argument
+        when "--"
+          @prompt_delimited = true
+          remaining.concat(arguments[(index + 1)..] || [])
+          break
         when "--working-directory"
           index += 1
           raise ArgumentError, "Missing value for --working-directory" if index >= arguments.length

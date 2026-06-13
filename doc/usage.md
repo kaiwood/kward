@@ -60,6 +60,13 @@ kward "Summarize the changes in this repository"
 kward Summarize the changes in this repository
 ```
 
+Use `--` before the prompt when the prompt itself starts with a command name or contains option-like text:
+
+```bash
+kward -- pan extra
+kward -- explain --working-directory option
+```
+
 Kward also accepts piped input:
 
 ```bash
