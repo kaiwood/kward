@@ -309,7 +309,6 @@ module Kward
 
       def run_command(session_id:, command:, arguments: "")
         name = command.to_s.delete_prefix("/")
-        return { ok: false, error: "unsupported", reason: "notImplemented" } if name == "crew"
         return { ok: false, error: "unsupported", reason: "clientClipboardOwnedByUi" } if name == "copy"
 
         run_plugin_command(session_id: session_id, command: name, arguments: arguments)

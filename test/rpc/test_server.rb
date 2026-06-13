@@ -271,11 +271,6 @@ class TestRPCServer < KwardTestCase
           assert_equal "skill:testing-verification", skill[:name]
           assert_equal "Testing and verification guidance", skill[:description]
           assert_equal File.join(skill_dir, "SKILL.md"), skill[:path]
-          builtin = commands.find { |command| command[:name] == "crew" }
-          assert_equal "crew", builtin[:name]
-          assert_equal false, builtin[:executable]
-          assert_equal true, builtin[:unsupported]
-          assert_equal "notImplemented", builtin[:reason]
           copy_command = commands.find { |command| command[:name] == "copy" }
           assert_equal false, copy_command[:executable]
           assert_equal true, copy_command[:unsupported]
@@ -314,25 +309,6 @@ class TestRPCServer < KwardTestCase
         assert_equal false, result[:ok]
         assert_equal "unsupported", result[:error]
         assert_equal "clientClipboardOwnedByUi", result[:reason]
-      end
-    end
-  end
-
-  def test_commands_run_reports_crew_unsupported
-    Dir.mktmpdir do |config_dir|
-      config_path = File.join(config_dir, "config.json")
-      File.write(config_path, JSON.dump({}))
-      client = RecordingClient.new([])
-
-      with_env("KWARD_CONFIG_PATH" => config_path) do
-        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: client)
-        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
-        result = server.send(:commands_run, "sessionId" => session[:id], "name" => "crew")
-
-        assert_equal false, result[:ok]
-        assert_equal "unsupported", result[:error]
-        assert_equal "notImplemented", result[:reason]
-        assert_empty client.seen_messages
       end
     end
   end

@@ -510,15 +510,6 @@ module Kward
         end
         builtins = [
           {
-            name: "crew",
-            description: "Reserved for future crew commands.",
-            argumentHint: "",
-            source: "builtin",
-            executable: false,
-            unsupported: true,
-            reason: "notImplemented"
-          },
-          {
             name: "copy",
             description: "CLI-only clipboard copy; RPC clients own their clipboard.",
             argumentHint: "[last|transcript]",

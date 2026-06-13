@@ -1828,26 +1828,6 @@ edit this prompt"
     end
   end
 
-  def test_crew_slash_command_is_reserved_without_calling_client_or_persisting_session_messages
-    Dir.mktmpdir do |config_dir|
-      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
-      config_path = File.join(config_dir, "config.json")
-      File.write(config_path, JSON.dump("personas" => { "default" => "Default persona." }))
-      prompt = FakePrompt.new(["/crew", "/exit"])
-      client = RecordingClient.new([])
-      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
-
-      with_env("KWARD_CONFIG_PATH" => config_path) do
-        cli.interactive_loop
-      end
-
-      output = prompt.output.join("\n")
-      assert_includes output, "The /crew command is not implemented yet."
-      assert_empty client.seen_messages
-      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
-    end
-  end
-
   def test_memory_auto_summary_command_toggles_setting
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
