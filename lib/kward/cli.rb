@@ -1,4 +1,3 @@
-require "base64"
 require "json"
 require "thread"
 require "tty-prompt"
@@ -8,6 +7,7 @@ require_relative "model/client"
 require_relative "compactor"
 require_relative "config_files"
 require_relative "clipboard"
+require_relative "cli_transcript_formatter"
 require_relative "model/context_usage"
 require_relative "events"
 require_relative "export_path"
@@ -1044,13 +1044,7 @@ module Kward
     end
 
     def full_message_text(message)
-      content = message_content(message)
-      text = if content.is_a?(Array)
-               content.filter_map { |part| part["text"] || part[:text] }.join("\n")
-             else
-               content.to_s
-             end
-      text.strip
+      CLITranscriptFormatter.full_text(message)
     end
 
     def copy_target_content(conversation, target)
@@ -1068,7 +1062,7 @@ module Kward
       message = conversation.messages.reverse.find { |item| message_role(item) == "assistant" }
       return "" unless message
 
-      message_content_text(message_content(message))
+      CLITranscriptFormatter.content_text(message_content(message))
     end
 
     def copy_target_label(target)
@@ -1100,10 +1094,10 @@ module Kward
         case role
         when "user"
           print_user_transcript(
-            message_user_transcript_input(message),
-            display_input: message_user_display_text(message),
-            attachment_references: message_image_references(message),
-            image_parts: message_image_parts(message)
+            CLITranscriptFormatter.user_transcript_input(message),
+            display_input: CLITranscriptFormatter.user_display_text(message),
+            attachment_references: CLITranscriptFormatter.image_references(message),
+            image_parts: CLITranscriptFormatter.image_parts(message)
           )
         when "assistant"
           render_reasoning(message)
@@ -1117,25 +1111,25 @@ module Kward
         when "compactionSummary"
           render_transcript_block("Compaction summary", message_summary(message))
         else
-          render_transcript_block(role.to_s.capitalize, message_content_text(message_content(message)))
+          render_transcript_block(role.to_s.capitalize, CLITranscriptFormatter.content_text(message_content(message)))
         end
       end
     end
 
     def render_reasoning(message)
-      reasoning = message_reasoning(message)
+      reasoning = CLITranscriptFormatter.reasoning(message)
       render_transcript_block("Reasoning", reasoning) unless reasoning.empty?
     end
 
     def render_assistant_message(message)
-      content = message_content_text(message_content(message))
+      content = CLITranscriptFormatter.content_text(message_content(message))
       return if content.empty?
 
       render_transcript_block("Assistant", content)
     end
 
     def render_tool_message(message, tool_calls_by_id)
-      tool_call = tool_calls_by_id[message_tool_call_id(message)] || synthetic_tool_call(message_name(message), message_tool_call_id(message))
+      tool_call = tool_calls_by_id[message_tool_call_id(message)] || CLITranscriptFormatter.synthetic_tool_call(message_name(message), message_tool_call_id(message))
       render_tool_result(tool_call, message_content(message).to_s)
     end
 
@@ -1226,113 +1220,6 @@ module Kward
       end
 
       [["Reasoning", grouped["Reasoning"]], ["Assistant", grouped["Assistant"]]] + others
-    end
-
-    def message_reasoning(message)
-      direct = message["reasoning_summary"] || message[:reasoning_summary]
-      return direct.to_s unless direct.to_s.empty?
-
-      content = message_content(message)
-      return "" unless content.is_a?(Array)
-
-      content.filter_map do |part|
-        type = part["type"] || part[:type]
-        next unless ["thinking", "reasoning"].include?(type)
-
-        part["thinking"] || part[:thinking] || part["text"] || part[:text]
-      end.join("\n")
-    end
-
-    def message_content_text(content)
-      case content
-      when Array
-        content.filter_map do |part|
-          type = part["type"] || part[:type]
-          if type == "text"
-            part["text"] || part[:text]
-          elsif type == "image"
-            path = part["path"] || part[:path]
-            media_type = part["media_type"] || part[:media_type] || "image"
-            "[#{media_type}#{path ? ": #{path}" : ""}]"
-          end
-        end.join("\n")
-      else
-        content.to_s
-      end
-    end
-
-    def message_display_text(message)
-      display_content = MessageAccess.display_content(message)
-      return display_content.to_s unless display_content.nil?
-
-      message_content_text(message_content(message))
-    end
-
-    def message_user_display_text(message)
-      display_content = MessageAccess.display_content(message)
-      return display_content.to_s unless display_content.nil?
-
-      content = message_content(message)
-      return content.to_s unless content.is_a?(Array)
-
-      text = content.filter_map do |part|
-        type = part["type"] || part[:type]
-        next unless type == "text"
-
-        part["text"] || part[:text]
-      end.join("\n")
-      Kward::ImageAttachments.display_text_without_references(text, Kward::ImageAttachments.references_from_text(text).select { |reference| reference[:status] == :attached })
-    end
-
-    def message_user_transcript_input(message)
-      content = message_content(message)
-      return content.to_s unless content.is_a?(Array)
-
-      message_user_display_text(message)
-    end
-
-    def message_image_parts(message)
-      content = message_content(message)
-      return [] unless content.is_a?(Array)
-
-      content.select do |part|
-        type = part["type"] || part[:type]
-        type == "image"
-      end
-    end
-
-    def message_image_references(message)
-      message_image_parts(message).map { |part| image_part_reference(part) }
-    end
-
-    def image_part_reference(part)
-      data = part[:data] || part["data"]
-      path = part[:path] || part["path"]
-      media_type = part[:media_type] || part["media_type"] || part[:mimeType] || part["mimeType"] || "image"
-      {
-        status: :attached,
-        type: "image",
-        label: path.to_s.empty? ? "pasted image" : File.basename(path),
-        media_type: media_type,
-        size_bytes: decoded_image_size(data),
-        path: path
-      }
-    end
-
-    def decoded_image_size(data)
-      return nil if data.to_s.empty?
-
-      Base64.decode64(data.to_s.gsub(/\s+/, "")).bytesize
-    rescue ArgumentError
-      nil
-    end
-
-    def synthetic_tool_call(name, id)
-      {
-        "id" => id || "restored_tool",
-        "type" => "function",
-        "function" => { "name" => name || "tool", "arguments" => "{}" }
-      }
     end
 
     def message_role(message)
