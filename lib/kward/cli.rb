@@ -874,6 +874,9 @@ module Kward
       when "reasoning"
         configure_reasoning(agent.conversation)
         [true, nil]
+      when "reload"
+        run_busy_local_command_and_requeue { reload_plugins(agent.conversation) }
+        [true, nil]
       when "new"
         [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
       when "resume"
@@ -1829,6 +1832,13 @@ module Kward
 
     def plugin_command_for(command)
       plugin_registry.command_for(command)
+    end
+
+    def reload_plugins(conversation)
+      @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+      conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
+      conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
+      @prompt.say("\nPlugins reloaded.\n")
     end
 
     def reserved_slash_command_names

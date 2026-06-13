@@ -461,6 +461,7 @@ module Kward
       def runtime_reload(params)
         @session_manager.runtime_state(session_id: params.fetch("sessionId"))
         @session_manager.refresh_client_config
+        @session_manager.reload_plugins
         { ok: true, message: "Resources reloaded." }
       end
 

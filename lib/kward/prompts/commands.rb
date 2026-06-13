@@ -19,6 +19,7 @@ module Kward
       { name: "model", description: "Select the default model.", argument_hint: "" },
       { name: "openrouter/catalog", description: "List the full OpenRouter model catalog.", argument_hint: "" },
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
+      { name: "reload", description: "Reload installed plugins.", argument_hint: "" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
       { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|relax|inspect|why|summarize]" }

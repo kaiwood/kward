@@ -482,6 +482,19 @@ module Kward
         refresh_session_tool_registries
       end
 
+      def reload_plugins
+        registry = PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+        sessions = @mutex.synchronize do
+          @plugin_registry = registry
+          @sessions.values
+        end
+        sessions.each do |rpc_session|
+          rpc_session.conversation.plugin_registry = registry if rpc_session.conversation.respond_to?(:plugin_registry=)
+          rpc_session.conversation.refresh_system_message! if rpc_session.conversation.respond_to?(:refresh_system_message!)
+          emit_footer_update(rpc_session)
+        end
+      end
+
       def session_payload(rpc_session)
         RuntimePayloads.session(rpc_session, modified_at: session_modified_at(rpc_session.session))
       end

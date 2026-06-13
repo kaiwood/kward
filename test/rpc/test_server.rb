@@ -362,6 +362,55 @@ class TestRPCServer < KwardTestCase
     end
   end
 
+  def test_runtime_reload_reloads_plugins_for_active_sessions
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |home|
+        config_path = File.join(config_dir, "config.json")
+        plugins_dir = File.join(home, ".kward", "plugins")
+        plugin_path = File.join(plugins_dir, "version.rb")
+        FileUtils.mkdir_p(plugins_dir)
+        File.write(plugin_path, <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.command "version" do |_args, ctx|
+              ctx.say("plugin=v1")
+            end
+            plugin.prompt_context do |_ctx|
+              "Plugin context: v1"
+            end
+          end
+        RUBY
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => config_path) do
+          server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
+          manager = server.instance_variable_get(:@session_manager)
+          session = manager.create_session(workspace_root: Dir.pwd)
+
+          first_run = server.send(:commands_run, "sessionId" => session[:id], "name" => "version")
+          File.write(plugin_path, <<~'RUBY')
+            Kward.plugin do |plugin|
+              plugin.command "version" do |_args, ctx|
+                ctx.say("plugin=v2")
+              end
+              plugin.prompt_context do |_ctx|
+                "Plugin context: v2"
+              end
+            end
+          RUBY
+          reload = server.send(:runtime_reload, "sessionId" => session[:id])
+          second_run = server.send(:commands_run, "sessionId" => session[:id], "name" => "version")
+          conversation = manager.send(:fetch_session, session[:id]).conversation
+          system_message = conversation.messages.find { |message| Kward::MessageAccess.role(message) == "system" }
+
+          assert_equal ["plugin=v1"], first_run[:output]
+          assert_equal({ ok: true, message: "Resources reloaded." }, reload)
+          assert_equal ["plugin=v2"], second_run[:output]
+          assert_includes Kward::MessageAccess.content(system_message), "Plugin context: v2"
+          refute_includes Kward::MessageAccess.content(system_message), "Plugin context: v1"
+        end
+      end
+    end
+  end
+
   def test_commands_run_reports_copy_unsupported
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

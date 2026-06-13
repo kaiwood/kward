@@ -2492,6 +2492,54 @@ edit this prompt"
     assert_equal "", cli.piped_prompt
   end
 
+  def test_reload_plugins_updates_commands_and_current_system_message
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      plugin_path = File.join(plugins_dir, "version.rb")
+      FileUtils.mkdir_p(plugins_dir)
+      File.write(plugin_path, <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.command "version" do |_args, ctx|
+            ctx.say("plugin=v1")
+          end
+          plugin.prompt_context do |_ctx|
+            "Plugin context: v1"
+          end
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        prompt = FakePrompt.new([])
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+        registry = cli.send(:plugin_registry)
+        conversation = Kward::Conversation.new(plugin_registry: registry)
+        agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
+
+        cli.send(:run_plugin_command, "version", "", agent)
+        File.write(plugin_path, <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.command "version" do |_args, ctx|
+              ctx.say("plugin=v2")
+            end
+            plugin.prompt_context do |_ctx|
+              "Plugin context: v2"
+            end
+          end
+        RUBY
+        cli.send(:reload_plugins, conversation)
+        cli.send(:run_plugin_command, "version", "", agent)
+
+        output = prompt.output.join("\n")
+        assert_includes output, "plugin=v1"
+        assert_includes output, "Plugins reloaded."
+        assert_includes output, "plugin=v2"
+        system_message = conversation.messages.find { |message| Kward::MessageAccess.role(message) == "system" }
+        assert_includes Kward::MessageAccess.content(system_message), "Plugin context: v2"
+        refute_includes Kward::MessageAccess.content(system_message), "Plugin context: v1"
+      end
+    end
+  end
+
   def test_interactive_plugin_slash_command_runs_without_calling_client
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")
