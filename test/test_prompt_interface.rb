@@ -1165,6 +1165,19 @@ class TestPromptInterface < KwardTestCase
     assert_includes stripped, "Tool output>\r\n.git/\r\n.gitignore\r\nREADME.md\r\n"
   end
 
+  def test_prompt_interface_synchronizes_say_redraw
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.say("hello")
+
+    assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE
+    assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+  end
+
   def test_prompt_interface_separates_say_output_from_next_stream_block
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

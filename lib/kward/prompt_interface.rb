@@ -139,11 +139,13 @@ module Kward
           next
         end
 
-        clear_prompt_for_output_locked
-        write_transcript_text_locked(text)
-        write_transcript_text_locked("\n") unless text.end_with?("\n")
-        @stream_block = nil
-        render_prompt_after_output_locked
+        with_synchronized_output_locked do
+          clear_prompt_for_output_locked
+          write_transcript_text_locked(text)
+          write_transcript_text_locked("\n") unless text.end_with?("\n")
+          @stream_block = nil
+          render_prompt_after_output_locked
+        end
         @output_io.flush
       end
     end
@@ -152,12 +154,14 @@ module Kward
       @mutex.synchronize do
         return if @restoring_transcript
 
-        clear_prompt_for_output_locked
-        text = message.to_s
-        write_visual_transcript_text_locked(text)
-        write_visual_transcript_text_locked("\n") unless text.end_with?("\n")
-        @stream_block = nil
-        render_prompt_after_output_locked
+        with_synchronized_output_locked do
+          clear_prompt_for_output_locked
+          text = message.to_s
+          write_visual_transcript_text_locked(text)
+          write_visual_transcript_text_locked("\n") unless text.end_with?("\n")
+          @stream_block = nil
+          render_prompt_after_output_locked
+        end
         @output_io.flush
       end
     end
@@ -396,16 +400,18 @@ module Kward
         rows = banner_rows(screen_width)
         return if rows.empty?
 
-        prepare_transcript_output_locked
-        rows.each do |row|
-          write_visual_transcript_text_locked(row)
-          write_visual_transcript_text_locked("\n")
+        with_synchronized_output_locked do
+          prepare_transcript_output_locked
+          rows.each do |row|
+            write_visual_transcript_text_locked(row)
+            write_visual_transcript_text_locked("\n")
+          end
+          @visual_banner_count += 1
+          invalidate_transcript_display_rows_cache
+          remember_transcript_viewport_locked
+          @stream_block = nil
+          restore_composer_cursor_locked
         end
-        @visual_banner_count += 1
-        invalidate_transcript_display_rows_cache
-        remember_transcript_viewport_locked
-        @stream_block = nil
-        restore_composer_cursor_locked
         @output_io.flush
       end
     end
@@ -436,7 +442,7 @@ module Kward
 
     def redraw
       @mutex.synchronize do
-        redraw_screen_locked
+        with_synchronized_output_locked { redraw_screen_locked }
         @output_io.flush
       end
     end
@@ -450,7 +456,7 @@ module Kward
         @stream_block = nil
         @stream_col = 0
         @stream_pending_wrap = false
-        redraw_screen_locked
+        with_synchronized_output_locked { redraw_screen_locked }
         @output_io.flush
       end
     end
