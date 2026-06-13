@@ -8,6 +8,7 @@ kward help                     # command overview and examples
 kward "Explain this project"   # one-shot prompt
 kward init                     # optional first-time setup
 kward doctor                   # check local setup
+kward auth status              # show saved credential status
 kward pan                      # Pan mode web UI
 kward rpc                      # experimental JSON-RPC backend
 ```
@@ -40,7 +41,7 @@ Prefix input with `!` to run a local shell command from the workspace root witho
 
 Use `kward help` or `kward --help` to print a colored overview of available commands and examples. Use `kward help <command>` or `<command> --help` for command-specific help. Use `kward version` or `kward --version` to print the installed version.
 
-Use `kward doctor` to check local config, workspace, auth hints, Pan credentials, and writable directories.
+Use `kward doctor` to check local config, workspace, auth hints, Pan credentials, and writable directories. Use `kward auth status` to show saved credential status without printing secrets, or `kward auth logout` to remove saved OpenAI, GitHub, and OpenRouter credentials.
 
 Use `--working-directory PATH` with any mode to run Kward from a different workspace:
 

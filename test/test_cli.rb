@@ -655,6 +655,63 @@ class TestCLI < KwardTestCase
     assert_includes prompt.output.join("\n"), "Usage\n  kward doctor"
   end
 
+  def test_auth_status_reports_configured_credentials_without_secret_values
+    Dir.mktmpdir do |config_dir|
+      auth_path = File.join(config_dir, "auth.json")
+      github_path = File.join(config_dir, "github_auth.json")
+      config_path = File.join(config_dir, "config.json")
+      File.write(auth_path, JSON.dump({ "tokens" => { "access_token" => "secret-openai" } }))
+      File.write(github_path, JSON.dump({ "tokens" => { "access" => "secret-github" } }))
+      File.write(config_path, JSON.dump({ "openrouter_api_key" => "secret-openrouter" }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: ["auth", "status"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_AUTH_PATH" => auth_path, "KWARD_GITHUB_AUTH_PATH" => github_path) do
+        cli.run
+      end
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Auth Status"
+      assert_includes output, "OpenAI OAuth: configured"
+      assert_includes output, "GitHub OAuth: configured"
+      assert_includes output, "OpenRouter API key: configured"
+      refute_includes output, "secret-openai"
+      refute_includes output, "secret-github"
+      refute_includes output, "secret-openrouter"
+    end
+  end
+
+  def test_auth_logout_removes_saved_credentials
+    Dir.mktmpdir do |config_dir|
+      auth_path = File.join(config_dir, "auth.json")
+      github_path = File.join(config_dir, "github_auth.json")
+      config_path = File.join(config_dir, "config.json")
+      File.write(auth_path, JSON.dump({ "tokens" => { "access_token" => "secret-openai" } }))
+      File.write(github_path, JSON.dump({ "tokens" => { "access" => "secret-github" } }))
+      File.write(config_path, JSON.dump({ "openrouter_api_key" => "secret-openrouter" }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: ["auth", "logout"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_AUTH_PATH" => auth_path, "KWARD_GITHUB_AUTH_PATH" => github_path) do
+        cli.run
+      end
+
+      refute_path_exists auth_path
+      refute_path_exists github_path
+      refute JSON.parse(File.read(config_path)).key?("openrouter_api_key")
+      assert_includes prompt.output.join("\n"), "Removed 3 saved credentials."
+    end
+  end
+
+  def test_auth_help_is_available
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["auth", "--help"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.run
+
+    assert_includes prompt.output.join("\n"), "Usage\n  kward auth status|logout"
+  end
+
   def test_known_command_with_invalid_arguments_does_not_run_one_shot
     Dir.mktmpdir do |config_dir|
       client = Object.new

@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 - Added `kward init` for installing the starter pack; `--install-starter-pack` remains as a compatibility alias.
 - Added `kward doctor` to check local config, workspace, auth hints, Pan credentials, and writable directories.
 - Added `--` as a prompt delimiter so option-like text can be sent as a one-shot prompt.
+- Added `kward auth status` and `kward auth logout` for checking and clearing saved credentials without printing secrets.
 - Changed memory retrieval and listing to use a global core, workspace core, workspace soft hierarchy, and added `/memory relax` for downgrading global core memories to the current workspace.
 - Removed the obsolete `/crew` command reservation and unreleased RPC compatibility aliases.
 - Added Session Tree support with a CLI `/tree` command plus RPC persisted entry IDs, labels, label timestamps, and branch navigation.

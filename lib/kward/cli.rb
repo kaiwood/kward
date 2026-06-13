@@ -115,6 +115,11 @@ module Kward
         return
       end
 
+      if @argv.first == "auth"
+        handle_auth_command(@argv[1..] || [])
+        return
+      end
+
       if @argv.first == "doctor"
         if help_option_arguments?(@argv[1..] || [])
           print_command_help("doctor")
@@ -226,6 +231,54 @@ module Kward
       end
       flush_markdown_deltas(markdown_chunks) if streamed
       assistant_streamed ? "" : render_markdown_transcript(answer)
+    end
+
+    def handle_auth_command(arguments)
+      if help_option_arguments?(arguments)
+        print_command_help("auth")
+        return
+      end
+
+      case arguments
+      when ["status"]
+        print_auth_status
+      when ["logout"]
+        logout_auth
+      else
+        raise ArgumentError, command_usage("auth")
+      end
+    end
+
+    def print_auth_status
+      config = safely_read_config.to_h
+      lines = ["#{colored("Auth Status", :green, :bold)}", ""]
+      lines << auth_status_line("OpenAI OAuth", File.exist?(OpenAIOAuth.default_auth_path), OpenAIOAuth.default_auth_path)
+      lines << auth_status_line("GitHub OAuth", File.exist?(GithubOAuth.default_auth_path), GithubOAuth.default_auth_path)
+      lines << auth_status_line("OpenRouter API key", !config["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?, ConfigFiles.config_path)
+      @prompt.say lines.join("\n")
+    end
+
+    def auth_status_line(label, configured, location)
+      status = configured ? :ok : :warning
+      message = configured ? "configured" : "not configured"
+      "#{doctor_mark(status)} #{label}: #{message} (#{location})"
+    end
+
+    def logout_auth
+      removed = []
+      [OpenAIOAuth.default_auth_path, GithubOAuth.default_auth_path].each do |path|
+        next unless File.exist?(path)
+
+        File.delete(path)
+        removed << path
+      end
+      removed << "OpenRouter API key" if OpenRouterAPIKey.new.logout
+
+      if removed.empty?
+        @prompt.say "No saved credentials found."
+      else
+        @prompt.say "Removed #{removed.length} saved credential#{removed.length == 1 ? "" : "s"}."
+      end
     end
 
     def login(provider: nil, oauth: nil)
@@ -364,6 +417,7 @@ module Kward
           #{command.call("kward")}                              Start an interactive chat
           #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
           #{command.call("kward login")}                        Sign in or save provider credentials
+          #{command.call("kward auth status")}                  Show saved credential status
           #{command.call("kward init")}                         Install starter prompts and AGENTS.md
           #{command.call("kward doctor")}                       Check local Kward setup
           #{command.call("kward pan")}                          Start Pan mode web UI
@@ -373,6 +427,7 @@ module Kward
           #{command.call("help")}                               Show this help
           #{command.call("version")}                            Show the installed Kward version
           #{command.call("login")} [openrouter|github]           Sign in with OpenAI, OpenRouter, or GitHub
+          #{command.call("auth status|logout")}                 Show or clear saved credentials
           #{command.call("init")}                               Install starter prompts and AGENTS.md
           #{command.call("doctor")}                             Check local Kward setup
           #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
@@ -411,6 +466,11 @@ module Kward
           usage: "kward login [openrouter|github]",
           description: "Sign in with OpenAI, OpenRouter, or GitHub.",
           examples: ["kward login", "kward login openrouter", "kward login github"]
+        },
+        "auth" => {
+          usage: "kward auth status|logout",
+          description: "Show or clear saved provider credentials without printing secrets.",
+          examples: ["kward auth status", "kward auth logout"]
         },
         "init" => {
           usage: "kward init",
