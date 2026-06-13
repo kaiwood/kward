@@ -348,25 +348,27 @@ class KwardTestCase < Minitest::Test
   end
 
   class FakeSelectPrompt < FakePrompt
-    attr_reader :select_messages, :select_choices, :select_titles
+    attr_reader :select_messages, :select_choices, :select_titles, :select_initial_indices
 
     def initialize(inputs, confirmations: [])
       super
       @select_messages = []
       @select_choices = []
       @select_titles = []
+      @select_initial_indices = []
     end
 
-    def select(message, choices, title: "Sessions", custom: false)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
       @select_messages << message
       @select_choices << choices
       @select_titles << title
+      @select_initial_indices << initial_index
       choices.find { |choice| choice.start_with?("/plan") } || choices.first
     end
   end
 
   class FakeSettingsPrompt < FakePrompt
-    attr_reader :overlay_settings_updates, :select_messages, :select_choices, :select_titles
+    attr_reader :overlay_settings_updates, :select_messages, :select_choices, :select_titles, :select_initial_indices
 
     def initialize(inputs, selections)
       super(inputs)
@@ -375,12 +377,14 @@ class KwardTestCase < Minitest::Test
       @select_messages = []
       @select_choices = []
       @select_titles = []
+      @select_initial_indices = []
     end
 
-    def select(message, choices, title: "Sessions", custom: false)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
       @select_messages << message
       @select_choices << choices
       @select_titles << title
+      @select_initial_indices << initial_index
       @selections.shift
     end
 
@@ -395,10 +399,11 @@ class KwardTestCase < Minitest::Test
       @selected_text = selected_text
     end
 
-    def select(message, choices, title: "Sessions", custom: false)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
       @select_messages << message
       @select_choices << choices
       @select_titles << title
+      @select_initial_indices << initial_index
       choices.find { |choice| choice.include?(@selected_text) } || choices.first
     end
   end

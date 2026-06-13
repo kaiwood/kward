@@ -922,7 +922,9 @@ module Kward
       end
 
       labels_by_entry_id = tree_items.to_h { |item| [item[:entry]["id"].to_s, item[:label]] }
-      choice = select_session_tree_entry(labels_by_entry_id.values)
+      current_leaf_id = @active_session.leaf_id || session_store.current_leaf(@active_session.path)
+      initial_index = tree_items.index { |item| item[:entry]["id"].to_s == current_leaf_id.to_s } || tree_items.length - 1
+      choice = select_session_tree_entry(labels_by_entry_id.values, initial_index: initial_index)
       return nil unless choice
 
       entry_id = labels_by_entry_id.key(choice)
@@ -946,9 +948,9 @@ module Kward
       nil
     end
 
-    def select_session_tree_entry(labels)
+    def select_session_tree_entry(labels, initial_index: 0)
       if @prompt.respond_to?(:select)
-        return @prompt.select("Tree>", labels, title: "Session Tree")
+        return @prompt.select("Tree>", labels, title: "Session Tree", initial_index: initial_index)
       end
 
       numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }

@@ -514,6 +514,18 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_uses_initial_index
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"], initial_index: 1)
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_filters_choices
     input, writer = IO.pipe
     output = StringIO.new

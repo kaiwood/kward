@@ -237,7 +237,7 @@ module Kward
       answer.start_with?("y")
     end
 
-    def select(message, choices, title: "Sessions", custom: false)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
       return nil if choices.empty? && !custom
 
       start
@@ -250,7 +250,9 @@ module Kward
         @asking = true
         @busy = false
         @queued_count = 0
-        @select_state = { choices: choices.map(&:to_s), selection_index: 0, title: title.to_s, custom: custom }
+        choice_labels = choices.map(&:to_s)
+        selection_index = choice_labels.empty? ? 0 : [[initial_index.to_i, 0].max, choice_labels.length - 1].min
+        @select_state = { choices: choice_labels, selection_index: selection_index, title: title.to_s, custom: custom }
         reset_history_navigation
         render_prompt_locked
       end

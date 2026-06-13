@@ -102,7 +102,7 @@ class TestCLI < KwardTestCase
   end
 
   class BusySelectPrompt < BusyPrompt
-    attr_reader :select_messages, :select_choices, :select_titles
+    attr_reader :select_messages, :select_choices, :select_titles, :select_initial_indices
 
     def initialize(inputs, selections: [])
       super(inputs)
@@ -110,12 +110,14 @@ class TestCLI < KwardTestCase
       @select_messages = []
       @select_choices = []
       @select_titles = []
+      @select_initial_indices = []
     end
 
-    def select(message, choices, title: "Sessions", custom: false)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
       @select_messages << message
       @select_choices << choices
       @select_titles << title
+      @select_initial_indices << initial_index
       @selections.empty? ? choices.first : @selections.shift
     end
   end
@@ -1180,9 +1182,32 @@ class TestCLI < KwardTestCase
       loaded_session, loaded_conversation = store.load(session.path)
 
       assert_equal ["Tree>"], prompt.select_messages.last(1)
+      assert_equal prompt.select_choices.last.length - 1, prompt.select_initial_indices.last
       assert_equal ["edit this prompt"], prompt.prefilled_inputs
       assert_equal "first reply", loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["content"]
       assert_equal loaded_session.leaf_id, loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["id"]
+    end
+  end
+
+  def test_tree_slash_command_starts_cursor_at_current_tree_position
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      first_reply_id = session.leaf_id
+      conversation.append_user("future prompt")
+      conversation.append_assistant("future reply")
+      session.branch(first_reply_id)
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "first reply")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      choices = prompt.select_choices.last
+      assert_equal choices.index { |choice| choice.include?("first reply") }, prompt.select_initial_indices.last
     end
   end
 
