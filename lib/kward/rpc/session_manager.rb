@@ -25,6 +25,7 @@ require_relative "../transcript_export"
 require_relative "../workspace"
 require_relative "prompt_bridge"
 require_relative "runtime_payloads"
+require_relative "session_metrics"
 require_relative "tool_event_normalizer"
 require_relative "transcript_normalizer"
 
@@ -46,6 +47,7 @@ module Kward
         @client = client
         @config_dir = config_dir
         @context_usage = context_usage
+        @session_metrics = SessionMetrics.new(context_usage: context_usage)
         @session_trash = session_trash
         @sessions = {}
         @turns = {}
@@ -459,7 +461,7 @@ module Kward
           steering_supported: supports_in_flight_steer?,
           auto_compaction_reserve_tokens: auto_compaction_reserve_tokens,
           active_persona_label: active_persona_label(rpc_session),
-          message_count: message_count(rpc_session.conversation),
+          message_count: @session_metrics.message_count(rpc_session.conversation),
           pending_count: pending_turn_count(rpc_session.id),
           compaction_enabled: compaction_settings.enabled,
           workspace_guardrails_enabled: workspace_guardrails_enabled?
@@ -469,7 +471,7 @@ module Kward
       def runtime_stats(session_id:)
         rpc_session = fetch_session(session_id)
         session = session_payload(rpc_session)
-        counts = message_stats(rpc_session.conversation)
+        counts = @session_metrics.message_stats(rpc_session.conversation)
         model = current_model
         compaction_settings = self.compaction_settings
         auto_compaction_reserve_tokens = compaction_reserve_tokens(
@@ -481,7 +483,7 @@ module Kward
           counts: counts,
           model: model,
           auto_compaction_reserve_tokens: auto_compaction_reserve_tokens,
-          context_usage: context_usage(rpc_session, model),
+          context_usage: @session_metrics.context_usage(rpc_session, model, client: @client),
           compaction_enabled: compaction_settings.enabled
         )
       end
@@ -619,42 +621,6 @@ module Kward
 
       def active_session_count(workspace_root)
         @mutex.synchronize { @sessions.values.count { |rpc_session| rpc_session.workspace_root == workspace_root } }
-      end
-
-      def message_count(conversation)
-        conversation.messages.count { |message| message_role(message) != "system" }
-      end
-
-      def context_usage(rpc_session, model)
-        context_parts = if @client.respond_to?(:current_context_parts)
-                          @client.current_context_parts(rpc_session.conversation.messages, rpc_session.tool_registry.schemas)
-                        else
-                          { provider: model[:provider], model: model[:id], messages: rpc_session.conversation.messages, tools: rpc_session.tool_registry.schemas }
-                        end
-        @context_usage.call(
-          provider: model[:provider],
-          model: model[:id],
-          context_window: model[:contextWindow],
-          context_parts: context_parts
-        )
-      end
-
-      def message_stats(conversation)
-        conversation.messages.each_with_object({ userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0 }) do |message, counts|
-          role = message_role(message)
-          next if role == "system"
-
-          counts[:totalMessages] += 1
-          case role
-          when "user"
-            counts[:userMessages] += 1
-          when "assistant"
-            counts[:assistantMessages] += 1
-            counts[:toolCalls] += tool_calls(message).length
-          when "tool", "toolResult"
-            counts[:toolResults] += 1
-          end
-        end
       end
 
       def tool_calls(message)
