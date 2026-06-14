@@ -351,16 +351,10 @@ module Kward
     end
 
     def normalize_tree_records(records)
-      parent_id = nil
-      entry_index = 0
       records.each do |record|
-        next unless tree_entry_record?(record)
+        next unless tree_entry_record?(record) && !record["id"].to_s.empty?
 
-        record["id"] = "message:#{entry_index}" if record["id"].to_s.empty?
-        record["parentId"] = parent_id unless record.key?("parentId")
         assign_message_entry_id(record["message"], record["id"]) if record["message"].is_a?(Hash) && message_entry_id(record["message"]).to_s.empty?
-        parent_id = record["id"]
-        entry_index += 1
       end
       records
     end
@@ -471,9 +465,7 @@ module Kward
     end
 
     def branch_records(records)
-      return legacy_branch_records(records) unless records.any? { |record| tree_entry_record?(record) && !record["id"].to_s.empty? }
-
-      entries = records.select { |record| tree_entry_record?(record) }
+      entries = records.select { |record| tree_entry_record?(record) && !record["id"].to_s.empty? }
       by_id = entries.to_h { |record| [record["id"].to_s, record] }
       leaf_id = current_leaf_id(records)
       return [] if leaf_id.nil?
@@ -488,10 +480,6 @@ module Kward
         current = parent_id ? by_id[parent_id.to_s] : nil
       end
       branch.reverse
-    end
-
-    def legacy_branch_records(records)
-      records.select { |record| ["message", "compaction"].include?(record["type"]) }
     end
 
     def current_leaf_id(records)

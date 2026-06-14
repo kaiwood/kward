@@ -203,7 +203,7 @@ class TestSessionStore < KwardTestCase
     end
   end
 
-  def test_session_loads_legacy_linear_records_as_tree
+  def test_session_ignores_legacy_linear_records_without_entry_ids
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       session = store.create
@@ -215,10 +215,9 @@ class TestSessionStore < KwardTestCase
       tree = store.session_tree(session.path)
       _loaded_session, loaded_conversation = store.load(session.path)
 
-      assert_equal "message:0", tree.first["entry"]["id"]
-      assert_equal "message:0", tree.first["children"].first["entry"]["parentId"]
+      assert_empty tree
       loaded_messages = loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
-      assert_equal ["legacy", "reply"], loaded_messages.map { |message| message["content"] || message[:content] }
+      assert_empty loaded_messages
     end
   end
 
