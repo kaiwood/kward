@@ -228,6 +228,14 @@ class KwardTestCase < Minitest::Test
     attr_reader :access_token
   end
 
+  class FakeAnthropicOAuth
+    def initialize(access_token)
+      @access_token = access_token
+    end
+
+    attr_reader :access_token
+  end
+
   class FakeGithubOAuth
     def initialize(access_token, base_url: "https://api.individual.githubcopilot.com")
       @access_token = access_token

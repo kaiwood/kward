@@ -81,6 +81,121 @@ module Kward
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
     end
 
+    def parse_anthropic_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, usage_normalizer: nil, request_error_class: nil)
+      state = anthropic_sse_state
+      buffer = +""
+      response.read_body do |chunk|
+        cancellation&.raise_if_cancelled!
+        buffer << chunk
+        while (index = buffer.index(/\r?\n\r?\n/))
+          delimiter = Regexp.last_match[0]
+          block = buffer[0...index]
+          buffer = buffer[(index + delimiter.length)..] || +""
+          process_anthropic_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      process_anthropic_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class) unless buffer.empty?
+      anthropic_sse_message(state)
+    rescue JSON::ParserError => e
+      raise "Anthropic returned invalid SSE JSON: #{e.message}"
+    end
+
+    def anthropic_sse_state
+      { content: +"", reasoning_summary: +"", blocks: {}, tool_calls: [], usage: nil }
+    end
+
+    def process_anthropic_sse_block(block, state, on_reasoning_delta: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
+      event_name = nil
+      data = block.lines.filter_map do |line|
+        event_name = line.delete_prefix("event:").strip if line.start_with?("event:")
+        line.start_with?("data:") ? line.delete_prefix("data:").strip : nil
+      end.join("\n")
+      return if data.empty? || data == "[DONE]"
+      raise anthropic_sse_error(data, request_error_class: request_error_class) if event_name == "error"
+
+      event = JSON.parse(data)
+      case event["type"]
+      when "message_start"
+        state[:usage] ||= usage_normalizer&.call(event.dig("message", "usage"))
+      when "content_block_start"
+        block_data = event["content_block"] || {}
+        state[:blocks][event["index"].to_i] = block_data.merge("partial_json" => "")
+        if block_data["type"] == "text"
+          text = block_data["text"].to_s
+          state[:content] << text
+          on_assistant_delta&.call(text) unless text.empty?
+        elsif block_data["type"] == "thinking"
+          text = block_data["thinking"].to_s
+          state[:reasoning_summary] << text
+          on_reasoning_delta&.call(text) unless text.empty?
+        end
+      when "content_block_delta"
+        current = state[:blocks][event["index"].to_i] ||= { "partial_json" => "" }
+        delta = event["delta"] || {}
+        case delta["type"]
+        when "text_delta"
+          text = delta["text"].to_s
+          state[:content] << text
+          on_assistant_delta&.call(text)
+        when "thinking_delta"
+          text = delta["thinking"].to_s
+          state[:reasoning_summary] << text
+          on_reasoning_delta&.call(text)
+        when "input_json_delta"
+          current["partial_json"] = current["partial_json"].to_s + delta["partial_json"].to_s
+        end
+      when "content_block_stop"
+        block_data = state[:blocks][event["index"].to_i]
+        tool_call = anthropic_tool_call(block_data)
+        state[:tool_calls] << tool_call if tool_call
+      when "message_delta"
+        state[:usage] = usage_normalizer&.call(event["usage"]) || state[:usage]
+      end
+    end
+
+    def anthropic_sse_error(data, request_error_class: nil)
+      if request_error_class
+        request_error_class.new(provider: "Anthropic", code: 400, body: data)
+      else
+        data
+      end
+    end
+
+    def anthropic_tool_call(block_data)
+      return nil unless block_data.is_a?(Hash) && block_data["type"] == "tool_use"
+
+      name = from_claude_code_tool_name(block_data["name"])
+      arguments = block_data["partial_json"].to_s
+      arguments = JSON.dump(block_data["input"] || {}) if arguments.empty?
+      arguments = "{}" if arguments.empty?
+      {
+        "id" => block_data["id"] || "call_#{name}",
+        "type" => "function",
+        "function" => { "name" => name, "arguments" => arguments }
+      }
+    end
+
+    def anthropic_sse_message(state)
+      message = { "role" => "assistant", "content" => state[:content] }
+      message["reasoning_summary"] = state[:reasoning_summary] unless state[:reasoning_summary].empty?
+      message["tool_calls"] = state[:tool_calls] unless state[:tool_calls].empty?
+      message["usage"] = state[:usage] if state[:usage]
+      message
+    end
+
+    def from_claude_code_tool_name(name)
+      case name.to_s
+      when "Read" then "read_file"
+      when "Write" then "write_file"
+      when "Edit" then "edit_file"
+      when "Bash" then "run_shell_command"
+      when "WebSearch" then "web_search"
+      when "AskUserQuestion" then "ask_user_question"
+      else name.to_s
+      end
+    end
+
     def merge_streaming_tool_call(tool_calls, delta)
       index = (delta["index"] || tool_calls.length).to_i
       tool_calls[index] ||= { "id" => nil, "type" => "function", "function" => { "name" => "", "arguments" => "" } }

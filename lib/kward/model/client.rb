@@ -1,6 +1,7 @@
 require "json"
 require "net/http"
 require "uri"
+require_relative "../auth/anthropic_oauth"
 require_relative "../auth/github_oauth"
 require_relative "../auth/openai_oauth"
 require_relative "../cancellation"
@@ -25,9 +26,11 @@ module Kward
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
     OPENROUTER_MODELS_URL = URI("https://openrouter.ai/api/v1/models")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
+    ANTHROPIC_URL = URI("https://api.anthropic.com/v1/messages")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
     OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouter_api_key to your Kward config."
     COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
+    ANTHROPIC_AUTH_ERROR = "No Anthropic OAuth login found. Run `ruby lib/main.rb login anthropic`."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
     DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
@@ -77,11 +80,12 @@ module Kward
     TRANSIENT_NETWORK_ERRORS = [IOError, EOFError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout].freeze
 
     # Creates an object for model provider requests.
-    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, github_oauth: GithubOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
+    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, github_oauth: GithubOAuth.new, anthropic_oauth: AnthropicOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
       @openrouter_api_key = presence(api_key)
       @openai_access_token = presence(openai_access_token)
       @oauth = oauth
       @github_oauth = github_oauth
+      @anthropic_oauth = anthropic_oauth
       @model = model
       @config_path = File.expand_path(config_path)
       @config = load_config
@@ -176,6 +180,7 @@ module Kward
       openai_model = model_for("Codex")
       openrouter_model = model_for("OpenRouter")
       copilot_model = model_for("Copilot")
+      anthropic_model = model_for("Anthropic")
       openrouter_choices = provider == "OpenRouter" ? openrouter_model_choices : ModelInfo::OPENROUTER_MODEL_CHOICES
       copilot_choices = provider == "Copilot" ? copilot_model_choices : static_copilot_model_choices
       models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
@@ -187,9 +192,13 @@ module Kward
       models += copilot_choices.map do |id|
         { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
       end
+      models += ModelInfo::ANTHROPIC_MODEL_CHOICES.map do |id|
+        { provider: "Anthropic", id: id, current: provider == "Anthropic" && anthropic_model == id }
+      end
       models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
       models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_choices.include?(openrouter_model)
       models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
+      models << { provider: "Anthropic", id: anthropic_model, current: provider == "Anthropic" } unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
       
       # Sort models by provider, then alphabetically by id
       models.sort_by { |model| [model[:provider], model[:id]] }
@@ -260,6 +269,16 @@ module Kward
           on_assistant_delta: on_assistant_delta,
           cancellation: cancellation
         )
+      when "Anthropic"
+        chat_anthropic_provider(
+          url: url,
+          token: token,
+          request_body: request_body,
+          current_model: current_model,
+          on_reasoning_delta: on_reasoning_delta,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
       else
         chat_openrouter_provider(
           url: url,
@@ -297,6 +316,32 @@ module Kward
       attach_response_metadata(message, provider: "Copilot", model: current_model)
     end
 
+    def chat_anthropic_provider(url:, token:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:)
+      request = Net::HTTP::Post.new(url)
+      request["Authorization"] = "Bearer #{token}"
+      request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
+      anthropic_headers.each { |key, value| request[key] = value }
+      request.body = request_body
+
+      message = nil
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise RequestError.new(provider: "Anthropic", code: response.code, body: redact(body, token))
+          end
+
+          message = parse_anthropic_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      attach_response_metadata(message, provider: "Anthropic", model: current_model)
+    end
+
     def chat_openrouter_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
@@ -327,6 +372,8 @@ module Kward
         OPENROUTER_AUTH_ERROR
       when "Copilot"
         COPILOT_AUTH_ERROR
+      when "Anthropic"
+        ANTHROPIC_AUTH_ERROR
       else
         AUTH_ERROR
       end
@@ -412,6 +459,8 @@ module Kward
     def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       if provider == "Codex"
         codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
+      elsif provider == "Anthropic"
+        anthropic_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       elsif provider == "Copilot" && copilot_responses_model?(model)
         copilot_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       else
@@ -603,6 +652,16 @@ module Kward
       ModelStreamParser.parse_openai_chat_sse(body, on_assistant_delta: on_assistant_delta, usage_normalizer: method(:normalized_usage))
     end
 
+    def anthropic_headers
+      {
+        "anthropic-version" => "2023-06-01",
+        "anthropic-beta" => "claude-code-20250219,oauth-2025-04-20",
+        "anthropic-dangerous-direct-browser-access" => "true",
+        "user-agent" => "claude-cli/2.1.75",
+        "x-app" => "cli"
+      }
+    end
+
     def copilot_headers(messages)
       headers = GithubOAuth::COPILOT_HEADERS.dup
       headers["X-Initiator"] = copilot_initiator(messages)
@@ -657,6 +716,10 @@ module Kward
       ModelStreamParser.parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
     end
 
+    def parse_anthropic_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
+      ModelStreamParser.parse_anthropic_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
+    end
+
     def close_http(http)
       http.finish if http&.started?
     rescue IOError
@@ -680,9 +743,9 @@ module Kward
       cache_read_tokens = positive_integer(
         nested_value(usage, "input_tokens_details", "cached_tokens") ||
         nested_value(usage, "prompt_tokens_details", "cached_tokens") ||
-        usage["cache_read_tokens"] || usage[:cache_read_tokens] || usage["cacheReadTokens"] || usage[:cacheReadTokens]
+        usage["cache_read_tokens"] || usage[:cache_read_tokens] || usage["cacheReadTokens"] || usage[:cacheReadTokens] || usage["cache_read_input_tokens"] || usage[:cache_read_input_tokens]
       )
-      cache_write_tokens = integer_value(usage, "cache_write_tokens", "cacheWriteTokens")
+      cache_write_tokens = integer_value(usage, "cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens")
       total_tokens = integer_value(usage, "total_tokens", "totalTokens")
       total_tokens ||= [input_tokens, output_tokens, cache_read_tokens, cache_write_tokens].compact.sum
       return nil unless total_tokens&.positive? || input_tokens&.positive? || output_tokens&.positive?
@@ -724,6 +787,10 @@ module Kward
         return [copilot_chat_url, github_access_token, provider, nil]
       end
 
+      if provider == "Anthropic"
+        return [ANTHROPIC_URL, anthropic_access_token, provider, nil]
+      end
+
       if provider == "OpenRouter"
         return [OPENROUTER_URL, openrouter_api_key, provider, nil]
       end
@@ -758,6 +825,10 @@ module Kward
 
     def github_access_token
       @github_oauth.access_token
+    end
+
+    def anthropic_access_token
+      @anthropic_oauth.access_token
     end
 
     def copilot_chat_url

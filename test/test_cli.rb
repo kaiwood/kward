@@ -255,7 +255,7 @@ class TestCLI < KwardTestCase
   def test_login_picker_includes_openrouter
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
 
-    assert_equal ["OpenAI", "OpenRouter", "GitHub"], cli.send(:login_provider_choices)
+    assert_equal ["OpenAI", "Anthropic", "OpenRouter", "GitHub"], cli.send(:login_provider_choices)
     assert_equal "openrouter", cli.send(:selected_login_provider, "OpenRouter")
   end
 
@@ -2211,7 +2211,7 @@ edit this prompt"
     cli.interactive_loop(agent: agent)
 
     assert_equal ["openai"], cli.login_providers
-    assert_equal ["OpenAI", "OpenRouter", "GitHub"], prompt.select_choices.first
+    assert_equal ["OpenAI", "Anthropic", "OpenRouter", "GitHub"], prompt.select_choices.first
     assert_equal "Login", prompt.select_titles.first
     assert_empty client.seen_messages
   end

@@ -49,7 +49,7 @@ module Kward
           toolCalls: counts[:toolCalls],
           toolResults: counts[:toolResults],
           totalMessages: counts[:totalMessages],
-          usingSubscription: model[:provider] == "Codex",
+          usingSubscription: ["Codex", "Anthropic"].include?(model[:provider]),
           autoCompactionEnabled: compaction_enabled,
           autoCompactionReserveTokens: auto_compaction_reserve_tokens,
           contextUsage: context_usage

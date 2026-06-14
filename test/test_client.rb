@@ -121,6 +121,25 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_anthropic_reads_model_from_config
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("anthropic_model" => "claude-opus-4.5", "anthropic_reasoning_effort" => "high"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new("anthropic-token"), config_path: path)
+
+      tools = [{ function: { name: "read_file", description: "Read a file", parameters: { properties: { path: { type: "string" } }, required: ["path"] } } }]
+      payload = client.send(:anthropic_payload, [{ role: "system", content: "ship rules" }, { role: "user", content: "hello" }], tools)
+
+      assert_equal "claude-opus-4-5", payload[:model]
+      assert_equal true, payload[:stream]
+      assert_equal "You are Claude Code, Anthropic's official CLI for Claude.", payload[:system].first[:text]
+      assert_equal "ship rules", payload[:system].last[:text]
+      assert_equal({ type: "adaptive", display: "summarized" }, payload[:thinking])
+      assert_equal({ effort: "high" }, payload[:output_config])
+      assert_equal "Read", payload[:tools].first[:name]
+    end
+  end
+
   def test_available_models_include_openai_openrouter_and_copilot_picker_choices
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
@@ -132,8 +151,37 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
     assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
     assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
+    assert_includes models, { provider: "Anthropic", id: "claude-sonnet-4-5", current: false }
+    assert_includes models, { provider: "Anthropic", id: "claude-opus-4-5", current: false }
     refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "claude-sonnet-4.6" }
     assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
+  end
+
+  def test_anthropic_chat_uses_messages_endpoint_and_parses_stream
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "anthropic", "anthropic_model" => "claude-sonnet-4-5"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new("sk-ant-oat-test"), config_path: path)
+      stream = [
+        "event: message_start\ndata: #{JSON.dump("type" => "message_start", "message" => { "usage" => { "input_tokens" => 3, "output_tokens" => 0 } })}\n\n",
+        "event: content_block_start\ndata: #{JSON.dump("type" => "content_block_start", "index" => 0, "content_block" => { "type" => "text", "text" => "" })}\n\n",
+        "event: content_block_delta\ndata: #{JSON.dump("type" => "content_block_delta", "index" => 0, "delta" => { "type" => "text_delta", "text" => "hello" })}\n\n",
+        "event: message_stop\ndata: #{JSON.dump("type" => "message_stop")}\n\n"
+      ].join
+
+      with_fake_http([fake_net_response(200, stream)]) do |http|
+        message = client.chat([{ role: "user", content: "hello" }])
+
+        assert_equal "hello", message["content"]
+        assert_equal "Anthropic", message["provider"]
+        assert_equal URI("https://api.anthropic.com/v1/messages"), http.requests.first.uri
+        assert_equal "Bearer sk-ant-oat-test", http.requests.first["Authorization"]
+        assert_equal "claude-code-20250219,oauth-2025-04-20", http.requests.first["anthropic-beta"]
+        payload = JSON.parse(http.requests.first.body)
+        assert_equal "claude-sonnet-4-5", payload.fetch("model")
+        assert_equal true, payload.fetch("stream")
+      end
+    end
   end
 
   def test_openrouter_available_models_use_live_model_ids_when_available

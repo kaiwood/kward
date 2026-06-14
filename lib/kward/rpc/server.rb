@@ -379,7 +379,7 @@ module Kward
             supported: true,
             providerFormat: "tauren-auth-v1",
             methods: AUTH_METHODS,
-            oauthProviders: ["openai", "github"],
+            oauthProviders: ["openai", "anthropic", "github"],
             unsupportedOAuthProviders: { github: "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet." },
             apiKeyProviders: ["openrouter"],
             logout: true

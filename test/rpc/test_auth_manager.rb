@@ -43,6 +43,30 @@ class TestRPCAuthManager < KwardTestCase
     end
   end
 
+  def test_anthropic_provider_reports_stored_oauth_and_logout
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      anthropic_auth_path = File.join(config_dir, "anthropic_auth.json")
+      File.write(anthropic_auth_path, JSON.pretty_generate("tokens" => { "access_token" => "stored-anthropic-token" }))
+      File.chmod(0o600, anthropic_auth_path)
+
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "auth/providers" },
+        { jsonrpc: "2.0", id: 2, method: "auth/logoutProvider", params: { providerId: "anthropic" } },
+        { jsonrpc: "2.0", id: 3, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path, "KWARD_ANTHROPIC_AUTH_PATH" => anthropic_auth_path })
+
+      anthropic = messages[0]["result"]["providers"].find { |provider| provider["id"] == "anthropic" }
+      assert_equal "oauth", anthropic["authType"]
+      assert_equal true, anthropic["configured"]
+      assert_equal "stored", anthropic["source"]
+      assert_equal true, anthropic["canLogout"]
+      assert_equal true, anthropic["usesCallbackServer"]
+      assert_equal({ "providerId" => "anthropic", "message" => "Logged out of Anthropic." }, messages[1]["result"])
+      refute File.exist?(anthropic_auth_path)
+    end
+  end
+
   def test_auth_provider_cards_api_key_login_and_logout
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

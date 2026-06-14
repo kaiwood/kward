@@ -1,3 +1,4 @@
+require "json"
 require_relative "../image_attachments"
 require_relative "../message_access"
 require_relative "model_info"
@@ -88,6 +89,27 @@ module Kward
       end
     end
 
+    def anthropic_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
+      parts = build_context_parts("Anthropic", messages, tools, model: model)
+      system = [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." }]
+      system << { type: "text", text: parts[:system] } unless parts[:system].to_s.empty?
+      payload = {
+        model: parts[:model],
+        system: system,
+        messages: parts[:messages],
+        max_tokens: max_tokens.to_i.positive? ? max_tokens.to_i : 16_384,
+        stream: true
+      }
+      payload[:tools] = parts[:tools] unless parts[:tools].empty?
+      if reasoning != false
+        payload[:thinking] = { type: "adaptive", display: "summarized" }
+        payload[:output_config] = { effort: reasoning_effort("Anthropic") }
+      else
+        payload[:thinking] = { type: "disabled" }
+      end
+      payload
+    end
+
     def codex_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       parts = build_context_parts("Codex", messages, tools, model: model)
       payload = {
@@ -112,7 +134,16 @@ module Kward
     # prefer this method when showing context usage or debugging provider payloads
     # so every frontend sees the same conversion rules.
     def build_context_parts(provider, messages, tools, model: nil)
-      if provider == "CopilotResponses"
+      if provider == "Anthropic"
+        system, anthropic_messages = anthropic_messages(messages)
+        {
+          provider: provider,
+          model: model_for(provider, override_model: model),
+          system: system,
+          messages: anthropic_messages,
+          tools: tools.map { |tool| anthropic_tool_schema(tool) }
+        }
+      elsif provider == "CopilotResponses"
         instructions, input = codex_messages(messages)
         {
           provider: provider,
@@ -138,6 +169,109 @@ module Kward
           tools: tools
         }
       end
+    end
+
+    def anthropic_messages(messages)
+      system = []
+      output = []
+      messages.each do |message|
+        role = MessageAccess.role(message)
+        content = MessageAccess.content(message) || ""
+        case role.to_s
+        when "system"
+          system << plain_content(content).to_s
+        when "assistant"
+          blocks = []
+          text = plain_content(content).to_s
+          blocks << { type: "text", text: text } unless text.empty?
+          MessageAccess.tool_calls(message).each do |tool_call|
+            function = tool_call[:function] || tool_call["function"] || {}
+            name = function[:name] || function["name"]
+            arguments = function[:arguments] || function["arguments"] || "{}"
+            blocks << {
+              type: "tool_use",
+              id: normalize_anthropic_tool_call_id(tool_call[:id] || tool_call["id"] || "call_#{name}"),
+              name: claude_code_tool_name(name),
+              input: parse_tool_arguments(arguments)
+            }
+          end
+          output << { role: "assistant", content: blocks } unless blocks.empty?
+        when "tool", "toolResult"
+          output << {
+            role: "user",
+            content: [{
+              type: "tool_result",
+              tool_use_id: normalize_anthropic_tool_call_id(MessageAccess.tool_call_id(message) || MessageAccess.tool_name(message) || "tool-call"),
+              content: plain_content(content).to_s
+            }]
+          }
+        when "compactionSummary"
+          summary = MessageAccess.summary(message) || content
+          output << { role: "assistant", content: [{ type: "text", text: summary.to_s }] } unless summary.to_s.empty?
+        else
+          output << { role: "user", content: anthropic_user_content(content) }
+        end
+      end
+      [system.join("\n\n"), output]
+    end
+
+    def anthropic_user_content(content)
+      return content.to_s unless content.is_a?(Array)
+
+      content.filter_map do |part|
+        type = part[:type] || part["type"]
+        if type == "text"
+          { type: "text", text: part[:text] || part["text"] || "" }
+        elsif type == "image"
+          mime_type, data = ImageAttachments.data_url(part).split(",", 2)
+          media_type = mime_type.to_s[/data:([^;]+)/, 1] || "image/png"
+          { type: "image", source: { type: "base64", media_type: media_type, data: data.to_s } }
+        end
+      end
+    end
+
+    CLAUDE_CODE_TOOL_NAMES = %w[Read Write Edit Bash Grep Glob AskUserQuestion EnterPlanMode ExitPlanMode KillShell NotebookEdit Skill Task TaskOutput TodoWrite WebFetch WebSearch].freeze
+
+    def claude_code_tool_name(name)
+      mapped = {
+        "read_file" => "Read",
+        "write_file" => "Write",
+        "edit_file" => "Edit",
+        "run_shell_command" => "Bash",
+        "web_search" => "WebSearch",
+        "ask_user_question" => "AskUserQuestion"
+      }[name.to_s]
+      return mapped if mapped
+
+      lookup = CLAUDE_CODE_TOOL_NAMES.find { |tool_name| tool_name.downcase == name.to_s.downcase }
+      lookup || name.to_s
+    end
+
+    def normalize_anthropic_tool_call_id(id)
+      id.to_s.gsub(/[^a-zA-Z0-9_-]/, "_")[0, 64]
+    end
+
+    def parse_tool_arguments(arguments)
+      return arguments if arguments.is_a?(Hash)
+
+      JSON.parse(arguments.to_s.empty? ? "{}" : arguments.to_s)
+    rescue JSON::ParserError
+      {}
+    end
+
+    def anthropic_tool_schema(tool)
+      function = tool[:function] || tool["function"] || {}
+      schema = function[:parameters] || function["parameters"] || {}
+      {
+        name: claude_code_tool_name(function[:name] || function["name"]),
+        description: function[:description] || function["description"] || "",
+        input_schema: {
+          type: "object",
+          properties: schema[:properties] || schema["properties"] || {},
+          required: schema[:required] || schema["required"] || []
+        },
+        eager_input_streaming: true
+      }
     end
 
     def codex_messages(messages)

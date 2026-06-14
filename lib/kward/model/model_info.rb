@@ -7,9 +7,15 @@ module Kward
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
     DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
     DEFAULT_COPILOT_MODEL = "gpt-5-mini"
+    DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
     DEFAULT_REASONING_EFFORT = "medium"
     OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     OPENROUTER_MODEL_CHOICES = OPENAI_MODEL_CHOICES.map { |model| "openai/#{model}" }.freeze
+    ANTHROPIC_MODEL_CHOICES = %w[
+      claude-sonnet-4-5
+      claude-opus-4-5
+      claude-haiku-4-5
+    ].freeze
     COPILOT_MODEL_CHOICES = %w[
       gpt-5-mini
       gpt-5.3-codex
@@ -64,9 +70,22 @@ module Kward
         env["OPENROUTER_MODEL"] || ConfigFiles.config_value(config, "openrouter_model", "model") || DEFAULT_OPENROUTER_MODEL
       when "Copilot"
         normalize_copilot_model(env["COPILOT_MODEL"] || ConfigFiles.config_value(config, "copilot_model", "model") || DEFAULT_COPILOT_MODEL)
+      when "Anthropic"
+        normalize_anthropic_model(env["ANTHROPIC_MODEL"] || ConfigFiles.config_value(config, "anthropic_model", "model") || DEFAULT_ANTHROPIC_MODEL)
       else
         env["OPENAI_MODEL"] || ConfigFiles.config_value(config, "openai_model", "model") || DEFAULT_OPENAI_MODEL
       end
+    end
+
+    def normalize_anthropic_model(id)
+      text = id.to_s.strip
+      return DEFAULT_ANTHROPIC_MODEL if text.empty?
+      text = text.delete_prefix("anthropic/").delete_prefix("claude/")
+      {
+        "claude-sonnet-4.5" => "claude-sonnet-4-5",
+        "claude-opus-4.5" => "claude-opus-4-5",
+        "claude-haiku-4.5" => "claude-haiku-4-5"
+      }.fetch(text, text)
     end
 
     def normalize_copilot_model(id)
@@ -94,6 +113,8 @@ module Kward
         env["OPENROUTER_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openrouter_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
       when "Copilot"
         env["COPILOT_REASONING_EFFORT"] || ConfigFiles.config_value(config, "copilot_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
+      when "Anthropic"
+        env["ANTHROPIC_REASONING_EFFORT"] || ConfigFiles.config_value(config, "anthropic_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
       else
         env["OPENAI_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openai_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
       end
@@ -103,6 +124,7 @@ module Kward
       case provider.to_s.downcase
       when "openrouter" then "OpenRouter"
       when "copilot" then "Copilot"
+      when "anthropic", "claude" then "Anthropic"
       when "codex", "openai" then "Codex"
       else provider.to_s
       end
@@ -112,6 +134,7 @@ module Kward
       case provider.to_s.downcase
       when "openrouter" then "openrouter"
       when "copilot" then "copilot"
+      when "anthropic", "claude" then "anthropic"
       else "codex"
       end
     end
@@ -120,6 +143,7 @@ module Kward
       case provider.to_s.downcase
       when "openrouter" then "openrouter_model"
       when "copilot" then "copilot_model"
+      when "anthropic", "claude" then "anthropic_model"
       else "openai_model"
       end
     end
@@ -128,6 +152,7 @@ module Kward
       case provider.to_s.downcase
       when "openrouter" then "openrouter_reasoning_effort"
       when "copilot" then "copilot_reasoning_effort"
+      when "anthropic", "claude" then "anthropic_reasoning_effort"
       else "openai_reasoning_effort"
       end
     end
@@ -144,6 +169,7 @@ module Kward
     end
 
     def context_window(provider, id)
+      return 200_000 if provider == "Anthropic"
       return nil unless provider == "Codex"
 
       match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
@@ -155,7 +181,7 @@ module Kward
     end
 
     def reasoning_supported?(provider, id)
-      provider == "Codex" || provider == "OpenRouter" || (provider == "Copilot" && id.to_s.match?(/\Agpt-5(?:\.|-|\z)/))
+      provider == "Codex" || provider == "OpenRouter" || provider == "Anthropic" || (provider == "Copilot" && id.to_s.match?(/\Agpt-5(?:\.|-|\z)/))
     end
 
     def normalize(model, current_provider: nil, current_model: nil, current_reasoning_effort: nil)

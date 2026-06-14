@@ -58,7 +58,7 @@ module Kward
           #{heading.call("Commands")}
             #{command.call("help")}                               Show this help
             #{command.call("version")}                            Show the installed Kward version
-            #{command.call("login")} [openrouter|github]           Sign in with OpenAI, OpenRouter, or GitHub
+            #{command.call("login")} [anthropic|openrouter|github] Sign in with OpenAI, Anthropic, OpenRouter, or GitHub
             #{command.call("auth status|logout")}                 Show or clear saved credentials
             #{command.call("init")}                               Install starter prompts and AGENTS.md
             #{command.call("doctor")}                             Check local Kward setup
@@ -95,9 +95,9 @@ module Kward
             examples: ["kward version", "kward --version"]
           },
           "login" => {
-            usage: "kward login [openrouter|github]",
-            description: "Sign in with OpenAI, OpenRouter, or GitHub.",
-            examples: ["kward login", "kward login openrouter", "kward login github"]
+            usage: "kward login [anthropic|openrouter|github]",
+            description: "Sign in with OpenAI, Anthropic, OpenRouter, or GitHub.",
+            examples: ["kward login", "kward login anthropic", "kward login openrouter", "kward login github"]
           },
           "auth" => {
             usage: "kward auth status|logout",

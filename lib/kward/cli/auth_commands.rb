@@ -25,6 +25,7 @@ module Kward
         config = safely_read_config.to_h
         lines = ["#{colored("Auth Status", :green, :bold)}", ""]
         lines << auth_status_line("OpenAI OAuth", File.exist?(OpenAIOAuth.default_auth_path), OpenAIOAuth.default_auth_path)
+        lines << auth_status_line("Anthropic OAuth", File.exist?(AnthropicOAuth.default_auth_path), AnthropicOAuth.default_auth_path)
         lines << auth_status_line("GitHub OAuth", File.exist?(GithubOAuth.default_auth_path), GithubOAuth.default_auth_path)
         lines << auth_status_line("OpenRouter API key", !config["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?, ConfigFiles.config_path)
         @prompt.say lines.join("\n")
@@ -38,7 +39,7 @@ module Kward
 
       def logout_auth
         removed = []
-        [OpenAIOAuth.default_auth_path, GithubOAuth.default_auth_path].each do |path|
+        [OpenAIOAuth.default_auth_path, AnthropicOAuth.default_auth_path, GithubOAuth.default_auth_path].each do |path|
           next unless File.exist?(path)
 
           File.delete(path)
@@ -62,9 +63,17 @@ module Kward
           return
         end
 
-        oauth ||= provider == "github" ? GithubOAuth.new : OpenAIOAuth.new
+        oauth ||= case provider
+                  when "github" then GithubOAuth.new
+                  when "anthropic", "claude" then AnthropicOAuth.new
+                  else OpenAIOAuth.new
+                  end
         path = oauth.login(prompt: @prompt)
-        name = provider == "github" ? "GitHub" : "OpenAI"
+        name = case provider
+               when "github" then "GitHub"
+               when "anthropic", "claude" then "Anthropic"
+               else "OpenAI"
+               end
         @prompt.say("#{colored("Saved", :green, :bold)} #{name} OAuth login to #{path}")
       end
 

@@ -107,7 +107,7 @@ module Kward
 
       def provider_choices
         current = current_model_provider
-        ["Codex", "OpenRouter", "Copilot"].map do |provider|
+        ["Codex", "Anthropic", "OpenRouter", "Copilot"].map do |provider|
           label = provider.dup
           label += " (current)" if provider == current
           label
@@ -117,6 +117,7 @@ module Kward
       def selected_provider(selected)
         text = selected.to_s.downcase
         return "Codex" if text.start_with?("codex")
+        return "Anthropic" if text.start_with?("anthropic") || text.start_with?("claude")
         return "OpenRouter" if text.start_with?("openrouter")
         return "Copilot" if text.start_with?("copilot")
 
@@ -128,6 +129,9 @@ module Kward
         case selected.to_s.downcase
         when /\Aopenai/
           login(provider: "openai")
+          reload_client_config
+        when /\Aanthropic/, /\Aclaude/
+          login(provider: "anthropic")
           reload_client_config
         when /\Agithub/
           login(provider: "github")
@@ -144,6 +148,7 @@ module Kward
         config = safely_read_config.to_h
         [
           "OpenAI login (#{File.exist?(OpenAIOAuth.default_auth_path) ? "configured" : "not configured"})",
+          "Anthropic login (#{File.exist?(AnthropicOAuth.default_auth_path) ? "configured" : "not configured"})",
           "GitHub login (#{File.exist?(GithubOAuth.default_auth_path) ? "configured" : "not configured"})",
           "OpenRouter API key (#{openrouter_key_status(config)})",
           "Status",
@@ -555,13 +560,15 @@ module Kward
       end
 
       def login_provider_choices
-        ["OpenAI", "OpenRouter", "GitHub"]
+        ["OpenAI", "Anthropic", "OpenRouter", "GitHub"]
       end
 
       def selected_login_provider(selected)
         case selected.to_s.downcase
         when /\Aopenai\b/
           "openai"
+        when /\Aanthropic\b/, /\Aclaude\b/
+          "anthropic"
         when /\Aopenrouter\b/
           "openrouter"
         when /\Agithub\b/
@@ -614,7 +621,7 @@ module Kward
         return [known[:provider], known[:id]] if known
 
         provider, model = text.split(/\s+/, 2)
-        if ["Codex", "OpenRouter", "Copilot"].include?(provider) && !model.to_s.strip.empty?
+        if ["Codex", "Anthropic", "OpenRouter", "Copilot"].include?(provider) && !model.to_s.strip.empty?
           [provider, model.strip]
         else
           [current_model_provider, text]

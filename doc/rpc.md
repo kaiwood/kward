@@ -59,7 +59,7 @@ Detailed capability fields include:
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
-- `auth`: Tauren auth provider format, OpenAI OAuth, OpenRouter API-key login, and provider logout for stored credentials.
+- `auth`: Tauren auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, and provider logout for stored credentials.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
@@ -589,11 +589,11 @@ Updates config, including secret values, and returns a redacted config object. T
 
 ### `auth/status`
 
-Returns whether OpenAI OAuth, OpenAI access token env, and OpenRouter API key env/config are available.
+Returns whether OpenAI OAuth, Anthropic OAuth, OpenAI access token env, and OpenRouter API key env/config are available.
 
 ### `auth/providers`
 
-Returns Tauren-compatible provider cards for OpenAI OAuth and OpenRouter API-key auth. Provider cards report whether credentials are configured, whether they came from stored config or environment variables, and whether stored credentials can be removed.
+Returns Tauren-compatible provider cards for OpenAI OAuth, Anthropic OAuth, OpenRouter API-key auth, and GitHub/Copilot status. Provider cards report whether credentials are configured, whether they came from stored config or environment variables, and whether stored credentials can be removed.
 
 ### `auth/loginWithApiKey`
 
@@ -608,7 +608,7 @@ Stores the API key with `0600` file permissions, refreshes client config, and re
 
 Params:
 
-- `providerId`: `openai` or `openrouter`.
+- `providerId`: `openai`, `anthropic`, or `openrouter`.
 
 Removes stored credentials only. Environment variables remain active and are still reported by `auth/providers`.
 
@@ -616,10 +616,10 @@ Removes stored credentials only. Environment variables remain active and are sti
 
 Params:
 
-- `providerId`: currently `openai`.
+- `providerId`: currently `openai` or `anthropic`.
 - `timeoutSeconds`: optional callback wait timeout.
 
-Provider-scoped wrapper around the OpenAI OAuth flow. The result includes `providerId`, `loginId`, `authorizationUrl`, `redirectUri`, and `status`.
+Provider-scoped wrapper around the OpenAI or Anthropic OAuth flow. The result includes `providerId`, `loginId`, `authorizationUrl`, `redirectUri`, and `status`.
 
 ### `auth/startOpenAILogin`
 

@@ -5,6 +5,7 @@ Kward needs credentials for a model provider before it can answer prompts. The e
 Kward supports:
 
 - OpenAI/ChatGPT OAuth for the Codex backend.
+- Anthropic OAuth for Claude Pro/Max subscription support.
 - OpenRouter API keys.
 - GitHub OAuth or `COPILOT_GITHUB_TOKEN` for experimental Copilot provider support.
 
@@ -24,6 +25,7 @@ From your shell, you can also run:
 
 ```bash
 kward login              # OpenAI/ChatGPT OAuth
+kward login anthropic    # Anthropic Claude Pro/Max OAuth
 kward login openrouter   # save an OpenRouter API key
 kward login github       # GitHub OAuth for experimental Copilot support
 ```
@@ -57,6 +59,26 @@ OpenAI OAuth requires an OAuth client ID in `~/.kward/config.json`:
 ```
 
 If it is missing, Kward tells you which config file to update.
+
+## Anthropic OAuth
+
+Anthropic OAuth uses your Claude Pro/Max subscription and sends requests to the Anthropic Messages API with Claude Code-compatible subscription headers. To start the browser login from your shell:
+
+```bash
+kward login anthropic
+```
+
+In an interactive session, run `/login` and choose Anthropic.
+
+Tokens are saved to:
+
+```text
+~/.kward/anthropic_auth.json
+```
+
+The auth file is written with file mode `0600`. Kward refreshes the access token when the saved refresh token is available.
+
+Important: Anthropic subscription access follows the same direct OAuth approach Pi uses for Claude Pro/Max. Subscription provider behavior may change upstream.
 
 ## OpenRouter API key
 
@@ -97,9 +119,10 @@ Important: Kward's Copilot provider follows Pi Agent's direct HTTPS approach. It
 Credential priority is provider-aware:
 
 - OpenAI OAuth is used by default after login, even when `OPENROUTER_API_KEY` or `openrouter_api_key` is also present.
+- Anthropic OAuth is used when `provider` or `KWARD_PROVIDER` selects `anthropic` or `claude`.
 - `OPENAI_ACCESS_TOKEN` can be used as an OpenAI environment fallback.
 - `OPENROUTER_API_KEY` is a fallback only when no OpenAI OAuth/access token exists.
 - `COPILOT_GITHUB_TOKEN` can be used as a Copilot environment fallback.
-- If `provider` in config or `KWARD_PROVIDER` in the environment is set to `codex`, `openrouter`, or `copilot`, Kward uses that provider and does not fall through to another provider.
+- If `provider` in config or `KWARD_PROVIDER` in the environment is set to `codex`, `anthropic`, `openrouter`, or `copilot`, Kward uses that provider and does not fall through to another provider.
 
 See [Configuration](configuration.md) for model and provider settings.

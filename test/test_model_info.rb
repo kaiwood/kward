@@ -39,12 +39,25 @@ class TestModelInfo < KwardTestCase
     assert_equal "openrouter_model", Kward::ModelInfo.config_key_for_provider("openrouter")
     assert_equal "copilot_model", Kward::ModelInfo.config_key_for_provider("Copilot")
     assert_equal "copilot_model", Kward::ModelInfo.config_key_for_provider("copilot")
+    assert_equal "anthropic_model", Kward::ModelInfo.config_key_for_provider("Anthropic")
+    assert_equal "anthropic_model", Kward::ModelInfo.config_key_for_provider("claude")
 
     assert_equal "openai_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Codex")
     assert_equal "openrouter_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("OpenRouter")
     assert_equal "openrouter_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("openrouter")
     assert_equal "copilot_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Copilot")
     assert_equal "copilot_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("copilot")
+    assert_equal "anthropic_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Anthropic")
+    assert_equal "anthropic_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("claude")
+  end
+
+  def test_anthropic_model_and_provider_metadata
+    assert_equal "Anthropic", Kward::ModelInfo.provider_label("claude")
+    assert_equal "anthropic", Kward::ModelInfo.provider_config_value("Anthropic")
+    assert_equal "claude-sonnet-4-5", Kward::ModelInfo.model_for("Anthropic", config: {}, env: {})
+    assert_equal "claude-opus-4-5", Kward::ModelInfo.model_for("Anthropic", config: { "anthropic_model" => "claude-opus-4.5" }, env: {})
+    assert_equal 200_000, Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-4-5")
+    assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-5")
   end
 
   def test_copilot_reasoning_effort_uses_copilot_config_and_env

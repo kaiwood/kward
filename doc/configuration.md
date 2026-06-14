@@ -28,6 +28,7 @@ By default, Kward stores user data under `~/.kward`:
 ```text
 ~/.kward/config.json
 ~/.kward/auth.json
+~/.kward/anthropic_auth.json
 ~/.kward/github_auth.json
 ~/.kward/sessions/
 ~/.kward/memory/
@@ -50,6 +51,7 @@ Set `provider` to choose the active backend:
 Supported values are:
 
 - `codex` for the OpenAI/ChatGPT Codex backend.
+- `anthropic` for Anthropic Claude Pro/Max subscription support.
 - `openrouter` for OpenRouter.
 - `copilot` for experimental Copilot provider support.
 
@@ -60,21 +62,24 @@ Model settings:
   "model": "gpt-5.5",
   "openai_model": "gpt-5.5",
   "openrouter_model": "openai/gpt-5.5",
+  "anthropic_model": "claude-sonnet-4-5",
   "copilot_model": "gpt-5-mini",
   "reasoning_effort": "medium",
   "openai_reasoning_effort": "medium",
   "openrouter_reasoning_effort": "medium",
+  "anthropic_reasoning_effort": "medium",
   "copilot_reasoning_effort": "medium",
   "thinking_level": "medium"
 }
 ```
 
-`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `openai_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
+`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `anthropic_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `openai_reasoning_effort`, `anthropic_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
 
 Defaults:
 
 - OpenAI/Codex: `gpt-5.5`
 - OpenRouter: `openai/gpt-5.5`
+- Anthropic: `claude-sonnet-4-5`
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
 
@@ -91,6 +96,8 @@ Provider and model:
 - `OPENAI_REASONING_EFFORT`
 - `OPENROUTER_MODEL`
 - `OPENROUTER_REASONING_EFFORT`
+- `ANTHROPIC_MODEL`
+- `ANTHROPIC_REASONING_EFFORT`
 - `COPILOT_MODEL`
 - `COPILOT_REASONING_EFFORT`
 
@@ -122,7 +129,7 @@ Credential settings can also live in config:
 }
 ```
 
-Use environment variables for temporary or local-only secrets when possible. If both OpenAI and OpenRouter credentials are available, OpenAI OAuth is used by default unless `provider` or `KWARD_PROVIDER` selects another backend.
+Use environment variables for temporary or local-only secrets when possible. If multiple credentials are available, OpenAI OAuth is used by default unless `provider` or `KWARD_PROVIDER` selects another backend such as `anthropic`, `openrouter`, or `copilot`.
 
 ## Overlay settings
 
