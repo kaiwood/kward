@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.67.1] - 2026-06-14
+
 ### Fixed
 
 - Fixed RPC session listing so it no longer deletes the active empty session file while UI clients are starting a first turn.
