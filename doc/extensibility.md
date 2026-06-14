@@ -23,7 +23,7 @@ Plugins are different: user plugins are loaded only from `~/.kward/plugins`, reg
 The optional starter pack installs a useful base `AGENTS.md` and prompt templates. You can install it with:
 
 ```bash
-kward --install-starter-pack
+kward init
 ```
 
 ## Agent instructions

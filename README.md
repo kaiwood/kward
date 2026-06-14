@@ -6,7 +6,7 @@ It currently supports the OpenAI/ChatGPT Codex backend, OpenRouter, and experime
 
 ## Install
 
-Kward is being prepared for a RubyGems release. Once published, install it with:
+Install Kward from RubyGems:
 
 ```bash
 gem install kward

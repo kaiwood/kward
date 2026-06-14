@@ -12,7 +12,7 @@ This page gets you to a first working chat. For day-to-day features after that, 
 
 ## Install
 
-Kward is being prepared for a RubyGems release. Once published:
+Install Kward from RubyGems:
 
 ```bash
 gem install kward
@@ -21,16 +21,16 @@ gem install kward
 Optionally install the starter pack:
 
 ```bash
-kward --install-starter-pack
+kward init
 ```
 
 The starter pack adds useful default prompts and a base `AGENTS.md` to your config directory. It is helpful for a first setup, but safe to skip if you want to write your own instructions. Existing files are not overwritten.
 
-Until the gem is published, run Kward from a repository checkout:
+If you are working from a repository checkout:
 
 ```bash
 bundle install
-ruby lib/main.rb --install-starter-pack   # optional
+ruby lib/main.rb init   # optional
 ```
 
 ## Start Kward and sign in
