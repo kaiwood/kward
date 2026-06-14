@@ -1413,7 +1413,7 @@ module Kward
     end
 
     def configure_web_search_provider
-      providers = %w[auto exa perplexity gemini legacy]
+      providers = WebSearch::PROVIDERS
       selected = @prompt.select("Web search provider", providers.map { |provider| provider == web_search_provider ? "#{provider} (current)" : provider }, title: "Settings")
       provider = providers.find { |value| selected.to_s.downcase.start_with?(value) }
       return unless provider

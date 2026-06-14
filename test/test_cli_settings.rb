@@ -283,6 +283,24 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_settings_slash_command_updates_web_search_provider
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Tools & Search", "Web search provider", "duckduckgo", "Done"])
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "duckduckgo", config.dig("web_search", "provider")
+      assert_includes prompt.select_choices.find { |choices| choices.include?("duckduckgo") }, "duckduckgo"
+    end
+  end
+
   def test_settings_slash_command_updates_provider_and_reloads_runtime
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
