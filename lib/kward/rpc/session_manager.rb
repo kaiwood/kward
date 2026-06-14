@@ -26,6 +26,7 @@ require_relative "attachment_normalizer"
 require_relative "prompt_bridge"
 require_relative "runtime_payloads"
 require_relative "session_metrics"
+require_relative "session_tree"
 require_relative "tool_event_normalizer"
 require_relative "transcript_normalizer"
 
@@ -140,7 +141,7 @@ module Kward
       def fork_messages(session_id:)
         rpc_session = fetch_session(session_id)
         {
-          messages: tree_entries(rpc_session).filter_map do |record|
+          messages: session_tree_helper(rpc_session).entries.filter_map do |record|
             message = record["message"]
             next unless message.is_a?(Hash) && message_role(message) == "user"
 
@@ -151,8 +152,9 @@ module Kward
 
       def fork_session(session_id:, entry_id:)
         source = fetch_session(session_id)
-        entries = tree_entries(source)
-        resolved_entry_id = resolve_tree_entry_id(entries, entry_id)
+        tree = session_tree_helper(source)
+        entries = tree.entries
+        resolved_entry_id = tree.resolve_entry_id(entry_id, entries: entries)
         selected_index = entries.index { |record| record["id"].to_s == resolved_entry_id.to_s }
         selected = selected_index && entries[selected_index]
         raise ArgumentError, "Unknown fork entryId: #{entry_id}" unless selected
@@ -190,15 +192,16 @@ module Kward
 
       def navigate_tree(session_id:, entry_id:, summarize: false, custom_instructions: nil)
         rpc_session = fetch_session(session_id)
-        entries = tree_entries(rpc_session)
-        resolved_entry_id = resolve_tree_entry_id(entries, entry_id)
+        tree = session_tree_helper(rpc_session)
+        entries = tree.entries
+        resolved_entry_id = tree.resolve_entry_id(entry_id, entries: entries)
         entry = rpc_session.store.session_entry(rpc_session.session.path, resolved_entry_id)
         raise ArgumentError, "Unknown tree entryId: #{entry_id}" unless entry
 
-        raise ArgumentError, "Tree entry is not selectable: #{entry_id}" unless selectable_tree_entry?(entry)
+        raise ArgumentError, "Tree entry is not selectable: #{entry_id}" unless tree.selectable_entry?(entry)
 
         message = entry["message"]
-        user_entry = user_tree_entry?(entry)
+        user_entry = tree.user_entry?(entry)
         target_leaf = user_entry ? entry["parentId"] : entry["id"]
         editor_text = user_entry ? full_message_text(message) : nil
         previous_leaf = rpc_session.session.leaf_id
@@ -635,18 +638,8 @@ module Kward
         MessageAccess.content(message)
       end
 
-      def tree_entries(rpc_session)
-        rpc_session.store.session_entries(rpc_session.session.path)
-      end
-
-      def resolve_tree_entry_id(entries, entry_id)
-        id = entry_id.to_s
-        return id if entries.any? { |record| record["id"].to_s == id }
-
-        match = id.match(/\Amessage:(\d+)\z/)
-        return entries[match[1].to_i]&.dig("id") if match
-
-        id
+      def session_tree_helper(rpc_session)
+        SessionTree.new(rpc_session)
       end
 
       def reload_rpc_session(rpc_session)
@@ -687,7 +680,7 @@ module Kward
             isLast: is_last,
             ancestorContinues: gutters.map { |gutter| gutter[:show] },
             activePath: active_path.include?(entry_id),
-            selectable: selectable_tree_entry?(entry),
+            selectable: session_tree_helper(rpc_session).selectable_entry?(entry),
             label: node[:source]["label"] || entry["resolvedLabel"],
             labelTimestamp: node[:source]["labelTimestamp"],
             prefix: tree_prefix(display_indent, gutters, show_connector && !virtual_root_child, is_last, !node[:children].empty?)
@@ -715,15 +708,6 @@ module Kward
         result
       end
 
-      def user_tree_entry?(entry)
-        message = entry["message"]
-        message.is_a?(Hash) && message_role(message) == "user"
-      end
-
-      def selectable_tree_entry?(entry)
-        !entry["id"].to_s.empty? && ["message", "compaction", "branch_summary"].include?(entry["type"])
-      end
-
       def nearest_visible_parent_by_id(user_entries, entries)
         user_ids = user_entries.map { |entry| entry["id"].to_s }.to_h { |id| [id, true] }
         by_id = entries.to_h { |entry| [entry["id"].to_s, entry] }
@@ -734,17 +718,6 @@ module Kward
           end
           parents[entry["id"].to_s] = user_ids[parent_id.to_s] ? parent_id.to_s : nil
         end
-      end
-
-      def active_path_ids(entries, leaf_id)
-        by_id = entries.to_h { |entry| [entry["id"].to_s, entry] }
-        ids = []
-        current = by_id[leaf_id.to_s]
-        while current
-          ids << current["id"].to_s
-          current = by_id[current["parentId"].to_s]
-        end
-        ids
       end
 
       def tree_active_path(roots, leaf_id)
@@ -899,9 +872,10 @@ module Kward
       end
 
       def summarize_branch(rpc_session, from_id:, to_id:, custom_instructions: nil)
-        entries = tree_entries(rpc_session)
-        active = active_path_ids(entries, from_id)
-        target = active_path_ids(entries, to_id)
+        tree = session_tree_helper(rpc_session)
+        entries = tree.entries
+        active = tree.active_path_ids(entries, from_id)
+        target = tree.active_path_ids(entries, to_id)
         target_lookup = target.to_h { |id| [id, true] }
         abandoned = active.reject { |id| target_lookup[id] }
         messages = entries.select { |entry| abandoned.include?(entry["id"].to_s) }.filter_map { |entry| entry["message"] }
