@@ -218,7 +218,7 @@ module Kward
         when "sessions/resume"
           @session_manager.resume_session(path: params.fetch("path"), workspace_root: params["workspaceRoot"])
         when "sessions/list"
-          { sessions: @session_manager.list_sessions(workspace_root: params["workspaceRoot"] || Dir.pwd, limit: params["limit"]) }
+          { sessions: @session_manager.list_sessions(workspace_root: params["workspaceRoot"] || Dir.pwd, limit: params["limit"], current_session_path: params["currentSessionPath"]) }
         when "sessions/rename"
           @session_manager.rename_session(session_id: params.fetch("sessionId"), name: params["name"])
         when "sessions/clone"

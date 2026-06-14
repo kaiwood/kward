@@ -247,6 +247,27 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_session_list_keeps_current_empty_session_file_until_first_turn_persists
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+
+      sessions = manager.list_sessions(workspace_root: workspace_root, current_session_path: session[:path], limit: 10)
+      assert_empty sessions
+      assert_path_exists session[:path]
+
+      turn = manager.start_turn(session_id: session[:id], input: "Hello")
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      records = jsonl_records(session[:path])
+      assert_equal "session", records.first["type"]
+      assert_equal 2, records.count { |record| record["type"] == "message" }
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_list_without_limit_returns_all_sessions
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

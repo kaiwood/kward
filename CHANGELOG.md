@@ -35,6 +35,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed RPC session listing so it no longer deletes the active empty session file while UI clients are starting a first turn.
 - Fixed RPC session deletion so empty unnamed sessions are explicitly deleted instead of being consumed by unused-session cleanup first.
 - Fixed the TUI `/tree` selector to start on the current tree position, or the last item for a fresh tree.
 - Fixed the normal session list/resume picker to stay in recent modification-time order, delete empty unnamed sessions, return the full list by default, and avoid test-created session pollution.

@@ -215,8 +215,9 @@ module Kward
       [session, conversation]
     end
 
-    def recent(limit: 20)
-      limit ? recent_sessions.first(limit) : recent_sessions
+    def recent(limit: 20, keep_empty_path: nil)
+      sessions = recent_sessions(keep_empty_path: keep_empty_path)
+      limit ? sessions.first(limit) : sessions
     end
 
     def remember_last_session(session)
@@ -241,8 +242,9 @@ module Kward
       nil
     end
 
-    def recent_tree(limit: 20)
-      sessions = limit ? recent_sessions.first(limit) : recent_sessions
+    def recent_tree(limit: 20, keep_empty_path: nil)
+      sessions = recent_sessions(keep_empty_path: keep_empty_path)
+      sessions = sessions.first(limit) if limit
       decorate_tree(sessions)
     end
 
@@ -574,18 +576,20 @@ module Kward
       nil
     end
 
-    def recent_sessions
+    def recent_sessions(keep_empty_path: nil)
+      keep_empty_path = File.expand_path(keep_empty_path) unless keep_empty_path.to_s.empty?
       Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
         info = session_info(path)
         next unless info
-        next if delete_empty_unnamed_session_info(info)
+        next if delete_empty_unnamed_session_info(info, keep_empty_path: keep_empty_path)
 
         info
       end.sort_by { |info| info.modified_at || Time.at(0) }.reverse
     end
 
-    def delete_empty_unnamed_session_info(info)
+    def delete_empty_unnamed_session_info(info, keep_empty_path: nil)
       return false unless info.name.to_s.strip.empty? && info.message_count.to_i.zero?
+      return true if keep_empty_path && File.expand_path(info.path) == keep_empty_path
 
       File.delete(info.path)
       true

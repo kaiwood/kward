@@ -93,12 +93,12 @@ module Kward
         payload
       end
 
-      def list_sessions(workspace_root: Dir.pwd, limit: nil)
+      def list_sessions(workspace_root: Dir.pwd, limit: nil, current_session_path: nil)
         root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
         requested_limit = limit.to_i if limit
         requested_limit = nil unless requested_limit&.positive?
-        store.recent(limit: requested_limit)
+        store.recent(limit: requested_limit, keep_empty_path: current_session_path)
              .map { |info| session_info_payload(info, workspace_root: root) }
       end
 
