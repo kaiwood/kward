@@ -141,6 +141,36 @@ class TestToolRegistry < KwardTestCase
     assert_includes properties.keys, :limit
   end
 
+  def test_tool_schemas_are_strict_output_contract
+    Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: [Kward::ConfigFiles::Skill.new(name: "planner")]).schemas.each do |schema|
+      parameters = schema[:function][:parameters]
+
+      assert_equal false, parameters[:additionalProperties], "#{schema[:function][:name]} should not advertise extra fields"
+    end
+  end
+
+  def test_tool_registry_ignores_extra_incoming_fields
+    Dir.mktmpdir do |dir|
+      path = "kward_extra_input.txt"
+      File.write(File.join(dir, path), "hello\n")
+      conversation = Kward::Conversation.new
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir))
+
+      result = registry.dispatch(tool_call("read_file", path: path, offset: 1, ignored: "compatibility"), conversation)
+
+      assert_equal "hello\n", result
+    end
+  end
+
+  def test_tool_registry_keeps_required_value_errors_for_tolerant_input
+    conversation = Kward::Conversation.new
+    registry = Kward::ToolRegistry.new
+
+    result = registry.dispatch(tool_call("read_file", path: ""), conversation)
+
+    assert_match(/Error:/, result)
+  end
+
   def test_code_search_schema_advertises_canonical_ecosystems_only
     code_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "code_search" }
     ecosystem_enum = code_schema[:function][:parameters][:properties][:ecosystem][:enum]
