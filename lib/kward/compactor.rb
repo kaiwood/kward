@@ -2,6 +2,7 @@ require "json"
 require_relative "model/chat_invocation"
 require_relative "compaction/file_operation_tracker"
 require_relative "config_files"
+require_relative "message_access"
 require_relative "prompts"
 require_relative "tools/tool_call"
 
@@ -288,28 +289,27 @@ module Kward
       end
 
       def message_role(message)
-        message["role"] || message[:role]
+        MessageAccess.role(message)
       end
 
       def message_content(message)
-        message["content"] || message[:content]
+        MessageAccess.content(message)
       end
 
       def message_summary(message)
-        message["summary"] || message[:summary] || message_content(message)
+        MessageAccess.summary(message) || message_content(message)
       end
 
       def message_name(message)
-        message["name"] || message[:name]
+        MessageAccess.tool_name(message)
       end
 
       def message_tool_call_id(message)
-        message["tool_call_id"] || message[:tool_call_id]
+        MessageAccess.tool_call_id(message)
       end
 
       def message_tool_calls(message)
-        value = message["tool_calls"] || message[:tool_calls]
-        value.is_a?(Array) ? value : []
+        MessageAccess.tool_calls(message)
       end
 
       def tool_call_id(tool_call)
