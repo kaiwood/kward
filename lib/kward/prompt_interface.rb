@@ -13,6 +13,7 @@ require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/composer_renderer"
+require_relative "prompt_interface/layout"
 
 module Kward
   class PromptInterface
@@ -31,6 +32,7 @@ module Kward
     include QuestionPrompt
     include OverlayRenderer
     include ComposerRenderer
+    include Layout
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
@@ -1556,9 +1558,6 @@ module Kward
       rows
     end
 
-    def transcript_redraw_row_count(height = screen_height)
-      [[@transcript_viewport_rows, transcript_bottom_row(height)].max, height].min
-    end
 
     def remember_transcript_viewport_locked(height = screen_height)
       @transcript_viewport_rows = transcript_bottom_row(height)
@@ -1600,13 +1599,6 @@ module Kward
 
 
 
-    def banner_rows(width)
-      @banner.rows(width)
-    end
-
-    def banner_logo_rows
-      @banner.logo_rows(screen_width)
-    end
 
 
 
@@ -1645,13 +1637,8 @@ module Kward
 
 
 
-    def composer_top_row(height = screen_height)
-      [height - @reserved_rows + 1, 1].max
-    end
 
-    def transcript_bottom_row(height = screen_height)
-      [height - @reserved_rows, 1].max
-    end
+
 
     def move_to_screen(row, col)
       @output_io.print("\e[#{row};#{col}H")
