@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Codex GPT-5.5 RPC model metadata to report a 400k context window instead of the upstream OpenAI API context window.
+
 ## [0.68.0] - 2026-06-14
 
 In this release, most changes are under the hood, as it included massive refactors to have an even more robust way forward.

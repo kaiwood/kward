@@ -71,6 +71,23 @@ module Kward
       /(?:\A|\/)gpt-5\.3-codex-spark\z/
     ].freeze
 
+    CODEX_CONTEXT_WINDOWS = [
+      [/\Agpt-5\.5/, 400_000],
+      [/\Agpt-5\.4-mini/, 400_000],
+      [/\Agpt-5\.4/, 1_050_000],
+      [/\Agpt-5-mini/, 400_000],
+      [/\Agpt-5-codex/, 400_000],
+      [/\Agpt-5\.3-codex-spark/, 128_000],
+      [/\Agpt-5\.3-codex/, 400_000],
+      [/\Agpt-5\.2-codex/, 400_000],
+      [/\Agpt-5/, 400_000],
+      [/\Agpt-4\.1/, 1_047_576],
+      [/\Agpt-4o/, 128_000],
+      [/\Ao3/, 200_000],
+      [/\Ao4/, 200_000],
+      [/\Agpt-4/, 128_000],
+      [/\Agpt-3\.5-turbo/, 16_385]
+    ].freeze
     OPENAI_CONTEXT_WINDOWS = [
       [/\Agpt-5\.5/, 1_050_000],
       [/\Agpt-5\.4-mini/, 400_000],
@@ -214,7 +231,7 @@ module Kward
     def context_window(provider, id)
       case provider
       when "Codex"
-        pattern_context_window(OPENAI_CONTEXT_WINDOWS, id)
+        pattern_context_window(CODEX_CONTEXT_WINDOWS, id)
       when "OpenRouter"
         openrouter_context_window(id)
       when "Copilot"

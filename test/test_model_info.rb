@@ -3,8 +3,8 @@ require_relative "test_helper"
 class TestModelInfo < KwardTestCase
   def test_context_window_uses_known_codex_model_patterns
     cases = {
-      "gpt-5.5" => 1_050_000,
-      "gpt-5.5-latest" => 1_050_000,
+      "gpt-5.5" => 400_000,
+      "gpt-5.5-latest" => 400_000,
       "gpt-5.4" => 1_050_000,
       "gpt-5.4-mini" => 400_000,
       "gpt-5-mini" => 400_000,
