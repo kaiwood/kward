@@ -1,0 +1,362 @@
+module Kward
+  class PromptInterface
+    module KeyHandler
+      private
+
+      def read_key(nonblock: false)
+        pending = @pending_keys.shift unless @pending_keys.empty?
+        return pending if pending
+
+        @reader.read_keypress(echo: false, raw: true, nonblock: nonblock)
+      rescue TTY::Reader::InputInterrupt
+        "\x03"
+      rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
+        nil
+      end
+
+      def handle_key(key)
+        return submit_input if key.nil?
+        return if handle_bracketed_paste_key(key)
+
+        csi_result = handle_csi_u_key(key)
+        return csi_result unless csi_result == false
+        return if handle_shift_enter_key(key)
+        if key.is_a?(String) && key.length > 1
+          token = next_key_token(key)
+          if token.length < key.length
+            queue_pending_keys(key[token.length..])
+            return handle_key(token)
+          end
+        end
+
+        binding_result = handle_composer_key_binding(key)
+        return binding_result unless binding_result == false
+
+        key_name = @reader.console.keys[key]
+        case key_name
+        when :return, :enter
+          submit_input
+        when :backspace
+          delete_before_cursor
+        when :delete
+          delete_at_cursor
+        when :ctrl_d
+          delete_at_cursor_or_exit
+        when :ctrl_c
+          cancel_input_or_interrupt
+        when :ctrl_a
+          move_to_start_of_line
+        when :ctrl_e
+          move_to_end_of_line
+        when :ctrl_b
+          move_cursor_left
+        when :ctrl_f
+          move_cursor_right
+        when :ctrl_w
+          delete_word_before_cursor
+        when :ctrl_u
+          kill_line_before_cursor
+        when :ctrl_k
+          kill_line_after_cursor
+        when :ctrl_y
+          yank_kill_buffer
+        when :ctrl_l
+          redraw_screen_locked
+        when :left
+          move_cursor_left
+        when :right
+          move_cursor_right
+        when :home
+          move_to_start_of_line
+        when :end
+          move_to_end_of_line
+        when :up
+          slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
+        when :down
+          slash_overlay_visible? ? select_next_slash_command : recall_next_history
+        else
+          case key
+          when "\n", "\r"
+            submit_input
+          when "\t"
+            complete_selected_slash_command || insert_key(key)
+          when "\b", "\x7F"
+            delete_before_cursor
+          when "\x04"
+            delete_at_cursor_or_exit
+          when "\x03"
+            cancel_input_or_interrupt
+          when "\e"
+            handle_escape_sequence
+          else
+            insert_key(key)
+          end
+        end
+      end
+
+      def cancel_input_or_interrupt
+        return CANCEL_INPUT if @busy
+
+        raise Interrupt
+      end
+
+      def handle_escape_sequence
+        pending_sequence = read_pending_escape_sequence
+        return true if pending_sequence.empty? && dismiss_slash_overlay
+
+        full_sequence = "\e#{pending_sequence}"
+        sequence = next_key_token(full_sequence)
+        queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
+        return true if sequence == "\e" && dismiss_slash_overlay
+        return true if handle_shift_enter_key(sequence)
+
+        binding_result = handle_composer_key_binding(sequence)
+        return binding_result unless binding_result == false
+
+        key_name = @reader.console.keys[sequence]
+        case key_name
+        when :up
+          slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
+        when :down
+          slash_overlay_visible? ? select_next_slash_command : recall_next_history
+        when :left
+          move_cursor_left
+        when :right
+          move_cursor_right
+        when :home
+          move_to_start_of_line
+        when :end
+          move_to_end_of_line
+        when :delete
+          delete_at_cursor
+        end
+        true
+      end
+
+      def handle_bracketed_paste_key(key)
+        text = key.to_s
+        return false unless text.start_with?(BRACKETED_PASTE_START)
+
+        pasted = text[BRACKETED_PASTE_START.length..] || ""
+        until pasted.include?(BRACKETED_PASTE_END)
+          chunk = @reader.read_keypress(echo: false, raw: true)
+          break if chunk.nil?
+
+          pasted << chunk.to_s
+        end
+
+        content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
+        insert_paste(normalize_paste(content || ""))
+        queue_pending_keys(remaining) if remaining && !remaining.empty?
+        true
+      end
+
+      def normalize_paste(content)
+        content.gsub("\r\n", "\n").gsub("\r", "\n")
+      end
+
+      def handle_csi_u_key(key)
+        match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
+        return false unless match
+
+        sequence = match[0]
+        code = match[1].to_i
+        modifier = (match[2] || "1").split(":", 2).first.to_i
+        queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+
+        case code
+        when 13
+          modifier == 2 ? insert_string("\n") : submit_input
+        when 27
+          dismiss_slash_overlay || false
+        when 8, 127
+          alt_modifier?(modifier) ? delete_word_before_cursor : delete_before_cursor
+          nil
+        when 4
+          delete_at_cursor_or_exit
+        else
+          handle_modified_csi_u_key(code, modifier)
+        end
+      end
+
+      def handle_modified_csi_u_key(code, modifier)
+        return false unless ctrl_modifier?(modifier) || alt_modifier?(modifier)
+
+        normalized_code = code.to_i.chr.downcase.ord rescue code
+        if ctrl_modifier?(modifier)
+          case normalized_code
+          when 97
+            move_to_start_of_line
+          when 98
+            move_cursor_left
+          when 99
+            cancel_input_or_interrupt
+          when 100
+            delete_at_cursor_or_exit
+          when 101
+            move_to_end_of_line
+          when 102
+            move_cursor_right
+          when 104
+            delete_before_cursor
+          when 107
+            kill_line_after_cursor
+          when 108
+            redraw_screen_locked
+          when 117
+            kill_line_before_cursor
+          when 119
+            delete_word_before_cursor
+          when 121
+            yank_kill_buffer
+          else
+            false
+          end
+        elsif alt_modifier?(modifier)
+          case normalized_code
+          when 98
+            move_to_previous_word
+          when 100
+            delete_word_after_cursor
+          when 102
+            move_to_next_word
+          else
+            false
+          end
+        else
+          false
+        end
+      end
+
+      def ctrl_modifier?(modifier)
+        ((modifier.to_i - 1) & 4).positive?
+      end
+
+      def alt_modifier?(modifier)
+        ((modifier.to_i - 1) & 2).positive?
+      end
+
+      def handle_shift_enter_key(key)
+        sequence = shift_enter_sequence_for(key)
+        return false unless sequence
+
+        insert_string("\n")
+        queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+        true
+      end
+
+      def queue_pending_keys(keys)
+        remaining = keys.to_s
+        until remaining.empty?
+          token = next_key_token(remaining)
+          @pending_keys << token
+          remaining = remaining[token.length..] || ""
+        end
+      end
+
+      def next_key_token(keys)
+        text = keys.to_s
+        text.match(/\A\e\[[0-9;:]*[A-Za-z~]/)&.[](0) ||
+          text.match(/\A\eO[A-Za-z]/)&.[](0) ||
+          shift_enter_sequence_for(text) ||
+          (text.start_with?("\e") && text.length > 1 && alt_key_sequence?(text[1]) ? text[0, 2] : text[0, 1])
+      end
+
+      def alt_key_sequence?(char)
+        char = char.to_s
+        char.match?(/[[:alpha:]]/) || char == "\b" || char == "\x7F"
+      end
+
+      def shift_enter_sequence_for(key)
+        return nil unless key.is_a?(String)
+
+        SHIFT_ENTER_SEQUENCES.find { |sequence| key.start_with?(sequence) }
+      end
+
+      def read_pending_escape_sequence
+        sequence = +""
+        until @pending_keys.empty?
+          sequence << @pending_keys.shift.to_s
+        end
+        while (char = @reader.read_keypress(echo: false, raw: true, nonblock: true))
+          sequence << char.to_s
+        end
+        sequence
+      rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
+        sequence
+      end
+
+      def handle_composer_key_binding(key)
+        case key
+        when "\x01"
+          move_to_start_of_line
+        when "\x02"
+          move_cursor_left
+        when "\x04"
+          delete_at_cursor_or_exit
+        when "\x05"
+          move_to_end_of_line
+        when "\x06"
+          move_cursor_right
+        when "\x0B"
+          kill_line_after_cursor
+        when "\x0C"
+          redraw_screen_locked
+        when "\x15"
+          kill_line_before_cursor
+        when "\x17"
+          delete_word_before_cursor
+        when "\x19"
+          yank_kill_buffer
+        when "\e[D", "\eOD"
+          move_cursor_left
+        when "\e[C", "\eOC"
+          move_cursor_right
+        when "\e[H", "\eOH", "\e[1~", "\e[7~"
+          move_to_start_of_line
+        when "\e[F", "\eOF", "\e[4~", "\e[8~"
+          move_to_end_of_line
+        when "\e[3~"
+          delete_at_cursor
+        when "\eb", "\eB"
+          move_to_previous_word
+        when "\ef", "\eF"
+          move_to_next_word
+        when "\ed", "\eD"
+          delete_word_after_cursor
+        when "\e\b", "\e\x7F"
+          delete_word_before_cursor
+        else
+          handle_modified_ansi_key(key) || false
+        end
+      end
+
+      def handle_modified_ansi_key(key)
+        match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/)
+        if match
+          modifier = match[2].to_i
+          final = match[3]
+          return false unless alt_modifier?(modifier)
+
+          case final
+          when "C"
+            move_to_next_word
+          when "D"
+            move_to_previous_word
+          when "F"
+            move_to_end_of_line
+          when "H"
+            move_to_start_of_line
+          else
+            false
+          end
+        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
+          alt_modifier?(match[1].to_i) ? delete_word_after_cursor : delete_at_cursor
+        else
+          false
+        end
+      end
+
+    end
+  end
+end
