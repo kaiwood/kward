@@ -434,12 +434,17 @@ module Kward
 
     def copilot_model_choices
       live_models = fetch_copilot_models
-      choices = live_models.empty? ? ModelInfo::COPILOT_MODEL_CHOICES : live_models
-      choices.select { |model| copilot_supported_model?(model) }.uniq
+      return static_copilot_model_choices if live_models.empty?
+
+      supported_copilot_model_choices(live_models)
     end
 
     def static_copilot_model_choices
-      ModelInfo::COPILOT_MODEL_CHOICES.select { |model| copilot_supported_model?(model) }.uniq
+      supported_copilot_model_choices(ModelInfo::COPILOT_MODEL_CHOICES)
+    end
+
+    def supported_copilot_model_choices(choices)
+      choices.select { |model| copilot_supported_model?(model) }.uniq
     end
 
     def resolved_copilot_chat_model(configured_model)
