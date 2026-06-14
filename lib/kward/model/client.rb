@@ -97,44 +97,20 @@ module Kward
         status = "completed"
         error = nil
         begin
-        if provider == "Codex"
-          message = codex_chat(url, token, account_id, messages, tools, request_body: request_body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, max_tokens: max_tokens)
-          message = attach_response_metadata(message, provider: provider, model: current_model)
-          next message
-        end
-
-        if provider == "Copilot"
-          message = if copilot_responses_model?(current_model)
-                      copilot_responses_chat(token, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
-                    else
-                      copilot_chat(url, token, messages, tools, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
-                    end
-          message = attach_response_metadata(message, provider: provider, model: current_model)
-          next message
-        end
-
-        request = Net::HTTP::Post.new(url)
-        request["Authorization"] = "Bearer #{token}"
-        request["Content-Type"] = "application/json"
-        request.body = request_body
-
-        response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
-          cancellation&.on_cancel { close_http(http) }
-          cancellation&.raise_if_cancelled!
-          http.request(request)
-        end
-        cancellation&.raise_if_cancelled!
-
-        unless response.is_a?(Net::HTTPSuccess)
-          raise RequestError.new(provider: provider, code: response.code, body: response.body)
-        end
-
-        body = JSON.parse(response.body)
-        message = body.fetch("choices").first.fetch("message")
-        cancellation&.raise_if_cancelled!
-        on_assistant_delta&.call(message.fetch("content", ""))
-        message = attach_response_metadata(message, provider: provider, model: current_model, usage: normalized_usage(body["usage"]))
-        message
+          message = chat_provider_request(
+            provider: provider,
+            url: url,
+            token: token,
+            account_id: account_id,
+            messages: messages,
+            tools: tools,
+            request_body: request_body,
+            current_model: current_model,
+            on_reasoning_delta: on_reasoning_delta,
+            on_assistant_delta: on_assistant_delta,
+            cancellation: cancellation,
+            max_tokens: max_tokens
+          )
         rescue StandardError => e
           status = "failed"
           error = e
@@ -223,6 +199,94 @@ module Kward
     end
 
     private
+
+    def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:, max_tokens:)
+      case provider
+      when "Codex"
+        chat_codex_provider(
+          url: url,
+          token: token,
+          account_id: account_id,
+          messages: messages,
+          tools: tools,
+          request_body: request_body,
+          current_model: current_model,
+          on_reasoning_delta: on_reasoning_delta,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation,
+          max_tokens: max_tokens
+        )
+      when "Copilot"
+        chat_copilot_provider(
+          url: url,
+          token: token,
+          messages: messages,
+          tools: tools,
+          request_body: request_body,
+          current_model: current_model,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
+      else
+        chat_openrouter_provider(
+          url: url,
+          token: token,
+          request_body: request_body,
+          current_model: current_model,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
+      end
+    end
+
+    def chat_codex_provider(url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:, max_tokens:)
+      message = codex_chat(
+        url,
+        token,
+        account_id,
+        messages,
+        tools,
+        request_body: request_body,
+        on_reasoning_delta: on_reasoning_delta,
+        on_assistant_delta: on_assistant_delta,
+        cancellation: cancellation,
+        max_tokens: max_tokens
+      )
+      attach_response_metadata(message, provider: "Codex", model: current_model)
+    end
+
+    def chat_copilot_provider(url:, token:, messages:, tools:, request_body:, current_model:, on_assistant_delta:, cancellation:)
+      message = if copilot_responses_model?(current_model)
+                  copilot_responses_chat(token, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+                else
+                  copilot_chat(url, token, messages, tools, request_body: request_body, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+                end
+      attach_response_metadata(message, provider: "Copilot", model: current_model)
+    end
+
+    def chat_openrouter_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
+      request = Net::HTTP::Post.new(url)
+      request["Authorization"] = "Bearer #{token}"
+      request["Content-Type"] = "application/json"
+      request.body = request_body
+
+      response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request)
+      end
+      cancellation&.raise_if_cancelled!
+
+      unless response.is_a?(Net::HTTPSuccess)
+        raise RequestError.new(provider: "OpenRouter", code: response.code, body: response.body)
+      end
+
+      body = JSON.parse(response.body)
+      message = body.fetch("choices").first.fetch("message")
+      cancellation&.raise_if_cancelled!
+      on_assistant_delta&.call(message.fetch("content", ""))
+      attach_response_metadata(message, provider: "OpenRouter", model: current_model, usage: normalized_usage(body["usage"]))
+    end
 
     def auth_error_for(provider)
       case provider
