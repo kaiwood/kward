@@ -8,6 +8,7 @@ require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
 require_relative "prompt_interface/transcript_buffer"
 require_relative "prompt_interface/stream_state"
+require_relative "prompt_interface/slash_overlay"
 
 module Kward
   class PromptInterface
@@ -20,6 +21,8 @@ module Kward
     TRANSCRIPT_BUFFER_LIMIT = 200_000
     BANNER_LOGO_PIXELS = Banner::LOGO_PIXELS
     BANNER_MESSAGE = Banner::MESSAGE
+
+    include SlashOverlay
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
@@ -1742,76 +1745,15 @@ module Kward
       sync_legacy_composer_ivars
     end
 
-    def reset_slash_selection
-      @slash_selection_index = 0
-    end
 
-    def dismiss_slash_overlay
-      return false unless slash_overlay_visible?
 
-      @slash_overlay_dismissed_input = @input.dup
-      reset_slash_selection
-      true
-    end
 
-    def normalize_slash_commands(commands)
-      commands.map do |command|
-        {
-          name: slash_command_value(command, :name).to_s,
-          description: slash_command_value(command, :description).to_s,
-          argument_hint: slash_command_value(command, :argument_hint).to_s
-        }
-      end.reject { |command| command[:name].empty? }.sort_by { |command| command[:name] }
-    end
 
-    def slash_command_value(command, key)
-      return command[key] if command.respond_to?(:key?) && command.key?(key)
-      return command[key.to_s] if command.respond_to?(:key?) && command.key?(key.to_s)
-      return command.public_send(key) if command.respond_to?(key)
 
-      ""
-    end
 
-    def slash_overlay_visible?
-      @input.match?(%r{\A/[^\s/]*\z}) && @slash_overlay_dismissed_input != @input && !slash_overlay_matches.empty?
-    end
 
-    def slash_overlay_matches
-      prefix = @input.delete_prefix("/").downcase
-      @slash_commands.select { |command| command[:name].downcase.start_with?(prefix) }.first(8)
-    end
 
-    def selected_slash_command
-      return nil unless slash_overlay_visible?
 
-      matches = slash_overlay_matches
-      return nil if matches.empty?
-
-      matches[[@slash_selection_index, matches.length - 1].min]
-    end
-
-    def select_previous_slash_command
-      matches = slash_overlay_matches
-      return if matches.empty?
-
-      @slash_selection_index = (@slash_selection_index - 1) % matches.length
-    end
-
-    def select_next_slash_command
-      matches = slash_overlay_matches
-      return if matches.empty?
-
-      @slash_selection_index = (@slash_selection_index + 1) % matches.length
-    end
-
-    def complete_selected_slash_command
-      command = selected_slash_command
-      return false unless command
-
-      replace_input("/#{command[:name]} ")
-      reset_slash_selection
-      true
-    end
 
     def render_prompt_locked
       return unless @started && @asking
@@ -2135,25 +2077,7 @@ module Kward
       overlay_card_rows(title, lines, width)
     end
 
-    def slash_overlay_rows(width, height: screen_height)
-      return [] unless slash_overlay_visible?
 
-      visible = visible_slash_overlay_matches(slash_overlay_matches, height: height)
-      start_index = visible[:start]
-      lines = visible[:commands].each_with_index.map do |command, offset|
-        index = start_index + offset
-        hint = command[:argument_hint].empty? ? "" : " #{command[:argument_hint]}"
-        description = command[:description].empty? ? "" : " — #{command[:description]}"
-        overlay_choice_line("/#{command[:name]}#{hint}#{description}", selected: index == @slash_selection_index)
-      end
-      overlay_card_rows("Slash commands", lines, width)
-    end
-
-    def visible_slash_overlay_matches(matches, height: screen_height)
-      max_rows = [[height - 7, 1].max, 8].min
-      start = [[@slash_selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
-      { start: start, commands: matches[start, max_rows] || [] }
-    end
 
     def selection_overlay_rows(width, height: screen_height)
       matches = selection_matches
