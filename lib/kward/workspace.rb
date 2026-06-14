@@ -4,6 +4,17 @@ require "timeout"
 require_relative "session_diff"
 
 module Kward
+  # Filesystem and shell-command boundary for workspace tools.
+  #
+  # `Workspace` is deliberately low-level: it validates paths, enforces output
+  # limits, applies exact edits, writes files, and runs shell commands from one
+  # root directory. It should not know about model prompts, sessions, telemetry,
+  # or UI confirmation. Tool wrappers and frontends provide those policies.
+  #
+  # Guardrails are enabled by default and require all file paths to resolve under
+  # `root`. RPC may report when guardrails are disabled, but callers should avoid
+  # bypassing this class for local filesystem mutation so read-before-write and
+  # path safety remain consistent.
   class Workspace
     MAX_FILE_BYTES = 256 * 1024
     MAX_READ_OUTPUT_BYTES = 50 * 1024
@@ -34,6 +45,11 @@ module Kward
       "Error: #{e.message}"
     end
 
+    # Reads a bounded text slice from a workspace file.
+    #
+    # The returned string is user/model-facing and includes continuation notices
+    # when output is truncated. Errors are returned as `"Error: ..."` strings so
+    # tool calls can be persisted in the conversation without raising.
     def read_file(path, offset: nil, limit: nil)
       resolved = workspace_path(path)
       return "Error: not a file: #{path}" unless File.file?(resolved)
@@ -46,6 +62,12 @@ module Kward
       "Error: #{e.message}"
     end
 
+    # Writes complete file content after enforcing read-before-write for
+    # existing files.
+    #
+    # `read_paths` must contain resolved paths previously observed by
+    # `ReadFile`; this keeps tool-driven edits explicit and prevents overwriting
+    # unseen user files.
     def write_file(path, content, read_paths:)
       resolved = workspace_write_path(path)
 
@@ -62,6 +84,11 @@ module Kward
       "Error: #{e.message}"
     end
 
+    # Applies exact non-overlapping replacements to a previously read file.
+    #
+    # Each `old_text` must match exactly once. This favors predictable model edits
+    # over fuzzy patching and returns readable error strings when more context is
+    # needed.
     def edit_file(path, edits, read_paths:)
       resolved = workspace_path(path)
       return "Error: not a file: #{path}" unless File.file?(resolved)
@@ -80,6 +107,11 @@ module Kward
       "Error: #{e.message}"
     end
 
+    # Runs a shell command from the workspace root with timeout, cancellation,
+    # and bounded combined output.
+    #
+    # This method intentionally does not ask for confirmation; CLI/RPC policy
+    # must decide whether a command is allowed before reaching this boundary.
     def run_shell_command(command, timeout_seconds: DEFAULT_COMMAND_TIMEOUT_SECONDS, cancellation: nil)
       command = command.to_s.strip
       return "Error: command is required" if command.empty?

@@ -22,6 +22,13 @@ module Kward
     # exposes capabilities during `initialize`, redacts secrets in errors and
     # notifications, and coordinates auth, config, sessions, turns, tools,
     # memory, commands, and startup resources.
+    #
+    # `Server` should stay focused on protocol concerns: framing, JSON-RPC error
+    # codes, method dispatch, capability reporting, and redaction at the wire
+    # boundary. Delegate stateful product behavior to manager objects such as
+    # `SessionManager`, `AuthManager`, and `ConfigManager`. When adding an RPC
+    # feature, update dispatch, capabilities, docs, and tests together so clients
+    # can trust `initialize` as the source of supported behavior.
     class Server
       PROTOCOL_VERSION = 1
       JSONRPC_VERSION = "2.0"

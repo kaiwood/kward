@@ -32,6 +32,18 @@ require_relative "transcript_normalizer"
 
 module Kward
   module RPC
+    # Owns RPC-visible session lifecycle, async turn queues, and frontend events.
+    #
+    # `Server` handles JSON-RPC framing/dispatch; `SessionManager` handles the
+    # product state behind those methods. It creates/resumes `SessionStore`
+    # sessions, builds agents with RPC prompt bridges, serializes turn events for
+    # clients, coordinates cancellation and follow-up queues, and integrates
+    # memory/plugin hooks for RPC sessions.
+    #
+    # Keep JSON-RPC wire shape normalization in the `RPC::*Normalizer` classes,
+    # persistence in `SessionStore`, and model/tool behavior in `Agent` and
+    # `ToolRegistry`. This class should coordinate those pieces rather than own
+    # their low-level mechanics.
     class SessionManager
       RECENT_EVENT_LIMIT = 1_000
       RPC_ATTACHMENT_MAX_BYTES = AttachmentNormalizer::MAX_BYTES
@@ -55,6 +67,11 @@ module Kward
         @mutex = Mutex.new
       end
 
+      # Creates a new RPC session or resumes the remembered session when allowed.
+      #
+      # Returns the normalized session payload expected by RPC clients. The RPC
+      # session id is separate from the persisted session id so one persisted file
+      # can be closed and reopened by different client connections.
       def create_session(workspace_root: Dir.pwd, name: nil, resume_last: false)
         workspace_root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: workspace_root)
@@ -260,6 +277,12 @@ module Kward
         { session: session_payload(rpc_session), messages: TranscriptNormalizer.new(rpc_session.conversation.messages).normalize }
       end
 
+      # Queues or starts an async model turn for an RPC session.
+      #
+      # `streaming_behavior` controls busy-session behavior: create a new turn,
+      # queue a follow-up, or steer the running turn when the active provider
+      # supports native steering. The returned turn id is used for status,
+      # cancellation, and event replay.
       def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [])
         rpc_session = fetch_session(session_id)
         normalized_attachments = normalize_attachments(attachments)
@@ -963,6 +986,11 @@ module Kward
         PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES + ConfigFiles.prompt_templates(reserved_commands: PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES).map(&:command)
       end
 
+      # Wires together the per-RPC-session runtime objects.
+      #
+      # This is the RPC counterpart to the CLI interactive setup: attach plugin
+      # context, create a prompt bridge for UI questions/footer output, advertise
+      # tools with the workspace guardrail policy, and build the shared `Agent`.
       def build_rpc_session(store, session, conversation, workspace_root)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
@@ -1105,6 +1133,11 @@ module Kward
         rpc_session.worker = nil if rpc_session.worker == Thread.current
       end
 
+      # Executes one queued turn and emits normalized RPC events.
+      #
+      # This method is intentionally the only place that calls `Agent#ask` for RPC
+      # turns. Keep event translation near this boundary so CLI rendering and RPC
+      # protocol details do not leak into `Agent`.
       def run_turn(rpc_session, turn)
         rpc_session.running_turn_id = turn.id
         turn.steering = build_steering(turn) if supports_in_flight_steer? && !turn.plugin_command_name

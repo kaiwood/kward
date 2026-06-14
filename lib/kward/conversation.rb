@@ -5,6 +5,18 @@ require_relative "plugin_registry"
 require_relative "prompts"
 
 module Kward
+  # Mutable transcript and runtime context for one agent session.
+  #
+  # `Conversation` owns message ordering, system prompt refresh, read-before-write
+  # state, memory prompt context, and persistence hooks. It intentionally stores
+  # plain hashes because provider payload builders, session JSONL files, and RPC
+  # normalizers all share the same transcript shape. Use `MessageAccess` when
+  # reading messages so symbol/string key and legacy field compatibility stays in
+  # one place.
+  #
+  # Frontends should not mutate `messages` directly after attaching a
+  # `SessionStore::Session`; use append/compact helpers so persistence callbacks
+  # run and session trees stay consistent.
   class Conversation
     DEFAULT_SYSTEM_MESSAGE = Object.new.freeze
 
@@ -38,6 +50,10 @@ module Kward
       @on_tool_execution = on_tool_execution
     end
 
+    # Appends a user message and normalizes image attachment syntax.
+    #
+    # `display_content` is transcript/UI text for cases where the model input is
+    # expanded, decorated, or contains encoded attachment content.
     def append_user(content, display_content: nil)
       content = ImageAttachments.content_from_text(content) unless content.is_a?(Array)
       message = { role: "user", content: content }
@@ -63,6 +79,12 @@ module Kward
       @on_tool_execution&.call(tool_call, content)
     end
 
+    # Rebuilds the system message from current config, memory, plugins, and
+    # workspace AGENTS.md state.
+    #
+    # Conversations created with `system_message: nil` keep system prompts
+    # disabled; this preserves tests, compaction summaries, and imported
+    # transcripts that intentionally do not include runtime instructions.
     def refresh_system_message!
       return nil unless @system_message_enabled
 
@@ -95,6 +117,13 @@ module Kward
       plugin_registry.prompt_context(context)
     end
 
+    # Replaces most transcript entries with a compaction summary and optional
+    # recent messages to keep.
+    #
+    # Compaction clears read-before-write state because file contents observed
+    # before the summary may no longer be represented exactly in the active
+    # context. Callers that need file mutation after compaction should read files
+    # again through the normal tools.
     def compact!(summary, compaction_summary: false, first_kept_entry_id: nil, tokens_before: nil, from_hook: false, details: {}, keep_messages: [])
       message = if compaction_summary
                   { role: "compactionSummary", summary: summary.to_s }

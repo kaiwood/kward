@@ -11,12 +11,30 @@ require_relative "tools/tool_call"
 require_relative "workspace"
 
 module Kward
+  # JSONL-backed persistence for CLI and RPC conversations.
+  #
+  # A session file is an append-only event log: a header record, message/tree
+  # records, metadata changes, memory state, tool execution metadata, labels, and
+  # branch navigation. `SessionStore` owns disk layout and reconstruction of a
+  # `Conversation`; frontends own when to create, resume, clone, compact, or
+  # delete sessions.
+  #
+  # The tree fields (`id`, `parentId`, leaf records, labels) are part of the
+  # persisted user-data contract. Keep backward compatibility in mind before
+  # changing record shapes, and prefer adding records over rewriting existing
+  # files.
   class SessionStore
     VERSION = 2
     LAST_SESSION_FILENAME = "last_session.json"
 
     SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
 
+    # Live handle that attaches persistence callbacks to a conversation.
+    #
+    # Once attached, every append/compact/tool execution writes a JSONL record and
+    # advances `leaf_id` for session tree navigation. Avoid mutating the attached
+    # conversation directly without these callbacks unless deliberately importing
+    # or reconstructing history.
     class Session
       attr_reader :id, :path, :cwd, :created_at, :parent_id, :parent_path
       attr_accessor :name, :leaf_id
@@ -33,6 +51,11 @@ module Kward
         @leaf_id = leaf_id
       end
 
+      # Installs persistence callbacks on `conversation`.
+      #
+      # The callbacks are intentionally simple lambdas so `Conversation` remains
+      # storage-agnostic while `SessionStore` remains the only owner of JSONL
+      # record shape.
       def attach(conversation)
         conversation.on_append = lambda { |message| append_message(message) }
         conversation.on_compact = lambda { |message| compact(message) }
@@ -116,6 +139,10 @@ module Kward
 
     attr_reader :cwd
 
+    # Creates a new empty session file for the store's workspace directory.
+    #
+    # Parent fields record clone/fork ancestry; they do not imply live coupling
+    # between files after creation.
     def create(model: nil, reasoning_effort: nil, parent_id: nil, parent_path: nil)
       dir = session_dir
       FileUtils.mkdir_p(dir, mode: 0o700)
@@ -178,6 +205,11 @@ module Kward
       { path: resolved_path, cwd: header["cwd"].to_s.empty? ? @cwd : header["cwd"].to_s }
     end
 
+    # Loads a session file and reconstructs its current conversation leaf.
+    #
+    # `workspace` is used both for the active root and to restore read-before-write
+    # paths from successful read tool results. If a session moved workspaces, load
+    # it through `session_location` first so the original cwd is respected.
     def load(path, workspace: Workspace.new, model: nil, reasoning_effort: nil)
       resolved_path = resolve_session_path(path)
       records = records_from_file(resolved_path)

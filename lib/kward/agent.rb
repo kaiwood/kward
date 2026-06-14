@@ -11,6 +11,17 @@ require_relative "tools/registry"
 module Kward
   # Runs model turns, handles context compaction, dispatches tool calls, and
   # streams high-level events back to CLI and RPC callers.
+  #
+  # `Agent` is the main turn orchestrator. It should know what a turn means:
+  # append the user's input, call the model, persist assistant/tool messages,
+  # retry once after recoverable context overflow, apply in-flight steering, and
+  # emit frontend-neutral `Events::*` objects. It should not know terminal or RPC
+  # rendering details; callers translate events into their own UI protocol.
+  #
+  # Tool implementations own local side effects. `Client` owns provider HTTP
+  # details. `Conversation` owns transcript state. Keep future changes in the
+  # lowest layer that owns the behavior, and use `Agent` only for cross-step turn
+  # coordination.
   class Agent
     def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: TelemetryLogger.new)
       @client = client

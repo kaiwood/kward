@@ -22,6 +22,16 @@ require_relative "prompt_interface/key_handler"
 require_relative "prompt_interface/runtime_state"
 
 module Kward
+  # Interactive terminal UI used by the CLI frontend.
+  #
+  # `PromptInterface` owns terminal mechanics: keyboard input, composer state,
+  # transcript rendering, overlays, footer updates, and terminal escape sequence
+  # setup/restore. It should not own agent turns, sessions, model calls, or tool
+  # policy; `CLI` coordinates those and calls this object for display/input.
+  #
+  # The implementation is split into small mixin modules under
+  # `prompt_interface/` to keep rendering, layout, keyboard handling, and runtime
+  # state readable while sharing one terminal state object.
   class PromptInterface
     HELP_TEXT = "Enter sends • Shift+Enter inserts newline • ↑/↓ history • Ctrl+D exits empty prompt".freeze
     BUSY_HELP_TEXT = "Ctrl+C cancels".freeze

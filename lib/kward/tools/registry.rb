@@ -16,12 +16,32 @@ require_relative "../workspace"
 module Kward
   # Exposes local workspace, search, skill, and interaction tools to the model
   # and dispatches tool calls into the active conversation.
+  #
+  # `ToolRegistry` is the boundary between model-requested function calls and
+  # Ruby tool objects. It owns schema exposure and transcript persistence for
+  # tool results; individual tools own validation and side effects. Keep frontend
+  # policy outside this class by passing dependencies such as `workspace` and
+  # `prompt` from CLI or RPC setup.
+  #
+  # A tool may exist in `@tools` but not be advertised in `schemas`. This allows
+  # restored transcripts or compatibility callers to dispatch known tools while
+  # config and frontend capability checks decide what the model can request next.
   class ToolRegistry
     # Tool schemas advertised to the model for the current frontend and config.
     #
     # @return [Array<Hash>]
     attr_reader :schemas
 
+    # Builds tool objects and the schema list for the current frontend/config.
+    #
+    # @param workspace [Workspace] filesystem/shell boundary used by local tools
+    # @param prompt [Object, nil] interactive prompt bridge; must implement
+    #   `ask_user_question` before that tool is advertised
+    # @param web_search [WebSearch] live web search implementation
+    # @param code_search [CodeSearch] public source/package search implementation
+    # @param web_search_enabled [Boolean, nil] override for web search exposure
+    # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
+    # @param ask_user_question_enabled [Boolean, nil] override question exposure
     def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
       @workspace = workspace
       @prompt = prompt
@@ -36,6 +56,10 @@ module Kward
 
     # Executes a model-requested tool call and appends the result to the
     # conversation transcript.
+    #
+    # Unknown tools are recorded as tool results instead of raising. That keeps
+    # the conversation valid for the model and lets the assistant recover by
+    # choosing an advertised tool on the next turn.
     #
     # @param tool_call [Hash] model tool call payload
     # @param conversation [Conversation] active conversation

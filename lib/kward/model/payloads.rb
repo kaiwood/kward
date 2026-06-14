@@ -3,6 +3,17 @@ require_relative "../message_access"
 require_relative "model_info"
 
 module Kward
+  # Converts Kward conversation/tool data into provider-specific request shapes.
+  #
+  # This module is mixed into `Client` because it needs provider configuration
+  # helpers such as `model_for` and `reasoning_effort`. Keep pure transcript and
+  # schema transformations here; keep network transport, credentials, retries,
+  # and telemetry in `Client`.
+  #
+  # Kward stores one internal transcript shape, then projects it into either
+  # Chat Completions-style messages or Responses/Codex input items. Preserve both
+  # symbol and string key handling through `MessageAccess` so restored sessions,
+  # tests, and RPC-normalized messages keep working.
   module ModelPayloads
     private
 
@@ -93,6 +104,12 @@ module Kward
       payload
     end
 
+    # Builds provider-neutral context parts before final JSON serialization.
+    #
+    # Codex and Copilot Responses use `instructions` plus typed `input` items;
+    # OpenRouter and Copilot chat use OpenAI-compatible `messages`. Callers should
+    # prefer this method when showing context usage or debugging provider payloads
+    # so every frontend sees the same conversion rules.
     def build_context_parts(provider, messages, tools, model: nil)
       if provider == "CopilotResponses"
         instructions, input = codex_messages(messages)

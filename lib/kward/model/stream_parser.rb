@@ -1,6 +1,14 @@
 require "json"
 
 module Kward
+  # Parses streaming provider responses into Kward assistant messages.
+  #
+  # `ModelStreamParser` is intentionally provider-shape focused and side-effect
+  # light: it accumulates assistant text, reasoning summaries, tool calls, and
+  # normalized usage from SSE events. Network IO, retries, credentials, and
+  # telemetry stay in `Client`; frontend rendering stays in CLI/RPC event
+  # handlers. Keep parser methods deterministic and easy to unit test with raw
+  # response bodies.
   module ModelStreamParser
     module_function
 
@@ -46,6 +54,11 @@ module Kward
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
     end
 
+    # Incrementally parses a Codex/Responses SSE HTTP response body.
+    #
+    # Deltas are yielded as soon as complete SSE blocks arrive so interactive
+    # frontends can render streamed assistant and reasoning text without waiting
+    # for the provider to close the response.
     def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, usage_normalizer: nil, request_error_class: nil)
       state = codex_sse_state
       buffer = +""

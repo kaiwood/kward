@@ -299,6 +299,11 @@ module Kward
         @last_retrieval || { "enabled" => enabled?, "core" => [], "soft" => [], "reasons" => [], "message" => "No memory retrieval has run yet." }
       end
 
+      # Formats retrieved memories for system prompt injection.
+      #
+      # Keep this block compact and explicit: it is read by the model, shown in
+      # transcripts, and explained by `/memory why`. Do not include inactive or
+      # forgotten memories here; retrieval already decides the active set.
       def memory_block(retrieval)
         core = Array(retrieval["core"])
         soft = Array(retrieval["soft"])
@@ -330,6 +335,11 @@ module Kward
         lines.join("\n")
       end
 
+      # Infers bounded session/workspace soft memories from a conversation.
+      #
+      # This is best-effort and intentionally conservative. It may use an LLM when
+      # configured, but failures fall back to heuristic text or no-op behavior so
+      # memory summarization never blocks normal session flow.
       def summarize_conversation(conversation, client: nil)
         text = messages_for_summarization(conversation).map { |message| MessageAccess.content(message) }.compact.join("\n")
         existing_texts = Array(conversation.session_memories).map { |memory| memory["text"] }

@@ -6,6 +6,11 @@ module Kward
   # Plugins live in the user plugin directory, run as local Ruby code, and can
   # register slash commands, one footer renderer, prompt context, and live
   # transcript-event observers for CLI and RPC frontends.
+  #
+  # This registry is intentionally trust-based, not a sandbox. Keep plugin loading
+  # restricted to `ConfigFiles.plugin_paths`, keep workspace-local code out of the
+  # load path, and expose immutable transcript views so plugins can observe state
+  # without corrupting active conversations.
   class PluginRegistry
     COMMAND_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_-]*\z/.freeze
 

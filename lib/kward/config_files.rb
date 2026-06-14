@@ -8,6 +8,15 @@ require_relative "skills/registry"
 module Kward
   # Resolves Kward configuration, cache, memory, prompt, skill, and plugin
   # paths, and reads/writes the JSON config file used by the CLI and RPC server.
+  #
+  # This module is the configuration boundary, not a runtime settings cache.
+  # Most methods read the filesystem each time so CLI commands and RPC reloads can
+  # observe edits made outside the process. Callers that need caching should own
+  # invalidation explicitly, as `Client#reload_config` does for provider state.
+  #
+  # Keep path decisions here. Higher-level code should ask `ConfigFiles` for
+  # config, prompt, skill, plugin, cache, memory, and session locations instead of
+  # reconstructing `~/.kward` paths independently.
   module ConfigFiles
     MAX_SKILL_FILE_BYTES = 100_000
     MAX_PROMPT_FILE_BYTES = 32 * 1024
@@ -105,7 +114,9 @@ module Kward
     # Reads the JSON config file.
     #
     # Missing files are treated as an empty config. Invalid JSON raises a
-    # user-facing error that includes the file path.
+    # user-facing error that includes the file path. This method does not merge
+    # defaults; callers should apply feature-specific defaults at the point where
+    # behavior is decided.
     #
     # @param path [String] config file path
     # @return [Hash] parsed config object
@@ -224,6 +235,10 @@ module Kward
 
     # Builds persona prompt text from default, workspace, model, reasoning,
     # time-of-day, weekday, and suffix config entries.
+    #
+    # Persona resolution is intentionally data-driven so users can edit config
+    # without plugin code. Keep new persona selectors additive and deterministic;
+    # prompt construction depends on stable ordering.
     #
     # @param workspace_root [String] active workspace root
     # @param model [String, nil] active model name
