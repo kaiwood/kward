@@ -1,4 +1,5 @@
 require "json"
+require_relative "../message_access"
 
 module Kward
   module ToolCall
@@ -63,11 +64,7 @@ module Kward
     end
 
     def value(object, key)
-      return nil unless object.respond_to?(:key?)
-      return object[key] if object.key?(key)
-      return object[key.to_s] if object.key?(key.to_s)
-
-      nil
+      MessageAccess.value(object, key)
     end
 
     def camelize_value(item)
