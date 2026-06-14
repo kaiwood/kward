@@ -27,7 +27,7 @@ module Kward
       "https://search.inetol.net",
       "https://searx.tiekoetter.com"
     ].freeze
-    PROVIDERS = %w[auto exa perplexity gemini legacy duckduckgo].freeze
+    PROVIDERS = %w[auto exa perplexity gemini duckduckgo].freeze
 
     Result = Struct.new(:title, :url, :excerpt, :provider, keyword_init: true)
     SearchResponse = Struct.new(:answer, :results, :provider, :note, keyword_init: true)
@@ -92,8 +92,8 @@ module Kward
                        perplexity_search(query, options)
                      when "gemini"
                        gemini_search(query, options)
-                     when "legacy"
-                       legacy_search(query, options)
+                     when "duckduckgo"
+                       duckduckgo_provider_search(query, options)
                      end
           return [response, errors.empty? ? nil : errors.join("; ")] if successful_response?(response)
           errors << "#{provider}: no results"
@@ -113,10 +113,10 @@ module Kward
           order << "perplexity" if api_key("perplexity")
           order << "gemini" if api_key("gemini")
         end
-        order << "legacy"
+        order << "duckduckgo"
         order
       when "duckduckgo"
-        ["legacy"]
+        ["duckduckgo"]
       else
         [provider]
       end
@@ -352,15 +352,15 @@ module Kward
       SearchResponse.new(answer: answer, results: results, provider: "gemini")
     end
 
-    def legacy_search(query, options)
-      legacy_query = query_with_domain_filter(query, options[:domain_filter])
-      results, error = legacy_search_query(legacy_query, options[:max_results], options[:recency_filter])
+    def duckduckgo_provider_search(query, options)
+      duckduckgo_query = query_with_domain_filter(query, options[:domain_filter])
+      results, error = duckduckgo_provider_query(duckduckgo_query, options[:max_results], options[:recency_filter])
       raise error if results.empty? && error
 
-      SearchResponse.new(answer: "", results: results, provider: results.first&.provider || "legacy", note: error)
+      SearchResponse.new(answer: "", results: results, provider: results.first&.provider || "duckduckgo", note: error)
     end
 
-    def legacy_search_query(query, max_results, recency_filter)
+    def duckduckgo_provider_query(query, max_results, recency_filter)
       begin
         duckduckgo_results = duckduckgo_search(query, max_results, recency_filter)
         return [duckduckgo_results, nil] unless duckduckgo_results.empty?

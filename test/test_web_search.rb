@@ -8,7 +8,7 @@ class TestWebSearch < KwardTestCase
     )
     research = Kward::WebSearch.new(http_client: http, searxng_instances: [])
 
-    result = research.search("queries" => ["ruby news"], "provider" => "legacy")
+    result = research.search("queries" => ["ruby news"], "provider" => "duckduckgo")
 
     assert_includes result, "# Web search"
     assert_includes result, "Provider: duckduckgo"
@@ -25,7 +25,7 @@ class TestWebSearch < KwardTestCase
     )
     research = Kward::WebSearch.new(http_client: http, searxng_instances: ["https://searx.test"])
 
-    result = research.search("queries" => ["ruby"], "provider" => "legacy")
+    result = research.search("queries" => ["ruby"], "provider" => "duckduckgo")
 
     assert_includes result, "Provider fallback note: DuckDuckGo search failed with HTTP 429"
     assert_includes result, "Provider: searxng"
@@ -41,7 +41,7 @@ class TestWebSearch < KwardTestCase
     )
     research = Kward::WebSearch.new(http_client: http, searxng_instances: ["https://searx.test"])
 
-    result = research.search("queries" => ["ruby"], "provider" => "legacy")
+    result = research.search("queries" => ["ruby"], "provider" => "duckduckgo")
 
     assert_includes result, "HTML Result"
     assert_includes result, "HTML snippet"
@@ -54,7 +54,7 @@ class TestWebSearch < KwardTestCase
     )
     research = Kward::WebSearch.new(http_client: http, searxng_instances: ["https://searx.test"])
 
-    result = research.search("queries" => ["ruby"], "provider" => "legacy")
+    result = research.search("queries" => ["ruby"], "provider" => "duckduckgo")
 
     assert_includes result, "Error: web_search found no results"
     assert_includes result, "DuckDuckGo search failed with HTTP 500"
@@ -68,9 +68,17 @@ class TestWebSearch < KwardTestCase
     )
     research = Kward::WebSearch.new(http_client: http, searxng_instances: [], max_output_bytes: 120)
 
-    result = research.search("queries" => ["ruby"], "provider" => "legacy")
+    result = research.search("queries" => ["ruby"], "provider" => "duckduckgo")
 
     assert_includes result, "... truncated to 120 bytes"
+  end
+
+  def test_web_search_rejects_legacy_provider_name
+    research = Kward::WebSearch.new
+
+    result = research.search("queries" => ["ruby"], "provider" => "legacy")
+
+    assert_equal "Error: provider must be one of: auto, exa, perplexity, gemini, duckduckgo", result
   end
 
   def test_web_search_uses_keyless_exa_mcp_by_default
@@ -133,7 +141,7 @@ class TestWebSearch < KwardTestCase
   def test_auto_mode_skips_model_backed_fallbacks_unless_allowed
     http = FakeHttpClient.new(
       ["POST_JSON", "https://mcp.exa.ai/mcp"] => fake_response(500, "nope"),
-      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, '<div class="result"><a class="result__a" href="https://example.com/legacy">Legacy</a></div>')
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, '<div class="result"><a class="result__a" href="https://example.com/duckduckgo">DuckDuckGo</a></div>')
     )
     research = Kward::WebSearch.new(http_client: http, searxng_instances: [], config: { "web_search" => { "perplexity_api_key" => "pplx-secret" } })
 
