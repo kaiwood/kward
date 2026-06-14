@@ -8,6 +8,7 @@ module Kward
       "write_file" => "write",
       "run_shell_command" => "bash",
       "list_directory" => "list_directory",
+      "code_search" => "code_search",
       "web_search" => "web_search",
       "read_skill" => "read_skill",
       "ask_user_question" => "ask_user_question"

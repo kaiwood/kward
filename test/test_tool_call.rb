@@ -32,6 +32,7 @@ class TestToolCall < KwardTestCase
 
   def test_normalizes_names_and_camelizes_nested_arguments
     assert_equal "edit", Kward::ToolCall.normalized_name("edit_file")
+    assert_equal "code_search", Kward::ToolCall.normalized_name("code_search")
     assert_equal({ timeoutSeconds: 7, nestedValue: [{ oldText: "old" }] }, Kward::ToolCall.camelize_args({ "timeout_seconds" => 7, "nested_value" => [{ "old_text" => "old" }] }))
   end
 end
