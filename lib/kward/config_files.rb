@@ -465,24 +465,12 @@ module Kward
     # @return [Array<String>] sorted plugin file paths
     def plugin_paths
       plugins_root = plugin_dir
-      warn_legacy_plugin_dir(plugins_root)
       return [] unless Dir.exist?(plugins_root)
 
       Dir.glob(File.join(plugins_root, "*.rb")).sort
     rescue StandardError => e
       warn "Warning: skipping Kward plugins in #{plugins_root}: #{e.message}"
       []
-    end
-
-    def warn_legacy_plugin_dir(plugins_root)
-      config_path = ENV["KWARD_CONFIG_PATH"]
-      return if config_path.to_s.empty?
-
-      legacy_root = File.expand_path(File.join(File.dirname(config_path), "plugins"))
-      return if legacy_root == File.expand_path(plugins_root)
-      return unless Dir.exist?(legacy_root)
-
-      warn "Warning: ignoring Kward plugins in #{legacy_root}; plugins are only loaded from #{File.expand_path(plugins_root)}"
     end
 
     # Lists prompt templates exposed as slash commands.

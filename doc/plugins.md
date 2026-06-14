@@ -24,8 +24,6 @@ Kward loads top-level Ruby files from:
 
 Plugins are intentionally **not** loaded from the current workspace, from a project repository, or from a custom `KWARD_CONFIG_PATH` directory. This keeps plugin loading tied to the local user account rather than to whatever project Kward is currently inspecting.
 
-If a legacy plugin directory exists beside a custom config path, Kward warns and ignores it.
-
 ## A first plugin
 
 Create the plugin directory:

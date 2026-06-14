@@ -53,12 +53,12 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
-  def test_ignores_and_warns_about_config_path_plugins
+  def test_config_path_plugins_are_ignored_silently
     Dir.mktmpdir do |home|
       Dir.mktmpdir do |config_dir|
-        legacy_plugins = File.join(config_dir, "plugins")
-        FileUtils.mkdir_p(legacy_plugins)
-        File.write(File.join(legacy_plugins, "legacy.rb"), <<~'RUBY')
+        config_plugins = File.join(config_dir, "plugins")
+        FileUtils.mkdir_p(config_plugins)
+        File.write(File.join(config_plugins, "legacy.rb"), <<~'RUBY')
           Kward.plugin do |plugin|
             plugin.command("legacy") { |_args, _ctx| "loaded" }
           end
@@ -70,8 +70,7 @@ class TestPluginRegistry < KwardTestCase
             assert_nil registry.command_for("legacy")
           end
 
-          assert_includes warnings, "Warning: ignoring Kward plugins in #{legacy_plugins}"
-          assert_includes warnings, "plugins are only loaded from #{File.join(home, ".kward", "plugins")}"
+          assert_equal "", warnings
         end
       end
     end
