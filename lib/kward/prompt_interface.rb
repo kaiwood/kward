@@ -199,7 +199,8 @@ module Kward
           @input = @prefill_input.to_s
           @prefill_input = nil
           @cursor = @input.length
-          @composer.clear_attachments; sync_legacy_composer_ivars
+          @composer.clear_attachments
+          @attachments = @composer.attachments
           reset_history_navigation
         end
         @pending_keys.clear
@@ -247,7 +248,8 @@ module Kward
         @prompt_label = message.to_s
         @input = ""
         @cursor = 0
-        @composer.clear_attachments; sync_legacy_composer_ivars
+        @composer.clear_attachments
+          @attachments = @composer.attachments
         @pending_keys.clear
         @asking = true
         @busy = false
@@ -324,7 +326,8 @@ module Kward
         @busy_activity = normalize_busy_activity(activity)
         @input = ""
         @cursor = 0
-        @composer.clear_attachments; sync_legacy_composer_ivars
+        @composer.clear_attachments
+          @attachments = @composer.attachments
         @pending_keys.clear
         @asking = true
         @busy = true
@@ -657,7 +660,8 @@ module Kward
         clear_prompt_for_output_locked
         @input = ""
         @cursor = 0
-        @composer.clear_attachments; sync_legacy_composer_ivars
+        @composer.clear_attachments
+          @attachments = @composer.attachments
         reset_history_navigation
         @asking = true
         render_prompt_after_output_locked
@@ -665,7 +669,8 @@ module Kward
         clear_prompt_locked
         @input = ""
         @cursor = 0
-        @composer.clear_attachments; sync_legacy_composer_ivars
+        @composer.clear_attachments
+          @attachments = @composer.attachments
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -688,14 +693,16 @@ module Kward
         clear_prompt_for_output_locked
         @input = ""
         @cursor = 0
-        @composer.clear_attachments; sync_legacy_composer_ivars
+        @composer.clear_attachments
+          @attachments = @composer.attachments
         @asking = true
         render_prompt_after_output_locked
       else
         clear_prompt_locked
         @input = ""
         @cursor = 0
-        @composer.clear_attachments; sync_legacy_composer_ivars
+        @composer.clear_attachments
+          @attachments = @composer.attachments
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
