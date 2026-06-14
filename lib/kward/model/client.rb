@@ -147,15 +147,16 @@ module Kward
     end
 
     def current_model
-      model_for(current_provider)
+      current_model_state[:model]
     end
 
     def current_reasoning_effort
-      reasoning_effort(current_provider)
+      current_model_state[:reasoning_effort]
     end
 
     def current_context_window
-      ModelInfo.context_window(current_provider, current_model)
+      state = current_model_state
+      ModelInfo.context_window(state[:provider], state[:model])
     end
 
     # Returns model choices suitable for settings UIs.
@@ -211,6 +212,15 @@ module Kward
     end
 
     private
+
+    def current_model_state
+      provider = current_provider
+      {
+        provider: provider,
+        model: model_for(provider),
+        reasoning_effort: reasoning_effort(provider)
+      }
+    end
 
     def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:, max_tokens:)
       case provider
