@@ -682,9 +682,6 @@ module Kward
 
 
 
-    def colored(text, *styles)
-      ANSI.colorize(text, *styles, enabled: @color_enabled)
-    end
 
 
 

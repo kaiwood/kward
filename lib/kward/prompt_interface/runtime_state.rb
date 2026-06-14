@@ -46,6 +46,11 @@ module Kward
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
 
+
+      def colored(text, *styles)
+        ANSI.colorize(text, *styles, enabled: @color_enabled)
+      end
+
     end
   end
 end
