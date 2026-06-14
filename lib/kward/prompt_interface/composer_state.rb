@@ -117,6 +117,39 @@ module Kward
         before_cursor = @input[0...@cursor]
         [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
       end
+
+      def add_history(value)
+        stripped = value.to_s.strip
+        return if stripped.empty?
+        return if @history.last == value
+
+        @history << value
+      end
+
+      def recall_previous_history
+        return if @history.empty?
+
+        @history_draft = @input if @history_index.nil?
+        @history_index = @history_index.nil? ? @history.length - 1 : [@history_index - 1, 0].max
+        replace_input(@history[@history_index])
+      end
+
+      def recall_next_history
+        return if @history_index.nil?
+
+        if @history_index < @history.length - 1
+          @history_index += 1
+          replace_input(@history[@history_index])
+        else
+          replace_input(@history_draft || "")
+          reset_history_navigation
+        end
+      end
+
+      def reset_history_navigation
+        @history_index = nil
+        @history_draft = nil
+      end
     end
   end
 end

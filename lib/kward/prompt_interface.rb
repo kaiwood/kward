@@ -1704,36 +1704,26 @@ module Kward
     end
 
     def add_history(value)
-      stripped = value.to_s.strip
-      return if stripped.empty?
-      return if @history.last == value
-
-      @history << value
+      sync_composer_from_legacy_ivars
+      @composer.add_history(value)
+      sync_legacy_composer_ivars
     end
 
     def recall_previous_history
-      return if @history.empty?
-
-      @history_draft = @input if @history_index.nil?
-      @history_index = @history_index.nil? ? @history.length - 1 : [@history_index - 1, 0].max
-      replace_input(@history[@history_index])
+      sync_composer_from_legacy_ivars
+      @composer.recall_previous_history
+      sync_legacy_composer_ivars
     end
 
     def recall_next_history
-      return if @history_index.nil?
-
-      if @history_index < @history.length - 1
-        @history_index += 1
-        replace_input(@history[@history_index])
-      else
-        replace_input(@history_draft || "")
-        reset_history_navigation
-      end
+      sync_composer_from_legacy_ivars
+      @composer.recall_next_history
+      sync_legacy_composer_ivars
     end
 
     def replace_input(value)
-      @input = value.to_s
-      @cursor = @input.length
+      @composer.replace_input(value)
+      sync_legacy_composer_ivars
     end
 
     def prefill_input(value)
@@ -1743,8 +1733,9 @@ module Kward
     end
 
     def reset_history_navigation
-      @history_index = nil
-      @history_draft = nil
+      sync_composer_from_legacy_ivars
+      @composer.reset_history_navigation
+      sync_legacy_composer_ivars
     end
 
     def reset_slash_selection
