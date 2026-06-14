@@ -213,6 +213,16 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["sessions"]["methods"], "sessions/close"
   end
 
+  def test_unknown_rpc_method_returns_method_not_found
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "missing/method" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ])
+
+    assert_equal(-32_601, messages[0]["error"]["code"])
+    assert_equal "Method not found: missing/method", messages[0]["error"]["message"]
+  end
+
   def test_memory_rpc_methods_manage_hierarchy
     Dir.mktmpdir do |dir|
       workspace_root = File.realpath(Dir.mktmpdir)
