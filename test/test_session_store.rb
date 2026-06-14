@@ -203,12 +203,12 @@ class TestSessionStore < KwardTestCase
     end
   end
 
-  def test_session_ignores_legacy_linear_records_without_entry_ids
+  def test_session_ignores_linear_records_without_entry_ids
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       session = store.create
       File.open(session.path, "a") do |file|
-        file.puts(JSON.generate({ type: "message", timestamp: Time.now.utc.iso8601(3), message: { role: "user", content: "legacy" } }))
+        file.puts(JSON.generate({ type: "message", timestamp: Time.now.utc.iso8601(3), message: { role: "user", content: "old" } }))
         file.puts(JSON.generate({ type: "message", timestamp: Time.now.utc.iso8601(3), message: { role: "assistant", content: "reply" } }))
       end
 

@@ -72,7 +72,7 @@ class TestConfigFiles < KwardTestCase
     assert_equal({}, Kward::ConfigFiles.web_search_config({}))
     assert_equal({ "enabled" => false }, Kward::ConfigFiles.web_search_config("web_search" => { "enabled" => false }))
     assert_equal({}, Kward::ConfigFiles.web_search_config("webSearch" => { "provider" => "exa" }))
-    assert_equal({}, Kward::ConfigFiles.web_search_config("web_research" => { "provider" => "legacy" }))
+    assert_equal({}, Kward::ConfigFiles.web_search_config("web_research" => { "provider" => "old" }))
     assert_equal({}, Kward::ConfigFiles.web_search_config("webResearch" => { "provider" => "duckduckgo" }))
     assert_equal({}, Kward::ConfigFiles.web_search_config("web_search" => "nope"))
   end

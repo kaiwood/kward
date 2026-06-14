@@ -58,16 +58,16 @@ class TestPluginRegistry < KwardTestCase
       Dir.mktmpdir do |config_dir|
         config_plugins = File.join(config_dir, "plugins")
         FileUtils.mkdir_p(config_plugins)
-        File.write(File.join(config_plugins, "legacy.rb"), <<~'RUBY')
+        File.write(File.join(config_plugins, "old.rb"), <<~'RUBY')
           Kward.plugin do |plugin|
-            plugin.command("legacy") { |_args, _ctx| "loaded" }
+            plugin.command("old") { |_args, _ctx| "loaded" }
           end
         RUBY
 
         with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
           _stdout, warnings = capture_io do
             registry = Kward::PluginRegistry.load
-            assert_nil registry.command_for("legacy")
+            assert_nil registry.command_for("old")
           end
 
           assert_equal "", warnings

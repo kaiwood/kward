@@ -84,7 +84,7 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_ignore_legacy_web_search_disabled_config
+  def test_tool_schemas_ignore_old_web_search_disabled_config
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({ "web_research" => { "enabled" => false } }))
 

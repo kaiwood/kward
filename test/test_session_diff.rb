@@ -70,7 +70,7 @@ class TestSessionDiff < KwardTestCase
     assert_equal({ additions: 12, deletions: 34 }, counts)
   end
 
-  def test_ignores_legacy_truncated_diff_without_full_stats
+  def test_ignores_truncated_diff_without_full_stats
     counts = Kward::SessionDiff.count(<<~DIFF)
       --- file.txt
       +++ file.txt

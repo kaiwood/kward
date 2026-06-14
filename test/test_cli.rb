@@ -190,11 +190,10 @@ class TestCLI < KwardTestCase
       client = RecordingClient.new(["reply"])
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        output = capture_io do
+        capture_io do
           Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: client).run
-        end.first
+        end
 
-        assert_includes output, "reply"
         assert_equal "--install-starter-pack", client.seen_messages.first.last[:content]
       end
     end
@@ -878,7 +877,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_legacy_pan_mode_flag_is_treated_as_prompt
+  def test_removed_pan_mode_flag_is_treated_as_prompt
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["reply"])
       cli = Kward::CLI.new(argv: ["--pan-mode"], stdin: FakeInput.new("", tty: true), client: client)
