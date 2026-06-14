@@ -1,6 +1,7 @@
 require "base64"
 require_relative "image_attachments"
 require_relative "message_access"
+require_relative "message_text"
 
 module Kward
   module CLITranscriptFormatter
@@ -79,13 +80,7 @@ module Kward
     end
 
     def full_text(message)
-      content = MessageAccess.content(message)
-      text = if content.is_a?(Array)
-               content.filter_map { |part| MessageAccess.value(part, :text) }.join("\n")
-             else
-               content.to_s
-             end
-      text.strip
+      MessageText.full_text(message)
     end
 
     def content_part_text(part)

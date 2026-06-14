@@ -12,6 +12,7 @@ require_relative "../events"
 require_relative "../export_path"
 require_relative "../memory/manager"
 require_relative "../message_access"
+require_relative "../message_text"
 require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
@@ -931,13 +932,7 @@ module Kward
       end
 
       def full_message_text(message)
-        content = message["content"] || message[:content]
-        text = if content.is_a?(Array)
-                 content.filter_map { |part| part["text"] || part[:text] }.join("\n")
-               else
-                 content.to_s
-               end
-        text.strip
+        MessageText.full_text(message)
       end
 
       def supports_in_flight_steer?

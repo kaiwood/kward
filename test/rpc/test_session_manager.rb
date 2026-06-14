@@ -820,6 +820,24 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_session_fork_uses_display_content_for_visible_text
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.conversation.append_user("Plan this:\nfix bug\n", display_content: "/plan fix bug")
+      rpc_session.conversation.append_assistant("future reply")
+
+      messages = manager.fork_messages(session_id: session[:id])[:messages]
+      fork = manager.fork_session(session_id: session[:id], entry_id: messages.first[:entryId])
+      tree = manager.session_tree(session_id: session[:id])[:items]
+
+      assert_equal "/plan fix bug", messages.first[:text]
+      assert_equal "/plan fix bug", fork[:text]
+      assert tree.any? { |item| item[:role] == "user" && item[:text] == "/plan fix bug" }
+    end
+  end
+
   def test_session_fork_creates_independent_session_and_returns_selected_text
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

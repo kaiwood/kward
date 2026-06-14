@@ -1602,6 +1602,24 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_tree_slash_command_uses_display_content_for_prefill
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("Plan this:\nfix bug\n", display_content: "/plan fix bug")
+      conversation.append_assistant("future reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"], "/plan fix bug")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal ["/plan fix bug"], prompt.prefilled_inputs
+      assert prompt.select_choices.last.any? { |choice| choice.include?("user: /plan fix bug") }
+    end
+  end
+
   def test_tree_slash_command_starts_cursor_at_current_tree_position
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

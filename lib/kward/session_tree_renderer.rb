@@ -1,5 +1,6 @@
 require "json"
 require_relative "message_access"
+require_relative "message_text"
 require_relative "tools/tool_call"
 
 module Kward
@@ -224,13 +225,7 @@ module Kward
     end
 
     def full_message_text(message)
-      content = message_content(message)
-      text = if content.is_a?(Array)
-               content.filter_map { |part| MessageAccess.value(part, :text) }.join("\n")
-             else
-               content.to_s
-             end
-      text.strip
+      MessageText.full_text(message)
     end
 
     def message_role(message)
