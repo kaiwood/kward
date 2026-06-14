@@ -5,6 +5,7 @@ require "tty-reader"
 require "tty-screen"
 require_relative "ansi"
 require_relative "prompt_interface/banner"
+require_relative "prompt_interface/transcript_buffer"
 
 module Kward
   class PromptInterface
@@ -65,9 +66,7 @@ module Kward
       @cursor_rendered_row = 0
       @stream_col = 0
       @stream_pending_wrap = false
-      @transcript_buffer = +""
-      @transcript_display_rows_cache_width = nil
-      @transcript_display_rows_cache = nil
+      @transcript_buffer = TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
       @visual_banner_count = 0
       @transcript_viewport_rows = 0
       @restoring_transcript = false
@@ -170,8 +169,7 @@ module Kward
       @mutex.synchronize do
         clear_prompt_for_output_locked
         @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
-        @transcript_buffer = +""
-        invalidate_transcript_display_rows_cache
+        @transcript_buffer.clear
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
         @stream_block = nil
@@ -452,8 +450,7 @@ module Kward
 
     def clear_transcript
       @mutex.synchronize do
-        @transcript_buffer = +""
-        invalidate_transcript_display_rows_cache
+        @transcript_buffer.clear
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
         @stream_block = nil
@@ -539,16 +536,11 @@ module Kward
     end
 
     def append_transcript_buffer(text)
-      @transcript_buffer << ANSI.sanitize_transcript(text)
-      invalidate_transcript_display_rows_cache
-      return if @transcript_buffer.length <= TRANSCRIPT_BUFFER_LIMIT
-
-      @transcript_buffer = @transcript_buffer[-TRANSCRIPT_BUFFER_LIMIT, TRANSCRIPT_BUFFER_LIMIT]
+      @transcript_buffer.append(text.to_s)
     end
 
     def invalidate_transcript_display_rows_cache
-      @transcript_display_rows_cache_width = nil
-      @transcript_display_rows_cache = nil
+      @transcript_buffer.invalidate_display_rows_cache
     end
 
     def ensure_transcript_block_separator_locked
@@ -1979,21 +1971,11 @@ module Kward
     end
 
     def transcript_display_rows(width)
-      return @transcript_display_rows_cache if @transcript_display_rows_cache_width == width && @transcript_display_rows_cache
-
-      rows = []
-      @visual_banner_count.times { rows.concat(banner_rows(width)) }
-      rows << "" if @visual_banner_count.positive? && @transcript_buffer.empty?
-      rows.concat(transcript_text_display_rows(width))
-      @transcript_display_rows_cache_width = width
-      @transcript_display_rows_cache = rows
+      @transcript_buffer.display_rows(width, visual_banner_count: @visual_banner_count, banner_rows: method(:banner_rows))
     end
 
     def transcript_text_display_rows(width)
-      @transcript_buffer.split(/\r\n|\r|\n/, -1).flat_map do |line|
-        chunks = ANSI.wrap_visible(line, width)
-        chunks.empty? ? [""] : chunks
-      end
+      @transcript_buffer.text_display_rows(width)
     end
 
     def reset_stream_position_from_transcript_locked(width = screen_width)
