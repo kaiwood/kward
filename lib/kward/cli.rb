@@ -1422,9 +1422,7 @@ module Kward
     end
 
     def web_search_config
-      config = safely_read_config.to_h
-      value = config["web_search"] || config["webSearch"] || config["web_research"] || config["webResearch"]
-      value.is_a?(Hash) ? value : {}
+      ConfigFiles.web_search_config(safely_read_config.to_h)
     end
 
     def web_search_enabled?

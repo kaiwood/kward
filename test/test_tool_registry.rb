@@ -54,6 +54,12 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_web_search_schema_uses_supported_provider_list
+    schema = Kward::ToolRegistry.new.schemas.find { |tool_schema| tool_schema[:function][:name] == "web_search" }
+
+    assert_equal Kward::WebSearch::PROVIDERS, schema[:function][:parameters][:properties][:provider][:enum]
+  end
+
   def test_tool_schemas_exclude_web_search_when_disabled
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({ "web_search" => { "enabled" => false } }))

@@ -1,4 +1,5 @@
 require_relative "base"
+require_relative "search/web"
 
 module Kward
   module Tools
@@ -22,7 +23,7 @@ module Kward
             },
             provider: {
               type: "string",
-              enum: %w[auto exa perplexity gemini legacy duckduckgo],
+              enum: Kward::WebSearch::PROVIDERS,
               description: "Provider override; default auto."
             },
             recency_filter: {

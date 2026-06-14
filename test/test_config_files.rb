@@ -68,6 +68,15 @@ class TestConfigFiles < KwardTestCase
     assert_equal false, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => { "auto_resume" => false })
   end
 
+  def test_web_search_config_accepts_current_and_legacy_keys
+    assert_equal({}, Kward::ConfigFiles.web_search_config({}))
+    assert_equal({ "enabled" => false }, Kward::ConfigFiles.web_search_config("web_search" => { "enabled" => false }))
+    assert_equal({ "provider" => "exa" }, Kward::ConfigFiles.web_search_config("webSearch" => { "provider" => "exa" }))
+    assert_equal({ "provider" => "legacy" }, Kward::ConfigFiles.web_search_config("web_research" => { "provider" => "legacy" }))
+    assert_equal({ "provider" => "duckduckgo" }, Kward::ConfigFiles.web_search_config("webResearch" => { "provider" => "duckduckgo" }))
+    assert_equal({}, Kward::ConfigFiles.web_search_config("web_search" => "nope"))
+  end
+
   def test_cli_run_creates_default_config_without_onboarding_output
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

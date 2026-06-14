@@ -604,8 +604,7 @@ module Kward
     end
 
     def web_config
-      value = config["web_search"] || config["webSearch"] || config["web_research"] || config["webResearch"] || {}
-      value.is_a?(Hash) ? value : {}
+      ConfigFiles.web_search_config(config)
     end
 
     def config_value(key)

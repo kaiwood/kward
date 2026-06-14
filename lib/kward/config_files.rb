@@ -186,6 +186,11 @@ module Kward
       sessions["auto_resume"] == true
     end
 
+    def web_search_config(config = read_config)
+      value = config["web_search"] || config["webSearch"] || config["web_research"] || config["webResearch"]
+      value.is_a?(Hash) ? value : {}
+    end
+
     def update_overlay_settings(values)
       raise "Overlay settings must be an object" unless values.is_a?(Hash)
 
