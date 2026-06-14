@@ -169,6 +169,22 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_available_models_does_not_fetch_inactive_provider_catalogs
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "openai"))
+      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: "openai-token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+
+      with_fake_http([]) do |http|
+        models = client.available_models
+
+        assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+        assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
+        assert_empty http.requests
+      end
+    end
+  end
+
   def test_openrouter_catalog_fetches_full_catalog_without_authorization_header
     client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     body = JSON.dump("data" => [{ "id" => "google/gemini-pro" }, { "slug" => "meta/llama" }])

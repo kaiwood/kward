@@ -156,8 +156,8 @@ module Kward
       openai_model = model_for("Codex")
       openrouter_model = model_for("OpenRouter")
       copilot_model = model_for("Copilot")
-      openrouter_choices = openrouter_model_choices
-      copilot_choices = copilot_model_choices
+      openrouter_choices = provider == "OpenRouter" ? openrouter_model_choices : ModelInfo::OPENROUTER_MODEL_CHOICES
+      copilot_choices = provider == "Copilot" ? copilot_model_choices : static_copilot_model_choices
       models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
         { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
       end
@@ -436,6 +436,10 @@ module Kward
       live_models = fetch_copilot_models
       choices = live_models.empty? ? ModelInfo::COPILOT_MODEL_CHOICES : live_models
       choices.select { |model| copilot_supported_model?(model) }.uniq
+    end
+
+    def static_copilot_model_choices
+      ModelInfo::COPILOT_MODEL_CHOICES.select { |model| copilot_supported_model?(model) }.uniq
     end
 
     def resolved_copilot_chat_model(configured_model)
