@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.68.0] - 2026-06-14
+
 In this release, most changes are under the hood, as it included massive refactors to have an even more robust way forward.
 
 ### Added
