@@ -93,7 +93,7 @@ module Kward
       end
 
       def doctor_pan_check(config)
-        pan = config.to_h["pan_mode"] || config.to_h["panMode"] || {}
+        pan = config.to_h["pan_mode"] || {}
         if !pan["username"].to_s.empty? && !pan["password"].to_s.empty?
           { status: :ok, label: "Pan mode", message: "credentials configured" }
         else

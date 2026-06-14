@@ -84,14 +84,14 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_exclude_web_search_with_legacy_disabled_config
+  def test_tool_schemas_ignore_legacy_web_search_disabled_config
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({ "web_research" => { "enabled" => false } }))
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
-        refute_includes tool_names, "web_search"
+        assert_includes tool_names, "web_search"
       end
     end
   end

@@ -269,7 +269,7 @@ module Kward
     end
 
     def pan_config(config)
-      values = config["pan_mode"] || config["panMode"]
+      values = config["pan_mode"]
       values.is_a?(Hash) ? values : {}
     end
 

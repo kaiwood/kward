@@ -611,11 +611,9 @@ module Kward
       snake = key.to_s
       camel = snake.gsub(/_([a-z])/) { Regexp.last_match(1).upcase }
       prefixed = "web_search_#{snake}"
-      legacy_prefixed = "web_research_#{snake}"
       return web_config[snake] if web_config.key?(snake)
       return web_config[camel] if web_config.key?(camel)
       return config[prefixed] if config.key?(prefixed)
-      return config[legacy_prefixed] if config.key?(legacy_prefixed)
       return config[snake] if config.key?(snake)
       return config[camel] if config.key?(camel)
 

@@ -187,7 +187,7 @@ module Kward
     end
 
     def web_search_config(config = read_config)
-      value = config["web_search"] || config["webSearch"] || config["web_research"] || config["webResearch"]
+      value = config["web_search"]
       value.is_a?(Hash) ? value : {}
     end
 
