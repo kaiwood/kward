@@ -13,6 +13,10 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.2"
 
   spec.metadata["rubygems_mfa_required"] = "true"
+  spec.metadata["source_code_uri"] = "https://github.com/kaiwood/kward"
+  spec.metadata["changelog_uri"] = "https://github.com/kaiwood/kward/blob/main/CHANGELOG.md"
+  spec.metadata["documentation_uri"] = "https://github.com/kaiwood/kward#readme"
+  spec.metadata["bug_tracker_uri"] = "https://github.com/kaiwood/kward/issues"
 
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |file|
