@@ -41,6 +41,23 @@ module Kward
         invalid_params: -32_602,
         internal_error: -32_603
       }.freeze
+      SESSION_METHODS = [
+        "sessions/create", "sessions/resume", "sessions/list", "sessions/rename",
+        "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork",
+        "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate",
+        "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"
+      ].freeze
+      MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set", "openrouter/catalog"].freeze
+      AUTH_METHODS = [
+        "auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider",
+        "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"
+      ].freeze
+      MEMORY_METHODS = [
+        "memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable",
+        "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore",
+        "memory/forget", "memory/promote", "memory/relax", "memory/inspect",
+        "memory/why", "memory/summarize"
+      ].freeze
 
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new)
         @transport = Transport.new(input: input, output: output)
@@ -294,7 +311,7 @@ module Kward
           sessions: {
             mode: "explicit",
             persistence: "jsonl",
-            methods: ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"],
+            methods: SESSION_METHODS,
             startupResume: { supported: true, method: "sessions/create", parameter: "resumeLast", default: session_auto_resume_enabled?, immediateTranscript: true, sessionActivePersonaLabel: true },
             list: { supported: true, source: "rpc", ancestry: true, treeFields: true },
             fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
@@ -340,7 +357,7 @@ module Kward
           },
           models: {
             supported: true,
-            methods: ["models/list", "models/current", "models/set", "reasoning/set", "openrouter/catalog"],
+            methods: MODEL_METHODS,
             fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
             scopedModels: false
           },
@@ -358,13 +375,13 @@ module Kward
           auth: {
             supported: true,
             providerFormat: "tauren-auth-v1",
-            methods: ["auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider", "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"],
+            methods: AUTH_METHODS,
             oauthProviders: ["openai", "github"],
             unsupportedOAuthProviders: { github: "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet." },
             apiKeyProviders: ["openrouter"],
             logout: true
           },
-          memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: ["memory/status", "memory/enable", "memory/disable", "memory/autoSummary/enable", "memory/autoSummary/disable", "memory/list", "memory/add", "memory/addCore", "memory/forget", "memory/promote", "memory/relax", "memory/inspect", "memory/why", "memory/summarize"] },
+          memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
