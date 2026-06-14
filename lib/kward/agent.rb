@@ -233,7 +233,7 @@ module Kward
     end
 
     def claims_file_edit?(text)
-      text.match?(/\b(I|I've|I have)\s+(changed|updated|modified|edited|created|deleted|wrote)\b/i)
+      text.match?(/\b(?:I|I've|I have)\s+(?:changed|updated|modified|edited|created|deleted|wrote)\s+(?:the\s+)?(?:file|files|[\w.\/-]+\.[\w-]+)\b/i)
     end
 
     def last_file_change_succeeded?

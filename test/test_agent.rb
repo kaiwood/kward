@@ -175,4 +175,40 @@ class TestAgent < KwardTestCase
     end
   end
 
+  def test_agent_rejects_file_change_claim_without_file_tool
+    client = FakeClient.new([{ "role" => "assistant", "content" => "I changed the file." }])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new)
+
+    answer = agent.ask("edit it")
+
+    assert_equal "I have not changed any files. I need to use write_file or edit_file successfully before claiming a file change.", answer
+  end
+
+  def test_agent_rejects_file_change_claim_after_failed_file_tool
+    Dir.mktmpdir do |dir|
+      path = "kward_agent_failed_edit.txt"
+      File.write(File.join(dir, path), "old\n")
+      client = FakeClient.new([
+        assistant_tool_call("edit_file", path: path, edits: [{ old_text: "old", new_text: "new" }]),
+        { "role" => "assistant", "content" => "I edited the file." }
+      ])
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir))
+      agent = Kward::Agent.new(client: client, tool_registry: registry)
+
+      answer = agent.ask("edit it")
+
+      assert_equal "The file change tool returned an error or declined result, so I did not successfully change the file.", answer
+      assert_equal "old\n", File.read(File.join(dir, path))
+    end
+  end
+
+  def test_agent_does_not_rewrite_non_file_change_claims
+    client = FakeClient.new([{ "role" => "assistant", "content" => "I updated my understanding of the issue." }])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new)
+
+    answer = agent.ask("think about it")
+
+    assert_equal "I updated my understanding of the issue.", answer
+  end
+
 end
