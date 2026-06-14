@@ -1,4 +1,5 @@
 require_relative "../image_attachments"
+require_relative "../message_access"
 require_relative "model_info"
 
 module Kward
@@ -22,18 +23,18 @@ module Kward
 
     def messages_include_images?(messages)
       messages.any? do |message|
-        content = message[:content] || message["content"]
+        content = MessageAccess.content(message)
         content.is_a?(Array) && content.any? { |part| (part[:type] || part["type"]).to_s == "image" }
       end
     end
 
     def chat_messages(messages)
       messages.map do |message|
-        role = message[:role] || message["role"]
-        content = message[:content] || message["content"]
+        role = MessageAccess.role(message)
+        content = MessageAccess.content(message)
         case role.to_s
         when "compactionSummary"
-          { role: "assistant", content: message[:summary] || message["summary"] || content.to_s }
+          { role: "assistant", content: MessageAccess.summary(message) || content.to_s }
         when "assistant"
           api_message(message, role: "assistant", content: content.is_a?(Array) ? plain_content(content) : content, keys: ["tool_calls", :tool_calls, "name", :name])
         when "toolResult"
@@ -51,7 +52,7 @@ module Kward
     def api_message(message, role:, content:, keys: [])
       result = { role: role, content: content }
       keys.each_slice(2) do |string_key, symbol_key|
-        value = message[string_key] || message[symbol_key]
+        value = MessageAccess.value(message, string_key) || MessageAccess.value(message, symbol_key)
         next if value.nil?
 
         target_key = case string_key.to_s
@@ -126,21 +127,21 @@ module Kward
       input = []
 
       messages.each do |message|
-        role = message[:role] || message["role"]
-        content = message[:content] || message["content"] || ""
+        role = MessageAccess.role(message)
+        content = MessageAccess.content(message) || ""
         case role.to_s
         when "system"
           instructions << plain_content(content).to_s
         when "tool", "toolResult"
           input << {
             type: "function_call_output",
-            call_id: message[:tool_call_id] || message["tool_call_id"] || message[:toolCallId] || message["toolCallId"] || message[:name] || message["name"] || message[:toolName] || message["toolName"] || "tool-call",
+            call_id: MessageAccess.tool_call_id(message) || MessageAccess.tool_name(message) || "tool-call",
             output: plain_content(content).to_s
           }
         when "assistant"
           content = plain_content(content)
           input << codex_message("assistant", content.to_s) unless content.to_s.empty?
-          (message[:tool_calls] || message["tool_calls"] || []).each do |tool_call|
+          MessageAccess.tool_calls(message).each do |tool_call|
             function = tool_call[:function] || tool_call["function"] || {}
             input << {
               type: "function_call",
@@ -150,7 +151,7 @@ module Kward
             }
           end
         when "compactionSummary"
-          summary = message[:summary] || message["summary"] || content
+          summary = MessageAccess.summary(message) || content
           input << codex_message("assistant", summary.to_s) unless summary.to_s.empty?
         else
           input << codex_user_message(content)
