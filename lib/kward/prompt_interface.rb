@@ -5,6 +5,7 @@ require "tty-reader"
 require "tty-screen"
 require_relative "ansi"
 require_relative "prompt_interface/banner"
+require_relative "prompt_interface/composer_state"
 require_relative "prompt_interface/transcript_buffer"
 require_relative "prompt_interface/stream_state"
 
@@ -48,8 +49,9 @@ module Kward
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
-      @input = ""
-      @cursor = 0
+      @composer = ComposerState.new
+      @input = @composer.input
+      @cursor = @composer.cursor
       @started = false
       @asking = false
       @busy = false
@@ -70,14 +72,14 @@ module Kward
       @transcript_viewport_rows = 0
       @restoring_transcript = false
       @pending_keys = []
-      @attachments = []
-      @kill_buffer = ""
+      @attachments = @composer.attachments
+      @kill_buffer = @composer.kill_buffer
       @original_console_mode = nil
       @raw_mode_active = false
-      @history = []
-      @history_index = nil
-      @history_draft = nil
-      @prefill_input = nil
+      @history = @composer.history
+      @history_index = @composer.history_index
+      @history_draft = @composer.history_draft
+      @prefill_input = @composer.prefill_input
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
@@ -550,32 +552,59 @@ module Kward
       text.gsub(/\r\n|\r|\n/, "\r\n")
     end
 
+    def sync_composer_from_legacy_ivars
+      @composer.input = @input.to_s if defined?(@input) && @input != @composer.input
+      @composer.cursor = @cursor.to_i if defined?(@cursor) && @cursor != @composer.cursor
+      @composer.kill_buffer = @kill_buffer.to_s if defined?(@kill_buffer) && @kill_buffer != @composer.kill_buffer
+      @composer.history_index = @history_index if defined?(@history_index) && @history_index != @composer.history_index
+      @composer.history_draft = @history_draft if defined?(@history_draft) && @history_draft != @composer.history_draft
+      @composer.prefill_input = @prefill_input if defined?(@prefill_input) && @prefill_input != @composer.prefill_input
+    end
+
+    def sync_legacy_composer_ivars
+      @input = @composer.input
+      @cursor = @composer.cursor
+      @attachments = @composer.attachments
+      @kill_buffer = @composer.kill_buffer
+      @history = @composer.history
+      @history_index = @composer.history_index
+      @history_draft = @composer.history_draft
+      @prefill_input = @composer.prefill_input
+    end
+
     def composer_input
-      @input
+      sync_composer_from_legacy_ivars
+      @composer.input
     end
 
     def composer_input=(value)
-      @input = value.to_s
+      @composer.input = value.to_s
+      sync_legacy_composer_ivars
     end
 
     def composer_cursor
-      @cursor
+      sync_composer_from_legacy_ivars
+      @composer.cursor
     end
 
     def composer_cursor=(value)
-      @cursor = value.to_i
+      @composer.cursor = value.to_i
+      sync_legacy_composer_ivars
     end
 
     def composer_attachments
-      @attachments
+      sync_composer_from_legacy_ivars
+      @composer.attachments
     end
 
     def composer_kill_buffer
-      @kill_buffer
+      sync_composer_from_legacy_ivars
+      @composer.kill_buffer
     end
 
     def composer_kill_buffer=(value)
-      @kill_buffer = value.to_s
+      @composer.kill_buffer = value.to_s
+      sync_legacy_composer_ivars
     end
 
     def reset_spinner_locked
