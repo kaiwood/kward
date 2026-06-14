@@ -12,6 +12,13 @@ require_relative "../telemetry/logger"
 require_relative "stream_parser"
 
 module Kward
+  # Provider-facing model client used by CLI, RPC, compaction, and memory flows.
+  #
+  # `Client` owns runtime provider selection, credential lookup, retry telemetry,
+  # and HTTP requests for the supported model backends. Provider-neutral payload
+  # construction and stream parsing live in `ModelPayloads` and
+  # `ModelStreamParser`; keep new provider mechanics there when they are reusable,
+  # and keep product policy such as configured provider/model selection here.
   class Client
     include ModelPayloads
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
@@ -151,6 +158,11 @@ module Kward
       ModelInfo.context_window(current_provider, current_model)
     end
 
+    # Returns model choices suitable for settings UIs.
+    #
+    # The active provider may use live catalog data. Inactive providers use static
+    # supported choices plus their configured model so listing models does not
+    # perform avoidable network calls for every configured credential.
     def available_models
       provider = current_provider
       openai_model = model_for("Codex")
