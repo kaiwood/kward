@@ -180,11 +180,11 @@ module Kward
     end
 
     def session_tree_message_tool_call_id(message)
-      message_tool_call_id(message) || MessageAccess.value(message, :toolCallId)
+      message_tool_call_id(message)
     end
 
     def session_tree_message_tool_name(message)
-      message_name(message) || MessageAccess.value(message, :toolName)
+      message_name(message)
     end
 
     def session_tree_format_tool_call(tool_call)

@@ -864,11 +864,11 @@ module Kward
       end
 
       def tree_message_tool_call_id(message)
-        MessageAccess.tool_call_id(message) || ToolCall.value(message, :toolCallId)
+        MessageAccess.tool_call_id(message)
       end
 
       def tree_message_tool_name(message)
-        MessageAccess.name(message) || ToolCall.value(message, :toolName)
+        MessageAccess.tool_name(message)
       end
 
       def format_tool_call(tool_call)

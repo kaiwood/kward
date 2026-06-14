@@ -22,4 +22,16 @@ class TestMessageAccess < KwardTestCase
     assert_equal [], Kward::MessageAccess.tool_calls({ role: "assistant", tool_calls: nil })
     assert_equal [], Kward::MessageAccess.tool_calls(nil)
   end
+
+  def test_reads_legacy_camel_case_tool_fields
+    message = {
+      "toolCallId" => "call_1",
+      "toolName" => "read_file",
+      "toolCalls" => [{ "id" => "call_1" }]
+    }
+
+    assert_equal "call_1", Kward::MessageAccess.tool_call_id(message)
+    assert_equal "read_file", Kward::MessageAccess.tool_name(message)
+    assert_equal [{ "id" => "call_1" }], Kward::MessageAccess.tool_calls(message)
+  end
 end

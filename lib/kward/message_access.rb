@@ -31,11 +31,15 @@ module Kward
     end
 
     def tool_call_id(message)
-      value(message, :tool_call_id)
+      value(message, :tool_call_id) || value(message, :toolCallId)
+    end
+
+    def tool_name(message)
+      value(message, :name) || value(message, :toolName)
     end
 
     def tool_calls(message)
-      calls = value(message, :tool_calls)
+      calls = value(message, :tool_calls) || value(message, :toolCalls)
       calls.is_a?(Array) ? calls : []
     end
   end
