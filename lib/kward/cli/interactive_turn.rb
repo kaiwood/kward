@@ -204,26 +204,7 @@ module Kward
         streamed = false
         markdown_chunks = []
         answer = agent.ask(input, **agent_display_options(display_input)) do |event|
-          case event
-          when Events::ReasoningDelta
-            streamed = true
-            append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
-          when Events::AssistantDelta
-            streamed = true
-            append_markdown_delta(markdown_chunks, "Assistant", event.delta)
-          when Events::Retry
-            streamed = true
-            flush_markdown_deltas(markdown_chunks)
-            print_retry(event)
-          when Events::ToolCall
-            streamed = true
-            flush_markdown_deltas(markdown_chunks)
-            print_tool_call(event.tool_call)
-          when Events::ToolResult
-            streamed = true
-            flush_markdown_deltas(markdown_chunks)
-            print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
-          end
+          streamed = true if render_blocking_turn_event(event, markdown_chunks, tool_line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         end
         flush_markdown_deltas(markdown_chunks) if streamed
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?

@@ -85,6 +85,30 @@ module Kward
         ANSI.markdown(content, enabled: @color_enabled)
       end
 
+      def render_blocking_turn_event(event, markdown_chunks, tool_line_limit: nil, update_diff: false)
+        case event
+        when Events::ReasoningDelta
+          append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
+          :streamed
+        when Events::AssistantDelta
+          append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+          :assistant_streamed
+        when Events::Retry
+          flush_markdown_deltas(markdown_chunks)
+          print_retry(event)
+          :streamed
+        when Events::ToolCall
+          flush_markdown_deltas(markdown_chunks)
+          print_tool_call(event.tool_call)
+          :streamed
+        when Events::ToolResult
+          flush_markdown_deltas(markdown_chunks)
+          update_session_diff(event.content, tool_call: event.tool_call) if update_diff
+          print_tool_result(event.tool_call, event.content, line_limit: tool_line_limit)
+          :streamed
+        end
+      end
+
       def append_markdown_delta(chunks, label, delta)
         text = delta.to_s
         return if text.empty?

@@ -233,27 +233,9 @@ module Kward
         conversation: conversation
       )
       answer = agent.ask(input) do |event|
-        case event
-        when Events::ReasoningDelta
-          streamed = true
-          append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
-        when Events::AssistantDelta
-          streamed = true
-          assistant_streamed = true
-          append_markdown_delta(markdown_chunks, "Assistant", event.delta)
-        when Events::Retry
-          streamed = true
-          flush_markdown_deltas(markdown_chunks)
-          print_retry(event)
-        when Events::ToolCall
-          streamed = true
-          flush_markdown_deltas(markdown_chunks)
-          print_tool_call(event.tool_call)
-        when Events::ToolResult
-          streamed = true
-          flush_markdown_deltas(markdown_chunks)
-          print_tool_result(event.tool_call, event.content)
-        end
+        result = render_blocking_turn_event(event, markdown_chunks)
+        streamed = true if result
+        assistant_streamed = true if result == :assistant_streamed
       end
       flush_markdown_deltas(markdown_chunks) if streamed
       assistant_streamed ? "" : render_markdown_transcript(answer)
