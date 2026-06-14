@@ -6,6 +6,7 @@ require "tty-screen"
 require_relative "ansi"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/transcript_buffer"
+require_relative "prompt_interface/stream_state"
 
 module Kward
   class PromptInterface
@@ -60,12 +61,10 @@ module Kward
       @last_footer_refresh = monotonic_now
       @prompt_label = "You>"
       @assistant_label = "Assistant"
-      @stream_block = nil
+      @stream_state = StreamState.new
       @rendered_rows = 0
       @last_composer_rows = []
       @cursor_rendered_row = 0
-      @stream_col = 0
-      @stream_pending_wrap = false
       @transcript_buffer = TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
       @visual_banner_count = 0
       @transcript_viewport_rows = 0
@@ -134,7 +133,7 @@ module Kward
         if @restoring_transcript
           write_transcript_text_locked(text)
           write_transcript_text_locked("\n") unless text.end_with?("\n")
-          @stream_block = nil
+          @stream_state.finish_block
           next
         end
 
@@ -142,7 +141,7 @@ module Kward
           clear_prompt_for_output_locked
           write_transcript_text_locked(text)
           write_transcript_text_locked("\n") unless text.end_with?("\n")
-          @stream_block = nil
+          @stream_state.finish_block
           render_prompt_after_output_locked
         end
         @output_io.flush
@@ -158,7 +157,7 @@ module Kward
           text = message.to_s
           write_visual_transcript_text_locked(text)
           write_visual_transcript_text_locked("\n") unless text.end_with?("\n")
-          @stream_block = nil
+          @stream_state.finish_block
           render_prompt_after_output_locked
         end
         @output_io.flush
@@ -172,9 +171,8 @@ module Kward
         @transcript_buffer.clear
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
-        @stream_block = nil
-        @stream_col = 0
-        @stream_pending_wrap = false
+        @stream_state.finish_block
+        @stream_state.reset
         @restoring_transcript = true
       end
 
@@ -409,7 +407,7 @@ module Kward
           @visual_banner_count += 1
           invalidate_transcript_display_rows_cache
           remember_transcript_viewport_locked(height)
-          @stream_block = nil
+          @stream_state.finish_block
           restore_composer_cursor_locked
         end
         @output_io.flush
@@ -453,9 +451,8 @@ module Kward
         @transcript_buffer.clear
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
-        @stream_block = nil
-        @stream_col = 0
-        @stream_pending_wrap = false
+        @stream_state.finish_block
+        @stream_state.reset
         width, height = screen_size
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         @output_io.flush
@@ -491,14 +488,14 @@ module Kward
     def write_stream_block_locked(label, delta, finish: false)
       with_synchronized_output_locked do
         prepare_transcript_output_locked unless @restoring_transcript
-        if label && @stream_block != label
+        if label && @stream_state.block != label
           ensure_transcript_block_separator_locked
           write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
-          @stream_block = label
+          @stream_state.start_block(label)
         end
         write_transcript_text_locked(delta) unless delta.empty?
-        write_transcript_text_locked("\n") if finish && @stream_block
-        @stream_block = nil if finish
+        write_transcript_text_locked("\n") if finish && @stream_state.block
+        @stream_state.finish_block if finish
         restore_composer_cursor_locked unless @restoring_transcript
       end
       @output_io.flush unless @restoring_transcript
@@ -1979,33 +1976,24 @@ module Kward
     end
 
     def reset_stream_position_from_transcript_locked(width = screen_width)
-      rows = transcript_display_rows(width)
-      last_length = rows.empty? ? 0 : ANSI.strip(rows.last).length
-      if last_length >= width
-        @stream_col = 0
-        @stream_pending_wrap = true
-      else
-        @stream_col = last_length
-        @stream_pending_wrap = false
-      end
+      @stream_state.reset_position_from_rows(transcript_display_rows(width), width)
     end
 
     def move_to_transcript_cursor_locked(width: screen_width, height: screen_height)
-      if @stream_pending_wrap
+      if @stream_state.pending_wrap?
         move_to_screen(transcript_bottom_row(height), width)
       else
-        move_to_screen(transcript_bottom_row(height), [@stream_col + 1, width].min)
+        move_to_screen(transcript_bottom_row(height), [@stream_state.col + 1, width].min)
       end
     end
 
     def advance_pending_stream_wrap_locked(output_text, width: screen_width, height: screen_height)
-      return unless @stream_pending_wrap
+      return unless @stream_state.pending_wrap?
       return if output_text.empty? || output_text.start_with?("\r", "\n")
 
       move_to_screen(transcript_bottom_row(height), width)
       @output_io.print("\r\n")
-      @stream_col = 0
-      @stream_pending_wrap = false
+      @stream_state.clear_pending_wrap
     end
 
     def composer_layout(width, height = screen_height)
@@ -2394,20 +2382,7 @@ module Kward
     end
 
     def update_stream_position(text, width: screen_width)
-      ANSI.strip(text).each_char do |char|
-        case char
-        when "\n", "\r"
-          @stream_col = 0
-          @stream_pending_wrap = false
-        else
-          @stream_pending_wrap = false
-          @stream_col += 1
-          if @stream_col >= width
-            @stream_col = 0
-            @stream_pending_wrap = true
-          end
-        end
-      end
+      @stream_state.update_position(text, width: width)
     end
 
     def colored(text, *styles)
