@@ -443,9 +443,7 @@ module Kward
     end
 
     def parse_openrouter_models(body)
-      data = JSON.parse(body.to_s)
-      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
-      Array(entries).filter_map do |entry|
+      model_catalog_entries(body).filter_map do |entry|
         if entry.is_a?(Hash)
           entry["id"] || entry[:id] || entry["slug"] || entry[:slug]
         else
@@ -505,13 +503,17 @@ module Kward
     end
 
     def parse_copilot_models(body)
-      data = JSON.parse(body.to_s)
-      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
-      Array(entries).filter_map do |entry|
+      model_catalog_entries(body).filter_map do |entry|
         copilot_model_id(entry)
       end.uniq
     rescue JSON::ParserError
       []
+    end
+
+    def model_catalog_entries(body)
+      data = JSON.parse(body.to_s)
+      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
+      Array(entries)
     end
 
     def copilot_model_id(entry)
