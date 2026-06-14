@@ -56,7 +56,14 @@ module Kward
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
 
-      def initialize(server:, client: Client.new, config_dir: ConfigFiles.config_dir, config_manager: ConfigManager.new, context_usage: ContextUsage.new, session_trash: SessionTrash.new)
+      def initialize(
+        server:,
+        client: Client.new,
+        config_dir: ConfigFiles.config_dir,
+        config_manager: ConfigManager.new(config_path: File.join(config_dir, "config.json")),
+        context_usage: ContextUsage.new,
+        session_trash: SessionTrash.new
+      )
         @server = server
         @client = client
         @config_dir = config_dir
