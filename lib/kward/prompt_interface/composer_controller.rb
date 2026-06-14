@@ -199,6 +199,61 @@ module Kward
               @composer.reset_history_navigation
             end
 
+
+      def submit_input
+        value = submitted_input
+        add_history(composer_input)
+        if @busy
+          clear_prompt_for_output_locked
+          self.composer_input = ""
+          self.composer_cursor = 0
+          @composer.clear_attachments
+          reset_history_navigation
+          @asking = true
+          render_prompt_after_output_locked
+        else
+          clear_prompt_locked
+          self.composer_input = ""
+          self.composer_cursor = 0
+          @composer.clear_attachments
+          @asking = false
+          @rendered_rows = 0
+          @cursor_rendered_row = 0
+        end
+        @output_io.flush
+        value
+      end
+
+      def submitted_input
+        return composer_input if composer_attachments.empty?
+
+        sources = composer_attachments.map { |attachment| attachment[:source_text].to_s }.reject(&:empty?)
+        display_input = composer_input.to_s.rstrip
+        full_input = [display_input, *sources].reject { |part| part.to_s.strip.empty? }.join("\n")
+        SubmittedInput.new(full_input, display_input: display_input)
+      end
+
+      def exit_input
+        if @busy
+          clear_prompt_for_output_locked
+          self.composer_input = ""
+          self.composer_cursor = 0
+          @composer.clear_attachments
+          @asking = true
+          render_prompt_after_output_locked
+        else
+          clear_prompt_locked
+          self.composer_input = ""
+          self.composer_cursor = 0
+          @composer.clear_attachments
+          @asking = false
+          @rendered_rows = 0
+          @cursor_rendered_row = 0
+        end
+        @output_io.flush
+        EXIT_INPUT
+      end
+
     end
   end
 end
