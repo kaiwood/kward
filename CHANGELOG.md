@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+In this release, most changes are under the hood, as it included massive refactors to have an even more robust way forward.
+
 ### Added
 
 - Added Anthropic Claude Pro/Max subscription provider support with OAuth login, static Claude model choices, and Anthropic Messages streaming.
