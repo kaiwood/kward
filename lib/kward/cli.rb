@@ -255,7 +255,7 @@ module Kward
       if session_store && agent.nil?
         agent = resume_last_session(session_store) || build_new_session_agent(session_store)
       elsif session_store
-        @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
+        @active_session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
         reset_session_diff
         @active_session.attach(agent.conversation)
       else

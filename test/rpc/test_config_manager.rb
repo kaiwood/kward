@@ -170,7 +170,7 @@ class TestRPCConfigManager < KwardTestCase
 
         store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
         _session, restored = store.load(session[:path], workspace: Kward::Workspace.new(root: Dir.pwd), model: "fallback", reasoning_effort: "fallback")
-        assert_equal "gpt-5.5", restored.model
+        assert_equal "gpt-5.3-codex-spark", restored.model
       end
     end
   end

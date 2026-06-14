@@ -331,10 +331,11 @@ class TestSessionStore < KwardTestCase
           store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
           conversation = Kward::Conversation.new(
             workspace_root: workspace_dir,
+            provider: "Codex",
             model: "gpt-5.5",
             reasoning_effort: "low"
           )
-          session = store.create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
+          session = store.create(provider: conversation.provider, model: conversation.model, reasoning_effort: conversation.reasoning_effort)
           session.attach(conversation)
           conversation.append_user("hello")
 
@@ -346,6 +347,33 @@ class TestSessionStore < KwardTestCase
           refute_includes prompt, "Reasoning was extra high."
         end
       end
+    end
+  end
+
+  def test_runtime_restores_latest_provider_model_and_reasoning
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create(provider: "Codex", model: "gpt-5.4", reasoning_effort: "low")
+      session.update_runtime(provider: "OpenRouter", model: "openai/gpt-5.5", reasoning_effort: "high")
+
+      _loaded_session, conversation = store.load(session.path, provider: "Codex", model: "fallback", reasoning_effort: "medium")
+
+      assert_equal "OpenRouter", conversation.provider
+      assert_equal "openai/gpt-5.5", conversation.model
+      assert_equal "high", conversation.reasoning_effort
+    end
+  end
+
+  def test_runtime_falls_back_for_legacy_sessions_without_runtime_metadata
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+
+      _loaded_session, conversation = store.load(session.path, provider: "Codex", model: "gpt-5.5", reasoning_effort: "medium")
+
+      assert_equal "Codex", conversation.provider
+      assert_equal "gpt-5.5", conversation.model
+      assert_equal "medium", conversation.reasoning_effort
     end
   end
 

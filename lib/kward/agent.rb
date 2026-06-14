@@ -79,6 +79,7 @@ module Kward
           overflow_retried = true
           next
         end
+        update_conversation_runtime(message)
         yield Events::AssistantMessage.new(message: message) if block_given?
         @conversation.append_assistant(message)
         steered_after_message = append_steering_events(steering_state)
@@ -219,9 +220,23 @@ module Kward
           on_assistant_delta: assistant_delta,
           on_retry: retry_callback,
           cancellation: cancellation,
-          steering: steering
+          steering: steering,
+          provider: @conversation.provider,
+          model: @conversation.model,
+          reasoning: @conversation.reasoning_effort
         }
       )
+    end
+
+    def update_conversation_runtime(message)
+      return unless message.is_a?(Hash)
+
+      provider = message["provider"] || message[:provider]
+      model = message["model"] || message[:model]
+      return if provider.to_s.empty? || model.to_s.empty?
+
+      @conversation.update_runtime_context!(provider: provider, model: model, reasoning_effort: @conversation.reasoning_effort)
+      @conversation.persist_runtime_context!
     end
 
     def safe_answer(content)

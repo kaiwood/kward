@@ -19,7 +19,7 @@ module Kward
         path = session_store.remembered_last_session_path if session_store.respond_to?(:remembered_last_session_path)
         return nil if path.to_s.empty?
 
-        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
+        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
         reset_session_diff(@active_session.path)
         track_session(@active_session)
         @resumed_last_session = true
@@ -43,7 +43,7 @@ module Kward
       end
 
       def build_new_session_agent(session_store)
-        @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
+        @active_session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
         reset_session_diff
         conversation = new_conversation(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
@@ -107,7 +107,7 @@ module Kward
         return nil if path.to_s.empty?
 
         previous_session = @active_session
-        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
+        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
         reset_session_diff(@active_session.path)
         track_session(@active_session)
         cleanup_replaced_session(previous_session)
@@ -191,6 +191,7 @@ module Kward
         @active_session, conversation = session_store.load(
           @active_session.path,
           workspace: configured_workspace(root: session_store.cwd),
+          provider: current_model_provider,
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )

@@ -156,9 +156,9 @@ class TestCLISettings < KwardTestCase
       _session, restored = with_env("KWARD_CONFIG_PATH" => config_path) do
         store.load(session_path, workspace: Kward::Workspace.new(root: workspace_dir), model: "fallback", reasoning_effort: "fallback")
       end
-      assert_equal "gpt-5.5", restored.model
-      assert_includes restored.messages.first[:content], "Commander K'warD"
-      refute_includes restored.messages.first[:content], "Commander Spark"
+      assert_equal "gpt-5.3-codex-spark", restored.model
+      assert_includes restored.messages.first[:content], "Commander Spark"
+      refute_includes restored.messages.first[:content], "Commander K'warD"
     end
   end
 

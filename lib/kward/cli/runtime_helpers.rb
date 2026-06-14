@@ -7,7 +7,7 @@ module Kward
       private
 
       def new_conversation(workspace_root: current_workspace_root)
-        Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort, plugin_registry: plugin_registry)
+        Conversation.new(workspace_root: workspace_root, provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort, plugin_registry: plugin_registry)
       end
 
       def update_assistant_prompt(conversation)
@@ -138,8 +138,7 @@ module Kward
       def refresh_conversation_runtime(conversation)
         return unless conversation&.respond_to?(:update_runtime_context!)
 
-        conversation.update_runtime_context!(model: current_model_id, reasoning_effort: current_reasoning_effort)
-        @active_session.update_runtime(model: conversation.model, reasoning_effort: conversation.reasoning_effort) if @active_session&.respond_to?(:update_runtime)
+        conversation.update_runtime_context!(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
         update_assistant_prompt(conversation)
       end
 

@@ -140,8 +140,15 @@ class TestClient < KwardTestCase
     end
   end
 
-  def test_available_models_include_openai_openrouter_and_copilot_picker_choices
-    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+  def test_available_models_include_only_logged_in_provider_picker_choices
+    client = Kward::Client.new(
+      api_key: "openrouter-token",
+      openai_access_token: "token",
+      oauth: FakeOAuth.new(nil),
+      github_oauth: FakeGithubOAuth.new("github-token"),
+      anthropic_oauth: FakeAnthropicOAuth.new("anthropic-token"),
+      config_path: "missing_kward_config.json"
+    )
 
     models = client.available_models
 
@@ -155,6 +162,17 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Anthropic", id: "claude-opus-4-5", current: false }
     refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "claude-sonnet-4.6" }
     assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
+  end
+
+  def test_available_models_hide_providers_without_credentials
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new(nil), config_path: "missing_kward_config.json")
+
+    models = client.available_models
+
+    assert models.any? { |model| model[:provider] == "Codex" }
+    refute models.any? { |model| model[:provider] == "OpenRouter" }
+    refute models.any? { |model| model[:provider] == "Copilot" }
+    refute models.any? { |model| model[:provider] == "Anthropic" }
   end
 
   def test_anthropic_chat_uses_messages_endpoint_and_parses_stream
@@ -228,6 +246,7 @@ class TestClient < KwardTestCase
 
         assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
         assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
+        refute models.any? { |model| model[:provider] == "Anthropic" }
         assert_empty http.requests
       end
     end

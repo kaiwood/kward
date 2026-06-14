@@ -95,24 +95,30 @@ module Kward
       @openrouter_catalog = nil
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, model: nil, reasoning: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil)
       cancellation&.raise_if_cancelled!
-      url, token, provider, account_id = credentials
-      raise auth_error_for(provider) if token.nil? || token.empty?
+      requested_provider = provider
+      url, token, resolved_provider, account_id = credentials(provider: requested_provider)
+      if token.to_s.empty? && !requested_provider.to_s.empty?
+        url, token, resolved_provider, account_id = credentials
+        model = nil
+        reasoning = nil
+      end
+      raise auth_error_for(resolved_provider) if token.nil? || token.empty?
 
-      current_model = model_for(provider, override_model: model)
-      current_model = resolved_copilot_chat_model(current_model) if provider == "Copilot" && model.nil?
+      current_model = model_for(resolved_provider, override_model: model)
+      current_model = resolved_copilot_chat_model(current_model) if resolved_provider == "Copilot" && model.nil?
 
-      validate_image_support!(provider, current_model, messages)
-      request_body = JSON.dump(request_body_payload(provider, messages, tools, max_tokens: max_tokens, model: current_model, reasoning: reasoning))
-      with_retries(provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
+      validate_image_support!(resolved_provider, current_model, messages)
+      request_body = JSON.dump(request_body_payload(resolved_provider, messages, tools, max_tokens: max_tokens, model: current_model, reasoning: reasoning))
+      with_retries(resolved_provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         request_started_at = @telemetry_logger.monotonic_now
         message = nil
         status = "completed"
         error = nil
         begin
           message = chat_provider_request(
-            provider: provider,
+            provider: resolved_provider,
             url: url,
             token: token,
             account_id: account_id,
@@ -130,7 +136,7 @@ module Kward
           error = e
           raise e
         ensure
-          log_model_request(provider: provider, model: current_model, request_bytes: request_body.bytesize, duration_ms: @telemetry_logger.duration_ms(request_started_at), status: status, error: error, usage: message && (message["usage"] || message[:usage]))
+          log_model_request(provider: resolved_provider, model: current_model, request_bytes: request_body.bytesize, duration_ms: @telemetry_logger.duration_ms(request_started_at), status: status, error: error, usage: message && (message["usage"] || message[:usage]))
         end
       end
     rescue *TRANSIENT_NETWORK_ERRORS => e
@@ -172,34 +178,48 @@ module Kward
 
     # Returns model choices suitable for settings UIs.
     #
-    # The active provider may use live catalog data. Inactive providers use static
+    # Only providers with configured credentials are listed. The active provider
+    # may use live catalog data. Inactive logged-in providers use static
     # supported choices plus their configured model so listing models does not
     # perform avoidable network calls for every configured credential.
     def available_models
       provider = current_provider
-      openai_model = model_for("Codex")
-      openrouter_model = model_for("OpenRouter")
-      copilot_model = model_for("Copilot")
-      anthropic_model = model_for("Anthropic")
-      openrouter_choices = provider == "OpenRouter" ? openrouter_model_choices : ModelInfo::OPENROUTER_MODEL_CHOICES
-      copilot_choices = provider == "Copilot" ? copilot_model_choices : static_copilot_model_choices
-      models = ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
-        { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
+      models = []
+
+      if provider_logged_in?("Codex")
+        openai_model = model_for("Codex")
+        models += ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
+          { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
+        end
+        models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
       end
-      models += openrouter_choices.map do |id|
-        { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
+
+      if provider_logged_in?("OpenRouter")
+        openrouter_model = model_for("OpenRouter")
+        openrouter_choices = provider == "OpenRouter" ? openrouter_model_choices : ModelInfo::OPENROUTER_MODEL_CHOICES
+        models += openrouter_choices.map do |id|
+          { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
+        end
+        models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_choices.include?(openrouter_model)
       end
-      models += copilot_choices.map do |id|
-        { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
+
+      if provider_logged_in?("Copilot")
+        copilot_model = model_for("Copilot")
+        copilot_choices = provider == "Copilot" ? copilot_model_choices : static_copilot_model_choices
+        models += copilot_choices.map do |id|
+          { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
+        end
+        models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
       end
-      models += ModelInfo::ANTHROPIC_MODEL_CHOICES.map do |id|
-        { provider: "Anthropic", id: id, current: provider == "Anthropic" && anthropic_model == id }
+
+      if provider_logged_in?("Anthropic")
+        anthropic_model = model_for("Anthropic")
+        models += ModelInfo::ANTHROPIC_MODEL_CHOICES.map do |id|
+          { provider: "Anthropic", id: id, current: provider == "Anthropic" && anthropic_model == id }
+        end
+        models << { provider: "Anthropic", id: anthropic_model, current: provider == "Anthropic" } unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
       end
-      models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
-      models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_choices.include?(openrouter_model)
-      models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
-      models << { provider: "Anthropic", id: anthropic_model, current: provider == "Anthropic" } unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
-      
+
       # Sort models by provider, then alphabetically by id
       models.sort_by { |model| [model[:provider], model[:id]] }
     end
@@ -781,8 +801,8 @@ module Kward
       integer.positive? ? integer : nil
     end
 
-    def credentials
-      provider = ModelInfo.provider_label(configured_provider)
+    def credentials(provider: nil)
+      provider = provider.to_s.empty? ? ModelInfo.provider_label(configured_provider) : ModelInfo.provider_label(provider)
       if provider == "Copilot"
         return [copilot_chat_url, github_access_token, provider, nil]
       end
@@ -811,6 +831,23 @@ module Kward
 
     def reasoning_effort(provider = nil)
       ModelInfo.reasoning_effort(config: @config, provider: provider)
+    end
+
+    def provider_logged_in?(provider)
+      case provider
+      when "Codex"
+        openai_configured?
+      when "OpenRouter"
+        !openrouter_api_key.to_s.empty?
+      when "Copilot"
+        !github_access_token.to_s.empty?
+      when "Anthropic"
+        !anthropic_access_token.to_s.empty?
+      else
+        false
+      end
+    rescue StandardError
+      false
     end
 
     def openai_configured?

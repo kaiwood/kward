@@ -131,6 +131,25 @@ class TestRPCSessionManagerRuntime < KwardTestCase
     end
   end
 
+  def test_runtime_state_uses_resumed_session_model
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      persisted = store.create(provider: "OpenRouter", model: "openai/gpt-5.5", reasoning_effort: "high")
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "gpt-5.3-codex-spark"
+      client.reasoning_effort = "low"
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+
+      session = manager.resume_session(path: persisted.path, workspace_root: Dir.pwd)
+      state = manager.runtime_state(session_id: session[:id])
+
+      assert_equal "OpenRouter", state[:model][:provider]
+      assert_equal "openai/gpt-5.5", state[:model][:id]
+      assert_equal "high", state[:thinkingLevel]
+    end
+  end
+
   def test_refresh_client_config_rebuilds_active_session_tool_registry
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

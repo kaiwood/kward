@@ -96,7 +96,7 @@ module Kward
         end
 
         conversation = new_conversation(workspace_root: workspace_root)
-        session = store.create(model: conversation.model, reasoning_effort: conversation.reasoning_effort)
+        session = store.create(provider: conversation.provider, model: conversation.model, reasoning_effort: conversation.reasoning_effort)
         session.rename(name) unless name.to_s.strip.empty?
         session.attach(conversation)
         rpc_session = build_rpc_session(store, session, conversation, workspace_root)
@@ -115,6 +115,7 @@ module Kward
         session, conversation = store.load(
           location[:path],
           workspace: configured_workspace(root),
+          provider: current_model[:provider],
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )
@@ -201,6 +202,7 @@ module Kward
 
         session, conversation = source.store.create_independent_from_messages(
           entries[0...selected_index].filter_map { |record| record["message"] },
+          provider: source.conversation.provider,
           model: source.conversation.model,
           reasoning_effort: source.conversation.reasoning_effort,
           parent_session: source.session
@@ -495,13 +497,30 @@ module Kward
         normalize_model(provider: provider, id: model, model: model, contextWindow: context_window, current: true)
       end
 
+      def session_model(rpc_session)
+        current = current_model
+        provider = rpc_session.conversation.provider || current[:provider]
+        model = rpc_session.conversation.model || current[:id]
+        reasoning_effort = rpc_session.conversation.reasoning_effort || current_reasoning_effort
+        reasoning_effort = nil unless ModelInfo.reasoning_supported?(provider, model)
+        context_window = current[:contextWindow] if provider == current[:provider] && model == current[:id]
+        normalize_model(
+          provider: provider,
+          id: model,
+          model: model,
+          reasoningEffort: reasoning_effort,
+          contextWindow: context_window,
+          current: true
+        )
+      end
+
       def in_flight_steer_supported?
         supports_in_flight_steer?
       end
 
       def runtime_state(session_id:)
         rpc_session = fetch_session(session_id)
-        model = current_model
+        model = session_model(rpc_session)
         compaction_settings = self.compaction_settings
         auto_compaction_reserve_tokens = compaction_reserve_tokens(
           context_window: model[:contextWindow],
@@ -526,7 +545,7 @@ module Kward
         rpc_session = fetch_session(session_id)
         session = session_payload(rpc_session)
         counts = @session_metrics.message_stats(rpc_session.conversation)
-        model = current_model
+        model = session_model(rpc_session)
         compaction_settings = self.compaction_settings
         auto_compaction_reserve_tokens = compaction_reserve_tokens(
           context_window: model[:contextWindow],
@@ -585,6 +604,7 @@ module Kward
       def new_conversation(workspace_root: Dir.pwd)
         Conversation.new(
           workspace_root: workspace_root,
+          provider: (@client.current_provider if @client.respond_to?(:current_provider)),
           model: (@client.current_model if @client.respond_to?(:current_model)),
           reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort)),
           plugin_registry: plugin_registry
@@ -596,8 +616,7 @@ module Kward
         reasoning_effort = current_reasoning_effort
         sessions = @mutex.synchronize { @sessions.values }
         sessions.each do |rpc_session|
-          rpc_session.conversation.update_runtime_context!(model: model, reasoning_effort: reasoning_effort)
-          rpc_session.session.update_runtime(model: model, reasoning_effort: reasoning_effort)
+          rpc_session.conversation.update_runtime_context!(provider: current_model[:provider], model: model, reasoning_effort: reasoning_effort)
         end
       end
 
@@ -697,6 +716,7 @@ module Kward
         session, conversation = rpc_session.store.load(
           rpc_session.session.path,
           workspace: configured_workspace(rpc_session.workspace_root),
+          provider: current_model[:provider],
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )

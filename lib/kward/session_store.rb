@@ -76,6 +76,7 @@ module Kward
         conversation.on_append = lambda { |message| append_message(message) }
         conversation.on_compact = lambda { |message| compact(message) }
         conversation.on_tool_execution = lambda { |tool_call, content| append_tool_execution(tool_call, content) }
+        conversation.on_runtime_update = lambda { |provider:, model:, reasoning_effort:| update_runtime(provider: provider, model: model, reasoning_effort: reasoning_effort) }
         self
       end
 
@@ -143,11 +144,12 @@ module Kward
       end
 
       # Persists model/runtime metadata so restored sessions keep their context.
-      def update_runtime(model:, reasoning_effort:)
+      def update_runtime(provider: nil, model:, reasoning_effort:)
         @store.append_record(@path, {
           type: "session_info",
           timestamp: Time.now.utc.iso8601(3),
           name: @name,
+          provider: provider.to_s,
           model: model.to_s,
           reasoningEffort: reasoning_effort.to_s
         }.delete_if { |_key, value| value.to_s.empty? })
@@ -172,7 +174,7 @@ module Kward
     #
     # Parent fields record clone/fork ancestry; they do not imply live coupling
     # between files after creation.
-    def create(model: nil, reasoning_effort: nil, parent_id: nil, parent_path: nil)
+    def create(provider: nil, model: nil, reasoning_effort: nil, parent_id: nil, parent_path: nil)
       dir = session_dir
       FileUtils.mkdir_p(dir, mode: 0o700)
       created_at = Time.now.utc
@@ -184,6 +186,7 @@ module Kward
         id: id,
         timestamp: created_at.iso8601(3),
         cwd: @cwd,
+        provider: provider.to_s,
         model: model.to_s,
         reasoningEffort: reasoning_effort.to_s,
         parentId: parent_id.to_s,
@@ -200,7 +203,7 @@ module Kward
     end
 
     def create_from_conversation(conversation, parent_session: nil)
-      session = create(model: conversation.model, reasoning_effort: conversation.reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
+      session = create(provider: conversation.provider, model: conversation.model, reasoning_effort: conversation.reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
       session.rename(parent_session.name) unless parent_session&.name.to_s.strip.empty?
       persisted_messages(conversation).each { |message| session.append_message(message) }
       session.attach(conversation)
@@ -211,6 +214,7 @@ module Kward
       create_independent_from_messages(
         persisted_messages(conversation),
         read_paths: Array(conversation.read_paths),
+        provider: conversation.provider,
         model: conversation.model,
         reasoning_effort: conversation.reasoning_effort,
         parent_session: parent_session
@@ -226,12 +230,12 @@ module Kward
     # @param read_paths [Array<String>] restored read-before-write paths
     # @param parent_session [Session, nil] optional source session metadata
     # @return [Array(Session, Conversation)] new session handle and attached conversation
-    def create_independent_from_messages(messages, read_paths: [], model: nil, reasoning_effort: nil, parent_session: nil)
-      session = create(model: model, reasoning_effort: reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
+    def create_independent_from_messages(messages, read_paths: [], provider: nil, model: nil, reasoning_effort: nil, parent_session: nil)
+      session = create(provider: provider, model: model, reasoning_effort: reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
       session.rename(parent_session.name) unless parent_session&.name.to_s.strip.empty?
       persisted = deep_copy(messages)
       persisted.each { |message| session.append_message(message) }
-      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd, model: model, reasoning_effort: reasoning_effort)
+      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd, provider: provider, model: model, reasoning_effort: reasoning_effort)
       session.attach(conversation)
       [session, conversation]
     end
@@ -251,7 +255,7 @@ module Kward
     # `workspace` is used both for the active root and to restore read-before-write
     # paths from successful read tool results. If a session moved workspaces, load
     # it through `session_location` first so the original cwd is respected.
-    def load(path, workspace: Workspace.new, model: nil, reasoning_effort: nil)
+    def load(path, workspace: Workspace.new, provider: nil, model: nil, reasoning_effort: nil)
       resolved_path = resolve_session_path(path)
       records = records_from_file(resolved_path)
       header = session_header(records, resolved_path)
@@ -267,6 +271,7 @@ module Kward
         messages: messages,
         read_paths: read_paths,
         workspace_root: workspace.root,
+        provider: runtime["provider"] || provider,
         model: runtime["model"] || model,
         reasoning_effort: runtime["reasoningEffort"] || reasoning_effort,
         session_memories: memory_state["sessionMemories"],
@@ -503,12 +508,14 @@ module Kward
 
     def session_runtime(records, header)
       result = {
+        "provider" => header["provider"],
         "model" => header["model"],
         "reasoningEffort" => header["reasoningEffort"]
       }
       records.each do |record|
         next unless record["type"] == "session_info"
 
+        result["provider"] = record["provider"] if record.key?("provider")
         result["model"] = record["model"] if record.key?("model")
         result["reasoningEffort"] = record["reasoningEffort"] if record.key?("reasoningEffort")
       end

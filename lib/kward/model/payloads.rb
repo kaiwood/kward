@@ -22,7 +22,7 @@ module Kward
     def request_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       parts = build_context_parts(provider, messages, tools, model: model)
       payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
-      payload[:reasoning] = { effort: reasoning_effort("OpenRouter") } if provider == "OpenRouter" && reasoning != false
+      payload[:reasoning] = { effort: reasoning || reasoning_effort("OpenRouter") } if provider == "OpenRouter" && reasoning != false
       payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end
@@ -103,7 +103,7 @@ module Kward
       payload[:tools] = parts[:tools] unless parts[:tools].empty?
       if reasoning != false
         payload[:thinking] = { type: "adaptive", display: "summarized" }
-        payload[:output_config] = { effort: reasoning_effort("Anthropic") }
+        payload[:output_config] = { effort: reasoning || reasoning_effort("Anthropic") }
       else
         payload[:thinking] = { type: "disabled" }
       end
@@ -123,7 +123,7 @@ module Kward
         store: false,
         include: []
       }
-      payload[:reasoning] = { effort: reasoning_effort("Codex"), summary: "auto" } unless reasoning == false
+      payload[:reasoning] = { effort: reasoning || reasoning_effort("Codex"), summary: "auto" } unless reasoning == false
       payload
     end
 

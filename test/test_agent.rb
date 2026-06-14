@@ -34,6 +34,19 @@ class TestAgent < KwardTestCase
     end
   end
 
+  class RuntimeCaptureClient
+    attr_reader :calls
+
+    def initialize
+      @calls = []
+    end
+
+    def chat(_messages, tools: [], provider: nil, model: nil, reasoning: nil, **_kwargs)
+      @calls << { provider: provider, model: model, reasoning: reasoning, tools: tools }
+      { "role" => "assistant", "content" => "ok", "provider" => provider, "model" => model }
+    end
+  end
+
   class ArgumentErrorAfterChatClient
     attr_reader :calls
 
@@ -71,6 +84,23 @@ class TestAgent < KwardTestCase
       on_assistant_delta&.call("continued")
       { "role" => "assistant", "content" => "continued" }
     end
+  end
+
+  def test_agent_passes_and_persists_conversation_runtime_after_model_request
+    conversation = Kward::Conversation.new(system_message: nil, provider: "OpenRouter", model: "openai/gpt-test", reasoning_effort: "high")
+    persisted = []
+    conversation.on_runtime_update = lambda { |provider:, model:, reasoning_effort:| persisted << { provider: provider, model: model, reasoning_effort: reasoning_effort } }
+    client = RuntimeCaptureClient.new
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new, conversation: conversation)
+
+    answer = agent.ask("hello")
+
+    assert_equal "ok", answer
+    assert_equal 1, client.calls.length
+    assert_equal "OpenRouter", client.calls.first[:provider]
+    assert_equal "openai/gpt-test", client.calls.first[:model]
+    assert_equal "high", client.calls.first[:reasoning]
+    assert_equal [{ provider: "OpenRouter", model: "openai/gpt-test", reasoning_effort: "high" }], persisted
   end
 
   def test_context_overflow_compacts_and_retries_once

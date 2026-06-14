@@ -29,6 +29,8 @@ module Kward
     attr_reader :workspace_root
     # @return [Hash, nil] system prompt used when summarizing old context
     attr_reader :compaction_system_message
+    # @return [String, nil] provider captured for session/runtime prompts
+    attr_reader :provider
     # @return [String, nil] model id captured for session/runtime prompts
     attr_reader :model
     # @return [String, nil] reasoning effort captured for session/runtime prompts
@@ -41,6 +43,8 @@ module Kward
     attr_accessor :on_compact
     # @return [Proc, nil] callback invoked when a tool execution record should be persisted
     attr_accessor :on_tool_execution
+    # @return [Proc, nil] callback invoked when runtime metadata should be persisted
+    attr_accessor :on_runtime_update
     # @return [String, nil] memory prompt context injected into refreshed system messages
     attr_accessor :memory_context
     # @return [Hash, nil] metadata for the last memory retrieval attached to the session
@@ -48,8 +52,9 @@ module Kward
     # @return [PluginRegistry, nil] registry used to collect plugin prompt context
     attr_accessor :plugin_registry
 
-    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
+      @provider = provider
       @model = model
       @reasoning_effort = reasoning_effort
       @plugin_registry = plugin_registry
@@ -73,6 +78,7 @@ module Kward
       @on_append = on_append
       @on_compact = on_compact
       @on_tool_execution = on_tool_execution
+      @on_runtime_update = on_runtime_update
     end
 
     # Appends a user message and normalizes image attachment syntax.
@@ -121,10 +127,15 @@ module Kward
       replacement
     end
 
-    def update_runtime_context!(model:, reasoning_effort:)
+    def update_runtime_context!(provider: nil, model:, reasoning_effort:)
+      @provider = provider unless provider.to_s.empty?
       @model = model
       @reasoning_effort = reasoning_effort
       refresh_system_message!
+    end
+
+    def persist_runtime_context!
+      @on_runtime_update&.call(provider: @provider, model: @model, reasoning_effort: @reasoning_effort)
     end
 
     def refresh_system_message_if_workspace_agents_changed!
