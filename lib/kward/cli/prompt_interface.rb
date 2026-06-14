@@ -26,7 +26,7 @@ module Kward
       end
 
       def load_prompt_interface
-        require_relative "prompt_interface"
+        require_relative "../prompt_interface"
         PromptInterface
       rescue LoadError => e
         raise unless missing_tty_tui_load_error?(e)
