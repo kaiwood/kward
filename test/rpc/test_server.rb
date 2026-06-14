@@ -180,6 +180,18 @@ class TestRPCServer < KwardTestCase
     FileUtils.remove_entry(config_dir) if config_dir && Dir.exist?(config_dir)
   end
 
+  def test_tools_list_matches_default_registry_tools
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ])
+
+    rpc_tool_names = messages[0]["result"]["tools"].map { |schema| schema["function"]["name"] }
+    registry_tool_names = Kward::ToolRegistry.new(workspace: Kward::Workspace.new).schemas.map { |schema| schema[:function][:name] }
+
+    assert_equal registry_tool_names, rpc_tool_names
+  end
+
   def test_initialize_capability_method_lists_match_rpc_methods
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },
