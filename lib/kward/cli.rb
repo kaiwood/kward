@@ -141,11 +141,6 @@ module Kward
         return
       end
 
-      if @argv == ["--install-starter-pack"]
-        install_starter_pack
-        return
-      end
-
       if @argv.first == "auth"
         handle_auth_command(@argv[1..] || [])
         return

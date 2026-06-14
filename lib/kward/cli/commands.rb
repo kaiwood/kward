@@ -166,7 +166,7 @@ module Kward
       end
 
       def pan_mode?
-        ["pan", "--pan-mode"].include?(@argv.first)
+        @argv.first == "pan"
       end
 
       def extract_global_options(arguments)

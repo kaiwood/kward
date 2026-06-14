@@ -185,23 +185,18 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_install_starter_pack_flag_remains_as_compatibility_alias
+  def test_install_starter_pack_flag_is_treated_as_prompt
     Dir.mktmpdir do |config_dir|
-      prompt = FakePrompt.new([])
-      calls = []
-      original_install = Kward::StarterPackInstaller.method(:install)
-      Kward::StarterPackInstaller.define_singleton_method(:install) do
-        calls << true
-        Kward::StarterPackInstaller::Result.new(installed: [], skipped: [])
-      end
+      client = RecordingClient.new(["reply"])
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
-      end
+        output = capture_io do
+          Kward::CLI.new(argv: ["--install-starter-pack"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: client).run
+        end.first
 
-      assert_equal [true], calls
-    ensure
-      Kward::StarterPackInstaller.define_singleton_method(:install, original_install) if original_install
+        assert_includes output, "reply"
+        assert_equal "--install-starter-pack", client.seen_messages.first.last[:content]
+      end
     end
   end
 
@@ -883,23 +878,17 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_legacy_pan_mode_flag_still_starts_pan_server
+  def test_legacy_pan_mode_flag_is_treated_as_prompt
     Dir.mktmpdir do |config_dir|
-      calls = []
-      original_new = Kward::PanServer.method(:new)
-      Kward::PanServer.define_singleton_method(:new) do |client:, working_directory:|
-        calls << working_directory
-        Object.new.tap { |server| server.define_singleton_method(:run) { calls << :run } }
-      end
-      cli = Kward::CLI.new(argv: ["--pan-mode"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: ["--pan-mode"], stdin: FakeInput.new("", tty: true), client: client)
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-        cli.run
-      end
+        output = capture_io { cli.run }.first
 
-      assert_equal [Dir.pwd, :run], calls
-    ensure
-      Kward::PanServer.define_singleton_method(:new, original_new) if original_new
+        assert_includes output, "reply"
+        assert_equal "--pan-mode", client.seen_messages.first.last[:content]
+      end
     end
   end
 

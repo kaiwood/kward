@@ -245,7 +245,7 @@ class KwardTestCase < Minitest::Test
       @seen_messages = []
     end
 
-    def chat(messages, tools: [])
+    def chat(messages, tools: [], **_opts)
       @seen_messages << messages.map(&:dup)
       response = @responses.shift
       response.is_a?(Hash) ? response : { "role" => "assistant", "content" => response }
