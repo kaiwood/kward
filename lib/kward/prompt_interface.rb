@@ -1463,8 +1463,9 @@ module Kward
       reset_slash_selection
       reset_history_navigation
       @slash_overlay_dismissed_input = nil
-      @input = @input[0...@cursor] + string + @input[@cursor..]
-      @cursor += string.length
+      sync_composer_from_legacy_ivars
+      @composer.insert_string(string)
+      sync_legacy_composer_ivars
     end
 
     def insert_paste(string)
@@ -1498,15 +1499,16 @@ module Kward
     end
 
     def delete_before_cursor
-      if @cursor.zero?
+      sync_composer_from_legacy_ivars
+      if @composer.cursor.zero?
         remove_last_attachment
         return
       end
 
       reset_slash_selection
       reset_history_navigation
-      @input = @input[0...(@cursor - 1)] + @input[@cursor..]
-      @cursor -= 1
+      @composer.delete_before_cursor
+      sync_legacy_composer_ivars
     end
 
     def remove_last_attachment
@@ -1519,12 +1521,14 @@ module Kward
     end
 
     def delete_at_cursor
-      return unless @cursor < @input.length
+      sync_composer_from_legacy_ivars
+      return unless @composer.cursor < @composer.input.length
 
       reset_slash_selection
       reset_history_navigation
       @slash_overlay_dismissed_input = nil
-      @input = @input[0...@cursor] + @input[(@cursor + 1)..]
+      @composer.delete_at_cursor
+      sync_legacy_composer_ivars
     end
 
     def handle_composer_key_binding(key)
@@ -1599,81 +1603,104 @@ module Kward
     end
 
     def move_cursor_left
-      @cursor -= 1 if @cursor.positive?
+      sync_composer_from_legacy_ivars
+      @composer.move_cursor_left
+      sync_legacy_composer_ivars
     end
 
     def move_cursor_right
-      @cursor += 1 if @cursor < @input.length
+      sync_composer_from_legacy_ivars
+      @composer.move_cursor_right
+      sync_legacy_composer_ivars
     end
 
     def move_to_start_of_line
-      @cursor = 0
+      sync_composer_from_legacy_ivars
+      @composer.move_to_start_of_line
+      sync_legacy_composer_ivars
     end
 
     def move_to_end_of_line
-      @cursor = @input.length
+      sync_composer_from_legacy_ivars
+      @composer.move_to_end_of_line
+      sync_legacy_composer_ivars
     end
 
     def move_to_previous_word
-      @cursor = previous_word_boundary(@cursor)
+      sync_composer_from_legacy_ivars
+      @composer.move_to_previous_word
+      sync_legacy_composer_ivars
     end
 
     def move_to_next_word
-      @cursor = next_word_boundary(@cursor)
+      sync_composer_from_legacy_ivars
+      @composer.move_to_next_word
+      sync_legacy_composer_ivars
     end
 
     def delete_at_cursor_or_exit
-      @input.empty? ? exit_input : delete_at_cursor
+      composer_input.empty? ? exit_input : delete_at_cursor
     end
 
     def delete_word_before_cursor
-      start_index = previous_word_boundary(@cursor)
-      kill_range(start_index, @cursor)
+      reset_slash_selection
+      reset_history_navigation
+      sync_composer_from_legacy_ivars
+      @composer.delete_word_before_cursor
+      sync_legacy_composer_ivars
     end
 
     def delete_word_after_cursor
-      end_index = next_word_boundary(@cursor)
-      kill_range(@cursor, end_index)
+      reset_slash_selection
+      reset_history_navigation
+      sync_composer_from_legacy_ivars
+      @composer.delete_word_after_cursor
+      sync_legacy_composer_ivars
     end
 
     def kill_line_before_cursor
-      kill_range(0, @cursor)
+      reset_slash_selection
+      reset_history_navigation
+      sync_composer_from_legacy_ivars
+      @composer.kill_line_before_cursor
+      sync_legacy_composer_ivars
     end
 
     def kill_line_after_cursor
-      kill_range(@cursor, @input.length)
+      reset_slash_selection
+      reset_history_navigation
+      sync_composer_from_legacy_ivars
+      @composer.kill_line_after_cursor
+      sync_legacy_composer_ivars
     end
 
     def kill_range(start_index, end_index)
-      return if start_index == end_index
+      sync_composer_from_legacy_ivars
+      return unless @composer.kill_range(start_index, end_index)
 
       reset_slash_selection
       reset_history_navigation
-      @kill_buffer = @input[start_index...end_index].to_s
-      @input = @input[0...start_index].to_s + @input[end_index..].to_s
-      @cursor = start_index
+      sync_legacy_composer_ivars
     end
 
     def yank_kill_buffer
-      insert_string(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
+      sync_composer_from_legacy_ivars
+      @composer.yank_kill_buffer
+      sync_legacy_composer_ivars
     end
 
     def previous_word_boundary(index)
-      cursor = index
-      cursor -= 1 while cursor.positive? && word_separator?(@input[cursor - 1])
-      cursor -= 1 while cursor.positive? && !word_separator?(@input[cursor - 1])
-      cursor
+      sync_composer_from_legacy_ivars
+      @composer.previous_word_boundary(index)
     end
 
     def next_word_boundary(index)
-      cursor = index
-      cursor += 1 while cursor < @input.length && word_separator?(@input[cursor])
-      cursor += 1 while cursor < @input.length && !word_separator?(@input[cursor])
-      cursor
+      sync_composer_from_legacy_ivars
+      @composer.next_word_boundary(index)
     end
 
     def word_separator?(char)
-      char.to_s.match?(/\s/)
+      @composer.word_separator?(char)
     end
 
     def add_history(value)
