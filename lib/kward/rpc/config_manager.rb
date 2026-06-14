@@ -48,6 +48,14 @@ module Kward
         ConfigFiles.delete_config_key(key, @config_path)
       end
 
+      def workspace_guardrails_enabled?
+        ConfigFiles.workspace_guardrails_enabled?(read(redacted: false))
+      end
+
+      def session_auto_resume_enabled?
+        ConfigFiles.session_auto_resume_enabled?(read(redacted: false))
+      end
+
       private
 
       def load_config

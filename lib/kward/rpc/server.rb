@@ -45,8 +45,8 @@ module Kward
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new)
         @transport = Transport.new(input: input, output: output)
         @error_output = error_output
-        @session_manager = SessionManager.new(server: self, client: client)
         @config_manager = ConfigManager.new
+        @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @shutdown = false
       end
@@ -607,11 +607,11 @@ module Kward
       end
 
       def workspace_guardrails_enabled?
-        ConfigFiles.workspace_guardrails_enabled?(@config_manager.read(redacted: false))
+        @config_manager.workspace_guardrails_enabled?
       end
 
       def session_auto_resume_enabled?
-        ConfigFiles.session_auto_resume_enabled?(@config_manager.read(redacted: false))
+        @config_manager.session_auto_resume_enabled?
       end
 
       def write_result(id, result)
