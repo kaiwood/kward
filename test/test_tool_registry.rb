@@ -167,9 +167,13 @@ class TestToolRegistry < KwardTestCase
 
     too_few = registry.dispatch(tool_call("ask_user_question", questions: [{ question: "Proceed?", header: "Confirm", options: [{ label: "Yes", description: "Continue." }] }]), conversation)
     unsupported = registry.dispatch(tool_call("ask_user_question", questions: [question_args("Proceed?").merge(multiSelect: true)]), conversation)
+    missing_text = registry.dispatch(tool_call("ask_user_question", questions: [question_args("Proceed?").merge(question: "")]), conversation)
+    missing_option_label = registry.dispatch(tool_call("ask_user_question", questions: [question_args("Proceed?").merge(options: [{ label: "", description: "Continue." }, { label: "No", description: "Stop." }])]), conversation)
 
     assert_equal "Error: question 1 requires 2 to 4 options.", too_few
     assert_equal "Error: question 1 uses unsupported multiSelect.", unsupported
+    assert_equal "Error: question 1 requires question and header.", missing_text
+    assert_equal "Error: question 1 option 1 requires label and description.", missing_option_label
   end
 
   def test_tool_registry_dispatches_web_search

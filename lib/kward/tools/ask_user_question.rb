@@ -1,3 +1,4 @@
+require_relative "../question_contract"
 require_relative "base"
 
 module Kward
@@ -67,40 +68,22 @@ module Kward
       end
 
       def validated_questions(args)
-        questions = argument(args, :questions)
-        return "Error: ask_user_question requires questions." unless questions.is_a?(Array)
-        return "Error: ask_user_question requires 1 to 4 questions." unless questions.length.between?(1, 4)
-
-        questions.map.with_index(1) do |question, index|
-          return "Error: question #{index} must be an object." unless question.respond_to?(:key?)
-          return "Error: question #{index} uses unsupported multiSelect." if question.key?("multiSelect") || question.key?(:multiSelect)
-
-          text = question_value(question, :question).to_s.strip
-          header = question_value(question, :header).to_s.strip
-          options = question_value(question, :options)
-          return "Error: question #{index} requires question and header." if text.empty? || header.empty?
-          return "Error: question #{index} requires 2 to 4 options." unless options.is_a?(Array) && options.length.between?(2, 4)
-
-          normalized_options = options.map.with_index(1) do |option, option_index|
-            return "Error: question #{index} option #{option_index} must be an object." unless option.respond_to?(:key?)
-            return "Error: question #{index} option #{option_index} uses unsupported preview." if option.key?("preview") || option.key?(:preview)
-
-            label = question_value(option, :label).to_s.strip
-            description = question_value(option, :description).to_s.strip
-            return "Error: question #{index} option #{option_index} requires label and description." if label.empty? || description.empty?
-
-            { label: label, description: description }
-          end
-
-          { question: text, header: header, options: normalized_options }
-        end
+        QuestionContract.normalize_questions(argument(args, :questions))
+      rescue ArgumentError => e
+        "Error: #{tool_error_message(e.message)}."
       end
 
-      def question_value(object, key)
-        return object[key] if object.key?(key)
-        return object[key.to_s] if object.key?(key.to_s)
-
-        nil
+      def tool_error_message(message)
+        case message
+        when "questions must be an array"
+          "ask_user_question requires questions"
+        when "ui/question requires 1-4 questions"
+          "ask_user_question requires 1 to 4 questions"
+        else
+          message.gsub("2-4", "2 to 4")
+                 .gsub("multiSelect is unsupported", "uses unsupported multiSelect")
+                 .gsub("preview is unsupported", "uses unsupported preview")
+        end
       end
     end
   end

@@ -61,6 +61,16 @@ class TestRPCPromptBridge < KwardTestCase
       bridge.ask_user_question([{ question: "Continue?", header: "Confirm", options: [{ label: "Yes", description: "Continue.", preview: "code" }, { label: "No", description: "Stop." }] }])
     end
     assert_equal "question 1 preview is unsupported", error.message
+
+    error = assert_raises(ArgumentError) do
+      bridge.ask_user_question([{ question: "", header: "Confirm", options: question_args("Continue?")[:options] }])
+    end
+    assert_equal "question 1 requires question and header", error.message
+
+    error = assert_raises(ArgumentError) do
+      bridge.ask_user_question([{ question: "Continue?", header: "Confirm", options: [{ label: "", description: "Continue." }, { label: "No", description: "Stop." }] }])
+    end
+    assert_equal "question 1 option 1 requires label and description", error.message
     assert_empty server.notifications
   end
 end
