@@ -2,6 +2,12 @@ require "json"
 require_relative "../message_access"
 
 module Kward
+  # Reads and normalizes model tool-call hashes.
+  #
+  # Tool calls arrive from several providers and may be restored from session
+  # files. This module keeps provider/string/symbol compatibility in one place
+  # and exposes small helpers used by the agent loop, tool registry, transcript
+  # formatters, and RPC event normalizers.
   module ToolCall
     TOOL_NAME_MAP = {
       "read_file" => "read",
@@ -17,19 +23,27 @@ module Kward
 
     module_function
 
+    # @return [String, nil] provider tool-call id
     def id(tool_call)
       value(tool_call, :id)
     end
 
+    # @return [String, nil] requested tool/function name
     def name(tool_call)
       value(function(tool_call), :name)
     end
 
+    # Returns the short name used in compact UI labels.
+    #
+    # @return [String] display label such as `read`, `edit`, or `bash`
     def display_name(tool_call)
       raw_name = name(tool_call)
       normalized_name(raw_name) || raw_name || "unknown_tool"
     end
 
+    # Parses the requested tool arguments.
+    #
+    # @return [Hash] decoded argument object, or an empty hash for invalid JSON
     def arguments(tool_call)
       parse_arguments(raw_arguments(tool_call))
     end
@@ -46,6 +60,10 @@ module Kward
       TOOL_NAME_MAP[name.to_s]
     end
 
+    # Converts provider argument payloads into hashes.
+    #
+    # Providers normally send JSON strings, while tests and compatibility callers
+    # may pass hashes directly.
     def parse_arguments(arguments)
       return {} if arguments.nil? || (arguments.respond_to?(:empty?) && arguments.empty?)
       return arguments if arguments.is_a?(Hash)
@@ -55,6 +73,9 @@ module Kward
       {}
     end
 
+    # Recursively converts snake_case hash keys to camelCase symbols.
+    #
+    # @return [Hash] camelized copy of `args`
     def camelize_args(args)
       return {} unless args.is_a?(Hash)
 

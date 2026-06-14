@@ -7,6 +7,11 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Documented the tool contract: schemas define strict generated/returned payloads, while runtime accepts tolerant incoming tool-call input for compatibility.
+- Improved RDoc coverage for message compatibility, tool-call normalization, session persistence, and session tree helpers.
+
+### Fixed
+
+- Fixed session tree editing and RPC fork text so prompt-template turns use the original visible slash command instead of expanded model content.
 
 ## [0.67.1] - 2026-06-14
 

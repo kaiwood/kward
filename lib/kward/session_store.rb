@@ -188,6 +188,15 @@ module Kward
       )
     end
 
+    # Creates a new session containing an independent copy of selected messages.
+    #
+    # Used by clone/fork flows where the new conversation must preserve selected
+    # history but then diverge without mutating the source session file.
+    #
+    # @param messages [Array<Hash>] messages to persist into the new session
+    # @param read_paths [Array<String>] restored read-before-write paths
+    # @param parent_session [Session, nil] optional source session metadata
+    # @return [Array(Session, Conversation)] new session handle and attached conversation
     def create_independent_from_messages(messages, read_paths: [], model: nil, reasoning_effort: nil, parent_session: nil)
       session = create(model: model, reasoning_effort: reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
       session.rename(parent_session.name) unless parent_session&.name.to_s.strip.empty?
@@ -198,6 +207,9 @@ module Kward
       [session, conversation]
     end
 
+    # Resolves a user-provided path and returns the stored workspace location.
+    #
+    # @return [Hash] `:path` and `:cwd` for loading the session safely
     def session_location(path)
       resolved_path = resolve_session_path(path)
       records = records_from_file(resolved_path)
@@ -247,11 +259,17 @@ module Kward
       [session, conversation]
     end
 
+    # Lists recent non-empty sessions for this workspace.
+    #
+    # @param limit [Integer, nil] maximum number of sessions, or nil for all
+    # @param keep_empty_path [String, nil] empty session path to keep visible
+    # @return [Array<SessionInfo>] newest sessions first
     def recent(limit: 20, keep_empty_path: nil)
       sessions = recent_sessions(keep_empty_path: keep_empty_path)
       limit ? sessions.first(limit) : sessions
     end
 
+    # Persists the last active session pointer for workspace auto-resume.
     def remember_last_session(session)
       return unless session&.path
 
@@ -263,6 +281,7 @@ module Kward
       File.join(session_dir, LAST_SESSION_FILENAME)
     end
 
+    # @return [String, nil] remembered session path when the file still exists
     def remembered_last_session_path
       return nil unless File.file?(last_session_path)
 
@@ -274,12 +293,18 @@ module Kward
       nil
     end
 
+    # Lists recent sessions decorated with parent/branch display metadata.
+    #
+    # @return [Array<SessionInfo>] recent sessions with tree depth fields
     def recent_tree(limit: 20, keep_empty_path: nil)
       sessions = recent_sessions(keep_empty_path: keep_empty_path)
       sessions = sessions.first(limit) if limit
       decorate_tree(sessions)
     end
 
+    # Deletes an empty unnamed session file.
+    #
+    # @return [Boolean] true when a file was removed
     def delete_unused_session(session)
       path = session.path
       return false if session_named?(session)
@@ -296,6 +321,9 @@ module Kward
     end
 
 
+    # Builds a persisted tree record and assigns a stable entry id to messages.
+    #
+    # @return [Hash] JSONL-ready tree record
     def build_tree_record(path, type, parent_id, fields = {})
       message = fields[:message]
       id = message_entry_id(message) || next_entry_id(path)
@@ -326,11 +354,13 @@ module Kward
       })
     end
 
+    # @return [Array<Hash>] nested session tree roots for the given session file
     def session_tree(path)
       records = records_from_file(resolve_session_path(path))
       build_session_tree(records)
     end
 
+    # @return [Array<Hash>] flat tree records with resolved labels attached
     def session_entries(path)
       records = records_from_file(resolve_session_path(path))
       labels = labels_by_target(records)
@@ -344,10 +374,14 @@ module Kward
       end
     end
 
+    # Finds one persisted tree entry by id.
+    #
+    # @return [Hash, nil]
     def session_entry(path, entry_id)
       session_entries(path).find { |record| record["id"].to_s == entry_id.to_s }
     end
 
+    # @return [String, nil] current active tree leaf id
     def current_leaf(path)
       current_leaf_id(records_from_file(resolve_session_path(path)))
     end
