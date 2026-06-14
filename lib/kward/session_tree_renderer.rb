@@ -1,6 +1,6 @@
-require "json"
 require_relative "message_access"
 require_relative "message_text"
+require_relative "session_tree_tool_display"
 require_relative "tools/tool_call"
 
 module Kward
@@ -174,7 +174,7 @@ module Kward
 
     def session_tree_tool_display(message, tool_calls_by_id)
       tool_call = tool_calls_by_id[session_tree_message_tool_call_id(message).to_s]
-      return session_tree_format_tool_call(tool_call) if tool_call
+      return SessionTreeToolDisplay.label(tool_call) if tool_call
 
       name = session_tree_message_tool_name(message).to_s
       "[#{name.empty? ? 'tool' : name}]"
@@ -186,33 +186,6 @@ module Kward
 
     def session_tree_message_tool_name(message)
       message_name(message)
-    end
-
-    def session_tree_format_tool_call(tool_call)
-      name = ToolCall.display_name(tool_call)
-      args = tool_call_args(tool_call)
-      case name
-      when "read"
-        path = args["path"] || args[:path] || args["file_path"] || args[:file_path]
-        offset = args["offset"] || args[:offset]
-        limit = args["limit"] || args[:limit]
-        display = path.to_s
-        if offset || limit
-          start_line = offset || 1
-          end_line = limit ? start_line.to_i + limit.to_i - 1 : nil
-          display += ":#{start_line}#{end_line ? "-#{end_line}" : ""}"
-        end
-        "[read: #{display}]"
-      when "write", "edit"
-        path = args["path"] || args[:path] || args["file_path"] || args[:file_path]
-        "[#{name}: #{path}]"
-      when "bash"
-        command = (args["command"] || args[:command]).to_s.gsub(/[\n\t]/, " ").strip
-        "[bash: #{command.length > 50 ? "#{command.slice(0, 50)}..." : command}]"
-      else
-        serialized = JSON.dump(args)
-        "[#{name}: #{serialized.length > 40 ? "#{serialized.slice(0, 40)}..." : serialized}]"
-      end
     end
 
     def display_message_text(message)
@@ -252,8 +225,5 @@ module Kward
       ToolCall.id(tool_call)
     end
 
-    def tool_call_args(tool_call)
-      ToolCall.arguments(tool_call)
-    end
   end
 end
