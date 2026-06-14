@@ -91,6 +91,10 @@ Safety rules:
 
 - Existing files must be read in the current conversation before Kward can write or edit them.
 - Text file reads and edits are capped at 256 KiB per file.
+- Tool schemas are the official contract for generated tool calls and returned tool payloads.
+- At runtime, Kward accepts tolerant incoming tool-call input for compatibility: extra fields are ignored, and existing legacy-compatible input shapes remain supported.
+- Required fields and invalid required values still return explicit tool errors.
+- Tool output payloads are kept schema-clean so future model calls and restored transcripts do not depend on accidental extra fields.
 - When successful tool results include unified diffs, the composer status shows live session totals such as `+700|-572`.
 
 ## Slash commands

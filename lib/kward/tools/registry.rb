@@ -26,6 +26,12 @@ module Kward
   # A tool may exist in `@tools` but not be advertised in `schemas`. This allows
   # restored transcripts or compatibility callers to dispatch known tools while
   # config and frontend capability checks decide what the model can request next.
+  #
+  # Tool schemas are the strict output contract advertised to models and clients.
+  # Incoming calls are intentionally more tolerant: extra fields are ignored by
+  # individual tools, and legacy-compatible shapes are accepted where already
+  # supported. Required fields and invalid required values should still return
+  # explicit tool errors.
   class ToolRegistry
     # Tool schemas advertised to the model for the current frontend and config.
     #
