@@ -42,6 +42,14 @@ class TestToolRegistry < KwardTestCase
     assert_includes tool_names, "code_search"
   end
 
+  def test_schema_tools_have_explicit_display_names
+    tool_names = Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: [Kward::ConfigFiles::Skill.new(name: "planner")]).schemas.map { |schema| schema[:function][:name] }
+
+    tool_names.each do |name|
+      assert Kward::ToolCall.normalized_name(name), "missing display name for #{name}"
+    end
+  end
+
   def test_tool_schemas_include_web_search_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
