@@ -6,8 +6,8 @@ module Kward
       def ask_single_user_question(question, index, total)
         @mutex.synchronize do
           @prompt_label = "Answer>"
-          @input = ""
-          @cursor = 0
+          self.composer_input = ""
+          self.composer_cursor = 0
           @pending_keys.clear
           @asking = true
           @busy = false
@@ -47,8 +47,8 @@ module Kward
       def begin_question_prompt_state
         {
           prompt_label: @prompt_label,
-          input: @input,
-          cursor: @cursor,
+          input: composer_input,
+          cursor: composer_cursor,
           asking: @asking,
           busy: @busy,
           queued_count: @queued_count,
@@ -63,8 +63,8 @@ module Kward
           @question_state = nil
           @select_state = saved_state[:select_state]
           @prompt_label = saved_state[:prompt_label]
-          @input = saved_state[:input]
-          @cursor = saved_state[:cursor]
+          self.composer_input = saved_state[:input]
+          self.composer_cursor = saved_state[:cursor]
           @asking = saved_state[:asking]
           @busy = saved_state[:busy]
           @queued_count = saved_state[:queued_count]
@@ -98,13 +98,13 @@ module Kward
         when :delete
           question_delete_at_cursor
         when :left
-          @cursor -= 1 if @cursor.positive?
+          self.composer_cursor -= 1 if composer_cursor.positive?
         when :right
-          @cursor += 1 if @cursor < @input.length
+          self.composer_cursor += 1 if composer_cursor < composer_input.length
         when :home
-          @cursor = 0
+          self.composer_cursor = 0
         when :end
-          @cursor = @input.length
+          self.composer_cursor = composer_input.length
         when :up
           question_previous_choice
         when :down
@@ -155,9 +155,9 @@ module Kward
         when :down
           question_next_choice
         when :left
-          @cursor -= 1 if @cursor.positive?
+          self.composer_cursor -= 1 if composer_cursor.positive?
         when :right
-          @cursor += 1 if @cursor < @input.length
+          self.composer_cursor += 1 if composer_cursor < composer_input.length
         end
         true
       end
@@ -185,7 +185,7 @@ module Kward
         return nil unless choice
 
         if choice[:custom]
-          answer = @input.strip
+          answer = composer_input.strip
           return nil if answer.empty?
 
           { question: current_question_text, answer: answer, custom: true }
@@ -205,7 +205,7 @@ module Kward
         options = Array(@question_state ? @question_state[:options] : []).map do |option|
           { label: (option[:label] || option["label"]).to_s, description: (option[:description] || option["description"]).to_s }
         end
-        choices = options + [{ label: "Type something.", description: @input.strip, custom: true }]
+        choices = options + [{ label: "Type something.", description: composer_input.strip, custom: true }]
         clamp_question_selection_index(choices.length)
         choices
       end
@@ -248,24 +248,24 @@ module Kward
       def question_insert_string(string)
         return if string.empty?
 
-        @input = @input[0...@cursor] + string + @input[@cursor..]
-        @cursor += string.length
+        self.composer_input = composer_input[0...composer_cursor] + string + composer_input[composer_cursor..]
+        self.composer_cursor += string.length
         @question_state[:selection_index] = question_choices.length - 1 if @question_state
       end
 
       def question_delete_before_cursor
-        return unless @cursor.positive?
+        return unless composer_cursor.positive?
 
-        @input = @input[0...(@cursor - 1)] + @input[@cursor..]
-        @cursor -= 1
-        @question_state[:selection_index] = question_choices.length - 1 if @question_state && !@input.empty?
+        self.composer_input = composer_input[0...(composer_cursor - 1)] + composer_input[composer_cursor..]
+        self.composer_cursor -= 1
+        @question_state[:selection_index] = question_choices.length - 1 if @question_state && !composer_input.empty?
       end
 
       def question_delete_at_cursor
-        return unless @cursor < @input.length
+        return unless composer_cursor < composer_input.length
 
-        @input = @input[0...@cursor] + @input[(@cursor + 1)..]
-        @question_state[:selection_index] = question_choices.length - 1 if @question_state && !@input.empty?
+        self.composer_input = composer_input[0...composer_cursor] + composer_input[(composer_cursor + 1)..]
+        @question_state[:selection_index] = question_choices.length - 1 if @question_state && !composer_input.empty?
       end
 
       def question_composer_layout(width, height = screen_height)
@@ -298,15 +298,15 @@ module Kward
       def question_custom_cursor_col(width)
         card_width = overlay_card_width(width)
         left_padding = overlay_left_padding(width, card_width)
-        custom_prefix = selected_question_choice&.fetch(:custom, false) || !@input.empty? ? "Type something: " : "Type something."
-        visible_before_cursor = display_question_input(@input[0...@cursor])
+        custom_prefix = selected_question_choice&.fetch(:custom, false) || !composer_input.empty? ? "Type something: " : "Type something."
+        visible_before_cursor = display_question_input(composer_input[0...composer_cursor])
         [[left_padding + 2 + 2 + custom_prefix.length + visible_before_cursor.length, width - 1].min, 0].max
       end
 
       def choice_text(choice, selected: false)
         if choice[:custom]
-          if selected || !@input.empty?
-            "Type something: #{display_question_input(@input)}"
+          if selected || !composer_input.empty?
+            "Type something: #{display_question_input(composer_input)}"
           else
             "Type something."
           end

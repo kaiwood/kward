@@ -27,13 +27,13 @@ module Kward
         when :delete
           select_delete_at_cursor
         when :left
-          @cursor -= 1 if @cursor.positive?
+          self.composer_cursor -= 1 if composer_cursor.positive?
         when :right
-          @cursor += 1 if @cursor < @input.length
+          self.composer_cursor += 1 if composer_cursor < composer_input.length
         when :home
-          @cursor = 0
+          self.composer_cursor = 0
         when :end
-          @cursor = @input.length
+          self.composer_cursor = composer_input.length
         when :up
           select_previous_choice
         when :down
@@ -84,9 +84,9 @@ module Kward
         when :down
           select_next_choice
         when :left
-          @cursor -= 1 if @cursor.positive?
+          self.composer_cursor -= 1 if composer_cursor.positive?
         when :right
-          @cursor += 1 if @cursor < @input.length
+          self.composer_cursor += 1 if composer_cursor < composer_input.length
         end
         true
       end
@@ -116,7 +116,7 @@ module Kward
       def custom_selection_choice
         return nil unless @select_state && @select_state[:custom]
 
-        value = @input.strip
+        value = composer_input.strip
         value.empty? ? nil : value
       end
 
@@ -150,29 +150,29 @@ module Kward
       def select_insert_string(string)
         return if string.empty?
 
-        @input = @input[0...@cursor] + string + @input[@cursor..]
-        @cursor += string.length
+        self.composer_input = composer_input[0...composer_cursor] + string + composer_input[composer_cursor..]
+        self.composer_cursor += string.length
         @select_state[:selection_index] = 0 if @select_state
       end
 
       def select_delete_before_cursor
-        return unless @cursor.positive?
+        return unless composer_cursor.positive?
 
-        @input = @input[0...(@cursor - 1)] + @input[@cursor..]
-        @cursor -= 1
+        self.composer_input = composer_input[0...(composer_cursor - 1)] + composer_input[composer_cursor..]
+        self.composer_cursor -= 1
         @select_state[:selection_index] = 0 if @select_state
       end
 
       def select_delete_at_cursor
-        return unless @cursor < @input.length
+        return unless composer_cursor < composer_input.length
 
-        @input = @input[0...@cursor] + @input[(@cursor + 1)..]
+        self.composer_input = composer_input[0...composer_cursor] + composer_input[(composer_cursor + 1)..]
         @select_state[:selection_index] = 0 if @select_state
       end
 
       def selection_matches
         choices = @select_state ? @select_state[:choices] : []
-        filter = @input.downcase.strip
+        filter = composer_input.downcase.strip
         matches = filter.empty? ? choices : choices.select { |choice| choice.downcase.include?(filter) }
         clamp_selection_index(matches.length)
         matches
@@ -193,8 +193,8 @@ module Kward
         @mutex.synchronize do
           @select_state = nil
           clear_prompt_locked
-          @input = ""
-          @cursor = 0
+          self.composer_input = ""
+          self.composer_cursor = 0
           @asking = false
           @rendered_rows = 0
           @cursor_rendered_row = 0
@@ -206,8 +206,8 @@ module Kward
         matches = selection_matches
         lines = [overlay_text_line("↑/↓ select · Enter open · Esc cancel", :muted), overlay_blank_line]
         if matches.empty?
-          if @select_state && @select_state[:custom] && !@input.strip.empty?
-            lines << overlay_choice_line("Use custom: #{@input.strip}", selected: true)
+          if @select_state && @select_state[:custom] && !composer_input.strip.empty?
+            lines << overlay_choice_line("Use custom: #{composer_input.strip}", selected: true)
           else
             lines << overlay_text_line("No matches", :muted)
           end

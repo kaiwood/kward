@@ -10,7 +10,7 @@ module Kward
       def dismiss_slash_overlay
         return false unless slash_overlay_visible?
 
-        @slash_overlay_dismissed_input = @input.dup
+        @slash_overlay_dismissed_input = composer_input.dup
         reset_slash_selection
         true
       end
@@ -34,11 +34,11 @@ module Kward
       end
 
       def slash_overlay_visible?
-        @input.match?(%r{\A/[^\s/]*\z}) && @slash_overlay_dismissed_input != @input && !slash_overlay_matches.empty?
+        composer_input.match?(%r{\A/[^\s/]*\z}) && @slash_overlay_dismissed_input != composer_input && !slash_overlay_matches.empty?
       end
 
       def slash_overlay_matches
-        prefix = @input.delete_prefix("/").downcase
+        prefix = composer_input.delete_prefix("/").downcase
         @slash_commands.select { |command| command[:name].downcase.start_with?(prefix) }.first(8)
       end
 

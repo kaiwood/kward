@@ -151,8 +151,8 @@ class TestPromptInterface < KwardTestCase
 
   def test_prompt_interface_renders_attachment_badge_rows
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, attachment_badges: ->(_input) { ["[image] screenshot.png · image/png · 12 KB"] })
-    prompt.instance_variable_set(:@input, "describe screenshot.png")
-    prompt.instance_variable_set(:@cursor, "describe screenshot.png".length)
+    prompt.send(:composer_input=, "describe screenshot.png")
+    prompt.send(:composer_cursor=, "describe screenshot.png".length)
 
     rows, cursor_row, = prompt.send(:composer_layout, 80)
     rendered = strip_ansi(rows.join("\n"))
@@ -164,8 +164,8 @@ class TestPromptInterface < KwardTestCase
   def test_prompt_interface_caps_input_height_with_attachment_badges
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, attachment_badges: ->(_input) { ["[image] one.png", "[image] two.png"] })
     value = (1..10).map { |index| "line #{index}" }.join("\n")
-    prompt.instance_variable_set(:@input, value)
-    prompt.instance_variable_set(:@cursor, value.length)
+    prompt.send(:composer_input=, value)
+    prompt.send(:composer_cursor=, value.length)
 
     rows, cursor_row, = prompt.send(:composer_layout, 80)
 
@@ -250,8 +250,8 @@ class TestPromptInterface < KwardTestCase
     output.truncate(0)
     output.rewind
 
-    prompt.instance_variable_set(:@input, "/")
-    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:composer_input=, "/")
+    prompt.send(:composer_cursor=, 1)
     prompt.send(:render_prompt_locked)
 
     refute_includes strip_ansi(output.string), "State your business."
@@ -278,14 +278,14 @@ class TestPromptInterface < KwardTestCase
 
     prompt.start
     prompt.print_visual_banner
-    prompt.instance_variable_set(:@input, "/")
-    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:composer_input=, "/")
+    prompt.send(:composer_cursor=, 1)
     prompt.send(:render_prompt_locked)
     output.truncate(0)
     output.rewind
 
-    prompt.instance_variable_set(:@input, "")
-    prompt.instance_variable_set(:@cursor, 0)
+    prompt.send(:composer_input=, "")
+    prompt.send(:composer_cursor=, 0)
     prompt.send(:render_prompt_locked)
 
     assert_includes strip_ansi(output.string), "State your business."
@@ -310,14 +310,14 @@ class TestPromptInterface < KwardTestCase
 
     prompt.start
     prompt.say((1..8).map { |index| "line#{index}" }.join("\n"))
-    prompt.instance_variable_set(:@input, "/")
-    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:composer_input=, "/")
+    prompt.send(:composer_cursor=, 1)
     prompt.send(:render_prompt_locked)
     output.truncate(0)
     output.rewind
 
-    prompt.instance_variable_set(:@input, "")
-    prompt.instance_variable_set(:@cursor, 0)
+    prompt.send(:composer_input=, "")
+    prompt.send(:composer_cursor=, 0)
     prompt.send(:render_prompt_locked)
 
     assert_includes output.string, "line8"
@@ -847,8 +847,8 @@ class TestPromptInterface < KwardTestCase
       output: StringIO.new,
       slash_commands: (1..14).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } }
     )
-    prompt.instance_variable_set(:@input, "/")
-    prompt.instance_variable_set(:@cursor, 1)
+    prompt.send(:composer_input=, "/")
+    prompt.send(:composer_cursor=, 1)
     original_width = TTY::Screen.method(:width)
     original_height = TTY::Screen.method(:height)
     TTY::Screen.define_singleton_method(:width) { 80 }
@@ -924,8 +924,8 @@ class TestPromptInterface < KwardTestCase
       index: 1,
       total: 1
     })
-    prompt.instance_variable_set(:@input, "maybe")
-    prompt.instance_variable_set(:@cursor, 5)
+    prompt.send(:composer_input=, "maybe")
+    prompt.send(:composer_cursor=, 5)
 
     assert_equal 49, prompt.send(:question_custom_cursor_col, 120)
   end
@@ -1060,13 +1060,13 @@ class TestPromptInterface < KwardTestCase
       prompt.begin_busy_input("You>")
       master.write("abcdef")
       6.times { prompt.poll_input }
-      assert_equal "abcdef", prompt.instance_variable_get(:@input)
+      assert_equal "abcdef", prompt.send(:composer_input)
 
       master.write("\x7F" * 3)
       sleep 0.05
       3.times { prompt.poll_input }
 
-      assert_equal "abc", prompt.instance_variable_get(:@input)
+      assert_equal "abc", prompt.send(:composer_input)
     ensure
       prompt&.close
     end
@@ -1445,8 +1445,8 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     original_height = TTY::Screen.method(:height)
     TTY::Screen.define_singleton_method(:height) { 3 }
-    prompt.instance_variable_set(:@input, "hello")
-    prompt.instance_variable_set(:@cursor, 5)
+    prompt.send(:composer_input=, "hello")
+    prompt.send(:composer_cursor=, 5)
 
     rows, cursor_row, = prompt.send(:composer_layout, 20)
 
@@ -1460,8 +1460,8 @@ class TestPromptInterface < KwardTestCase
   def test_prompt_interface_caps_boxed_composer_height
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     value = (1..10).map { |index| "line #{index}" }.join("\n")
-    prompt.instance_variable_set(:@input, value)
-    prompt.instance_variable_set(:@cursor, value.length)
+    prompt.send(:composer_input=, value)
+    prompt.send(:composer_cursor=, value.length)
 
     rows, cursor_row, = prompt.send(:composer_layout, 80)
 
@@ -1489,7 +1489,7 @@ class TestPromptInterface < KwardTestCase
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
-    prompt.instance_variable_set(:@input, "abcde")
+    prompt.send(:composer_input=, "abcde")
     rows, = prompt.send(:composer_layout, 10)
     assert rows.all? { |row| Kward::ANSI.strip(row).length <= 10 }
 

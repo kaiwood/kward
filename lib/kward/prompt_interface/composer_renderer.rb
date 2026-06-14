@@ -138,9 +138,9 @@ module Kward
       def attachment_badge_texts
         return [] unless @attachment_badges
 
-        Array(@attachment_badges.call(@input, @attachments)).map(&:to_s).reject(&:empty?)
+        Array(@attachment_badges.call(composer_input, composer_attachments)).map(&:to_s).reject(&:empty?)
       rescue ArgumentError
-        Array(@attachment_badges.call(@input)).map(&:to_s).reject(&:empty?)
+        Array(@attachment_badges.call(composer_input)).map(&:to_s).reject(&:empty?)
       rescue StandardError
         []
       end
@@ -151,7 +151,7 @@ module Kward
       end
 
       def input_lines
-        lines = @input.split("\n", -1)
+        lines = composer_input.split("\n", -1)
         lines.empty? ? [""] : lines
       end
 
@@ -160,7 +160,7 @@ module Kward
       end
 
       def cursor_logical_position
-        before_cursor = @input[0...@cursor]
+        before_cursor = composer_input[0...composer_cursor]
         [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
       end
 

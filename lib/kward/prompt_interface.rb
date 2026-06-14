@@ -65,8 +65,8 @@ module Kward
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
       @composer = ComposerState.new
-      @input = @composer.input
-      @cursor = @composer.cursor
+      self.composer_input = @composer.input
+      self.composer_cursor = @composer.cursor
       @started = false
       @asking = false
       @busy = false
@@ -87,14 +87,8 @@ module Kward
       @transcript_viewport_rows = 0
       @restoring_transcript = false
       @pending_keys = []
-      @attachments = @composer.attachments
-      @kill_buffer = @composer.kill_buffer
       @original_console_mode = nil
       @raw_mode_active = false
-      @history = @composer.history
-      @history_index = @composer.history_index
-      @history_draft = @composer.history_draft
-      @prefill_input = @composer.prefill_input
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
@@ -208,14 +202,13 @@ module Kward
       was_composing = @started && @asking
       start
       @mutex.synchronize do
-        preserve_input = was_composing && !@busy && !@input.empty?
+        preserve_input = was_composing && !@busy && !composer_input.empty?
         @prompt_label = message.to_s
         unless preserve_input
-          @input = @prefill_input.to_s
-          @prefill_input = nil
-          @cursor = @input.length
+          self.composer_input = @composer.prefill_input.to_s
+          @composer.prefill_input = nil
+          self.composer_cursor = composer_input.length
           @composer.clear_attachments
-          @attachments = @composer.attachments
           reset_history_navigation
         end
         @pending_keys.clear
@@ -261,11 +254,10 @@ module Kward
       start
       @mutex.synchronize do
         @prompt_label = message.to_s
-        @input = ""
-        @cursor = 0
+        self.composer_input = ""
+        self.composer_cursor = 0
         @composer.clear_attachments
-          @attachments = @composer.attachments
-        @pending_keys.clear
+                  @pending_keys.clear
         @asking = true
         @busy = false
         @queued_count = 0
@@ -339,11 +331,10 @@ module Kward
       @mutex.synchronize do
         @prompt_label = message.to_s
         @busy_activity = normalize_busy_activity(activity)
-        @input = ""
-        @cursor = 0
+        self.composer_input = ""
+        self.composer_cursor = 0
         @composer.clear_attachments
-          @attachments = @composer.attachments
-        @pending_keys.clear
+                  @pending_keys.clear
         @asking = true
         @busy = true
         @queued_count = 0
@@ -532,59 +523,32 @@ module Kward
       text.gsub(/\r\n|\r|\n/, "\r\n")
     end
 
-    def sync_composer_from_legacy_ivars
-      @composer.input = @input.to_s if defined?(@input) && @input != @composer.input
-      @composer.cursor = @cursor.to_i if defined?(@cursor) && @cursor != @composer.cursor
-      @composer.kill_buffer = @kill_buffer.to_s if defined?(@kill_buffer) && @kill_buffer != @composer.kill_buffer
-      @composer.history_index = @history_index if defined?(@history_index) && @history_index != @composer.history_index
-      @composer.history_draft = @history_draft if defined?(@history_draft) && @history_draft != @composer.history_draft
-      @composer.prefill_input = @prefill_input if defined?(@prefill_input) && @prefill_input != @composer.prefill_input
-    end
-
-    def sync_legacy_composer_ivars
-      @input = @composer.input
-      @cursor = @composer.cursor
-      @attachments = @composer.attachments
-      @kill_buffer = @composer.kill_buffer
-      @history = @composer.history
-      @history_index = @composer.history_index
-      @history_draft = @composer.history_draft
-      @prefill_input = @composer.prefill_input
-    end
-
     def composer_input
-      sync_composer_from_legacy_ivars
       @composer.input
     end
 
     def composer_input=(value)
       @composer.input = value.to_s
-      sync_legacy_composer_ivars
     end
 
     def composer_cursor
-      sync_composer_from_legacy_ivars
       @composer.cursor
     end
 
     def composer_cursor=(value)
       @composer.cursor = value.to_i
-      sync_legacy_composer_ivars
     end
 
     def composer_attachments
-      sync_composer_from_legacy_ivars
       @composer.attachments
     end
 
     def composer_kill_buffer
-      sync_composer_from_legacy_ivars
       @composer.kill_buffer
     end
 
     def composer_kill_buffer=(value)
       @composer.kill_buffer = value.to_s
-      sync_legacy_composer_ivars
     end
 
     def reset_spinner_locked
@@ -632,22 +596,20 @@ module Kward
 
     def submit_input
       value = submitted_input
-      add_history(@input)
+      add_history(composer_input)
       if @busy
         clear_prompt_for_output_locked
-        @input = ""
-        @cursor = 0
+        self.composer_input = ""
+        self.composer_cursor = 0
         @composer.clear_attachments
-          @attachments = @composer.attachments
         reset_history_navigation
         @asking = true
         render_prompt_after_output_locked
       else
         clear_prompt_locked
-        @input = ""
-        @cursor = 0
+        self.composer_input = ""
+        self.composer_cursor = 0
         @composer.clear_attachments
-          @attachments = @composer.attachments
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -657,10 +619,10 @@ module Kward
     end
 
     def submitted_input
-      return @input if @attachments.empty?
+      return composer_input if composer_attachments.empty?
 
-      sources = @attachments.map { |attachment| attachment[:source_text].to_s }.reject(&:empty?)
-      display_input = @input.to_s.rstrip
+      sources = composer_attachments.map { |attachment| attachment[:source_text].to_s }.reject(&:empty?)
+      display_input = composer_input.to_s.rstrip
       full_input = [display_input, *sources].reject { |part| part.to_s.strip.empty? }.join("\n")
       SubmittedInput.new(full_input, display_input: display_input)
     end
@@ -668,18 +630,16 @@ module Kward
     def exit_input
       if @busy
         clear_prompt_for_output_locked
-        @input = ""
-        @cursor = 0
+        self.composer_input = ""
+        self.composer_cursor = 0
         @composer.clear_attachments
-          @attachments = @composer.attachments
         @asking = true
         render_prompt_after_output_locked
       else
         clear_prompt_locked
-        @input = ""
-        @cursor = 0
+        self.composer_input = ""
+        self.composer_cursor = 0
         @composer.clear_attachments
-          @attachments = @composer.attachments
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -1019,10 +979,8 @@ module Kward
       reset_slash_selection
       reset_history_navigation
       @slash_overlay_dismissed_input = nil
-      sync_composer_from_legacy_ivars
-      @composer.insert_string(string)
-      sync_legacy_composer_ivars
-    end
+            @composer.insert_string(string)
+          end
 
     def insert_paste(string)
       parsed = parse_attachments(string)
@@ -1045,14 +1003,11 @@ module Kward
     end
 
     def add_attachment(attachment)
-      sync_composer_from_legacy_ivars
-      @composer.add_attachment(attachment)
-      sync_legacy_composer_ivars
-    end
+            @composer.add_attachment(attachment)
+          end
 
     def delete_before_cursor
-      sync_composer_from_legacy_ivars
-      if @composer.cursor.zero?
+            if @composer.cursor.zero?
         remove_last_attachment
         return
       end
@@ -1060,29 +1015,24 @@ module Kward
       reset_slash_selection
       reset_history_navigation
       @composer.delete_before_cursor
-      sync_legacy_composer_ivars
-    end
+          end
 
     def remove_last_attachment
-      sync_composer_from_legacy_ivars
-      return unless @composer.remove_last_attachment
+            return unless @composer.remove_last_attachment
 
       reset_slash_selection
       reset_history_navigation
       @slash_overlay_dismissed_input = nil
-      sync_legacy_composer_ivars
-    end
+          end
 
     def delete_at_cursor
-      sync_composer_from_legacy_ivars
-      return unless @composer.cursor < @composer.input.length
+            return unless @composer.cursor < @composer.input.length
 
       reset_slash_selection
       reset_history_navigation
       @slash_overlay_dismissed_input = nil
       @composer.delete_at_cursor
-      sync_legacy_composer_ivars
-    end
+          end
 
     def handle_composer_key_binding(key)
       case key
@@ -1156,40 +1106,28 @@ module Kward
     end
 
     def move_cursor_left
-      sync_composer_from_legacy_ivars
-      @composer.move_cursor_left
-      sync_legacy_composer_ivars
-    end
+            @composer.move_cursor_left
+          end
 
     def move_cursor_right
-      sync_composer_from_legacy_ivars
-      @composer.move_cursor_right
-      sync_legacy_composer_ivars
-    end
+            @composer.move_cursor_right
+          end
 
     def move_to_start_of_line
-      sync_composer_from_legacy_ivars
-      @composer.move_to_start_of_line
-      sync_legacy_composer_ivars
-    end
+            @composer.move_to_start_of_line
+          end
 
     def move_to_end_of_line
-      sync_composer_from_legacy_ivars
-      @composer.move_to_end_of_line
-      sync_legacy_composer_ivars
-    end
+            @composer.move_to_end_of_line
+          end
 
     def move_to_previous_word
-      sync_composer_from_legacy_ivars
-      @composer.move_to_previous_word
-      sync_legacy_composer_ivars
-    end
+            @composer.move_to_previous_word
+          end
 
     def move_to_next_word
-      sync_composer_from_legacy_ivars
-      @composer.move_to_next_word
-      sync_legacy_composer_ivars
-    end
+            @composer.move_to_next_word
+          end
 
     def delete_at_cursor_or_exit
       composer_input.empty? ? exit_input : delete_at_cursor
@@ -1198,58 +1136,44 @@ module Kward
     def delete_word_before_cursor
       reset_slash_selection
       reset_history_navigation
-      sync_composer_from_legacy_ivars
-      @composer.delete_word_before_cursor
-      sync_legacy_composer_ivars
-    end
+            @composer.delete_word_before_cursor
+          end
 
     def delete_word_after_cursor
       reset_slash_selection
       reset_history_navigation
-      sync_composer_from_legacy_ivars
-      @composer.delete_word_after_cursor
-      sync_legacy_composer_ivars
-    end
+            @composer.delete_word_after_cursor
+          end
 
     def kill_line_before_cursor
       reset_slash_selection
       reset_history_navigation
-      sync_composer_from_legacy_ivars
-      @composer.kill_line_before_cursor
-      sync_legacy_composer_ivars
-    end
+            @composer.kill_line_before_cursor
+          end
 
     def kill_line_after_cursor
       reset_slash_selection
       reset_history_navigation
-      sync_composer_from_legacy_ivars
-      @composer.kill_line_after_cursor
-      sync_legacy_composer_ivars
-    end
+            @composer.kill_line_after_cursor
+          end
 
     def kill_range(start_index, end_index)
-      sync_composer_from_legacy_ivars
-      return unless @composer.kill_range(start_index, end_index)
+            return unless @composer.kill_range(start_index, end_index)
 
       reset_slash_selection
       reset_history_navigation
-      sync_legacy_composer_ivars
-    end
+          end
 
     def yank_kill_buffer
-      sync_composer_from_legacy_ivars
-      @composer.yank_kill_buffer
-      sync_legacy_composer_ivars
-    end
+            @composer.yank_kill_buffer
+          end
 
     def previous_word_boundary(index)
-      sync_composer_from_legacy_ivars
-      @composer.previous_word_boundary(index)
+            @composer.previous_word_boundary(index)
     end
 
     def next_word_boundary(index)
-      sync_composer_from_legacy_ivars
-      @composer.next_word_boundary(index)
+            @composer.next_word_boundary(index)
     end
 
     def word_separator?(char)
@@ -1257,39 +1181,30 @@ module Kward
     end
 
     def add_history(value)
-      sync_composer_from_legacy_ivars
-      @composer.add_history(value)
-      sync_legacy_composer_ivars
-    end
+            @composer.add_history(value)
+          end
 
     def recall_previous_history
-      sync_composer_from_legacy_ivars
-      @composer.recall_previous_history
-      sync_legacy_composer_ivars
-    end
+            @composer.recall_previous_history
+          end
 
     def recall_next_history
-      sync_composer_from_legacy_ivars
-      @composer.recall_next_history
-      sync_legacy_composer_ivars
-    end
+            @composer.recall_next_history
+          end
 
     def replace_input(value)
       @composer.replace_input(value)
-      sync_legacy_composer_ivars
-    end
+          end
 
     def prefill_input(value)
       @mutex.synchronize do
-        @prefill_input = value.to_s
+        @composer.prefill_input = value.to_s
       end
     end
 
     def reset_history_navigation
-      sync_composer_from_legacy_ivars
-      @composer.reset_history_navigation
-      sync_legacy_composer_ivars
-    end
+            @composer.reset_history_navigation
+          end
 
 
 
