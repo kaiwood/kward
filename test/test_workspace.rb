@@ -99,6 +99,14 @@ class TestWorkspace < KwardTestCase
     end
   end
 
+  def test_read_file_rejects_binary_content
+    with_temp_workspace do |workspace, dir|
+      File.binwrite(File.join(dir, "binary_read.tmp"), "text\x00binary")
+
+      assert_equal "Error: not a text file: binary_read.tmp", workspace.read_file("binary_read.tmp")
+    end
+  end
+
   def test_existing_file_write_requires_prior_successful_read
     with_temp_workspace do |workspace, dir|
       path = "kward_existing_requires_read.txt"

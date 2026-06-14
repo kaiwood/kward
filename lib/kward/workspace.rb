@@ -57,7 +57,10 @@ module Kward
       size = File.size(resolved)
       return "Error: file too large: #{path} is #{size} bytes; limit is #{@max_file_bytes} bytes" if size > @max_file_bytes
 
-      read_file_slice(File.read(resolved), offset: offset, limit: limit)
+      content = File.read(resolved)
+      return "Error: not a text file: #{path}" if binary_content?(content)
+
+      read_file_slice(content, offset: offset, limit: limit)
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end
@@ -215,6 +218,10 @@ module Kward
       end
 
       output
+    end
+
+    def binary_content?(content)
+      content.include?("\x00")
     end
 
     def read_start_index(offset)
