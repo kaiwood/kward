@@ -14,6 +14,7 @@ require_relative "prompt_interface/question_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/layout"
+require_relative "prompt_interface/screen"
 
 module Kward
   class PromptInterface
@@ -33,6 +34,7 @@ module Kward
     include OverlayRenderer
     include ComposerRenderer
     include Layout
+    include Screen
     KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
@@ -479,29 +481,7 @@ module Kward
 
     private
 
-    def enter_raw_mode_locked
-      return unless @input_io.respond_to?(:tty?) && @input_io.tty?
-      return unless @input_io.respond_to?(:console_mode) && @input_io.respond_to?(:console_mode=)
-      return if @raw_mode_active
 
-      @original_console_mode = @input_io.console_mode
-      raw_mode = @input_io.console_mode.raw
-      raw_mode.echo = false
-      @input_io.console_mode = raw_mode
-      @raw_mode_active = true
-    rescue StandardError
-      @original_console_mode = nil
-      @raw_mode_active = false
-    end
-
-    def restore_console_mode_locked
-      return unless @raw_mode_active
-
-      @input_io.console_mode = @original_console_mode if @original_console_mode
-    ensure
-      @original_console_mode = nil
-      @raw_mode_active = false
-    end
 
     def write_stream_block_locked(label, delta, finish: false)
       with_synchronized_output_locked do
@@ -519,22 +499,6 @@ module Kward
       @output_io.flush unless @restoring_transcript
     end
 
-    def with_synchronized_output_locked
-      if @restoring_transcript || @synchronized_output_depth.positive?
-        yield
-        return
-      end
-
-      synchronized = true
-      @synchronized_output_depth += 1
-      @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
-      yield
-    ensure
-      if synchronized
-        @synchronized_output_depth -= 1
-        @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE) if @synchronized_output_depth.zero?
-      end
-    end
 
     def write_transcript_text_locked(text)
       append_transcript_buffer(text.to_s)
@@ -1385,11 +1349,6 @@ module Kward
       move_to_transcript_cursor_locked(width: width, height: height)
     end
 
-    def hide_cursor_for_transcript_output_locked
-      return unless @started && @asking
-
-      set_cursor_visible_locked(false)
-    end
 
     def restore_composer_cursor_locked
       return unless @started && @asking
@@ -1400,117 +1359,17 @@ module Kward
       render_cursor_visibility_locked
     end
 
-    def render_cursor_visibility_locked
-      visible = !(@question_state && !selected_question_choice&.fetch(:custom, false))
-      set_cursor_visible_locked(visible)
-    end
 
-    def set_cursor_visible_locked(visible, force: false)
-      return if !force && @cursor_visible == visible
 
-      @output_io.print(visible ? CURSOR_SHOW : CURSOR_HIDE)
-      @cursor_visible = visible
-    end
 
-    def reserve_composer_region_locked(width: screen_width, height: screen_height)
-      rows, = composer_layout(width, height)
-      ensure_scroll_region_locked(rows.length, width: width, height: height)
-    end
 
-    def ensure_scroll_region_locked(row_count, redraw_transcript: true, width: screen_width, height: screen_height)
-      new_reserved_rows = [[row_count, 1].max, [height - 1, 1].max].min
-      return if @reserved_rows == new_reserved_rows && @last_height == height
 
-      old_reserved_rows = @reserved_rows
-      rows_to_clear = [old_reserved_rows, new_reserved_rows].max
-      @reserved_rows = new_reserved_rows
-      @output_io.print("\e[1;#{transcript_bottom_row(height)}r")
-      clear_composer_region_locked(rows_to_clear, height: height)
-      redraw_transcript_locked(width: width, height: height) if redraw_transcript && new_reserved_rows < old_reserved_rows
-    end
 
-    def handle_resize_locked
-      current_width, current_height = screen_size
-      return false if current_width == @last_width && current_height == @last_height
 
-      old_width = @last_width
-      old_height = @last_height
-      old_reserved_rows = @reserved_rows
-      restore_scroll_region_locked
-      rows_to_clear = resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)
-      clear_resized_composer_region_locked(old_height, current_height, rows_to_clear)
-      @reserved_rows = 0
-      @last_width = current_width
-      @last_height = current_height
-      redraw_screen_locked(width: current_width, height: current_height)
-      true
-    end
 
-    def restore_scroll_region_locked
-      @output_io.print("\e[r")
-      @reserved_rows = 0
-    end
 
-    def render_composer_rows_locked(rows, height: screen_height)
-      top = composer_top_row(height)
-      max_rows = [@last_composer_rows.length, rows.length].max
-      rows_to_clear = [@reserved_rows - rows.length, 0].max
 
-      max_rows.times do |index|
-        row = rows[index]
-        previous = @last_composer_rows[index]
-        next if row == previous
 
-        move_to_screen(top + index, 1)
-        @output_io.print(TTY::Cursor.clear_line)
-        @output_io.print(row) unless row.to_s.empty?
-      end
-
-      rows.length.upto(rows.length + rows_to_clear - 1) do |index|
-        move_to_screen(top + index, 1)
-        @output_io.print(TTY::Cursor.clear_line)
-      end
-
-      @last_composer_rows = rows.dup
-    end
-
-    def clear_composer_region_locked(rows_to_clear = nil, height: screen_height)
-      rows_to_clear ||= [@reserved_rows, @rendered_rows].max
-      clear_bottom_rows_locked(height, rows_to_clear)
-      @last_composer_rows = []
-    end
-
-    def resize_prompt_clear_rows(old_width, current_width, old_reserved_rows)
-      return old_reserved_rows unless old_reserved_rows.positive?
-
-      return old_reserved_rows unless current_width < old_width
-
-      wrapped_rows_per_row = ((old_width - 1) / current_width) + 1
-      old_reserved_rows * wrapped_rows_per_row
-    end
-
-    def clear_resized_composer_region_locked(old_height, current_height, rows_to_clear)
-      return unless rows_to_clear.positive?
-
-      old_top = [old_height - rows_to_clear + 1, 1].max
-      current_top = [current_height - rows_to_clear + 1, 1].max
-      clear_screen_rows_locked([old_top, current_top].min, current_height)
-    end
-
-    def clear_bottom_rows_locked(height, rows_to_clear)
-      return unless rows_to_clear.positive?
-
-      bottom = height
-      top = [bottom - rows_to_clear + 1, 1].max
-      clear_screen_rows_locked(top, bottom)
-    end
-
-    def clear_screen_rows_locked(top, bottom)
-      top.upto(bottom) do |row|
-        move_to_screen(row, 1)
-        @output_io.print(TTY::Cursor.clear_line)
-      end
-    end
 
     def redraw_screen_locked(width: screen_width, height: screen_height)
       return unless @started
@@ -1640,9 +1499,6 @@ module Kward
 
 
 
-    def move_to_screen(row, col)
-      @output_io.print("\e[#{row};#{col}H")
-    end
 
 
 
@@ -1674,16 +1530,7 @@ module Kward
       end
     end
 
-    def screen_size
-      [screen_width, screen_height]
-    end
 
-    def screen_width
-      [TTY::Screen.width, 1].max
-    end
 
-    def screen_height
-      [TTY::Screen.height, 2].max
-    end
   end
 end
