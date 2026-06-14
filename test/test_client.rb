@@ -140,6 +140,20 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_anthropic_payload_disables_thinking_for_models_without_reasoning_effort
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "anthropic", "anthropic_model" => "claude-haiku-4.5"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new("anthropic-token"), config_path: path)
+
+      payload = client.send(:request_body_payload, "Anthropic", [{ role: "user", content: "hello" }], [], model: "claude-haiku-4-5")
+
+      assert_equal "claude-haiku-4-5", payload[:model]
+      assert_equal({ type: "disabled" }, payload[:thinking])
+      refute payload.key?(:output_config)
+    end
+  end
+
   def test_available_models_include_only_logged_in_provider_picker_choices
     client = Kward::Client.new(
       api_key: "openrouter-token",

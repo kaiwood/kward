@@ -180,7 +180,7 @@ class TestCLISettings < KwardTestCase
       assert_equal 1, client.reload_count
       assert_equal ["Reasoning effort"], prompt.select_messages
       assert_equal ["Reasoning"], prompt.select_titles
-      assert_equal ["Low", "Medium (current)", "High", "Extra High"], prompt.select_choices.first
+      assert_equal ["None", "Low", "Medium (current)", "High", "Extra High"], prompt.select_choices.first
       assert_empty prompt.output
       assert_equal 1, prompt.redraw_count
     end
@@ -214,6 +214,7 @@ class TestCLISettings < KwardTestCase
       prompt = FakeSettingsPrompt.new(["/reasoning", "/exit"], ["High"])
       client = FakeClient.new([])
       client.provider = "Copilot"
+      client.model = "gpt-5-mini"
       client.reasoning_effort = "medium"
       agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)

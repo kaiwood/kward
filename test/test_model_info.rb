@@ -3,8 +3,11 @@ require_relative "test_helper"
 class TestModelInfo < KwardTestCase
   def test_context_window_uses_known_codex_model_patterns
     cases = {
-      "gpt-5.5" => 400_000,
-      "gpt-5.5-latest" => 400_000,
+      "gpt-5.5" => 1_050_000,
+      "gpt-5.5-latest" => 1_050_000,
+      "gpt-5.4" => 1_050_000,
+      "gpt-5.4-mini" => 400_000,
+      "gpt-5-mini" => 400_000,
       "gpt-5-codex" => 400_000,
       "gpt-5.3-codex-spark" => 128_000,
       "gpt-5.3-codex" => 400_000,
@@ -23,8 +26,13 @@ class TestModelInfo < KwardTestCase
     end
   end
 
-  def test_context_window_only_applies_to_codex_provider
-    assert_nil Kward::ModelInfo.context_window("OpenRouter", "gpt-5.5")
+  def test_context_window_uses_provider_model_patterns
+    assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.5")
+    assert_equal 1_000_000, Kward::ModelInfo.context_window("OpenRouter", "anthropic/claude-opus-4.8")
+    assert_equal 1_048_576, Kward::ModelInfo.context_window("OpenRouter", "google/gemini-3.1-pro-preview")
+    assert_equal 1_000_000, Kward::ModelInfo.context_window("Copilot", "claude-sonnet-4.6")
+    assert_equal 1_048_576, Kward::ModelInfo.context_window("Copilot", "gemini-3.5-flash")
+    assert_nil Kward::ModelInfo.context_window("OpenRouter", "unknown/model")
   end
 
   def test_supports_images_excludes_codex_spark
@@ -56,8 +64,23 @@ class TestModelInfo < KwardTestCase
     assert_equal "anthropic", Kward::ModelInfo.provider_config_value("Anthropic")
     assert_equal "claude-sonnet-4-6", Kward::ModelInfo.model_for("Anthropic", config: {}, env: {})
     assert_equal "claude-opus-4-5", Kward::ModelInfo.model_for("Anthropic", config: { "anthropic_model" => "claude-opus-4.5" }, env: {})
+    assert_equal "claude-opus-4-8", Kward::ModelInfo.normalize_anthropic_model("claude-opus-4.8")
+    assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-4-6")
+    assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-opus-4-8")
     assert_equal 200_000, Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-4-5")
-    assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-5")
+    assert_equal 200_000, Kward::ModelInfo.context_window("Anthropic", "claude-haiku-4-5")
+    refute Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-5")
+    assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-6")
+  end
+
+  def test_reasoning_effort_choices_are_model_specific
+    assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.5").map(&:first)
+    assert_equal %w[low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.3-codex").map(&:first)
+    assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-opus-4-8").map(&:first)
+    assert_equal %w[low medium high max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-sonnet-4-6").map(&:first)
+    assert_equal %w[low medium high], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-opus-4-5").map(&:first)
+    assert_empty Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-haiku-4-5")
+    assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Copilot", "gpt-5-mini").map(&:first)
   end
 
   def test_copilot_reasoning_effort_uses_copilot_config_and_env

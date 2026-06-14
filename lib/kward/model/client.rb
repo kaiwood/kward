@@ -477,6 +477,8 @@ module Kward
     end
 
     def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
+      reasoning = false unless ModelInfo.reasoning_supported?(provider, model)
+
       if provider == "Codex"
         codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       elsif provider == "Anthropic"

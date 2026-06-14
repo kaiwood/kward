@@ -44,13 +44,38 @@ module Kward
       ["high", "High"],
       ["xhigh", "Extra High"]
     ].freeze
+    OPENAI_REASONING_EFFORT_CHOICES = [
+      ["none", "None"],
+      *REASONING_EFFORT_CHOICES
+    ].freeze
+    ANTHROPIC_HIGH_REASONING_EFFORT_CHOICES = [
+      ["low", "Low"],
+      ["medium", "Medium"],
+      ["high", "High"],
+      ["xhigh", "Extra High"],
+      ["max", "Max"]
+    ].freeze
+    ANTHROPIC_STANDARD_REASONING_EFFORT_CHOICES = [
+      ["low", "Low"],
+      ["medium", "Medium"],
+      ["high", "High"],
+      ["max", "Max"]
+    ].freeze
+    ANTHROPIC_OPUS_4_5_REASONING_EFFORT_CHOICES = [
+      ["low", "Low"],
+      ["medium", "Medium"],
+      ["high", "High"]
+    ].freeze
 
     IMAGE_UNSUPPORTED_MODELS = [
       /(?:\A|\/)gpt-5\.3-codex-spark\z/
     ].freeze
 
     OPENAI_CONTEXT_WINDOWS = [
-      [/\Agpt-5\.5/, 400_000],
+      [/\Agpt-5\.5/, 1_050_000],
+      [/\Agpt-5\.4-mini/, 400_000],
+      [/\Agpt-5\.4/, 1_050_000],
+      [/\Agpt-5-mini/, 400_000],
       [/\Agpt-5-codex/, 400_000],
       [/\Agpt-5\.3-codex-spark/, 128_000],
       [/\Agpt-5\.3-codex/, 400_000],
@@ -62,6 +87,16 @@ module Kward
       [/\Ao4/, 200_000],
       [/\Agpt-4/, 128_000],
       [/\Agpt-3\.5-turbo/, 16_385]
+    ].freeze
+    ANTHROPIC_CONTEXT_WINDOWS = [
+      [/\Aclaude-(?:fable|mythos)-5(?:\z|-)/, 1_000_000],
+      [/\Aclaude-opus-4-(?:6|7|8)(?:\z|-)/, 1_000_000],
+      [/\Aclaude-sonnet-4-6(?:\z|-)/, 1_000_000],
+      [/\Aclaude-(?:haiku|opus|sonnet)-4-5(?:\z|-)/, 200_000],
+      [/\Aclaude-(?:haiku|opus|sonnet)-4(?:\z|-)/, 200_000]
+    ].freeze
+    GEMINI_CONTEXT_WINDOWS = [
+      [/\Agemini-(?:2\.5-pro|3(?:\.1)?-pro|3(?:\.5)?-flash)/, 1_048_576]
     ].freeze
 
     module_function
@@ -86,7 +121,11 @@ module Kward
       return DEFAULT_ANTHROPIC_MODEL if text.empty?
       text = text.delete_prefix("anthropic/").delete_prefix("claude/")
       {
+        "claude-sonnet-4.6" => "claude-sonnet-4-6",
         "claude-sonnet-4.5" => "claude-sonnet-4-5",
+        "claude-opus-4.8" => "claude-opus-4-8",
+        "claude-opus-4.7" => "claude-opus-4-7",
+        "claude-opus-4.6" => "claude-opus-4-6",
         "claude-opus-4.5" => "claude-opus-4-5",
         "claude-haiku-4.5" => "claude-haiku-4-5"
       }.fetch(text, text)
@@ -173,11 +212,41 @@ module Kward
     end
 
     def context_window(provider, id)
-      return 200_000 if provider == "Anthropic"
-      return nil unless provider == "Codex"
+      case provider
+      when "Codex"
+        pattern_context_window(OPENAI_CONTEXT_WINDOWS, id)
+      when "OpenRouter"
+        openrouter_context_window(id)
+      when "Copilot"
+        copilot_context_window(id)
+      when "Anthropic"
+        anthropic_context_window(id)
+      end
+    end
 
-      match = OPENAI_CONTEXT_WINDOWS.find { |pattern, _window| id.to_s.match?(pattern) }
+    def pattern_context_window(patterns, id)
+      match = patterns.find { |pattern, _window| id.to_s.match?(pattern) }
       match&.last
+    end
+
+    def openrouter_context_window(id)
+      text = id.to_s
+      return pattern_context_window(OPENAI_CONTEXT_WINDOWS, text.delete_prefix("openai/")) if text.start_with?("openai/")
+      return anthropic_context_window(text.delete_prefix("anthropic/")) if text.start_with?("anthropic/")
+      return pattern_context_window(GEMINI_CONTEXT_WINDOWS, text.delete_prefix("google/")) if text.start_with?("google/")
+
+      nil
+    end
+
+    def copilot_context_window(id)
+      text = id.to_s
+      pattern_context_window(OPENAI_CONTEXT_WINDOWS, text) ||
+        anthropic_context_window(normalize_anthropic_model(text)) ||
+        pattern_context_window(GEMINI_CONTEXT_WINDOWS, text)
+    end
+
+    def anthropic_context_window(id)
+      pattern_context_window(ANTHROPIC_CONTEXT_WINDOWS, normalize_anthropic_model(id))
     end
 
     def supports_images?(_provider, id)
@@ -185,7 +254,45 @@ module Kward
     end
 
     def reasoning_supported?(provider, id)
-      provider == "Codex" || provider == "OpenRouter" || provider == "Anthropic" || (provider == "Copilot" && id.to_s.match?(/\Agpt-5(?:\.|-|\z)/))
+      case provider
+      when "Codex", "OpenRouter"
+        true
+      when "Anthropic"
+        !reasoning_effort_choices(provider, id).empty?
+      when "Copilot"
+        id.to_s.match?(/\Agpt-5(?:\.|-|\z)/)
+      else
+        false
+      end
+    end
+
+    def reasoning_effort_choices(provider, id)
+      case provider
+      when "Codex", "OpenRouter"
+        openai_reasoning_effort_choices(id)
+      when "Anthropic"
+        anthropic_reasoning_effort_choices(id)
+      when "Copilot"
+        id.to_s.match?(/\Agpt-5(?:\.|-|\z)/) ? openai_reasoning_effort_choices(id) : []
+      else
+        []
+      end
+    end
+
+    def openai_reasoning_effort_choices(id)
+      text = id.to_s.delete_prefix("openai/")
+      return REASONING_EFFORT_CHOICES if text.match?(/\Agpt-5\.[23]-codex/)
+
+      OPENAI_REASONING_EFFORT_CHOICES
+    end
+
+    def anthropic_reasoning_effort_choices(id)
+      text = normalize_anthropic_model(id)
+      return ANTHROPIC_HIGH_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-(?:fable|mythos)-5(?:\z|-)|\Aclaude-opus-4-(?:7|8)(?:\z|-)/)
+      return ANTHROPIC_STANDARD_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-(?:opus-4-6|sonnet-4-6)(?:\z|-)/)
+      return ANTHROPIC_OPUS_4_5_REASONING_EFFORT_CHOICES if text.match?(/\Aclaude-opus-4-5(?:\z|-)/)
+
+      []
     end
 
     def normalize(model, current_provider: nil, current_model: nil, current_reasoning_effort: nil)

@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed known context windows and reasoning effort choices to use provider/model-specific metadata for Codex, OpenRouter, Copilot, and Anthropic models.
 - Changed the default Anthropic model to Claude Sonnet 4.6 and expanded direct Anthropic model choices to include newer Claude Opus/Sonnet releases.
 - Changed resumed sessions to restore the session's last-used provider, model, and reasoning effort without rewriting default config.
 - Documented the tool contract: schemas define strict generated/returned payloads, while runtime accepts tolerant incoming tool-call input for compatibility.

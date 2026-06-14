@@ -540,12 +540,17 @@ module Kward
           return
         end
 
-        choices = ModelInfo::REASONING_EFFORT_CHOICES
+        choices = ModelInfo.reasoning_effort_choices(current_model_provider, current_model_id)
+        if choices.empty?
+          @prompt.say("\nReasoning effort is unavailable for #{current_model_provider} #{current_model_id}.\n")
+          return
+        end
+
         selected = @prompt.select("Reasoning effort", reasoning_choices(choices), title: "Reasoning")
         return unless selected
 
         effort, = choices.find { |_value, label| selected.to_s.downcase.start_with?(label.downcase) }
-        raise "Reasoning effort must be low, medium, high, or extra high" unless effort
+        raise "Reasoning effort must be one of: #{choices.map(&:first).join(", ")}" unless effort
 
         ConfigFiles.update_config(ModelInfo.reasoning_config_key_for_provider(current_model_provider) => effort)
         reload_client_config
