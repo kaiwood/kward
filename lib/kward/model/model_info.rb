@@ -7,14 +7,18 @@ module Kward
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
     DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
     DEFAULT_COPILOT_MODEL = "gpt-5-mini"
-    DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
+    DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
     DEFAULT_REASONING_EFFORT = "medium"
     OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     OPENROUTER_MODEL_CHOICES = OPENAI_MODEL_CHOICES.map { |model| "openai/#{model}" }.freeze
     ANTHROPIC_MODEL_CHOICES = %w[
-      claude-sonnet-4-5
-      claude-opus-4-5
+      claude-opus-4-8
+      claude-sonnet-4-6
       claude-haiku-4-5
+      claude-opus-4-7
+      claude-opus-4-6
+      claude-opus-4-5
+      claude-sonnet-4-5
     ].freeze
     COPILOT_MODEL_CHOICES = %w[
       gpt-5-mini

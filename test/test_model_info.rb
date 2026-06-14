@@ -54,7 +54,7 @@ class TestModelInfo < KwardTestCase
   def test_anthropic_model_and_provider_metadata
     assert_equal "Anthropic", Kward::ModelInfo.provider_label("claude")
     assert_equal "anthropic", Kward::ModelInfo.provider_config_value("Anthropic")
-    assert_equal "claude-sonnet-4-5", Kward::ModelInfo.model_for("Anthropic", config: {}, env: {})
+    assert_equal "claude-sonnet-4-6", Kward::ModelInfo.model_for("Anthropic", config: {}, env: {})
     assert_equal "claude-opus-4-5", Kward::ModelInfo.model_for("Anthropic", config: { "anthropic_model" => "claude-opus-4.5" }, env: {})
     assert_equal 200_000, Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-4-5")
     assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-5")
