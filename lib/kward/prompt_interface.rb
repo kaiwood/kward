@@ -550,6 +550,34 @@ module Kward
       text.gsub(/\r\n|\r|\n/, "\r\n")
     end
 
+    def composer_input
+      @input
+    end
+
+    def composer_input=(value)
+      @input = value.to_s
+    end
+
+    def composer_cursor
+      @cursor
+    end
+
+    def composer_cursor=(value)
+      @cursor = value.to_i
+    end
+
+    def composer_attachments
+      @attachments
+    end
+
+    def composer_kill_buffer
+      @kill_buffer
+    end
+
+    def composer_kill_buffer=(value)
+      @kill_buffer = value.to_s
+    end
+
     def reset_spinner_locked
       @spinner_frame_index = 0
       @last_spinner_tick = monotonic_now
