@@ -239,6 +239,7 @@ module Kward
         "edit_file" => "Edit",
         "run_shell_command" => "Bash",
         "web_search" => "WebSearch",
+        "fetch_content" => "WebFetch",
         "ask_user_question" => "AskUserQuestion"
       }[name.to_s]
       return mapped if mapped

@@ -191,6 +191,7 @@ module Kward
       when "Edit" then "edit_file"
       when "Bash" then "run_shell_command"
       when "WebSearch" then "web_search"
+      when "WebFetch" then "fetch_content"
       when "AskUserQuestion" then "ask_user_question"
       else name.to_s
       end

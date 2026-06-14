@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added `fetch_content` and `fetch_raw` web tools for reading specific URLs after search discovery.
+
 ### Fixed
 
 - Fixed Codex GPT-5.5 RPC model metadata to report a 400k context window instead of the upstream OpenAI API context window.

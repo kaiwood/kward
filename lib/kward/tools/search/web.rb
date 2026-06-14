@@ -64,7 +64,7 @@ module Kward
         provider: provider
       }
 
-      sections = ["# Web search"]
+      sections = ["# Web search", "Use fetch_content with a result URL to verify human-readable pages, or fetch_raw for specs, JSON, YAML, XML, and other machine-readable resources."]
       failures = []
       any_results = false
 
@@ -715,7 +715,7 @@ module Kward
 
     # HTTP adapter used by web-search providers and fallbacks.
     class NetHttpClient
-      Response = Struct.new(:code, :body, keyword_init: true)
+      Response = Struct.new(:code, :body, :headers, keyword_init: true)
 
       def get(url, headers: {})
         request(url, Net::HTTP::Get, headers: headers)
@@ -742,7 +742,7 @@ module Kward
           headers.each { |key, value| http_request[key] = value }
           yield http_request if block_given?
           response = http.request(http_request)
-          Response.new(code: response.code, body: response.body)
+          Response.new(code: response.code, body: response.body, headers: response.each_header.to_h)
         end
       end
     end

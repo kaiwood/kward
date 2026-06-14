@@ -83,7 +83,9 @@ Kward can use these tools during a turn:
 - `list_directory` and `read_file` to inspect the workspace.
 - `write_file` and `edit_file` to create or change files.
 - `run_shell_command` to run local commands from the workspace.
-- `web_search` to search the live web.
+- `web_search` to discover live web sources.
+- `fetch_content` to read specific human-readable pages after search discovery.
+- `fetch_raw` to read specific machine-readable URLs such as JSON, YAML, XML, RSS, OpenAPI specs, and plain text.
 - `code_search` to find packages, clone public GitHub repositories into cache, and read bounded source snippets.
 - `ask_user_question` to ask structured clarification questions.
 

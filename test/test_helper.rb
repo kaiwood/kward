@@ -103,8 +103,8 @@ class KwardTestCase < Minitest::Test
     }
   end
 
-  def fake_response(code, body)
-    Kward::WebSearch::NetHttpClient::Response.new(code: code, body: body)
+  def fake_response(code, body, headers: {})
+    Kward::WebSearch::NetHttpClient::Response.new(code: code, body: body, headers: headers)
   end
 
   class FakeHttpClient

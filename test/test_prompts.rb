@@ -7,6 +7,14 @@ class TestPrompts < KwardTestCase
     assert_equal false, Kward::ConfigFiles.composer_busy_help?({ "composer" => { "busy_help" => false } })
   end
 
+  def test_base_prompt_includes_web_research_guidance
+    content = Kward::Prompts.base_prompt
+
+    assert_includes content, "use web_search to discover sources"
+    assert_includes content, "fetch_content for important human-readable pages"
+    assert_includes content, "Use fetch_raw for machine-readable resources"
+  end
+
   def test_config_agents_prompt_appends_from_config_dir
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |workspace|

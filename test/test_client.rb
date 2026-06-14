@@ -127,7 +127,10 @@ class TestClient < KwardTestCase
       File.write(path, JSON.dump("anthropic_model" => "claude-opus-4.5", "anthropic_reasoning_effort" => "high"))
       client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new("anthropic-token"), config_path: path)
 
-      tools = [{ function: { name: "read_file", description: "Read a file", parameters: { properties: { path: { type: "string" } }, required: ["path"] } } }]
+      tools = [
+        { function: { name: "read_file", description: "Read a file", parameters: { properties: { path: { type: "string" } }, required: ["path"] } } },
+        { function: { name: "fetch_content", description: "Fetch content", parameters: { properties: { url: { type: "string" } }, required: ["url"] } } }
+      ]
       payload = client.send(:anthropic_payload, [{ role: "system", content: "ship rules" }, { role: "user", content: "hello" }], tools)
 
       assert_equal "claude-opus-4-5", payload[:model]
@@ -137,6 +140,7 @@ class TestClient < KwardTestCase
       assert_equal({ type: "adaptive", display: "summarized" }, payload[:thinking])
       assert_equal({ effort: "high" }, payload[:output_config])
       assert_equal "Read", payload[:tools].first[:name]
+      assert_equal "WebFetch", payload[:tools].last[:name]
     end
   end
 

@@ -2,6 +2,8 @@ require_relative "../config_files"
 require_relative "ask_user_question"
 require_relative "code_search"
 require_relative "edit_file"
+require_relative "fetch_content"
+require_relative "fetch_raw"
 require_relative "list_directory"
 require_relative "read_file"
 require_relative "read_skill"
@@ -10,6 +12,7 @@ require_relative "web_search"
 require_relative "write_file"
 require_relative "search/code"
 require_relative "search/web"
+require_relative "search/web_fetch"
 require_relative "tool_call"
 require_relative "../workspace"
 
@@ -45,14 +48,16 @@ module Kward
     # @param prompt [Object, nil] interactive prompt bridge; must implement
     #   `ask_user_question` before that tool is advertised
     # @param web_search [WebSearch] live web search implementation
+    # @param web_fetch [WebFetch] specific URL fetch implementation
     # @param code_search [CodeSearch] public source/package search implementation
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
+      @web_fetch = web_fetch
       @code_search = code_search
       @skills = skills
       @web_search_enabled = web_search_enabled
@@ -103,7 +108,7 @@ module Kward
       tools = @tools.values_at(
         "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search"
       )
-      tools << @tools["web_search"] if web_search_available?
+      tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
       tools
@@ -112,6 +117,8 @@ module Kward
     def all_tools
       core_tools + [
         Tools::WebSearch.new(web_search: @web_search),
+        Tools::FetchContent.new(web_fetch: @web_fetch),
+        Tools::FetchRaw.new(web_fetch: @web_fetch),
         Tools::ReadSkill.new,
         Tools::AskUserQuestion.new(prompt: @prompt)
       ]

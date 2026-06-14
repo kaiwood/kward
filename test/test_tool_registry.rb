@@ -50,7 +50,7 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_tool_schemas_include_web_search_by_default
+  def test_tool_schemas_include_web_tools_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
 
@@ -58,6 +58,8 @@ class TestToolRegistry < KwardTestCase
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
         assert_includes tool_names, "web_search"
+        assert_includes tool_names, "fetch_content"
+        assert_includes tool_names, "fetch_raw"
       end
     end
   end
@@ -68,7 +70,7 @@ class TestToolRegistry < KwardTestCase
     assert_equal Kward::WebSearch::PROVIDERS, schema[:function][:parameters][:properties][:provider][:enum]
   end
 
-  def test_tool_schemas_exclude_web_search_when_disabled
+  def test_tool_schemas_exclude_web_tools_when_disabled
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({ "web_search" => { "enabled" => false } }))
 
@@ -76,11 +78,13 @@ class TestToolRegistry < KwardTestCase
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
         refute_includes tool_names, "web_search"
+        refute_includes tool_names, "fetch_content"
+        refute_includes tool_names, "fetch_raw"
       end
     end
   end
 
-  def test_tool_schemas_include_web_search_when_enabled
+  def test_tool_schemas_include_web_tools_when_enabled
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({ "web_search" => { "enabled" => true } }))
 
@@ -88,6 +92,8 @@ class TestToolRegistry < KwardTestCase
         tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
         assert_includes tool_names, "web_search"
+        assert_includes tool_names, "fetch_content"
+        assert_includes tool_names, "fetch_raw"
       end
     end
   end
@@ -223,6 +229,23 @@ class TestToolRegistry < KwardTestCase
 
     assert_equal "research result", result
     assert_equal [{ "queries" => ["ruby"] }], search.calls
+  end
+
+  def test_tool_registry_dispatches_fetch_content
+    fetch = Object.new
+    fetch.define_singleton_method(:fetch_content) do |args|
+      @calls ||= []
+      @calls << args
+      "fetched content"
+    end
+    fetch.define_singleton_method(:calls) { @calls }
+    registry = Kward::ToolRegistry.new(web_fetch: fetch, web_search_enabled: true)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("fetch_content", url: "https://example.com"), conversation)
+
+    assert_equal "fetched content", result
+    assert_equal [{ "url" => "https://example.com" }], fetch.calls
   end
 
   def test_tool_registry_dispatches_code_search

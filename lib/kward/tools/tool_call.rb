@@ -18,6 +18,8 @@ module Kward
       "list_directory" => "list_directory",
       "code_search" => "code_search",
       "web_search" => "web_search",
+      "fetch_content" => "fetch_content",
+      "fetch_raw" => "fetch_raw",
       "read_skill" => "read_skill",
       "ask_user_question" => "ask_user_question"
     }.freeze
