@@ -1,0 +1,109 @@
+module Kward
+  class CLI
+    module Plugins
+      private
+
+      def prompt_templates
+        @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
+      end
+
+      def plugin_registry
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+      end
+
+      def plugin_commands
+        plugin_registry.commands
+      end
+
+      def plugin_command_for(command)
+        plugin_registry.command_for(command)
+      end
+
+      def reload_plugins(conversation)
+        @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
+        conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
+        @prompt.say("\nPlugins reloaded.\n")
+      end
+
+      def reserved_slash_command_names
+        BUILTIN_SLASH_COMMAND_NAMES + prompt_templates.map(&:command)
+      end
+
+      def slash_command_entries
+        prompt_entries = prompt_templates.map do |template|
+          {
+            name: template.command,
+            description: template.description,
+            argument_hint: template.argument_hint
+          }
+        end
+        plugin_entries = plugin_commands.map(&:entry)
+        BUILTIN_SLASH_COMMANDS + prompt_entries + plugin_entries
+      end
+
+      def prompt_template_for(command)
+        prompt_templates.find { |template| template.command == command }
+      end
+
+      def expand_prompt_template(input)
+        PromptCommands.expand(input, templates: prompt_templates, reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
+      end
+
+      def run_plugin_command(name, argument, agent)
+        command = plugin_command_for(name)
+        return [false, nil] unless command
+
+        agent.conversation.plugin_registry ||= plugin_registry if agent.conversation.respond_to?(:plugin_registry)
+        context = plugin_context(agent.conversation, argument)
+        command.handler.call(argument, context)
+        [true, nil]
+      rescue StandardError => e
+        @prompt.say("\nPlugin command /#{name} error: #{e.message}\n")
+        [true, nil]
+      end
+
+      def plugin_context(conversation, args)
+        PluginRegistry::Context.new(
+          conversation: conversation,
+          args: args,
+          session: @active_session,
+          workspace_root: conversation.workspace_root,
+          say_callback: lambda { |message| @prompt.say("\n#{message}\n") }
+        )
+      end
+
+      def selected_slash_command_input(input)
+        return nil if prompt_interface?
+        return nil unless @prompt.respond_to?(:select)
+        return nil unless input.match?(%r{\A/[^\s/]*\z})
+        return nil if prompt_template_for(input.delete_prefix("/"))
+
+        prefix = input.delete_prefix("/").downcase
+        return nil if slash_command_entries.any? { |entry| entry[:name].downcase == prefix }
+
+        matches = slash_command_entries.select { |entry| entry[:name].downcase.start_with?(prefix) }
+        return nil if matches.empty?
+
+        labels = matches.map { |entry| slash_command_label(entry) }
+        choice = @prompt.select("Slash command>", labels)
+        entry = matches[labels.index(choice)]
+        entry ? "/#{entry[:name]}" : nil
+      end
+
+      def slash_command_label(entry)
+        hint = entry[:argument_hint].to_s.empty? ? "" : " #{entry[:argument_hint]}"
+        description = entry[:description].to_s.empty? ? "" : " - #{entry[:description]}"
+        "/#{entry[:name]}#{hint}#{description}"
+      end
+
+      def notify_plugin_transcript_event(event, conversation)
+        return unless conversation
+        return if plugin_registry.transcript_event_handlers.empty?
+
+        plugin_registry.notify_transcript_event(event, plugin_context(conversation, ""))
+      end
+
+    end
+  end
+end

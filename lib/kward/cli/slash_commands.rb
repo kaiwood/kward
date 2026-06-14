@@ -1,0 +1,108 @@
+module Kward
+  class CLI
+    module SlashCommands
+      private
+
+      def handle_local_slash_command(command, agent, session_store)
+        name, argument = parse_slash_command(command)
+        case name
+        when "status"
+          run_busy_local_command_and_requeue { print_status }
+          [true, nil]
+        when "stats"
+          run_busy_local_command_and_requeue { print_stats(argument) }
+          [true, nil]
+        when "memory"
+          activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
+          run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
+          [true, nil]
+        when "redraw"
+          run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
+          [true, nil]
+        when "settings"
+          configure_settings(agent.conversation)
+          [true, nil]
+        when "login"
+          login_interactively
+          [true, nil]
+        when "model"
+          models = run_busy_local_command_and_requeue { normalized_available_models }
+          configure_model(agent.conversation, models: models)
+          [true, nil]
+        when "openrouter/catalog"
+          run_busy_local_command_and_requeue { print_openrouter_catalog }
+          [true, nil]
+        when "reasoning"
+          configure_reasoning(agent.conversation)
+          [true, nil]
+        when "reload"
+          run_busy_local_command_and_requeue { reload_plugins(agent.conversation) }
+          [true, nil]
+        when "new"
+          [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
+        when "resume"
+          [true, run_busy_local_command_and_requeue do
+            path = argument.to_s.strip
+            path = select_session_path(session_store) if session_store && path.empty?
+            resume_session(session_store, path)
+          end]
+        when "name"
+          run_busy_local_command_and_requeue { rename_session(argument) }
+          [true, nil]
+        when "clone"
+          [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]
+        when "tree"
+          [true, run_busy_local_command_and_requeue { navigate_session_tree(session_store) }]
+        when "copy"
+          run_busy_local_command_and_requeue { copy_session_text(agent.conversation, argument) }
+          [true, nil]
+        when "export"
+          run_busy_local_command_and_requeue { export_session(agent.conversation, argument) }
+          [true, nil]
+        when "compact"
+          run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
+          [true, nil]
+        else
+          return run_plugin_command(name, argument, agent) if plugin_command_for(name)
+
+          [false, nil]
+        end
+      end
+
+      def parse_slash_command(command)
+        PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def print_status
+        lines = [STATUS_MESSAGE]
+        lines << ""
+        lines << auto_compaction_status_line
+        if @active_session
+          lines << "Session: #{@active_session.name || @active_session.id}"
+          lines << "File: #{@active_session.path}"
+        end
+        lines.compact!
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{lines.join("\n")}\n")
+      end
+
+      def auto_compaction_status_line
+        settings = Kward::Compaction::Settings.from_config
+        return "Auto-compaction: disabled" unless settings.enabled
+
+        context_window = composer_context_window
+        return "Auto-compaction: enabled, unknown context window" unless context_window.to_i.positive?
+
+        reserve_tokens = Kward::Compactor.auto_compaction_reserve_tokens(
+          context_window: context_window,
+          configured_reserve_tokens: settings.reserve_tokens
+        )
+        percent = ((reserve_tokens.to_f / context_window.to_i) * 100).round(1)
+        "Auto-compaction reserve: #{reserve_tokens} tokens (#{percent}% of #{context_window})"
+      rescue StandardError => e
+        warn "Auto-compaction status unavailable: #{e.message}"
+        nil
+      end
+
+    end
+  end
+end

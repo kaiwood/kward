@@ -35,6 +35,21 @@ require_relative "tools/tool_call"
 require_relative "tools/registry"
 require_relative "telemetry/stats"
 require_relative "workspace"
+require_relative "cli/commands"
+require_relative "cli/auth_commands"
+require_relative "cli/doctor"
+require_relative "cli/stats"
+require_relative "cli/runtime_helpers"
+require_relative "cli/slash_commands"
+require_relative "cli/memory_commands"
+require_relative "cli/settings"
+require_relative "cli/sessions"
+require_relative "cli/compaction"
+require_relative "cli/rendering"
+require_relative "cli/prompt_interface"
+require_relative "cli/plugins"
+require_relative "cli/interactive_turn"
+require_relative "cli/tool_summaries"
 
 module Kward
   # Command-line interface for interactive chat, one-shot prompts, login,
@@ -48,6 +63,22 @@ module Kward
     INTERACTIVE_EVENT_DRAIN_LIMIT = 100
     BUILTIN_SLASH_COMMANDS = PromptCommands::BUILTIN_COMMANDS
     BUILTIN_SLASH_COMMAND_NAMES = PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES
+
+    include CLI::Commands
+    include CLI::AuthCommands
+    include CLI::Doctor
+    include CLI::Stats
+    include CLI::RuntimeHelpers
+    include CLI::SlashCommands
+    include CLI::MemoryCommands
+    include CLI::Settings
+    include CLI::Sessions
+    include CLI::CompactionCommands
+    include CLI::Rendering
+    include CLI::PromptInterfaceSupport
+    include CLI::Plugins
+    include CLI::InteractiveTurn
+    include CLI::ToolSummaries
 
     def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new, session_store: nil, context_usage: ContextUsage.new)
       @argv = argv
@@ -233,68 +264,10 @@ module Kward
       assistant_streamed ? "" : render_markdown_transcript(answer)
     end
 
-    def handle_auth_command(arguments)
-      if help_option_arguments?(arguments)
-        print_command_help("auth")
-        return
-      end
 
-      case arguments
-      when ["status"]
-        print_auth_status
-      when ["logout"]
-        logout_auth
-      else
-        raise ArgumentError, command_usage("auth")
-      end
-    end
 
-    def print_auth_status
-      config = safely_read_config.to_h
-      lines = ["#{colored("Auth Status", :green, :bold)}", ""]
-      lines << auth_status_line("OpenAI OAuth", File.exist?(OpenAIOAuth.default_auth_path), OpenAIOAuth.default_auth_path)
-      lines << auth_status_line("GitHub OAuth", File.exist?(GithubOAuth.default_auth_path), GithubOAuth.default_auth_path)
-      lines << auth_status_line("OpenRouter API key", !config["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?, ConfigFiles.config_path)
-      @prompt.say lines.join("\n")
-    end
 
-    def auth_status_line(label, configured, location)
-      status = configured ? :ok : :warning
-      message = configured ? "configured" : "not configured"
-      "#{doctor_mark(status)} #{label}: #{message} (#{location})"
-    end
 
-    def logout_auth
-      removed = []
-      [OpenAIOAuth.default_auth_path, GithubOAuth.default_auth_path].each do |path|
-        next unless File.exist?(path)
-
-        File.delete(path)
-        removed << path
-      end
-      removed << "OpenRouter API key" if OpenRouterAPIKey.new.logout
-
-      if removed.empty?
-        @prompt.say "No saved credentials found."
-      else
-        @prompt.say "Removed #{removed.length} saved credential#{removed.length == 1 ? "" : "s"}."
-      end
-    end
-
-    def login(provider: nil, oauth: nil)
-      provider = provider.to_s.downcase
-      if provider == "openrouter"
-        auth = oauth || OpenRouterAPIKey.new
-        path = auth.login(prompt: @prompt)
-        @prompt.say("#{colored("Saved", :green, :bold)} OpenRouter API key to #{path}")
-        return
-      end
-
-      oauth ||= provider == "github" ? GithubOAuth.new : OpenAIOAuth.new
-      path = oauth.login(prompt: @prompt)
-      name = provider == "github" ? "GitHub" : "OpenAI"
-      @prompt.say("#{colored("Saved", :green, :bold)} #{name} OAuth login to #{path}")
-    end
 
     def interactive_loop(agent: nil)
       setup_interactive_prompt
@@ -374,2707 +347,267 @@ module Kward
       @stdin.read.strip
     end
 
-    private
-
-    def help_command?
-      ["help", "--help", "-h"].include?(@argv.first) && @argv.length <= 2
-    end
-
-    def version_command?
-      ["version", "--version", "-v"].include?(@argv.first) && @argv.length == 1
-    end
-
-    def help_option_arguments?(arguments)
-      arguments.length == 1 && ["help", "--help", "-h"].include?(arguments.first)
-    end
-
-    def one_shot_prompt_argument
-      prompt = @argv.join(" ").strip
-      prompt.empty? ? nil : prompt
-    end
-
-    def print_command_help(command_name = nil)
-      if command_name.to_s.empty? || ["--help", "-h"].include?(command_name)
-        print_help
-        return
-      end
-
-      help = command_help[command_name]
-      raise ArgumentError, "Unknown command: #{command_name}" unless help
-
-      @prompt.say render_command_help(command_name, help)
-    end
-
-    def print_help
-      command = ->(text) { colored(text, :green, :bold) }
-      option = ->(text) { colored(text, :cyan) }
-      heading = ->(text) { colored(text, :blue, :bold) }
-
-      @prompt.say <<~HELP.rstrip
-        #{colored("Kward", :green, :bold)} - an extendable CLI coding agent
-
-        #{heading.call("Usage")}
-          #{command.call("kward")}                              Start an interactive chat
-          #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
-          #{command.call("kward login")}                        Sign in or save provider credentials
-          #{command.call("kward auth status")}                  Show saved credential status
-          #{command.call("kward init")}                         Install starter prompts and AGENTS.md
-          #{command.call("kward doctor")}                       Check local Kward setup
-          #{command.call("kward pan")}                          Start Pan mode web UI
-          #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
-
-        #{heading.call("Commands")}
-          #{command.call("help")}                               Show this help
-          #{command.call("version")}                            Show the installed Kward version
-          #{command.call("login")} [openrouter|github]           Sign in with OpenAI, OpenRouter, or GitHub
-          #{command.call("auth status|logout")}                 Show or clear saved credentials
-          #{command.call("init")}                               Install starter prompts and AGENTS.md
-          #{command.call("doctor")}                             Check local Kward setup
-          #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
-          #{command.call("pan")}                                Start Pan mode web UI
-          #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
-
-        #{heading.call("Options")}
-          #{option.call("--working-directory=PATH")}             Run Kward from PATH
-          #{option.call("--help")}, #{option.call("-h")}                         Show this help
-          #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
-
-        #{heading.call("Examples")}
-          #{command.call("kward")}
-          #{command.call("kward")} #{option.call('"Review this diff"')}
-          #{command.call("git diff | kward")} #{option.call('"Review this diff"')}
-          #{command.call("kward login openrouter")}
-          #{command.call("kward stats tokens today --bucket hour")}
-
-        Command names take precedence. Anything else is sent as a one-shot prompt.
-      HELP
-    end
-
-    def command_help
-      {
-        "help" => {
-          usage: "kward help [command]",
-          description: "Show the top-level command overview or help for one command.",
-          examples: ["kward help", "kward help pan"]
-        },
-        "version" => {
-          usage: "kward version",
-          description: "Show the installed Kward version.",
-          examples: ["kward version", "kward --version"]
-        },
-        "login" => {
-          usage: "kward login [openrouter|github]",
-          description: "Sign in with OpenAI, OpenRouter, or GitHub.",
-          examples: ["kward login", "kward login openrouter", "kward login github"]
-        },
-        "auth" => {
-          usage: "kward auth status|logout",
-          description: "Show or clear saved provider credentials without printing secrets.",
-          examples: ["kward auth status", "kward auth logout"]
-        },
-        "init" => {
-          usage: "kward init",
-          description: "Install starter prompts and base AGENTS.md into your config directory.",
-          examples: ["kward init"]
-        },
-        "doctor" => {
-          usage: "kward doctor",
-          description: "Check local Kward configuration, workspace, auth hints, and writable directories.",
-          examples: ["kward doctor", "kward --working-directory ~/code/project doctor"]
-        },
-        "stats" => {
-          usage: "kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]",
-          description: "Export local token telemetry as CSV.",
-          examples: ["kward stats tokens today", "kward stats tokens today --bucket hour", "kward stats tokens week --output tokens.csv"]
-        },
-        "pan" => {
-          usage: "kward pan",
-          description: "Start Pan mode, a minimal LAN web UI with a prompt textarea and transcript.",
-          examples: ["kward pan", "kward --working-directory ~/code/project pan"]
-        },
-        "rpc" => {
-          usage: "kward rpc",
-          description: "Start the experimental JSON-RPC backend for UI clients.",
-          examples: ["kward rpc", "kward --working-directory ~/code/project rpc"]
-        }
-      }
-    end
-
-    def render_command_help(name, help)
-      heading = ->(text) { colored(text, :blue, :bold) }
-      command = ->(text) { colored(text, :green, :bold) }
-
-      lines = [
-        "#{command.call(name)} - #{help.fetch(:description)}",
-        "",
-        heading.call("Usage"),
-        "  #{command.call(help.fetch(:usage))}"
-      ]
-      examples = help.fetch(:examples, [])
-      if examples.any?
-        lines << ""
-        lines << heading.call("Examples")
-        examples.each { |example| lines << "  #{command.call(example)}" }
-      end
-      lines.join("\n")
-    end
-
-    def command_usage(name)
-      "Usage: #{command_help.fetch(name).fetch(:usage)}"
-    end
-
-    def print_version
-      @prompt.say "kward #{VERSION}"
-    end
-
-    def print_doctor
-      lines = ["#{colored("Kward Doctor", :green, :bold)}", ""]
-      doctor_checks.each do |check|
-        lines << "#{doctor_mark(check.fetch(:status))} #{check.fetch(:label)}: #{check.fetch(:message)}"
-      end
-      @prompt.say lines.join("\n")
-    end
-
-    def doctor_checks
-      config = safely_read_config
-      [
-        doctor_config_check,
-        doctor_config_json_check(config),
-        doctor_directory_check("Config directory", ConfigFiles.config_dir),
-        doctor_directory_check("Session directory", SessionStore.new(cwd: current_workspace_root).session_dir, create: true),
-        doctor_workspace_check,
-        doctor_model_check,
-        doctor_auth_check(config),
-        doctor_pan_check(config),
-        { status: :ok, label: "Color", message: @color_enabled ? "enabled" : "disabled" }
-      ]
-    end
-
-    def safely_read_config
-      ConfigFiles.read_config
-    rescue StandardError
-      nil
-    end
-
-    def doctor_config_check
-      path = ConfigFiles.config_path
-      if File.exist?(path)
-        readable = File.readable?(path)
-        return { status: readable ? :ok : :error, label: "Config", message: readable ? path : "not readable: #{path}" }
-      end
-
-      { status: :warning, label: "Config", message: "not found: #{path}" }
-    end
-
-    def doctor_config_json_check(config)
-      return { status: :error, label: "Config JSON", message: "invalid or unreadable" } unless config.is_a?(Hash)
-
-      { status: :ok, label: "Config JSON", message: "valid" }
-    end
-
-    def doctor_directory_check(label, path, create: false)
-      FileUtils.mkdir_p(path, mode: 0o700) if create
-      if Dir.exist?(path) && File.writable?(path)
-        { status: :ok, label: label, message: "writable: #{path}" }
-      elsif Dir.exist?(path)
-        { status: :error, label: label, message: "not writable: #{path}" }
-      else
-        { status: :error, label: label, message: "missing: #{path}" }
-      end
-    rescue StandardError => e
-      { status: :error, label: label, message: e.message }
-    end
-
-    def doctor_workspace_check
-      root = current_workspace_root
-      return { status: :ok, label: "Workspace", message: root } if Dir.exist?(root) && File.directory?(root)
-
-      { status: :error, label: "Workspace", message: "not a directory: #{root}" }
-    end
-
-    def doctor_model_check
-      provider = @client.current_provider if @client.respond_to?(:current_provider)
-      model = @client.current_model if @client.respond_to?(:current_model)
-      parts = [provider, model].compact.map(&:to_s).reject(&:empty?)
-      return { status: :ok, label: "Model", message: parts.join(" / ") } if parts.any?
-
-      { status: :warning, label: "Model", message: "not configured" }
-    rescue StandardError => e
-      { status: :warning, label: "Model", message: e.message }
-    end
-
-    def doctor_auth_check(config)
-      openai_auth = OpenAIOAuth.default_auth_path
-      github_auth = GithubOAuth.default_auth_path
-      has_openrouter = !config.to_h["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?
-      paths = []
-      paths << "OpenAI OAuth" if File.exist?(openai_auth)
-      paths << "GitHub OAuth" if File.exist?(github_auth)
-      paths << "OpenRouter API key" if has_openrouter
-      return { status: :ok, label: "Auth", message: paths.join(", ") } if paths.any?
-
-      { status: :warning, label: "Auth", message: "no saved credentials found; run `kward login`" }
-    end
-
-    def doctor_pan_check(config)
-      pan = config.to_h["pan_mode"] || config.to_h["panMode"] || {}
-      if !pan["username"].to_s.empty? && !pan["password"].to_s.empty?
-        { status: :ok, label: "Pan mode", message: "credentials configured" }
-      else
-        { status: :warning, label: "Pan mode", message: "username/password not configured" }
-      end
-    end
-
-    def doctor_mark(status)
-      case status
-      when :ok
-        colored("✓", :green, :bold)
-      when :warning
-        colored("!", :yellow, :bold)
-      else
-        colored("✗", :red, :bold)
-      end
-    end
-
-    def install_starter_pack
-      result = StarterPackInstaller.install
-      installed_count = result.installed.length
-      skipped_count = result.skipped.length
-      @prompt.say("Installed #{installed_count} starter pack file#{installed_count == 1 ? "" : "s"}.")
-      @prompt.say("Skipped #{skipped_count} existing starter pack file#{skipped_count == 1 ? "" : "s"}.") if skipped_count.positive?
-    rescue StandardError => e
-      warn "Failed to install starter pack: #{e.message}"
-      exit 1
-    end
-
-    def pan_mode?
-      ["pan", "--pan-mode"].include?(@argv.first)
-    end
-
-    def export_token_stats(arguments)
-      options = parse_token_stats_options(arguments)
-      csv = TelemetryStats.new.token_usage_csv(options[:range], bucket: options[:bucket])
-      if options[:output]
-        File.write(options[:output], csv)
-      else
-        $stdout.write(csv)
-      end
-    rescue ArgumentError => e
-      warn e.message
-      warn "Usage: kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]"
-      exit 1
-    end
-
-    def parse_token_stats_options(arguments)
-      remaining = []
-      bucket = nil
-      output = nil
-      index = 0
-      while index < arguments.length
-        argument = arguments[index]
-        case argument
-        when "--bucket"
-          index += 1
-          raise ArgumentError, "Missing value for --bucket" if index >= arguments.length
-
-          bucket = arguments[index]
-        when /\A--bucket=(.+)\z/
-          bucket = Regexp.last_match(1)
-        when "--output"
-          index += 1
-          raise ArgumentError, "Missing value for --output" if index >= arguments.length
-
-          output = arguments[index]
-        when /\A--output=(.+)\z/
-          output = Regexp.last_match(1)
-        else
-          remaining << argument
-        end
-        index += 1
-      end
-      { range: remaining.join(" "), bucket: bucket, output: output }
-    end
-
-    def extract_global_options(arguments)
-      remaining = []
-      index = 0
-      while index < arguments.length
-        argument = arguments[index]
-        case argument
-        when "--"
-          @prompt_delimited = true
-          remaining.concat(arguments[(index + 1)..] || [])
-          break
-        when "--working-directory"
-          index += 1
-          raise ArgumentError, "Missing value for --working-directory" if index >= arguments.length
-
-          @working_directory = expanded_working_directory(arguments[index])
-        when /\A--working-directory=(.*)\z/
-          @working_directory = expanded_working_directory(Regexp.last_match(1))
-        else
-          remaining << argument
-        end
-        index += 1
-      end
-      remaining
-    end
-
-    def expanded_working_directory(path)
-      value = path.to_s.strip
-      raise ArgumentError, "Missing value for --working-directory" if value.empty?
-
-      expanded = File.expand_path(value)
-      raise ArgumentError, "Working directory does not exist: #{expanded}" unless Dir.exist?(expanded)
-      raise ArgumentError, "Working directory is not a directory: #{expanded}" unless File.directory?(expanded)
-
-      expanded
-    end
-
-    def with_working_directory
-      return yield unless @working_directory
-
-      Dir.chdir(@working_directory) { yield }
-    end
-
-    def interactive_session_store(agent)
-      return @session_store if @session_store
-      return nil if agent
-
-      SessionStore.new
-    end
-
-    def resume_last_session(session_store)
-      return nil unless session_auto_resume_enabled?
-
-      path = session_store.remembered_last_session_path if session_store.respond_to?(:remembered_last_session_path)
-      return nil if path.to_s.empty?
-
-      @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
-      reset_session_diff(@active_session.path)
-      track_session(@active_session)
-      @resumed_last_session = true
-      build_interactive_agent(conversation)
-    rescue StandardError
-      nil
-    end
-
-    def render_resumed_last_session_transcript(conversation)
-      restore_prompt_transcript do
-        @prompt.say("\nResumed session: #{@active_session.path}\n")
-        render_conversation_transcript(conversation)
-      end
-    end
-
-    def remember_active_session(session_store)
-      return unless session_store&.respond_to?(:remember_last_session)
-      return unless @active_session&.path && File.file?(@active_session.path)
-
-      session_store.remember_last_session(@active_session)
-    end
-
-    def build_new_session_agent(session_store)
-      @active_session = track_session(session_store.create(model: current_model_id, reasoning_effort: current_reasoning_effort))
-      reset_session_diff
-      conversation = new_conversation(workspace_root: session_store.cwd)
-      @active_session.attach(conversation)
-      build_interactive_agent(conversation)
-    end
-
-    def track_session(session)
-      @cleanup_sessions << session if session
-      session
-    end
-
-    def reset_session_diff(path = nil)
-      @session_diff = path ? SessionDiff.from_session_file(path) : SessionDiff.new
-    end
-
-    def update_session_diff(content, tool_call: nil)
-      return unless mutation_tool_call?(tool_call)
-      return unless @session_diff&.add_tool_result(content)
-
-      @prompt.redraw if @prompt.respond_to?(:redraw)
-    end
-
-    def mutation_tool_call?(tool_call)
-      ["edit_file", "write_file", "edit", "write"].include?(ToolCall.name(tool_call).to_s)
-    end
-
-    def cleanup_unused_sessions
-      @cleanup_sessions.reverse_each do |session|
-        session.delete_if_unused if session.respond_to?(:delete_if_unused)
-      end
-      @cleanup_sessions.clear
-    end
-
-    def cleanup_replaced_session(previous_session)
-      return unless previous_session
-      return if @active_session && File.expand_path(previous_session.path) == File.expand_path(@active_session.path)
-
-      previous_session.delete_if_unused if previous_session.respond_to?(:delete_if_unused)
-    end
-
-    def new_conversation(workspace_root: current_workspace_root)
-      Conversation.new(workspace_root: workspace_root, model: current_model_id, reasoning_effort: current_reasoning_effort, plugin_registry: plugin_registry)
-    end
-
-    def update_assistant_prompt(conversation)
-      @assistant_prompt = assistant_prompt_label(conversation)
-      @prompt.update_assistant_label(assistant_prompt_name) if @prompt.respond_to?(:update_assistant_label)
-      @assistant_prompt
-    end
-
-    def assistant_prompt_label(conversation)
-      label = ConfigFiles.active_persona_label(workspace_root: conversation.workspace_root, model: conversation.model)
-      "#{label || "Assistant"}>"
-    rescue StandardError
-      "Assistant>"
-    end
-
-    def assistant_prompt_name
-      assistant_output_prompt.delete_suffix(">")
-    end
-
-    def assistant_output_prompt
-      @assistant_prompt || "Assistant>"
-    end
-
-    def build_interactive_agent(conversation)
-      conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
-      workspace = configured_workspace(root: conversation.workspace_root)
-      tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
-      @footer_conversation = conversation
-      @footer_tool_registry = tool_registry
-      Agent.new(
-        client: @client,
-        tool_registry: tool_registry,
-        conversation: conversation
-      )
-    end
-
-    def handle_interactive_shell_command(input, agent)
-      command = input.to_s.sub(/\A!\s*/, "")
-      if command.strip.empty?
-        @prompt.say("\nShell command is required after !\n")
-        return true
-      end
-
-      run_busy_local_command_and_requeue(activity: "running") do
-        result = configured_workspace(root: interactive_workspace_root(agent)).run_shell_command(command)
-        @prompt.say("\n#{colored("Shell>", :green, :bold)} #{command}\n#{result}\n")
-      end
-      true
-    end
-
-    def shell_command_input?(input)
-      input.to_s.start_with?("!")
-    end
-
-    def configured_workspace(root: current_workspace_root)
-      Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
-    end
-
-    def workspace_guardrails_enabled?
-      ConfigFiles.workspace_guardrails_enabled?(safely_read_config.to_h)
-    end
-
-    def interactive_workspace_root(agent)
-      conversation = agent.conversation if agent.respond_to?(:conversation)
-      return conversation.workspace_root if conversation&.respond_to?(:workspace_root)
-
-      current_workspace_root
-    end
-
-    def handle_local_slash_command(command, agent, session_store)
-      name, argument = parse_slash_command(command)
-      case name
-      when "status"
-        run_busy_local_command_and_requeue { print_status }
-        [true, nil]
-      when "stats"
-        run_busy_local_command_and_requeue { print_stats(argument) }
-        [true, nil]
-      when "memory"
-        activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
-        run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
-        [true, nil]
-      when "redraw"
-        run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
-        [true, nil]
-      when "settings"
-        configure_settings(agent.conversation)
-        [true, nil]
-      when "login"
-        login_interactively
-        [true, nil]
-      when "model"
-        models = run_busy_local_command_and_requeue { normalized_available_models }
-        configure_model(agent.conversation, models: models)
-        [true, nil]
-      when "openrouter/catalog"
-        run_busy_local_command_and_requeue { print_openrouter_catalog }
-        [true, nil]
-      when "reasoning"
-        configure_reasoning(agent.conversation)
-        [true, nil]
-      when "reload"
-        run_busy_local_command_and_requeue { reload_plugins(agent.conversation) }
-        [true, nil]
-      when "new"
-        [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
-      when "resume"
-        [true, run_busy_local_command_and_requeue do
-          path = argument.to_s.strip
-          path = select_session_path(session_store) if session_store && path.empty?
-          resume_session(session_store, path)
-        end]
-      when "name"
-        run_busy_local_command_and_requeue { rename_session(argument) }
-        [true, nil]
-      when "clone"
-        [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]
-      when "tree"
-        [true, run_busy_local_command_and_requeue { navigate_session_tree(session_store) }]
-      when "copy"
-        run_busy_local_command_and_requeue { copy_session_text(agent.conversation, argument) }
-        [true, nil]
-      when "export"
-        run_busy_local_command_and_requeue { export_session(agent.conversation, argument) }
-        [true, nil]
-      when "compact"
-        run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
-        [true, nil]
-      else
-        return run_plugin_command(name, argument, agent) if plugin_command_for(name)
-
-        [false, nil]
-      end
-    end
-
-    def parse_slash_command(command)
-      PromptCommands.parse(command) || [nil, ""]
-    end
-
-    def memory_summarize_command?(argument)
-      subcommand, = argument.to_s.strip.split(/\s+/, 2)
-      ["summarize", "learn"].include?(subcommand)
-    end
-
-    def print_status
-      lines = [STATUS_MESSAGE]
-      lines << ""
-      lines << auto_compaction_status_line
-      if @active_session
-        lines << "Session: #{@active_session.name || @active_session.id}"
-        lines << "File: #{@active_session.path}"
-      end
-      lines.compact!
-      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{lines.join("\n")}\n")
-    end
-
-    def auto_compaction_status_line
-      settings = Kward::Compaction::Settings.from_config
-      return "Auto-compaction: disabled" unless settings.enabled
-
-      context_window = composer_context_window
-      return "Auto-compaction: enabled, unknown context window" unless context_window.to_i.positive?
-
-      reserve_tokens = Kward::Compactor.auto_compaction_reserve_tokens(
-        context_window: context_window,
-        configured_reserve_tokens: settings.reserve_tokens
-      )
-      percent = ((reserve_tokens.to_f / context_window.to_i) * 100).round(1)
-      "Auto-compaction reserve: #{reserve_tokens} tokens (#{percent}% of #{context_window})"
-    rescue StandardError => e
-      warn "Auto-compaction status unavailable: #{e.message}"
-      nil
-    end
-
-    def print_stats(argument)
-      result = TelemetryStats.new.collect(argument)
-      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{TelemetryStats.format(result)}\n")
-    rescue ArgumentError => e
-      message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
-      @prompt.say("\n#{message}\n")
-    end
-
-    def handle_memory_command(argument, agent)
-      subcommand, rest = argument.to_s.strip.split(/\s+/, 2)
-      manager = Memory::Manager.new
-      case subcommand
-      when "enable"
-        manager.enable
-        agent.conversation.refresh_system_message!
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory enabled.\n")
-      when "disable"
-        manager.disable
-        agent.conversation.memory_context = nil
-        agent.conversation.refresh_system_message!
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory disabled.\n")
-      when "auto-summary"
-        case rest.to_s.strip
-        when "enable", "on"
-          manager.auto_summary_enable
-          @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory auto-summary enabled.\n")
-        when "disable", "off"
-          manager.auto_summary_disable
-          @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Memory auto-summary disabled.\n")
-        else
-          @prompt.say("\nUsage: /memory auto-summary enable|disable\n")
-        end
-      when "core"
-        record = manager.add_core(unquote_argument(rest))
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Added core memory #{record["id"]}.\n")
-      when "add"
-        record = manager.add_soft(unquote_argument(rest), scope: "workspace:#{agent.conversation.workspace_root}")
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Added soft memory #{record["id"]}.\n")
-      when "list"
-        @prompt.say("\n#{format_memory_list(manager.hierarchy(workspace_root: agent.conversation.workspace_root))}\n")
-      when "forget"
-        forgotten = manager.forget_memory(rest.to_s.strip)
-        @prompt.say("\n#{forgotten ? "Forgot #{rest.to_s.strip}." : "No memory found for #{rest.to_s.strip}."}\n")
-      when "promote"
-        record = manager.promote_memory(rest.to_s.strip)
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Promoted memory #{record["id"]}.\n")
-      when "relax"
-        record = manager.relax_core(rest.to_s.strip, workspace_root: agent.conversation.workspace_root)
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Relaxed memory #{record["id"]}.\n")
-      when "inspect"
-        @prompt.say("\n#{JSON.pretty_generate(manager.inspect_memory)}\n")
-      when "why"
-        explanation = agent.conversation.last_memory_retrieval || manager.explain_retrieval
-        @prompt.say("\n#{format_memory_why(explanation)}\n")
-      when "summarize", "learn"
-        records = summarize_memory(agent.conversation, manager: manager)
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} Learned #{records.length} soft #{records.length == 1 ? "memory" : "memories"}.\n")
-      else
-        @prompt.say("\nUsage: /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize\n")
-      end
-    rescue StandardError => e
-      @prompt.say("\nMemory command failed: #{e.message}\n")
-    end
-
-    def summarize_memory(conversation, manager: Memory::Manager.new)
-      records = manager.summarize_conversation(conversation, client: @client)
-      @active_session&.update_memory_state(session_memories: conversation.session_memories, last_retrieval: conversation.last_memory_retrieval)
-      records
-    end
-
-    def unquote_argument(text)
-      value = text.to_s.strip
-      value = value[1...-1] if value.length >= 2 && ((value.start_with?("\"") && value.end_with?("\"")) || (value.start_with?("'") && value.end_with?("'")))
-      value
-    end
-
-    def format_memory_list(memories)
-      sections = [
-        ["Global Core Memories:", Array(memories["global_core"])],
-        ["Workspace Core Memories:", Array(memories["workspace_core"])],
-        ["Workspace Soft Memories:", Array(memories["workspace_soft"])]
-      ]
-
-      sections.flat_map do |heading, records|
-        lines = [heading]
-        records.each { |item| lines << "- #{item["id"]} [#{item["scope"]}] #{item["text"]}" }
-        lines << "- none" if records.empty?
-        lines
-      end.join("\n")
-    end
-
-    def format_memory_why(explanation)
-      reasons = Array(explanation["reasons"])
-      return explanation["message"] || "No memories were retrieved." if reasons.empty?
-
-      (["Memory retrieval reasons:"] + reasons.map { |item| "- #{item["id"]} (#{item["layer"]}, score #{item["score"]}): #{Array(item["reasons"]).join("; ")}" }).join("\n")
-    end
-
-    def run_busy_local_command(activity: "loading")
-      return yield unless prompt_interface?
-
-      queued_inputs = []
-      result = nil
-      error = nil
-      @prompt.begin_busy_input("You>", activity: activity) if @prompt.respond_to?(:begin_busy_input)
-
-      worker = Thread.new do
-        result = yield
-      rescue StandardError => e
-        error = e
-      end
-
-      while worker.alive?
-        collect_queued_input(queued_inputs)
-        sleep 0.02
-      end
-      worker.join
-      drain_queued_input(queued_inputs)
-      raise error if error
-
-      [result, queued_inputs]
-    ensure
-      @prompt.finish_busy_input if prompt_interface? && @prompt.respond_to?(:finish_busy_input)
-    end
-
-    def run_busy_local_command_and_requeue(activity: "loading")
-      return yield unless prompt_interface?
-
-      result, queued_inputs = run_busy_local_command(activity: activity) { yield }
-      queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
-      result
-    end
-
-    def current_workspace_root
-      return @active_session.cwd.to_s unless @active_session&.cwd.to_s.empty?
-      return @working_directory if @working_directory
-
-      Dir.pwd
-    end
-
-    def configure_settings(conversation = nil)
-      unless settings_overlay_available?
-        @prompt.say("\nSettings overlay is unavailable in this prompt.\n")
-        return
-      end
-
-      loop do
-        selected = @prompt.select("Settings category", settings_category_choices, title: "Settings")
-        category = selected_settings_category(selected)
-        break unless category
-
-        break if category == "done"
-
-        handle_settings_category(category, conversation)
-      end
-    rescue StandardError => e
-      @prompt.say("\nSettings error: #{e.message}\n")
-    end
-
-    def settings_category_choices
-      [
-        "Model & Reasoning",
-        "Accounts",
-        "Memory",
-        "Interface",
-        "Tools & Search",
-        "Context & Compaction",
-        "Personalization",
-        "Logging",
-        "Advanced",
-        "Done"
-      ]
-    end
-
-    def selected_settings_category(selected)
-      text = selected.to_s.downcase
-      return nil if text.empty?
-      return "done" if text.start_with?("done")
-      return "model" if text.start_with?("model")
-      return "accounts" if text.start_with?("accounts")
-      return "memory" if text.start_with?("memory")
-      return "interface" if text.start_with?("interface")
-      return "tools" if text.start_with?("tools")
-      return "context" if text.start_with?("context")
-      return "personalization" if text.start_with?("personalization")
-      return "logging" if text.start_with?("logging")
-      return "advanced" if text.start_with?("advanced")
-
-      nil
-    end
-
-    def handle_settings_category(category, conversation)
-      case category
-      when "model"
-        configure_model_settings(conversation)
-      when "accounts"
-        configure_account_settings
-      when "memory"
-        configure_memory_settings(conversation)
-      when "interface"
-        configure_interface_settings
-      when "tools"
-        configure_tools_settings
-      when "context"
-        configure_context_settings
-      when "personalization"
-        configure_personalization_settings(conversation)
-      when "logging"
-        configure_logging_settings
-      when "advanced"
-        show_advanced_settings
-      end
-    end
-
-    def configure_model_settings(conversation)
-      selected = @prompt.select("Model & Reasoning", ["Provider", "Default model", "Reasoning effort", "Back"], title: "Settings")
-      case selected.to_s.downcase
-      when /\Aprovider/
-        configure_provider(conversation)
-      when /\Adefault model/
-        configure_model(conversation)
-      when /\Areasoning effort/
-        configure_reasoning(conversation)
-      end
-    end
-
-    def configure_provider(conversation)
-      selected = @prompt.select("Provider", provider_choices, title: "Settings")
-      provider = selected_provider(selected)
-      return unless provider
-
-      ConfigFiles.update_config("provider" => ModelInfo.config_provider_for_provider(provider))
-      reload_client_config
-      refresh_conversation_runtime(conversation)
-      @prompt.redraw if @prompt.respond_to?(:redraw)
-    end
-
-    def provider_choices
-      current = current_model_provider
-      ["Codex", "OpenRouter", "Copilot"].map do |provider|
-        label = provider.dup
-        label += " (current)" if provider == current
-        label
-      end
-    end
-
-    def selected_provider(selected)
-      text = selected.to_s.downcase
-      return "Codex" if text.start_with?("codex")
-      return "OpenRouter" if text.start_with?("openrouter")
-      return "Copilot" if text.start_with?("copilot")
-
-      nil
-    end
-
-    def configure_account_settings
-      selected = @prompt.select("Accounts", account_setting_choices, title: "Settings")
-      case selected.to_s.downcase
-      when /\Aopenai/
-        login(provider: "openai")
-        reload_client_config
-      when /\Agithub/
-        login(provider: "github")
-        reload_client_config
-      when /\Aopenrouter/
-        login(provider: "openrouter")
-        reload_client_config
-      when /\Astatus/
-        print_auth_status
-      end
-    end
-
-    def account_setting_choices
-      config = safely_read_config.to_h
-      [
-        "OpenAI login (#{File.exist?(OpenAIOAuth.default_auth_path) ? "configured" : "not configured"})",
-        "GitHub login (#{File.exist?(GithubOAuth.default_auth_path) ? "configured" : "not configured"})",
-        "OpenRouter API key (#{openrouter_key_status(config)})",
-        "Status",
-        "Back"
-      ]
-    end
-
-    def openrouter_key_status(config)
-      return "configured via environment" unless ENV["OPENROUTER_API_KEY"].to_s.empty?
-
-      config["openrouter_api_key"].to_s.empty? ? "not configured" : "configured"
-    end
-
-    def configure_memory_settings(conversation)
-      selected = @prompt.select("Memory", memory_setting_choices, title: "Settings")
-      case selected.to_s.downcase
-      when /\Aenable memory/, /\Adisable memory/
-        set_memory_enabled(!memory_enabled?)
-        conversation&.refresh_system_message!
-        @prompt.say("\nMemory #{memory_enabled? ? "enabled" : "disabled"}.\n")
-      when /\Aenable auto-summary/, /\Adisable auto-summary/
-        set_memory_auto_summary_enabled(!memory_auto_summary_enabled?)
-        @prompt.say("\nMemory auto-summary #{memory_auto_summary_enabled? ? "enabled" : "disabled"}.\n")
-      when /\Amanage/
-        @prompt.say("\nUse /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize.\n")
-      end
-    end
-
-    def memory_setting_choices
-      [
-        "#{memory_enabled? ? "Disable" : "Enable"} memory (currently #{on_off(memory_enabled?)})",
-        "#{memory_auto_summary_enabled? ? "Disable" : "Enable"} auto-summary (currently #{on_off(memory_auto_summary_enabled?)})",
-        "Manage memories with /memory",
-        "Back"
-      ]
-    end
-
-    def memory_enabled?
-      memory = safely_read_config.to_h["memory"]
-      memory.is_a?(Hash) && memory["enabled"] == true
-    end
-
-    def memory_auto_summary_enabled?
-      memory = safely_read_config.to_h["memory"]
-      memory.is_a?(Hash) && memory["auto_summary"] == true
-    end
-
-    def set_memory_enabled(enabled)
-      update_nested_config("memory", "enabled" => enabled)
-    end
-
-    def set_memory_auto_summary_enabled(enabled)
-      update_nested_config("memory", "auto_summary" => enabled)
-    end
-
-    def configure_interface_settings
-      selected = @prompt.select("Interface", interface_setting_choices, title: "Settings")
-      case selected.to_s.downcase
-      when /\Aoverlay alignment/
-        settings = ConfigFiles.overlay_settings
-        alignment = choose_overlay_setting("Overlay alignment", overlay_alignment_choices(settings), ConfigFiles::OVERLAY_ALIGNMENTS)
-        return unless alignment
-
-        @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("alignment" => alignment))
-      when /\Aoverlay width/
-        settings = ConfigFiles.overlay_settings
-        width = choose_overlay_setting("Overlay width", overlay_width_choices(settings), ConfigFiles::OVERLAY_WIDTHS)
-        return unless width
-
-        @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("width" => width))
-      when /\Ashow busy help/, /\Ahide busy help/
-        set_composer_busy_help(!composer_busy_help?)
-        @prompt.say("\nBusy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.\n")
-      when /\Ashow startup banner/, /\Ahide startup banner/
-        set_banner_enabled(!banner_enabled?)
-        @prompt.say("\nStartup banner #{banner_enabled? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.\n")
-      when /\Aenable session auto-resume/, /\Adisable session auto-resume/
-        set_session_auto_resume_enabled(!session_auto_resume_enabled?)
-        @prompt.say("\nSession auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.\n")
-      end
-    end
-
-    def interface_setting_choices
-      settings = ConfigFiles.overlay_settings
-      [
-        "Overlay alignment (#{settings["alignment"]})",
-        "Overlay width (#{settings["width"]})",
-        "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
-        "#{banner_enabled? ? "Hide" : "Show"} startup banner (currently #{on_off(banner_enabled?)})",
-        "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
-        "Back"
-      ]
-    end
-
-    def composer_busy_help?
-      ConfigFiles.composer_busy_help?(safely_read_config.to_h)
-    end
-
-    def banner_enabled?
-      ConfigFiles.banner_enabled?(safely_read_config.to_h)
-    end
-
-    def session_auto_resume_enabled?
-      ConfigFiles.session_auto_resume_enabled?(safely_read_config.to_h)
-    end
-
-    def set_composer_busy_help(enabled)
-      update_nested_config("composer", "busy_help" => enabled)
-    end
-
-    def set_banner_enabled(enabled)
-      update_nested_config("banner", "enabled" => enabled)
-    end
-
-    def set_session_auto_resume_enabled(enabled)
-      update_nested_config("sessions", "auto_resume" => enabled)
-    end
-
-    def configure_tools_settings
-      selected = @prompt.select("Tools & Search", tools_setting_choices, title: "Settings")
-      case selected.to_s.downcase
-      when /\Aenable web search/, /\Adisable web search/
-        set_web_search_enabled(!web_search_enabled?)
-        @prompt.say("\nWeb search #{web_search_enabled? ? "enabled" : "disabled"}.\n")
-      when /\Aweb search provider/
-        configure_web_search_provider
-      when /\Aallow model-provider/, /\Adisallow model-provider/
-        set_web_search_allow_model_providers(!web_search_allow_model_providers?)
-        @prompt.say("\nModel-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.\n")
-      when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
-        set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
-        @prompt.say("\nWorkspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.\n")
-      end
-    end
-
-    def tools_setting_choices
-      [
-        "#{web_search_enabled? ? "Disable" : "Enable"} web search (currently #{on_off(web_search_enabled?)})",
-        "Web search provider (#{web_search_provider})",
-        "#{web_search_allow_model_providers? ? "Disallow" : "Allow"} model-provider web search (currently #{on_off(web_search_allow_model_providers?)})",
-        "#{workspace_guardrails_enabled? ? "Disable" : "Enable"} workspace guardrails (currently #{on_off(workspace_guardrails_enabled?)})",
-        "Back"
-      ]
-    end
-
-    def configure_web_search_provider
-      providers = WebSearch::PROVIDERS
-      selected = @prompt.select("Web search provider", providers.map { |provider| provider == web_search_provider ? "#{provider} (current)" : provider }, title: "Settings")
-      provider = providers.find { |value| selected.to_s.downcase.start_with?(value) }
-      return unless provider
-
-      update_nested_config("web_search", "provider" => provider)
-    end
-
-    def web_search_config
-      ConfigFiles.web_search_config(safely_read_config.to_h)
-    end
-
-    def web_search_enabled?
-      web_search_config["enabled"] != false
-    end
-
-    def web_search_provider
-      web_search_config["provider"].to_s.empty? ? "auto" : web_search_config["provider"].to_s
-    end
-
-    def web_search_allow_model_providers?
-      web_search_config["allow_model_providers"] == true
-    end
-
-    def set_web_search_enabled(enabled)
-      update_nested_config("web_search", "enabled" => enabled)
-    end
-
-    def set_web_search_allow_model_providers(enabled)
-      update_nested_config("web_search", "allow_model_providers" => enabled)
-    end
-
-    def set_workspace_guardrails_enabled(enabled)
-      update_nested_config("tools", "workspace_guardrails" => enabled)
-    end
-
-    def configure_context_settings
-      selected = @prompt.select("Context & Compaction", context_setting_choices, title: "Settings")
-      case selected.to_s.downcase
-      when /\Aenable auto-compaction/, /\Adisable auto-compaction/
-        set_compaction_enabled(!compaction_enabled?)
-        @prompt.say("\nAuto-compaction #{compaction_enabled? ? "enabled" : "disabled"}.\n")
-      else
-        @prompt.say("\n#{auto_compaction_status_line}\n") if selected.to_s.downcase.start_with?("status")
-      end
-    end
-
-    def context_setting_choices
-      [
-        "#{compaction_enabled? ? "Disable" : "Enable"} auto-compaction (currently #{on_off(compaction_enabled?)})",
-        "Status",
-        "Back"
-      ]
-    end
-
-    def compaction_enabled?
-      Kward::Compaction::Settings.from_config(safely_read_config.to_h).enabled
-    end
-
-    def set_compaction_enabled(enabled)
-      update_nested_config("compaction", "enabled" => enabled)
-    end
-
-    def configure_personalization_settings(conversation)
-      selected = @prompt.select("Personalization", personalization_setting_choices(conversation), title: "Settings")
-      case selected.to_s.downcase
-      when /\Adefault persona/
-        configure_default_persona(conversation)
-      when /\Aactive instructions/
-        show_active_instructions_summary(conversation)
-      end
-    end
-
-    def personalization_setting_choices(conversation)
-      [
-        "Default persona (#{default_persona_label})",
-        "Active instructions summary",
-        "Back"
-      ]
-    end
-
-    def default_persona_label
-      personas = safely_read_config.to_h["personas"]
-      value = personas.is_a?(Hash) ? personas["default"] : nil
-      value.to_s.empty? ? "none" : value.to_s
-    end
-
-    def configure_default_persona(conversation)
-      config = safely_read_config.to_h
-      personas = config["personas"].is_a?(Hash) ? config["personas"] : {}
-      entries = ConfigFiles.crew_character_labels(personas)
-      choices = entries.map { |key, label| key == personas["default"] ? "#{label} (#{key}, current)" : "#{label} (#{key})" }
-      if choices.empty?
-        @prompt.say("\nNo configured personas found. Edit #{ConfigFiles.config_path} to add personas.\n")
-        return
-      end
-
-      selected = @prompt.select("Default persona", choices, title: "Settings")
-      key = entries.keys.find { |candidate| selected.to_s.include?("(#{candidate}") }
-      return unless key
-
-      personas = personas.dup
-      personas["default"] = key
-      ConfigFiles.update_config("personas" => personas)
-      conversation&.refresh_system_message!
-      @prompt.redraw if @prompt.respond_to?(:redraw)
-    end
-
-    def show_active_instructions_summary(conversation)
-      label = ConfigFiles.active_persona_label(workspace_root: current_workspace_root, model: current_model_id, config: safely_read_config.to_h)
-      lines = ["Active persona: #{label || "none"}"]
-      lines << "Global AGENTS.md: #{ConfigFiles.agents_prompt ? "present" : "absent"}"
-      lines << "Workspace AGENTS.md: #{ConfigFiles.workspace_agents_prompt(current_workspace_root) ? "present" : "absent"}"
-      lines << "Messages: #{conversation.messages.length}" if conversation&.respond_to?(:messages)
-      @prompt.say("\n#{lines.join("\n")}\n")
-    end
-
-    def configure_logging_settings
-      selected = @prompt.select("Logging", logging_setting_choices, title: "Settings")
-      key = logging_key_for_choice(selected)
-      return unless key
-
-      set_logging_value(key, !logging_enabled?(key))
-      @prompt.say("\nLogging #{key.tr("_", " ")} #{logging_enabled?(key) ? "enabled" : "disabled"}.\n")
-    end
-
-    def logging_setting_choices
-      [
-        "#{logging_enabled?("enabled") ? "Disable" : "Enable"} local logging (currently #{on_off(logging_enabled?("enabled"))})",
-        "#{logging_enabled?("tokens") ? "Disable" : "Enable"} token logs (currently #{on_off(logging_enabled?("tokens"))})",
-        "#{logging_enabled?("performance") ? "Disable" : "Enable"} performance logs (currently #{on_off(logging_enabled?("performance"))})",
-        "#{logging_enabled?("tools") ? "Disable" : "Enable"} tool logs (currently #{on_off(logging_enabled?("tools"))})",
-        "#{logging_enabled?("errors") ? "Disable" : "Enable"} error logs (currently #{on_off(logging_enabled?("errors"))})",
-        "Back"
-      ]
-    end
-
-    def logging_key_for_choice(selected)
-      text = selected.to_s.downcase
-      return "enabled" if text.include?("local logging")
-      return "tokens" if text.include?("token logs")
-      return "performance" if text.include?("performance logs")
-      return "tools" if text.include?("tool logs")
-      return "errors" if text.include?("error logs")
-
-      nil
-    end
-
-    def logging_enabled?(key)
-      logging = safely_read_config.to_h["logging"]
-      logging.is_a?(Hash) && logging[key] == true
-    end
-
-    def set_logging_value(key, value)
-      update_nested_config("logging", key => value)
-    end
-
-    def show_advanced_settings
-      lines = [
-        "Config path: #{ConfigFiles.config_path}",
-        "Config directory: #{ConfigFiles.config_dir}",
-        "Cache directory: #{ConfigFiles.cache_dir}",
-        "Memory directory: #{ConfigFiles.memory_dir}",
-        "Plugin directory: #{ConfigFiles.plugin_dir}",
-        "Plugins: #{ConfigFiles.plugin_paths.length}",
-        "Skills: #{ConfigFiles.skills.length}",
-        "Prompt templates: #{ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES).length}"
-      ]
-      @prompt.say("\n#{lines.join("\n")}\n")
-    end
-
-    def update_nested_config(section, values)
-      config = ConfigFiles.read_config
-      current = config[section].is_a?(Hash) ? config[section].dup : {}
-      config[section] = current.merge(values)
-      ConfigFiles.write_config(config)
-      config
-    end
-
-    def on_off(value)
-      value ? "on" : "off"
-    end
-
-    def login_interactively
-      unless login_picker_available?
-        @prompt.say("\nLogin provider picker is unavailable in this prompt.\n")
-        return
-      end
-
-      selected = @prompt.select("OAuth provider", login_provider_choices, title: "Login")
-      provider = selected_login_provider(selected)
-      return unless provider
-
-      login(provider: provider)
-      reload_client_config
-    rescue StandardError => e
-      @prompt.say("\nLogin error: #{e.message}\n")
-    end
-
-    def configure_model(conversation = nil, models: nil)
-      unless model_overlay_available?
-        @prompt.say("\nModel overlay is unavailable in this prompt.\n")
-        return
-      end
-
-      models ||= normalized_available_models
-      choices = model_choices(models)
-      selected = @prompt.select("Default model", choices, title: "Models", custom: true)
-      return unless selected
-
-      provider, model = selected_model(selected, models)
-      raise "Model must be a non-empty string" if model.to_s.strip.empty?
-
-      ConfigFiles.update_config(ModelInfo.config_values_for_selection(provider, model))
-      reload_client_config
-      refresh_conversation_runtime(conversation)
-      @prompt.redraw if @prompt.respond_to?(:redraw)
-    rescue StandardError => e
-      @prompt.say("\nModel error: #{e.message}\n")
-    end
-
-    def print_openrouter_catalog
-      unless @client.respond_to?(:openrouter_catalog)
-        @prompt.say("\nOpenRouter catalog is unavailable for this client.\n")
-        return
-      end
-
-      models = Array(@client.openrouter_catalog)
-      if models.empty?
-        @prompt.say("\nNo OpenRouter catalog models available.\n")
-      else
-        ids = models.map { |model| model[:id] || model["id"] || model }.map(&:to_s).reject(&:empty?)
-        @prompt.say("\nOpenRouter catalog:\n#{ids.join("\n")}\n")
-      end
-    rescue StandardError => e
-      @prompt.say("\nOpenRouter catalog error: #{e.message}\n")
-    end
-
-    def configure_reasoning(conversation = nil)
-      unless model_overlay_available?
-        @prompt.say("\nReasoning overlay is unavailable in this prompt.\n")
-        return
-      end
-
-      choices = ModelInfo::REASONING_EFFORT_CHOICES
-      selected = @prompt.select("Reasoning effort", reasoning_choices(choices), title: "Reasoning")
-      return unless selected
-
-      effort, = choices.find { |_value, label| selected.to_s.downcase.start_with?(label.downcase) }
-      raise "Reasoning effort must be low, medium, high, or extra high" unless effort
-
-      ConfigFiles.update_config(ModelInfo.reasoning_config_key_for_provider(current_model_provider) => effort)
-      reload_client_config
-      refresh_conversation_runtime(conversation)
-      @prompt.redraw if @prompt.respond_to?(:redraw)
-    rescue StandardError => e
-      @prompt.say("\nReasoning error: #{e.message}\n")
-    end
-
-    def login_picker_available?
-      @prompt.respond_to?(:select)
-    end
-
-    def login_provider_choices
-      ["OpenAI", "OpenRouter", "GitHub"]
-    end
-
-    def selected_login_provider(selected)
-      case selected.to_s.downcase
-      when /\Aopenai\b/
-        "openai"
-      when /\Aopenrouter\b/
-        "openrouter"
-      when /\Agithub\b/
-        "github"
-      end
-    end
-
-    def model_overlay_available?
-      @prompt.respond_to?(:select)
-    end
-
-    def settings_overlay_available?
-      @prompt.respond_to?(:select) && @prompt.respond_to?(:update_overlay_settings)
-    end
-
-    def choose_overlay_setting(message, choices, values)
-      choice = @prompt.select(message, choices, title: "Settings")
-      return nil unless choice
-
-      values.find { |value| choice.to_s.downcase.start_with?(value) }
-    end
-
-    def normalized_available_models
-      current_provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-      current_model = @client.respond_to?(:current_model) ? @client.current_model : nil
-      current_reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
-      models = @client.respond_to?(:available_models) ? Array(@client.available_models) : []
-      models.map do |model|
-        ModelInfo.normalize(
-          model,
-          current_provider: current_provider,
-          current_model: current_model,
-          current_reasoning_effort: current_reasoning
-        )
-      end
-    end
-
-    def model_choices(models)
-      choices = models.map do |model|
-        label = "#{model[:provider]} #{model[:id]}"
-        label += " (current)" if model[:current]
-        label
-      end
-      choices.empty? ? ["#{current_model_provider} #{current_model_id} (current)"] : choices.uniq
-    end
-
-    def selected_model(selected, models)
-      text = selected.to_s.sub(/ \(current\)\z/, "").strip
-      known = models.find { |model| "#{model[:provider]} #{model[:id]}" == text }
-      return [known[:provider], known[:id]] if known
-
-      provider, model = text.split(/\s+/, 2)
-      if ["Codex", "OpenRouter", "Copilot"].include?(provider) && !model.to_s.strip.empty?
-        [provider, model.strip]
-      else
-        [current_model_provider, text]
-      end
-    end
-
-    def reasoning_choices(choices)
-      current = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort.to_s : ModelInfo::DEFAULT_REASONING_EFFORT
-      choices.map do |effort, label|
-        text = label.dup
-        text += " (current)" if current == effort
-        text
-      end
-    end
-
-    def current_model_provider
-      @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-    end
-
-    def current_model_id
-      @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
-    end
-
-    def current_reasoning_effort
-      @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
-    end
-
-    def reload_client_config
-      @client.reload_config if @client.respond_to?(:reload_config)
-    end
-
-    def refresh_conversation_runtime(conversation)
-      return unless conversation&.respond_to?(:update_runtime_context!)
-
-      conversation.update_runtime_context!(model: current_model_id, reasoning_effort: current_reasoning_effort)
-      @active_session.update_runtime(model: conversation.model, reasoning_effort: conversation.reasoning_effort) if @active_session&.respond_to?(:update_runtime)
-      update_assistant_prompt(conversation)
-    end
-
-    def overlay_alignment_choices(settings)
-      ConfigFiles::OVERLAY_ALIGNMENTS.map do |alignment|
-        label = alignment.capitalize
-        label += " (current)" if settings["alignment"] == alignment
-        label
-      end
-    end
-
-    def overlay_width_choices(settings)
-      ConfigFiles::OVERLAY_WIDTHS.map do |width|
-        label = width.capitalize
-        label += " (current)" if settings["width"] == width
-        label
-      end
-    end
-
-    def start_new_session(session_store)
-      return say_sessions_unavailable unless session_store
-
-      previous_session = @active_session
-      @active_session = track_session(session_store.create)
-      reset_session_diff
-      cleanup_replaced_session(previous_session)
-      conversation = new_conversation(workspace_root: session_store.cwd)
-      @active_session.attach(conversation)
-      update_assistant_prompt(conversation)
-      clear_prompt_transcript
-      print_visual_banner
-      build_interactive_agent(conversation)
-    end
-
-    def resume_session(session_store, argument)
-      return say_sessions_unavailable unless session_store
-
-      path = argument.to_s.strip
-      path = select_session_path(session_store) if path.empty?
-      return nil if path.to_s.empty?
-
-      previous_session = @active_session
-      @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), model: current_model_id, reasoning_effort: current_reasoning_effort)
-      reset_session_diff(@active_session.path)
-      track_session(@active_session)
-      cleanup_replaced_session(previous_session)
-      update_assistant_prompt(conversation)
-      restore_prompt_transcript do
-        @prompt.say("\nResumed session: #{@active_session.path}\n")
-        render_conversation_transcript(conversation)
-      end
-      agent = build_interactive_agent(conversation)
-      @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
-      agent
-    rescue StandardError => e
-      @prompt.say("\nError: #{e.message}\n")
-      nil
-    end
-
-
-    def navigate_session_tree(session_store)
-      return say_sessions_unavailable unless session_store
-      unless @active_session
-        @prompt.say("\nNo active persisted session.\n")
-        return nil
-      end
-
-      tree_items = session_tree_items(session_store)
-      if tree_items.empty?
-        @prompt.say("\nNo session tree entries found.\n")
-        return nil
-      end
-
-      labels_by_entry_id = tree_items.to_h { |item| [item[:entry]["id"].to_s, item[:label]] }
-      current_leaf_id = @active_session.leaf_id || session_store.current_leaf(@active_session.path)
-      initial_index = tree_items.index { |item| item[:entry]["id"].to_s == current_leaf_id.to_s } || tree_items.length - 1
-      choice = select_session_tree_entry(labels_by_entry_id.values, initial_index: initial_index)
-      return nil unless choice
-
-      entry_id = labels_by_entry_id.key(choice)
-      entry = tree_items.find { |item| item[:entry]["id"].to_s == entry_id }&.fetch(:entry)
-      return nil unless entry
-
-      selected_text = apply_session_tree_entry(entry)
-      @prompt.say("\nMoved session tree position to #{entry["id"]}.\n")
-      if selected_text && !selected_text.empty?
-        if @prompt.respond_to?(:prefill_input)
-          @prompt.prefill_input(selected_text)
-        else
-          @prompt.say("\nSelected text for editing:\n#{selected_text}\n")
-        end
-      end
-      agent = reload_active_session(session_store)
-      @prompt.redraw if @prompt.respond_to?(:redraw)
-      agent
-    rescue StandardError => e
-      @prompt.say("\nSession tree error: #{e.message}\n")
-      nil
-    end
-
-    def select_session_tree_entry(labels, initial_index: 0)
-      if @prompt.respond_to?(:select)
-        return @prompt.select("Tree>", labels, title: "Session Tree", initial_index: initial_index)
-      end
-
-      numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
-      @prompt.say("\nSession tree:\n#{numbered_labels.join("\n")}\n")
-      answer = @prompt.ask("Tree entry number>").to_s.strip
-      answer.match?(/\A\d+\z/) ? labels[answer.to_i - 1] : nil
-    end
-
-    def apply_session_tree_entry(entry)
-      message = entry["message"]
-      if message.is_a?(Hash) && message_role(message) == "user"
-        target_leaf = entry["parentId"]
-        target_leaf.to_s.empty? ? @active_session.reset_leaf : @active_session.branch(target_leaf)
-        return full_message_text(message)
-      end
-
-      @active_session.branch(entry["id"])
-      nil
-    end
-
-    def reload_active_session(session_store)
-      @active_session, conversation = session_store.load(
-        @active_session.path,
-        workspace: configured_workspace(root: session_store.cwd),
-        model: current_model_id,
-        reasoning_effort: current_reasoning_effort
-      )
-      reset_session_diff(@active_session.path)
-      track_session(@active_session)
-      update_assistant_prompt(conversation)
-      restore_prompt_transcript do
-        render_conversation_transcript(conversation)
-      end
-      build_interactive_agent(conversation)
-    end
-
-    def session_tree_items(session_store)
-      roots = session_store.session_tree(@active_session.path)
-      current_leaf_id = @active_session.leaf_id || session_store.current_leaf(@active_session.path)
-      SessionTreeRenderer.new(roots: roots, current_leaf_id: current_leaf_id).items
-    end
-
-    def rename_session(argument)
-      unless @active_session
-        @prompt.say("\nNo active persisted session.\n")
-        return
-      end
-
-      @active_session.rename(argument)
-      label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
-      @prompt.say("\n#{label}\n")
-    end
-
-    def clone_session(session_store, agent)
-      return say_sessions_unavailable unless session_store
-
-      previous_session = @active_session
-      @active_session = track_session(session_store.create_from_conversation(agent.conversation, parent_session: previous_session))
-      reset_session_diff(@active_session.path)
-      cleanup_replaced_session(previous_session)
-      @prompt.say("\nCloned session: #{@active_session.path}\n")
-      render_conversation_transcript(agent.conversation)
-      agent
-    end
-
-    def copy_session_text(conversation, argument)
-      target = copy_target(argument)
-      unless target
-        @prompt.say("\nUsage: /copy [last|transcript]\n")
-        return
-      end
-
-      content = copy_target_content(conversation, target)
-      if content.to_s.empty?
-        @prompt.say("\nNothing to copy.\n")
-        return
-      end
-
-      result = Clipboard.new(output: $stdout).copy(content)
-      if result.success?
-        @prompt.say("\nCopied #{copy_target_label(target)}.\n")
-      else
-        @prompt.say("\nCopy failed: #{result.message}.\n")
-      end
-    end
-
-    def copy_target(argument)
-      target = argument.to_s.strip.downcase
-      target = "last" if target.empty?
-      return target if ["last", "transcript"].include?(target)
-
-      nil
-    end
-
-    def full_message_text(message)
-      CLITranscriptFormatter.full_text(message)
-    end
-
-    def copy_target_content(conversation, target)
-      case target
-      when "last"
-        last_assistant_copy_text(conversation)
-      when "transcript"
-        markdown_transcript(conversation)
-      else
-        ""
-      end
-    end
-
-    def last_assistant_copy_text(conversation)
-      message = conversation.messages.reverse.find { |item| message_role(item) == "assistant" }
-      return "" unless message
-
-      CLITranscriptFormatter.content_text(message_content(message))
-    end
-
-    def copy_target_label(target)
-      target == "transcript" ? "transcript" : "last assistant response"
-    end
-
-    def compact_context(agent, argument)
-      result = Compactor.new(
-        conversation: agent.conversation,
-        client: @client,
-        tool_result_summarizer: lambda { |tool_call, content| tool_result_summary(tool_call, content) }
-      ).compact(custom_instructions: argument)
-      @prompt.say("\nCompacted context: #{result.old_message_count} messages -> #{result.new_message_count} messages.\n")
-      render_transcript_block("Assistant", result.summary)
-    rescue Compactor::NothingToCompact, Compactor::AlreadyCompacted, Compactor::EmptySummary => e
-      @prompt.say("\n#{e.message}\n")
-    rescue StandardError => e
-      @prompt.say("\nCompaction error: #{e.message}\n")
-    end
-
-
-    def render_conversation_transcript(conversation)
-      tool_calls_by_id = {}
-      @prompt.say("\n#{colored("Transcript", :cyan, :bold)}\n")
-      conversation.messages.each do |message|
-        role = message_role(message)
-        next if role == "system"
-
-        case role
-        when "user"
-          print_user_transcript(
-            CLITranscriptFormatter.user_transcript_input(message),
-            display_input: CLITranscriptFormatter.user_display_text(message),
-            attachment_references: CLITranscriptFormatter.image_references(message),
-            image_parts: CLITranscriptFormatter.image_parts(message)
-          )
-        when "assistant"
-          render_reasoning(message)
-          render_assistant_message(message)
-          message_tool_calls(message).each do |tool_call|
-            tool_calls_by_id[tool_call_id(tool_call)] = tool_call
-            render_tool_call(tool_call)
-          end
-        when "tool"
-          render_tool_message(message, tool_calls_by_id)
-        when "compactionSummary"
-          render_transcript_block("Compaction summary", message_summary(message))
-        else
-          render_transcript_block(role.to_s.capitalize, CLITranscriptFormatter.content_text(message_content(message)))
-        end
-      end
-    end
-
-    def render_reasoning(message)
-      reasoning = CLITranscriptFormatter.reasoning(message)
-      render_transcript_block("Reasoning", reasoning) unless reasoning.empty?
-    end
-
-    def render_assistant_message(message)
-      content = CLITranscriptFormatter.content_text(message_content(message))
-      return if content.empty?
-
-      render_transcript_block("Assistant", content)
-    end
-
-    def render_tool_message(message, tool_calls_by_id)
-      tool_call = tool_calls_by_id[message_tool_call_id(message)] || CLITranscriptFormatter.synthetic_tool_call(message_name(message), message_tool_call_id(message))
-      render_tool_result(tool_call, message_content(message).to_s)
-    end
-
-    def render_tool_call(tool_call)
-      if prompt_interface?
-        print_tool_call(tool_call)
-      else
-        @prompt.say("\n#{colored("Tool>", :magenta, :bold)}\n#{tool_command(tool_call)}\n")
-      end
-    end
-
-    def render_tool_result(tool_call, content)
-      summary = limit_tool_output_lines(tool_result_summary(tool_call, content), INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
-      if prompt_interface?
-        print_tool_result(tool_call, content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
-      else
-        @prompt.say("\n#{colored("Tool output>", :cyan, :bold)}\n#{summary}\n")
-      end
-    end
-
-    def render_transcript_block(label, content)
-      return if content.to_s.empty?
-
-      rendered = render_markdown_transcript(content)
-      if prompt_interface?
-        print_block_delta(label, rendered)
-        finish_stream_block
-      else
-        @prompt.say("\n#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n#{rendered}\n")
-      end
-    end
-
-    def render_markdown_transcript(content)
-      ANSI.markdown(content, enabled: @color_enabled)
-    end
-
-    def append_markdown_delta(chunks, label, delta)
-      text = delta.to_s
-      return if text.empty?
-
-      if chunks.last&.first == label
-        chunks.last[1] << text
-      else
-        chunks << [label, +text]
-      end
-    end
-
-    def flush_markdown_deltas(chunks, finish: true, streams: nil)
-      wrote = false
-      entries = ordered_markdown_entries(chunks.dup)
-      if finish && streams
-        streamed_labels = entries.map(&:first)
-        entries = ordered_markdown_entries(entries.concat(streams.keys.reject { |label| streamed_labels.include?(label) }.map { |label| [label, ""] }))
-      end
-
-      entries.each do |label, content|
-        next if content.empty? && !(finish && streams&.key?(label))
-
-        rendered = if streams
-          streams[label] ||= ANSI::MarkdownStream.new(enabled: @color_enabled)
-          streams[label].render(content, final: finish)
-        else
-          render_markdown_transcript(content)
-        end
-        streams.delete(label) if finish && streams
-        next if rendered.empty?
-
-        print_block_delta(label, rendered)
-        finish_stream_block if finish
-        wrote = true
-      end
-      chunks.clear
-      wrote
-    end
-
-    def ordered_markdown_entries(entries)
-      labels = entries.map(&:first)
-      return entries unless labels.include?("Reasoning") && labels.include?("Assistant")
-
-      grouped = { "Reasoning" => +"", "Assistant" => +"" }
-      others = []
-      entries.each do |label, content|
-        if grouped.key?(label)
-          grouped[label] << content.to_s
-        else
-          others << [label, content]
-        end
-      end
-
-      [["Reasoning", grouped["Reasoning"]], ["Assistant", grouped["Assistant"]]] + others
-    end
-
-    def message_role(message)
-      MessageAccess.role(message)
-    end
-
-    def message_content(message)
-      MessageAccess.content(message)
-    end
-
-    def message_summary(message)
-      MessageAccess.summary(message) || message_content(message)
-    end
-
-    def message_name(message)
-      MessageAccess.name(message)
-    end
-
-    def message_tool_call_id(message)
-      MessageAccess.tool_call_id(message)
-    end
-
-    def message_tool_calls(message)
-      MessageAccess.tool_calls(message)
-    end
-
-    def tool_call_id(tool_call)
-      tool_call["id"] || tool_call[:id]
-    end
-
-    def export_session(conversation, argument)
-      path = export_path(argument)
-      File.write(path, markdown_transcript(conversation))
-      @prompt.say("\nExported session: #{path}\n")
-    rescue StandardError => e
-      @prompt.say("\nError: #{e.message}\n")
-    end
-
-    def say_sessions_unavailable
-      @prompt.say("\nSessions are unavailable for this interactive loop.\n")
-      nil
-    end
-
-    def clear_prompt_transcript
-      @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
-    end
-
-    def restore_prompt_transcript(&block)
-      if @prompt.respond_to?(:restore_transcript)
-        @prompt.restore_transcript(&block)
-      else
-        block.call
-      end
-    end
-
-    def select_session_path(session_store)
-      sessions = session_store.recent(limit: nil)
-      if sessions.empty?
-        @prompt.say("\nNo saved sessions found.\n")
-        return nil
-      end
-
-      labels = sessions.map { |session| session_label(session) }
-      if @prompt.respond_to?(:select)
-        choice = @prompt.select("Session>", labels)
-        return nil unless choice
-
-        selected = sessions[labels.index(choice)]
-        return selected&.path
-      end
-
-      numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
-      @prompt.say("\nRecent sessions:\n#{numbered_labels.join("\n")}\n")
-      answer = @prompt.ask("Session number or path>").to_s.strip
-      if answer.match?(/\A\d+\z/)
-        sessions[answer.to_i - 1]&.path
-      else
-        answer
-      end
-    end
-
-    def session_label(session)
-      title = session.name.to_s.strip
-      title = session.first_message.to_s.strip if title.empty?
-      title = session.id if title.empty?
-      "#{session_tree_prefix(session)}#{title} — #{File.basename(session.path)}"
-    end
-
-    def session_tree_prefix(session)
-      depth = session.respond_to?(:depth) ? session.depth.to_i : 0
-      return "" if depth <= 0
-
-      ancestors = session.respond_to?(:ancestor_continues) ? Array(session.ancestor_continues) : []
-      prefix = ancestors.map { |continues| continues ? "│  " : "   " }.join
-      branch = session.respond_to?(:is_last) && session.is_last ? "└─ " : "├─ "
-      prefix + branch
-    end
-
-    def export_path(argument)
-      default_path = if @active_session
-                       @active_session.path.sub(/\.jsonl\z/, ".md")
-                     else
-                       File.expand_path("kward-session-#{Time.now.utc.iso8601(3).tr(':', '-')}.md", Dir.pwd)
-                     end
-      session_dir = @session_store&.session_dir || (@active_session && File.dirname(@active_session.path))
-
-      ExportPath.resolve(argument, workspace_root: Dir.pwd, default_path: default_path, session_dir: session_dir)
-    end
-
-    def markdown_transcript(conversation)
-      TranscriptExport.content(conversation)
-    end
-
-    def setup_interactive_prompt
-      return unless @stdin.tty?
-      return unless @prompt.is_a?(TTY::Prompt)
-
-      prompt_interface = load_prompt_interface
-      return unless prompt_interface
-
-      banner_enabled = ConfigFiles.banner_enabled?
-      @prompt = prompt_interface.new(
-        slash_commands: slash_command_entries,
-        overlay_settings: ConfigFiles.overlay_settings,
-        footer: prompt_footer_renderer,
-        composer_status: method(:composer_status_text),
-        busy_help: ConfigFiles.composer_busy_help?,
-        attachment_badges: method(:composer_attachment_badges),
-        attachment_parser: method(:composer_attachment_parser),
-        banner_pixels: banner_enabled ? Kward::PromptInterface::BANNER_LOGO_PIXELS : nil,
-        banner_message: banner_enabled ? Kward::PromptInterface::BANNER_MESSAGE : nil
-      )
-      @prompt.start
-    end
-
-    def load_prompt_interface
-      require_relative "prompt_interface"
-      PromptInterface
-    rescue LoadError => e
-      raise unless missing_tty_tui_load_error?(e)
-
-      nil
-    end
-
-    def missing_tty_tui_load_error?(error)
-      ["tty-cursor", "tty-reader", "tty-screen"].include?(error.path) ||
-        error.message.match?(/cannot load such file -- tty-(cursor|reader|screen)/)
-    end
-
-    def prompt_interface?
-      @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
-    end
-
-    def print_visual_banner
-      @prompt.print_visual_banner if @prompt.respond_to?(:print_visual_banner)
-    end
-
-    def prompt_templates
-      @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
-    end
-
-    def plugin_registry
-      @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names)
-    end
-
-    def plugin_commands
-      plugin_registry.commands
-    end
-
-    def plugin_command_for(command)
-      plugin_registry.command_for(command)
-    end
-
-    def reload_plugins(conversation)
-      @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
-      conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
-      conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
-      @prompt.say("\nPlugins reloaded.\n")
-    end
-
-    def reserved_slash_command_names
-      BUILTIN_SLASH_COMMAND_NAMES + prompt_templates.map(&:command)
-    end
-
-    def slash_command_entries
-      prompt_entries = prompt_templates.map do |template|
-        {
-          name: template.command,
-          description: template.description,
-          argument_hint: template.argument_hint
-        }
-      end
-      plugin_entries = plugin_commands.map(&:entry)
-      BUILTIN_SLASH_COMMANDS + prompt_entries + plugin_entries
-    end
-
-    def prompt_template_for(command)
-      prompt_templates.find { |template| template.command == command }
-    end
-
-    def expand_prompt_template(input)
-      PromptCommands.expand(input, templates: prompt_templates, reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
-    end
-
-    def run_plugin_command(name, argument, agent)
-      command = plugin_command_for(name)
-      return [false, nil] unless command
-
-      agent.conversation.plugin_registry ||= plugin_registry if agent.conversation.respond_to?(:plugin_registry)
-      context = plugin_context(agent.conversation, argument)
-      command.handler.call(argument, context)
-      [true, nil]
-    rescue StandardError => e
-      @prompt.say("\nPlugin command /#{name} error: #{e.message}\n")
-      [true, nil]
-    end
-
-    def prompt_footer_renderer
-      renderer = plugin_registry.footer_renderer
-      return nil unless renderer
-
-      lambda do
-        context = plugin_context(current_footer_conversation, "")
-        renderer.call(context).to_s
-      rescue StandardError => e
-        warn "Warning: Kward plugin footer error: #{e.message}"
-        ""
-      end
-    end
-
-    def composer_status_text
-      provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-      model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
-      reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
-      reasoning = "n/a" unless ModelInfo.reasoning_supported?(provider, model) && !reasoning.to_s.empty?
-      text = "#{provider} #{model} · #{reasoning}"
-      parts = []
-      diff = composer_session_diff_text
-      parts << diff if diff
-      usage = composer_context_usage(provider, model)
-      parts << composer_context_percent_text(usage[:percent]) if usage
-      parts << text
-      parts.join(" · ")
-    end
-
-    def composer_session_diff_text
-      return nil if @session_diff.nil? || @session_diff.empty?
-
-      additions = ANSI.colorize("+#{@session_diff.additions}", :green, enabled: @color_enabled)
-      deletions = ANSI.colorize("-#{@session_diff.deletions}", :red, enabled: @color_enabled)
-      "#{additions}|#{deletions}"
-    end
-
-    def composer_context_percent_text(percent)
-      value = percent.round
-      color = if value >= 85
-                :red
-              elsif value >= 50
-                :yellow
-              end
-      ANSI.colorize("#{value}%", color, enabled: @color_enabled)
-    end
-
-    def composer_context_window
-      provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-      model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
-      provider = ModelInfo.provider_label(provider)
-      @client.respond_to?(:current_context_window) ? @client.current_context_window : ModelInfo.context_window(provider, model)
-    end
-
-    def composer_context_usage(provider, model)
-      context_window = composer_context_window
-      context_parts = if @client.respond_to?(:current_context_parts)
-                        @client.current_context_parts(current_footer_conversation.messages, footer_tool_schemas)
-                      else
-                        { provider: provider, model: model, messages: current_footer_conversation.messages, tools: footer_tool_schemas }
-                      end
-      @context_usage.call(
-        provider: provider,
-        model: model,
-        context_window: context_window,
-        context_parts: context_parts
-      )
-    end
-
-    def footer_tool_schemas
-      @footer_tool_registry&.schemas || []
-    end
-
-    def current_footer_conversation
-      @footer_conversation || Conversation.new(system_message: nil)
-    end
-
-    def plugin_context(conversation, args)
-      PluginRegistry::Context.new(
-        conversation: conversation,
-        args: args,
-        session: @active_session,
-        workspace_root: conversation.workspace_root,
-        say_callback: lambda { |message| @prompt.say("\n#{message}\n") }
-      )
-    end
-
-    def selected_slash_command_input(input)
-      return nil if prompt_interface?
-      return nil unless @prompt.respond_to?(:select)
-      return nil unless input.match?(%r{\A/[^\s/]*\z})
-      return nil if prompt_template_for(input.delete_prefix("/"))
-
-      prefix = input.delete_prefix("/").downcase
-      return nil if slash_command_entries.any? { |entry| entry[:name].downcase == prefix }
-
-      matches = slash_command_entries.select { |entry| entry[:name].downcase.start_with?(prefix) }
-      return nil if matches.empty?
-
-      labels = matches.map { |entry| slash_command_label(entry) }
-      choice = @prompt.select("Slash command>", labels)
-      entry = matches[labels.index(choice)]
-      entry ? "/#{entry[:name]}" : nil
-    end
-
-    def slash_command_label(entry)
-      hint = entry[:argument_hint].to_s.empty? ? "" : " #{entry[:argument_hint]}"
-      description = entry[:description].to_s.empty? ? "" : " - #{entry[:description]}"
-      "/#{entry[:name]}#{hint}#{description}"
-    end
-
-    def auto_name_active_session(input)
-      return unless @active_session
-      return unless @active_session.name.to_s.strip.empty?
-
-      name = default_session_name(input)
-      @active_session.rename(name) unless name.empty?
-    end
-
-    def default_session_name(input)
-      input.to_s.gsub(/\s+/, " ").strip.slice(0, 120).to_s
-    end
-
-    def run_interactive_turn(agent, input, display_input: nil)
-      prepare_memory_context(agent.conversation, input) if agent.respond_to?(:conversation)
-      print_user_transcript(input, display_input: display_input) if prompt_interface?
-      return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
-
-      queued_inputs = []
-      cancellation = Cancellation.new
-      cancelled = false
-      steering = steering_supported? ? Steering.new : nil
-      event_queue = Queue.new
-      stream_state = {
-        streamed: false,
-        last_flush: monotonic_now,
-        stream_block_open: false,
-        markdown_streams: {},
-        defer_assistant_streaming: defer_assistant_streaming?(agent)
-      }
-      markdown_chunks = []
-      answer = nil
-      error = nil
-      @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
-
-      worker = Thread.new do
-        options = agent_display_options(display_input)
-        options[:cancellation] = cancellation
-        options[:steering] = steering if steering
-        answer = agent.ask(input, **options) do |event|
-          event_queue << event
-        end
-      rescue StandardError => e
-        error = e
-      end
-      worker.report_on_exception = false
-
-      while worker.alive?
-        begin
-          poll_result = collect_busy_input(queued_inputs, steering)
-          sleep 0.01
-        rescue Interrupt
-          poll_result = PromptInterface::CANCEL_INPUT
-        end
-        if poll_result == PromptInterface::CANCEL_INPUT && !cancelled
-          cancelled = true
-          cancellation.cancel!
-          worker.raise(Cancellation::CancelledError, "cancelled") if worker.alive?
-        end
-        drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
-      end
-      begin
-        worker.join
-      rescue Cancellation::CancelledError => e
-        error ||= e
-      end
-      drain_busy_input(queued_inputs, nil) unless cancelled
-      drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
-      raise error if error && !error.is_a?(Cancellation::CancelledError)
-
-      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless cancelled || stream_state[:streamed] || answer.to_s.empty?
-      persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
-      auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && queued_inputs.empty? && !cancelled
-      queued_inputs
-    ensure
-      @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
-    end
-
-    def drain_interactive_events(event_queue, markdown_chunks, stream_state, agent = nil, force: false)
-      drained = 0
-      loop do
-        break if !force && drained >= INTERACTIVE_EVENT_DRAIN_LIMIT
-
-        event = event_queue.pop(true)
-        drained += 1
-        notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
-        handle_interactive_event(event, markdown_chunks, stream_state)
-      rescue ThreadError
-        break
-      end
-
-      flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: force)
-    end
-
-    def notify_plugin_transcript_event(event, conversation)
-      return unless conversation
-      return if plugin_registry.transcript_event_handlers.empty?
-
-      plugin_registry.notify_transcript_event(event, plugin_context(conversation, ""))
-    end
-
-    def handle_interactive_event(event, markdown_chunks, stream_state)
-      case event
-      when Events::ReasoningDelta
-        stream_state[:streamed] = true
-        append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
-      when Events::AssistantDelta
-        stream_state[:streamed] = true
-        append_markdown_delta(markdown_chunks, "Assistant", event.delta)
-      when Events::SteeringApplied
-        @prompt.clear_steered_count if @prompt.respond_to?(:clear_steered_count)
-      when Events::Retry
-        stream_state[:streamed] = true
-        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-        print_retry(event)
-      when Events::ToolCall
-        stream_state[:streamed] = true
-        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-        print_tool_call(event.tool_call)
-      when Events::ToolResult
-        stream_state[:streamed] = true
-        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-        update_session_diff(event.content, tool_call: event.tool_call)
-        print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
-      end
-    end
-
-    def flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: false)
-      if force
-        finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-        return
-      end
-      return if markdown_chunks.empty?
-      return unless monotonic_now - stream_state[:last_flush] >= STREAM_RENDER_INTERVAL
-
-      chunks_to_flush = markdown_chunks
-      if stream_state[:defer_assistant_streaming]
-        chunks_to_flush, delayed_chunks = split_deferred_assistant_entries(markdown_chunks)
-        return if chunks_to_flush.empty?
-
-        markdown_chunks.replace(delayed_chunks)
-      end
-
-      stream_state[:stream_block_open] = true if flush_markdown_deltas(chunks_to_flush, finish: false, streams: stream_state[:markdown_streams])
-      stream_state[:last_flush] = monotonic_now
-    end
-
-    def finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-      wrote = flush_markdown_deltas(markdown_chunks, streams: stream_state[:markdown_streams])
-      finish_stream_block if stream_state[:stream_block_open] && !wrote
-      stream_state[:stream_block_open] = false
-      stream_state[:last_flush] = monotonic_now
-    end
-
-    def split_deferred_assistant_entries(markdown_chunks)
-      markdown_chunks.partition { |label, _content| label != "Assistant" }
-    end
-
-    def monotonic_now
-      Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    end
-
-    def collect_queued_input(queued_inputs)
-      collect_busy_input(queued_inputs, nil)
-    end
-
-    def collect_busy_input(queued_inputs, steering)
-      return nil if @prompt.respond_to?(:modal_active?) && @prompt.modal_active?
-
-      poll_result = @prompt.poll_input
-      case poll_result
-      when String
-        if steering && !poll_result.strip.empty?
-          begin
-            steering.submit(poll_result)
-            @prompt.set_steered_count(1) if @prompt.respond_to?(:set_steered_count)
-          rescue StandardError
-            queued_inputs << poll_result
-            @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
-          end
-        else
-          queued_inputs << poll_result unless poll_result.strip.empty?
-          @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
-        end
-      when PromptInterface::EXIT_INPUT
-        queued_inputs << "/exit"
-        @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
-      end
-      poll_result
-    end
-
-    def drain_queued_input(queued_inputs)
-      drain_busy_input(queued_inputs, nil)
-    end
-
-    def drain_busy_input(queued_inputs, steering)
-      deadline = Time.now + 0.15
-      loop do
-        poll_result = collect_busy_input(queued_inputs, steering)
-        break if Time.now > deadline && poll_result.nil?
-
-        sleep 0.01
-      end
-    end
-
-    def steering_supported?
-      @client.respond_to?(:supports_in_flight_steer?) && @client.supports_in_flight_steer?
-    end
-
-    def defer_assistant_streaming?(agent)
-      return false unless agent.respond_to?(:conversation)
-
-      conversation = agent.conversation
-      model = conversation.respond_to?(:model) && conversation.model ? conversation.model : current_model_id
-      ModelInfo.reasoning_supported?(current_model_provider, model)
-    end
-
-    def run_blocking_interactive_turn(agent, input, display_input: nil)
-      streamed = false
-      markdown_chunks = []
-      answer = agent.ask(input, **agent_display_options(display_input)) do |event|
-        case event
-        when Events::ReasoningDelta
-          streamed = true
-          append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
-        when Events::AssistantDelta
-          streamed = true
-          append_markdown_delta(markdown_chunks, "Assistant", event.delta)
-        when Events::Retry
-          streamed = true
-          flush_markdown_deltas(markdown_chunks)
-          print_retry(event)
-        when Events::ToolCall
-          streamed = true
-          flush_markdown_deltas(markdown_chunks)
-          print_tool_call(event.tool_call)
-        when Events::ToolResult
-          streamed = true
-          flush_markdown_deltas(markdown_chunks)
-          print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
-        end
-      end
-      flush_markdown_deltas(markdown_chunks) if streamed
-      @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
-      persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
-      auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation)
-      []
-    end
-
-    def prepare_memory_context(conversation, input)
-      manager = Memory::Manager.new
-      retrieval = manager.retrieve_relevant(input: input, workspace_root: conversation.workspace_root)
-      conversation.last_memory_retrieval = retrieval
-      conversation.memory_context = manager.memory_block(retrieval)
-      conversation.refresh_system_message!
-    rescue StandardError => e
-      warn "Memory retrieval failed: #{e.message}"
-      nil
-    end
-
-    def persist_memory_state(conversation)
-      @active_session&.update_memory_state(session_memories: conversation.session_memories, last_retrieval: conversation.last_memory_retrieval)
-    rescue StandardError
-      nil
-    end
-
-    def auto_summarize_memory(conversation)
-      manager = Memory::Manager.new
-      return unless manager.enabled? && manager.auto_summary_enabled?
-
-      summarize_memory(conversation, manager: manager)
-    rescue StandardError => e
-      warn "Memory auto-summary failed: #{e.message}"
-      nil
-    end
-
-    def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
-      visible_input = display_input.nil? ? input : display_input
-      @prompt.say("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
-      print_attachment_badges(input, references: attachment_references)
-      print_pasted_images(input, image_parts: image_parts)
-    end
-
-    def print_attachment_badges(input, references: nil)
-      badges = references ? Array(references).map { |reference| attachment_badge_text(reference) } : composer_attachment_badges(input)
-      return if badges.empty?
-
-      @prompt.say("#{badges.join("\n")}\n")
-    end
-
-    def composer_attachment_badges(input, attachments = [])
-      references = Array(attachments)
-      references = Kward::ImageAttachments.references_from_text(input) if references.empty?
-      references.map { |reference| attachment_badge_text(reference) }
-    end
-
-    def composer_attachment_parser(input)
-      Kward::ImageAttachments.extract_references_from_text(input)
-    end
-
-    def submitted_display_input(input)
-      input.respond_to?(:display_input) ? input.display_input : nil
-    end
-
-    def attachment_badge_text(reference)
-      status = reference[:status] || reference["status"]
-      label = reference[:label] || reference["label"] || "image"
-      if status == :missing || status.to_s == "missing"
-        "[image?] #{label} not found"
-      else
-        media_type = reference[:media_type] || reference["media_type"] || reference[:mimeType] || reference["mimeType"] || "image"
-        size = format_attachment_size(reference[:size_bytes] || reference["size_bytes"] || reference[:sizeBytes] || reference["sizeBytes"])
-        "[image] #{label} · #{media_type}#{size.empty? ? "" : " · #{size}"}"
-      end
-    end
-
-    def format_attachment_size(bytes)
-      value = bytes.to_i
-      return "" unless value.positive?
-      return "#{value} B" if value < 1024
-
-      units = %w[KB MB GB]
-      size = value.to_f / 1024
-      unit = units.shift
-      while size >= 1024 && units.any?
-        size /= 1024
-        unit = units.shift
-      end
-      formatted = size >= 10 ? size.round.to_s : format("%.1f", size).sub(/\.0\z/, "")
-      "#{formatted} #{unit}"
-    end
-
-    def agent_display_options(display_input)
-      display_input.nil? ? {} : { display_input: display_input }
-    end
-
-    def print_pasted_images(input, image_parts: nil)
-      parts = image_parts || Kward::ImageAttachments.image_parts_from_text(input)
-      parts.each do |part|
-        sequence = Kward::ImageAttachments.terminal_image_sequence(part)
-        next unless sequence
-
-        if @prompt.respond_to?(:say_visual)
-          @prompt.say_visual(sequence)
-        else
-          @prompt.say(sequence)
-        end
-      end
-    end
-
-    def print_block_delta(label, delta)
-      if prompt_interface?
-        @prompt.start_stream_block(label)
-        @prompt.write_delta(delta)
-      else
-        start_stream_block(label)
-        print delta
-        $stdout.flush
-      end
-    end
-
-    def print_retry(event)
-      message = retry_message(event)
-      if prompt_interface?
-        if @prompt.respond_to?(:write_stream_block)
-          @prompt.write_stream_block("Retry", "#{message}\n", finish: true)
-        else
-          @prompt.start_stream_block("Retry")
-          @prompt.write_delta("#{message}\n")
-          @prompt.finish_stream_block
-        end
-      else
-        start_stream_block("Retry")
-        puts message
-        $stdout.flush
-        @stream_block = nil
-      end
-    end
-
-    def retry_message(event)
-      RetryMessage.format(event)
-    end
-
-    def print_tool_call(tool_call)
-      if prompt_interface?
-        if @prompt.respond_to?(:write_stream_block)
-          @prompt.write_stream_block("Tool", "#{tool_command(tool_call)}\n", finish: true)
-        else
-          @prompt.start_stream_block("Tool")
-          @prompt.write_delta("#{tool_command(tool_call)}\n")
-          @prompt.finish_stream_block
-        end
-      else
-        start_stream_block("Tool")
-        puts tool_command(tool_call)
-        $stdout.flush
-        @stream_block = nil
-      end
-    end
-
-    def print_tool_result(tool_call, content, line_limit: nil)
-      summary = tool_result_summary(tool_call, content)
-      summary = limit_tool_output_lines(summary, line_limit) if line_limit
-      if prompt_interface?
-        summary = summary.end_with?("\n") ? summary : "#{summary}\n"
-        if @prompt.respond_to?(:write_stream_block)
-          @prompt.write_stream_block("Tool output", summary, finish: true)
-        else
-          @prompt.start_stream_block("Tool output")
-          @prompt.write_delta(summary)
-          @prompt.finish_stream_block
-        end
-      else
-        start_stream_block("Tool output")
-        print summary
-        puts unless summary.end_with?("\n")
-        $stdout.flush
-        @stream_block = nil
-      end
-    end
-
-    def tool_result_summary(tool_call, content)
-      name = tool_call_name(tool_call)
-      args = tool_call_args(tool_call)
-      text = content.to_s
-      return error_tool_summary(name, args, text) if text.start_with?("Error:", "Declined:")
-
-      case name
-      when "read_file"
-        read_file_summary(args, text)
-      when "write_file", "edit_file"
-        file_change_summary(name, args, text)
-      when "run_shell_command"
-        shell_command_summary(args, text)
-      when "web_search"
-        web_search_summary(args, text)
-      else
-        generic_tool_summary(name, text)
-      end
-    end
-
-    def limit_tool_output_lines(content, line_limit)
-      lines = content.to_s.lines
-      return content.to_s if lines.length <= line_limit
-
-      kept_lines = lines.first(line_limit - 1).join
-      omitted_lines = lines.length - (line_limit - 1)
-      suffix = omitted_lines == 1 ? "line" : "lines"
-      notice = "...[truncated #{omitted_lines} #{suffix}]"
-      kept_lines.end_with?("\n") || kept_lines.empty? ? "#{kept_lines}#{notice}" : "#{kept_lines}\n#{notice}"
-    end
-
-    def read_file_summary(args, content)
-      path = args["path"] || args[:path] || "(unknown path)"
-      "read_file: #{path}\n#{content.lines.count} lines, #{content.bytesize} bytes"
-    end
-
-    def file_change_summary(name, args, content)
-      path = args["path"] || args[:path] || path_from_tool_result(content) || "(unknown path)"
-      concise = content.lines.first.to_s.strip
-      concise = "completed" if concise.empty?
-      "#{name}: #{path}\n#{concise}"
-    end
-
-    def shell_command_summary(args, content)
-      command = args["command"] || args[:command] || ""
-      lines = ["run_shell_command: #{command}".strip]
-      lines << "Exit status: #{shell_exit_status(content) || "unknown"}"
-      stdout = shell_section(content, "STDOUT")
-      stderr = shell_section(content, "STDERR")
-      lines << compact_stream_summary("stdout", stdout) unless stdout.empty?
-      lines << compact_stream_summary("stderr", stderr) unless stderr.empty?
-      lines.join("\n")
-    end
-
-    def web_search_summary(args, content)
-      queries = Array(args["queries"] || args[:queries]).map(&:to_s)
-      queries = web_search_queries_from_content(content) if queries.empty?
-      counts = web_search_result_counts(content)
-      lines = ["web_search"]
-      queries.each do |query|
-        lines << "#{query}: #{counts.fetch(query, 0)} result(s)"
-      end
-      lines << "#{web_search_total_count(content)} result(s)" if queries.empty?
-      lines.join("\n")
-    end
-
-    def error_tool_summary(name, args, content)
-      path = args["path"] || args[:path]
-      command = args["command"] || args[:command]
-      context = path || command
-      [name, context, content.lines.first.to_s.strip].compact.reject(&:empty?).join("\n")
-    end
-
-    def generic_tool_summary(name, content)
-      text = content.to_s
-      return "#{name}: #{text}" if text.length <= RESTORED_TOOL_OUTPUT_LIMIT
-
-      "#{name}: #{text[0, RESTORED_TOOL_OUTPUT_LIMIT]}\n...[truncated #{text.length - RESTORED_TOOL_OUTPUT_LIMIT} bytes]"
-    end
-
-    def compact_stream_summary(label, text)
-      summary = text.strip
-      summary = summary[0, 500] + "\n...[truncated #{summary.length - 500} chars]" if summary.length > 500
-      "#{label} (#{text.bytesize} bytes):#{summary.empty? ? "" : "\n#{summary}"}"
-    end
-
-    def shell_exit_status(content)
-      content.match(/^Exit status: ([^\n]+)/)&.[](1)
-    end
-
-    def shell_section(content, name)
-      match = content.match(/^#{Regexp.escape(name)}:\n(.*?)(?=\nSTD(?:OUT|ERR):\n|\z)/m)
-      match ? match[1] : ""
-    end
-
-    def web_search_queries_from_content(content)
-      content.scan(/^## Query: (.+)$/).flatten
-    end
-
-    def web_search_result_counts(content)
-      counts = {}
-      current_query = nil
-      content.each_line do |line|
-        if (match = line.match(/^## Query: (.+)$/))
-          current_query = match[1]
-          counts[current_query] ||= 0
-        elsif current_query && line.match?(/^\d+\. /)
-          counts[current_query] += 1
-        end
-      end
-      counts
-    end
-
-    def web_search_total_count(content)
-      content.each_line.count { |line| line.match?(/^\d+\. /) }
-    end
-
-    def path_from_tool_result(content)
-      content.match(/\b(?:to|file|Edited)\s+([^:\n]+?)(?:\s|:|\z)/)&.[](1)
-    end
-
-    def tool_call_name(tool_call)
-      ToolCall.name(tool_call) || "unknown_tool"
-    end
-
-    def tool_call_args(tool_call)
-      ToolCall.arguments(tool_call)
-    end
-
-    def start_stream_block(label)
-      return if @stream_block == label
-
-      puts if @stream_block
-      puts "\n#{colored("#{transcript_label(label)}>", label_color(label), :bold)}"
-      @stream_block = label
-    end
-
-    def finish_stream_block
-      if prompt_interface?
-        @prompt.finish_stream_block
-      else
-        puts if @stream_block
-        @stream_block = nil
-      end
-    end
-
-    def colored(text, *styles)
-      ANSI.colorize(text, *styles, enabled: @color_enabled)
-    end
-
-    def transcript_label(label)
-      label == "Assistant" ? assistant_prompt_name : label
-    end
-
-    def label_color(label)
-      case label
-      when "Reasoning"
-        :yellow
-      when "Assistant", "Kward"
-        :green
-      when "Tool"
-        :magenta
-      when "Tool output"
-        :cyan
-      else
-        :blue
-      end
-    end
-
-    def tool_command(tool_call)
-      name = tool_call_name(tool_call)
-      args = tool_call_args(tool_call)
-
-      if name == "run_shell_command"
-        args["command"] || args[:command] || ""
-      elsif args.empty?
-        name.to_s
-      else
-        "#{name} #{JSON.dump(args)}"
-      end
-    end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   end
 end
