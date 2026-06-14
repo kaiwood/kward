@@ -4,7 +4,9 @@ require "time"
 require_relative "../config_files"
 require_relative "../rpc/redactor"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Append-only JSONL telemetry logger with secret-conscious error payloads.
   class TelemetryLogger
     CATEGORIES = %w[tokens performance tools errors].freeze
     ENV_KEYS = {
@@ -16,6 +18,7 @@ module Kward
     }.freeze
     DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
+    # Creates an object for telemetry event logging.
     def initialize(config_path: ConfigFiles.config_path, log_dir: nil, max_bytes: DEFAULT_MAX_BYTES, clock: Time, monotonic_clock: Process, error_output: $stderr)
       @config_path = config_path
       @log_dir = log_dir

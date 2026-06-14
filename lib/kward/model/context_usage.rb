@@ -1,7 +1,9 @@
 require "json"
 require_relative "../message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Estimates provider context usage and compaction pressure.
   class ContextUsage
     OPENAI_CONTEXT_PROVIDERS = ["Codex", "OpenAI"].freeze
 
@@ -78,6 +80,7 @@ module Kward
     end
   end
 
+  # Structured context usage result returned to frontends.
   class TiktokenTokenCounter
     def count(text, model:)
       encoding(model).encode(text.to_s).length

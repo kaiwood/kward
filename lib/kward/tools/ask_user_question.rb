@@ -1,9 +1,13 @@
 require_relative "../question_contract"
 require_relative "base"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Model-callable tool wrappers and their argument schemas.
   module Tools
+    # Tool wrapper for structured clarification questions to the user.
     class AskUserQuestion < Base
+      # Builds the tool schema and stores the execution dependency.
       def initialize(prompt:)
         @prompt = prompt
         super(
@@ -43,6 +47,7 @@ module Kward
         )
       end
 
+      # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
         return "Error: ask_user_question requires interactive prompt support." unless @prompt.respond_to?(:ask_user_question)
 

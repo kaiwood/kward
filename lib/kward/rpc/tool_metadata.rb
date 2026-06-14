@@ -1,8 +1,11 @@
 require_relative "../tools/tool_call"
 require_relative "../workspace"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Builds compact metadata for RPC tool-call display.
     module ToolMetadata
       module_function
 

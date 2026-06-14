@@ -11,6 +11,7 @@ require_relative "payloads"
 require_relative "../telemetry/logger"
 require_relative "stream_parser"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Provider-facing model client used by CLI, RPC, compaction, and memory flows.
   #
@@ -48,6 +49,7 @@ module Kward
     RequestError = Class.new(StandardError) do
       attr_reader :provider, :code, :body
 
+      # Creates an object for model provider requests.
       def initialize(provider:, code:, body:)
         @provider = provider
         @code = code.to_i
@@ -74,6 +76,7 @@ module Kward
     end
     TRANSIENT_NETWORK_ERRORS = [IOError, EOFError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout].freeze
 
+    # Creates an object for model provider requests.
     def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, github_oauth: GithubOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
       @openrouter_api_key = presence(api_key)
       @openai_access_token = presence(openai_access_token)
@@ -136,6 +139,7 @@ module Kward
       raise e
     end
 
+    # Returns the active provider label after applying env/config/credential fallback rules.
     def current_provider
       _url, _token, provider = credentials
       provider
@@ -146,14 +150,17 @@ module Kward
       openai_configured? ? "Codex" : "OpenRouter"
     end
 
+    # Returns the model id that will be used for the next request.
     def current_model
       current_model_state[:model]
     end
 
+    # Returns the configured reasoning effort for providers that support it.
     def current_reasoning_effort
       current_model_state[:reasoning_effort]
     end
 
+    # Returns the known context window for the active provider/model pair.
     def current_context_window
       state = current_model_state
       ModelInfo.context_window(state[:provider], state[:model])
@@ -188,22 +195,26 @@ module Kward
       models.sort_by { |model| [model[:provider], model[:id]] }
     end
 
+    # Fetches the full OpenRouter public model catalog for settings UIs.
     def openrouter_catalog
       fetch_openrouter_models(full_catalog: true).map do |id|
         { provider: "OpenRouter", id: id, current: current_provider == "OpenRouter" && model_for("OpenRouter") == id }
       end.sort_by { |model| model[:id] }
     end
 
+    # Projects messages/tools into the provider-specific context shape without sending it.
     def current_context_parts(messages, tools)
       build_context_parts(current_provider, messages, tools)
     end
 
+    # Returns whether the active provider can accept steering while a turn is streaming.
     def supports_in_flight_steer?
       current_provider == "Codex"
     rescue StandardError
       false
     end
 
+    # Reloads config-backed provider settings and clears live model catalog caches.
     def reload_config
       @config = load_config
       @copilot_models = nil

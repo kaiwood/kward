@@ -1,8 +1,25 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Interactive terminal UI used by the CLI frontend.
   class PromptInterface
+    # Mutable text, cursor, history, and overlay state for the composer.
     class ComposerState
-      attr_accessor :input, :cursor, :kill_buffer, :history_index, :history_draft, :prefill_input
-      attr_reader :attachments, :history
+      # @return [String] editable text currently shown in the composer
+      attr_accessor :input
+      # @return [Integer] cursor offset into `input`
+      attr_accessor :cursor
+      # @return [String] most recently killed text available for yank
+      attr_accessor :kill_buffer
+      # @return [Integer, nil] active history index while navigating history
+      attr_accessor :history_index
+      # @return [String, nil] draft restored after leaving history navigation
+      attr_accessor :history_draft
+      # @return [String, nil] text queued for the next composer prompt
+      attr_accessor :prefill_input
+      # @return [Array<Hash>] pending image/file attachments submitted with the next turn
+      attr_reader :attachments
+      # @return [Array<String>] submitted input history
+      attr_reader :history
 
       def initialize
         @input = +""
@@ -15,10 +32,12 @@ module Kward
         @prefill_input = nil
       end
 
+      # Removes all pending attachments without changing text input.
       def clear_attachments
         @attachments.clear
       end
 
+      # Adds one attachment unless its source is already pending.
       def add_attachment(attachment)
         return false unless attachment.respond_to?(:key?)
 
@@ -30,6 +49,7 @@ module Kward
         true
       end
 
+      # Removes the most recently added attachment.
       def remove_last_attachment
         return false if @attachments.empty?
 
@@ -37,6 +57,7 @@ module Kward
         true
       end
 
+      # Inserts text at the cursor and advances by the inserted length.
       def insert_string(string)
         return if string.empty?
 
@@ -44,6 +65,7 @@ module Kward
         @cursor += string.length
       end
 
+      # Deletes one character before the cursor.
       def delete_before_cursor
         return false if @cursor.zero?
 
@@ -52,6 +74,7 @@ module Kward
         true
       end
 
+      # Deletes one character at the cursor without moving it.
       def delete_at_cursor
         return false unless @cursor < @input.length
 
@@ -59,46 +82,57 @@ module Kward
         true
       end
 
+      # Moves the cursor one character left when possible.
       def move_cursor_left
         @cursor -= 1 if @cursor.positive?
       end
 
+      # Moves the cursor one character right when possible.
       def move_cursor_right
         @cursor += 1 if @cursor < @input.length
       end
 
+      # Moves the cursor to the beginning of the input buffer.
       def move_to_start_of_line
         @cursor = 0
       end
 
+      # Moves the cursor to the end of the input buffer.
       def move_to_end_of_line
         @cursor = @input.length
       end
 
+      # Moves the cursor to the previous word boundary.
       def move_to_previous_word
         @cursor = previous_word_boundary(@cursor)
       end
 
+      # Moves the cursor to the next word boundary.
       def move_to_next_word
         @cursor = next_word_boundary(@cursor)
       end
 
+      # Kills the word before the cursor into `kill_buffer`.
       def delete_word_before_cursor
         kill_range(previous_word_boundary(@cursor), @cursor)
       end
 
+      # Kills the word after the cursor into `kill_buffer`.
       def delete_word_after_cursor
         kill_range(@cursor, next_word_boundary(@cursor))
       end
 
+      # Kills all text before the cursor into `kill_buffer`.
       def kill_line_before_cursor
         kill_range(0, @cursor)
       end
 
+      # Kills all text after the cursor into `kill_buffer`.
       def kill_line_after_cursor
         kill_range(@cursor, @input.length)
       end
 
+      # Removes a range, stores it in `kill_buffer`, and moves the cursor to the start.
       def kill_range(start_index, end_index)
         return false if start_index == end_index
 
@@ -108,10 +142,12 @@ module Kward
         true
       end
 
+      # Inserts the last killed text at the cursor.
       def yank_kill_buffer
         insert_string(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
       end
 
+      # Finds the start offset of the word before `index`.
       def previous_word_boundary(index)
         cursor = index
         cursor -= 1 while cursor.positive? && word_separator?(@input[cursor - 1])
@@ -119,6 +155,7 @@ module Kward
         cursor
       end
 
+      # Finds the end offset of the word after `index`.
       def next_word_boundary(index)
         cursor = index
         cursor += 1 while cursor < @input.length && word_separator?(@input[cursor])
@@ -126,20 +163,24 @@ module Kward
         cursor
       end
 
+      # Treats whitespace as the only word separator for composer navigation.
       def word_separator?(char)
         char.to_s.match?(/\s/)
       end
 
+      # Replaces the full input buffer and places the cursor at the end.
       def replace_input(value)
         @input = value.to_s
         @cursor = @input.length
       end
 
+      # Returns `[row, column]` for cursor placement in multi-line input.
       def cursor_logical_position
         before_cursor = @input[0...@cursor]
         [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
       end
 
+      # Stores a submitted input unless it is blank or duplicates the previous entry.
       def add_history(value)
         stripped = value.to_s.strip
         return if stripped.empty?
@@ -148,6 +189,7 @@ module Kward
         @history << value
       end
 
+      # Replaces input with the previous history entry, preserving the draft first.
       def recall_previous_history
         return if @history.empty?
 
@@ -156,6 +198,7 @@ module Kward
         replace_input(@history[@history_index])
       end
 
+      # Replaces input with the next history entry or restores the saved draft.
       def recall_next_history
         return if @history_index.nil?
 
@@ -168,6 +211,7 @@ module Kward
         end
       end
 
+      # Leaves history navigation and clears the saved draft/index state.
       def reset_history_navigation
         @history_index = nil
         @history_draft = nil

@@ -1,6 +1,7 @@
 require "json"
 require_relative "tools/tool_call"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Formats persisted tool calls for compact session tree rows.
   #

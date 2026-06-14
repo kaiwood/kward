@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Selection overlay implementation for list-style prompts.
   class PromptInterface
+    # Selection-list overlay support for prompt choices.
     module SelectionPrompt
       private
 

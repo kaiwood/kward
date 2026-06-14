@@ -13,6 +13,7 @@ require_relative "search/web"
 require_relative "tool_call"
 require_relative "../workspace"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Exposes local workspace, search, skill, and interaction tools to the model
   # and dispatches tool calls into the active conversation.
@@ -35,7 +36,7 @@ module Kward
   class ToolRegistry
     # Tool schemas advertised to the model for the current frontend and config.
     #
-    # @return [Array<Hash>]
+    # @return [Array<Hash>] tool schemas currently advertised to the model
     attr_reader :schemas
 
     # Builds tool objects and the schema list for the current frontend/config.

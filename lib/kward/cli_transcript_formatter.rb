@@ -3,7 +3,9 @@ require_relative "image_attachments"
 require_relative "message_access"
 require_relative "message_text"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Formats conversation messages for terminal transcript display.
   module CLITranscriptFormatter
     module_function
 

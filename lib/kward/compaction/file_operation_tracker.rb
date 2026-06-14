@@ -1,8 +1,11 @@
 require_relative "../message_access"
 require_relative "../tools/tool_call"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Conversation compaction settings, planning, and summary generation.
   module Compaction
+    # Tracks file operations while preparing compaction summaries.
     class FileOperationTracker
       def call(messages, previous_details: {})
         read_files = Array(path_values(previous_details, "read_files", :read_files))

@@ -1,5 +1,6 @@
 require_relative "config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Loads trusted user plugin files and provides the plugin DSL.
   #
@@ -31,6 +32,7 @@ module Kward
 
     # Read-only transcript view exposed to plugin code.
     class Transcript
+      # Creates an object for trusted plugin loading and dispatch.
       def initialize(conversation)
         @conversation = conversation
       end
@@ -48,6 +50,7 @@ module Kward
     class Context
       attr_reader :args, :workspace_root
 
+      # Creates an object for trusted plugin loading and dispatch.
       def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil)
         @conversation = conversation
         @args = args.to_s
@@ -94,6 +97,7 @@ module Kward
 
     # DSL object yielded by `Kward.plugin` blocks.
     class DSL
+      # Creates an object for trusted plugin loading and dispatch.
       def initialize(registry, path)
         @registry = registry
         @path = path
@@ -133,6 +137,7 @@ module Kward
       end
     end
 
+    # Mutable singleton guard used while loading trusted plugin files.
     class << self
       attr_accessor :loading_registry, :loading_path
 
@@ -166,6 +171,7 @@ module Kward
       end
     end
 
+    # Creates an object for trusted plugin loading and dispatch.
     def initialize(reserved_commands: [])
       @reserved_commands = reserved_commands.map(&:to_s)
       @commands = {}
@@ -175,6 +181,7 @@ module Kward
       @prompt_context_renderers = []
     end
 
+    # @return [String, nil] plugin file currently responsible for footer output
     attr_reader :footer_path
 
     def commands

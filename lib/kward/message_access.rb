@@ -1,3 +1,4 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Compatibility reader for persisted conversation message hashes.
   #

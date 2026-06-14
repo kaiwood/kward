@@ -1,6 +1,8 @@
 require_relative "../message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
     # Computes conversation metrics and context usage for RPC runtime payloads.
     class SessionMetrics

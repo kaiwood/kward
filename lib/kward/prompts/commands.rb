@@ -1,6 +1,8 @@
 require_relative "../config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Prompt-template and slash-command parsing helpers.
   module PromptCommands
     BUILTIN_COMMANDS = [
       { name: "exit", description: "Exit the interactive session.", argument_hint: "" },

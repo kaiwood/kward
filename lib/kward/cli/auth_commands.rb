@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Login, logout, and credential-status commands mixed into the CLI frontend.
     module AuthCommands
       def handle_auth_command(arguments)
         if help_option_arguments?(arguments)
@@ -17,6 +20,7 @@ module Kward
         end
       end
 
+      # Writes the auth status output for the terminal CLI flow.
       def print_auth_status
         config = safely_read_config.to_h
         lines = ["#{colored("Auth Status", :green, :bold)}", ""]

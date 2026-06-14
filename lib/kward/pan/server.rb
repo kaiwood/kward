@@ -15,7 +15,9 @@ require_relative "../tools/tool_call"
 require_relative "../tools/registry"
 require_relative "../workspace"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Minimal local HTTP server for the experimental Pan web UI.
   class PanServer
     DEFAULT_HOST = "0.0.0.0"
     DEFAULT_PORT = 8765

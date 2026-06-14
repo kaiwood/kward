@@ -1,4 +1,6 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # ANSI color and terminal capability helpers.
   module ANSI
     ESCAPE_PATTERN = /\e\[[0-9;?]*[ -\/]*[@-~]/.freeze
     SGR_PATTERN = /\e\[[0-9;:]*m/.freeze
@@ -125,6 +127,7 @@ module Kward
       rendered.join("\n") + (string.end_with?("\n") ? "\n" : "")
     end
 
+    # String wrapper that strips ANSI escape sequences while preserving visible text operations.
     class MarkdownStream
       def initialize(enabled: ANSI.enabled?)
         @enabled = enabled

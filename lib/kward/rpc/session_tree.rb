@@ -1,7 +1,10 @@
 require_relative "../message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Helper for resolving and selecting persisted session tree entries.
     class SessionTree
       def initialize(rpc_session)
         @rpc_session = rpc_session

@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # High-level composer input loop and submission controller.
   class PromptInterface
+    # Text composer state transitions for keyboard input, paste, history, and submission.
     module ComposerController
       private
 

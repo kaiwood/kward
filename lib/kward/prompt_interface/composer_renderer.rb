@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Renderer for the editable composer text area.
   class PromptInterface
+    # Renderer for the editable prompt composer area.
     module ComposerRenderer
       private
 

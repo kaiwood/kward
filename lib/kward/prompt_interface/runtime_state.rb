@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Runtime metadata shown in the prompt footer and status UI.
   class PromptInterface
+    # Runtime footer, model, persona, and session state shown by the prompt interface.
     module RuntimeState
       private
 

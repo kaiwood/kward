@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Interactive settings menu actions mixed into the CLI frontend.
     module Settings
       private
 
@@ -22,6 +25,7 @@ module Kward
         @prompt.say("\nSettings error: #{e.message}\n")
       end
 
+      # Returns the category labels shown by the interactive settings overlay.
       def settings_category_choices
         [
           "Model & Reasoning",
@@ -37,6 +41,7 @@ module Kward
         ]
       end
 
+      # Maps a selected settings label back to the internal category key.
       def selected_settings_category(selected)
         text = selected.to_s.downcase
         return nil if text.empty?
@@ -506,6 +511,7 @@ module Kward
         @prompt.say("\nModel error: #{e.message}\n")
       end
 
+      # Writes the openrouter catalog output for the terminal CLI flow.
       def print_openrouter_catalog
         unless @client.respond_to?(:openrouter_catalog)
           @prompt.say("\nOpenRouter catalog is unavailable for this client.\n")

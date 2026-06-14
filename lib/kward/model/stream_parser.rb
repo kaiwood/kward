@@ -1,5 +1,6 @@
 require "json"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Parses streaming provider responses into Kward assistant messages.
   #

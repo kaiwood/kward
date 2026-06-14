@@ -1,5 +1,6 @@
 require_relative "message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Builds user-visible plain text from persisted conversation messages.
   #

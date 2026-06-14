@@ -7,6 +7,7 @@ require "uri"
 require "zlib"
 require_relative "config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Installs Kward's starter prompt/instruction files into the user config dir.
   class StarterPackInstaller

@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Compact tool-output summaries for terminal display and restored transcripts.
     module ToolSummaries
       private
 

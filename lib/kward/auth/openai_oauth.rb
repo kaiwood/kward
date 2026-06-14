@@ -8,7 +8,9 @@ require "time"
 require "uri"
 require_relative "file"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # OAuth helper for ChatGPT/OpenAI Codex credentials.
   class OpenAIOAuth
     ISSUER = "https://auth.openai.com"
     TOKEN_URL = URI("#{ISSUER}/oauth/token")
@@ -19,6 +21,7 @@ module Kward
 
     attr_reader :auth_path
 
+    # Creates an object for OpenAI OAuth credentials.
     def initialize(auth_path: OpenAIOAuth.default_auth_path, client_id: nil, config_path: OpenAIOAuth.default_config_path, issuer: ISSUER)
       @auth_path = File.expand_path(auth_path)
       @client_id = client_id
@@ -143,6 +146,7 @@ module Kward
       AuthFile.write_json(@auth_path, data)
     end
 
+    # Performs refresh for OpenAI OAuth credentials.
     def refresh!
       auth = load_auth || raise("OpenAI OAuth login not found")
       refresh_token = auth.fetch("tokens", {}).fetch("refresh_token", nil)

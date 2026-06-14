@@ -1,4 +1,6 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Frontend-neutral event objects emitted during agent turns.
   module Events
     ReasoningDelta = Struct.new(:delta, keyword_init: true)
     AssistantDelta = Struct.new(:delta, keyword_init: true)

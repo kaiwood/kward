@@ -1,7 +1,9 @@
 require "cgi"
 require_relative "markdown_transcript"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Serializes conversations for transcript export formats.
   class TranscriptExport
     SUPPORTED_FORMATS = ["markdown", "html"].freeze
 

@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Slash-command completion overlay behavior.
   class PromptInterface
+    # Slash-command completion overlay support.
     module SlashOverlay
       private
 

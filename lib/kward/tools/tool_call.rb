@@ -1,6 +1,7 @@
 require "json"
 require_relative "../message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Reads and normalizes model tool-call hashes.
   #

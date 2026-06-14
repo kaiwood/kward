@@ -1,9 +1,13 @@
 require_relative "base"
 require_relative "../config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Model-callable tool wrappers and their argument schemas.
   module Tools
+    # Tool wrapper for reading configured skill instructions.
     class ReadSkill < Base
+      # Builds the tool schema and stores the execution dependency.
       def initialize
         super(
           "read_skill",
@@ -16,6 +20,7 @@ module Kward
         )
       end
 
+      # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
         name = argument(args, :name, "")
         path = argument(args, :path)

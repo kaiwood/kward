@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Adapter methods that connect the CLI coordinator to the terminal prompt interface.
     module PromptInterfaceSupport
       private
 
@@ -43,6 +46,7 @@ module Kward
         @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
       end
 
+      # Writes the visual banner output for the terminal CLI flow.
       def print_visual_banner
         @prompt.print_visual_banner if @prompt.respond_to?(:print_visual_banner)
       end

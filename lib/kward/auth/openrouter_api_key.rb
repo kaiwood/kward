@@ -1,7 +1,9 @@
 require_relative "../config_files"
 require_relative "openai_oauth"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Config helper for storing and removing OpenRouter API keys.
   class OpenRouterAPIKey
     attr_reader :config_path
 

@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Layout calculations for terminal rows and overlay placement.
   class PromptInterface
+    # Terminal layout calculations for transcript, overlays, footer, and composer.
     module Layout
       private
 

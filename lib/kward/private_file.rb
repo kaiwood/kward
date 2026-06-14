@@ -1,7 +1,9 @@
 require "fileutils"
 require "json"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Writes sensitive JSON files with private filesystem permissions.
   module PrivateFile
     module_function
 

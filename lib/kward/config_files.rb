@@ -5,6 +5,7 @@ require_relative "private_file"
 require_relative "prompts/templates"
 require_relative "skills/registry"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Resolves Kward configuration, cache, memory, prompt, skill, and plugin
   # paths, and reads/writes the JSON config file used by the CLI and RPC server.
@@ -82,6 +83,7 @@ module Kward
       }
     end
 
+    # Performs ensure default config for configuration file and path handling.
     def ensure_default_config!(path = config_path)
       path = File.expand_path(path)
       return false if File.exist?(path)
@@ -137,6 +139,7 @@ module Kward
       PrivateFile.write_json(path, config)
     end
 
+    # Merges top-level config values and writes the updated config privately.
     def update_config(values, path = config_path)
       raise "Config values must be an object" unless values.is_a?(Hash)
 
@@ -146,6 +149,7 @@ module Kward
       config
     end
 
+    # Removes a top-level config key when it exists.
     def delete_config_key(key, path = config_path)
       config = read_config(path)
       existed = config.key?(key.to_s)
@@ -154,6 +158,7 @@ module Kward
       existed
     end
 
+    # Returns the first present non-empty string value among several config keys.
     def config_value(config, *keys)
       keys.each do |key|
         text = presence(config[key])
@@ -177,31 +182,37 @@ module Kward
       settings
     end
 
+    # Returns whether the composer should show busy-state keyboard help.
     def composer_busy_help?(config = read_config)
       composer = config["composer"].is_a?(Hash) ? config["composer"] : {}
       composer["busy_help"] != false
     end
 
+    # Returns whether the terminal startup banner should be displayed.
     def banner_enabled?(config = read_config)
       banner = config["banner"].is_a?(Hash) ? config["banner"] : {}
       banner["enabled"] != false
     end
 
+    # Returns whether file tools must stay inside the active workspace root.
     def workspace_guardrails_enabled?(config = read_config)
       tools = config["tools"].is_a?(Hash) ? config["tools"] : {}
       tools["workspace_guardrails"] != false
     end
 
+    # Returns whether new frontends should resume the last active session automatically.
     def session_auto_resume_enabled?(config = read_config)
       sessions = config["sessions"].is_a?(Hash) ? config["sessions"] : {}
       sessions["auto_resume"] == true
     end
 
+    # Returns the nested web-search config object, or an empty config when absent.
     def web_search_config(config = read_config)
       value = config["web_search"]
       value.is_a?(Hash) ? value : {}
     end
 
+    # Validates and persists terminal overlay settings.
     def update_overlay_settings(values)
       raise "Overlay settings must be an object" unless values.is_a?(Hash)
 
@@ -255,6 +266,7 @@ module Kward
       text
     end
 
+    # Returns the label of the persona selected by default/workspace/model rules.
     def active_persona_label(workspace_root:, model: nil, config: read_config)
       personas = config["personas"]
       return nil unless personas.is_a?(Hash)

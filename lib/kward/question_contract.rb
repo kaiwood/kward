@@ -1,5 +1,6 @@
 require_relative "message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Validates and normalizes structured clarification questions shared by CLI
   # tools and RPC prompt bridging.

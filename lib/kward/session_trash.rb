@@ -1,6 +1,7 @@
 require "open3"
 require "rbconfig"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Best-effort session file remover. Uses the OS trash/recycle bin when a
   # supported platform tool is available, and falls back to permanent deletion.

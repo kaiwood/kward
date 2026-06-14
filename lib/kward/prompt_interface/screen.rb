@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Terminal screen lifecycle and escape-sequence management.
   class PromptInterface
+    # Terminal screen control and escape-sequence helpers.
     module Screen
       private
 

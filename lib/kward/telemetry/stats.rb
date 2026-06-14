@@ -3,7 +3,9 @@ require "time"
 require_relative "../config_files"
 require_relative "logger"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Aggregates local telemetry logs into token and usage statistics.
   class TelemetryStats
     DEFAULT_RANGE = "1 week"
     UNITS = %w[minute hour day week month year].freeze
@@ -34,6 +36,7 @@ module Kward
       end
     end
 
+    # Creates an object for telemetry statistics aggregation.
     def initialize(telemetry_logger: TelemetryLogger.new, clock: Time)
       @telemetry_logger = telemetry_logger
       @clock = clock

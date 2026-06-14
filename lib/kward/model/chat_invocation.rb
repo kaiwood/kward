@@ -1,4 +1,6 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Thin adapter that invokes the configured model client.
   module ChatInvocation
     module_function
 

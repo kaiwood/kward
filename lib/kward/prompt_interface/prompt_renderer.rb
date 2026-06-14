@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Prompt label and composer chrome renderer.
   class PromptInterface
+    # Renderer for prompt labels and composer prompt chrome.
     module PromptRenderer
       private
 

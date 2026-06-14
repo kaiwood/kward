@@ -3,6 +3,7 @@ require "pathname"
 require "timeout"
 require_relative "session_diff"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Filesystem and shell-command boundary for workspace tools.
   #
@@ -23,6 +24,7 @@ module Kward
     MAX_EDIT_DIFF_BYTES = 8 * 1024
     DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
 
+    # Creates an object for workspace filesystem and shell operations.
     def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES, guardrails: true)
       @root = Pathname.new(root).realpath
       @guardrails = guardrails
@@ -32,8 +34,10 @@ module Kward
       @max_command_output_bytes = max_command_output_bytes
     end
 
+    # @return [Pathname] canonical workspace root used as the base for file and shell tools
     attr_reader :root
 
+    # Lists immediate directory children after resolving `path` through workspace guardrails.
     def list_directory(path)
       resolved = workspace_path(path)
       return "Error: not a directory: #{path}" unless File.directory?(resolved)
@@ -145,6 +149,7 @@ module Kward
       "Error: #{e.message}"
     end
 
+    # Resolves a path with the same guardrails used by file tools.
     def resolved_path(path)
       workspace_path(path)
     end

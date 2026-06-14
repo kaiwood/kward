@@ -1,6 +1,8 @@
 require_relative "../config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Static and configured model metadata helpers.
   module ModelInfo
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
     DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"

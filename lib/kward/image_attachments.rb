@@ -4,7 +4,9 @@ require "shellwords"
 require "tmpdir"
 require "uri"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Image attachment parsing, validation, encoding, and display helpers.
   module ImageAttachments
     MAX_IMAGE_BYTES = 20 * 1024 * 1024
     MIME_TYPES = {

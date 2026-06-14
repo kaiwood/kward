@@ -1,7 +1,10 @@
 require "thread"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Cooperative cancellation token shared by model calls, tools, and workers.
   class Cancellation
+    # Cooperative cancellation token shared by model calls, tools, and workers.
     class CancelledError < StandardError; end
 
     def initialize

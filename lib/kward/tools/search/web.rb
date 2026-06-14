@@ -5,7 +5,9 @@ require "nokogiri"
 require "uri"
 require_relative "../../config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Live web-search implementation with provider fallbacks.
   class WebSearch
     DEFAULT_MAX_RESULTS = 5
     MAX_MAX_RESULTS = 20
@@ -32,6 +34,7 @@ module Kward
     Result = Struct.new(:title, :url, :excerpt, :provider, keyword_init: true)
     SearchResponse = Struct.new(:answer, :results, :provider, :note, keyword_init: true)
 
+    # Creates an object for web search provider operations.
     def initialize(http_client: NetHttpClient.new, searxng_instances: PUBLIC_SEARXNG_INSTANCES, max_output_bytes: MAX_OUTPUT_BYTES, config: nil)
       @http_client = http_client
       @searxng_instances = searxng_instances
@@ -105,6 +108,7 @@ module Kward
       [nil, errors.join("; ")]
     end
 
+    # Returns the configured provider fallback order for a query.
     def provider_order(provider)
       case provider
       when "auto"
@@ -576,6 +580,7 @@ module Kward
       text
     end
 
+    # Returns browser-like headers used for HTML search fallbacks.
     def browser_headers(accept)
       {
         "Accept" => accept,
@@ -708,6 +713,7 @@ module Kward
       { "day" => "d", "week" => "w", "month" => "m", "year" => "y" }[filter]
     end
 
+    # HTTP adapter used by web-search providers and fallbacks.
     class NetHttpClient
       Response = Struct.new(:code, :body, keyword_init: true)
 

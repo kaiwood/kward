@@ -1,9 +1,13 @@
 require_relative "base"
 require_relative "search/web"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Model-callable tool wrappers and their argument schemas.
   module Tools
+    # Live web-search implementation with provider fallbacks.
     class WebSearch < Base
+      # Builds the tool schema and stores the execution dependency.
       def initialize(web_search:)
         @web_search = web_search
         super(
@@ -41,6 +45,7 @@ module Kward
         )
       end
 
+      # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
         @web_search.search(args)
       end

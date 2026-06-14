@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Bounded text buffer for transcript rendering.
   class PromptInterface
+    # Bounded in-memory transcript buffer used by the prompt interface.
     class TranscriptBuffer
       attr_reader :text
 

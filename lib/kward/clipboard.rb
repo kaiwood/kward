@@ -2,6 +2,7 @@ require "base64"
 require "open3"
 require "rbconfig"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Best-effort local clipboard writer used by explicit user copy commands.
   class Clipboard

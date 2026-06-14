@@ -1,7 +1,9 @@
 # Generated from avatar_kward_32x32.png as RGB terminal cells.
 # The interactive banner uses this data instead of decoding a PNG at runtime.
 module Kward
+  # Static avatar logo data used by generated resources.
   module Resources
+    # Static avatar logo data used by generated resources.
     module AvatarKwardLogo
       PIXELS = [
         [nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil],

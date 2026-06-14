@@ -3,7 +3,9 @@ require_relative "../message_text"
 require_relative "../session_tree_tool_display"
 require_relative "../tools/tool_call"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
     # Builds frontend-neutral RPC row payloads from a persisted session tree.
     #

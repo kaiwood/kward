@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Top-level command help, option parsing, and command dispatch helpers mixed into the CLI frontend.
     module Commands
       private
 
@@ -20,6 +23,7 @@ module Kward
         prompt.empty? ? nil : prompt
       end
 
+      # Writes the command help output for the terminal CLI flow.
       def print_command_help(command_name = nil)
         if command_name.to_s.empty? || ["--help", "-h"].include?(command_name)
           print_help
@@ -32,6 +36,7 @@ module Kward
         @prompt.say render_command_help(command_name, help)
       end
 
+      # Writes the help output for the terminal CLI flow.
       def print_help
         command = ->(text) { colored(text, :green, :bold) }
         option = ->(text) { colored(text, :cyan) }
@@ -150,6 +155,7 @@ module Kward
         "Usage: #{command_help.fetch(name).fetch(:usage)}"
       end
 
+      # Writes the version output for the terminal CLI flow.
       def print_version
         @prompt.say "kward #{VERSION}"
       end

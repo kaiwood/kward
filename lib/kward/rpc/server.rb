@@ -14,7 +14,9 @@ require_relative "redactor"
 require_relative "session_manager"
 require_relative "transport"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
     # Experimental JSON-RPC backend for UI clients.
     #
@@ -59,6 +61,7 @@ module Kward
         "memory/why", "memory/summarize"
       ].freeze
 
+      # Creates the RPC server and its stateful managers.
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new)
         @transport = Transport.new(input: input, output: output)
         @error_output = error_output

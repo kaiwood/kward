@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Interactive turn loop helpers for streaming, cancellation, and queued user input.
     module InteractiveTurn
       private
 

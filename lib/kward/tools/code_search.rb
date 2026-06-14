@@ -1,8 +1,12 @@
 require_relative "base"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Model-callable tool wrappers and their argument schemas.
   module Tools
+    # Package lookup and GitHub repository cache/search implementation.
     class CodeSearch < Base
+      # Builds the tool schema and stores the execution dependency.
       def initialize(code_search:)
         @code_search = code_search
         super(
@@ -56,6 +60,7 @@ module Kward
         )
       end
 
+      # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
         cancellation&.raise_if_cancelled!
         @code_search.call(args)

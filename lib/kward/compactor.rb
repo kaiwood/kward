@@ -6,12 +6,19 @@ require_relative "message_access"
 require_relative "prompts"
 require_relative "tools/tool_call"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Conversation compaction settings, planning, and summary generation.
   module Compaction
+    # Compaction support object used by conversation summarization.
     class Error < StandardError; end
+    # Compaction support object used by conversation summarization.
     class NothingToCompact < Error; end
+    # Compaction support object used by conversation summarization.
     class AlreadyCompacted < Error; end
+    # Compaction support object used by conversation summarization.
     class Cancelled < Error; end
+    # Compaction support object used by conversation summarization.
     class SummarizationFailed < Error; end
 
     PreparationResult = Struct.new(
@@ -29,6 +36,7 @@ module Kward
 
     Cut = Struct.new(:first_kept_index, :messages_to_summarize, :turn_prefix_messages, :split_turn, :preserved_messages, :preserved_start_index, keyword_init: true)
 
+    # Interactive settings menu actions mixed into the CLI frontend.
     class Settings
       DEFAULT_ENABLED = true
       DEFAULT_RESERVE_TOKENS = 16_384
@@ -36,6 +44,7 @@ module Kward
 
       attr_reader :enabled, :reserve_tokens, :keep_recent_tokens, :context_window
 
+      # Creates an object for conversation compaction.
       def initialize(enabled: DEFAULT_ENABLED, reserve_tokens: DEFAULT_RESERVE_TOKENS, keep_recent_tokens: DEFAULT_KEEP_RECENT_TOKENS, context_window: nil)
         @enabled = enabled != false
         @reserve_tokens = positive_integer(reserve_tokens, DEFAULT_RESERVE_TOKENS)
@@ -65,6 +74,7 @@ module Kward
       end
     end
 
+    # Compaction support object used by conversation summarization.
     class TokenEstimator
       def estimate_tokens(text)
         (text.to_s.length / 4.0).ceil
@@ -170,9 +180,11 @@ module Kward
       end
     end
 
+    # Compaction support object used by conversation summarization.
     class ConversationSerializer
       TOOL_RESULT_LIMIT = 2_000
 
+      # Creates an object for conversation compaction.
       def initialize(tool_result_summarizer: nil)
         @tool_result_summarizer = tool_result_summarizer
       end
@@ -350,9 +362,11 @@ module Kward
       end
     end
 
+    # Compaction support object used by conversation summarization.
     class CutPointFinder
       VALID_CUT_ROLES = ["user", "assistant", "bash", "custom", "branchSummary"].freeze
 
+      # Creates an object for conversation compaction.
       def initialize(estimator: TokenEstimator.new)
         @estimator = estimator
       end
@@ -431,7 +445,9 @@ module Kward
       end
     end
 
+    # Compaction support object used by conversation summarization.
     class Preparation
+      # Creates an object for conversation compaction.
       def initialize(conversation:, settings: Settings.new, estimator: TokenEstimator.new, cut_point_finder: CutPointFinder.new(estimator: estimator), file_operation_tracker: FileOperationTracker.new)
         @conversation = conversation
         @settings = settings
@@ -521,6 +537,7 @@ module Kward
       end
     end
 
+    # Compaction support object used by conversation summarization.
     class PromptBuilder
       SYSTEM_PROMPT = <<~PROMPT.strip.freeze
         You are a context summarization assistant. Your task is to read a conversation between a user and an AI coding assistant, then produce a structured summary following the exact format specified.
@@ -673,6 +690,7 @@ module Kward
         Be concise. Focus only on what is needed to understand and continue from the kept suffix. Preserve exact file paths, commands, class names, module names, method names, constants, spec names, migration names, and error messages.
       PROMPT
 
+      # Creates an object for conversation compaction.
       def initialize(serializer: ConversationSerializer.new)
         @serializer = serializer
       end
@@ -728,7 +746,9 @@ module Kward
       end
     end
 
+    # Compaction support object used by conversation summarization.
     class Summarizer
+      # Creates an object for conversation compaction.
       def initialize(client:, prompt_builder: PromptBuilder.new)
         @client = client
         @prompt_builder = prompt_builder
@@ -785,6 +805,7 @@ module Kward
     end
   end
 
+  # Compaction support object used by conversation summarization.
   class Compactor
     Result = Struct.new(:summary, :old_message_count, :new_message_count, :first_kept_entry_id, :tokens_before, :details, keyword_init: true)
     NothingToCompact = Compaction::NothingToCompact
@@ -795,6 +816,7 @@ module Kward
     AUTO_COMPACTION_GUARD_RATIO = 0.10
     AUTO_COMPACTION_EXTRA_GUARD_CAP = 12_000
 
+    # Creates an object for conversation compaction.
     def initialize(conversation:, client:, tool_result_summarizer: nil, settings: nil, summarizer: nil)
       @conversation = conversation
       @client = client

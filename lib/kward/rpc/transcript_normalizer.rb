@@ -1,8 +1,11 @@
 require_relative "../tools/tool_call"
 require_relative "tool_metadata"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Normalizes Kward transcript messages into Tauren-compatible RPC payloads.
     class TranscriptNormalizer
       IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
       THINKING_CONTENT_TYPES = ["thinking", "reasoning"].freeze

@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Builders for Tauren-compatible runtime state payloads.
     module RuntimePayloads
       module_function
 

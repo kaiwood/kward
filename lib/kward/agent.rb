@@ -8,6 +8,7 @@ require_relative "steering"
 require_relative "telemetry/logger"
 require_relative "tools/registry"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Runs model turns, handles context compaction, dispatches tool calls, and
   # streams high-level events back to CLI and RPC callers.

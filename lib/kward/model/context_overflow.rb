@@ -1,4 +1,6 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Detects provider errors caused by context-window overflow.
   module ContextOverflow
     OVERFLOW_PATTERNS = [
       /prompt is too long/i,

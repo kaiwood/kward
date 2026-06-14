@@ -7,7 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Documented the tool contract: schemas define strict generated/returned payloads, while runtime accepts tolerant incoming tool-call input for compatibility.
-- Improved RDoc coverage for message compatibility, tool-call normalization, session persistence, and session tree helpers.
+- Expanded RDoc coverage past 50% across message compatibility, tool-call normalization, session persistence, session tree helpers, model/client boundaries, config paths, workspace operations, telemetry, RPC, plugins, memory, auth, compaction, search internals, CLI mixins, and prompt interface components.
 
 ### Fixed
 

@@ -1,8 +1,12 @@
 require_relative "base"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Model-callable tool wrappers and their argument schemas.
   module Tools
+    # Tool wrapper for bounded workspace file reads.
     class ReadFile < Base
+      # Builds the tool schema and stores the execution dependency.
       def initialize(workspace:)
         @workspace = workspace
         super(
@@ -17,6 +21,7 @@ module Kward
         )
       end
 
+      # Executes the tool and returns model-facing output text.
       def call(args, conversation, cancellation: nil)
         path = argument(args, :path, "")
         offset = argument(args, :offset)

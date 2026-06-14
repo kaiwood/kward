@@ -2,8 +2,11 @@ require_relative "../ansi"
 require_relative "../resources/avatar_kward_logo"
 require_relative "../resources/pixel_logo"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Startup banner logo and message renderer.
   class PromptInterface
+    # Startup banner rendering data and helpers for the prompt interface.
     class Banner
       LOGO_WIDTH = 32
       LOGO_PIXEL_HEIGHT = 32

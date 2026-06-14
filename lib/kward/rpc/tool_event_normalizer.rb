@@ -1,8 +1,11 @@
 require "time"
 require_relative "tool_metadata"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Converts tool calls and results into RPC event payloads.
     class ToolEventNormalizer
       def initialize(tool_call, content: nil)
         @tool_call = tool_call

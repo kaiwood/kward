@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Terminal rendering helpers for streamed assistant/tool output.
     module Rendering
       private
 
@@ -193,6 +196,7 @@ module Kward
         tool_call["id"] || tool_call[:id]
       end
 
+      # Writes the user transcript output for the terminal CLI flow.
       def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
         visible_input = display_input.nil? ? input : display_input
         @prompt.say("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
@@ -200,6 +204,7 @@ module Kward
         print_pasted_images(input, image_parts: image_parts)
       end
 
+      # Writes the attachment badges output for the terminal CLI flow.
       def print_attachment_badges(input, references: nil)
         badges = references ? Array(references).map { |reference| attachment_badge_text(reference) } : composer_attachment_badges(input)
         return if badges.empty?
@@ -249,6 +254,7 @@ module Kward
         "#{formatted} #{unit}"
       end
 
+      # Writes the pasted images output for the terminal CLI flow.
       def print_pasted_images(input, image_parts: nil)
         parts = image_parts || Kward::ImageAttachments.image_parts_from_text(input)
         parts.each do |part|
@@ -263,6 +269,7 @@ module Kward
         end
       end
 
+      # Writes the block delta output for the terminal CLI flow.
       def print_block_delta(label, delta)
         if prompt_interface?
           @prompt.start_stream_block(label)
@@ -274,6 +281,7 @@ module Kward
         end
       end
 
+      # Writes the retry output for the terminal CLI flow.
       def print_retry(event)
         message = retry_message(event)
         if prompt_interface?
@@ -296,6 +304,7 @@ module Kward
         RetryMessage.format(event)
       end
 
+      # Writes the tool call output for the terminal CLI flow.
       def print_tool_call(tool_call)
         if prompt_interface?
           if @prompt.respond_to?(:write_stream_block)
@@ -313,6 +322,7 @@ module Kward
         end
       end
 
+      # Writes the tool result output for the terminal CLI flow.
       def print_tool_result(tool_call, content, line_limit: nil)
         summary = tool_result_summary(tool_call, content)
         summary = limit_tool_output_lines(summary, line_limit) if line_limit

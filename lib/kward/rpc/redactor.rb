@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Redacts sensitive configuration values before RPC responses.
     module Redactor
       SECRET_KEYS = /(?:token|secret|api[_-]?key|authorization|password|credential)/i
 

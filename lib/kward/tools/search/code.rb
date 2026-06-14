@@ -7,7 +7,9 @@ require "pathname"
 require "uri"
 require_relative "../../config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Package lookup and GitHub repository cache/search implementation.
   class CodeSearch
     DEFAULT_MAX_RESULTS = 10
     MAX_MAX_RESULTS = 50
@@ -21,6 +23,7 @@ module Kward
     ECOSYSTEMS = %w[rubygems npm pypi crates go].freeze
     ACTIONS = %w[package_search github_search repo_clone repo_search repo_read list_cache refresh_cache clear_cache].freeze
 
+    # Creates an object for code search and repository cache operations.
     def initialize(cache_root: nil, http_client: NetHttpClient.new, git_runner: GitRunner.new, max_output_bytes: MAX_OUTPUT_BYTES)
       @cache_root = File.expand_path(cache_root || ConfigFiles.code_search_cache_dir)
       @http_client = http_client
@@ -46,6 +49,7 @@ module Kward
       "Error: code_search failed: #{redact(e.message)}"
     end
 
+    # HTTP adapter used by code search registry/package lookups.
     class NetHttpClient
       def get_json(url, headers: {})
         JSON.parse(get_text(url, headers: headers.merge("Accept" => "application/json")))
@@ -65,6 +69,7 @@ module Kward
       end
     end
 
+    # Git command adapter used by repository cache operations.
     class GitRunner
       def run(*args, chdir: nil)
         command = ["git", *args]
@@ -410,6 +415,7 @@ module Kward
       text[%r{https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?}]
     end
 
+    # Returns GitHub API headers, including an optional token when configured.
     def github_headers
       token = ENV["GITHUB_TOKEN"] || ENV["GH_TOKEN"]
       token.to_s.empty? ? {} : { "Authorization" => "Bearer #{token}" }
@@ -422,6 +428,7 @@ module Kward
       nil
     end
 
+    # Returns a cache file path relative to the cloned repository root.
     def relative_path(root, path)
       Pathname.new(path).relative_path_from(Pathname.new(root)).to_s
     end

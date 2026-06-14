@@ -1,8 +1,12 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Environment and configuration diagnostics for the `doctor` command.
     module Doctor
       private
 
+      # Writes the doctor output for the terminal CLI flow.
       def print_doctor
         lines = ["#{colored("Kward Doctor", :green, :bold)}", ""]
         doctor_checks.each do |check|

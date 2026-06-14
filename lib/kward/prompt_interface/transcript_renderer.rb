@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Terminal transcript rendering helpers.
   class PromptInterface
+    # Renderer for transcript entries in the terminal prompt interface.
     module TranscriptRenderer
       private
 

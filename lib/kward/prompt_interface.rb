@@ -21,6 +21,7 @@ require_relative "prompt_interface/screen"
 require_relative "prompt_interface/key_handler"
 require_relative "prompt_interface/runtime_state"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Interactive terminal UI used by the CLI frontend.
   #
@@ -70,6 +71,7 @@ module Kward
     CANCEL_INPUT = :cancel_input
     SELECT_CANCEL = :select_cancel
 
+    # Submitted input string carrying optional display text for transcripts.
     class SubmittedInput < String
       attr_reader :display_input
 

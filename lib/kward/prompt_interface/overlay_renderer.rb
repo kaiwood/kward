@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Shared overlay drawing helpers for prompt UI popups.
   class PromptInterface
+    # Renderer for selection, slash-command, and question overlays.
     module OverlayRenderer
       private
 

@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Structured question overlay used by ask_user_question.
   class PromptInterface
+    # Structured question overlay used by the ask-user-question tool.
     module QuestionPrompt
       private
 

@@ -1,9 +1,13 @@
 require_relative "base"
 require_relative "../workspace"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Model-callable tool wrappers and their argument schemas.
   module Tools
+    # Tool wrapper for bounded shell commands in the workspace.
     class RunShellCommand < Base
+      # Builds the tool schema and stores the execution dependency.
       def initialize(workspace:)
         @workspace = workspace
         super(
@@ -17,6 +21,7 @@ module Kward
         )
       end
 
+      # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
         command = argument(args, :command, "")
         timeout_seconds = argument(args, :timeout_seconds, Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS)

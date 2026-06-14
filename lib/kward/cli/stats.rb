@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Token statistics command helpers mixed into the CLI frontend.
     module Stats
       private
 
@@ -47,6 +50,7 @@ module Kward
         { range: remaining.join(" "), bucket: bucket, output: output }
       end
 
+      # Writes the stats output for the terminal CLI flow.
       def print_stats(argument)
         result = TelemetryStats.new.collect(argument)
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{TelemetryStats.format(result)}\n")

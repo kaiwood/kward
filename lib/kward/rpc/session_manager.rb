@@ -34,7 +34,9 @@ require_relative "session_tree_rows"
 require_relative "tool_event_normalizer"
 require_relative "transcript_normalizer"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
     # Owns RPC-visible session lifecycle, async turn queues, and frontend events.
     #
@@ -59,6 +61,7 @@ module Kward
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
 
+      # Creates an object for RPC session lifecycle and turn coordination.
       def initialize(
         server:,
         client: Client.new,
@@ -134,12 +137,14 @@ module Kward
              .map { |info| session_info_payload(info, workspace_root: root) }
       end
 
+      # Renames the persisted session attached to an RPC session id.
       def rename_session(session_id:, name:)
         rpc_session = fetch_session(session_id)
         rpc_session.session.rename(name)
         session_payload(rpc_session)
       end
 
+      # Creates an independent copy of the current conversation branch.
       def clone_session(session_id:)
         source = fetch_session(session_id)
         session, conversation = source.store.create_independent_from_conversation(source.conversation, parent_session: source.session)
@@ -150,6 +155,7 @@ module Kward
         session_payload(rpc_session)
       end
 
+      # Compacts an RPC session and emits start/end events for UI progress.
       def compact_session(session_id:, custom_instructions: "")
         rpc_session = fetch_session(session_id)
         emit_session_event(rpc_session, "compactionStart", {})
@@ -167,6 +173,7 @@ module Kward
         raise e
       end
 
+      # Lists user-message entries that can be used as fork points.
       def fork_messages(session_id:)
         rpc_session = fetch_session(session_id)
         {
@@ -179,6 +186,7 @@ module Kward
         }
       end
 
+      # Creates a new session from history before the selected user message.
       def fork_session(session_id:, entry_id:)
         source = fetch_session(session_id)
         tree = session_tree_helper(source)
@@ -208,17 +216,20 @@ module Kward
         }
       end
 
+      # Returns the flattened session tree rows consumed by RPC clients.
       def session_tree(session_id:)
         rpc_session = fetch_session(session_id)
         { items: flatten_session_tree(rpc_session) }
       end
 
+      # Persists a label override for one tree entry.
       def set_tree_label(session_id:, entry_id:, label: nil)
         rpc_session = fetch_session(session_id)
         rpc_session.session.append_label_change(entry_id, label)
         { ok: true }
       end
 
+      # Moves the active branch to a tree entry, optionally summarizing abandoned history.
       def navigate_tree(session_id:, entry_id:, summarize: false, custom_instructions: nil)
         rpc_session = fetch_session(session_id)
         tree = session_tree_helper(rpc_session)
@@ -251,6 +262,7 @@ module Kward
         }.compact
       end
 
+      # Exports the current transcript in markdown or JSON format.
       def export_session(session_id:, path: nil, format: nil)
         rpc_session = fetch_session(session_id)
         format = export_format(format)
@@ -260,6 +272,7 @@ module Kward
         { path: path, format: format }
       end
 
+      # Deletes the backing session file through the configured trash strategy.
       def delete_session(session_id:)
         rpc_session = fetch_session(session_id)
         path = rpc_session.session.path
@@ -268,12 +281,14 @@ module Kward
         { deleted: deleted, path: path }
       end
 
+      # Stops workers and removes an RPC session from the live session map.
       def close_session(session_id:)
         rpc_session = fetch_session(session_id)
         close_rpc_session(rpc_session)
         { closed: true }
       end
 
+      # Closes idle empty sessions left behind by UI lifecycle transitions.
       def cleanup_unused_sessions
         rpc_sessions = @mutex.synchronize { @sessions.values.dup }
         rpc_sessions.reverse_each do |rpc_session|
@@ -284,6 +299,7 @@ module Kward
         { closed: true }
       end
 
+      # Returns the normalized transcript for the active RPC session.
       def transcript(session_id:)
         rpc_session = fetch_session(session_id)
         { session: session_payload(rpc_session), messages: TranscriptNormalizer.new(rpc_session.conversation.messages).normalize }

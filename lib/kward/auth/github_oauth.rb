@@ -5,7 +5,9 @@ require "uri"
 require_relative "file"
 require_relative "../config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # OAuth helper for GitHub Copilot credentials.
   class GithubOAuth
     DEVICE_CODE_URL = URI("https://github.com/login/device/code")
     TOKEN_URL = URI("https://github.com/login/oauth/access_token")
@@ -21,6 +23,7 @@ module Kward
 
     attr_reader :auth_path
 
+    # Creates an object for GitHub Copilot OAuth credentials.
     def initialize(auth_path: GithubOAuth.default_auth_path, config_path: ConfigFiles.config_path)
       @auth_path = File.expand_path(auth_path)
       @config_path = File.expand_path(config_path)

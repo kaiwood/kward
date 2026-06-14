@@ -3,8 +3,11 @@ require_relative "../config_files"
 require_relative "../model/model_info"
 require_relative "redactor"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # RPC configuration manager for reading and updating user config.
     class ConfigManager
       def initialize(config_path: OpenAIOAuth.default_config_path)
         @config_path = File.expand_path(config_path)

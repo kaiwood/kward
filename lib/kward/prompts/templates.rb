@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Prompt template discovery from configured markdown files.
   module Prompts
+    # Parsed prompt template loaded from disk.
     class Templates
       def initialize(config_dir:, template_class:, markdown_parser:)
         @config_dir = config_dir

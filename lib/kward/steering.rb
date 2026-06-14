@@ -1,7 +1,9 @@
 require "thread"
 require "time"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Thread-safe queue for in-flight user steering events.
   class Steering
     Event = Struct.new(:input, :created_at, keyword_init: true)
 

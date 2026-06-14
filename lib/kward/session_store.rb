@@ -10,6 +10,7 @@ require_relative "rpc/tool_event_normalizer"
 require_relative "tools/tool_call"
 require_relative "workspace"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # JSONL-backed persistence for CLI and RPC conversations.
   #
@@ -36,9 +37,24 @@ module Kward
     # conversation directly without these callbacks unless deliberately importing
     # or reconstructing history.
     class Session
-      attr_reader :id, :path, :cwd, :created_at, :parent_id, :parent_path
-      attr_accessor :name, :leaf_id
+      # @return [String] stable persisted session id from the JSONL header
+      attr_reader :id
+      # @return [String] absolute JSONL session file path
+      attr_reader :path
+      # @return [String] workspace directory recorded when the session was created
+      attr_reader :cwd
+      # @return [Time] creation timestamp used for sorting and filenames
+      attr_reader :created_at
+      # @return [String, nil] source session id when this session was cloned or forked
+      attr_reader :parent_id
+      # @return [String, nil] source session path when this session was cloned or forked
+      attr_reader :parent_path
+      # @return [String, nil] user-visible session name persisted as metadata records
+      attr_accessor :name
+      # @return [String, nil] active tree leaf id used to restore the selected branch
+      attr_accessor :leaf_id
 
+      # Creates an object for JSONL session persistence.
       def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil, leaf_id: nil)
         @store = store
         @id = id
@@ -63,22 +79,26 @@ module Kward
         self
       end
 
+      # Persists a message as a tree entry and advances the session leaf.
       def append_message(message)
         record = @store.build_tree_record(@path, "message", @leaf_id, message: message)
         @leaf_id = record[:id]
         @store.append_record(@path, record)
       end
 
+      # Persists a compaction summary entry and makes it the active leaf.
       def compact(message)
         record = @store.build_tree_record(@path, "compaction", @leaf_id, message: message)
         @leaf_id = record[:id]
         @store.append_record(@path, record)
       end
 
+      # Persists normalized tool execution metadata alongside transcript messages.
       def append_tool_execution(tool_call, content)
         @store.append_record(@path, RPC::ToolEventNormalizer.new(tool_call, content: content).execution_record)
       end
 
+      # Persists the session memory snapshot used when the session is restored.
       def update_memory_state(session_memories:, last_retrieval: nil)
         @store.append_record(@path, {
           type: "memory_state",
@@ -88,6 +108,7 @@ module Kward
         })
       end
 
+      # Persists a user-visible session name without rewriting earlier records.
       def rename(name)
         @name = name.to_s.strip.empty? ? nil : name.to_s.strip
         @store.append_record(@path, {
@@ -97,19 +118,23 @@ module Kward
         })
       end
 
+      # Moves the active leaf to an existing entry so future messages fork there.
       def branch(entry_id)
         @leaf_id = entry_id.to_s.empty? ? nil : entry_id.to_s
         @store.append_leaf_change(@path, @leaf_id)
       end
 
+      # Clears the active leaf so the next append starts a fresh root branch.
       def reset_leaf
         branch(nil)
       end
 
+      # Persists a display label override for one tree entry.
       def append_label_change(entry_id, label)
         @store.append_label_change(@path, entry_id, label)
       end
 
+      # Adds a branch-summary node under `parent_id` and selects it as the leaf.
       def append_branch_summary(parent_id, from_id:, summary:, details: {})
         record = @store.build_tree_record(@path, "branch_summary", parent_id, fromId: from_id, summary: summary, details: details || {})
         @leaf_id = record[:id]
@@ -117,6 +142,7 @@ module Kward
         record[:id]
       end
 
+      # Persists model/runtime metadata so restored sessions keep their context.
       def update_runtime(model:, reasoning_effort:)
         @store.append_record(@path, {
           type: "session_info",
@@ -127,16 +153,19 @@ module Kward
         }.delete_if { |_key, value| value.to_s.empty? })
       end
 
+      # Removes this session file when it is still empty and unnamed.
       def delete_if_unused
         @store.delete_unused_session(self)
       end
     end
 
+    # Creates an object for JSONL session persistence.
     def initialize(config_dir: ConfigFiles.config_dir, cwd: Dir.pwd)
       @config_dir = config_dir
       @cwd = File.expand_path(cwd)
     end
 
+    # @return [String] workspace directory this store lists and creates sessions for
     attr_reader :cwd
 
     # Creates a new empty session file for the store's workspace directory.

@@ -1,6 +1,8 @@
 require "json"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Counts unified-diff additions and deletions for summaries.
   class SessionDiff
     attr_reader :additions, :deletions
 

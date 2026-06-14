@@ -1,7 +1,10 @@
 require "pathname"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Skill discovery and metadata parsing from configured skill folders.
   module Skills
+    # Parsed skill metadata and instruction path.
     class Registry
       def initialize(config_dir:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:)
         @config_dir = config_dir

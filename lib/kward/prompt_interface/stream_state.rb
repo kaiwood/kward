@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Cursor/column state for streamed assistant blocks.
   class PromptInterface
+    # State object for streamed assistant output blocks.
     class StreamState
       attr_reader :block, :col
 

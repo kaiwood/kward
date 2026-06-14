@@ -3,7 +3,9 @@ require_relative "message_text"
 require_relative "session_tree_tool_display"
 require_relative "tools/tool_call"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Terminal renderer for persisted session tree choices.
   class SessionTreeRenderer
     def initialize(roots:, current_leaf_id:)
       @roots = roots

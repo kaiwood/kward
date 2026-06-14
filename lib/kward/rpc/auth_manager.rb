@@ -5,8 +5,11 @@ require_relative "../auth/openai_oauth"
 require_relative "../model/client"
 require_relative "config_manager"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # RPC authentication manager for provider status, login, and logout requests.
     class AuthManager
       Login = Struct.new(:id, :oauth, :pkce, :state, :server, :redirect_uri, :status, :error, :thread, keyword_init: true)
 

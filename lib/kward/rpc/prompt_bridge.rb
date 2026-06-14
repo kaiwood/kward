@@ -2,8 +2,11 @@ require "securerandom"
 require_relative "../message_access"
 require_relative "../question_contract"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # RPC prompt bridge for structured user questions.
     class PromptBridge
       def initialize(server:, session_id:)
         @server = server

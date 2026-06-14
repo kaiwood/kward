@@ -2,6 +2,7 @@ require_relative "../image_attachments"
 require_relative "../message_access"
 require_relative "model_info"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
   # Converts Kward conversation/tool data into provider-specific request shapes.
   #

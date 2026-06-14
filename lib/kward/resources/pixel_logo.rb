@@ -1,6 +1,8 @@
 require "zlib"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Pixel-art logo data and rendering helpers.
   module PixelLogo
     PNG_SIGNATURE = "\x89PNG\r\n\x1a\n".b.freeze
     TRANSPARENT_ALPHA = 128

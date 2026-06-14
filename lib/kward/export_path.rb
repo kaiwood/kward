@@ -1,6 +1,8 @@
 require "pathname"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Resolves safe output paths for transcript exports.
   class ExportPath
     def self.resolve(path, workspace_root:, default_path:, session_dir: nil)
       explicit = path.to_s.strip

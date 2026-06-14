@@ -7,7 +7,9 @@ require_relative "../config_files"
 require_relative "../message_access"
 require_relative "../model/client"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Memory subsystem for core, soft, session, and retrieval state.
   module Memory
     # Manages Kward's opt-in structured memory store.
     #
@@ -35,6 +37,7 @@ module Kward
         )
       end
 
+      # Creates an object for memory storage and retrieval.
       def initialize(config_path: ConfigFiles.config_path, core_path: ConfigFiles.memory_core_path, soft_path: ConfigFiles.memory_soft_path, events_path: ConfigFiles.memory_events_path, now: nil)
         @config_path = config_path
         @core_path = core_path

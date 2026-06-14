@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Keyboard sequence dispatcher for composer and overlay input.
   class PromptInterface
+    # Keyboard sequence handling for the terminal prompt interface.
     module KeyHandler
       private
 

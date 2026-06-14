@@ -1,6 +1,8 @@
 require_relative "config_files"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # System prompt assembly from config, workspace instructions, memory, and plugins.
   module Prompts
     module_function
 

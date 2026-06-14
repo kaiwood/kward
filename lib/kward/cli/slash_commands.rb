@@ -1,5 +1,8 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
+    # Interactive slash-command parsing and dispatch helpers.
     module SlashCommands
       private
 
@@ -73,6 +76,7 @@ module Kward
         PromptCommands.parse(command) || [nil, ""]
       end
 
+      # Writes the status output for the terminal CLI flow.
       def print_status
         lines = [STATUS_MESSAGE]
         lines << ""

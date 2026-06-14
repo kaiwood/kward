@@ -1,4 +1,6 @@
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Formats retry status messages for model-provider requests.
   module RetryMessage
     module_function
 

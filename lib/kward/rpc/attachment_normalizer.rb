@@ -1,8 +1,11 @@
 require "base64"
 require_relative "../tools/tool_call"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # JSON-RPC backend namespace used by UI clients.
   module RPC
+    # Validates and normalizes RPC image attachments.
     class AttachmentNormalizer
       IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
       MAX_BYTES = 10 * 1024 * 1024

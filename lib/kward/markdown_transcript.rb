@@ -1,6 +1,8 @@
 require_relative "message_access"
 
+# Namespace for the Kward CLI agent runtime.
 module Kward
+  # Markdown renderer for conversation transcripts.
   class MarkdownTranscript
     def initialize(conversation)
       @conversation = conversation
