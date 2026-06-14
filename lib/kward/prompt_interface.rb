@@ -199,7 +199,7 @@ module Kward
           @input = @prefill_input.to_s
           @prefill_input = nil
           @cursor = @input.length
-          @attachments.clear
+          @composer.clear_attachments; sync_legacy_composer_ivars
           reset_history_navigation
         end
         @pending_keys.clear
@@ -247,7 +247,7 @@ module Kward
         @prompt_label = message.to_s
         @input = ""
         @cursor = 0
-        @attachments.clear
+        @composer.clear_attachments; sync_legacy_composer_ivars
         @pending_keys.clear
         @asking = true
         @busy = false
@@ -324,7 +324,7 @@ module Kward
         @busy_activity = normalize_busy_activity(activity)
         @input = ""
         @cursor = 0
-        @attachments.clear
+        @composer.clear_attachments; sync_legacy_composer_ivars
         @pending_keys.clear
         @asking = true
         @busy = true
@@ -657,7 +657,7 @@ module Kward
         clear_prompt_for_output_locked
         @input = ""
         @cursor = 0
-        @attachments.clear
+        @composer.clear_attachments; sync_legacy_composer_ivars
         reset_history_navigation
         @asking = true
         render_prompt_after_output_locked
@@ -665,7 +665,7 @@ module Kward
         clear_prompt_locked
         @input = ""
         @cursor = 0
-        @attachments.clear
+        @composer.clear_attachments; sync_legacy_composer_ivars
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -688,14 +688,14 @@ module Kward
         clear_prompt_for_output_locked
         @input = ""
         @cursor = 0
-        @attachments.clear
+        @composer.clear_attachments; sync_legacy_composer_ivars
         @asking = true
         render_prompt_after_output_locked
       else
         clear_prompt_locked
         @input = ""
         @cursor = 0
-        @attachments.clear
+        @composer.clear_attachments; sync_legacy_composer_ivars
         @asking = false
         @rendered_rows = 0
         @cursor_rendered_row = 0
@@ -1489,13 +1489,9 @@ module Kward
     end
 
     def add_attachment(attachment)
-      return unless attachment.respond_to?(:key?)
-
-      source = attachment[:source_text] || attachment["source_text"] || attachment[:original_path] || attachment["original_path"]
-      return if source.to_s.empty?
-      return if @attachments.any? { |item| (item[:source_text] || item["source_text"]).to_s == source.to_s }
-
-      @attachments << attachment
+      sync_composer_from_legacy_ivars
+      @composer.add_attachment(attachment)
+      sync_legacy_composer_ivars
     end
 
     def delete_before_cursor
@@ -1512,12 +1508,13 @@ module Kward
     end
 
     def remove_last_attachment
-      return if @attachments.empty?
+      sync_composer_from_legacy_ivars
+      return unless @composer.remove_last_attachment
 
       reset_slash_selection
       reset_history_navigation
       @slash_overlay_dismissed_input = nil
-      @attachments.pop
+      sync_legacy_composer_ivars
     end
 
     def delete_at_cursor

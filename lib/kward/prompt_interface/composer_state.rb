@@ -15,6 +15,28 @@ module Kward
         @prefill_input = nil
       end
 
+      def clear_attachments
+        @attachments.clear
+      end
+
+      def add_attachment(attachment)
+        return false unless attachment.respond_to?(:key?)
+
+        source = attachment[:source_text] || attachment["source_text"] || attachment[:original_path] || attachment["original_path"]
+        return false if source.to_s.empty?
+        return false if @attachments.any? { |item| (item[:source_text] || item["source_text"]).to_s == source.to_s }
+
+        @attachments << attachment
+        true
+      end
+
+      def remove_last_attachment
+        return false if @attachments.empty?
+
+        @attachments.pop
+        true
+      end
+
       def insert_string(string)
         return if string.empty?
 
