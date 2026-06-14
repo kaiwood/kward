@@ -330,17 +330,6 @@ module Kward
       nil
     end
 
-    def workspace_config(workspace_root, config = read_config)
-      workspaces = config["workspaces"]
-      return nil unless workspaces.is_a?(Hash)
-
-      root = canonical_workspace_root(workspace_root)
-      workspaces.each do |path, entry|
-        return entry if canonical_workspace_root(path) == root
-      end
-      nil
-    end
-
     def canonical_workspace_root(path)
       expanded = File.expand_path(path.to_s.empty? ? Dir.pwd : path.to_s)
       File.directory?(expanded) ? File.realpath(expanded) : expanded

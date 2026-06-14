@@ -359,24 +359,6 @@ class TestPrompts < KwardTestCase
     ], entries
   end
 
-  def test_legacy_workspace_system_prompt_is_ignored
-    Dir.mktmpdir do |config_dir|
-      Dir.mktmpdir do |workspace|
-        File.write(File.join(config_dir, "config.json"), JSON.dump({
-          "workspaces" => {
-            workspace => { "system_prompt" => "Legacy personality." }
-          }
-        }))
-
-        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
-
-          refute_includes content, "Legacy personality."
-        end
-      end
-    end
-  end
-
   def test_config_skills_are_listed_without_body
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
