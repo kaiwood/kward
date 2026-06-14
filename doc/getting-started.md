@@ -108,8 +108,6 @@ Kward saves interactive sessions under `~/.kward/sessions/`.
 ## Safety basics
 
 - Kward must read an existing file in the current conversation before it can edit or overwrite it.
-- File writes and edits ask for confirmation first.
-- Shell commands ask for confirmation before running.
 - Tool reads are bounded so large files are not accidentally loaded into context.
 
 ## Run tests

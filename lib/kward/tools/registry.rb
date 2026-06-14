@@ -15,7 +15,7 @@ require_relative "../workspace"
 
 module Kward
   # Exposes local workspace, search, skill, and interaction tools to the model
-  # and dispatches approved tool calls into the active conversation.
+  # and dispatches tool calls into the active conversation.
   class ToolRegistry
     # Tool schemas advertised to the model for the current frontend and config.
     #

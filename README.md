@@ -54,8 +54,8 @@ exe/kward
 ## What Kward can do
 
 - Keep a multi-turn coding conversation in your terminal.
-- Read, write, and edit workspace files with confirmation before changes.
-- Run shell commands after confirmation.
+- Read, write, and edit workspace files with read-before-write guardrails.
+- Run local shell commands from the workspace.
 - Search the live web and inspect cached public GitHub repositories.
 - Save, resume, clone, compact, and export sessions.
 - Extend the Agent with trusted Ruby plugins for custom commands, footer UI, prompt context, and transcript-event observers.

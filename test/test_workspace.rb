@@ -104,7 +104,7 @@ class TestWorkspace < KwardTestCase
       path = "kward_existing_requires_read.txt"
       File.write(File.join(dir, path), "old\n")
 
-      result = workspace.write_file(path, "new\n", read_paths: []) { true }
+      result = workspace.write_file(path, "new\n", read_paths: [])
 
       assert_equal "Error: existing file must be read before writing: #{path}", result
       assert_equal "old\n", File.read(File.join(dir, path))
@@ -115,25 +115,14 @@ class TestWorkspace < KwardTestCase
     with_temp_workspace do |workspace, dir|
       path = "kward_accepted_new.txt"
 
-      result = workspace.write_file(path, "hello\n", read_paths: []) { true }
+      result = workspace.write_file(path, "hello\n", read_paths: [])
 
       assert_equal "Wrote 6 bytes to #{path}", result
       assert_equal "hello\n", File.read(File.join(dir, path))
     end
   end
 
-  def test_declined_write_does_not_modify_file
-    with_temp_workspace do |workspace, dir|
-      path = "kward_declined_write.txt"
-
-      result = workspace.write_file(path, "hello\n", read_paths: []) { false }
-
-      assert_equal "Declined: write_file was not approved for #{path}", result
-      refute File.exist?(File.join(dir, path))
-    end
-  end
-
-  def test_existing_file_can_be_written_after_successful_read_and_confirmation
+  def test_existing_file_can_be_written_after_successful_read
     with_temp_workspace do |workspace, dir|
       path = "kward_existing_after_read.txt"
       File.write(File.join(dir, path), "old\n")
@@ -141,7 +130,7 @@ class TestWorkspace < KwardTestCase
       content = workspace.read_file(path)
       conversation.mark_read(workspace.resolved_path(path)) unless content.start_with?("Error:")
 
-      result = workspace.write_file(path, "new\n", read_paths: conversation.read_paths) { true }
+      result = workspace.write_file(path, "new\n", read_paths: conversation.read_paths)
 
       assert_includes result, "Wrote 4 bytes to #{path}"
       assert_includes result, "--- #{path}"

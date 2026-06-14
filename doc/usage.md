@@ -82,7 +82,7 @@ Kward can use these tools during a turn:
 
 - `list_directory` and `read_file` to inspect the workspace.
 - `write_file` and `edit_file` to create or change files.
-- `run_shell_command` to run confirmed local commands.
+- `run_shell_command` to run local commands from the workspace.
 - `web_search` to search the live web.
 - `code_search` to find packages, clone public GitHub repositories into cache, and read bounded source snippets.
 - `ask_user_question` to ask structured clarification questions.
@@ -90,7 +90,6 @@ Kward can use these tools during a turn:
 Safety rules:
 
 - Existing files must be read in the current conversation before Kward can write or edit them.
-- Every write, edit, and shell command asks for confirmation first.
 - Text file reads and edits are capped at 256 KiB per file.
 - When successful tool results include unified diffs, the composer status shows live session totals such as `+700|-572`.
 

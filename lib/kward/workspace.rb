@@ -53,10 +53,6 @@ module Kward
         return "Error: existing file must be read before writing: #{path}"
       end
 
-      if block_given? && !yield(relative_path(resolved), content.bytesize)
-        return "Declined: write_file was not approved for #{path}"
-      end
-
       old_content = File.exist?(resolved) ? File.read(resolved) : nil
       File.write(resolved, content)
       output = "Wrote #{content.bytesize} bytes to #{path}"
