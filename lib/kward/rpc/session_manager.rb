@@ -1,4 +1,3 @@
-require "base64"
 require "securerandom"
 require "thread"
 require "time"
@@ -23,6 +22,7 @@ require_relative "../tools/tool_call"
 require_relative "../tools/registry"
 require_relative "../transcript_export"
 require_relative "../workspace"
+require_relative "attachment_normalizer"
 require_relative "prompt_bridge"
 require_relative "runtime_payloads"
 require_relative "session_metrics"
@@ -33,8 +33,8 @@ module Kward
   module RPC
     class SessionManager
       RECENT_EVENT_LIMIT = 1_000
-      RPC_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
-      RPC_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"].freeze
+      RPC_ATTACHMENT_MAX_BYTES = AttachmentNormalizer::MAX_BYTES
+      RPC_IMAGE_MIME_TYPES = AttachmentNormalizer::IMAGE_MIME_TYPES
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
       FOOTER_REFRESH_INTERVAL = 1.0
       WORKER_STOP = Object.new.freeze
@@ -978,42 +978,7 @@ module Kward
       end
 
       def normalize_attachments(attachments)
-        return [] if attachments.nil?
-        raise ArgumentError, "attachments must be an array" unless attachments.is_a?(Array)
-
-        attachments.map { |attachment| normalize_attachment(attachment) }
-      end
-
-      def normalize_attachment(attachment)
-        raise ArgumentError, "attachment must be an object" unless attachment.is_a?(Hash)
-
-        type = ToolCall.value(attachment, :type).to_s
-        raise ArgumentError, "Unsupported attachment type: #{type.empty? ? "unknown" : type}" unless type == "image"
-
-        mime_type = normalize_attachment_mime_type(ToolCall.value(attachment, :mimeType) || ToolCall.value(attachment, :mime_type) || ToolCall.value(attachment, :media_type))
-        raise ArgumentError, "Unsupported image MIME type: #{mime_type.empty? ? "unknown" : mime_type}" unless RPC_IMAGE_MIME_TYPES.include?(mime_type)
-
-        data = ToolCall.value(attachment, :data).to_s
-        raise ArgumentError, "Image attachment data must be valid base64" if data.empty?
-        raise ArgumentError, "Image attachment data must be raw base64" if data.start_with?("data:")
-        declared_size = ToolCall.value(attachment, :sizeBytes) || ToolCall.value(attachment, :size_bytes)
-        raise ArgumentError, "Image attachment is too large" if declared_size && declared_size.to_i > RPC_ATTACHMENT_MAX_BYTES
-
-        decoded_size = Base64.strict_decode64(data).bytesize
-        raise ArgumentError, "Image attachment is too large" if decoded_size > RPC_ATTACHMENT_MAX_BYTES
-
-        result = { type: "image", data: data, mimeType: mime_type }
-        name = ToolCall.value(attachment, :name)
-        result[:alt] = name.to_s unless name.to_s.empty?
-        result
-      rescue ArgumentError => e
-        raise e if e.message.start_with?("Unsupported", "Image attachment", "attachment")
-
-        raise ArgumentError, "Image attachment data must be valid base64"
-      end
-
-      def normalize_attachment_mime_type(mime_type)
-        mime_type.to_s.downcase
+        AttachmentNormalizer.new(max_bytes: RPC_ATTACHMENT_MAX_BYTES, mime_types: RPC_IMAGE_MIME_TYPES).normalize(attachments)
       end
 
       def plugin_registry
