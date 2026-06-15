@@ -54,8 +54,9 @@ class TestContextUsage < KwardTestCase
     assert_includes token_counter.texts.first, "read_file"
   end
 
-  def test_omits_usage_for_image_contexts
-    usage = Kward::ContextUsage.new(token_counter: CountingTokenCounter.new).call(
+  def test_redacts_image_data_from_usage_estimate
+    token_counter = CountingTokenCounter.new
+    usage = Kward::ContextUsage.new(token_counter: token_counter).call(
       provider: "Codex",
       model: "gpt-5",
       context_window: 400_000,
@@ -66,7 +67,9 @@ class TestContextUsage < KwardTestCase
       }
     )
 
-    assert_nil usage
+    assert usage[:tokens] > 0
+    assert_includes token_counter.texts.first, "[image omitted from token estimate]"
+    refute_includes token_counter.texts.first, "data:image/png;base64,abc"
   end
 
   def test_omits_usage_for_non_openai_provider

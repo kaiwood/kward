@@ -14,9 +14,8 @@ module Kward
     def call(provider:, model:, context_window:, context_parts:)
       return nil unless OPENAI_CONTEXT_PROVIDERS.include?(provider.to_s)
       return nil unless context_window
-      return nil if contains_image?(context_parts)
 
-      parts = stringify_keys(context_parts || {})
+      parts = redact_image_data(stringify_keys(context_parts || {}))
       return nil unless contains_session_content?(parts)
 
       payload = prompt_payload(parts)
@@ -58,19 +57,21 @@ module Kward
       false
     end
 
-    def contains_image?(value)
+    def redact_image_data(value)
       case value
       when Hash
-        type = value[:type] || value["type"]
-        return true if ["image", "input_image", "image_url"].include?(type.to_s)
-        return true if value.key?(:image_url) || value.key?("image_url")
-
-        value.any? { |_key, item| contains_image?(item) }
+        value.each_with_object({}) do |(key, item), result|
+          result[key] = image_data_key?(key) ? "[image omitted from token estimate]" : redact_image_data(item)
+        end
       when Array
-        value.any? { |item| contains_image?(item) }
+        value.map { |item| redact_image_data(item) }
       else
-        false
+        value
       end
+    end
+
+    def image_data_key?(key)
+      ["data", "image_url"].include?(key.to_s)
     end
 
     def stringify_keys(value)
