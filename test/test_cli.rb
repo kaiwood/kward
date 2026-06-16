@@ -2553,6 +2553,40 @@ edit this prompt"
     assert_equal "", cli.piped_prompt
   end
 
+  def test_reload_plugins_updates_footer_renderer
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      plugin_path = File.join(plugins_dir, "footer.rb")
+      FileUtils.mkdir_p(plugins_dir)
+      File.write(plugin_path, <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.footer do |_ctx|
+            "footer=v1"
+          end
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+        footer = cli.send(:prompt_footer_renderer)
+        conversation = Kward::Conversation.new(plugin_registry: cli.send(:plugin_registry))
+
+        assert_equal "footer=v1", footer.call
+
+        File.write(plugin_path, <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.footer do |_ctx|
+              "footer=v2"
+            end
+          end
+        RUBY
+        cli.send(:reload_plugins, conversation)
+
+        assert_equal "footer=v2", footer.call
+      end
+    end
+  end
+
   def test_reload_plugins_updates_commands_and_current_system_message
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")

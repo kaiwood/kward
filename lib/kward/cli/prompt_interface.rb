@@ -52,10 +52,12 @@ module Kward
       end
 
       def prompt_footer_renderer
-        renderer = plugin_registry.footer_renderer
-        return nil unless renderer
+        return nil unless plugin_registry.footer_renderer
 
         lambda do
+          renderer = plugin_registry.footer_renderer
+          next "" unless renderer
+
           context = plugin_context(current_footer_conversation, "")
           renderer.call(context).to_s
         rescue StandardError => e

@@ -576,7 +576,13 @@ module Kward
         sessions.each do |rpc_session|
           rpc_session.conversation.plugin_registry = registry if rpc_session.conversation.respond_to?(:plugin_registry=)
           rpc_session.conversation.refresh_system_message! if rpc_session.conversation.respond_to?(:refresh_system_message!)
-          emit_footer_update(rpc_session)
+          if registry.footer_renderer
+            start_footer_worker(rpc_session)
+            emit_footer_update(rpc_session)
+          else
+            stop_footer_worker(rpc_session)
+            clear_footer_update(rpc_session)
+          end
         end
       end
 
@@ -1140,7 +1146,7 @@ module Kward
 
       def emit_footer_update(rpc_session)
         renderer = plugin_registry.footer_renderer
-        return unless renderer
+        return clear_footer_update(rpc_session) unless renderer
 
         text = begin
           context = PluginRegistry::Context.new(
@@ -1158,6 +1164,13 @@ module Kward
 
         rpc_session.last_footer_text = text
         @server.notify("ui/footer", { sessionId: rpc_session.id, text: text })
+      end
+
+      def clear_footer_update(rpc_session)
+        return if rpc_session.last_footer_text.to_s.empty?
+
+        rpc_session.last_footer_text = ""
+        @server.notify("ui/footer", { sessionId: rpc_session.id, text: "" })
       end
 
       def emit_turn_event(turn, type, payload)
