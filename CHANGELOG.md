@@ -8,6 +8,10 @@ All notable changes to Kward will be documented in this file.
 
 - Added `fetch_content` and `fetch_raw` web tools for reading specific URLs after search discovery.
 
+### Changed
+
+- Separated conversation system prompt state from durable transcript messages; provider request context still includes the current system prompt on every model request.
+
 ### Fixed
 
 - Fixed in-flight steering messages so they appear in the interactive transcript as `You>` entries.

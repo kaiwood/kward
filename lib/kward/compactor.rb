@@ -482,7 +482,7 @@ module Kward
           kept_messages: kept_messages,
           turn_prefix_messages: cut.turn_prefix_messages,
           split_turn: cut.split_turn,
-          tokens_before: @estimator.context_tokens(@conversation.messages),
+          tokens_before: @estimator.context_tokens(@conversation.context_messages),
           previous_summary: previous_entry ? compaction_summary(previous_entry) : nil,
           file_ops: file_ops,
           settings: @settings
@@ -866,7 +866,7 @@ module Kward
       context_window ||= @settings.context_window
       return nil unless context_window
 
-      context_tokens ||= Compaction::TokenEstimator.new.context_tokens(@conversation.messages)
+      context_tokens ||= Compaction::TokenEstimator.new.context_tokens(@conversation.context_messages)
       reserve_tokens = auto_compaction_reserve_tokens(context_window: context_window.to_i)
       return nil unless context_tokens.to_i > context_window.to_i - reserve_tokens
 

@@ -213,7 +213,7 @@ module Kward
       end
       ChatInvocation.call(
         @client,
-        @conversation.messages,
+        @conversation.context_messages,
         {
           tools: @tool_registry.schemas,
           on_reasoning_delta: reasoning_delta,

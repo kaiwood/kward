@@ -31,6 +31,8 @@ Interactive mode opens a terminal composer and saves the conversation as a per-w
 
 The composer stays available while assistant and tool output streams. If you press Enter while a response is still running, Kward queues your next prompt and sends it after the current turn finishes. Press Ctrl+C while a response is running to stop the current turn and return to the composer.
 
+Kward separates the durable transcript from the provider request context. The transcript contains user, assistant, tool, and compaction messages. The current system prompt is stored as conversation runtime state and is not counted as a transcript message. For every model request, Kward builds a fresh request context from the current system prompt plus the active transcript, because supported providers are stateless across turns and need the operating instructions each time.
+
 Prefix input with `!` to run a local shell command from the workspace root without sending it to the model:
 
 ```text

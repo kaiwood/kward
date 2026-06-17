@@ -36,7 +36,7 @@ class TestCompactor < KwardTestCase
 
           system_content = messages.first[:content]
           user_content = messages.last[:content]
-          assert_includes conversation.messages.first[:content], "Speak like a starship computer."
+          assert_includes conversation.system_message[:content], "Speak like a starship computer."
           refute_includes system_content, "Speak like a starship computer."
           assert_includes system_content, "context summarization assistant"
           assert_includes user_content, "<conversation>"

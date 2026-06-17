@@ -21,8 +21,10 @@ module Kward
   class Conversation
     DEFAULT_SYSTEM_MESSAGE = Object.new.freeze
 
-    # @return [Array<Hash>] ordered transcript entries sent to providers and persisted in sessions
+    # @return [Array<Hash>] ordered durable transcript entries, excluding runtime system prompt state
     attr_reader :messages
+    # @return [Hash, nil] current system prompt included when building provider request context
+    attr_reader :system_message
     # @return [Set<String>] resolved paths read by file tools during the active context
     attr_reader :read_paths
     # @return [String] canonical workspace root used for prompts and file guardrails
@@ -59,10 +61,12 @@ module Kward
       @reasoning_effort = reasoning_effort
       @plugin_registry = plugin_registry
       @messages = []
+      restored_system_message, transcript_messages = split_system_message(messages)
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        system_message = messages.any? { |message| MessageAccess.role(message) == "system" } ? nil : Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context, plugin_context: plugin_prompt_context)
+        system_message = restored_system_message || Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context, plugin_context: plugin_prompt_context)
       end
-      @system_message_enabled = !!(system_message || messages.find { |message| MessageAccess.role(message) == "system" })
+      @system_message = system_message
+      @system_message_enabled = !@system_message.nil?
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
         compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort) : nil
       end
@@ -72,8 +76,7 @@ module Kward
       @memory_context = memory_context
       @session_memories = Array(session_memories)
       @last_memory_retrieval = last_memory_retrieval
-      @messages << system_message unless system_message.nil?
-      @messages.concat(messages)
+      @messages.concat(transcript_messages)
       @read_paths = Set.new(read_paths)
       @on_append = on_append
       @on_compact = on_compact
@@ -110,6 +113,11 @@ module Kward
       @on_tool_execution&.call(tool_call, content)
     end
 
+    # @return [Array<Hash>] provider request context: current system prompt plus durable transcript
+    def context_messages
+      @system_message ? [@system_message] + @messages : @messages.dup
+    end
+
     # Rebuilds the system message from current config, memory, plugins, and
     # workspace AGENTS.md state.
     #
@@ -120,8 +128,7 @@ module Kward
       return nil unless @system_message_enabled
 
       replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context, plugin_context: plugin_prompt_context)
-      index = @messages.index { |message| MessageAccess.role(message) == "system" }
-      index ? @messages[index] = replacement : @messages.unshift(replacement)
+      @system_message = replacement
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)
       @workspace_agents_mtime = workspace_agents_mtime
       replacement
@@ -172,7 +179,7 @@ module Kward
         message[:from_hook] = from_hook
         message[:details] = details || {}
       end
-      @messages = @messages.select { |item| MessageAccess.role(item) == "system" }
+      @messages = []
       @messages << message
       @messages.concat(Array(keep_messages))
       @read_paths.clear
@@ -196,6 +203,19 @@ module Kward
     end
 
     private
+
+    def split_system_message(messages)
+      system_message = nil
+      transcript_messages = []
+      Array(messages).each do |message|
+        if MessageAccess.role(message) == "system" && system_message.nil?
+          system_message = message
+        elsif MessageAccess.role(message) != "system"
+          transcript_messages << message
+        end
+      end
+      [system_message, transcript_messages]
+    end
 
     def workspace_agents_mtime
       path = File.join(@workspace_root, "AGENTS.md")

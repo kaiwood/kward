@@ -25,10 +25,12 @@ class TestConversation < KwardTestCase
 
     conversation.compact!("summary")
 
+    assert_equal({ role: "system", content: "system" }, conversation.system_message)
+    assert_equal [{ role: "assistant", content: "summary" }], conversation.messages
     assert_equal [
       { role: "system", content: "system" },
       { role: "assistant", content: "summary" }
-    ], conversation.messages
+    ], conversation.context_messages
     assert_empty conversation.read_paths
     assert_equal({ role: "assistant", content: "summary" }, compacted)
   end

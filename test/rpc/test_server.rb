@@ -406,7 +406,7 @@ class TestRPCServer < KwardTestCase
 
           run = server.send(:commands_run, "sessionId" => session[:id], "name" => "hello", "arguments" => "Martok")
           assert_equal "hello", run[:command]
-          assert_equal ["Hello Martok; messages=1"], run[:output]
+          assert_equal ["Hello Martok; messages=0"], run[:output]
           assert_equal "returned Martok", run[:result]
 
           sections = server.send(:startup_resources, "sessionId" => session[:id])[:sections]
@@ -456,7 +456,7 @@ class TestRPCServer < KwardTestCase
           reload = server.send(:runtime_reload, "sessionId" => session[:id])
           second_run = server.send(:commands_run, "sessionId" => session[:id], "name" => "version")
           conversation = manager.send(:fetch_session, session[:id]).conversation
-          system_message = conversation.messages.find { |message| Kward::MessageAccess.role(message) == "system" }
+          system_message = conversation.system_message
 
           assert_equal ["plugin=v1"], first_run[:output]
           assert_equal({ ok: true, message: "Resources reloaded." }, reload)

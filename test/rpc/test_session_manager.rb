@@ -560,13 +560,13 @@ class TestRPCSessionManager < KwardTestCase
 
       session = manager.create_session(workspace_root: Dir.pwd, name: "Bridge")
       create_footer = manager.instance_variable_get(:@server).notifications.find { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "Bridge 1 messages" }, create_footer[:params])
+      assert_equal({ sessionId: session[:id], text: "Bridge 0 messages" }, create_footer[:params])
 
       turn = manager.start_turn(session_id: session[:id], input: "hello")
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
 
       footer_notifications = manager.instance_variable_get(:@server).notifications.select { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "Bridge 3 messages" }, footer_notifications.last[:params])
+      assert_equal({ sessionId: session[:id], text: "Bridge 2 messages" }, footer_notifications.last[:params])
     end
   end
 

@@ -109,9 +109,9 @@ module Kward
       def composer_context_usage(provider, model)
         context_window = composer_context_window
         context_parts = if @client.respond_to?(:current_context_parts)
-                          @client.current_context_parts(current_footer_conversation.messages, footer_tool_schemas)
+                          @client.current_context_parts(current_footer_conversation.context_messages, footer_tool_schemas)
                         else
-                          { provider: provider, model: model, messages: current_footer_conversation.messages, tools: footer_tool_schemas }
+                          { provider: provider, model: model, messages: current_footer_conversation.context_messages, tools: footer_tool_schemas }
                         end
         @context_usage.call(
           provider: provider,

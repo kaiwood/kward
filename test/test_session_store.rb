@@ -341,7 +341,7 @@ class TestSessionStore < KwardTestCase
 
           _loaded_session, loaded_conversation = store.load(session.path, workspace: Kward::Workspace.new(root: workspace_dir), model: "gpt-5.5", reasoning_effort: "xhigh")
 
-          prompt = loaded_conversation.messages.first[:content]
+          prompt = loaded_conversation.system_message[:content]
           assert_includes prompt, "Default persona."
           assert_includes prompt, "Reasoning was low."
           refute_includes prompt, "Reasoning was extra high."

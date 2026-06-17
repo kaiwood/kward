@@ -276,7 +276,7 @@ class TestRPCSessionManagerTurns < KwardTestCase
           wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
 
           events = manager.turn_events(turn_id: turn[:id], after_sequence: 0)[:events]
-          assert_equal "Hi Martok; messages=1\nreturned Martok", events.find { |event| event[:type] == "answer" }[:payload][:content]
+          assert_equal "Hi Martok; messages=0\nreturned Martok", events.find { |event| event[:type] == "answer" }[:payload][:content]
           assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta].include?("Hi Martok") }
         end
 

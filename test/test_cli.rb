@@ -914,7 +914,8 @@ class TestCLI < KwardTestCase
     assert_equal "hello", client.seen_messages[0][1][:content]
     assert_equal "reply 1", client.seen_messages[1][2]["content"]
     assert_equal "again", client.seen_messages[1][3][:content]
-    assert_equal 5, conversation.messages.length
+    assert_equal 4, conversation.messages.length
+    assert_equal 5, conversation.context_messages.length
   end
 
   def test_copy_defaults_to_last_assistant_response
@@ -2645,7 +2646,7 @@ edit this prompt"
         assert_includes output, "plugin=v1"
         assert_includes output, "Plugins reloaded."
         assert_includes output, "plugin=v2"
-        system_message = conversation.messages.find { |message| Kward::MessageAccess.role(message) == "system" }
+        system_message = conversation.system_message
         assert_includes Kward::MessageAccess.content(system_message), "Plugin context: v2"
         refute_includes Kward::MessageAccess.content(system_message), "Plugin context: v1"
       end
@@ -2673,7 +2674,7 @@ edit this prompt"
       end
 
       assert_equal 1, client.seen_messages.length
-      assert_includes prompt.output.join("\n"), "messages=3"
+      assert_includes prompt.output.join("\n"), "messages=2"
     end
   end
 

@@ -22,7 +22,7 @@ class TestPrompts < KwardTestCase
         File.write(File.join(dir, "AGENTS.md"), "Config prompt instructions.\n")
 
         with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
           refute_includes content, "# AGENTS.md"
           assert_includes content, "Config prompt instructions."
@@ -38,7 +38,7 @@ class TestPrompts < KwardTestCase
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         _stdout, stderr = capture_io do
-          content = Kward::Conversation.new.messages.first[:content]
+          content = Kward::Conversation.new.system_message[:content]
 
           refute_includes content, "xxx"
         end
@@ -61,7 +61,7 @@ class TestPrompts < KwardTestCase
         end
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace, plugin_registry: registry).messages.first[:content]
+          content = Kward::Conversation.new(workspace_root: workspace, plugin_registry: registry).system_message[:content]
 
           assert_order content, "Default persona.", "Plugin context."
         end
@@ -87,7 +87,7 @@ class TestPrompts < KwardTestCase
         }))
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
           assert_order content,
                        "You are Kward",
@@ -106,7 +106,7 @@ class TestPrompts < KwardTestCase
       File.write(File.join(workspace, "AGENTS.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
 
       _stdout, stderr = capture_io do
-        content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+        content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
         refute_includes content, "xxx"
       end
@@ -130,8 +130,8 @@ class TestPrompts < KwardTestCase
           }))
 
           with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-            first_content = Kward::Conversation.new(workspace_root: first_workspace).messages.first[:content]
-            second_content = Kward::Conversation.new(workspace_root: second_workspace).messages.first[:content]
+            first_content = Kward::Conversation.new(workspace_root: first_workspace).system_message[:content]
+            second_content = Kward::Conversation.new(workspace_root: second_workspace).system_message[:content]
 
             assert_includes first_content, "First persona."
             refute_includes first_content, "Second persona."
@@ -185,7 +185,7 @@ class TestPrompts < KwardTestCase
             workspace_root: workspace,
             model: "gpt-test",
             reasoning_effort: "low"
-          ).messages.first[:content]
+          ).system_message[:content]
 
           assert_includes content, "Default persona."
           assert_includes content, "Workspace persona."
@@ -236,7 +236,7 @@ class TestPrompts < KwardTestCase
         File.write(File.join(config_dir, "config.json"), JSON.dump({}))
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
           assert_includes content, "You are Kward"
           refute_includes content, "personality"
@@ -259,7 +259,7 @@ class TestPrompts < KwardTestCase
         }))
 
         with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
-          content = Kward::Conversation.new(workspace_root: workspace).messages.first[:content]
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
           assert_includes content, "Speak tersely."
           assert_includes content, "Run focused tests."
@@ -375,7 +375,7 @@ class TestPrompts < KwardTestCase
       File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nSecret full body.\n")
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
-        content = Kward::Conversation.new.messages.first[:content]
+        content = Kward::Conversation.new.system_message[:content]
 
         assert_includes content, "Available skills:"
         assert_includes content, "- planner: Helps plan work."
@@ -394,7 +394,7 @@ class TestPrompts < KwardTestCase
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         _stdout, stderr = capture_io do
-          content = Kward::Conversation.new.messages.first[:content]
+          content = Kward::Conversation.new.system_message[:content]
 
           refute_includes content, "Available skills:"
         end

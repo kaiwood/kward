@@ -95,7 +95,7 @@ class TestPluginRegistry < KwardTestCase
 
   def test_plugin_context_can_refresh_system_message
     conversation = Kward::Conversation.new
-    original_content = conversation.messages.first[:content]
+    original_content = conversation.system_message[:content]
     refreshed = false
     conversation.define_singleton_method(:refresh_system_message!) do
       refreshed = true
@@ -105,7 +105,7 @@ class TestPluginRegistry < KwardTestCase
 
     assert_nil context.refresh_system_message!
     assert refreshed
-    assert_equal original_content, conversation.messages.first[:content]
+    assert_equal original_content, conversation.system_message[:content]
   end
 
   def test_prompt_context_renderers_are_joined

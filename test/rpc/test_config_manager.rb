@@ -165,8 +165,8 @@ class TestRPCConfigManager < KwardTestCase
 
         rpc_session = server.instance_variable_get(:@session_manager).instance_variable_get(:@sessions).fetch(session[:id])
         assert_equal "gpt-5.5", rpc_session.conversation.model
-        assert_includes rpc_session.conversation.messages.first[:content], "Commander K'warD"
-        refute_includes rpc_session.conversation.messages.first[:content], "Commander Spark"
+        assert_includes rpc_session.conversation.system_message[:content], "Commander K'warD"
+        refute_includes rpc_session.conversation.system_message[:content], "Commander Spark"
 
         store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
         _session, restored = store.load(session[:path], workspace: Kward::Workspace.new(root: Dir.pwd), model: "fallback", reasoning_effort: "fallback")
