@@ -95,24 +95,47 @@ class TestPrompts < KwardTestCase
                        "Default persona.",
                        "Workspace persona.",
                        "Available skills:",
-                       "Workspace instructions."
+                       "Workspace guidance is available"
+          assert_includes content, File.join(workspace, "AGENTS.md")
+          refute_includes content, "Workspace instructions."
         end
       end
     end
   end
 
-  def test_oversized_workspace_agents_prompt_warns_and_skips
-    Dir.mktmpdir do |workspace|
-      File.write(File.join(workspace, "AGENTS.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
+  def test_workspace_agents_prompt_is_injected_when_enforced
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(workspace, "AGENTS.md"), "Workspace instructions.\n")
+        File.write(File.join(config_dir, "config.json"), JSON.dump("enforce_workspace_agents_file" => true))
 
-      _stdout, stderr = capture_io do
-        content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
-        refute_includes content, "xxx"
+          assert_includes content, "Workspace instructions."
+          refute_includes content, "Workspace guidance is available"
+        end
       end
+    end
+  end
 
-      assert_includes stderr, "Warning: skipping workspace AGENTS.md"
-      assert_includes stderr, "file too large"
+  def test_oversized_workspace_agents_prompt_warns_and_skips_when_enforced
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(config_dir, "config.json"), JSON.dump("enforce_workspace_agents_file" => true))
+        File.write(File.join(workspace, "AGENTS.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          _stdout, stderr = capture_io do
+            content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
+
+            refute_includes content, "xxx"
+          end
+
+          assert_includes stderr, "Warning: skipping workspace AGENTS.md"
+          assert_includes stderr, "file too large"
+        end
+      end
     end
   end
 
@@ -262,7 +285,8 @@ class TestPrompts < KwardTestCase
           content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
           assert_includes content, "Speak tersely."
-          assert_includes content, "Run focused tests."
+          assert_includes content, "Workspace guidance is available"
+          refute_includes content, "Run focused tests."
         end
       end
     end

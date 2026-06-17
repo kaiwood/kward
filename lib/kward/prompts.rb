@@ -19,7 +19,7 @@ module Kward
       parts << persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now) if include_workspace_personality
       parts << plugin_context unless plugin_context.to_s.empty? || !include_workspace_personality
       parts << skills_prompt
-      parts << workspace_agents_prompt(workspace_root)
+      parts << workspace_agents_context(workspace_root)
       parts
     end
 
@@ -39,8 +39,26 @@ module Kward
       ConfigFiles.persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now)
     end
 
+    def workspace_agents_context(workspace_root = Dir.pwd)
+      if ConfigFiles.enforce_workspace_agents_file?
+        ConfigFiles.workspace_agents_prompt(workspace_root)
+      else
+        workspace_agents_hint(workspace_root)
+      end
+    end
+
     def workspace_agents_prompt(workspace_root = Dir.pwd)
       ConfigFiles.workspace_agents_prompt(workspace_root)
+    end
+
+    def workspace_agents_hint(workspace_root = Dir.pwd)
+      return nil unless ConfigFiles.workspace_agents_file?(workspace_root)
+
+      path = ConfigFiles.workspace_agents_path(workspace_root)
+      <<~PROMPT.strip
+        Workspace guidance is available in AGENTS.md at the workspace root: #{path}
+        For tasks involving this repository, read it before analyzing or modifying project files, and follow it when it does not conflict with higher-priority instructions or the user's request.
+      PROMPT
     end
 
     def skills_prompt

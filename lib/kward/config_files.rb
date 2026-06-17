@@ -77,6 +77,7 @@ module Kward
         "sessions" => {
           "auto_resume" => false
         },
+        "enforce_workspace_agents_file" => false,
         "tools" => {
           "workspace_guardrails" => true
         }
@@ -204,6 +205,12 @@ module Kward
     def session_auto_resume_enabled?(config = read_config)
       sessions = config["sessions"].is_a?(Hash) ? config["sessions"] : {}
       sessions["auto_resume"] == true
+    end
+
+    # Returns whether workspace AGENTS.md contents should be injected directly
+    # instead of a compact read-when-relevant instruction.
+    def enforce_workspace_agents_file?(config = read_config)
+      config["enforce_workspace_agents_file"] == true
     end
 
     # Returns the nested web-search config object, or an empty config when absent.
@@ -336,10 +343,17 @@ module Kward
 
       entries
     end
+
+    def workspace_agents_path(workspace_root)
+      File.join(canonical_workspace_root(workspace_root), "AGENTS.md")
+    end
+
+    def workspace_agents_file?(workspace_root)
+      File.exist?(workspace_agents_path(workspace_root))
+    end
+
     def workspace_agents_prompt(workspace_root)
-      root = canonical_workspace_root(workspace_root)
-      path = File.join(root, "AGENTS.md")
-      read_prompt_file(path, "workspace AGENTS.md")
+      read_prompt_file(workspace_agents_path(workspace_root), "workspace AGENTS.md")
     end
 
     def read_prompt_file(path, label)

@@ -20,6 +20,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal false, config.dig("memory", "auto_summary")
       assert_equal true, config.dig("composer", "busy_help")
       assert_equal false, config.dig("sessions", "auto_resume")
+      assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
       refute config.key?("provider")
       refute config.key?("model")
@@ -66,6 +67,12 @@ class TestConfigFiles < KwardTestCase
     assert_equal false, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => {})
     assert_equal true, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => { "auto_resume" => true })
     assert_equal false, Kward::ConfigFiles.session_auto_resume_enabled?("sessions" => { "auto_resume" => false })
+  end
+
+  def test_enforce_workspace_agents_file_defaults_to_false_and_only_true_enables_it
+    assert_equal false, Kward::ConfigFiles.enforce_workspace_agents_file?({})
+    assert_equal true, Kward::ConfigFiles.enforce_workspace_agents_file?("enforce_workspace_agents_file" => true)
+    assert_equal false, Kward::ConfigFiles.enforce_workspace_agents_file?("enforce_workspace_agents_file" => false)
   end
 
   def test_web_search_config_accepts_current_key_only

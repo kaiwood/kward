@@ -7,9 +7,11 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added `fetch_content` and `fetch_raw` web tools for reading specific URLs after search discovery.
+- Added `enforce_workspace_agents_file` config support for forcing full workspace `AGENTS.md` injection.
 
 ### Changed
 
+- Changed workspace `AGENTS.md` handling to inject a compact read-when-relevant instruction by default instead of the full file.
 - Changed interactive runtime command/status messages to use a `Runtime>` transcript label instead of the assistant label.
 - Changed terminal tool transcript rendering to show a single `Tool>` block containing the tool invocation summary and result summary.
 - Changed transcript label colors to a quieter palette, with failed tool calls rendered in red.

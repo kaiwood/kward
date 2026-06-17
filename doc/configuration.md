@@ -281,6 +281,20 @@ For higher limits or alternate providers, add user-specific keys. Model-backed a
 
 Do not put shared or published API keys in this file.
 
+## Workspace AGENTS.md
+
+By default, Kward does not inject the full workspace `AGENTS.md` into every request. When a workspace `AGENTS.md` exists, Kward injects a compact instruction telling the model to read it for repository-related tasks before analyzing or modifying project files.
+
+For smaller models that need the workspace instructions in the initial system prompt, enforce direct injection:
+
+```json
+{
+  "enforce_workspace_agents_file": true
+}
+```
+
+The default is `false`.
+
 ## Tool workspace guardrails
 
 Workspace guardrails are enabled by default. File tools such as `read_file`, `write_file`, `edit_file`, and `list_directory` are limited to the active workspace. To allow those file tools to access paths outside the workspace:
