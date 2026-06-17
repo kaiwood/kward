@@ -1,18 +1,25 @@
 # Plugins
 
-Plugins are Kward's trusted local extension system. They let you add project or personal workflow features without changing Kward itself.
+Plugins are trusted local Ruby extensions for Kward. Use them when you need behavior that prompts, skills, or instructions cannot provide.
 
-A plugin can:
+Good plugin use cases:
 
-- add interactive slash commands,
-- expose commands through the RPC backend,
-- render a custom terminal footer,
-- inject concise prompt context into future model requests,
-- observe live transcript events such as assistant output, tool calls, and retries.
+- add a slash command for a personal workflow,
+- show project/session status in the terminal footer,
+- add concise local context to prompts,
+- log or observe transcript events,
+- expose local commands to an RPC client.
 
-Plugins are plain Ruby files. They run inside the Kward process with your local user permissions, so install only plugins you trust.
+Plugins run inside the Kward process with your user permissions. Install only plugins you trust.
 
-Use a prompt template when reusable text is enough. Use a skill when you need reusable instructions. Use a plugin when you need local Ruby behavior, file or network integration, custom commands, or transcript observers.
+## When to use a plugin
+
+| Need | Better choice |
+| --- | --- |
+| Reusable prompt text | prompt template |
+| Reusable model instructions | skill |
+| Repository rules | `AGENTS.md` |
+| Local Ruby code or integration | plugin |
 
 ## Where plugins live
 
@@ -22,7 +29,7 @@ Kward loads top-level Ruby files from:
 ~/.kward/plugins/*.rb
 ```
 
-Plugins are intentionally **not** loaded from the current workspace, from a project repository, or from a custom `KWARD_CONFIG_PATH` directory. This keeps plugin loading tied to the local user account rather than to whatever project Kward is currently inspecting.
+Plugins are not loaded from the current workspace or a custom `KWARD_CONFIG_PATH` directory. This prevents a project checkout from silently adding executable Ruby code to Kward.
 
 ## A first plugin
 
@@ -32,12 +39,12 @@ Create the plugin directory:
 mkdir -p ~/.kward/plugins
 ```
 
-Then create `~/.kward/plugins/hello.rb`:
+Create `~/.kward/plugins/hello.rb`:
 
 ```ruby
 Kward.plugin do |plugin|
   plugin.command "hello", description: "Say hello", argument_hint: "[name]" do |args, ctx|
-    name = args.strip.empty? ? "captain" : args.strip
+    name = args.strip.empty? ? "there" : args.strip
     ctx.say("Hello, #{name}.")
   end
 end
@@ -49,41 +56,28 @@ Start Kward and run:
 /hello Kai
 ```
 
-Plugin commands appear in interactive slash completion and in RPC command listings.
+## Add a slash command
 
-## Slash commands
-
-Register a command with `plugin.command`:
+Use plugin commands for local actions that should not call the model.
 
 ```ruby
 Kward.plugin do |plugin|
   plugin.command "session-info", description: "Show session details" do |_args, ctx|
     ctx.say("Session: #{ctx.session_name || ctx.session_id || 'unnamed'}")
-    ctx.say("Path: #{ctx.session_path || 'not saved'}")
     ctx.say("Workspace: #{ctx.workspace_root}")
   end
 end
 ```
 
-Command names:
+Command names do not include `/`. They must start with a letter or number and may contain letters, numbers, `_`, and `-`.
 
-- do not include the leading `/`,
-- must start with a letter or number,
-- may contain letters, numbers, `_`, and `-`,
-- cannot replace built-in commands or prompt-template commands.
+A plugin command cannot replace a built-in command or prompt-template command.
 
-If a plugin command conflicts with a reserved or duplicate command, Kward skips it and prints a warning.
+## Add prompt context
 
-Command handlers receive:
+Prompt context is short text injected into future model requests.
 
-- `args`: the raw text after the command name,
-- `ctx`: a plugin context object.
-
-Use `ctx.say(message)` for user-visible output.
-
-## Prompt context
-
-Plugins can add concise context to future system prompts:
+Use it for stable facts the model should know, not for large files or secrets.
 
 ```ruby
 Kward.plugin do |plugin|
@@ -95,37 +89,29 @@ Kward.plugin do |plugin|
 end
 ```
 
-Prompt context is injected after personas and before skills/workspace instructions. Keep it short and stable. Long or noisy prompt context will be sent repeatedly to the model and can reduce useful context space.
-
-If plugin state changes and the active conversation should rebuild its system message, call:
+If plugin state changes and Kward should rebuild the active system message, call:
 
 ```ruby
 ctx.refresh_system_message!
 ```
 
-from a command or event handler.
+## Add a footer
 
-## Custom footer
-
-A plugin can render one custom footer for the terminal UI:
+A footer can show compact local status in the terminal UI:
 
 ```ruby
 Kward.plugin do |plugin|
   plugin.footer do |ctx|
-    name = ctx.session_name || "unnamed"
-    messages = ctx.transcript.messages.length
-    "#{name} • #{messages} messages"
+    "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
   end
 end
 ```
 
-Only one footer renderer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning.
+Only one footer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning.
 
-Footer errors are caught and printed as warnings so they do not break the session.
+## Observe transcript events
 
-## Transcript events
-
-Plugins can observe live transcript stream events:
+Use transcript events when you need to log or react to live activity:
 
 ```ruby
 Kward.plugin do |plugin|
@@ -139,7 +125,9 @@ Kward.plugin do |plugin|
 end
 ```
 
-Supported event types include:
+Event payloads are read-only copies. Handler errors are caught and printed as warnings.
+
+Common event types include:
 
 - `reasoning_delta`
 - `assistant_delta`
@@ -150,28 +138,24 @@ Supported event types include:
 - `tool_result`
 - `answer`
 
-Event payloads are deep-frozen copies. Treat them as read-only.
+## Plugin context
 
-Transcript-event handler errors are caught and printed as warnings.
+Handlers receive a `ctx` object. Common methods:
 
-## Plugin context API
+- `ctx.workspace_root`
+- `ctx.args`
+- `ctx.say(message)`
+- `ctx.transcript.messages`
+- `ctx.session_id`
+- `ctx.session_name`
+- `ctx.session_path`
+- `ctx.refresh_system_message!`
 
-Plugin handlers receive a `ctx` object with:
-
-- `ctx.args` - raw command arguments for contexts that have them.
-- `ctx.workspace_root` - active workspace path.
-- `ctx.transcript.messages` - deep-frozen copy of active conversation messages.
-- `ctx.say(message)` - emit output to the active frontend when available.
-- `ctx.session_id` - current persisted session ID when available.
-- `ctx.session_name` - current session name when available.
-- `ctx.session_path` - current session file path when available.
-- `ctx.refresh_system_message!` - rebuild the active conversation system message.
-
-The transcript is read-only by design. Plugins should use Kward APIs exposed through the context rather than mutating conversation internals.
+The transcript is read-only. Use context methods instead of mutating Kward internals.
 
 ## RPC support
 
-Plugins are available to both the CLI and the experimental RPC backend.
+Plugins are available in the CLI and experimental RPC backend.
 
 RPC clients can:
 
@@ -179,43 +163,17 @@ RPC clients can:
 - run plugin commands through `commands/run`,
 - run plugin slash commands through `turns/start` input such as `/hello Kai`.
 
-When a plugin command is run as a turn, Kward emits command output through normal turn events without calling the model.
+Plugin command output is emitted through normal turn events without calling the model.
 
-## Security model
+## Security
 
-Plugins are trusted local Ruby code. A plugin can read and write files, run commands, make network requests, and access process environment variables just like any Ruby code running as your user.
+Plugins are local Ruby code. They can read files, write files, run commands, make network requests, and read environment variables as your user.
 
 Recommended practices:
 
 - Install plugins only from sources you trust.
 - Keep plugins in your personal `~/.kward/plugins` directory.
-- Do not place secrets directly in plugin files if they will be shared.
-- Prefer user-specific config or environment variables for credentials.
-- Keep prompt context concise and avoid injecting secrets into model prompts.
-- Be careful when writing transcript observers that persist conversation content.
-
-## Complete example
-
-```ruby
-Kward.plugin do |plugin|
-  plugin.command "last-message", description: "Show transcript size" do |_args, ctx|
-    ctx.say("Messages: #{ctx.transcript.messages.length}")
-  end
-
-  plugin.footer do |ctx|
-    "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
-  end
-
-  plugin.prompt_context do |_ctx|
-    "Project background: prefer small, focused changes."
-  end
-
-  plugin.on_transcript_event do |event, ctx|
-    next unless event.type == "assistant_delta"
-
-    File.open(File.join(ctx.workspace_root, ".assistant-stream.log"), "a") do |file|
-      file.write(event.payload[:delta])
-    end
-  end
-end
-```
+- Do not put secrets in shared plugin files.
+- Prefer environment variables or private config for credentials.
+- Keep prompt context short and never inject secrets into model prompts.
+- Be careful with transcript observers that persist conversation content.

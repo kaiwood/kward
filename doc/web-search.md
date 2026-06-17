@@ -1,54 +1,94 @@
 # Web search
 
-Web search lets the agent search and fetch live web resources. Use it when you need current facts, official docs, release notes, bug reports, pricing pages, recent announcements, or specific pages discovered during research.
+Use web search when the answer depends on current or external information:
+
+- current framework or dependency docs,
+- release notes and migration guides,
+- security advisories,
+- pricing or provider pages,
+- bug reports and issue discussions,
+- a specific URL you want Kward to inspect.
 
 Example prompts:
 
 ```text
-Research the current Rails release notes and summarize migration risks.
+Check the current Rails release notes and summarize migration risks for this project.
 Find the official OpenRouter docs for model configuration.
 Check whether this dependency has a recent security advisory.
+Read this URL and explain the setup steps: https://example.com/docs
 ```
 
-The `web_search`, `fetch_content`, and `fetch_raw` tools are advertised by default so the agent can use current sources when needed. In `auto` mode the `web_search` provider fallback order is:
+## How Kward researches
 
-1. Exa API when `EXA_API_KEY` is configured, otherwise keyless Exa MCP (`https://mcp.exa.ai/mcp`)
-2. Perplexity API when configured and `allow_model_providers` is true
-3. Gemini API with Google Search grounding when configured and `allow_model_providers` is true
-4. DuckDuckGo HTML search, then bundled public SearXNG instances
+Kward has three web tools:
 
-Queries and fetched URLs are sent over the network to the selected provider or host. API keys are never bundled with Kward; configure your own keys only if you want higher limits or alternate providers. Set `web_search.enabled` to `false` to hide all web tools. Direct `provider: perplexity` or `provider: gemini` requests still use those providers when keys are configured.
+1. `web_search` finds candidate sources.
+2. `fetch_content` reads human-readable pages.
+3. `fetch_raw` reads machine-readable files such as JSON, YAML, XML, RSS, OpenAPI specs, or plain text.
 
-## Tools
+A good research flow is:
+
+```text
+Search for the official docs, fetch the relevant page, then answer with the source URL.
+```
+
+Kward should search first, then fetch important pages before relying on them.
+
+## Network behavior
+
+Web tools are advertised to the model by default. Queries and fetched URLs are sent over the network to the selected provider or target host.
+
+In automatic mode, provider fallback is:
+
+1. Exa API when `EXA_API_KEY` is configured, otherwise keyless Exa MCP.
+2. Perplexity API when configured and model-provider fallback is allowed.
+3. Gemini API with Google Search grounding when configured and model-provider fallback is allowed.
+4. DuckDuckGo HTML search, then bundled public SearXNG instances.
+
+You do not need an API key for basic web search, but keys can improve limits or provider choice.
+
+## Disable web tools
+
+Hide all web tools:
+
+```json
+{
+  "web_search": {
+    "enabled": false
+  }
+}
+```
+
+Use this when working on private projects where no prompt should trigger external lookup.
+
+## Tool details
 
 ### `web_search`
 
-Use `web_search` to discover candidate sources. It returns bounded search results with titles, URLs, snippets, and provider notes.
+Finds candidate sources. Arguments:
 
-Supported arguments:
-
-- `queries`: one to four search strings
-- `max_results`: results per query, default 5, capped at 20
-- `provider`: optional `auto`, `exa`, `perplexity`, `gemini`, or `duckduckgo`
-- `recency_filter`: optional `day`, `week`, `month`, or `year`
-- `domain_filter`: optional list of included domains, or excluded domains prefixed with `-`
+- `queries`: one to four search strings.
+- `max_results`: results per query, default 5, capped at 20.
+- `provider`: optional `auto`, `exa`, `perplexity`, `gemini`, or `duckduckgo`.
+- `recency_filter`: optional `day`, `week`, `month`, or `year`.
+- `domain_filter`: optional domains to include, or domains prefixed with `-` to exclude.
 
 ### `fetch_content`
 
-Use `fetch_content` after search when the agent needs to verify or quote a specific page. It follows bounded redirects, extracts readable text from HTML, strips common navigation/script noise, and limits returned content.
+Reads a specific HTTP or HTTPS page and extracts readable text. Use it for docs pages, articles, issues, and release notes.
 
-Supported arguments:
+Arguments:
 
-- `url`: HTTP or HTTPS URL to fetch
-- `max_bytes`: optional maximum returned content bytes, default 16384, capped at 131072
-- `extract`: optional `auto`, `text`, or `markdown`, default `auto`
+- `url`
+- `max_bytes`: default 16384, capped at 131072.
+- `extract`: optional `auto`, `text`, or `markdown`.
 
 ### `fetch_raw`
 
-Use `fetch_raw` for machine-readable resources where extraction would be harmful, such as JSON APIs, YAML files, OpenAPI specs, XML/RSS, or plain text source files.
+Reads a specific HTTP or HTTPS resource without readability extraction. Use it for JSON, YAML, XML, RSS, OpenAPI specs, and plain text.
 
-Supported arguments:
+Arguments:
 
-- `url`: HTTP or HTTPS URL to fetch
-- `max_bytes`: optional maximum returned content bytes, default 16384, capped at 131072
-- `accept`: optional HTTP `Accept` header
+- `url`
+- `max_bytes`: default 16384, capped at 131072.
+- `accept`: optional HTTP `Accept` header.

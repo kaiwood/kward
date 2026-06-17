@@ -16,5 +16,15 @@ end
 
 YARD::Rake::YardocTask.new do |yard|
   yard.files = ["lib/**/*.rb", "-", "README.md", "CHANGELOG.md", "LICENSE", "doc/**/*.md"]
-  yard.options = ["--readme", "README.md", "--output-dir", "_yardoc", "--markup", "markdown"]
+  yard.options = [
+    "--readme", "README.md",
+    "--output-dir", "_yardoc",
+    "--markup", "markdown",
+    "--template-path", "templates"
+  ]
+end
+
+namespace :docs do
+  desc "Build the YARD documentation site"
+  task build: :yard
 end

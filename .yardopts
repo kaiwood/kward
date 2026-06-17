@@ -1,6 +1,7 @@
 --readme README.md
 --output-dir _yardoc
 --markup markdown
+--template-path templates
 lib/**/*.rb
 -
 README.md

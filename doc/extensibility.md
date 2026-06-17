@@ -1,181 +1,125 @@
 # Extensibility
 
-Kward can be customized at several levels:
+Kward can be customized without changing its source code. Use extensibility when you want Kward to follow your conventions, repeat common prompts, or add local behavior.
 
-- `PRINCIPLES.md` for global coding principles, plus workspace `AGENTS.md` for repository rules.
-- Prompt templates for reusable slash-command prompts.
-- Skills for reusable agent instructions the model can load on demand.
-- Personas for assistant personality and communication style.
-- Plugins for trusted Ruby extensions that add commands, footer UI, prompt context, transcript-event observers, and RPC-visible behavior.
+Start simple. Most users only need `PRINCIPLES.md`, workspace `AGENTS.md`, and maybe a prompt template.
 
-Prompts, skills, personas, and config-directory `PRINCIPLES.md` live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead. Config-directory `AGENTS.md` remains supported as a legacy alias.
+## Choose the right extension point
 
-Plugins are different: user plugins are loaded only from `~/.kward/plugins`, regardless of `KWARD_CONFIG_PATH` or the current project directory. See the dedicated [Plugins guide](plugins.md).
+| Need | Use |
+| --- | --- |
+| Global coding preferences | `~/.kward/PRINCIPLES.md` |
+| Repository-specific rules | `<workspace>/AGENTS.md` |
+| Reusable slash prompts | prompt templates |
+| Task-specific reusable instructions | skills |
+| Different tone or role | [personas](personas.md) |
+| Local Ruby behavior or integrations | plugins |
 
-## Which extension point should I use?
-
-- Use config-directory `PRINCIPLES.md` for global coding principles, review expectations, or workflow guidance.
-- Use workspace `AGENTS.md` for repository-specific rules and conventions.
-- Use prompt templates when you want reusable slash commands such as `/plan <task>` or `/review <diff>`.
-- Use skills when you want reusable instructions that Kward can load only when a task needs them.
-- Use personas when you want to change tone, role, or communication style.
-- Use plugins when you need Ruby code to run locally, add commands, observe transcript events, or integrate with another tool.
-
-The optional starter pack installs a useful base `PRINCIPLES.md` and prompt templates. You can install it with:
+Install the starter pack for a useful starting point:
 
 ```bash
 kward init
 ```
 
-## Agent instructions
+## Global instructions: `PRINCIPLES.md`
 
-Kward separates repository guidance from workspace-specific agent personality.
+Use this for preferences you want in most projects:
 
-- Config-directory `PRINCIPLES.md`: global coding guidance appended to Kward's built-in system instructions when present. Config-directory `AGENTS.md` is still read as a legacy alias when `PRINCIPLES.md` is absent.
-- Workspace `AGENTS.md`: repository guidance available from the active workspace root when present.
+```markdown
+Prefer small, focused changes.
+Add tests for new behavior.
+Do not refactor unrelated code.
+Explain risky assumptions before editing.
+```
 
-Use these files for engineering instructions such as coding rules, project conventions, testing requirements, review expectations, and workflow guidance. Avoid putting personality, roleplay, or communication style there; configure those as personas instead.
+Default location:
 
-By default, workspace `AGENTS.md` is represented by a compact read-when-relevant instruction instead of injecting the full file into every request. Set `enforce_workspace_agents_file` to `true` if you need the full workspace file injected directly. Prompt files are skipped with a warning if they exceed 32 KiB.
+```text
+~/.kward/PRINCIPLES.md
+```
+
+If `KWARD_CONFIG_PATH` is set, `PRINCIPLES.md` lives beside that config file.
+
+## Project instructions: `AGENTS.md`
+
+Put repository-specific rules in the workspace root:
+
+```text
+my-project/AGENTS.md
+```
+
+Good examples:
+
+```markdown
+Run tests with `bundle exec rake test`.
+Use Minitest, not RSpec.
+Do not change generated files under `schema/`.
+Update CHANGELOG.md for user-visible changes.
+```
+
+Use `AGENTS.md` for project facts and engineering rules. Do not put personality or roleplay instructions there; use [personas](personas.md) for tone.
+
+By default, Kward adds a compact instruction telling the model that `AGENTS.md` exists and should be read when relevant. Set `enforce_workspace_agents_file: true` only if you want the full file injected every time.
 
 ## Prompt templates
 
-Prompt templates create user-invocable slash commands for reusable prompts.
+Use prompt templates when you repeatedly type the same kind of request.
 
-Create a template at:
+Create:
 
 ```text
-<config-dir>/prompts/<command>.md
+~/.kward/prompts/review.md
 ```
 
-For example, `prompts/plan.md` becomes `/plan` in interactive mode. Templates support `$ARGUMENTS`, replaced by the text after the command.
-
-Built-in commands such as `/exit`, `/new`, `/resume`, `/name`, `/clone`, `/export`, `/redraw`, and `/status` are reserved.
-
-Example prompt template:
+Example:
 
 ```markdown
 ---
-description: Create an implementation plan.
-argument-hint: <task>
+description: Review a change for correctness.
+argument-hint: <focus>
 ---
 
-Plan this implementation request:
-
-$ARGUMENTS
+Review the current diff for correctness, tests, and maintainability.
+Focus on: $ARGUMENTS
 ```
+
+Then run inside Kward:
+
+```text
+/review auth edge cases
+```
+
+Prompt templates are best for reusable text. They do not run local code.
 
 ## Skills
 
-Skills are reusable instruction packs the assistant can load when a task matches their description. They are useful when an instruction is too specific to include in every conversation, but important enough to keep around.
+Use skills for reusable instructions that should only be loaded for certain tasks.
 
-Create a skill at:
+Create:
 
 ```text
-<config-dir>/skills/<skill-name>/SKILL.md
+~/.kward/skills/testing/SKILL.md
 ```
 
-A skill is listed in the system instructions by its frontmatter `name` and `description`. The assistant can then call `read_skill` to load `SKILL.md` or related files inside that skill folder.
-
-Example skill:
+Example:
 
 ```markdown
 ---
-name: planner
-description: Helps plan implementation work.
+name: testing
+or description: Use when adding or changing tests.
 ---
 
-# Planner
-
-Use this when planning a code change.
+Prefer focused tests near the changed behavior.
+Do not weaken assertions to make tests pass.
 ```
 
-## Personas
-
-Personas configure personality, role, and communication style without modifying repository files. New configs include a single active `kward` character by default; edit or remove `personas.default` to change the first-run experience. `personas.crew` is still accepted as an alias for `personas.characters`.
-
-A small persona config looks like this:
-
-```json
-{
-  "personas": {
-    "characters": [
-      {
-        "key": "kward",
-        "label": "Kward",
-        "instruction": "Be concise, practical, and friendly. Prefer small, safe changes."
-      }
-    ],
-    "default": "kward"
-  }
-}
-```
-
-You can also target personas by workspace, model, reasoning effort, time of day, or weekday:
-
-```json
-{
-  "personas": {
-    "characters": [
-      {
-        "key": "reviewer",
-        "label": "Reviewer",
-        "instruction": "Be skeptical and focus on correctness, tests, and maintainability."
-      },
-      {
-        "key": "coach",
-        "label": "Coach",
-        "instruction": "Explain tradeoffs and teach as you go."
-      }
-    ],
-    "default": "reviewer",
-    "workspaces": {
-      "/Users/kwood/Repositories/github.com/kaiwood/tauren": "coach"
-    },
-    "models": {
-      "gpt-5.5": "reviewer"
-    },
-    "persona_modifiers": {
-      "reasoning": {
-        "high": "Think strategically before answering."
-      },
-      "suffix": "Act like it."
-    }
-  }
-}
-```
-
-Persona selection is hierarchical. Kward starts with `personas.default`, overrides it with a matching `personas.workspaces` entry, and overrides that with a matching `personas.models` entry for the current model. Only the last matching base persona is injected.
-
-Persona modifiers are separate and appended after the selected base persona:
-
-1. Matching `persona_modifiers.reasoning` entry for the current reasoning effort
-2. Matching `persona_modifiers.time_of_day` entry for local time: `morning` 05:00-10:59, `before_lunch` 11:00-11:59, `late_evening` 21:00-04:59
-3. Matching `persona_modifiers.weekday` entry for the local weekday
-4. `persona_modifiers.suffix`
-
-Prompt assembly order is:
-
-1. Kward built-in base prompt
-2. Config-directory `PRINCIPLES.md` or legacy `AGENTS.md`
-3. Evaluated persona text
-4. Plugin prompt context
-5. Skills listing
-6. Workspace `AGENTS.md` hint, or full contents when `enforce_workspace_agents_file` is `true`
-
-If no persona entries match, Kward simply omits that part. Conversation compaction uses a neutral prompt without workspace personality, so summaries stay continuation-focused and machine-oriented.
+Skills are listed to the model by name and description. Kward can load the full skill only when it is relevant.
 
 ## Plugins
 
-Plugins are Kward's trusted Ruby extension layer. Use them when you need behavior rather than just instructions or reusable prompts.
+Use plugins when text instructions are not enough and you need Ruby code to run locally.
 
-Plugins can add:
-
-- slash commands,
-- one custom terminal footer,
-- prompt context,
-- live transcript-event observers,
-- command behavior exposed to RPC clients.
+Plugins can add slash commands, prompt context, footer UI, transcript observers, and RPC-visible commands.
 
 Plugin files live in:
 
@@ -183,4 +127,21 @@ Plugin files live in:
 ~/.kward/plugins/*.rb
 ```
 
-See [Plugins](plugins.md) for the full plugin API, examples, and security model.
+Plugins are trusted local Ruby code. Install only plugins you trust. See [Plugins](plugins.md).
+
+## Prompt assembly order
+
+When Kward builds instructions for a turn, it combines roughly:
+
+1. Kward's built-in operating instructions.
+2. `PRINCIPLES.md`.
+3. selected persona.
+4. plugin prompt context.
+5. available skills list.
+6. workspace `AGENTS.md` hint or full content.
+
+If behavior seems surprising, inspect the assembled instructions:
+
+```bash
+kward sysprompt
+```

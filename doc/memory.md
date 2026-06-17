@@ -1,21 +1,33 @@
 # Memory
 
-Kward has an opt-in structured memory system for interactive sessions. Memory is designed to be inspectable, explainable, and removable. It is disabled by default.
+Memory lets Kward remember stable preferences and project facts across interactive sessions. It is off by default.
+
+Use memory when you keep telling Kward the same things:
+
+- "This project uses Minitest."
+- "Prefer small patches with tests."
+- "Do not run destructive database commands."
+- "In this workspace, use `bundle exec rake test`."
+
+Leave memory off when every session should start clean.
 
 Memory is not used for one-shot prompts such as `kward "..."`.
 
-Use memory when you want Kward to remember stable preferences, recurring project facts, or personal workflow habits across interactive sessions. Leave it disabled when you want every session to start clean.
+## Enable memory
 
-## Enable or disable memory
-
-In interactive chat:
+Inside interactive Kward:
 
 ```text
 /memory enable
+```
+
+Disable it again:
+
+```text
 /memory disable
 ```
 
-Enabling memory stores this config in `~/.kward/config.json`:
+The setting is stored in `~/.kward/config.json`:
 
 ```json
 {
@@ -25,101 +37,63 @@ Enabling memory stores this config in `~/.kward/config.json`:
 }
 ```
 
-When memory is disabled, Kward does not inject retrieved memories into the prompt.
+## Add memories yourself
 
-## Auto-summary
-
-Memory auto-summary is off by default. When both memory and auto-summary are enabled, Kward quietly runs the same learning flow as `/memory summarize` after each completed interactive agent turn, when it is ready for the next user prompt:
-
-```text
-/memory auto-summary enable
-/memory auto-summary disable
-```
-
-The config value is stored as:
-
-```json
-{
-  "memory": {
-    "enabled": true,
-    "auto_summary": true
-  }
-}
-```
-
-Auto-summary does not run when memory is disabled and is not used for one-shot prompts.
-
-## Memory layers
-
-### Core memories
-
-Memory is organized as a hierarchy for the active workspace:
-
-1. Global core memories
-2. Workspace core memories
-3. Workspace soft memories
-
-Global core memories are explicit user instructions. They are high-trust, apply everywhere, and are ranked before workspace-specific memory. Add them only when you intentionally want Kward to remember something globally:
+Add a global instruction when it should apply everywhere:
 
 ```text
 /memory core "Prefer small, focused patches with tests."
 ```
 
-Core memories are stored as human-readable JSON in:
+Add a workspace-specific hint when it only applies to the current project:
 
 ```text
-~/.kward/memory/core.json
+/memory add "This workspace uses Minitest."
 ```
 
-Workspace core memories are core memories scoped to a specific workspace. They usually come from promoting workspace soft memories.
+Use global core memory sparingly. It has higher priority than workspace memory.
 
-### Soft memories
+## Let Kward summarize useful memories
 
-Soft memories are workspace-scoped contextual hints, such as workflow preferences or recurring project facts. They are confidence-based and treated as non-authoritative. Add one manually with:
+Auto-summary is off by default. Enable it if you want Kward to learn recurring preferences from interactive sessions:
 
 ```text
-/memory add "This workspace usually uses Minitest."
+/memory auto-summary enable
 ```
 
-Soft memories are stored as JSON Lines in:
+This only runs when memory is enabled. It does not run for one-shot prompts.
 
-```text
-~/.kward/memory/soft.jsonl
-```
-
-Kward can also infer soft memories when auto-summary is enabled, or when you explicitly ask it to summarize/learn from the current session:
+You can also ask Kward to summarize the current session manually:
 
 ```text
 /memory summarize
 ```
 
-The v1 inference is conservative and heuristic-based, with optional model-based reformulation when summarization has an available client. Kward refuses to automatically persist inferred emotional, intimate, romantic, or dependency-forming memories.
+Kward is conservative about inferred memories and refuses to automatically persist emotional, intimate, romantic, or dependency-forming memories.
 
-### Session memories
+## Inspect what Kward remembers
 
-Session memories record memories learned during the current conversation so Kward can avoid learning the same item again when summarizing or resuming the session. They are stored with the session JSONL file, but they are not injected into the prompt as a separate memory layer and are not automatically promoted into core memories.
-
-## Inspect, explain, and remove memory
-
-List memories for the active workspace hierarchy:
+List active memories for the current workspace:
 
 ```text
 /memory list
 ```
 
-The list is grouped as global core, workspace core, and workspace soft. Memories from other workspaces are not shown in this hierarchy view.
-
-Inspect memory state and file paths:
+Show memory files and state:
 
 ```text
 /memory inspect
 ```
 
-Explain why memories were retrieved for the most recent interactive turn:
+Explain why memories were used for the most recent turn:
 
 ```text
 /memory why
 ```
+
+This is useful when an answer seems influenced by previous context and you want to know why.
+
+## Remove or change memories
 
 Forget a memory:
 
@@ -128,57 +102,31 @@ Forget a memory:
 /memory forget soft_001
 ```
 
-For core memories, forget removes the record. For soft memories, forget marks the record inactive and redacts its stored text, tags, confidence, and hit count so inactive audit metadata can remain without retaining the memory content.
-
-Promote a memory:
+Promote a workspace hint when it should become a stronger rule:
 
 ```text
 /memory promote soft_001
-/memory promote core_001
 ```
 
-Promoting a soft memory creates a new workspace core memory and marks the soft memory forgotten. Promoting a workspace core memory upgrades it to global core.
-
-Relax a global core memory back to the current workspace:
+Relax a global memory back to the current workspace:
 
 ```text
 /memory relax core_001
 ```
 
-## Retrieval behavior
+## How memory is organized
 
-For each interactive turn, Kward selectively retrieves memories using:
+Kward uses three layers:
 
-- scope: `global` and `workspace:<canonical path>`
-- global core memories first
-- workspace core memories second
-- workspace soft-memory text or tag overlap with the current input; soft memories without overlap are not injected
-- soft-memory confidence
-- soft-memory recency/TTL, updated when a soft memory is retrieved
-- hard limits on injected memory count
+1. **Global core memories**: explicit user instructions that apply everywhere.
+2. **Workspace core memories**: strong instructions for one workspace.
+3. **Workspace soft memories**: lower-confidence hints for one workspace.
 
-Retrieved memories are injected into the system prompt as a bounded block similar to:
+Core memories override soft memories. Soft memories are treated as hints, not facts.
 
-```text
-<kward_memory>
-Global Core Memories:
-- [core_001] ...
+Kward does not inject every stored memory into every prompt. It retrieves a bounded set that appears relevant to the current turn.
 
-Workspace Core Memories:
-- [core_002] ...
-
-Workspace Soft Memories:
-- [soft_001] ...
-
-Rules:
-- Core memories override soft memories.
-- Soft memories are contextual hints, not guaranteed facts.
-</kward_memory>
-```
-
-Kward never injects every stored memory.
-
-## Storage and audit trail
+## Where memory is stored
 
 Default files:
 
@@ -188,27 +136,12 @@ Default files:
 ~/.kward/memory/events.jsonl
 ```
 
-`events.jsonl` records minimal audit events such as enable, disable, add, forget, promote, retrieve, and summarize. Audit events use IDs, scopes, tags, and timestamps rather than full memory text where practical. Forgotten soft memories keep inactive metadata in `soft.jsonl`, but their stored text is replaced with `[forgotten]`.
+`events.jsonl` stores a small audit trail for actions such as enable, add, retrieve, summarize, promote, and forget.
+
+When a soft memory is forgotten, its text is replaced with `[forgotten]` while inactive audit metadata can remain.
 
 If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead of under `~/.kward`.
 
-## RPC methods
+## RPC support
 
-The experimental RPC backend exposes dedicated memory methods:
-
-- `memory/status`
-- `memory/enable`
-- `memory/disable`
-- `memory/autoSummary/enable`
-- `memory/autoSummary/disable`
-- `memory/list`
-- `memory/add`
-- `memory/addCore`
-- `memory/forget`
-- `memory/promote`
-- `memory/relax`
-- `memory/inspect`
-- `memory/why`
-- `memory/summarize`
-
-See [RPC protocol](rpc.md) for method details.
+The experimental RPC backend exposes memory methods such as `memory/list`, `memory/add`, `memory/forget`, `memory/why`, and `memory/summarize`. See [RPC protocol](rpc.md) if you are building a client.

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <%= erb(:headers) %>
+  </head>
+  <body class="kward-docs <%= home_page? ? 'kward-home-body' : 'kward-content-body' %>">
+    <div id="main_progress" aria-hidden="true"></div>
+
+    <header class="kward-topbar">
+      <a class="kward-brand" href="<%= url_for('index.html') %>">
+        <img class="kward-brand-logo" src="<%= url_for('images/kward_logo.png') %>" alt="" aria-hidden="true">
+        <span>
+          <strong>Kward</strong>
+        </span>
+      </a>
+      <button class="kward-nav-toggle" type="button" aria-expanded="false" aria-controls="kward-primary-nav" onclick="document.body.classList.toggle('kward-nav-open'); this.setAttribute('aria-expanded', document.body.classList.contains('kward-nav-open'))">
+        Menu
+      </button>
+      <nav id="kward-primary-nav" class="kward-topnav" aria-label="Primary navigation">
+        <a href="<%= url_for('index.html') %>" class="<%= 'active' if home_page? %>">Home</a>
+        <div class="kward-nav-menu <%= 'active' if guide_page? %>">
+          <a class="kward-nav-menu-link" href="<%= url_for('file.README.html') %>">User Guides</a>
+          <button class="kward-nav-menu-button" type="button" aria-label="Open user guides menu">⌄</button>
+          <div class="kward-nav-dropdown">
+            <% guide_groups.each do |title, items| %>
+              <section>
+                <h2><%= h title %></h2>
+                <% items.each do |label, link| %>
+                  <a href="<%= url_for(link) %>"><%= h label %></a>
+                <% end %>
+              </section>
+            <% end %>
+          </div>
+        </div>
+        <a href="<%= url_for('Kward.html') %>" class="<%= 'active' if api_page? %>">API Docs</a>
+      </nav>
+    </header>
+
+    <% if home_page? %>
+      <main id="main" class="kward-home">
+        <section class="kward-hero">
+          <div class="kward-hero-copy">
+            <p class="kward-eyebrow">⌘ Ruby CLI Coding Agent</p>
+            <h1>Your terminal.<br><span>Your agent.</span></h1>
+            <p class="kward-lede">Kward is an extendable Ruby CLI coding agent that helps you understand your project, edit files, run commands, search the web, and automate workflows—right from your terminal.</p>
+            <div class="kward-actions">
+              <a class="kward-primary-button" href="<%= url_for('file.README.html') %>">Get Started ›</a>
+              <a class="kward-secondary-button" href="https://github.com/kaiwood/kward" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+            </div>
+            <p class="kward-supports">Supports <span>OpenAI</span>, <span>Anthropic</span>, <span>OpenRouter</span> &amp; more.</p>
+          </div>
+          <div class="kward-hero-art" aria-hidden="true">
+            <img src="<%= url_for('images/kward_logo.png') %>" alt="">
+          </div>
+        </section>
+
+        <section id="features" class="kward-feature-strip" aria-label="Feature summary">
+          <article><strong>☏</strong><h2>Chat in your terminal</h2><p>Multi-turn coding conversations.</p></article>
+          <article><strong>▤</strong><h2>Read, write, edit files</h2><p>With read-before-write guardrails.</p></article>
+          <article><strong>›_</strong><h2>Run shell commands</h2><p>Execute local commands safely.</p></article>
+          <article><strong>◎</strong><h2>Search the web</h2><p>Get live answers and inspect repos.</p></article>
+          <article><strong>✣</strong><h2>Extend with plugins</h2><p>Trusted Ruby plugins for workflows.</p></article>
+          <article><strong>▰</strong><h2>Sessions &amp; memory</h2><p>Save, resume, clone, compact, export.</p></article>
+        </section>
+
+        <section class="kward-install-card">
+          <div class="kward-install-copy">
+            <h2>⇩ Install</h2>
+            <p>Install Kward from RubyGems and get started in seconds.</p>
+            <pre><code>gem install kward</code></pre>
+            <p>Then initialize the starter pack, if you want the defaults.</p>
+            <pre><code>kward init</code></pre>
+            <a href="<%= url_for('file.getting-started.html') %>">View full installation docs →</a>
+          </div>
+          <div class="kward-terminal-card">
+            <div class="kward-tabs"><span>Quick Start</span><span>Run from Source</span></div>
+            <pre><code># Start an interactive chat
+kward
+
+# Show available commands and examples
+kward help
+
+# Sign in or save provider credentials
+kward login
+
+# Run one prompt and exit
+kward "Explain this project"
+
+# Use a specific working directory
+kward --working-directory ~/code/project "Explain this project"</code></pre>
+          </div>
+        </section>
+
+        <section class="kward-capabilities">
+          <h2>⌘ What Kward can do</h2>
+          <ul>
+            <li>Keep a multi-turn coding conversation in your terminal.</li>
+            <li>Read, write, and edit workspace files with read-before-write guardrails.</li>
+            <li>Run local shell commands from the workspace.</li>
+            <li>Search the live web and inspect cached public GitHub repositories.</li>
+            <li>Save, resume, clone, compact, and export sessions.</li>
+            <li>Use optional memory, personas, prompt templates, and skills.</li>
+            <li>Extend the Agent with trusted Ruby plugins for custom workflows.</li>
+            <li>Serve an experimental JSON-RPC backend for UI clients.</li>
+          </ul>
+        </section>
+
+        <section class="kward-cta">
+          <div>
+            <strong>▻</strong>
+            <h2>Built for developers. Powered by you.</h2>
+            <p>Open source, extensible, and ready for your workflows.</p>
+          </div>
+          <a class="kward-primary-button" href="https://github.com/kaiwood/kward" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+        </section>
+
+        <%= erb(:footer) %>
+      </main>
+    <% else %>
+      <div class="kward-page">
+        <main id="main" class="kward-content-page <%= guide_page? ? 'kward-guide-page' : 'kward-api-page' %>">
+          <div id="header">
+            <%= erb(:breadcrumb) %>
+            <%= erb(:search) %>
+            <div class="clear"></div>
+          </div>
+
+          <div id="content"><%= yieldall %></div>
+
+          <%= erb(:footer) %>
+        </main>
+      </div>
+    <% end %>
+  </body>
+</html>

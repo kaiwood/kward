@@ -4,6 +4,27 @@ Kward is an extendable Ruby CLI coding agent. It can chat with you about a proje
 
 It currently supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscription, OpenRouter, and experimental Copilot provider support.
 
+## Why use Kward?
+
+Kward is designed for working with real projects, not isolated prompts.
+
+Typical workflows include:
+
+- Understanding an unfamiliar codebase
+- Investigating bugs
+- Reviewing changes
+- Refactoring code
+- Automating repetitive development tasks
+- Building custom agent workflows through plugins
+
+Examples:
+
+```bash
+kward "Explain this project"
+kward "Review this diff"
+kward "Find performance problems in this codebase"
+```
+
 ## Install
 
 Install Kward from RubyGems:
@@ -33,24 +54,6 @@ kward --working-directory ~/code/project "Explain this project"
 
 See [Authentication](doc/authentication.md) for more details about sign-in options and provider credentials.
 
-## Run from source
-
-If you are working from a checkout:
-
-```bash
-bundle install
-ruby lib/main.rb login                    # sign in or save provider credentials
-ruby lib/main.rb                          # start an interactive chat
-ruby lib/main.rb help                     # show available commands and examples
-ruby lib/main.rb "Explain this project"   # run one prompt and exit
-```
-
-You can also use the executable directly after installing dependencies:
-
-```bash
-exe/kward
-```
-
 ## What Kward can do
 
 - Keep a multi-turn coding conversation in your terminal.
@@ -75,7 +78,8 @@ Start here:
 Feature guides:
 
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
-- [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, personas, skills, and prompt templates.
+- [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
+- [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and extension choices.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
 - [Web search](doc/web-search.md): live search providers and network behavior.
 - [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading.
@@ -85,21 +89,22 @@ Advanced/reference:
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
 
-## Run tests
+## Development
+
+Run tests:
 
 ```bash
 bundle exec rake test
 ```
 
-Equivalent direct command:
+Build the YARD documentation site:
 
 ```bash
-ruby -Itest -e 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }'
+bundle exec rake docs:build
 ```
 
-## Generate API documentation
+Generate the RDoc API documentation:
 
 ```bash
 bundle exec rake rdoc
-bundle exec yard doc
 ```

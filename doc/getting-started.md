@@ -1,125 +1,123 @@
 # Getting started
 
-Kward is a Ruby CLI coding agent for local projects. It can answer questions, inspect files, propose and apply edits, run confirmed commands, search the web, and keep session history.
+Use Kward when you want an agent in your terminal that can inspect the current project, explain code, edit files, run local commands, and keep an interactive session history.
 
-This page gets you to a first working chat. For day-to-day features after that, see [Usage](usage.md).
+This page gets you from install to a first useful chat.
 
 ## Requirements
 
 - Ruby 3.2 or newer.
-- Bundler when running from source.
-- Credentials for at least one model provider. You can add them with `/login` inside Kward or with `kward login` from your shell.
+- Credentials for one model provider. The easiest setup is `kward login` or `/login` inside Kward.
+- Bundler only if you run Kward from a source checkout.
 
 ## Install
 
-Install Kward from RubyGems:
+Install the gem:
 
 ```bash
 gem install kward
 ```
 
-Optionally install the starter pack:
+Install the starter pack:
 
 ```bash
 kward init
 ```
 
-The starter pack adds useful default prompts and a base `PRINCIPLES.md` to your config directory. It is helpful for a first setup, but safe to skip if you want to write your own instructions. Existing files are not overwritten.
+The starter pack adds default prompts and a base `PRINCIPLES.md` under `~/.kward`. It does not overwrite existing files.
 
-If you are working from a repository checkout:
+If you are working from a checkout instead:
 
 ```bash
 bundle install
-ruby lib/main.rb init   # optional
+ruby lib/main.rb init
 ```
 
-## Start Kward and sign in
+## Sign in
 
-Start an interactive session:
-
-```bash
-kward
-```
-
-From source:
-
-```bash
-ruby lib/main.rb
-```
-
-When Kward needs credentials, sign in from inside the session:
-
-```text
-/login
-```
-
-You can also sign in from your shell before starting a chat:
+From your shell:
 
 ```bash
 kward login
 ```
 
-From source:
+Or from inside an interactive session:
 
-```bash
-ruby lib/main.rb login
+```text
+/login
 ```
 
-For provider-specific login options, such as OpenRouter API keys or experimental Copilot support, see [Authentication](authentication.md).
+Kward supports OpenAI/ChatGPT, Anthropic Claude Pro/Max, OpenRouter, and experimental Copilot credentials. See [Authentication](authentication.md) when you need a specific provider.
+
+## Start an interactive chat
+
+Run Kward from the project you want it to work on:
+
+```bash
+cd ~/code/my-project
+kward
+```
+
+Ask something concrete:
+
+```text
+Explain the structure of this project.
+```
+
+Then try a task that uses the workspace:
+
+```text
+Find where user authentication is implemented and summarize the flow.
+```
+
+Kward can read files, suggest edits, apply changes, and run commands from the workspace. Existing files must be read in the current conversation before Kward can edit them.
 
 ## Ask one question and exit
 
-Pass a prompt as command-line text:
+For quick tasks, pass the prompt directly:
 
 ```bash
 kward "Explain this project"
 ```
 
-From source:
+Review a diff:
 
 ```bash
-ruby lib/main.rb "Explain this project"
-```
-
-You can also pipe input:
-
-```bash
-git diff | kward "Review this diff"
+git diff | kward "Review this diff for bugs"
 ```
 
 One-shot prompts do not use Kward memory.
 
 ## Useful first commands
 
-Inside an interactive session:
+Inside interactive Kward:
 
 ```text
 /login              sign in or save provider credentials
-/status             show current session and compaction status
-/model              choose the default model
-/reasoning          choose reasoning effort
-/resume             resume a saved session
-/export notes.md    export the current session as Markdown
-/exit               leave the session
+/model              choose a model
+/status             show session and context status
+/resume             resume a previous session
+/export notes.md    export the transcript
+/compact            summarize older context when a chat gets long
+/exit               leave Kward
 ```
 
-Kward saves interactive sessions under `~/.kward/sessions/`.
-
-## Safety basics
-
-- Kward must read an existing file in the current conversation before it can edit or overwrite it.
-- Tool reads are bounded so large files are not accidentally loaded into context.
-
-## Run tests
-
-If you are developing Kward itself:
+## Run from source
 
 ```bash
-bundle exec rake test
+ruby lib/main.rb login
+ruby lib/main.rb
+ruby lib/main.rb "Explain this project"
 ```
 
-Equivalent direct command:
+You can also run:
 
 ```bash
-ruby -Itest -e 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }'
+exe/kward
 ```
+
+## Next steps
+
+- Read [Usage](usage.md) for day-to-day workflows.
+- Read [Configuration](configuration.md) when you want to change providers, models, memory, or web search.
+- Read [Extensibility](extensibility.md) when you want reusable prompts, skills, or project rules.

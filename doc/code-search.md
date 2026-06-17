@@ -1,56 +1,83 @@
 # Code search
 
-Kward exposes a `code_search` tool so the agent can inspect public open-source code for implementation guidance.
+Code search lets Kward inspect public open-source repositories while working on your project.
 
-Use code search when you want Kward to learn from real packages before changing your project. It is useful for checking library APIs, finding examples, comparing implementation patterns, or understanding how another project solved a similar problem.
+Use it when examples from real packages would make an answer better:
+
+- checking how a library API is actually used,
+- finding test patterns before adding tests,
+- comparing implementation approaches,
+- reading source for a dependency,
+- investigating a public bug fix or release.
 
 Example prompts:
 
 ```text
 Look up how tty-prompt handles key bindings before changing our composer.
 Find examples of Faraday retry middleware usage.
-Inspect how Rails structures this kind of generator test.
+Inspect how Rails structures generator tests.
+Check the source for this gem before recommending an API call.
 ```
 
-The tool can:
+## How it works
 
-- look up packages from RubyGems, npm, PyPI, crates.io, and Go package documentation
-- find public GitHub source repositories from package metadata
-- fall back to GitHub repository search when registry metadata has no source URL
-- clone public GitHub repositories into Kward's cache
-- search cached repository files and return bounded snippets with paths and line numbers
-- read bounded line ranges from cached repository files
-- list, refresh, and clear cached repositories
+The `code_search` tool can:
 
-## Cache
+1. find package metadata from registries,
+2. discover likely GitHub repositories,
+3. clone public repositories into a local cache,
+4. search cached files,
+5. read bounded line ranges from cached files.
 
-Repositories are cloned under:
+Kward should use this when the best answer depends on how another project actually implemented something.
+
+## Cache location
+
+Repositories are cached outside your workspace:
 
 ```text
 ~/.kward/cache/code_search
 ```
 
-If `KWARD_CONFIG_PATH` points at another config location, the cache is stored next to that config directory under `cache/code_search`.
+If `KWARD_CONFIG_PATH` points elsewhere, the cache lives beside that config directory under:
 
-The tool keeps cloned repositories outside the current workspace. It uses safe cache keys derived from GitHub `owner/name` identifiers and rejects absolute paths or path traversal when reading files.
+```text
+cache/code_search
+```
+
+The cache is intentionally separate from your project. Kward uses GitHub `owner/name` cache keys and rejects absolute paths or path traversal when reading cached files.
 
 ## GitHub access
 
-`code_search` uses live network access and the local `git` executable. GitHub authentication is optional. If either `GITHUB_TOKEN` or `GH_TOKEN` is set, the token is sent to GitHub API requests. Without a token, GitHub requests are unauthenticated and may hit lower rate limits.
+Code search uses live network access and the local `git` executable.
 
-Tokens are not included in tool output.
+GitHub authentication is optional. To raise rate limits, set either:
 
-## Actions
+```bash
+GITHUB_TOKEN=...
+```
 
-The tool has one schema with an `action` parameter:
+or:
 
-- `package_search` - find package metadata and likely source repository
-- `github_search` - search public GitHub repositories
-- `repo_clone` - clone a GitHub repository into cache if needed
-- `repo_search` - search cached repository files for text
-- `repo_read` - read a bounded line range from a cached repository file
-- `list_cache` - list cached repositories
-- `refresh_cache` - fetch updates for a cached repository
-- `clear_cache` - remove one cached repository
+```bash
+GH_TOKEN=...
+```
 
-Search and read output is bounded to avoid loading excessive external source into context. Oversized and binary files are skipped.
+Tokens are used for GitHub API requests and are not included in tool output.
+
+## Tool actions
+
+The tool uses an `action` parameter:
+
+| Action | Use it to... |
+| --- | --- |
+| `package_search` | find package metadata and likely source repositories. |
+| `github_search` | search public GitHub repositories. |
+| `repo_clone` | clone a GitHub repository into cache. |
+| `repo_search` | search files in a cached repository. |
+| `repo_read` | read a bounded line range from a cached file. |
+| `list_cache` | show cached repositories. |
+| `refresh_cache` | fetch updates for a cached repository. |
+| `clear_cache` | remove a cached repository. |
+
+Search and read results are bounded so Kward does not load large external repositories into context by accident. Oversized and binary files are skipped.
