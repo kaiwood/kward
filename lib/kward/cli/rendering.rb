@@ -8,7 +8,7 @@ module Kward
 
       def render_conversation_transcript(conversation)
         tool_calls_by_id = {}
-        @prompt.say("\n#{colored("Transcript", :cyan, :bold)}\n")
+        @prompt.say("\n#{colored("Transcript", :gray, :bold)}\n")
         conversation.messages.each do |message|
           role = message_role(message)
           next if role == "system"
@@ -59,7 +59,7 @@ module Kward
         if prompt_interface?
           print_tool_result(tool_call, content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         else
-          @prompt.say("\n#{colored("Tool>", :magenta, :bold)}\n#{summary}\n")
+          @prompt.say("\n#{colored("Tool>", *tool_label_styles(content))}\n#{summary}\n")
         end
       end
 
@@ -71,7 +71,7 @@ module Kward
           print_block_delta(label, rendered)
           finish_stream_block
         else
-          @prompt.say("\n#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n#{rendered}\n")
+          @prompt.say("\n#{colored("#{transcript_label(label)}>", *label_styles(label))}\n#{rendered}\n")
         end
       end
 
@@ -308,7 +308,7 @@ module Kward
             @prompt.finish_stream_block
           end
         else
-          start_stream_block("Tool")
+          start_stream_block(tool_stream_label(content))
           print summary
           puts unless summary.end_with?("\n")
           $stdout.flush
@@ -320,7 +320,7 @@ module Kward
         return if @stream_block == label
 
         puts if @stream_block
-        puts "\n#{colored("#{transcript_label(label)}>", label_color(label), :bold)}"
+        puts "\n#{colored("#{transcript_label(label)}>", *label_styles(label))}"
         @stream_block = label
       end
 
@@ -338,22 +338,39 @@ module Kward
       end
 
       def transcript_label(label)
-        label == "Assistant" ? assistant_prompt_name : label
+        case label
+        when "Assistant"
+          assistant_prompt_name
+        when "Tool failed"
+          "Tool"
+        else
+          label
+        end
       end
 
-      def label_color(label)
+      def label_styles(label)
         case label
-        when "Reasoning"
-          :yellow
+        when "Reasoning", "Compaction summary"
+          [:gray, :bold]
         when "Assistant", "Kward"
-          :green
-        when "Tool"
-          :magenta
-        when "Tool output"
-          :cyan
+          [:green, :bold]
+        when "Tool", "Tool output"
+          [:cyan, :bold]
+        when "Tool failed"
+          [:red, :bold]
+        when "Retry"
+          [:yellow, :bold]
         else
-          :blue
+          [:gray, :bold]
         end
+      end
+
+      def tool_stream_label(content)
+        tool_result_failed?(content) ? "Tool failed" : "Tool"
+      end
+
+      def tool_label_styles(content)
+        label_styles(tool_stream_label(content))
       end
 
     end

@@ -573,11 +573,24 @@ class TestCLI < KwardTestCase
   def test_cli_colors_stream_labels_when_forced
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
     cli.instance_variable_set(:@color_enabled, true)
-    output = capture_io do
-      cli.send(:start_stream_block, "Assistant")
-    end.first
 
-    assert_includes output, "\e[32;1mAssistant>\e[0m"
+    assistant_output = capture_io { cli.send(:start_stream_block, "Assistant") }.first
+    reasoning_output = capture_io { cli.send(:start_stream_block, "Reasoning") }.first
+    retry_output = capture_io { cli.send(:start_stream_block, "Retry") }.first
+    tool_output = capture_io { cli.send(:print_tool_result, tool_call("read_file", path: "README.md"), "content") }.first
+    failed_tool_output = capture_io { cli.send(:print_tool_result, tool_call("read_file", path: "README.md"), "Error: missing") }.first
+
+    runtime_prompt = FakePrompt.new([])
+    runtime_cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: runtime_prompt, client: FakeClient.new([]))
+    runtime_cli.instance_variable_set(:@color_enabled, true)
+    runtime_cli.send(:runtime_output, "Saved.")
+
+    assert_includes assistant_output, "\e[32;1mAssistant>\e[0m"
+    assert_includes reasoning_output, "\e[90;1mReasoning>\e[0m"
+    assert_includes retry_output, "\e[33;1mRetry>\e[0m"
+    assert_includes tool_output, "\e[36;1mTool>\e[0m"
+    assert_includes failed_tool_output, "\e[31;1mTool>\e[0m"
+    assert_includes runtime_prompt.output.join, "\e[90;1mRuntime>\e[0m"
   end
 
   def test_module_split_keeps_one_shot_mode_working

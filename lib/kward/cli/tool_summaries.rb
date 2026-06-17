@@ -10,7 +10,7 @@ module Kward
         name = tool_call_name(tool_call)
         args = tool_call_args(tool_call)
         text = content.to_s
-        return error_tool_summary(name, args, text) if text.start_with?("Error:", "Declined:")
+        return error_tool_summary(name, args, text) if tool_result_failed?(text)
 
         case name
         when "read_file"
@@ -24,6 +24,10 @@ module Kward
         else
           generic_tool_summary(name, text)
         end
+      end
+
+      def tool_result_failed?(content)
+        content.to_s.start_with?("Error:", "Declined:", "Cancelled.")
       end
 
       def limit_tool_output_lines(content, line_limit)

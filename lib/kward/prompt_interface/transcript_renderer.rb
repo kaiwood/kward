@@ -11,7 +11,7 @@ module Kward
           prepare_transcript_output_locked unless @restoring_transcript
           if label && @stream_state.block != label
             ensure_transcript_block_separator_locked
-            write_transcript_text_locked("#{colored("#{transcript_label(label)}>", label_color(label), :bold)}\n")
+            write_transcript_text_locked("#{colored("#{transcript_label(label)}>", *label_styles(label))}\n")
             @stream_state.start_block(label)
           end
           write_transcript_text_locked(delta) unless delta.empty?
@@ -119,21 +119,30 @@ module Kward
       end
 
       def transcript_label(label)
-        label == "Assistant" ? @assistant_label : label
+        case label
+        when "Assistant"
+          @assistant_label
+        when "Tool failed"
+          "Tool"
+        else
+          label
+        end
       end
 
-      def label_color(label)
+      def label_styles(label)
         case label
-        when "Reasoning"
-          :yellow
+        when "Reasoning", "Compaction summary"
+          [:gray, :bold]
         when "Assistant", "Kward"
-          :green
-        when "Tool"
-          :magenta
-        when "Tool output"
-          :cyan
+          [:green, :bold]
+        when "Tool", "Tool output"
+          [:cyan, :bold]
+        when "Tool failed"
+          [:red, :bold]
+        when "Retry"
+          [:yellow, :bold]
         else
-          :blue
+          [:gray, :bold]
         end
       end
 

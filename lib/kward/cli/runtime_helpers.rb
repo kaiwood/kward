@@ -37,7 +37,7 @@ module Kward
 
       def runtime_output(text)
         content = text.to_s.chomp
-        label = colored(runtime_output_prompt, :blue, :bold)
+        label = colored(runtime_output_prompt, :gray, :bold)
         separator = content.include?("\n") ? "\n" : " "
         @prompt.say("\n#{label}#{separator}#{content}\n")
       end
@@ -64,7 +64,7 @@ module Kward
 
         run_busy_local_command_and_requeue(activity: "running") do
           result = configured_workspace(root: interactive_workspace_root(agent)).run_shell_command(command)
-          @prompt.say("\n#{colored("Shell>", :green, :bold)} #{command}\n#{result}\n")
+          @prompt.say("\n#{colored("Shell>", :cyan, :bold)} #{command}\n#{result}\n")
         end
         true
       end
