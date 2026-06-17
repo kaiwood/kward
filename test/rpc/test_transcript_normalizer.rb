@@ -71,6 +71,27 @@ class TestRPCTranscriptNormalizer < KwardTestCase
     ], messages.first[:content]
   end
 
+  def test_assistant_response_items_restore_thinking_text_and_tool_calls
+    messages = Kward::RPC::TranscriptNormalizer.new([
+      {
+        "role" => "assistant",
+        "content" => "",
+        "tool_calls" => [tool_call("read_file", path: "README.md")],
+        "response_items" => [
+          { "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "Checked context." }] },
+          { "type" => "message", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "Need inspect file first." }] },
+          { "type" => "message", "phase" => "final_answer", "content" => [{ "type" => "output_text", "text" => "Done." }] }
+        ]
+      }
+    ]).normalize
+
+    assert_equal [
+      { type: "thinking", thinking: "Checked context." },
+      { type: "text", text: "Done." },
+      { type: "toolCall", id: "call_read_file", name: "read", arguments: { path: "README.md" } }
+    ], messages.first[:content]
+  end
+
   def test_session_transcript_normalizes_tool_calls_and_results
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

@@ -43,7 +43,7 @@ module Kward
       end
 
       def render_assistant_message(message)
-        content = CLITranscriptFormatter.content_text(message_content(message))
+        content = CLITranscriptFormatter.assistant_content_text(message)
         return if content.empty?
 
         render_transcript_block("Assistant", content)

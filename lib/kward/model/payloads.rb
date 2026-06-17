@@ -292,16 +292,21 @@ module Kward
             output: plain_content(content).to_s
           }
         when "assistant"
-          content = plain_content(content)
-          input << codex_message("assistant", content.to_s) unless content.to_s.empty?
-          MessageAccess.tool_calls(message).each do |tool_call|
-            function = tool_call[:function] || tool_call["function"] || {}
-            input << {
-              type: "function_call",
-              call_id: tool_call[:id] || tool_call["id"] || function[:name] || function["name"] || "tool-call",
-              name: function[:name] || function["name"],
-              arguments: function[:arguments] || function["arguments"] || "{}"
-            }
+          response_items = codex_replay_response_items(message)
+          if response_items.empty?
+            content = plain_content(content)
+            input << codex_message("assistant", content.to_s) unless content.to_s.empty?
+            MessageAccess.tool_calls(message).each do |tool_call|
+              function = tool_call[:function] || tool_call["function"] || {}
+              input << {
+                type: "function_call",
+                call_id: tool_call[:id] || tool_call["id"] || function[:name] || function["name"] || "tool-call",
+                name: function[:name] || function["name"],
+                arguments: function[:arguments] || function["arguments"] || "{}"
+              }
+            end
+          else
+            input.concat(response_items)
           end
         when "compactionSummary"
           summary = MessageAccess.summary(message) || content
@@ -331,6 +336,85 @@ module Kward
     def codex_message(role, text)
       type = role == "assistant" ? "output_text" : "input_text"
       { type: "message", role: role, content: [{ type: type, text: text }] }
+    end
+
+    def codex_replay_response_items(message)
+      items = MessageAccess.response_items(message)
+      return [] if items.empty?
+
+      items.filter_map { |item| codex_replay_response_item(item) }
+    end
+
+    def codex_replay_response_item(item)
+      return nil unless item.is_a?(Hash)
+
+      case item[:type] || item["type"]
+      when "reasoning"
+        codex_replay_reasoning_item(item)
+      when "message"
+        codex_replay_message_item(item)
+      when "function_call", "custom_tool_call"
+        codex_replay_tool_call_item(item)
+      end
+    end
+
+    def codex_replay_reasoning_item(item)
+      result = { type: "reasoning" }
+      id = item[:id] || item["id"]
+      summary = item[:summary] || item["summary"]
+      content = item[:content] || item["content"]
+      result[:id] = id if id
+      result[:summary] = summary if summary.is_a?(Array)
+      result[:content] = content if content.is_a?(Array)
+      result
+    end
+
+    def codex_replay_message_item(item)
+      content = item[:content] || item["content"]
+      return nil unless content.is_a?(Array)
+
+      result = { type: "message", role: item[:role] || item["role"] || "assistant", content: codex_replay_message_content(content) }
+      id = item[:id] || item["id"]
+      status = item[:status] || item["status"]
+      phase = item[:phase] || item["phase"]
+      result[:id] = id if id
+      result[:status] = status if status
+      result[:phase] = phase if phase
+      result
+    end
+
+    def codex_replay_message_content(content)
+      content.filter_map do |part|
+        next unless part.is_a?(Hash)
+
+        type = part[:type] || part["type"]
+        next unless ["output_text", "text", "refusal"].include?(type)
+
+        replay_part = { type: type }
+        text = part[:text] || part["text"]
+        refusal = part[:refusal] || part["refusal"]
+        replay_part[:text] = text.to_s if text || type != "refusal"
+        replay_part[:refusal] = refusal.to_s if refusal
+        annotations = part[:annotations] || part["annotations"]
+        replay_part[:annotations] = annotations if annotations.is_a?(Array)
+        replay_part
+      end
+    end
+
+    def codex_replay_tool_call_item(item)
+      type = item[:type] || item["type"]
+      result = { type: type }
+      id = item[:id] || item["id"]
+      call_id = item[:call_id] || item["call_id"]
+      name = item[:name] || item["name"]
+      arguments = item[:arguments] || item["arguments"]
+      input = item[:input] || item["input"]
+      result[:id] = id if id
+      result[:call_id] = call_id if call_id
+      result[:name] = name if name
+      result[:arguments] = arguments if arguments
+      result[:input] = input if input
+      result
     end
 
     def plain_content(content)

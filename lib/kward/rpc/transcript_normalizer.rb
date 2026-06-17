@@ -61,6 +61,7 @@ module Kward
 
       def normalize_assistant_message(message)
         content = reasoning_first_content(normalize_content(ToolCall.value(message, :content), preserve_thinking: true))
+        content = response_item_content(message) if text_content_empty?(content)
         reasoning = normalize_reasoning_summary(message)
         content.unshift(reasoning) if reasoning && !thinking_content?(content)
         tool_calls(message).each do |tool_call|
@@ -152,6 +153,52 @@ module Kward
       def normalize_reasoning_summary(message)
         summary = ToolCall.value(message, :reasoning_summary) || ToolCall.value(message, :reasoningSummary)
         summary.to_s.empty? ? nil : { type: "thinking", thinking: summary.to_s }
+      end
+
+      def response_item_content(message)
+        response_items(message).filter_map do |item|
+          next unless item.is_a?(Hash)
+
+          case ToolCall.value(item, :type).to_s
+          when "reasoning"
+            thinking = reasoning_item_text(item)
+            { type: "thinking", thinking: thinking } unless thinking.empty?
+          when "message"
+            next if ToolCall.value(item, :phase).to_s == "commentary"
+
+            text = response_message_item_text(item)
+            { type: "text", text: text } unless text.empty?
+          end
+        end
+      end
+
+      def response_items(message)
+        items = ToolCall.value(message, :response_items) || ToolCall.value(message, :responseItems)
+        items.is_a?(Array) ? items : []
+      end
+
+      def reasoning_item_text(item)
+        summary = ToolCall.value(item, :summary)
+        content = ToolCall.value(item, :content)
+        response_text_parts(summary).empty? ? response_text_parts(content).join("\n\n") : response_text_parts(summary).join("\n\n")
+      end
+
+      def response_message_item_text(item)
+        response_text_parts(ToolCall.value(item, :content)).join
+      end
+
+      def response_text_parts(parts)
+        Array(parts).filter_map do |part|
+          next unless part.is_a?(Hash)
+
+          ToolCall.value(part, :text) || ToolCall.value(part, :refusal)
+        end.map(&:to_s)
+      end
+
+      def text_content_empty?(content)
+        Array(content).all? do |part|
+          !part.is_a?(Hash) || !["text", "thinking"].include?(ToolCall.value(part, :type).to_s) || ToolCall.value(part, :text).to_s.empty? && ToolCall.value(part, :thinking).to_s.empty?
+        end
       end
 
       def thinking_content?(content)

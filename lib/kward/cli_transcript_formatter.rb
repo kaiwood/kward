@@ -14,13 +14,20 @@ module Kward
       return direct.to_s unless direct.to_s.empty?
 
       content = MessageAccess.content(message)
-      return "" unless content.is_a?(Array)
+      if content.is_a?(Array)
+        text = content.filter_map do |part|
+          type = MessageAccess.value(part, :type)
+          next unless ["thinking", "reasoning"].include?(type)
 
-      content.filter_map do |part|
-        type = MessageAccess.value(part, :type)
-        next unless ["thinking", "reasoning"].include?(type)
+          MessageAccess.value(part, :thinking) || MessageAccess.value(part, :reasoning) || MessageAccess.value(part, :text)
+        end.join("\n")
+        return text unless text.empty?
+      end
 
-        MessageAccess.value(part, :thinking) || MessageAccess.value(part, :reasoning) || MessageAccess.value(part, :text)
+      response_items(message).filter_map do |item|
+        next unless MessageAccess.value(item, :type) == "reasoning"
+
+        response_item_text(MessageAccess.value(item, :summary)).empty? ? response_item_text(MessageAccess.value(item, :content)) : response_item_text(MessageAccess.value(item, :summary))
       end.join("\n")
     end
 
@@ -31,6 +38,18 @@ module Kward
       else
         content.to_s
       end
+    end
+
+    def assistant_content_text(message)
+      text = content_text(MessageAccess.content(message))
+      return text unless text.empty?
+
+      response_items(message).filter_map do |item|
+        next unless MessageAccess.value(item, :type) == "message"
+        next if MessageAccess.value(item, :phase).to_s == "commentary"
+
+        response_item_text(MessageAccess.value(item, :content))
+      end.join
     end
 
     def display_text(message)
@@ -94,6 +113,18 @@ module Kward
         media_type = MessageAccess.value(part, :media_type) || MessageAccess.value(part, :mimeType) || "image"
         "[#{media_type}#{path ? ": #{path}" : ""}]"
       end
+    end
+
+    def response_items(message)
+      MessageAccess.response_items(message)
+    end
+
+    def response_item_text(parts)
+      Array(parts).filter_map do |part|
+        next unless part.is_a?(Hash)
+
+        MessageAccess.value(part, :text) || MessageAccess.value(part, :refusal)
+      end.join
     end
 
     def image_part_reference(part)

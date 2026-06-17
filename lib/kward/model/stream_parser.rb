@@ -219,7 +219,18 @@ module Kward
     end
 
     def codex_sse_state
-      { content: +"", reasoning_summary: +"", tool_calls: [], final_output: [], usage: nil }
+      {
+        content: +"",
+        raw_content: +"",
+        emitted_message_keys: [],
+        reasoning_summary: +"",
+        tool_calls: [],
+        response_item_keys: [],
+        items_by_id: {},
+        active_item_id: nil,
+        current_text_content_part: nil,
+        usage: nil
+      }
     end
 
     def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
@@ -228,30 +239,33 @@ module Kward
 
       event = JSON.parse(data)
       case event["type"]
-      when "response.output_text.delta"
-        delta = event["delta"].to_s
-        state[:content] << delta
-        on_assistant_delta&.call(delta)
+      when "response.output_item.added"
+        codex_output_item_added(state, event["item"])
+      when "response.content_part.added"
+        codex_content_part_added(state, event["part"])
+      when "response.output_text.delta", "response.refusal.delta"
+        codex_output_text_delta(state, event["delta"], on_assistant_delta: on_assistant_delta)
+      when "response.reasoning_summary_part.added"
+        codex_reasoning_summary_part_added(state, event["part"])
       when "response.reasoning_summary_text.delta"
-        delta = event["delta"].to_s
-        state[:reasoning_summary] << delta
-        on_reasoning_delta&.call(delta)
+        codex_reasoning_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta)
+      when "response.reasoning_summary_part.done"
+        codex_reasoning_part_done(state, on_reasoning_delta: on_reasoning_delta)
+      when "response.reasoning_text.delta"
+        codex_reasoning_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta)
+      when "response.function_call_arguments.delta", "response.custom_tool_call_input.delta"
+        codex_tool_arguments_delta(state, event["delta"])
+      when "response.function_call_arguments.done"
+        codex_tool_arguments_done(state, event["arguments"])
       when "response.output_item.done"
-        item = event["item"]
-        state[:final_output] << item if item.is_a?(Hash)
-        tool_call = codex_tool_call(item)
-        state[:tool_calls] << tool_call if tool_call
+        codex_output_item_done(state, event["item"], on_assistant_delta: on_assistant_delta, on_reasoning_delta: on_reasoning_delta)
       when "response.completed"
         response = event["response"]
         state[:usage] ||= usage_normalizer&.call(response["usage"]) if response.is_a?(Hash)
         state[:usage] ||= usage_normalizer&.call(event["usage"])
-        if state[:content].empty? && response.is_a?(Hash) && response["output"].is_a?(Array)
-          state[:final_output] = response["output"]
-          text = text_from_codex_items(state[:final_output])
-          state[:content] << text
-          on_assistant_delta&.call(text) unless text.empty?
-          if state[:reasoning_summary].empty?
-            state[:reasoning_summary] << reasoning_summary_from_codex_items(state[:final_output])
+        if response.is_a?(Hash) && response["output"].is_a?(Array) && state[:response_item_keys].empty?
+          response["output"].each do |item|
+            codex_output_item_done(state, item, on_assistant_delta: on_assistant_delta, on_reasoning_delta: on_reasoning_delta)
           end
         end
       when "response.failed", "response.incomplete"
@@ -276,19 +290,237 @@ module Kward
       end
     end
 
-    def codex_sse_message(state)
-      if state[:tool_calls].empty?
-        state[:final_output].each do |item|
-          tool_call = codex_tool_call(item)
-          state[:tool_calls] << tool_call if tool_call
-        end
-      end
+    def codex_output_item_added(state, item)
+      return unless item.is_a?(Hash)
 
-      message = { "role" => "assistant", "content" => state[:content] }
+      item = deep_dup_hash(item)
+      item["content"] = [] if item["type"] == "message" && !item["content"].is_a?(Array)
+      item["summary"] = [] if item["type"] == "reasoning" && !item["summary"].is_a?(Array)
+      remember_codex_item(state, item)
+      state[:active_item_id] = codex_item_key(item)
+      state[:current_text_content_part] = nil
+    end
+
+    def codex_content_part_added(state, part)
+      item = active_codex_item(state)
+      return unless item&.fetch("type", nil) == "message" && part.is_a?(Hash)
+      return unless ["output_text", "text", "refusal"].include?(part["type"])
+
+      item["content"] ||= []
+      item["content"] << deep_dup_hash(part)
+      state[:current_text_content_part] = item["content"].last
+    end
+
+    def codex_output_text_delta(state, delta, on_assistant_delta: nil)
+      text = delta.to_s
+      return if text.empty?
+
+      item = active_codex_item(state)
+      if item&.fetch("type", nil) == "message"
+        item["content"] ||= [{ "type" => "output_text", "text" => +"" }]
+        part = state[:current_text_content_part] || item["content"].last
+        part = item["content"].last unless part.is_a?(Hash)
+        part["type"] ||= "output_text"
+        text_key = part["type"] == "refusal" ? "refusal" : "text"
+        part[text_key] = part[text_key].to_s + text
+      end
+      state[:raw_content] << text
+    end
+
+    def codex_reasoning_summary_part_added(state, part)
+      item = active_codex_item(state)
+      return unless item&.fetch("type", nil) == "reasoning" && part.is_a?(Hash)
+
+      item["summary"] ||= []
+      item["summary"] << deep_dup_hash(part)
+    end
+
+    def codex_reasoning_delta(state, delta, on_reasoning_delta: nil)
+      text = delta.to_s
+      return if text.empty?
+
+      item = active_codex_item(state)
+      if item&.fetch("type", nil) == "reasoning"
+        item["summary"] ||= []
+        item["summary"] << { "type" => "summary_text", "text" => +"" } if item["summary"].empty?
+        item["summary"].last["text"] = item["summary"].last["text"].to_s + text
+      end
+      state[:reasoning_summary] << text
+      on_reasoning_delta&.call(text)
+    end
+
+    def codex_reasoning_part_done(state, on_reasoning_delta: nil)
+      item = active_codex_item(state)
+      return unless item&.fetch("type", nil) == "reasoning"
+      return if item["summary"].to_a.empty?
+
+      text = "\n\n"
+      item["summary"].last["text"] = item["summary"].last["text"].to_s + text
+      state[:reasoning_summary] << text
+      on_reasoning_delta&.call(text)
+    end
+
+    def codex_tool_arguments_delta(state, delta)
+      item = active_codex_item(state)
+      return unless item && ["function_call", "custom_tool_call"].include?(item["type"])
+
+      key = item["type"] == "custom_tool_call" ? "input" : "arguments"
+      item[key] = item[key].to_s + delta.to_s
+    end
+
+    def codex_tool_arguments_done(state, arguments)
+      item = active_codex_item(state)
+      return unless item&.fetch("type", nil) == "function_call"
+
+      item["arguments"] = arguments.to_s
+    end
+
+    def codex_output_item_done(state, item, on_assistant_delta: nil, on_reasoning_delta: nil)
+      return unless item.is_a?(Hash)
+
+      item = merge_codex_item(active_or_known_codex_item(state, item), item)
+      remember_codex_item(state, item)
+      collect_codex_item_output(state, item, on_assistant_delta: on_assistant_delta, on_reasoning_delta: on_reasoning_delta)
+      state[:active_item_id] = nil if state[:active_item_id] == codex_item_key(item)
+      state[:current_text_content_part] = nil
+    end
+
+    def collect_codex_item_output(state, item, on_assistant_delta: nil, on_reasoning_delta: nil)
+      case item["type"]
+      when "message"
+        text = text_from_codex_items([item])
+        return if text.empty? || !codex_streamable_message_item?(item)
+
+        state[:content] << text
+        key = codex_item_key(item)
+        unless state[:emitted_message_keys].include?(key)
+          on_assistant_delta&.call(text)
+          state[:emitted_message_keys] << key
+        end
+      when "reasoning"
+        text = reasoning_summary_from_codex_items([item])
+        if state[:reasoning_summary].empty? && !text.empty?
+          state[:reasoning_summary] << text
+          on_reasoning_delta&.call(text)
+        end
+      when "function_call", "custom_tool_call"
+        tool_call = codex_tool_call(item)
+        state[:tool_calls] << tool_call if tool_call && !state[:tool_calls].any? { |call| call["id"] == tool_call["id"] }
+      end
+    end
+
+    def active_or_known_codex_item(state, item)
+      key = codex_item_key(item)
+      known = state[:items_by_id][key]
+      return known if known
+
+      active = active_codex_item(state)
+      return active if active && (!codex_item_has_stable_key?(item) || codex_item_key(active) == key)
+
+      nil
+    end
+
+    def codex_item_has_stable_key?(item)
+      item.key?("id") || item.key?("call_id")
+    end
+
+    def active_codex_item(state)
+      key = state[:active_item_id]
+      key ? state[:items_by_id][key] : nil
+    end
+
+    def remember_codex_item(state, item)
+      key = codex_item_key(item)
+      if state[:items_by_id].key?(key)
+        stored = state[:items_by_id][key]
+        stored.replace(merge_codex_item(stored, item))
+      else
+        state[:items_by_id][key] = item
+        state[:response_item_keys] << key
+      end
+    end
+
+    def codex_item_key(item)
+      item["id"] || item["call_id"] || "item_#{item.object_id}"
+    end
+
+    def merge_codex_item(existing, update)
+      return deep_dup_hash(update) unless existing.is_a?(Hash)
+
+      merged = deep_dup_hash(existing)
+      update.each do |key, value|
+        next if value.nil?
+
+        merged[key] = if key == "content" && merged[key].is_a?(Array) && value.is_a?(Array)
+                        value.empty? ? merged[key] : value
+                      elsif key == "summary" && merged[key].is_a?(Array) && value.is_a?(Array)
+                        value.empty? ? merged[key] : value
+                      elsif key == "arguments" && value.to_s.empty? && !merged[key].to_s.empty?
+                        merged[key]
+                      else
+                        deep_dup(value)
+                      end
+      end
+      merged
+    end
+
+    def deep_dup_hash(hash)
+      deep_dup(hash)
+    end
+
+    def deep_dup(value)
+      case value
+      when Hash
+        value.each_with_object({}) { |(key, entry), result| result[key] = deep_dup(entry) }
+      when Array
+        value.map { |entry| deep_dup(entry) }
+      when String
+        value.dup
+      else
+        value
+      end
+    end
+
+    def codex_sse_message(state)
+      message = { "role" => "assistant", "content" => codex_visible_content(state) }
       message["reasoning_summary"] = state[:reasoning_summary] unless state[:reasoning_summary].empty?
       message["tool_calls"] = state[:tool_calls] unless state[:tool_calls].empty?
+      response_items = codex_response_items(state)
+      message["response_items"] = response_items unless response_items.empty?
       message["usage"] = state[:usage] if state[:usage]
       message
+    end
+
+    def codex_visible_content(state)
+      return state[:content] unless state[:content].empty?
+
+      response_items = codex_response_items(state)
+      visible_text = text_from_codex_items(visible_codex_message_items(response_items, tool_calls: state[:tool_calls]))
+      return visible_text unless visible_text.empty?
+      return "" unless state[:tool_calls].empty?
+
+      state[:raw_content]
+    end
+
+    def visible_codex_message_items(items, tool_calls: [])
+      messages = Array(items).select { |item| item.is_a?(Hash) && item["type"] == "message" }
+      final_messages = messages.select { |item| codex_message_phase(item) == "final_answer" }
+      return final_messages unless final_messages.empty?
+      return [] unless tool_calls.empty?
+
+      messages.reject { |item| codex_message_phase(item) == "commentary" }
+    end
+
+    def codex_streamable_message_item?(item)
+      codex_message_phase(item) == "final_answer"
+    end
+
+    def codex_message_phase(item)
+      item["phase"].to_s
+    end
+
+    def codex_response_items(state)
+      state[:response_item_keys].filter_map { |key| state[:items_by_id][key] }
     end
 
     def codex_tool_call(item)

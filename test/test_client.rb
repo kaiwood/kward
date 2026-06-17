@@ -756,20 +756,29 @@ class TestClient < KwardTestCase
 
   def test_codex_sse_parses_text_response
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
-    body = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n" \
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [], "phase" => "final_answer" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.content_part.added", "part" => { "type" => "output_text", "text" => "" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_text.delta", "delta" => "hi")}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [{ "type" => "output_text", "text" => "hi" }], "phase" => "final_answer" })}\n\n" \
       "data: {\"type\":\"response.completed\",\"response\":{}}\n\n"
 
     message = client.send(:parse_codex_sse, body)
 
     assert_equal "assistant", message["role"]
     assert_equal "hi", message["content"]
+    assert_equal "final_answer", message["response_items"].first["phase"]
   end
 
   def test_codex_sse_parses_reasoning_summary
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     deltas = []
-    body = "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"thinking\"}\n\n" \
-      "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n"
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
+      "data: {\"type\":\"response.reasoning_summary_text.delta\",\"delta\":\"thinking\"}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "thinking" }] })}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [], "phase" => "final_answer" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.content_part.added", "part" => { "type" => "output_text", "text" => "" })}\n\n" \
+      "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [{ "type" => "output_text", "text" => "hi" }], "phase" => "final_answer" })}\n\n"
 
     message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
 
@@ -809,6 +818,7 @@ class TestClient < KwardTestCase
       "type" => "response.output_item.done",
       "item" => {
         "type" => "function_call",
+        "id" => "fc_1",
         "call_id" => "call_1",
         "name" => "list_directory",
         "arguments" => JSON.dump("path" => ".")
@@ -820,6 +830,46 @@ class TestClient < KwardTestCase
 
     assert_equal "call_1", message["tool_calls"].first["id"]
     assert_equal "list_directory", message["tool_calls"].first["function"]["name"]
+    assert_equal "function_call", message["response_items"].first["type"]
+    assert_equal "fc_1", message["response_items"].first["id"]
+  end
+
+  def test_codex_sse_keeps_commentary_tool_turn_out_of_visible_assistant_content
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    deltas = []
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [], "phase" => "commentary" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.content_part.added", "part" => { "type" => "output_text", "text" => "" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_text.delta", "delta" => "Need inspect file first.")}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [{ "type" => "output_text", "text" => "Need inspect file first." }], "phase" => "commentary" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "type" => "function_call", "id" => "fc_1", "call_id" => "call_1", "name" => "read_file", "arguments" => JSON.dump("path" => "README.md") })}\n\n"
+
+    message = client.send(:parse_codex_sse, body, on_assistant_delta: ->(delta) { deltas << delta })
+
+    assert_equal "", message["content"]
+    assert_empty deltas
+    assert_equal "commentary", message["response_items"].first["phase"]
+    assert_equal "read_file", message["tool_calls"].first["function"]["name"]
+  end
+
+  def test_codex_payload_replays_response_items_with_phase
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    assistant = {
+      "role" => "assistant",
+      "content" => "",
+      "tool_calls" => [tool_call("read_file", "path" => "README.md")],
+      "response_items" => [
+        { "type" => "message", "id" => "msg_1", "role" => "assistant", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "Need inspect file first.", "annotations" => [] }] },
+        { "type" => "function_call", "id" => "fc_1", "call_id" => "call_1", "name" => "read_file", "arguments" => JSON.dump("path" => "README.md") }
+      ]
+    }
+
+    input = client.send(:codex_payload, [assistant], [])[:input]
+
+    assert_equal "message", input.first[:type]
+    assert_equal "commentary", input.first[:phase]
+    assert_equal "function_call", input.last[:type]
+    assert_equal "fc_1", input.last[:id]
+    assert_equal "call_1", input.last[:call_id]
   end
 
 end

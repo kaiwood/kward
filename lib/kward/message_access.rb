@@ -59,5 +59,11 @@ module Kward
       calls = value(message, :tool_calls) || value(message, :toolCalls)
       calls.is_a?(Array) ? calls : []
     end
+
+    # @return [Array<Hash>] provider-native Responses output items, or an empty array
+    def response_items(message)
+      items = value(message, :response_items) || value(message, :responseItems)
+      items.is_a?(Array) ? items : []
+    end
   end
 end

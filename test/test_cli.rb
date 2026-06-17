@@ -1455,6 +1455,36 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_resume_renders_response_item_reasoning_and_hides_commentary
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("inspect file")
+      conversation.append_assistant({
+        "role" => "assistant",
+        "content" => "",
+        "tool_calls" => [tool_call("read_file", path: "README.md")],
+        "response_items" => [
+          { "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "Need context." }] },
+          { "type" => "message", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "Need inspect file first." }] },
+          { "type" => "function_call", "id" => "fc_1", "call_id" => "call_read_file", "name" => "read_file", "arguments" => JSON.dump("path" => "README.md") }
+        ]
+      })
+      conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "README contents\n")
+      prompt = FakePrompt.new(["/resume #{saved.path}", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Reasoning>\nNeed context."
+      refute_includes output, "Need inspect file first."
+      assert_includes output, "Tool>\nread_file: README.md"
+    end
+  end
+
   def test_retry_event_renders_retry_message
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
     event = Kward::Events::Retry.new(provider: "Codex", model: "gpt-test", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream", request_bytes: 123)
