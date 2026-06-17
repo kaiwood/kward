@@ -13,7 +13,7 @@ module Kward
         if raw
           @prompt.say(content)
         else
-          @prompt.say(render_sysprompt_sections(conversation))
+          @prompt.say(render_markdown_transcript(render_sysprompt_sections(conversation)))
         end
       end
 
@@ -38,7 +38,7 @@ module Kward
           memory_context: conversation.memory_context,
           plugin_context: conversation.last_plugin_prompt_context
         )
-        lines = ["Kward System Prompt", "", "Workspace: #{conversation.workspace_root}"]
+        lines = ["# Kward System Prompt", "", "Workspace: #{conversation.workspace_root}"]
         lines << "Model: #{[conversation.provider, conversation.model].compact.join(" / ")}" unless conversation.model.to_s.empty?
         lines << "Reasoning effort: #{conversation.reasoning_effort}" unless conversation.reasoning_effort.to_s.empty?
         lines << "Memory: not included; memory context is retrieved per user turn."
