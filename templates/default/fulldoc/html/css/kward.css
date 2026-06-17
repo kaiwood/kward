@@ -98,6 +98,94 @@ body.kward-docs::before {
   justify-content: center;
 }
 
+.kward-sr-only {
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.kward-guide-search {
+  justify-self: end;
+  position: relative;
+  width: min(280px, 24vw);
+}
+
+.kward-guide-search input {
+  background: rgba(3, 6, 4, 0.72);
+  border: 1px solid rgba(156, 175, 53, 0.42);
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--kward-ink);
+  font: inherit;
+  outline: none;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.kward-guide-search input::placeholder {
+  color: var(--kward-muted);
+}
+
+.kward-guide-search input:focus {
+  border-color: var(--kward-accent-bright);
+  box-shadow: 0 0 0 3px rgba(156, 175, 53, 0.18);
+}
+
+.kward-guide-search-results {
+  background: rgba(5, 9, 5, 0.98);
+  border: 1px solid rgba(156, 175, 53, 0.32);
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+  display: none;
+  margin-top: 10px;
+  max-height: min(460px, calc(100vh - 120px));
+  overflow: auto;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: min(440px, calc(100vw - 32px));
+  z-index: 9200;
+}
+
+.kward-guide-search-results.open {
+  display: block;
+}
+
+.kward-guide-search-results a,
+.kward-guide-search-empty {
+  border-radius: 8px;
+  color: var(--kward-ink);
+  display: block;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
+.kward-guide-search-results a:hover,
+.kward-guide-search-results a:focus {
+  background: rgba(156, 175, 53, 0.13);
+  color: var(--kward-ink);
+}
+
+.kward-guide-search-results strong {
+  color: var(--kward-accent-bright);
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.kward-guide-search-results span,
+.kward-guide-search-empty {
+  color: var(--kward-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
 
 .kward-nav-toggle {
   background: transparent;
@@ -214,7 +302,8 @@ body.kward-docs #footer {
     font-size: 23px;
   }
 
-  .kward-topnav {
+  .kward-topnav,
+  .kward-guide-search {
     display: none;
   }
 

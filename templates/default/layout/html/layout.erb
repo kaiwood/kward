@@ -34,6 +34,12 @@
         </div>
         <a href="<%= url_for('Kward.html') %>" class="<%= 'active' if api_page? %>">API Docs</a>
       </nav>
+      <form class="kward-guide-search" role="search">
+        <label class="kward-sr-only" for="kward-guide-search-input">Search user guides</label>
+        <input id="kward-guide-search-input" type="search" placeholder="Search guides" autocomplete="off" aria-label="Search user guides" aria-controls="kward-guide-search-results">
+        <div id="kward-guide-search-results" class="kward-guide-search-results" role="listbox" aria-label="Search results"></div>
+      </form>
+      <script type="application/json" id="kward-guide-search-index"><%= guide_search_index_json %></script>
     </header>
 
     <% if home_page? %>

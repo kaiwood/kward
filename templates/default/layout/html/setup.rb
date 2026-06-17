@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 module KwardDocsNavigation
   GUIDE_GROUPS = [
     [
@@ -34,6 +36,15 @@ module KwardDocsNavigation
 
   GUIDE_OVERVIEW = "file.README.html"
   GUIDE_LINKS = ([GUIDE_OVERVIEW] + GUIDE_GROUPS.flat_map { |_title, items| items.map(&:last) }).freeze
+  GUIDE_SEARCH_FILES = [
+    ["Overview", "README.md", GUIDE_OVERVIEW],
+    *GUIDE_GROUPS.flat_map do |_title, items|
+      items.map do |label, link|
+        source = "doc/#{link.delete_prefix("file.").delete_suffix(".html")}.md"
+        [label, source, link]
+      end
+    end
+  ].freeze
   GUIDE_FILE_LINKS = {
     "doc/getting-started.md" => "file.getting-started.html",
     "doc/usage.md" => "file.usage.html",
@@ -56,6 +67,24 @@ module KwardDocsNavigation
 
   def guide_overview
     GUIDE_OVERVIEW
+  end
+
+  def guide_search_index_json
+    JSON.generate(guide_search_index).gsub("</", "<\\/")
+  end
+
+  def guide_search_index
+    GUIDE_SEARCH_FILES.filter_map do |title, source, link|
+      next unless File.file?(source)
+
+      content = File.read(source)
+      {
+        title: title,
+        path: source,
+        url: url_for(link),
+        text: content.gsub(/[`*_#>\[\]()]/, " ").gsub(/\s+/, " ").strip
+      }
+    end
   end
 
   def current_docs_path
