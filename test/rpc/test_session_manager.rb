@@ -167,6 +167,9 @@ class TestRPCSessionManager < KwardTestCase
       assert_equal "Named", info[:name]
       assert_equal "first prompt with spaces", info[:firstMessage]
       assert_equal 3, info[:messageCount]
+      assert_equal "Codex", info[:provider]
+      assert_equal "fake-model", info[:model]
+      assert_equal "medium", info[:reasoningEffort]
       assert info[:createdAt]
       assert info[:modifiedAt]
     ensure

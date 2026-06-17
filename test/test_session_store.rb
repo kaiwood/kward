@@ -398,6 +398,21 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_recent_sessions_include_latest_runtime_metadata
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create(provider: "Codex", model: "gpt-5.4", reasoning_effort: "low")
+      session.update_runtime(provider: "OpenRouter", model: "openai/gpt-5.5", reasoning_effort: "high")
+      session.append_message("role" => "user", "content" => "hello")
+
+      info = store.recent.first
+
+      assert_equal "OpenRouter", info.provider
+      assert_equal "openai/gpt-5.5", info.model
+      assert_equal "high", info.reasoning_effort
+    end
+  end
+
   def test_tool_execution_end_record_matches_tauren_session_diff_shape
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

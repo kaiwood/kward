@@ -162,6 +162,22 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_model_and_reasoning_pickers_mark_resumed_session_runtime_current
+    client = FakeClient.new([])
+    client.provider = "Codex"
+    client.model = "gpt-5.5"
+    client.reasoning_effort = "medium"
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client)
+    conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "gpt-5.5", reasoning_effort: "low")
+    cli.instance_variable_set(:@footer_conversation, conversation)
+
+    models = cli.send(:normalized_available_models, conversation)
+
+    assert_equal ["Codex gpt-5.5 (current)"], cli.send(:model_choices, models, conversation)
+    assert_includes cli.send(:reasoning_choices, Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.5"), conversation), "Low (current)"
+    refute_includes cli.send(:reasoning_choices, Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.5"), conversation), "Medium (current)"
+  end
+
   def test_reasoning_slash_command_persists_effort_and_reloads_config
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

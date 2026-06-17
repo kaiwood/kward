@@ -29,7 +29,7 @@ module Kward
     VERSION = 2
     LAST_SESSION_FILENAME = "last_session.json"
 
-    SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
+    SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :provider, :model, :reasoning_effort, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
 
     # Live handle that attaches persistence callbacks to a conversation.
     #
@@ -757,6 +757,7 @@ module Kward
 
       messages = restored_messages(records)
       name = session_name(records)
+      runtime = session_runtime(records, header)
       first_message = messages.find { |message| ["user", "compactionSummary"].include?(message_role(message)) }
       stats = File.stat(path)
 
@@ -769,6 +770,9 @@ module Kward
         name: name,
         first_message: first_message ? message_text(first_message) : "",
         message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult", "compactionSummary"].include?(message_role(message)) },
+        provider: runtime["provider"],
+        model: runtime["model"],
+        reasoning_effort: runtime["reasoningEffort"],
         parent_id: header["parentId"],
         parent_path: header["parentPath"],
         depth: 0,

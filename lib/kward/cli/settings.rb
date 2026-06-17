@@ -502,8 +502,8 @@ module Kward
           return
         end
 
-        models ||= normalized_available_models
-        choices = model_choices(models)
+        models ||= normalized_available_models(conversation)
+        choices = model_choices(models, conversation)
         selected = @prompt.select("Default model", choices, title: "Models", custom: true)
         return unless selected
 
@@ -542,13 +542,15 @@ module Kward
           return
         end
 
-        choices = ModelInfo.reasoning_effort_choices(current_model_provider, current_model_id)
+        provider = conversation&.provider || current_model_provider
+        model = conversation&.model || current_model_id
+        choices = ModelInfo.reasoning_effort_choices(provider, model)
         if choices.empty?
-          runtime_output("Reasoning effort is unavailable for #{current_model_provider} #{current_model_id}.")
+          runtime_output("Reasoning effort is unavailable for #{provider} #{model}.")
           return
         end
 
-        selected = @prompt.select("Reasoning effort", reasoning_choices(choices), title: "Reasoning")
+        selected = @prompt.select("Reasoning effort", reasoning_choices(choices, conversation), title: "Reasoning")
         return unless selected
 
         effort, = choices.find { |_value, label| selected.to_s.downcase.start_with?(label.downcase) }
@@ -598,10 +600,10 @@ module Kward
         values.find { |value| choice.to_s.downcase.start_with?(value) }
       end
 
-      def normalized_available_models
-        current_provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-        current_model = @client.respond_to?(:current_model) ? @client.current_model : nil
-        current_reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
+      def normalized_available_models(conversation = current_footer_conversation)
+        current_provider = conversation.provider || (@client.respond_to?(:current_provider) ? @client.current_provider : "Codex")
+        current_model = conversation.model || (@client.respond_to?(:current_model) ? @client.current_model : nil)
+        current_reasoning = conversation.reasoning_effort || (@client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil)
         models = @client.respond_to?(:available_models) ? Array(@client.available_models) : []
         models.map do |model|
           ModelInfo.normalize(
@@ -613,13 +615,15 @@ module Kward
         end
       end
 
-      def model_choices(models)
+      def model_choices(models, conversation = current_footer_conversation)
+        current_provider = conversation.provider || current_model_provider
+        current_model = conversation.model || current_model_id
         choices = models.map do |model|
           label = "#{model[:provider]} #{model[:id]}"
           label += " (current)" if model[:current]
           label
         end
-        choices.empty? ? ["#{current_model_provider} #{current_model_id} (current)"] : choices.uniq
+        choices.empty? ? ["#{current_provider} #{current_model} (current)"] : choices.uniq
       end
 
       def selected_model(selected, models)
@@ -635,8 +639,8 @@ module Kward
         end
       end
 
-      def reasoning_choices(choices)
-        current = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort.to_s : ModelInfo::DEFAULT_REASONING_EFFORT
+      def reasoning_choices(choices, conversation = current_footer_conversation)
+        current = (conversation.reasoning_effort || (@client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT)).to_s
         choices.map do |effort, label|
           text = label.dup
           text += " (current)" if current == effort

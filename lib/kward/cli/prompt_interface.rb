@@ -67,9 +67,10 @@ module Kward
       end
 
       def composer_status_text
-        provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-        model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
-        reasoning = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
+        conversation = current_footer_conversation
+        provider = conversation.provider || (@client.respond_to?(:current_provider) ? @client.current_provider : "Codex")
+        model = conversation.model || (@client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL)
+        reasoning = conversation.reasoning_effort || (@client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT)
         reasoning = "n/a" unless ModelInfo.reasoning_supported?(provider, model) && !reasoning.to_s.empty?
         text = "#{provider} #{model} · #{reasoning}"
         parts = []
@@ -99,15 +100,14 @@ module Kward
         ANSI.colorize("#{value}%", color, enabled: @color_enabled)
       end
 
-      def composer_context_window
-        provider = @client.respond_to?(:current_provider) ? @client.current_provider : "Codex"
-        model = @client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL
-        provider = ModelInfo.provider_label(provider)
-        @client.respond_to?(:current_context_window) ? @client.current_context_window : ModelInfo.context_window(provider, model)
+      def composer_context_window(provider = nil, model = nil)
+        provider ||= current_footer_conversation.provider || (@client.respond_to?(:current_provider) ? @client.current_provider : "Codex")
+        model ||= current_footer_conversation.model || (@client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL)
+        ModelInfo.context_window(ModelInfo.provider_label(provider), model)
       end
 
       def composer_context_usage(provider, model)
-        context_window = composer_context_window
+        context_window = composer_context_window(provider, model)
         context_parts = if @client.respond_to?(:current_context_parts)
                           @client.current_context_parts(current_footer_conversation.context_messages, footer_tool_schemas)
                         else

@@ -32,6 +32,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed persona selection so workspace and model personas override the default base persona instead of appending duplicate base personas.
 - Fixed Codex Responses streaming to preserve ordered response items, replay assistant phase metadata, and keep commentary/tool-planning text out of visible assistant output.
 - Fixed Codex multi-turn requests with `store: false` by not replaying server-assigned response item ids.
+- Fixed RPC session listing to include each session's persisted provider, model, and reasoning effort so pickers can show session-specific runtime state.
 
 ## [0.68.0] - 2026-06-14
 
