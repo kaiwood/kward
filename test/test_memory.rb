@@ -53,6 +53,27 @@ class MemoryManagerTest < KwardTestCase
     assert_equal "manual", soft["source"]
   end
 
+  def test_add_soft_reuses_existing_active_memory_for_same_scope
+    first = @manager.add_soft("The user prefers TypeScript", scope: "workspace:#{@dir}")
+    second = @manager.add_soft("User prefers typescript", scope: "workspace:#{@dir}")
+
+    assert_equal first["id"], second["id"]
+    assert_equal [first["id"]], @manager.list["soft"].map { |memory| memory["id"] }
+  end
+
+  def test_memory_list_hides_duplicate_soft_records_already_on_disk
+    first = @manager.add_soft("The user prefers using Tool as the output label", scope: "workspace:#{File.realpath(@dir)}")
+    duplicate = @manager.add_soft("The user prefers Tool as the output label", scope: "workspace:/tmp/other")
+    records = jsonl_records(File.join(@dir, "memory", "soft.jsonl"))
+    records << first.merge("id" => "soft_999", "text" => "The user prefers Tool as output label")
+    File.write(File.join(@dir, "memory", "soft.jsonl"), records.map { |record| JSON.generate(record) }.join("\n") + "\n")
+
+    hierarchy = @manager.hierarchy(workspace_root: @dir)
+
+    assert_equal [first["id"]], hierarchy["workspace_soft"].map { |memory| memory["id"] }
+    assert_equal [first["id"], duplicate["id"]], @manager.list["soft"].map { |memory| memory["id"] }
+  end
+
   def test_retrieval_is_disabled_until_enabled
     @manager.add_core("Always mention tests")
 
@@ -401,6 +422,43 @@ class MemoryManagerTest < KwardTestCase
     )
 
     assert_equal ["The user prefers concise and practical answers"], records.map { |record| record["text"] }
+  end
+
+  def test_inferred_memory_canonicalizes_first_person_with_frequency_adverb
+    @manager.define_singleton_method(:should_use_llm_summarization?) { false }
+
+    records = @manager.infer_soft_from_text(
+      "I usually prefer concise and practical answers.",
+      workspace_root: @dir
+    )
+
+    assert_equal ["The user usually prefers concise and practical answers"], records.map { |record| record["text"] }
+  end
+
+  def test_infer_soft_from_text_skips_auto_summary_duplicate_with_not_using_variant
+    mock_client = Object.new
+    responses = [
+      "The user prefers not using Assistant> as a prefix",
+      "The user prefers not to use Assistant> as a prefix"
+    ]
+    mock_client.define_singleton_method(:chat) do |_messages, **_opts|
+      { "content" => responses.shift }
+    end
+
+    first = @manager.infer_soft_from_text(
+      "I prefer not using Assistant> as a prefix",
+      workspace_root: @dir,
+      client: mock_client
+    )
+    second = @manager.infer_soft_from_text(
+      "I prefer not to use Assistant> as a prefix",
+      workspace_root: @dir,
+      client: mock_client
+    )
+
+    assert_equal 1, first.length
+    assert_empty second
+    assert_equal ["The user prefers not using Assistant> as a prefix"], @manager.list["soft"].map { |memory| memory["text"] }
   end
 
   def test_infer_soft_from_text_skips_similar_duplicate_memories

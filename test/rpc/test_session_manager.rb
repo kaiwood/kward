@@ -433,8 +433,8 @@ class TestRPCSessionManager < KwardTestCase
 
       memories = result[:memories]
       assert_equal 1, memories.length
-      # LLM summarization reformulates first-person to third-person
-      assert_equal ["I usually prefer concise and practical answers"], memories.map { |memory| memory["text"] }
+      # Memory summarization canonicalizes first-person user preferences.
+      assert_equal ["The user usually prefers concise and practical answers"], memories.map { |memory| memory["text"] }
       assert_equal ["soft_001"], memories.map { |memory| memory["id"] }
       refute_includes memories.map { |memory| memory["text"] }, "Prefer focused tests and always use minitest"
       refute_includes memories.map { |memory| memory["text"] }, "I always use assistant-generated summaries"

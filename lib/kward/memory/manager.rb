@@ -23,6 +23,7 @@ module Kward
       DEFAULT_SOFT_TTL_DAYS = 60
       DEFAULT_SOFT_CONFIDENCE = 0.65
       EMOTIONAL_PATTERN = /\b(love|loves|romantic|intimate|dependency|depend on me|need me|flirty|crush)\b/i
+      MEMORY_DUPLICATE_STOPWORDS = Set.new(%w[a an and as at for in of on or that the this to with])
 
       # Details for the most recent retrieval, used by `/memory why`.
       attr_reader :last_retrieval
@@ -148,10 +149,20 @@ module Kward
       # @param ttl_days [Integer, nil] time-to-live in days
       # @return [Hash] stored memory record
       def add_soft(text, scope: "global", tags: [], confidence: DEFAULT_SOFT_CONFIDENCE, ttl_days: DEFAULT_SOFT_TTL_DAYS, source: "manual")
+        normalized_scope = clean_scope(scope)
+        normalized_text = clean_text(normalize_memory_text(text))
+        raise ArgumentError, "Memory text cannot be empty" if normalized_text.empty?
+        raise ArgumentError, "Refusing to persist emotional or dependency-forming memory automatically" if source == "inferred" && unsafe_soft_text?(normalized_text)
+
+        existing = soft_memories.find do |item|
+          item["scope"] == normalized_scope && duplicate_memory_text?(normalized_text, [item["text"]])
+        end
+        return existing if existing
+
         record = {
           "id" => next_id("soft", soft_memories(include_inactive: true).map { |item| item["id"] }),
-          "text" => clean_text(normalize_memory_text(text)),
-          "scope" => clean_scope(scope),
+          "text" => normalized_text,
+          "scope" => normalized_scope,
           "tags" => clean_tags(tags),
           "confidence" => [[confidence.to_f, 0.0].max, 1.0].min,
           "hits" => 0,
@@ -162,8 +173,6 @@ module Kward
           "source" => source,
           "status" => "active"
         }
-        raise ArgumentError, "Memory text cannot be empty" if record["text"].empty?
-        raise ArgumentError, "Refusing to persist emotional or dependency-forming memory automatically" if source == "inferred" && unsafe_soft_text?(record["text"])
 
         append_soft(record)
         append_event("add", event_ref(record, layer: "soft"))
@@ -232,16 +241,20 @@ module Kward
       end
 
       def list(include_inactive: false)
-        { "core" => core_memories, "soft" => soft_memories(include_inactive: include_inactive) }
+        soft = soft_memories(include_inactive: include_inactive)
+        soft = deduplicate_soft_records(soft) unless include_inactive
+        { "core" => core_memories, "soft" => soft }
       end
 
       def hierarchy(workspace_root: Dir.pwd, include_inactive: false)
         workspace = workspace_scope(workspace_root)
         core = core_memories
+        soft = soft_memories(include_inactive: include_inactive)
+        soft = deduplicate_soft_records(soft) unless include_inactive
         {
           "global_core" => core.select { |item| item["scope"] == "global" },
           "workspace_core" => core.select { |item| item["scope"] == workspace },
-          "workspace_soft" => soft_memories(include_inactive: include_inactive).select { |item| item["scope"] == workspace }
+          "workspace_soft" => soft.select { |item| item["scope"] == workspace }
         }
       end
 
@@ -271,8 +284,7 @@ module Kward
         core_reasons = core.map { |item| reason_for(item, layer: "core", score: 1.0, reasons: ["scope match", "core memories are preferred"]) }
 
         soft_records_all = soft_memories(include_inactive: true)
-        soft_scored = soft_records_all.filter_map do |item|
-          next unless item["status"] == "active"
+        soft_scored = deduplicate_soft_records(soft_records_all.select { |item| item["status"] == "active" }).filter_map do |item|
           next unless item["scope"] == workspace
           next if expired?(item)
 
@@ -354,15 +366,20 @@ module Kward
       def infer_soft_from_text(text, workspace_root: Dir.pwd, client: nil, existing_texts: [])
         candidates = heuristic_candidates(text)
         existing_set = Set.new(existing_texts.map { |t| normalize_for_comparison(t) })
+        scope = workspace_scope(workspace_root)
+        workspace_scopes = [scope, clean_scope("workspace:#{workspace_root}")].uniq
+        workspace_soft_texts = soft_memories.select { |memory| workspace_scopes.include?(memory["scope"]) }.map { |memory| memory["text"] }
         candidates.filter_map do |candidate|
           summarized = normalize_inferred_memory_text(summarize_text(candidate, client: client), source_text: candidate)
           normalized = normalize_for_comparison(summarized)
           # Skip if this text already exists in provided list or existing soft memories
           next if existing_set.include?(normalized)
           next if duplicate_memory_text?(summarized, existing_texts)
-          next if duplicate_memory_text?(summarized, soft_memories.map { |m| m["text"] })
+          next if duplicate_memory_text?(summarized, workspace_soft_texts)
 
-          add_soft(summarized, scope: workspace_scope(workspace_root), tags: ["workflow"], confidence: 0.55, source: "inferred")
+          record = add_soft(summarized, scope: scope, tags: ["workflow"], confidence: 0.55, source: "inferred")
+          workspace_soft_texts << record["text"]
+          record
         end
       end
 
@@ -375,11 +392,15 @@ module Kward
           normalized = normalized.sub(/\AThe\s+\w+\s+(prefers|likes|uses|usually|always|wants|believes|thinks|avoids)\b/i) do
             "The user #{Regexp.last_match(1).downcase}"
           end
-          normalized = normalized.sub(/\AI\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) do
-            "The user #{third_person_verb(Regexp.last_match(1))}"
+          normalized = normalized.sub(/\AI\s+(?:(usually|always)\s+)?(prefer|like|use|want|believe|think|avoid)\b/i) do
+            adverb = Regexp.last_match(1)
+            verb = third_person_verb(Regexp.last_match(2))
+            ["The user", adverb&.downcase, verb].compact.join(" ")
           end
-          normalized = normalized.sub(/\AWe\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) do
-            "The user #{third_person_verb(Regexp.last_match(1))}"
+          normalized = normalized.sub(/\AWe\s+(?:(usually|always)\s+)?(prefer|like|use|want|believe|think|avoid)\b/i) do
+            adverb = Regexp.last_match(1)
+            verb = third_person_verb(Regexp.last_match(2))
+            ["The user", adverb&.downcase, verb].compact.join(" ")
           end
           normalized = normalized.sub(/\AMy\s+/i, "The user's ")
           normalized = normalized.sub(/\AOur\s+/i, "The user's ")
@@ -408,23 +429,56 @@ module Kward
 
           overlap = (candidate_tokens & existing_tokens).length
           union = (candidate_tokens | existing_tokens).length
-          union.positive? && overlap.to_f / union >= 0.9
+          union.positive? && overlap.to_f / union >= 0.8
         end
       end
 
       def memory_duplicate_key(text)
         normalized = normalize_for_comparison(text).downcase
-        normalized = normalized.sub(/\Ai\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) { "the user #{third_person_verb(Regexp.last_match(1))}" }
-        normalized = normalized.sub(/\Awe\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) { "the user #{third_person_verb(Regexp.last_match(1))}" }
+        normalized = normalized.sub(/\Ai\s+(?:(usually|always)\s+)?(prefer|like|use|want|believe|think|avoid)\b/i) do
+          ["the user", Regexp.last_match(1)&.downcase, third_person_verb(Regexp.last_match(2))].compact.join(" ")
+        end
+        normalized = normalized.sub(/\Awe\s+(?:(usually|always)\s+)?(prefer|like|use|want|believe|think|avoid)\b/i) do
+          ["the user", Regexp.last_match(1)&.downcase, third_person_verb(Regexp.last_match(2))].compact.join(" ")
+        end
         normalized = normalized.sub(/\Amy\s+/i, "the user's ")
         normalized = normalized.sub(/\Aour\s+/i, "the user's ")
         normalized.tr("“”‘’", "\"\"''")
       end
 
       def memory_duplicate_tokens(text)
-        memory_duplicate_key(text).scan(/[a-z0-9_\-']{3,}/).map do |term|
-          term.sub(/\A(.{4,})s\z/, '\\1')
+        memory_duplicate_key(text).scan(/[a-z0-9_\-']{3,}/).filter_map do |term|
+          token = memory_duplicate_token(term)
+          token unless MEMORY_DUPLICATE_STOPWORDS.include?(token)
         end.uniq
+      end
+
+      def memory_duplicate_token(term)
+        case term
+        when "uses", "using"
+          "use"
+        when "prefers", "preferring"
+          "prefer"
+        when "avoids", "avoiding"
+          "avoid"
+        else
+          term.sub(/\A(.{4,})s\z/, '\\1')
+        end
+      end
+
+      def deduplicate_soft_records(records)
+        seen = []
+        records.each_with_object([]) do |record, deduplicated|
+          scope = record["scope"]
+          text = record["text"]
+          duplicate = seen.any? do |seen_record|
+            seen_record["scope"] == scope && duplicate_memory_text?(text, [seen_record["text"]])
+          end
+          next if duplicate
+
+          seen << record
+          deduplicated << record
+        end
       end
 
       def summarize_text(text, client: nil)
