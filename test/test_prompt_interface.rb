@@ -624,6 +624,28 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_ask_user_question_keeps_trailing_space_visible_while_typing
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 2,
+      index: 1,
+      total: 1
+    })
+    prompt.send(:composer_input=, "some")
+    prompt.send(:composer_cursor=, 4)
+    cursor_before_space = prompt.send(:question_custom_cursor_col, 120)
+
+    prompt.send(:composer_input=, "some ")
+    prompt.send(:composer_cursor=, 5)
+
+    assert_equal "some ", prompt.send(:display_question_input, "some ")
+    assert_equal cursor_before_space + 1, prompt.send(:question_custom_cursor_col, 120)
+    assert_includes strip_ansi(prompt.send(:question_overlay_rows, 120).join("\n")), "Type something: some "
+  end
+
   def test_prompt_interface_ask_user_question_handles_multiple_questions
     input, writer = IO.pipe
     output = StringIO.new

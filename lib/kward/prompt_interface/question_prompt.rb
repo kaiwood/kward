@@ -320,7 +320,7 @@ module Kward
       end
 
       def display_question_input(value)
-        value.to_s.gsub(/\s+/, " ").strip
+        value.to_s.gsub(/\s+/, " ")
       end
 
     end
