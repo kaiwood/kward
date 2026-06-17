@@ -53,10 +53,10 @@ module Kward
       # Writes the stats output for the terminal CLI flow.
       def print_stats(argument)
         result = TelemetryStats.new.collect(argument)
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{TelemetryStats.format(result)}\n")
+        runtime_output(TelemetryStats.format(result))
       rescue ArgumentError => e
         message = e.message == TelemetryStats::USAGE ? e.message : "#{e.message}\n#{TelemetryStats::USAGE}"
-        @prompt.say("\n#{message}\n")
+        runtime_output(message)
       end
 
     end

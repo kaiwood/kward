@@ -12,12 +12,12 @@ module Kward
           client: @client,
           tool_result_summarizer: lambda { |tool_call, content| tool_result_summary(tool_call, content) }
         ).compact(custom_instructions: argument)
-        @prompt.say("\nCompacted context: #{result.old_message_count} messages -> #{result.new_message_count} messages.\n")
+        runtime_output("Compacted context: #{result.old_message_count} messages -> #{result.new_message_count} messages.")
         render_transcript_block("Assistant", result.summary)
       rescue Compactor::NothingToCompact, Compactor::AlreadyCompacted, Compactor::EmptySummary => e
-        @prompt.say("\n#{e.message}\n")
+        runtime_output(e.message)
       rescue StandardError => e
-        @prompt.say("\nCompaction error: #{e.message}\n")
+        runtime_output("Compaction error: #{e.message}")
       end
 
     end

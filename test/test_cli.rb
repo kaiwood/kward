@@ -2291,6 +2291,27 @@ edit this prompt"
     end
   end
 
+  def test_memory_commands_use_runtime_output_label
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      prompt = FakePrompt.new(["/memory core Captain likes coffee", "/memory list", "/memory forget core_001", "/exit"])
+      client = FakeClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      output = prompt.output.join("\n")
+      assert_includes output, "Runtime> Added core memory core_001."
+      assert_includes output, "Runtime> Forgot core_001."
+      assert_includes output, "\nRuntime>\nGlobal Core Memories:"
+      refute_includes output, "Runtime> Global Core Memories:"
+      refute_includes output, "Assistant> Added core memory"
+    end
+  end
+
   def test_memory_auto_summary_command_toggles_setting
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

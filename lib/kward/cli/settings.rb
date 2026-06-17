@@ -8,7 +8,7 @@ module Kward
 
       def configure_settings(conversation = nil)
         unless settings_overlay_available?
-          @prompt.say("\nSettings overlay is unavailable in this prompt.\n")
+          runtime_output("Settings overlay is unavailable in this prompt.")
           return
         end
 
@@ -22,7 +22,7 @@ module Kward
           handle_settings_category(category, conversation)
         end
       rescue StandardError => e
-        @prompt.say("\nSettings error: #{e.message}\n")
+        runtime_output("Settings error: #{e.message}")
       end
 
       # Returns the category labels shown by the interactive settings overlay.
@@ -168,12 +168,12 @@ module Kward
         when /\Aenable memory/, /\Adisable memory/
           set_memory_enabled(!memory_enabled?)
           conversation&.refresh_system_message!
-          @prompt.say("\nMemory #{memory_enabled? ? "enabled" : "disabled"}.\n")
+          runtime_output("Memory #{memory_enabled? ? "enabled" : "disabled"}.")
         when /\Aenable auto-summary/, /\Adisable auto-summary/
           set_memory_auto_summary_enabled(!memory_auto_summary_enabled?)
-          @prompt.say("\nMemory auto-summary #{memory_auto_summary_enabled? ? "enabled" : "disabled"}.\n")
+          runtime_output("Memory auto-summary #{memory_auto_summary_enabled? ? "enabled" : "disabled"}.")
         when /\Amanage/
-          @prompt.say("\nUse /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize.\n")
+          runtime_output("Use /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize.")
         end
       end
 
@@ -221,13 +221,13 @@ module Kward
           @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("width" => width))
         when /\Ashow busy help/, /\Ahide busy help/
           set_composer_busy_help(!composer_busy_help?)
-          @prompt.say("\nBusy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.\n")
+          runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
         when /\Ashow startup banner/, /\Ahide startup banner/
           set_banner_enabled(!banner_enabled?)
-          @prompt.say("\nStartup banner #{banner_enabled? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.\n")
+          runtime_output("Startup banner #{banner_enabled? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
         when /\Aenable session auto-resume/, /\Adisable session auto-resume/
           set_session_auto_resume_enabled(!session_auto_resume_enabled?)
-          @prompt.say("\nSession auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.\n")
+          runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
         end
       end
 
@@ -272,15 +272,15 @@ module Kward
         case selected.to_s.downcase
         when /\Aenable web search/, /\Adisable web search/
           set_web_search_enabled(!web_search_enabled?)
-          @prompt.say("\nWeb search #{web_search_enabled? ? "enabled" : "disabled"}.\n")
+          runtime_output("Web search #{web_search_enabled? ? "enabled" : "disabled"}.")
         when /\Aweb search provider/
           configure_web_search_provider
         when /\Aallow model-provider/, /\Adisallow model-provider/
           set_web_search_allow_model_providers(!web_search_allow_model_providers?)
-          @prompt.say("\nModel-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.\n")
+          runtime_output("Model-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.")
         when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
           set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
-          @prompt.say("\nWorkspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.\n")
+          runtime_output("Workspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.")
         end
       end
 
@@ -336,9 +336,9 @@ module Kward
         case selected.to_s.downcase
         when /\Aenable auto-compaction/, /\Adisable auto-compaction/
           set_compaction_enabled(!compaction_enabled?)
-          @prompt.say("\nAuto-compaction #{compaction_enabled? ? "enabled" : "disabled"}.\n")
+          runtime_output("Auto-compaction #{compaction_enabled? ? "enabled" : "disabled"}.")
         else
-          @prompt.say("\n#{auto_compaction_status_line}\n") if selected.to_s.downcase.start_with?("status")
+          runtime_output(auto_compaction_status_line) if selected.to_s.downcase.start_with?("status")
         end
       end
 
@@ -388,7 +388,7 @@ module Kward
         entries = ConfigFiles.crew_character_labels(personas)
         choices = entries.map { |key, label| key == personas["default"] ? "#{label} (#{key}, current)" : "#{label} (#{key})" }
         if choices.empty?
-          @prompt.say("\nNo configured personas found. Edit #{ConfigFiles.config_path} to add personas.\n")
+          runtime_output("No configured personas found. Edit #{ConfigFiles.config_path} to add personas.")
           return
         end
 
@@ -409,7 +409,7 @@ module Kward
         lines << "Global AGENTS.md: #{ConfigFiles.agents_prompt ? "present" : "absent"}"
         lines << "Workspace AGENTS.md: #{ConfigFiles.workspace_agents_prompt(current_workspace_root) ? "present" : "absent"}"
         lines << "Messages: #{conversation.messages.length}" if conversation&.respond_to?(:messages)
-        @prompt.say("\n#{lines.join("\n")}\n")
+        runtime_output(lines.join("\n"))
       end
 
       def configure_logging_settings
@@ -418,7 +418,7 @@ module Kward
         return unless key
 
         set_logging_value(key, !logging_enabled?(key))
-        @prompt.say("\nLogging #{key.tr("_", " ")} #{logging_enabled?(key) ? "enabled" : "disabled"}.\n")
+        runtime_output("Logging #{key.tr("_", " ")} #{logging_enabled?(key) ? "enabled" : "disabled"}.")
       end
 
       def logging_setting_choices
@@ -463,7 +463,7 @@ module Kward
           "Skills: #{ConfigFiles.skills.length}",
           "Prompt templates: #{ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES).length}"
         ]
-        @prompt.say("\n#{lines.join("\n")}\n")
+        runtime_output(lines.join("\n"))
       end
 
       def update_nested_config(section, values)
@@ -480,7 +480,7 @@ module Kward
 
       def login_interactively
         unless login_picker_available?
-          @prompt.say("\nLogin provider picker is unavailable in this prompt.\n")
+          runtime_output("Login provider picker is unavailable in this prompt.")
           return
         end
 
@@ -493,12 +493,12 @@ module Kward
           reload_client_config
         end
       rescue StandardError => e
-        @prompt.say("\nLogin error: #{e.message}\n")
+        runtime_output("Login error: #{e.message}")
       end
 
       def configure_model(conversation = nil, models: nil)
         unless model_overlay_available?
-          @prompt.say("\nModel overlay is unavailable in this prompt.\n")
+          runtime_output("Model overlay is unavailable in this prompt.")
           return
         end
 
@@ -515,36 +515,36 @@ module Kward
         refresh_conversation_runtime(conversation)
         @prompt.redraw if @prompt.respond_to?(:redraw)
       rescue StandardError => e
-        @prompt.say("\nModel error: #{e.message}\n")
+        runtime_output("Model error: #{e.message}")
       end
 
       # Writes the openrouter catalog output for the terminal CLI flow.
       def print_openrouter_catalog
         unless @client.respond_to?(:openrouter_catalog)
-          @prompt.say("\nOpenRouter catalog is unavailable for this client.\n")
+          runtime_output("OpenRouter catalog is unavailable for this client.")
           return
         end
 
         models = Array(@client.openrouter_catalog)
         if models.empty?
-          @prompt.say("\nNo OpenRouter catalog models available.\n")
+          runtime_output("No OpenRouter catalog models available.")
         else
           ids = models.map { |model| model[:id] || model["id"] || model }.map(&:to_s).reject(&:empty?)
-          @prompt.say("\nOpenRouter catalog:\n#{ids.join("\n")}\n")
+          runtime_output((["OpenRouter catalog:"] + ids).join("\n"))
         end
       rescue StandardError => e
-        @prompt.say("\nOpenRouter catalog error: #{e.message}\n")
+        runtime_output("OpenRouter catalog error: #{e.message}")
       end
 
       def configure_reasoning(conversation = nil)
         unless model_overlay_available?
-          @prompt.say("\nReasoning overlay is unavailable in this prompt.\n")
+          runtime_output("Reasoning overlay is unavailable in this prompt.")
           return
         end
 
         choices = ModelInfo.reasoning_effort_choices(current_model_provider, current_model_id)
         if choices.empty?
-          @prompt.say("\nReasoning effort is unavailable for #{current_model_provider} #{current_model_id}.\n")
+          runtime_output("Reasoning effort is unavailable for #{current_model_provider} #{current_model_id}.")
           return
         end
 
@@ -559,7 +559,7 @@ module Kward
         refresh_conversation_runtime(conversation)
         @prompt.redraw if @prompt.respond_to?(:redraw)
       rescue StandardError => e
-        @prompt.say("\nReasoning error: #{e.message}\n")
+        runtime_output("Reasoning error: #{e.message}")
       end
 
       def login_picker_available?

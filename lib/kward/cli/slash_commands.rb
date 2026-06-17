@@ -88,7 +88,7 @@ module Kward
           lines << "File: #{@active_session.path}"
         end
         lines.compact!
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{lines.join("\n")}\n")
+        runtime_output(lines.join("\n"))
       end
 
       def auto_compaction_status_line

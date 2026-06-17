@@ -26,7 +26,7 @@ module Kward
         @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
         conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
         conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
-        @prompt.say("\nPlugins reloaded.\n")
+        runtime_output("Plugins reloaded.")
       end
 
       def reserved_slash_command_names
@@ -62,7 +62,7 @@ module Kward
         command.handler.call(argument, context)
         [true, nil]
       rescue StandardError => e
-        @prompt.say("\nPlugin command /#{name} error: #{e.message}\n")
+        runtime_output("Plugin command /#{name} error: #{e.message}")
         [true, nil]
       end
 
@@ -72,7 +72,7 @@ module Kward
           args: args,
           session: @active_session,
           workspace_root: conversation.workspace_root,
-          say_callback: lambda { |message| @prompt.say("\n#{message}\n") }
+          say_callback: lambda { |message| runtime_output(message) }
         )
       end
 

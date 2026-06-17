@@ -30,7 +30,7 @@ module Kward
 
       def render_resumed_last_session_transcript(conversation)
         restore_prompt_transcript do
-          @prompt.say("\nResumed session: #{@active_session.path}\n")
+          runtime_output("Resumed session: #{@active_session.path}")
           render_conversation_transcript(conversation)
         end
       end
@@ -113,27 +113,27 @@ module Kward
         cleanup_replaced_session(previous_session)
         update_assistant_prompt(conversation)
         restore_prompt_transcript do
-          @prompt.say("\nResumed session: #{@active_session.path}\n")
+          runtime_output("Resumed session: #{@active_session.path}")
           render_conversation_transcript(conversation)
         end
         agent = build_interactive_agent(conversation)
         @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
         agent
       rescue StandardError => e
-        @prompt.say("\nError: #{e.message}\n")
+        runtime_output("Error: #{e.message}")
         nil
       end
 
       def navigate_session_tree(session_store)
         return say_sessions_unavailable unless session_store
         unless @active_session
-          @prompt.say("\nNo active persisted session.\n")
+          runtime_output("No active persisted session.")
           return nil
         end
 
         tree_items = session_tree_items(session_store)
         if tree_items.empty?
-          @prompt.say("\nNo session tree entries found.\n")
+          runtime_output("No session tree entries found.")
           return nil
         end
 
@@ -148,19 +148,19 @@ module Kward
         return nil unless entry
 
         selected_text = apply_session_tree_entry(entry)
-        @prompt.say("\nMoved session tree position to #{entry["id"]}.\n")
+        runtime_output("Moved session tree position to #{entry["id"]}.")
         if selected_text && !selected_text.empty?
           if @prompt.respond_to?(:prefill_input)
             @prompt.prefill_input(selected_text)
           else
-            @prompt.say("\nSelected text for editing:\n#{selected_text}\n")
+            runtime_output("Selected text for editing:\n#{selected_text}")
           end
         end
         agent = reload_active_session(session_store)
         @prompt.redraw if @prompt.respond_to?(:redraw)
         agent
       rescue StandardError => e
-        @prompt.say("\nSession tree error: #{e.message}\n")
+        runtime_output("Session tree error: #{e.message}")
         nil
       end
 
@@ -170,7 +170,7 @@ module Kward
         end
 
         numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
-        @prompt.say("\nSession tree:\n#{numbered_labels.join("\n")}\n")
+        runtime_output((["Session tree:"] + numbered_labels).join("\n"))
         answer = @prompt.ask("Tree entry number>").to_s.strip
         answer.match?(/\A\d+\z/) ? labels[answer.to_i - 1] : nil
       end
@@ -212,13 +212,13 @@ module Kward
 
       def rename_session(argument)
         unless @active_session
-          @prompt.say("\nNo active persisted session.\n")
+          runtime_output("No active persisted session.")
           return
         end
 
         @active_session.rename(argument)
         label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
-        @prompt.say("\n#{label}\n")
+        runtime_output(label)
       end
 
       def clone_session(session_store, agent)
@@ -228,7 +228,7 @@ module Kward
         @active_session = track_session(session_store.create_from_conversation(agent.conversation, parent_session: previous_session))
         reset_session_diff(@active_session.path)
         cleanup_replaced_session(previous_session)
-        @prompt.say("\nCloned session: #{@active_session.path}\n")
+        runtime_output("Cloned session: #{@active_session.path}")
         render_conversation_transcript(agent.conversation)
         agent
       end
@@ -236,21 +236,21 @@ module Kward
       def copy_session_text(conversation, argument)
         target = copy_target(argument)
         unless target
-          @prompt.say("\nUsage: /copy [last|transcript]\n")
+          runtime_output("Usage: /copy [last|transcript]")
           return
         end
 
         content = copy_target_content(conversation, target)
         if content.to_s.empty?
-          @prompt.say("\nNothing to copy.\n")
+          runtime_output("Nothing to copy.")
           return
         end
 
         result = Clipboard.new(output: $stdout).copy(content)
         if result.success?
-          @prompt.say("\nCopied #{copy_target_label(target)}.\n")
+          runtime_output("Copied #{copy_target_label(target)}.")
         else
-          @prompt.say("\nCopy failed: #{result.message}.\n")
+          runtime_output("Copy failed: #{result.message}.")
         end
       end
 
@@ -291,13 +291,13 @@ module Kward
       def export_session(conversation, argument)
         path = export_path(argument)
         File.write(path, markdown_transcript(conversation))
-        @prompt.say("\nExported session: #{path}\n")
+        runtime_output("Exported session: #{path}")
       rescue StandardError => e
-        @prompt.say("\nError: #{e.message}\n")
+        runtime_output("Error: #{e.message}")
       end
 
       def say_sessions_unavailable
-        @prompt.say("\nSessions are unavailable for this interactive loop.\n")
+        runtime_output("Sessions are unavailable for this interactive loop.")
         nil
       end
 
@@ -316,7 +316,7 @@ module Kward
       def select_session_path(session_store)
         sessions = session_store.recent(limit: nil)
         if sessions.empty?
-          @prompt.say("\nNo saved sessions found.\n")
+          runtime_output("No saved sessions found.")
           return nil
         end
 
@@ -330,7 +330,7 @@ module Kward
         end
 
         numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
-        @prompt.say("\nRecent sessions:\n#{numbered_labels.join("\n")}\n")
+        runtime_output((["Recent sessions:"] + numbered_labels).join("\n"))
         answer = @prompt.ask("Session number or path>").to_s.strip
         if answer.match?(/\A\d+\z/)
           sessions[answer.to_i - 1]&.path

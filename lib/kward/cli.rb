@@ -303,13 +303,13 @@ module Kward
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e
-          @prompt.say("\nError: #{e.message}\n")
+          runtime_output("Error: #{e.message}")
         end
       end
 
       agent.conversation
     rescue Interrupt
-      @prompt.say("\nGoodbye.")
+      runtime_output("Goodbye.")
       agent&.conversation
     ensure
       begin

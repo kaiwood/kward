@@ -31,6 +31,17 @@ module Kward
         @assistant_prompt || "Assistant>"
       end
 
+      def runtime_output_prompt
+        "Runtime>"
+      end
+
+      def runtime_output(text)
+        content = text.to_s.chomp
+        label = colored(runtime_output_prompt, :blue, :bold)
+        separator = content.include?("\n") ? "\n" : " "
+        @prompt.say("\n#{label}#{separator}#{content}\n")
+      end
+
       def build_interactive_agent(conversation)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
@@ -47,7 +58,7 @@ module Kward
       def handle_interactive_shell_command(input, agent)
         command = input.to_s.sub(/\A!\s*/, "")
         if command.strip.empty?
-          @prompt.say("\nShell command is required after !\n")
+          runtime_output("Shell command is required after !")
           return true
         end
 
