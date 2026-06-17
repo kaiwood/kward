@@ -145,15 +145,14 @@ You can also target personas by workspace, model, reasoning effort, time of day,
 }
 ```
 
-Persona evaluation order is:
+Persona selection is hierarchical. Kward starts with `personas.default`, overrides it with a matching `personas.workspaces` entry, and overrides that with a matching `personas.models` entry for the current model. Only the last matching base persona is injected.
 
-1. `personas.default`
-2. Matching `personas.workspaces` entry, using normalized workspace paths
-3. Matching `personas.models` entry for the current model
-4. Matching `persona_modifiers.reasoning` entry for the current reasoning effort
-5. Matching `persona_modifiers.time_of_day` entry for local time: `morning` 05:00-10:59, `before_lunch` 11:00-11:59, `late_evening` 21:00-04:59
-6. Matching `persona_modifiers.weekday` entry for the local weekday
-7. `persona_modifiers.suffix`
+Persona modifiers are separate and appended after the selected base persona:
+
+1. Matching `persona_modifiers.reasoning` entry for the current reasoning effort
+2. Matching `persona_modifiers.time_of_day` entry for local time: `morning` 05:00-10:59, `before_lunch` 11:00-11:59, `late_evening` 21:00-04:59
+3. Matching `persona_modifiers.weekday` entry for the local weekday
+4. `persona_modifiers.suffix`
 
 Prompt assembly order is:
 

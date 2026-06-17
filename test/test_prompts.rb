@@ -124,10 +124,10 @@ class TestPrompts < KwardTestCase
           assert_order content,
                        "You are Kward",
                        "Config instructions.",
-                       "Default persona.",
                        "Workspace persona.",
                        "Available skills:",
                        "Workspace guidance is available"
+          refute_includes content, "Default persona."
           assert_includes content, File.join(workspace, "AGENTS.md")
           refute_includes content, "Workspace instructions."
         end
@@ -242,10 +242,10 @@ class TestPrompts < KwardTestCase
             reasoning_effort: "low"
           ).system_message[:content]
 
-          assert_includes content, "Default persona."
-          assert_includes content, "Workspace persona."
           assert_includes content, "Model persona."
           assert_includes content, "Low reasoning persona."
+          refute_includes content, "Default persona."
+          refute_includes content, "Workspace persona."
           refute_includes content, "kward"
           refute_includes content, "spark"
           refute_includes content, "gpt-alt"
@@ -377,13 +377,13 @@ class TestPrompts < KwardTestCase
           )[:content]
 
           assert_order content,
-                       "Default persona.",
-                       "Workspace persona.",
                        "Model persona.",
                        "Low reasoning persona.",
                        "Morning persona.",
                        "Sunday persona.",
                        "Act like it."
+          refute_includes content, "Default persona."
+          refute_includes content, "Workspace persona."
           refute_includes content, "Ignored persona."
           refute_includes content, "kward"
           refute_includes content, "spark"

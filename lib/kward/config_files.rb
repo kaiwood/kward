@@ -319,22 +319,30 @@ module Kward
 
       characters = crew_characters(personas)
       entries = []
-
-      add_persona_entry(entries, "default", resolved_persona_text(personas["default"], characters: characters))
+      active_persona = { layer: "default", value: personas["default"], name: nil }
 
       workspaces = personas["workspaces"]
       if workspaces.is_a?(Hash)
         root = canonical_workspace_root(workspace_root)
         workspaces.each do |path, key|
           if canonical_workspace_root(path) == root
-            add_persona_entry(entries, "workspace", resolved_persona_text(key, characters: characters), name: path)
+            active_persona = { layer: "workspace", value: key, name: path }
             break
           end
         end
       end
 
       models = personas["models"]
-      add_persona_entry(entries, "model", resolved_persona_text(models[model.to_s], characters: characters), name: model.to_s) if models.is_a?(Hash) && !model.to_s.empty?
+      if models.is_a?(Hash) && !model.to_s.empty? && models.key?(model.to_s)
+        active_persona = { layer: "model", value: models[model.to_s], name: model.to_s }
+      end
+
+      add_persona_entry(
+        entries,
+        active_persona.fetch(:layer),
+        resolved_persona_text(active_persona.fetch(:value), characters: characters),
+        name: active_persona[:name]
+      )
 
       modifiers = personas["persona_modifiers"]
       if modifiers.is_a?(Hash)

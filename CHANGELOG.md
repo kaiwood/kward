@@ -28,6 +28,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed `/reload` so terminal plugin footers use the newly loaded plugin renderer without restarting Kward.
 - Fixed Codex GPT-5.5 RPC model metadata to report a 400k context window instead of the upstream OpenAI API context window.
 - Fixed a bug that prevented proper context window calculation whenever an image is attached to a session
+- Fixed persona selection so workspace and model personas override the default base persona instead of appending duplicate base personas.
 
 ## [0.68.0] - 2026-06-14
 
