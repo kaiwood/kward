@@ -254,14 +254,14 @@ class MemoryManagerTest < KwardTestCase
     mock_client.define_singleton_method(:chat) do |messages, **opts|
       # Return a response with content that reformulates the input
       if messages.any? { |m| m[:content].to_s.include?("steak") }
-        { "content" => "The captain likes eating steak" }
+        { "content" => "The user likes eating steak" }
       else
         { "content" => messages.last[:content].to_s.gsub(/^Reformulate this as a memory statement: /, "") }
       end
     end
 
     result = @manager.summarize_text("I like to eat the most important meal today: steak", client: mock_client)
-    assert_equal "The captain likes eating steak", result
+    assert_equal "The user likes eating steak", result
   end
 
   def test_summarize_text_returns_original_on_llm_failure
@@ -286,7 +286,7 @@ class MemoryManagerTest < KwardTestCase
     )
 
     assert_equal 1, records.length
-    assert_equal "The captain likes eating steak", records.first["text"]
+    assert_equal "The user likes eating steak", records.first["text"]
   end
 
   def test_summarize_text_passes_through_when_llm_not_available
@@ -338,8 +338,8 @@ class MemoryManagerTest < KwardTestCase
 
     records = @manager.summarize_conversation(conversation)
 
-    assert_equal ["I like steak"], records.map { |record| record["text"] }
-    assert_equal [{ "id" => "soft_001", "text" => "I like steak", "scope" => "workspace:#{File.realpath(@dir)}", "tags" => ["workflow"] }], conversation.session_memories
+    assert_equal ["The user likes steak"], records.map { |record| record["text"] }
+    assert_equal [{ "id" => "soft_001", "text" => "The user likes steak", "scope" => "workspace:#{File.realpath(@dir)}", "tags" => ["workflow"] }], conversation.session_memories
   end
 
   def test_infer_soft_from_text_skips_duplicates_in_existing_soft_memories
@@ -386,5 +386,46 @@ class MemoryManagerTest < KwardTestCase
 
     assert_empty records
     assert_equal 1, manager.list["soft"].length
+  end
+
+  def test_inferred_memory_canonicalizes_personal_subject_to_user
+    mock_client = Object.new
+    mock_client.define_singleton_method(:chat) do |_messages, **_opts|
+      { "content" => "The teammate prefers concise and practical answers" }
+    end
+
+    records = @manager.infer_soft_from_text(
+      "I usually prefer concise and practical answers.",
+      workspace_root: @dir,
+      client: mock_client
+    )
+
+    assert_equal ["The user prefers concise and practical answers"], records.map { |record| record["text"] }
+  end
+
+  def test_infer_soft_from_text_skips_similar_duplicate_memories
+    mock_client = Object.new
+    responses = [
+      "The user prefers starting directly with refactor/cleanup",
+      "The user prefers directly starting with refactor/cleanup"
+    ]
+    mock_client.define_singleton_method(:chat) do |_messages, **_opts|
+      { "content" => responses.shift }
+    end
+
+    first = @manager.infer_soft_from_text(
+      "I prefer starting directly with refactor/cleanup",
+      workspace_root: @dir,
+      client: mock_client
+    )
+    second = @manager.infer_soft_from_text(
+      "I prefer directly starting with refactor/cleanup",
+      workspace_root: @dir,
+      client: mock_client
+    )
+
+    assert_equal 1, first.length
+    assert_empty second
+    assert_equal 1, @manager.list["soft"].length
   end
 end

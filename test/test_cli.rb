@@ -2315,7 +2315,7 @@ edit this prompt"
       prompt = FakePrompt.new(["I am starting the session", "/memory summarize", "/exit"])
       client = FakeClient.new([
         "ok",
-        { "content" => "The captain prefers concise and practical answers" }
+        { "content" => "The user prefers concise and practical answers" }
       ])
       conversation = Kward::Conversation.new
       conversation.append_user("I usually prefer concise and practical answers.")
@@ -2329,8 +2329,8 @@ edit this prompt"
         cli.interactive_loop(agent: agent)
       end
 
-      # LLM summarization reformulates first-person to third-person
-      assert_equal ["The captain prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
+      # LLM summarization reformulates first-person to canonical third-person user wording
+      assert_equal ["The user prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
       assert_equal ["soft_001"], conversation.session_memories.map { |memory| memory["id"] }
       refute_includes conversation.session_memories.map { |memory| memory["text"] }, "Prefer focused tests and always use minitest"
       refute_includes conversation.session_memories.map { |memory| memory["text"] }, "I always use assistant-generated summaries"
@@ -2345,7 +2345,7 @@ edit this prompt"
       prompt = FakePrompt.new(["Here is an important information: I usually prefer concise and practical answers.", "/exit"])
       client = FakeClient.new([
         { "role" => "assistant", "content" => "ok" },
-        { "content" => "The captain prefers concise and practical answers" }
+        { "content" => "The user prefers concise and practical answers" }
       ])
       conversation = Kward::Conversation.new
       agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
@@ -2355,7 +2355,7 @@ edit this prompt"
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal ["The captain prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
+      assert_equal ["The user prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
       refute_includes prompt.output.join("\n"), "Learned 1 soft memory."
     end
   end
@@ -2428,7 +2428,7 @@ edit this prompt"
       prompt = BusyPrompt.new(["I am starting the session", "/memory summarize", "/exit"])
       client = FakeClient.new([
         "ok",
-        { "content" => "The captain prefers concise and practical answers" }
+        { "content" => "The user prefers concise and practical answers" }
       ])
       conversation = Kward::Conversation.new
       conversation.append_user("I usually prefer concise and practical answers.")
@@ -2444,7 +2444,7 @@ edit this prompt"
       assert summarizing_index
       finish_after_summarizing = prompt.events[summarizing_index..].index([:finish_busy_input])
       assert finish_after_summarizing
-      assert_equal ["The captain prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
+      assert_equal ["The user prefers concise and practical answers"], conversation.session_memories.map { |memory| memory["text"] }
     end
   end
 

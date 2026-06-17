@@ -355,14 +355,76 @@ module Kward
         candidates = heuristic_candidates(text)
         existing_set = Set.new(existing_texts.map { |t| normalize_for_comparison(t) })
         candidates.filter_map do |candidate|
-          summarized = summarize_text(candidate, client: client)
+          summarized = normalize_inferred_memory_text(summarize_text(candidate, client: client), source_text: candidate)
           normalized = normalize_for_comparison(summarized)
           # Skip if this text already exists in provided list or existing soft memories
           next if existing_set.include?(normalized)
-          next if soft_memories.any? { |m| normalize_for_comparison(m["text"]) == normalized }
+          next if duplicate_memory_text?(summarized, existing_texts)
+          next if duplicate_memory_text?(summarized, soft_memories.map { |m| m["text"] })
 
           add_soft(summarized, scope: workspace_scope(workspace_root), tags: ["workflow"], confidence: 0.55, source: "inferred")
         end
+      end
+
+      def normalize_inferred_memory_text(text, source_text: nil)
+        normalized = normalize_memory_text(text)
+        source = source_text.to_s
+        first_person_source = source.match?(/\b(?:i|we|my|our)\b/i)
+
+        if first_person_source
+          normalized = normalized.sub(/\AThe\s+\w+\s+(prefers|likes|uses|usually|always|wants|believes|thinks|avoids)\b/i) do
+            "The user #{Regexp.last_match(1).downcase}"
+          end
+          normalized = normalized.sub(/\AI\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) do
+            "The user #{third_person_verb(Regexp.last_match(1))}"
+          end
+          normalized = normalized.sub(/\AWe\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) do
+            "The user #{third_person_verb(Regexp.last_match(1))}"
+          end
+          normalized = normalized.sub(/\AMy\s+/i, "The user's ")
+          normalized = normalized.sub(/\AOur\s+/i, "The user's ")
+        end
+
+        clean_text(normalized)
+      end
+
+      def third_person_verb(verb)
+        word = verb.to_s.downcase
+        return word if ["usually", "always"].include?(word)
+        return "uses" if word == "use"
+
+        word.end_with?("s") ? word : "#{word}s"
+      end
+
+      def duplicate_memory_text?(text, existing_texts)
+        candidate = memory_duplicate_key(text)
+        candidate_tokens = memory_duplicate_tokens(text)
+        Array(existing_texts).any? do |existing|
+          existing_key = memory_duplicate_key(existing)
+          next true if existing_key == candidate
+
+          existing_tokens = memory_duplicate_tokens(existing)
+          next false if candidate_tokens.empty? || existing_tokens.empty?
+
+          overlap = (candidate_tokens & existing_tokens).length
+          union = (candidate_tokens | existing_tokens).length
+          union.positive? && overlap.to_f / union >= 0.9
+        end
+      end
+
+      def memory_duplicate_key(text)
+        normalized = normalize_for_comparison(text).downcase
+        normalized = normalized.sub(/\Ai\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) { "the user #{third_person_verb(Regexp.last_match(1))}" }
+        normalized = normalized.sub(/\Awe\s+(prefer|like|use|usually|always|want|believe|think|avoid)\b/i) { "the user #{third_person_verb(Regexp.last_match(1))}" }
+        normalized = normalized.sub(/\Amy\s+/i, "the user's ")
+        normalized = normalized.sub(/\Aour\s+/i, "the user's ")
+        normalized.tr("“”‘’", "\"\"''")
+      end
+
+      def memory_duplicate_tokens(text)
+        memory_duplicate_key(text).scan(/[a-z0-9_\-']{3,}/).map do |term|
+          term.sub(/\A(.{4,})s\z/, '\\1')
+        end.uniq
       end
 
       def summarize_text(text, client: nil)
@@ -404,16 +466,17 @@ module Kward
             You are a memory text reformulation assistant. Your task is to transform user-generated text into proper third-person descriptive memory statements.
 
             Rules:
-            - Convert first-person statements ("I like", "we prefer") to third-person ("The captain likes", "The user prefers")
+            - Convert first-person statements ("I like", "we prefer") to third-person ("The user likes", "The user prefers")
             - Remove conversational filler, preambles, and action descriptions
             - Keep only the factual preference or fact
-            - Use "The captain" or "The user" as the subject for personal preferences
+            - Always use "The user" as the subject for personal preferences
+            - Do not use persona-specific names, titles, roles, or nicknames
             - Preserve workflow-related technical preferences as-is
             - Keep the text concise (under 100 characters)
             - If the text is already a good memory statement, return it unchanged
 
             Examples:
-            - "I like to eat the most important meal today: steak" → "The captain likes eating steak"
+            - "I like to eat the most important meal today: steak" → "The user likes eating steak"
             - "We should prefer TDD for this project" → "Prefer TDD for this project"
             - "Remember that the user prefers minitest" → "The user prefers minitest"
             - "But first we need to remember that we are using TDD" → "Use TDD"
