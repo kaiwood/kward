@@ -224,6 +224,41 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_tree_renderer_handles_deep_linear_trees
+    root = { "entry" => { "type" => "message", "id" => "0", "message" => { "role" => "user", "content" => "0" } }, "children" => [] }
+    node = root
+    3_000.times do |index|
+      id = (index + 1).to_s
+      child = { "entry" => { "type" => "message", "id" => id, "parentId" => index.to_s, "message" => { "role" => "user", "content" => id } }, "children" => [] }
+      node["children"] << child
+      node = child
+    end
+
+    items = Kward::SessionTreeRenderer.new(roots: [root], current_leaf_id: "3000").items
+
+    assert_equal 3_001, items.length
+    assert_equal "3000", items.last[:entry]["id"]
+  end
+
+  def test_session_tree_handles_duplicate_entry_ids_without_self_cycle
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first")
+      reused_message = conversation.messages.first
+      conversation.append_assistant(reused_message)
+
+      tree = store.session_tree(session.path)
+      items = Kward::SessionTreeRenderer.new(roots: tree, current_leaf_id: session.leaf_id).items
+
+      assert_equal 1, tree.length
+      assert_empty tree.first["children"]
+      assert_equal ["first"], items.map { |item| item[:entry].dig("message", "content") }
+    end
+  end
+
   def test_session_ignores_linear_records_without_entry_ids
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

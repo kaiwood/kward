@@ -592,7 +592,11 @@ module Kward
         next unless node
 
         parent = nodes[entry["parentId"].to_s]
-        parent ? parent["children"] << node : roots << node
+        if parent && !parent.equal?(node)
+          parent["children"] << node unless parent["children"].include?(node)
+        else
+          roots << node unless roots.include?(node)
+        end
       end
       roots
     end

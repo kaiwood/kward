@@ -19,7 +19,12 @@ module Kward
       multiple_roots = visible_roots.length > 1
       result = []
 
-      walk = lambda do |node, indent, just_branched, show_connector, is_last, gutters, virtual_root_child|
+      stack = visible_roots.sort_by { |root| session_tree_contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index.map do |root, index|
+        [root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == visible_roots.length - 1, [], multiple_roots]
+      end.reverse
+
+      until stack.empty?
+        node, indent, just_branched, show_connector, is_last, gutters, virtual_root_child = stack.pop
         entry = node[:source]["entry"] || {}
         display_indent = multiple_roots ? [indent - 1, 0].max : indent
         prefix = session_tree_visual_prefix(display_indent, gutters, show_connector && !virtual_root_child, is_last, !node[:children].empty?)
@@ -40,13 +45,9 @@ module Kward
         connector_position = [display_indent - 1, 0].max
         child_gutters = show_connector && !virtual_root_child ? gutters + [{ position: connector_position, show: !is_last }] : gutters
 
-        children.each_with_index do |child, index|
-          walk.call(child, child_indent, multiple_children, multiple_children, index == children.length - 1, child_gutters, false)
+        children.each_with_index.reverse_each do |child, index|
+          stack << [child, child_indent, multiple_children, multiple_children, index == children.length - 1, child_gutters, false]
         end
-      end
-
-      visible_roots.sort_by { |root| session_tree_contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index do |root, index|
-        walk.call(root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == visible_roots.length - 1, [], multiple_roots)
       end
 
       result
@@ -55,10 +56,29 @@ module Kward
     private
 
     def visible_session_tree_nodes(node)
-      children = Array(node["children"]).flat_map { |child| visible_session_tree_nodes(child) }
-      return children if hidden_session_tree_entry?(node["entry"] || {})
+      results = {}
+      stack = [[node, false, {}]]
 
-      [{ source: node, children: children }]
+      until stack.empty?
+        current, visited, seen = stack.pop
+        node_key = current.object_id
+        next if seen[node_key]
+
+        if visited
+          children = Array(current["children"]).flat_map { |child| results[child.object_id] || [] }
+          results[node_key] = if hidden_session_tree_entry?(current["entry"] || {})
+                                children
+                              else
+                                [{ source: current, children: children }]
+                              end
+        else
+          branch_seen = seen.merge(node_key => true)
+          stack << [current, true, seen]
+          Array(current["children"]).reverse_each { |child| stack << [child, false, branch_seen] unless branch_seen[child.object_id] }
+        end
+      end
+
+      results[node.object_id] || []
     end
 
     def hidden_session_tree_entry?(entry)
@@ -132,15 +152,28 @@ module Kward
     end
 
     def session_tree_contains_active_path?(node, active_path)
-      entry_id = (node[:source]["entry"] || {})["id"].to_s
-      active_path.include?(entry_id) || node[:children].any? { |child| session_tree_contains_active_path?(child, active_path) }
+      stack = [node]
+      seen = {}
+      until stack.empty?
+        current = stack.pop
+        next if seen[current.object_id]
+
+        seen[current.object_id] = true
+        entry_id = (current[:source]["entry"] || {})["id"].to_s
+        return true if active_path.include?(entry_id)
+
+        stack.concat(current[:children])
+      end
+      false
     end
 
     def session_tree_active_path(roots, leaf_id)
       by_id = session_tree_entries_by_id(roots)
       ids = []
       entry = by_id[leaf_id.to_s]
-      while entry
+      seen = {}
+      while entry && !seen[entry["id"].to_s]
+        seen[entry["id"].to_s] = true
         ids << entry["id"].to_s
         entry = by_id[entry["parentId"].to_s]
       end
@@ -150,8 +183,12 @@ module Kward
     def session_tree_entries_by_id(roots)
       roots.each_with_object({}) do |root, map|
         stack = [root]
+        seen = {}
         until stack.empty?
           node = stack.pop
+          next if seen[node.object_id]
+
+          seen[node.object_id] = true
           entry = node["entry"] || {}
           map[entry["id"].to_s] = entry unless entry["id"].to_s.empty?
           stack.concat(Array(node["children"]))
@@ -162,8 +199,12 @@ module Kward
     def session_tree_tool_calls(roots)
       roots.each_with_object({}) do |root, tool_calls|
         stack = [root]
+        seen = {}
         until stack.empty?
           node = stack.pop
+          next if seen[node.object_id]
+
+          seen[node.object_id] = true
           entry = node["entry"] || {}
           message = entry["message"]
           if entry["type"] == "message" && message.is_a?(Hash) && message_role(message) == "assistant"

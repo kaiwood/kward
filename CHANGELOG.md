@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `/tree` session rendering to tolerate malformed cyclic tree records instead of overflowing the Ruby stack.
+
 ## [0.69.0] - 2026-06-17
 
 ### Added
