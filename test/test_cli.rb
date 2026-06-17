@@ -161,6 +161,73 @@ class TestCLI < KwardTestCase
     Kward::Clipboard.define_singleton_method(:new, original_new)
   end
 
+  def test_sysprompt_prints_annotated_effective_prompt
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        Dir.mktmpdir do |home|
+          File.write(File.join(config_dir, "config.json"), JSON.dump({
+            "personas" => {
+              "workspaces" => { workspace_dir => "Workspace persona." }
+            }
+          }))
+          File.write(File.join(config_dir, "PRINCIPLES.md"), "Global principles.\n")
+          File.write(File.join(workspace_dir, "AGENTS.md"), "Workspace instructions.\n")
+          plugins_dir = File.join(home, ".kward", "plugins")
+          FileUtils.mkdir_p(plugins_dir)
+          File.write(File.join(plugins_dir, "context.rb"), <<~'RUBY')
+            Kward.plugin do |plugin|
+              plugin.prompt_context { |ctx| "Plugin workspace: #{ctx.workspace_root}" }
+            end
+          RUBY
+
+          prompt = FakePrompt.new([])
+          with_env("HOME" => home, "KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+            Kward::CLI.new(argv: ["--working-directory", workspace_dir, "sysprompt"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+          end
+
+          output = prompt.output.join("\n")
+          assert_includes output, "Kward System Prompt"
+          workspace_root = File.realpath(workspace_dir)
+          assert_includes output, "Workspace: #{workspace_root}"
+          assert_includes output, "## Config principles"
+          assert_includes output, "Source: #{File.join(config_dir, "PRINCIPLES.md")}"
+          assert_includes output, "Global principles."
+          assert_includes output, "## Persona"
+          assert_includes output, "Workspace persona."
+          assert_includes output, "## Plugin context"
+          assert_includes output, "Plugin workspace: #{workspace_root}"
+          assert_includes output, "## Workspace AGENTS.md hint"
+          assert_includes output, File.join(workspace_root, "AGENTS.md")
+          refute_includes output, "Workspace instructions."
+          assert_includes output, "Memory: not included"
+        end
+      end
+    end
+  end
+
+  def test_sysprompt_raw_prints_unannotated_effective_prompt
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+        File.write(File.join(config_dir, "PRINCIPLES.md"), "Global principles.\n")
+        File.write(File.join(workspace_dir, "AGENTS.md"), "Workspace instructions.\n")
+
+        prompt = FakePrompt.new([])
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          Kward::CLI.new(argv: ["--working-directory=#{workspace_dir}", "sysprompt", "--raw"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+        end
+
+        output = prompt.output.join("\n")
+        assert_includes output, "You are Kward"
+        assert_includes output, "Global principles."
+        assert_includes output, "Workspace guidance is available"
+        refute_includes output, "Kward System Prompt"
+        refute_includes output, "## Config principles"
+        refute_includes output, "Workspace instructions."
+      end
+    end
+  end
+
   def test_init_command_creates_default_config_and_reports_result
     Dir.mktmpdir do |config_dir|
       prompt = FakePrompt.new([])
@@ -808,7 +875,9 @@ class TestCLI < KwardTestCase
         end
 
         system_message = client.seen_messages.first.first[:content]
-        assert_includes system_message, "Workspace marker from option"
+        assert_includes system_message, "Workspace guidance is available"
+        assert_includes system_message, File.join(File.realpath(workspace_dir), "AGENTS.md")
+        refute_includes system_message, "Workspace marker from option"
       end
     end
   end

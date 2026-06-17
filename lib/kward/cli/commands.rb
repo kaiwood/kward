@@ -52,6 +52,7 @@ module Kward
             #{command.call("kward auth status")}                  Show saved credential status
             #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
             #{command.call("kward doctor")}                       Check local Kward setup
+            #{command.call("kward sysprompt")}                    Inspect the effective system prompt
             #{command.call("kward pan")}                          Start Pan mode web UI
             #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
 
@@ -62,6 +63,7 @@ module Kward
             #{command.call("auth status|logout")}                 Show or clear saved credentials
             #{command.call("init")}                               Install starter prompts and PRINCIPLES.md
             #{command.call("doctor")}                             Check local Kward setup
+            #{command.call("sysprompt")} [--raw]                  Inspect the effective system prompt
             #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
             #{command.call("pan")}                                Start Pan mode web UI
             #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
@@ -113,6 +115,11 @@ module Kward
             usage: "kward doctor",
             description: "Check local Kward configuration, workspace, auth hints, and writable directories.",
             examples: ["kward doctor", "kward --working-directory ~/code/project doctor"]
+          },
+          "sysprompt" => {
+            usage: "kward sysprompt [--raw]",
+            description: "Inspect the effective system prompt for a new conversation in the current workspace.",
+            examples: ["kward sysprompt", "kward sysprompt --raw", "kward --working-directory ~/code/project sysprompt"]
           },
           "stats" => {
             usage: "kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]",

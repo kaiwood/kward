@@ -39,6 +39,7 @@ require_relative "workspace"
 require_relative "cli/commands"
 require_relative "cli/auth_commands"
 require_relative "cli/doctor"
+require_relative "cli/sysprompt"
 require_relative "cli/stats"
 require_relative "cli/runtime_helpers"
 require_relative "cli/slash_commands"
@@ -69,6 +70,7 @@ module Kward
     include CLI::Commands
     include CLI::AuthCommands
     include CLI::Doctor
+    include CLI::Sysprompt
     include CLI::Stats
     include CLI::RuntimeHelpers
     include CLI::SlashCommands
@@ -156,6 +158,16 @@ module Kward
         raise ArgumentError, command_usage("doctor") unless @argv.length == 1
 
         print_doctor
+        return
+      end
+
+      if @argv.first == "sysprompt"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("sysprompt")
+          return
+        end
+
+        print_sysprompt(@argv[1..] || [])
         return
       end
 

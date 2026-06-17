@@ -55,6 +55,8 @@ module Kward
     attr_accessor :last_memory_retrieval
     # @return [PluginRegistry, nil] registry used to collect plugin prompt context
     attr_accessor :plugin_registry
+    # @return [String, nil] plugin prompt context used in the current system prompt
+    attr_reader :last_plugin_prompt_context
 
     def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
@@ -65,7 +67,12 @@ module Kward
       @messages = []
       restored_system_message, transcript_messages = split_system_message(messages)
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        system_message = restored_system_message || Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context, plugin_context: plugin_prompt_context)
+        if restored_system_message
+          system_message = restored_system_message
+        else
+          @last_plugin_prompt_context = plugin_prompt_context
+          system_message = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context, plugin_context: @last_plugin_prompt_context)
+        end
       end
       @system_message = system_message
       @system_message_enabled = !@system_message.nil?
@@ -130,7 +137,8 @@ module Kward
     def refresh_system_message!
       return nil unless @system_message_enabled
 
-      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context, plugin_context: plugin_prompt_context)
+      @last_plugin_prompt_context = plugin_prompt_context
+      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context, plugin_context: @last_plugin_prompt_context)
       @system_message = replacement
       @on_system_message_change&.call(replacement)
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)

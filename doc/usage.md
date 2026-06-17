@@ -8,6 +8,7 @@ kward help                     # command overview and examples
 kward "Explain this project"   # one-shot prompt
 kward init                     # optional first-time setup
 kward doctor                   # check local setup
+kward sysprompt                # inspect the effective system prompt
 kward auth status              # show saved credential status
 kward pan                      # Pan mode web UI
 kward rpc                      # experimental JSON-RPC backend
@@ -24,6 +25,28 @@ kward init
 ```
 
 The installer downloads the pinned `kaiwood/kward-starter-pack` `v1.0.1` release, creates the config directory and base `config.json` if needed, and copies only starter-pack instruction/prompt files. It preserves the starter-pack layout in your config directory and skips files that already exist.
+
+## System prompt inspection
+
+Inspect the effective system prompt Kward would use for a new conversation in the current workspace:
+
+```bash
+kward sysprompt
+```
+
+The default output is annotated with sources such as config `PRINCIPLES.md`, plugin context, skills, and workspace `AGENTS.md` handling. To print only the assembled prompt content:
+
+```bash
+kward sysprompt --raw
+```
+
+Use `--working-directory PATH` to inspect another workspace:
+
+```bash
+kward --working-directory ~/code/project sysprompt
+```
+
+Memory is not included because memory context is retrieved per user turn.
 
 ## Interactive chat
 

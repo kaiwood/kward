@@ -9,6 +9,7 @@ All notable changes to Kward will be documented in this file.
 - Added `fetch_content` and `fetch_raw` web tools for reading specific URLs after search discovery.
 - Added `enforce_workspace_agents_file` config support for forcing full workspace `AGENTS.md` injection.
 - Added config-directory `PRINCIPLES.md` as the preferred global principles file, with `AGENTS.md` kept as a legacy alias.
+- Added `kward sysprompt` for inspecting the effective system prompt, with `--raw` for unannotated prompt content.
 
 ### Changed
 
