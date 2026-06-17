@@ -985,6 +985,7 @@ body.kward-docs .kward-home #footer {
   width: 100%;
 }
 
+.kward-guide-page,
 .kward-api-page {
   max-width: 1100px;
 }
