@@ -851,25 +851,29 @@ class TestClient < KwardTestCase
     assert_equal "read_file", message["tool_calls"].first["function"]["name"]
   end
 
-  def test_codex_payload_replays_response_items_with_phase
+  def test_codex_payload_replays_response_items_without_persisted_ids
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     assistant = {
       "role" => "assistant",
       "content" => "",
       "tool_calls" => [tool_call("read_file", "path" => "README.md")],
       "response_items" => [
-        { "type" => "message", "id" => "msg_1", "role" => "assistant", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "Need inspect file first.", "annotations" => [] }] },
-        { "type" => "function_call", "id" => "fc_1", "call_id" => "call_1", "name" => "read_file", "arguments" => JSON.dump("path" => "README.md") }
+        { "type" => "reasoning", "id" => "rs_1", "status" => nil, "summary" => [{ "type" => "summary_text", "text" => "thinking" }] },
+        { "type" => "message", "id" => "msg_1", "status" => "completed", "role" => "assistant", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "Need inspect file first.", "annotations" => [] }] },
+        { "type" => "function_call", "id" => "fc_1", "status" => "completed", "call_id" => "call_1", "name" => "read_file", "arguments" => JSON.dump("path" => "README.md") }
       ]
     }
 
     input = client.send(:codex_payload, [assistant], [])[:input]
 
-    assert_equal "message", input.first[:type]
-    assert_equal "commentary", input.first[:phase]
-    assert_equal "function_call", input.last[:type]
-    assert_equal "fc_1", input.last[:id]
-    assert_equal "call_1", input.last[:call_id]
+    assert_equal "reasoning", input[0][:type]
+    assert_equal [{ "type" => "summary_text", "text" => "thinking" }], input[0][:summary]
+    assert_equal "message", input[1][:type]
+    assert_equal "commentary", input[1][:phase]
+    assert_equal "function_call", input[2][:type]
+    assert_equal "call_1", input[2][:call_id]
+    assert input.none? { |item| item.key?(:id) }
+    assert input.none? { |item| item.key?(:status) }
   end
 
 end

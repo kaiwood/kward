@@ -360,12 +360,12 @@ module Kward
 
     def codex_replay_reasoning_item(item)
       result = { type: "reasoning" }
-      id = item[:id] || item["id"]
       summary = item[:summary] || item["summary"]
       content = item[:content] || item["content"]
-      result[:id] = id if id
+      encrypted_content = item[:encrypted_content] || item["encrypted_content"]
       result[:summary] = summary if summary.is_a?(Array)
       result[:content] = content if content.is_a?(Array)
+      result[:encrypted_content] = encrypted_content if encrypted_content
       result
     end
 
@@ -374,11 +374,7 @@ module Kward
       return nil unless content.is_a?(Array)
 
       result = { type: "message", role: item[:role] || item["role"] || "assistant", content: codex_replay_message_content(content) }
-      id = item[:id] || item["id"]
-      status = item[:status] || item["status"]
       phase = item[:phase] || item["phase"]
-      result[:id] = id if id
-      result[:status] = status if status
       result[:phase] = phase if phase
       result
     end
@@ -404,12 +400,10 @@ module Kward
     def codex_replay_tool_call_item(item)
       type = item[:type] || item["type"]
       result = { type: type }
-      id = item[:id] || item["id"]
       call_id = item[:call_id] || item["call_id"]
       name = item[:name] || item["name"]
       arguments = item[:arguments] || item["arguments"]
       input = item[:input] || item["input"]
-      result[:id] = id if id
       result[:call_id] = call_id if call_id
       result[:name] = name if name
       result[:arguments] = arguments if arguments
