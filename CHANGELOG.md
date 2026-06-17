@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Separated conversation system prompt state from durable transcript messages; provider request context still includes the current system prompt on every model request.
+- Persisted system prompt snapshots as session audit metadata when the prompt changes, without adding them to transcript messages.
 
 ### Fixed
 

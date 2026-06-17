@@ -1,4 +1,5 @@
 require "fileutils"
+require "digest"
 require "json"
 require "securerandom"
 require "time"
@@ -77,6 +78,8 @@ module Kward
         conversation.on_compact = lambda { |message| compact(message) }
         conversation.on_tool_execution = lambda { |tool_call, content| append_tool_execution(tool_call, content) }
         conversation.on_runtime_update = lambda { |provider:, model:, reasoning_effort:| update_runtime(provider: provider, model: model, reasoning_effort: reasoning_effort) }
+        conversation.on_system_message_change = lambda { |system_message| append_system_prompt_snapshot(system_message, reason: "changed") }
+        append_system_prompt_snapshot(conversation.system_message, reason: "attach")
         self
       end
 
@@ -97,6 +100,11 @@ module Kward
       # Persists normalized tool execution metadata alongside transcript messages.
       def append_tool_execution(tool_call, content)
         @store.append_record(@path, RPC::ToolEventNormalizer.new(tool_call, content: content).execution_record)
+      end
+
+      # Persists the current system prompt as audit metadata when it changes.
+      def append_system_prompt_snapshot(system_message, reason: "changed")
+        @store.append_system_prompt_snapshot(@path, system_message, reason: reason)
       end
 
       # Persists the session memory snapshot used when the session is restored.
@@ -427,11 +435,38 @@ module Kward
       end
     end
 
+    def append_system_prompt_snapshot(path, system_message, reason: "changed")
+      content = MessageAccess.content(system_message).to_s
+      return if content.empty?
+      return if latest_system_prompt_hash(records_from_file(path)) == system_prompt_hash(content)
+
+      append_record(path, {
+        type: "system_prompt",
+        timestamp: Time.now.utc.iso8601(3),
+        reason: reason.to_s,
+        hash: system_prompt_hash(content),
+        content: content
+      })
+    end
+
     def self.safe_cwd(cwd)
       "--#{File.expand_path(cwd).sub(%r{\A[/\\]}, "").gsub(%r{[/\\:]}, "-")}--"
     end
 
     private
+
+    def latest_system_prompt_hash(records)
+      records.reverse_each do |record|
+        next unless record["type"] == "system_prompt"
+
+        return record["hash"].to_s unless record["hash"].to_s.empty?
+      end
+      nil
+    end
+
+    def system_prompt_hash(content)
+      "sha256:#{Digest::SHA256.hexdigest(content.to_s)}"
+    end
 
     def resolve_session_path(path)
       expanded = path.to_s.start_with?("~/") ? File.join(Dir.home, path.to_s[2..]) : path.to_s

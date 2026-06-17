@@ -22,6 +22,27 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_store_persists_system_prompt_snapshots_only_when_changed
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: { role: "system", content: "system v1" })
+
+      session.attach(conversation)
+      session.attach(conversation)
+      conversation.memory_context = "system v2"
+      conversation.refresh_system_message!
+
+      snapshots = jsonl_records(session.path).select { |record| record["type"] == "system_prompt" }
+      assert_equal 2, snapshots.length
+      assert_equal "system v1", snapshots[0]["content"]
+      assert_includes snapshots[1]["content"], "system v2"
+      assert snapshots.all? { |record| record["hash"].start_with?("sha256:") }
+      assert_equal ["attach", "changed"], snapshots.map { |record| record["reason"] }
+      assert_empty jsonl_records(session.path).select { |record| record["type"] == "message" && record.dig("message", "role") == "system" }
+    end
+  end
+
   def test_session_store_skips_missing_restored_read_paths
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|

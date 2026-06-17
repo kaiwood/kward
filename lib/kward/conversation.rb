@@ -47,6 +47,8 @@ module Kward
     attr_accessor :on_tool_execution
     # @return [Proc, nil] callback invoked when runtime metadata should be persisted
     attr_accessor :on_runtime_update
+    # @return [Proc, nil] callback invoked when the system prompt runtime state changes
+    attr_accessor :on_system_message_change
     # @return [String, nil] memory prompt context injected into refreshed system messages
     attr_accessor :memory_context
     # @return [Hash, nil] metadata for the last memory retrieval attached to the session
@@ -82,6 +84,7 @@ module Kward
       @on_compact = on_compact
       @on_tool_execution = on_tool_execution
       @on_runtime_update = on_runtime_update
+      @on_system_message_change = nil
     end
 
     # Appends a user message and normalizes image attachment syntax.
@@ -129,6 +132,7 @@ module Kward
 
       replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context, plugin_context: plugin_prompt_context)
       @system_message = replacement
+      @on_system_message_change&.call(replacement)
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)
       @workspace_agents_mtime = workspace_agents_mtime
       replacement

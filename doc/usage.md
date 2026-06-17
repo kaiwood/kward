@@ -33,6 +33,8 @@ The composer stays available while assistant and tool output streams. If you pre
 
 Kward separates the durable transcript from the provider request context. The transcript contains user, assistant, tool, and compaction messages. The current system prompt is stored as conversation runtime state and is not counted as a transcript message. For every model request, Kward builds a fresh request context from the current system prompt plus the active transcript, because supported providers are stateless across turns and need the operating instructions each time.
 
+Persisted session files keep system prompts as audit metadata rather than transcript messages. Kward appends a `system_prompt` JSONL record when a session is attached and again only when the prompt content changes, storing the prompt content and a `sha256:` hash. This keeps normal transcript operations small while preserving enough data to inspect which operating instructions were active for model requests.
+
 Prefix input with `!` to run a local shell command from the workspace root without sending it to the model:
 
 ```text
