@@ -24,7 +24,7 @@ Optionally install the starter pack:
 kward init
 ```
 
-The starter pack adds useful default prompts and a base `AGENTS.md` to your config directory. It is helpful for a first setup, but safe to skip if you want to write your own instructions. Existing files are not overwritten.
+The starter pack adds useful default prompts and a base `PRINCIPLES.md` to your config directory. It is helpful for a first setup, but safe to skip if you want to write your own instructions. Existing files are not overwritten.
 
 If you are working from a repository checkout:
 

@@ -11,9 +11,9 @@ require_relative "config_files"
 module Kward
   # Installs Kward's starter prompt/instruction files into the user config dir.
   class StarterPackInstaller
-    VERSION = "v1.0.0"
+    VERSION = "v1.0.1"
     ARCHIVE_URL = "https://codeload.github.com/kaiwood/kward-starter-pack/tar.gz/refs/tags/#{VERSION}".freeze
-    ALLOWED_FILES = ["AGENTS.md"].freeze
+    ALLOWED_FILES = ["PRINCIPLES.md"].freeze
     ALLOWED_PREFIXES = ["prompts/", "skills/"].freeze
     Result = Struct.new(:installed, :skipped, keyword_init: true)
 

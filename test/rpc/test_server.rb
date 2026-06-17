@@ -369,7 +369,7 @@ class TestRPCServer < KwardTestCase
         FileUtils.mkdir_p(prompts_dir)
         FileUtils.mkdir_p(skill_dir)
         FileUtils.mkdir_p(plugins_dir)
-        File.write(File.join(config_dir, "AGENTS.md"), "# Context\n")
+        File.write(File.join(config_dir, "PRINCIPLES.md"), "# Context\n")
         File.write(File.join(prompts_dir, "review.md"), "---\ndescription: Review current changes\nargument-hint: files\n---\nReview $ARGUMENTS\n")
         File.write(File.join(skill_dir, "SKILL.md"), "---\nname: testing-verification\ndescription: Testing and verification guidance\n---\n# Skill\n")
         File.write(File.join(plugins_dir, "hello.rb"), <<~'RUBY')
@@ -410,7 +410,7 @@ class TestRPCServer < KwardTestCase
           assert_equal "returned Martok", run[:result]
 
           sections = server.send(:startup_resources, "sessionId" => session[:id])[:sections]
-          assert_equal ["AGENTS.md"], sections.find { |section| section[:name] == "Context" }[:items]
+          assert_equal ["PRINCIPLES.md"], sections.find { |section| section[:name] == "Context" }[:items]
           assert_equal ["testing-verification"], sections.find { |section| section[:name] == "Skills" }[:items]
           assert_equal ["/review"], sections.find { |section| section[:name] == "Prompts" }[:items]
           assert_equal ["/hello"], sections.find { |section| section[:name] == "Plugins" }[:items]

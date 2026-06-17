@@ -281,6 +281,10 @@ For higher limits or alternate providers, add user-specific keys. Model-backed a
 
 Do not put shared or published API keys in this file.
 
+## Global principles
+
+Put global engineering principles in `PRINCIPLES.md` beside your config file, usually `~/.kward/PRINCIPLES.md`. Kward appends this file to its built-in system instructions when present. Existing config-directory `AGENTS.md` files are still read as a legacy alias when `PRINCIPLES.md` is absent.
+
 ## Workspace AGENTS.md
 
 By default, Kward does not inject the full workspace `AGENTS.md` into every request. When a workspace `AGENTS.md` exists, Kward injects a compact instruction telling the model to read it for repository-related tasks before analyzing or modifying project files.

@@ -406,7 +406,7 @@ module Kward
       def show_active_instructions_summary(conversation)
         label = ConfigFiles.active_persona_label(workspace_root: current_workspace_root, model: current_model_id, config: safely_read_config.to_h)
         lines = ["Active persona: #{label || "none"}"]
-        lines << "Global AGENTS.md: #{ConfigFiles.agents_prompt ? "present" : "absent"}"
+        lines << "Global PRINCIPLES.md: #{ConfigFiles.agents_prompt ? "present" : "absent"}"
         lines << "Workspace AGENTS.md: #{ConfigFiles.workspace_agents_prompt(current_workspace_root) ? "present" : "absent"}"
         lines << "Messages: #{conversation.messages.length}" if conversation&.respond_to?(:messages)
         runtime_output(lines.join("\n"))

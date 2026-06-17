@@ -50,7 +50,7 @@ module Kward
             #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
             #{command.call("kward login")}                        Sign in or save provider credentials
             #{command.call("kward auth status")}                  Show saved credential status
-            #{command.call("kward init")}                         Install starter prompts and AGENTS.md
+            #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
             #{command.call("kward doctor")}                       Check local Kward setup
             #{command.call("kward pan")}                          Start Pan mode web UI
             #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
@@ -60,7 +60,7 @@ module Kward
             #{command.call("version")}                            Show the installed Kward version
             #{command.call("login")} [anthropic|openrouter|github] Sign in with OpenAI, Anthropic, OpenRouter, or GitHub
             #{command.call("auth status|logout")}                 Show or clear saved credentials
-            #{command.call("init")}                               Install starter prompts and AGENTS.md
+            #{command.call("init")}                               Install starter prompts and PRINCIPLES.md
             #{command.call("doctor")}                             Check local Kward setup
             #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
             #{command.call("pan")}                                Start Pan mode web UI
@@ -106,7 +106,7 @@ module Kward
           },
           "init" => {
             usage: "kward init",
-            description: "Install starter prompts and base AGENTS.md into your config directory.",
+            description: "Install starter prompts and base PRINCIPLES.md into your config directory.",
             examples: ["kward init"]
           },
           "doctor" => {

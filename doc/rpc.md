@@ -554,7 +554,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns stable startup sections for configured context (`AGENTS.md`), skills, prompt templates, and plugin slash commands.
+Returns stable startup sections for configured context (`PRINCIPLES.md`, or legacy `AGENTS.md`), skills, prompt templates, and plugin slash commands.
 
 ### `prompts/list`
 

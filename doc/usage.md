@@ -17,13 +17,13 @@ When running from source, replace `kward` with `ruby lib/main.rb`.
 
 ## Starter pack
 
-Install Kward's starter prompts and base `AGENTS.md` into your config directory, usually `~/.kward`:
+Install Kward's starter prompts and base `PRINCIPLES.md` into your config directory, usually `~/.kward`:
 
 ```bash
 kward init
 ```
 
-The installer downloads the pinned `kaiwood/kward-starter-pack` `v1.0.0` release, creates the config directory and base `config.json` if needed, and copies only starter-pack instruction/prompt files. It preserves the starter-pack layout in your config directory and skips files that already exist.
+The installer downloads the pinned `kaiwood/kward-starter-pack` `v1.0.1` release, creates the config directory and base `config.json` if needed, and copies only starter-pack instruction/prompt files. It preserves the starter-pack layout in your config directory and skips files that already exist.
 
 ## Interactive chat
 

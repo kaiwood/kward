@@ -15,26 +15,58 @@ class TestPrompts < KwardTestCase
     assert_includes content, "Use fetch_raw for machine-readable resources"
   end
 
-  def test_config_agents_prompt_appends_from_config_dir
+  def test_config_principles_prompt_appends_from_config_dir
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |workspace|
         File.write(File.join(dir, "config.json"), JSON.dump({}))
-        File.write(File.join(dir, "AGENTS.md"), "Config prompt instructions.\n")
+        File.write(File.join(dir, "PRINCIPLES.md"), "Config prompt instructions.\n")
 
         with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
           content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
 
-          refute_includes content, "# AGENTS.md"
+          refute_includes content, "# PRINCIPLES.md"
           assert_includes content, "Config prompt instructions."
         end
       end
     end
   end
 
-  def test_oversized_config_agents_prompt_warns_and_skips
+  def test_config_agents_prompt_alias_appends_from_config_dir
+    Dir.mktmpdir do |dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        File.write(File.join(dir, "AGENTS.md"), "Alias prompt instructions.\n")
+
+        with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
+
+          assert_includes content, "Alias prompt instructions."
+        end
+      end
+    end
+  end
+
+  def test_config_principles_prompt_takes_precedence_over_agents_alias
+    Dir.mktmpdir do |dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(dir, "config.json"), JSON.dump({}))
+        File.write(File.join(dir, "PRINCIPLES.md"), "Preferred prompt instructions.\n")
+        File.write(File.join(dir, "AGENTS.md"), "Alias prompt instructions.\n")
+
+        with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
+
+          assert_includes content, "Preferred prompt instructions."
+          refute_includes content, "Alias prompt instructions."
+        end
+      end
+    end
+  end
+
+  def test_oversized_config_principles_prompt_warns_and_skips
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
-      File.write(File.join(dir, "AGENTS.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
+      File.write(File.join(dir, "PRINCIPLES.md"), "x" * (Kward::ConfigFiles::MAX_PROMPT_FILE_BYTES + 1))
 
       with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
         _stdout, stderr = capture_io do
@@ -43,7 +75,7 @@ class TestPrompts < KwardTestCase
           refute_includes content, "xxx"
         end
 
-        assert_includes stderr, "Warning: skipping Kward prompt file"
+        assert_includes stderr, "Warning: skipping Kward principles file"
         assert_includes stderr, "file too large"
       end
     end
@@ -72,7 +104,7 @@ class TestPrompts < KwardTestCase
   def test_persona_prompt_and_agents_prompt_order
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
-        File.write(File.join(config_dir, "AGENTS.md"), "Config instructions.\n")
+        File.write(File.join(config_dir, "PRINCIPLES.md"), "Config instructions.\n")
         skill_dir = File.join(config_dir, "skills", "planner")
         FileUtils.mkdir_p(skill_dir)
         File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nSkill body.\n")
@@ -412,7 +444,7 @@ class TestPrompts < KwardTestCase
   def test_invalid_config_prompt_and_skill_warn_and_skip
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
-      Dir.mkdir(File.join(dir, "AGENTS.md"))
+      Dir.mkdir(File.join(dir, "PRINCIPLES.md"))
       invalid_skill_path = File.join(dir, "skills", "bad", "SKILL.md")
       FileUtils.mkdir_p(invalid_skill_path)
 
@@ -423,7 +455,7 @@ class TestPrompts < KwardTestCase
           refute_includes content, "Available skills:"
         end
 
-        assert_includes stderr, "Warning: skipping Kward prompt file"
+        assert_includes stderr, "Warning: skipping Kward principles file"
         assert_includes stderr, "Warning: skipping Kward skill"
       end
     end

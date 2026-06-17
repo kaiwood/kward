@@ -18,7 +18,7 @@ Optionally install the starter pack after installation:
 kward init
 ```
 
-This downloads Kward's default prompts and base `AGENTS.md` into your config directory. It is useful for a first setup, but safe to skip if you prefer to create your own instructions. Existing files are left untouched.
+This downloads Kward's default prompts and base `PRINCIPLES.md` into your config directory. It is useful for a first setup, but safe to skip if you prefer to create your own instructions. Existing files are left untouched.
 
 Then start Kward and sign in when needed:
 
@@ -75,7 +75,7 @@ Start here:
 Feature guides:
 
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
-- [Extensibility](doc/extensibility.md): `AGENTS.md`, personas, skills, and prompt templates.
+- [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, personas, skills, and prompt templates.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
 - [Web search](doc/web-search.md): live search providers and network behavior.
 - [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading.

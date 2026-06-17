@@ -2,25 +2,26 @@
 
 Kward can be customized at several levels:
 
-- `AGENTS.md` for coding guidance and repository rules.
+- `PRINCIPLES.md` for global coding principles, plus workspace `AGENTS.md` for repository rules.
 - Prompt templates for reusable slash-command prompts.
 - Skills for reusable agent instructions the model can load on demand.
 - Personas for assistant personality and communication style.
 - Plugins for trusted Ruby extensions that add commands, footer UI, prompt context, transcript-event observers, and RPC-visible behavior.
 
-Prompts, skills, personas, and config-directory `AGENTS.md` live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead.
+Prompts, skills, personas, and config-directory `PRINCIPLES.md` live beside the config file. By default this is `~/.kward`; if `KWARD_CONFIG_PATH` is set, Kward uses that file's directory instead. Config-directory `AGENTS.md` remains supported as a legacy alias.
 
 Plugins are different: user plugins are loaded only from `~/.kward/plugins`, regardless of `KWARD_CONFIG_PATH` or the current project directory. See the dedicated [Plugins guide](plugins.md).
 
 ## Which extension point should I use?
 
-- Use `AGENTS.md` when you want Kward to follow coding rules, project conventions, or review expectations.
+- Use config-directory `PRINCIPLES.md` for global coding principles, review expectations, or workflow guidance.
+- Use workspace `AGENTS.md` for repository-specific rules and conventions.
 - Use prompt templates when you want reusable slash commands such as `/plan <task>` or `/review <diff>`.
 - Use skills when you want reusable instructions that Kward can load only when a task needs them.
 - Use personas when you want to change tone, role, or communication style.
 - Use plugins when you need Ruby code to run locally, add commands, observe transcript events, or integrate with another tool.
 
-The optional starter pack installs a useful base `AGENTS.md` and prompt templates. You can install it with:
+The optional starter pack installs a useful base `PRINCIPLES.md` and prompt templates. You can install it with:
 
 ```bash
 kward init
@@ -30,12 +31,12 @@ kward init
 
 Kward separates repository guidance from workspace-specific agent personality.
 
-- Config-directory `AGENTS.md`: global coding guidance appended to Kward's built-in system instructions when present.
-- Workspace `AGENTS.md`: repository guidance loaded from the active workspace root when present.
+- Config-directory `PRINCIPLES.md`: global coding guidance appended to Kward's built-in system instructions when present. Config-directory `AGENTS.md` is still read as a legacy alias when `PRINCIPLES.md` is absent.
+- Workspace `AGENTS.md`: repository guidance available from the active workspace root when present.
 
-Use `AGENTS.md` for engineering instructions such as coding rules, project conventions, testing requirements, review expectations, and workflow guidance. Avoid putting personality, roleplay, or communication style there; configure those as personas instead.
+Use these files for engineering instructions such as coding rules, project conventions, testing requirements, review expectations, and workflow guidance. Avoid putting personality, roleplay, or communication style there; configure those as personas instead.
 
-Workspace `AGENTS.md` is injected once when a conversation starts. Kward refreshes it only when the file changes or when the agent edits the workspace `AGENTS.md`. Config-directory and workspace `AGENTS.md` files are skipped with a warning if they exceed 32 KiB, because they are injected into every model request.
+By default, workspace `AGENTS.md` is represented by a compact read-when-relevant instruction instead of injecting the full file into every request. Set `enforce_workspace_agents_file` to `true` if you need the full workspace file injected directly. Prompt files are skipped with a warning if they exceed 32 KiB.
 
 ## Prompt templates
 
@@ -157,11 +158,11 @@ Persona evaluation order is:
 Prompt assembly order is:
 
 1. Kward built-in base prompt
-2. Config-directory `AGENTS.md`
+2. Config-directory `PRINCIPLES.md` or legacy `AGENTS.md`
 3. Evaluated persona text
 4. Plugin prompt context
 5. Skills listing
-6. Workspace `AGENTS.md`
+6. Workspace `AGENTS.md` hint, or full contents when `enforce_workspace_agents_file` is `true`
 
 If no persona entries match, Kward simply omits that part. Conversation compaction uses a neutral prompt without workspace personality, so summaries stay continuation-focused and machine-oriented.
 

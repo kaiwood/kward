@@ -168,7 +168,7 @@ class TestCLI < KwardTestCase
       original_install = Kward::StarterPackInstaller.method(:install)
       Kward::StarterPackInstaller.define_singleton_method(:install) do
         calls << true
-        Kward::StarterPackInstaller::Result.new(installed: ["AGENTS.md"], skipped: ["prompts/plan.md"])
+        Kward::StarterPackInstaller::Result.new(installed: ["PRINCIPLES.md"], skipped: ["prompts/plan.md"])
       end
 
       with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do

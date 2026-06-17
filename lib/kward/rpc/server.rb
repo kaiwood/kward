@@ -560,8 +560,13 @@ module Kward
       def startup_resources(params)
         @session_manager.runtime_state(session_id: params.fetch("sessionId"))
         sections = []
-        agents_path = File.join(ConfigFiles.config_dir, "AGENTS.md")
-        sections << { name: "Context", items: ["AGENTS.md"] } if File.exist?(agents_path)
+        context_items = []
+        if File.exist?(ConfigFiles.config_principles_path)
+          context_items << "PRINCIPLES.md"
+        elsif File.exist?(ConfigFiles.config_agents_path)
+          context_items << "AGENTS.md"
+        end
+        sections << { name: "Context", items: context_items } unless context_items.empty?
         skills = ConfigFiles.skills.map(&:name)
         prompts = ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES).map { |template| "/#{template.command}" }
         plugins = @session_manager.plugin_commands.map { |command| "/#{command.name}" }

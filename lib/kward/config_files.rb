@@ -243,12 +243,25 @@ module Kward
       overlay_settings(config)
     end
 
-    # Reads global agent instructions from the config directory.
+    # Reads global principle instructions from the config directory.
+    #
+    # `PRINCIPLES.md` is preferred. `AGENTS.md` remains a backwards-compatible
+    # alias for existing installations.
     #
     # @return [String, nil] prompt text, or nil when absent/too large
     def agents_prompt
-      path = File.join(config_dir, "AGENTS.md")
-      read_prompt_file(path, "Kward prompt file")
+      path = config_principles_path
+      return read_prompt_file(path, "Kward principles file") if File.exist?(path)
+
+      read_prompt_file(config_agents_path, "Kward AGENTS.md alias")
+    end
+
+    def config_principles_path
+      File.join(config_dir, "PRINCIPLES.md")
+    end
+
+    def config_agents_path
+      File.join(config_dir, "AGENTS.md")
     end
 
     # Builds persona prompt text from default, workspace, model, reasoning,
