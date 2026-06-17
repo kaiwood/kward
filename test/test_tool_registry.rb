@@ -312,12 +312,13 @@ class TestToolRegistry < KwardTestCase
           conversation = Kward::Conversation.new(workspace_root: workspace)
           registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace))
 
-          assert_includes conversation.system_message[:content], "Old guidance."
+          assert_includes conversation.system_message[:content], "AGENTS.md"
 
           registry.dispatch(tool_call("read_file", path: "AGENTS.md"), conversation)
           registry.dispatch(tool_call("edit_file", path: "AGENTS.md", edits: [{ old_text: "Old guidance.", new_text: "New guidance." }]), conversation)
 
-          assert_includes conversation.system_message[:content], "New guidance."
+          assert_includes conversation.system_message[:content], "AGENTS.md"
+          refute_includes conversation.system_message[:content], "New guidance."
           refute_includes conversation.system_message[:content], "Old guidance."
         end
       end

@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.69.0] - 2026-06-17
+
 ### Added
 
 - Added a `docs:build` Rake task for building the YARD documentation site.

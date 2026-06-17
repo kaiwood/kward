@@ -283,7 +283,7 @@ class TestRPCServer < KwardTestCase
       end
 
       result = read_framed_messages(output).find { |message| message["id"] == 1 }["result"]
-      assert_equal ["I prefer concise answers"], result["memories"].map { |memory| memory["text"] }
+      assert_equal ["The user prefers concise answers"], result["memories"].map { |memory| memory["text"] }
       assert_equal ["soft_001"], result["memories"].map { |memory| memory["id"] }
     end
   end
