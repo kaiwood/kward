@@ -66,9 +66,11 @@ module Kward
           run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
           [true, nil]
         else
-          return run_plugin_command(name, argument, agent) if plugin_command_for(name)
-
-          [false, nil]
+          if plugin_command_for(name)
+            run_busy_local_command_and_requeue(activity: "running") { run_plugin_command(name, argument, agent) }
+          else
+            [false, nil]
+          end
         end
       end
 

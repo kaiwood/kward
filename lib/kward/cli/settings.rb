@@ -488,8 +488,10 @@ module Kward
         provider = selected_login_provider(selected)
         return unless provider
 
-        login(provider: provider)
-        reload_client_config
+        run_busy_local_command_and_requeue(activity: "running") do
+          login(provider: provider)
+          reload_client_config
+        end
       rescue StandardError => e
         @prompt.say("\nLogin error: #{e.message}\n")
       end

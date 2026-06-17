@@ -2216,6 +2216,22 @@ edit this prompt"
     assert_empty client.seen_messages
   end
 
+  def test_login_slash_command_shows_running_spinner_after_provider_selection
+    prompt = BusySelectPrompt.new(["/login", "/exit"], selections: ["OpenAI"])
+    client = RecordingClient.new([])
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+    cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+    cli.interactive_loop(agent: agent)
+
+    running_index = prompt.events.index([:begin_busy_input, "You>", "running"])
+    assert running_index
+    finish_after_running = prompt.events[running_index..].index([:finish_busy_input])
+    assert finish_after_running
+    assert_equal ["openai"], cli.login_providers
+    assert_empty client.seen_messages
+  end
+
   def test_login_slash_command_selects_github_provider_without_calling_client
     prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["GitHub"])
     client = RecordingClient.new([])
@@ -2657,6 +2673,35 @@ edit this prompt"
 
       assert_equal 1, client.seen_messages.length
       assert_includes prompt.output.join("\n"), "messages=3"
+    end
+  end
+
+  def test_interactive_plugin_slash_command_shows_running_spinner
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins_dir)
+      File.write(File.join(plugins_dir, "news.rb"), <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.command "news", description: "Show news" do |_args, ctx|
+            ctx.say("news ready")
+          end
+        end
+      RUBY
+      prompt = BusyPrompt.new(["/news", "/exit"])
+      client = RecordingClient.new([])
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        cli.interactive_loop(agent: agent)
+      end
+
+      running_index = prompt.events.index([:begin_busy_input, "You>", "running"])
+      assert running_index
+      finish_after_running = prompt.events[running_index..].index([:finish_busy_input])
+      assert finish_after_running
+      assert_equal 0, client.seen_messages.length
+      assert_includes prompt.output.join("\n"), "news ready"
     end
   end
 
