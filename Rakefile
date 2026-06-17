@@ -1,3 +1,4 @@
+require "fileutils"
 require "rdoc/task"
 require "yard"
 require "yard/rake/yardoc_task"
@@ -26,5 +27,7 @@ end
 
 namespace :docs do
   desc "Build the YARD documentation site"
-  task build: :yard
+  task build: :yard do
+    FileUtils.touch("_yardoc/.nojekyll")
+  end
 end

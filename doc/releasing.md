@@ -14,8 +14,10 @@ Release steps before publishing:
 
    ```bash
    bundle exec rake rdoc
-   bundle exec yard doc
+   bundle exec rake docs:build
    ```
+
+   Pushes to `main` deploy the generated YARD site to GitHub Pages.
 
 5. Build the gem locally:
 

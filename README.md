@@ -103,6 +103,8 @@ Build the YARD documentation site:
 bundle exec rake docs:build
 ```
 
+The generated site is written to `_yardoc/`. Pushes to `main` deploy that directory to GitHub Pages.
+
 Generate the RDoc API documentation:
 
 ```bash
