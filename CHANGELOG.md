@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Changed interactive runtime command/status messages to use a `Runtime>` transcript label instead of the assistant label.
+- Changed terminal tool transcript rendering to show a single `Tool>` block containing the tool invocation summary and result summary.
 - Separated conversation system prompt state from durable transcript messages; provider request context still includes the current system prompt on every model request.
 - Persisted system prompt snapshots as session audit metadata when the prompt changes, without adding them to transcript messages.
 

@@ -26,7 +26,6 @@ module Kward
             render_assistant_message(message)
             message_tool_calls(message).each do |tool_call|
               tool_calls_by_id[tool_call_id(tool_call)] = tool_call
-              render_tool_call(tool_call)
             end
           when "tool"
             render_tool_message(message, tool_calls_by_id)
@@ -55,20 +54,12 @@ module Kward
         render_tool_result(tool_call, message_content(message).to_s)
       end
 
-      def render_tool_call(tool_call)
-        if prompt_interface?
-          print_tool_call(tool_call)
-        else
-          @prompt.say("\n#{colored("Tool>", :magenta, :bold)}\n#{tool_command(tool_call)}\n")
-        end
-      end
-
       def render_tool_result(tool_call, content)
         summary = limit_tool_output_lines(tool_result_summary(tool_call, content), INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         if prompt_interface?
           print_tool_result(tool_call, content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         else
-          @prompt.say("\n#{colored("Tool output>", :cyan, :bold)}\n#{summary}\n")
+          @prompt.say("\n#{colored("Tool>", :magenta, :bold)}\n#{summary}\n")
         end
       end
 
@@ -102,7 +93,6 @@ module Kward
           :streamed
         when Events::ToolCall
           flush_markdown_deltas(markdown_chunks)
-          print_tool_call(event.tool_call)
           :streamed
         when Events::ToolResult
           flush_markdown_deltas(markdown_chunks)
@@ -304,24 +294,6 @@ module Kward
         RetryMessage.format(event)
       end
 
-      # Writes the tool call output for the terminal CLI flow.
-      def print_tool_call(tool_call)
-        if prompt_interface?
-          if @prompt.respond_to?(:write_stream_block)
-            @prompt.write_stream_block("Tool", "#{tool_command(tool_call)}\n", finish: true)
-          else
-            @prompt.start_stream_block("Tool")
-            @prompt.write_delta("#{tool_command(tool_call)}\n")
-            @prompt.finish_stream_block
-          end
-        else
-          start_stream_block("Tool")
-          puts tool_command(tool_call)
-          $stdout.flush
-          @stream_block = nil
-        end
-      end
-
       # Writes the tool result output for the terminal CLI flow.
       def print_tool_result(tool_call, content, line_limit: nil)
         summary = tool_result_summary(tool_call, content)
@@ -329,14 +301,14 @@ module Kward
         if prompt_interface?
           summary = summary.end_with?("\n") ? summary : "#{summary}\n"
           if @prompt.respond_to?(:write_stream_block)
-            @prompt.write_stream_block("Tool output", summary, finish: true)
+            @prompt.write_stream_block("Tool", summary, finish: true)
           else
-            @prompt.start_stream_block("Tool output")
+            @prompt.start_stream_block("Tool")
             @prompt.write_delta(summary)
             @prompt.finish_stream_block
           end
         else
-          start_stream_block("Tool output")
+          start_stream_block("Tool")
           print summary
           puts unless summary.end_with?("\n")
           $stdout.flush

@@ -518,9 +518,11 @@ class TestCLI < KwardTestCase
 
   def test_prompt_interface_interactive_turn_flushes_deltas_before_tool_events
     prompt = BusyPrompt.new([])
+    readme_tool_call = tool_call("read_file", path: "README.md")
     events = [
       Kward::Events::AssistantDelta.new(delta: "before tool"),
-      Kward::Events::ToolCall.new(tool_call: tool_call("read_file", path: "README.md"))
+      Kward::Events::ToolCall.new(tool_call: readme_tool_call),
+      Kward::Events::ToolResult.new(tool_call: readme_tool_call, content: "README contents\n")
     ]
     agent = EventAgent.new(events)
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
@@ -1203,7 +1205,7 @@ class TestCLI < KwardTestCase
     assert_equal "read_file", client.seen_messages[1][3][:name]
     assert_includes client.seen_messages[1][3][:content], "# Kward"
     assert_includes output, "Tool>"
-    assert_includes output, "Tool output>"
+    refute_includes output, "Tool output>"
   end
 
   def test_resume_explicit_session_path_loads_prior_messages
@@ -1364,8 +1366,8 @@ class TestCLI < KwardTestCase
       assert_includes output, "You> inspect file"
       assert_includes output, "Reasoning>\nNeed to inspect the file."
       assert_includes output, "I'll read it."
-      assert_includes output, "Tool>\nread_file"
-      assert_includes output, "Tool output>\nread_file: README.md"
+      assert_includes output, "Tool>\nread_file: README.md"
+      refute_includes output, "Tool output>"
       assert_includes output, "1 lines, 16 bytes"
       refute_includes output, "README contents"
     end
@@ -1417,7 +1419,7 @@ class TestCLI < KwardTestCase
       cli.send(:print_tool_result, tool_call("custom_tool", {}), content, line_limit: Kward::CLI::INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
     end.first
 
-    summary = strip_ansi(output).split("Tool output>\n", 2).last
+    summary = strip_ansi(output).split("Tool>\n", 2).last
     assert_equal 10, summary.lines.length
     assert_includes output, "line10"
     refute_includes output, "truncated"
@@ -1435,7 +1437,8 @@ class TestCLI < KwardTestCase
         cli.interactive_loop
       end.first
 
-      assert_includes output, "Tool output>"
+      assert_includes output, "Tool>"
+      refute_includes output, "Tool output>"
       assert_includes output, "...[truncated"
       refute_includes output, "line12"
       tool_message = client.seen_messages[1].find { |message| (message["role"] || message[:role]) == "tool" }
@@ -1462,7 +1465,7 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       output = strip_ansi(prompt.output.join("\n"))
-      assert_includes output, "Tool output>\ncustom_tool: line1"
+      assert_includes output, "Tool>\ncustom_tool: line1"
       assert_includes output, "...[truncated 3 lines]"
       refute_includes output, "line12"
     end

@@ -107,7 +107,6 @@ module Kward
         when Events::ToolCall
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
-          print_tool_call(event.tool_call)
         when Events::ToolResult
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
