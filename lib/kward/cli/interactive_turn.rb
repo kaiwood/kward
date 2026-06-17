@@ -95,6 +95,9 @@ module Kward
         when Events::AssistantDelta
           stream_state[:streamed] = true
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)
+        when Events::Steering
+          finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+          print_user_transcript(event.input)
         when Events::SteeringApplied
           @prompt.clear_steered_count if @prompt.respond_to?(:clear_steered_count)
         when Events::Retry

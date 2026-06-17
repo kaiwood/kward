@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed in-flight steering messages so they appear in the interactive transcript as `You>` entries.
 - Fixed interactive plugin slash commands and OAuth login so they show the running spinner while executing.
 - Fixed `/reload` so terminal plugin footers use the newly loaded plugin renderer without restarting Kward.
 - Fixed Codex GPT-5.5 RPC model metadata to report a 400k context window instead of the upstream OpenAI API context window.

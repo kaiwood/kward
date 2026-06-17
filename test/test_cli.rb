@@ -2186,6 +2186,7 @@ edit this prompt"
     rendered = strip_ansi(output.string)
     assert_equal ["first", "steer this"], agent.conversation.messages.select { |message| message[:role] == "user" }.map { |message| message[:content] }
     assert_equal "first", client.seen_messages[0][1][:content]
+    assert_includes rendered, "You> steer this"
     assert_includes rendered, "steering"
     assert_includes rendered, "streaming"
     refute_includes rendered, "steered"
