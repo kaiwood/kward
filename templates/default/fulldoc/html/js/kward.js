@@ -25,7 +25,25 @@ window.setTimeout(resetScrollPosition, 50)
 window.setTimeout(resetScrollPosition, 250)
 if (window.requestAnimationFrame) window.requestAnimationFrame(resetScrollPosition)
 
-const setupGuideSearch = () => {
+const guideLinks = {
+  'doc/getting-started.md': 'file.getting-started.html',
+  'doc/usage.md': 'file.usage.html',
+  'doc/configuration.md': 'file.configuration.html',
+  'doc/authentication.md': 'file.authentication.html',
+  'doc/troubleshooting.md': 'file.troubleshooting.html',
+  'doc/memory.md': 'file.memory.html',
+  'doc/personas.md': 'file.personas.html',
+  'doc/extensibility.md': 'file.extensibility.html',
+  'doc/plugins.md': 'file.plugins.html',
+  'doc/web-search.md': 'file.web-search.html',
+  'doc/code-search.md': 'file.code-search.html',
+  'doc/rpc.md': 'file.rpc.html',
+  'doc/releasing.md': 'file.releasing.html'
+}
+
+let pageController = null
+
+const setupGuideSearch = (signal) => {
   const form = document.querySelector('.kward-guide-search')
   const input = document.getElementById('kward-guide-search-input')
   const results = document.getElementById('kward-guide-search-results')
@@ -109,7 +127,7 @@ const setupGuideSearch = () => {
       link.appendChild(title)
 
       const summary = document.createElement('span')
-      summary.textContent = excerpt(item.text, query)
+      summary.textContent = excerpt(item.text || '', query)
       link.appendChild(summary)
 
       results.appendChild(link)
@@ -118,7 +136,7 @@ const setupGuideSearch = () => {
     results.classList.add('open')
   }
 
-  input.addEventListener('input', renderResults)
+  input.addEventListener('input', renderResults, { signal })
 
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -126,67 +144,54 @@ const setupGuideSearch = () => {
       closeResults()
       input.blur()
     }
-  })
+  }, { signal })
 
   form.addEventListener('submit', (event) => {
     event.preventDefault()
     const firstResult = results.querySelector('a')
-    if (firstResult) window.location.href = firstResult.href
-  })
+    if (firstResult) visitPage(firstResult.href)
+  }, { signal })
 
   document.addEventListener('click', (event) => {
     if (!form.contains(event.target)) closeResults()
-  })
+  }, { signal })
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  resetScrollPosition()
-  setupGuideSearch()
-
+const setupNavigation = (signal) => {
   const toggle = document.querySelector('.kward-nav-toggle')
 
   if (toggle) {
     toggle.addEventListener('click', () => {
       const isOpen = document.body.classList.toggle('kward-nav-open')
       toggle.setAttribute('aria-expanded', String(isOpen))
-    })
+    }, { signal })
   }
 
   document.querySelectorAll('.kward-nav-menu-button').forEach((button) => {
     button.addEventListener('click', (event) => {
       event.stopPropagation()
       button.parentElement.classList.toggle('open')
-    })
+    }, { signal })
   })
 
   document.addEventListener('click', (event) => {
     document.querySelectorAll('.kward-nav-menu.open').forEach((menu) => {
       if (!menu.contains(event.target)) menu.classList.remove('open')
     })
-  })
+  }, { signal })
+}
 
-  const guideLinks = {
-    'doc/getting-started.md': 'file.getting-started.html',
-    'doc/usage.md': 'file.usage.html',
-    'doc/configuration.md': 'file.configuration.html',
-    'doc/authentication.md': 'file.authentication.html',
-    'doc/troubleshooting.md': 'file.troubleshooting.html',
-    'doc/memory.md': 'file.memory.html',
-    'doc/personas.md': 'file.personas.html',
-    'doc/extensibility.md': 'file.extensibility.html',
-    'doc/plugins.md': 'file.plugins.html',
-    'doc/web-search.md': 'file.web-search.html',
-    'doc/code-search.md': 'file.code-search.html',
-    'doc/rpc.md': 'file.rpc.html',
-    'doc/releasing.md': 'file.releasing.html'
-  }
-
+const rewriteGuideLinks = () => {
   document.querySelectorAll('#filecontents a[href]').forEach((link) => {
     const target = guideLinks[link.getAttribute('href')]
     if (target) link.setAttribute('href', target)
   })
+}
 
+const setupCodeCopy = () => {
   document.querySelectorAll('pre').forEach((block) => {
+    if (block.closest('.code-copy-wrapper')) return
+
     const code = block.querySelector('code')
     if (!code || !navigator.clipboard) return
 
@@ -210,4 +215,82 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wrapper.appendChild(button)
   })
+}
+
+const initializePage = () => {
+  if (pageController) pageController.abort()
+  pageController = new AbortController()
+
+  resetScrollPosition()
+  setupGuideSearch(pageController.signal)
+  setupNavigation(pageController.signal)
+  rewriteGuideLinks()
+  setupCodeCopy()
+}
+
+const samePageUrl = (url) => {
+  return url.origin === window.location.origin &&
+    url.pathname === window.location.pathname &&
+    url.search === window.location.search
+}
+
+const navigableUrl = (url) => {
+  if (url.hash) return false
+  if (url.origin !== window.location.origin) return false
+  if (!url.pathname.endsWith('.html') && !url.pathname.endsWith('/')) return false
+  return !samePageUrl(url)
+}
+
+const replacePage = (html, url) => {
+  const nextDocument = new DOMParser().parseFromString(html, 'text/html')
+  const nextBody = nextDocument.body
+  if (!nextBody) throw new Error('Missing response body')
+
+  document.title = nextDocument.title
+  document.body.className = nextBody.className
+  document.body.innerHTML = nextBody.innerHTML
+  window.history.pushState({}, '', url.href)
+  initializePage()
+}
+
+const visitPage = async (href) => {
+  const url = new URL(href, window.location.href)
+
+  if (!navigableUrl(url)) {
+    window.location.href = url.href
+    return
+  }
+
+  document.documentElement.classList.add('kward-page-loading')
+
+  try {
+    const response = await fetch(url.href)
+    if (!response.ok) throw new Error(`Failed to load ${url.href}`)
+
+    const html = await response.text()
+    replacePage(html, url)
+  } catch (_error) {
+    window.location.href = url.href
+  } finally {
+    document.documentElement.classList.remove('kward-page-loading')
+  }
+}
+
+document.addEventListener('click', (event) => {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
+  const link = event.target.closest('a[href]')
+  if (!link || link.target || link.hasAttribute('download')) return
+
+  const url = new URL(link.href, window.location.href)
+  if (!navigableUrl(url)) return
+
+  event.preventDefault()
+  visitPage(url.href)
 })
+
+window.addEventListener('popstate', () => {
+  window.location.reload()
+})
+
+document.addEventListener('DOMContentLoaded', initializePage)
