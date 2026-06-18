@@ -175,6 +175,7 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Codex", id: "gpt-5.4-mini", current: false }
     assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
     assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+    assert_includes models, { provider: "OpenRouter", id: "z-ai/glm-5.2", current: false }
     assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
     assert_includes models, { provider: "Anthropic", id: "claude-sonnet-4-6", current: false }
     assert_includes models, { provider: "Anthropic", id: "claude-opus-4-8", current: false }
@@ -252,6 +253,7 @@ class TestClient < KwardTestCase
       models = client.available_models
 
       assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+      assert_includes models, { provider: "OpenRouter", id: "z-ai/glm-5.2", current: false }
     end
   end
 
@@ -265,6 +267,7 @@ class TestClient < KwardTestCase
         models = client.available_models
 
         assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
+        assert_includes models, { provider: "OpenRouter", id: "z-ai/glm-5.2", current: false }
         assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
         refute models.any? { |model| model[:provider] == "Anthropic" }
         assert_empty http.requests
