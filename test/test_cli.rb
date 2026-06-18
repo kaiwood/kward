@@ -1381,8 +1381,8 @@ class TestCLI < KwardTestCase
         events << [:select_session]
         choices.first
       end
-      store.define_singleton_method(:recent) do |limit: 20|
-        prompt.events << [:recent, limit]
+      store.define_singleton_method(:recent_tree) do |limit: 20|
+        prompt.events << [:recent_tree, limit]
         super(limit: limit)
       end
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
@@ -1390,13 +1390,31 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       loading_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
-      recent_index = prompt.events.index([:recent, nil])
+      recent_index = prompt.events.index([:recent_tree, nil])
       select_index = prompt.events.index([:select_session])
       assert loading_index
       assert recent_index
       assert select_index
       assert_operator loading_index, :<, recent_index
       assert_operator loading_index, :<, select_index
+    end
+  end
+
+  def test_resume_picker_displays_cloned_sessions_as_tree_children
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      source.attach(conversation)
+      conversation.append_user("source prompt")
+      store.create_independent_from_conversation(conversation, parent_session: source)
+      prompt = BusySelectPrompt.new(["/resume", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      choices = prompt.select_choices.first
+      assert choices.any? { |label| label.start_with?("└─ source prompt") }, choices.inspect
     end
   end
 
@@ -1864,9 +1882,8 @@ edit this prompt"
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
-      assert_equal "clone session — #{File.basename(clone.path)}", prompt.select_choices.first.first
-      assert_includes prompt.select_choices.first, "root session — #{File.basename(source.path)}"
-      refute prompt.select_choices.first.any? { |choice| choice.include?("└─ clone session") }
+      assert_equal "root session — #{File.basename(source.path)}", prompt.select_choices.first.first
+      assert_includes prompt.select_choices.first, "└─ clone session — #{File.basename(clone.path)}"
     end
   end
 

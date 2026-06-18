@@ -314,7 +314,7 @@ module Kward
       end
 
       def select_session_path(session_store)
-        sessions = session_store.recent(limit: nil)
+        sessions = session_store.recent_tree(limit: nil)
         if sessions.empty?
           runtime_output("No saved sessions found.")
           return nil

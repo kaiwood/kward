@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `/resume` session picker entries to show cloned session ancestry as a tree.
+
 ## [0.69.1] - 2026-06-18
 
 ### Fixed
