@@ -130,7 +130,8 @@ module Kward
       return "" if display_indent.to_i <= 0
 
       connector_position = show_connector ? display_indent - 1 : -1
-      (0...(display_indent * 3)).map do |index|
+      indentation = "      "
+      indentation + (0...(display_indent * 3)).map do |index|
         level = index / 3
         position = index % 3
         gutter = gutters.find { |candidate| candidate[:position] == level }

@@ -1835,8 +1835,10 @@ class TestCLI < KwardTestCase
       side_choice = choices.find { |choice| choice.include?("side branch") }
       refute choices.any? { |choice| choice.include?("assistant: ") && choice.include?("(no content)") }
       assert choices.any? { |choice| choice.include?("[read: README.md:2-4]") }
-      assert_includes active_choice, "├⊟ • user: active branch"
-      assert_includes side_choice, "└⊟ user: side branch"
+      root_choice = choices.find { |choice| choice.include?("root prompt") }
+      assert root_choice.start_with?("• user: root prompt"), root_choice
+      assert_includes active_choice, "      ├⊟ • user: active branch"
+      assert_includes side_choice, "      └⊟ user: side branch"
       assert_operator choices.index(active_choice), :<, choices.index(side_choice)
     end
   end

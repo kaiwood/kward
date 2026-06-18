@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Fixed
 
 - Fixed `/resume` session picker entries to show cloned session ancestry as a tree.
+- Made `/tree` branch indentation more visible in the terminal session picker.
 
 ## [0.69.1] - 2026-06-18
 
