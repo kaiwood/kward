@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <%= erb(:headers) %>
   </head>
   <body class="kward-docs <%= home_page? ? 'kward-home-body' : 'kward-content-body' %>">
-    <div id="main_progress" aria-hidden="true"></div>
+    <a href="#main" class="kward-skip-link">Skip to content</a>
 
     <header class="kward-topbar">
       <a class="kward-brand" href="<%= url_for('index.html') %>">
@@ -13,14 +13,17 @@
           <strong>Kward</strong>
         </span>
       </a>
-      <button class="kward-nav-toggle" type="button" aria-expanded="false" aria-controls="kward-primary-nav" onclick="document.body.classList.toggle('kward-nav-open'); this.setAttribute('aria-expanded', document.body.classList.contains('kward-nav-open'))">
-        Menu
+      <button class="kward-nav-toggle" type="button" aria-expanded="false" aria-controls="kward-primary-nav" aria-label="Toggle navigation menu" onclick="document.body.classList.toggle('kward-nav-open'); this.setAttribute('aria-expanded', document.body.classList.contains('kward-nav-open'))">
+        <span class="kward-nav-toggle-bar"></span>
+        <span class="kward-nav-toggle-bar"></span>
+        <span class="kward-nav-toggle-bar"></span>
+        <span class="kward-sr-only">Menu</span>
       </button>
       <nav id="kward-primary-nav" class="kward-topnav" aria-label="Primary navigation">
         <a href="<%= url_for('index.html') %>" class="<%= 'active' if home_page? %>">Home</a>
         <div class="kward-nav-menu <%= 'active' if guide_page? %>">
           <a class="kward-nav-menu-link" href="<%= url_for('file.README.html') %>">User Guides</a>
-          <button class="kward-nav-menu-button" type="button" aria-label="Open user guides menu">⌄</button>
+          <button class="kward-nav-menu-button" type="button" aria-label="Expand user guides" aria-expanded="false">⌄</button>
           <div class="kward-nav-dropdown">
             <% guide_groups.each do |title, items| %>
               <section>
@@ -137,5 +140,7 @@ kward --working-directory ~/code/project "Explain this project"</code></pre>
         </main>
       </div>
     <% end %>
+
+    <script type="text/javascript" charset="utf-8" src="<%= url_for('js/kward.js') %>"></script>
   </body>
 </html>

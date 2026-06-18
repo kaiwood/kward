@@ -131,7 +131,7 @@ end
 include KwardDocsNavigation
 
 def javascripts
-  super + %w(js/kward.js)
+  super
 end
 
 def stylesheets

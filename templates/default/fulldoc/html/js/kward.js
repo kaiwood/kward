@@ -1,30 +1,4 @@
-const resetScrollPosition = () => {
-  if (window.location.hash) return
-
-  document.documentElement.scrollTop = 0
-  if (document.body) document.body.scrollTop = 0
-  window.scrollTo(0, 0)
-
-  const main = document.getElementById('main')
-  if (main) {
-    main.scrollTop = 0
-    main.scrollLeft = 0
-  }
-}
-
-if (!window.location.hash && 'scrollRestoration' in history) {
-  history.scrollRestoration = 'manual'
-}
-
-resetScrollPosition()
-window.addEventListener('load', resetScrollPosition)
-window.addEventListener('pageshow', resetScrollPosition)
-window.addEventListener('DOMContentLoaded', resetScrollPosition)
-window.setTimeout(resetScrollPosition, 0)
-window.setTimeout(resetScrollPosition, 50)
-window.setTimeout(resetScrollPosition, 250)
-if (window.requestAnimationFrame) window.requestAnimationFrame(resetScrollPosition)
-
+(() => {
 const guideLinks = {
   'doc/getting-started.md': 'file.getting-started.html',
   'doc/usage.md': 'file.usage.html',
@@ -58,9 +32,12 @@ const setupGuideSearch = (signal) => {
     return
   }
 
+  let selectedIndex = -1
+
   const closeResults = () => {
     results.classList.remove('open')
     results.innerHTML = ''
+    selectedIndex = -1
   }
 
   const excerpt = (text, query) => {
@@ -98,6 +75,18 @@ const setupGuideSearch = (signal) => {
       .map((result) => result.item)
   }
 
+  const updateActiveItem = () => {
+    const items = results.querySelectorAll('a')
+    items.forEach((item, i) => {
+      if (i === selectedIndex) {
+        item.classList.add('kward-search-active')
+        item.scrollIntoView({ block: 'nearest' })
+      } else {
+        item.classList.remove('kward-search-active')
+      }
+    })
+  }
+
   const renderResults = () => {
     const query = input.value.trim()
     if (query.length < 2) {
@@ -107,6 +96,7 @@ const setupGuideSearch = (signal) => {
 
     const matches = search(query)
     results.innerHTML = ''
+    selectedIndex = -1
 
     if (matches.length === 0) {
       const empty = document.createElement('div')
@@ -139,17 +129,37 @@ const setupGuideSearch = (signal) => {
   input.addEventListener('input', renderResults, { signal })
 
   input.addEventListener('keydown', (event) => {
+    const items = results.querySelectorAll('a')
+
     if (event.key === 'Escape') {
       input.value = ''
       closeResults()
       input.blur()
+      return
+    }
+
+    if (items.length === 0) return
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      selectedIndex = Math.min(selectedIndex + 1, items.length - 1)
+      updateActiveItem()
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      selectedIndex = Math.max(selectedIndex - 1, 0)
+      updateActiveItem()
+    } else if (event.key === 'Enter') {
+      if (selectedIndex >= 0 && items[selectedIndex]) {
+        event.preventDefault()
+        window.location.href = items[selectedIndex].href
+      }
     }
   }, { signal })
 
   form.addEventListener('submit', (event) => {
     event.preventDefault()
     const firstResult = results.querySelector('a')
-    if (firstResult) visitPage(firstResult.href)
+    if (firstResult) window.location.href = firstResult.href
   }, { signal })
 
   document.addEventListener('click', (event) => {
@@ -159,25 +169,79 @@ const setupGuideSearch = (signal) => {
 
 const setupNavigation = (signal) => {
   const toggle = document.querySelector('.kward-nav-toggle')
+  const nav = document.getElementById('kward-primary-nav')
+
+  const closeMenu = () => {
+    document.body.classList.remove('kward-nav-open')
+    if (toggle) toggle.setAttribute('aria-expanded', 'false')
+    document.querySelectorAll('.kward-nav-menu.open').forEach((menu) => {
+      menu.classList.remove('open')
+      const btn = menu.querySelector('.kward-nav-menu-button')
+      if (btn) btn.setAttribute('aria-expanded', 'false')
+    })
+  }
 
   if (toggle) {
+    // The inline onclick handles the toggle. We only need to close
+    // sub-menus when the main menu closes.
     toggle.addEventListener('click', () => {
-      const isOpen = document.body.classList.toggle('kward-nav-open')
-      toggle.setAttribute('aria-expanded', String(isOpen))
+      if (!document.body.classList.contains('kward-nav-open')) {
+        document.querySelectorAll('.kward-nav-menu.open').forEach((menu) => {
+          menu.classList.remove('open')
+          const btn = menu.querySelector('.kward-nav-menu-button')
+          if (btn) btn.setAttribute('aria-expanded', 'false')
+        })
+      }
     }, { signal })
   }
 
   document.querySelectorAll('.kward-nav-menu-button').forEach((button) => {
     button.addEventListener('click', (event) => {
       event.stopPropagation()
-      button.parentElement.classList.toggle('open')
+      const menu = button.parentElement
+      const wasOpen = menu.classList.contains('open')
+      document.querySelectorAll('.kward-nav-menu.open').forEach((m) => {
+        m.classList.remove('open')
+        const b = m.querySelector('.kward-nav-menu-button')
+        if (b) b.setAttribute('aria-expanded', 'false')
+      })
+      if (!wasOpen) {
+        menu.classList.add('open')
+        button.setAttribute('aria-expanded', 'true')
+      }
     }, { signal })
   })
 
+  // Close menu when a nav link is clicked (mobile navigation)
+  if (nav) {
+    nav.addEventListener('click', (event) => {
+      const link = event.target.closest('a[href]')
+      if (link) closeMenu()
+    }, { signal })
+  }
+
+  // Close on outside click
   document.addEventListener('click', (event) => {
+    if (document.body.classList.contains('kward-nav-open')) {
+      if (nav && !nav.contains(event.target) && toggle && !toggle.contains(event.target)) {
+        closeMenu()
+      }
+    }
     document.querySelectorAll('.kward-nav-menu.open').forEach((menu) => {
-      if (!menu.contains(event.target)) menu.classList.remove('open')
+      if (!menu.contains(event.target)) {
+        menu.classList.remove('open')
+        const btn = menu.querySelector('.kward-nav-menu-button')
+        if (btn) btn.setAttribute('aria-expanded', 'false')
+      }
     })
+  }, { signal })
+
+  // Close on Escape
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.body.classList.contains('kward-nav-open')) {
+      closeMenu()
+      if (toggle) toggle.focus()
+    }
   }, { signal })
 }
 
@@ -221,76 +285,15 @@ const initializePage = () => {
   if (pageController) pageController.abort()
   pageController = new AbortController()
 
-  resetScrollPosition()
   setupGuideSearch(pageController.signal)
   setupNavigation(pageController.signal)
   rewriteGuideLinks()
   setupCodeCopy()
 }
 
-const samePageUrl = (url) => {
-  return url.origin === window.location.origin &&
-    url.pathname === window.location.pathname &&
-    url.search === window.location.search
-}
-
-const navigableUrl = (url) => {
-  if (url.hash) return false
-  if (url.origin !== window.location.origin) return false
-  if (!url.pathname.endsWith('.html') && !url.pathname.endsWith('/')) return false
-  return !samePageUrl(url)
-}
-
-const replacePage = (html, url) => {
-  const nextDocument = new DOMParser().parseFromString(html, 'text/html')
-  const nextBody = nextDocument.body
-  if (!nextBody) throw new Error('Missing response body')
-
-  document.title = nextDocument.title
-  document.body.className = nextBody.className
-  document.body.innerHTML = nextBody.innerHTML
-  window.history.pushState({}, '', url.href)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePage, { once: true })
+} else {
   initializePage()
 }
-
-const visitPage = async (href) => {
-  const url = new URL(href, window.location.href)
-
-  if (!navigableUrl(url)) {
-    window.location.href = url.href
-    return
-  }
-
-  document.documentElement.classList.add('kward-page-loading')
-
-  try {
-    const response = await fetch(url.href)
-    if (!response.ok) throw new Error(`Failed to load ${url.href}`)
-
-    const html = await response.text()
-    replacePage(html, url)
-  } catch (_error) {
-    window.location.href = url.href
-  } finally {
-    document.documentElement.classList.remove('kward-page-loading')
-  }
-}
-
-document.addEventListener('click', (event) => {
-  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-
-  const link = event.target.closest('a[href]')
-  if (!link || link.target || link.hasAttribute('download')) return
-
-  const url = new URL(link.href, window.location.href)
-  if (!navigableUrl(url)) return
-
-  event.preventDefault()
-  visitPage(url.href)
-})
-
-window.addEventListener('popstate', () => {
-  window.location.reload()
-})
-
-document.addEventListener('DOMContentLoaded', initializePage)
+})()
