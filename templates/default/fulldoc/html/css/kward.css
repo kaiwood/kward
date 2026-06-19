@@ -425,6 +425,101 @@ body.kward-docs #footer {
   color: var(--kward-accent-bright);
 }
 
+/*
+  Hero tagline "swosh": "Your terminal." flies out to the left and is
+  replaced by "Your RPC frontend." flying in from the right, then cycles
+  back. The second line mirrors it from the opposite side — "Your agent."
+  flies out to the right and is replaced by "Your engine." flying in from
+  the left — both lines swap in sync. Pure CSS — no JS. The global
+  @media (prefers-reduced-motion) rule above collapses the animation to
+  the static original copy ("Your terminal. Your agent.") so it remains
+  accessible and calm.
+*/
+.kward-swosh {
+  box-sizing: content-box;
+  display: inline-block;
+  height: 0.98em;
+  line-height: 0.98;
+  margin: -0.16em -0.08em;
+  overflow: hidden;
+  padding: 0.16em 0.08em;
+  position: relative;
+  vertical-align: top;
+}
+
+.kward-hero h1 .kward-swosh-text {
+  color: var(--kward-ink);
+  display: inline-block;
+  line-height: 0.98;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+/* The longer text ("Your RPC frontend.") stays in flow to size the box;
+   the shorter "Your terminal." overlays it absolutely. */
+.kward-swosh-text-a {
+  left: 0.08em;
+  position: absolute;
+  top: 0.16em;
+}
+
+.kward-swosh-text-a {
+  animation: kward-swosh-a 12s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.kward-swosh-text-b {
+  animation: kward-swosh-b 12s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  position: relative;
+}
+
+@keyframes kward-swosh-a {
+  0%, 40%   { transform: translateX(0);     opacity: 1; filter: none; }
+  50%       { transform: translateX(-140%); opacity: 0; filter: blur(3px); }
+  51%, 88%  { transform: translateX(140%);  opacity: 0; filter: none; }
+  100%      { transform: translateX(0);     opacity: 1; filter: none; }
+}
+
+@keyframes kward-swosh-b {
+  0%, 40%   { transform: translateX(140%);  opacity: 0; filter: none; }
+  50%       { transform: translateX(0);     opacity: 1; filter: none; }
+  88%       { transform: translateX(0);     opacity: 1; filter: none; }
+  100%      { transform: translateX(-140%); opacity: 0; filter: blur(3px); }
+}
+
+/*
+  Second line, mirrored: "Your agent." exits to the right while
+  "Your LLM engine." enters from the left (left-to-right), in sync with
+  the first swosh. Both texts keep the accent-bright color of the
+  original "Your agent." span.
+*/
+.kward-hero h1 .kward-swosh-text-c {
+  animation: kward-swosh-c 12s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  color: var(--kward-accent-bright);
+  left: 0.08em;
+  position: absolute;
+  top: 0.16em;
+}
+
+.kward-hero h1 .kward-swosh-text-d {
+  animation: kward-swosh-d 12s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  color: var(--kward-accent-bright);
+  position: relative;
+}
+
+@keyframes kward-swosh-c {
+  0%, 40%  { transform: translateX(0);     opacity: 1; filter: none; }
+  50%       { transform: translateX(140%);  opacity: 0; filter: blur(3px); }
+  51%, 88%  { transform: translateX(-140%); opacity: 0; filter: none; }
+  100%      { transform: translateX(0);     opacity: 1; filter: none; }
+}
+
+@keyframes kward-swosh-d {
+  0%, 40%  { transform: translateX(-140%); opacity: 0; filter: none; }
+  50%       { transform: translateX(0);     opacity: 1; filter: none; }
+  88%       { transform: translateX(0);     opacity: 1; filter: none; }
+  100%      { transform: translateX(140%);  opacity: 0; filter: blur(3px); }
+}
+
 .kward-lede {
   color: var(--kward-ink);
   font-size: 19px;
