@@ -15,6 +15,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed root-prompt session tree navigation so it no longer persists an empty active branch that makes cloned sessions resume with a blank transcript.
 - Fixed `/resume` session picker entries to show cloned session ancestry as a tree.
 - Made `/tree` branch indentation more visible in the terminal session picker.
 - Fixed `Encoding::CompatibilityError` crash during compaction when tool results contained ASCII-8BIT (BINARY) strings from HTTP response bodies or shell output. Tool content is now normalized to UTF-8 on append.

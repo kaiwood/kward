@@ -363,7 +363,7 @@ module Kward
         message = entry["message"]
         if message.is_a?(Hash) && message_role(message) == "user"
           target_leaf = entry["parentId"]
-          target_leaf.to_s.empty? ? @active_session.reset_leaf : @active_session.branch(target_leaf)
+          @active_session.branch(target_leaf) unless target_leaf.to_s.empty?
           return full_message_text(message)
         end
 

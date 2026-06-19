@@ -251,8 +251,8 @@ module Kward
         if summarize
           summary = summarize_branch(rpc_session, from_id: previous_leaf, to_id: target_leaf, custom_instructions: custom_instructions)
           target_leaf = rpc_session.session.append_branch_summary(target_leaf, from_id: previous_leaf, summary: summary, details: {})
-        else
-          target_leaf ? rpc_session.session.branch(target_leaf) : rpc_session.session.reset_leaf
+        elsif target_leaf
+          rpc_session.session.branch(target_leaf)
         end
 
         reload_rpc_session(rpc_session)

@@ -298,6 +298,7 @@ class TestRPCSessionManager < KwardTestCase
       rpc_session = manager.send(:fetch_session, session[:id])
       rpc_session.conversation.append_user("first")
       rpc_session.conversation.append_assistant("reply")
+      previous_leaf_id = rpc_session.session.leaf_id
       first_id = manager.session_tree(session_id: session[:id])[:items].first[:entryId]
 
       manager.set_tree_label(session_id: session[:id], entry_id: first_id, label: "start")
@@ -310,8 +311,9 @@ class TestRPCSessionManager < KwardTestCase
       assert_equal "start", tree.first[:label]
       assert tree.first[:labelTimestamp]
       assert_equal "first", result[:editorText]
-      assert_nil rpc_session.session.leaf_id
-      assert_empty rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      assert_equal previous_leaf_id, rpc_session.session.leaf_id
+      assert_equal ["user", "assistant"], rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.map { |message| message["role"] || message[:role] }
+      refute jsonl_records(session[:path]).any? { |record| record["type"] == "leaf" && record["targetId"].nil? }
     end
   end
 
