@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.70.0] - 2026-06-19
+
 ### Added
 
 - Added `z-ai/glm-5.2` to the static OpenRouter model choices.
