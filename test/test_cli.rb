@@ -1918,6 +1918,71 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_tree_slash_command_loads_tree_with_spinner_before_opening_picker
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      prompt = BusySelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"])
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0|
+        events << [:select, message, title, initial_index]
+        choices.first
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      tree_select_index = prompt.events.index { |event| event[0] == :select && event[1] == "Tree>" }
+      loading_indices = prompt.events.each_index.select { |index| prompt.events[index] == [:begin_busy_input, "You>", "loading"] }
+      tree_loading_index = loading_indices.find { |index| tree_select_index && index < tree_select_index }
+      tree_finish_index = prompt.events[tree_loading_index..tree_select_index]&.index([:finish_busy_input])
+      assert tree_select_index
+      assert tree_loading_index
+      assert tree_finish_index
+      assert_operator tree_loading_index, :<, tree_select_index
+      assert_operator tree_loading_index + tree_finish_index, :<, tree_select_index
+    end
+  end
+
+  def test_tree_slash_command_applies_selection_with_loading_spinner
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      conversation.append_user("edit this prompt")
+      prompt = BusySelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"])
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0|
+        events << [:select, message, title, initial_index]
+        choices.find { |choice| choice.include?("edit this prompt") } || choices.first
+      end
+      prompt.define_singleton_method(:prefill_input) do |value|
+        events << [:prefill_input, value]
+        super(value)
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      tree_select_index = prompt.events.index { |event| event[0] == :select && event[1] == "Tree>" }
+      loading_indices = prompt.events.each_index.select { |index| prompt.events[index] == [:begin_busy_input, "You>", "loading"] }
+      tree_loading_index = loading_indices.find { |index| tree_select_index && index > tree_select_index }
+      tree_finish_index = prompt.events[tree_loading_index..]&.index([:finish_busy_input])
+      prefill_index = prompt.events.index([:prefill_input, "edit this prompt"])
+      assert tree_select_index
+      assert tree_loading_index
+      assert tree_finish_index
+      assert prefill_index
+      assert_operator tree_select_index, :<, tree_loading_index
+      assert_operator tree_loading_index + tree_finish_index, :<, prefill_index
+    end
+  end
+
   def test_tree_slash_command_uses_display_content_for_prefill
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

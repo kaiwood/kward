@@ -195,13 +195,10 @@ module Kward
       def finish_select_prompt
         @mutex.synchronize do
           @select_state = nil
-          clear_prompt_locked
-          restore_scroll_region_locked
           self.composer_input = ""
           self.composer_cursor = 0
-          @asking = false
-          @rendered_rows = 0
-          @cursor_rendered_row = 0
+          @asking = true
+          render_prompt_locked
           @output_io.flush
         end
       end

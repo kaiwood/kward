@@ -133,7 +133,7 @@ module Kward
           return nil
         end
 
-        tree_items = session_tree_items(session_store)
+        tree_items = run_busy_local_command_and_requeue { session_tree_items(session_store) }
         if tree_items.empty?
           runtime_output("No session tree entries found.")
           return nil
@@ -149,8 +149,12 @@ module Kward
         entry = tree_items.find { |item| item[:entry]["id"].to_s == entry_id }&.fetch(:entry)
         return nil unless entry
 
-        selected_text = apply_session_tree_entry(entry)
-        runtime_output("Moved session tree position to #{entry["id"]}.")
+        selected_text = nil
+        agent = run_busy_local_command_and_requeue do
+          selected_text = apply_session_tree_entry(entry)
+          runtime_output("Moved session tree position to #{entry["id"]}.")
+          reload_active_session(session_store)
+        end
         if selected_text && !selected_text.empty?
           if @prompt.respond_to?(:prefill_input)
             @prompt.prefill_input(selected_text)
@@ -158,8 +162,7 @@ module Kward
             runtime_output("Selected text for editing:\n#{selected_text}")
           end
         end
-        agent = reload_active_session(session_store)
-        @prompt.redraw if @prompt.respond_to?(:redraw)
+        @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
         agent
       rescue StandardError => e
         runtime_output("Session tree error: #{e.message}")

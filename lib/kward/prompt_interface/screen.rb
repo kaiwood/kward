@@ -75,10 +75,12 @@ module Kward
         return if @reserved_rows == new_reserved_rows && @last_height == height
 
         old_reserved_rows = @reserved_rows
-        rows_to_clear = [old_reserved_rows, new_reserved_rows].max
+        old_top = [height - old_reserved_rows + 1, 1].max
         @reserved_rows = new_reserved_rows
+        new_top = composer_top_row(height)
         @output_io.print("\e[1;#{transcript_bottom_row(height)}r")
-        clear_composer_region_locked(rows_to_clear, height: height)
+        clear_screen_rows_locked(old_top, new_top - 1) if new_top > old_top
+        @last_composer_rows = []
         redraw_transcript_locked(width: width, height: height) if redraw_transcript && new_reserved_rows < old_reserved_rows
       end
 
@@ -115,8 +117,11 @@ module Kward
           next if row == previous
 
           move_to_screen(top + index, 1)
-          @output_io.print(TTY::Cursor.clear_line)
-          @output_io.print(row) unless row.to_s.empty?
+          if row
+            @output_io.print(row)
+          else
+            @output_io.print(TTY::Cursor.clear_line)
+          end
         end
 
         rows.length.upto(rows.length + rows_to_clear - 1) do |index|

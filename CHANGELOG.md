@@ -16,6 +16,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed overlay open/close rendering so the interactive composer stays visible instead of briefly blinking away.
 - Fixed interactive session diff totals to show the net workspace diff instead of counting repeated edits to the same lines multiple times.
 - Fixed `/sessions` picker cancellation so Escape closes smoothly without a blink, while keeping the loading spinner visible as saved sessions are loaded.
 - Fixed root-prompt session tree navigation so it no longer persists an empty active branch that makes cloned sessions resume with a blank transcript.

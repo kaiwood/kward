@@ -376,7 +376,8 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "\e_G"
     refute_includes output.string, "\e]1337;File="
     assert_includes strip_ansi(output.string), "                              State your business."
-    assert_operator output.string.rindex(TTY::Cursor.clear_line), :<, color_index
+    clear_index = output.string.rindex(TTY::Cursor.clear_line)
+    assert_operator clear_index, :<, color_index if clear_index
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
@@ -592,7 +593,7 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
-  def test_prompt_interface_select_cancel_restores_scroll_region_state
+  def test_prompt_interface_select_cancel_keeps_composer_reserved
     input, writer = IO.pipe
     output = StringIO.new
     writer.write("\e")
@@ -600,7 +601,7 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
     assert_nil prompt.select("Session>", (1..12).map { |index| "choice #{index}" })
-    assert_equal 0, prompt.instance_variable_get(:@reserved_rows)
+    assert_operator prompt.instance_variable_get(:@reserved_rows), :>, 0
   ensure
     input&.close unless input&.closed?
   end
@@ -954,6 +955,63 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_prompt_interface_select_close_keeps_composer_visible
+    input, writer = IO.pipe
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    writer.write("\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "choice one", prompt.select("Tree>", ["choice one"], title: "Session Tree")
+
+    assert_includes strip_ansi(output.string), "╭ Tree"
+    assert_includes strip_ansi(output.string), "│"
+    assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE
+    assert_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+    assert_equal true, prompt.instance_variable_get(:@asking)
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_closing_slash_overlay_does_not_blank_composer_rows_before_repaint
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      slash_commands: [{ name: "plan", description: "Plan work.", argument_hint: "" }]
+    )
+    prompt.start
+    prompt.send(:composer_input=, "/")
+    prompt.send(:composer_cursor=, 1)
+    prompt.send(:render_prompt_locked)
+    output.truncate(0)
+    output.rewind
+
+    prompt.send(:dismiss_slash_overlay)
+    prompt.send(:render_prompt_locked)
+
+    composer_top = 18
+    composer_bottom = 20
+    composer_top.upto(composer_bottom - 1) do |row|
+      refute_includes output.string, "\e[#{row};1H#{TTY::Cursor.clear_line}\e[#{row + 1};1H"
+    end
+    assert_includes strip_ansi(output.string), "╭ You"
+    assert_includes strip_ansi(output.string), "│ /"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_prompt_interface_selected_overlay_items_keep_color_after_navigation
     input, writer = IO.pipe
     output = StringIO.new
@@ -1081,7 +1139,7 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:tick_spinner_locked)
     prompt.send(:render_prompt_locked)
 
-    assert_equal 1, output.string.scan(TTY::Cursor.clear_line).length
+    assert_equal 0, output.string.scan(TTY::Cursor.clear_line).length
     assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
   end
 

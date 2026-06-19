@@ -9,17 +9,19 @@ module Kward
       def render_prompt_locked
         return unless @started && @asking
 
-        handle_resize_locked
-        width, height = screen_size
-        rows, cursor_row, cursor_col = composer_layout(width, height)
-        ensure_scroll_region_locked(rows.length, width: width, height: height)
-        @rendered_rows = rows.length
-        render_composer_rows_locked(rows, height: height)
-        @cursor_rendered_row = cursor_row
-        @last_width = width
-        @last_height = height
-        move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
-        render_cursor_visibility_locked
+        with_synchronized_output_locked do
+          handle_resize_locked
+          width, height = screen_size
+          rows, cursor_row, cursor_col = composer_layout(width, height)
+          ensure_scroll_region_locked(rows.length, width: width, height: height)
+          @rendered_rows = rows.length
+          render_composer_rows_locked(rows, height: height)
+          @cursor_rendered_row = cursor_row
+          @last_width = width
+          @last_height = height
+          move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
+          render_cursor_visibility_locked
+        end
         @output_io.flush
       end
 
