@@ -16,6 +16,40 @@ class TestConversation < KwardTestCase
     File.delete(path) if path && File.exist?(path)
   end
 
+  def test_append_tool_normalizes_binary_encoded_content_to_utf_8
+    binary_content = +"caf\xc3\xa9 r\xc3\xa9sum\xc3\xa9"
+    binary_content = binary_content.force_encoding(Encoding::ASCII_8BIT)
+    conversation = Kward::Conversation.new(system_message: nil)
+
+    conversation.append_tool(tool_call_id: "call_1", name: "fetch_content", content: binary_content)
+
+    stored = conversation.messages.last[:content]
+    assert_equal Encoding::UTF_8, stored.encoding
+    assert stored.valid_encoding?
+  end
+
+  def test_append_tool_scrubs_invalid_binary_bytes
+    invalid_binary = +"caf\xe9\xff\xfe"
+    invalid_binary = invalid_binary.force_encoding(Encoding::ASCII_8BIT)
+    conversation = Kward::Conversation.new(system_message: nil)
+
+    conversation.append_tool(tool_call_id: "call_2", name: "fetch_raw", content: invalid_binary)
+
+    stored = conversation.messages.last[:content]
+    assert_equal Encoding::UTF_8, stored.encoding
+    assert stored.valid_encoding?
+  end
+
+  def test_append_tool_preserves_utf_8_content
+    utf8_content = +"caf\xc3\xa9"
+    utf8_content = utf8_content.force_encoding(Encoding::UTF_8)
+    conversation = Kward::Conversation.new(system_message: nil)
+
+    conversation.append_tool(tool_call_id: "call_3", name: "read_file", content: utf8_content)
+
+    assert_equal Encoding::UTF_8, conversation.messages.last[:content].encoding
+  end
+
   def test_compact_preserves_system_message_and_resets_read_paths
     compacted = nil
     conversation = Kward::Conversation.new(system_message: { role: "system", content: "system" }, read_paths: ["README.md"])

@@ -300,4 +300,26 @@ class TestCompactor < KwardTestCase
     end
     assert_equal original, conversation.messages
   end
+
+  def test_serializer_handles_binary_tool_content_mixed_with_utf8
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("Héllo café")
+    conversation.append_assistant("Fetching.")
+    conversation.append_tool(
+      tool_call_id: "call_1",
+      name: "fetch_content",
+      content: (+"# Fetched\n\ncafé résumé").force_encoding(Encoding::ASCII_8BIT)
+    )
+    conversation.append_assistant("Done.")
+    conversation.append_user("More work")
+    conversation.append_assistant("Done.")
+    conversation.append_user("Another request")
+
+    serializer = Kward::Compaction::ConversationSerializer.new
+    result = serializer.serialize(conversation.messages)
+
+    assert_equal Encoding::UTF_8, result.encoding
+    assert result.valid_encoding?
+    assert_includes result, "café"
+  end
 end
