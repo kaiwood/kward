@@ -1,3 +1,5 @@
+require "time"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
@@ -173,6 +175,188 @@ module Kward
         runtime_output((["Session tree:"] + numbered_labels).join("\n"))
         answer = @prompt.ask("Tree entry number>").to_s.strip
         answer.match?(/\A\d+\z/) ? labels[answer.to_i - 1] : nil
+      end
+
+      def rewind_session(session_store)
+        return say_sessions_unavailable unless session_store
+        unless @active_session
+          runtime_output("No active persisted session.")
+          return nil
+        end
+
+        points = rewind_points(session_store)
+        if points.empty?
+          runtime_output("No prompts to rewind to.")
+          return nil
+        end
+
+        labels = points.map { |point| point[:label] }
+        choice = select_rewind_point(labels)
+        return nil unless choice
+
+        point = points[labels.index(choice)]
+        return nil unless point
+
+        if point[:return_leaf_id]
+          @active_session.branch(point[:return_leaf_id])
+          @rewind_return_leaf_id = nil
+        else
+          @rewind_return_leaf_id = @active_session.leaf_id || session_store.current_leaf(@active_session.path)
+          selected_text = apply_session_tree_entry(point[:entry])
+          if selected_text && !selected_text.empty?
+            if @prompt.respond_to?(:prefill_input)
+              @prompt.prefill_input(selected_text)
+            else
+              runtime_output("Selected prompt for editing:\n#{selected_text}")
+            end
+          end
+        end
+        agent = reload_active_session(session_store)
+        @prompt.redraw if @prompt.respond_to?(:redraw)
+        agent
+      rescue StandardError => e
+        runtime_output("Rewind error: #{e.message}")
+        nil
+      end
+
+      def select_rewind_point(labels)
+        if @prompt.respond_to?(:select)
+          return @prompt.select("Rewind>", labels, title: "Rewind")
+        end
+
+        numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
+        runtime_output((["Rewind to:"] + numbered_labels).join("\n"))
+        answer = @prompt.ask("Rewind point number>").to_s.strip
+        answer.match?(/\A\d+\z/) ? labels[answer.to_i - 1] : nil
+      end
+
+      def rewind_points(session_store)
+        entries = session_store.session_entries(@active_session.path)
+        current_leaf_id = @active_session.leaf_id || session_store.current_leaf(@active_session.path)
+        active_path = active_session_tree_entry_ids(entries, current_leaf_id)
+        user_entries = entries.select { |entry| rewind_entry?(entry) }
+        points = user_entries.reverse_each.with_index.map do |entry, index|
+          {
+            entry: entry,
+            label: rewind_point_label(entry, index, active_path.include?(entry["id"].to_s)),
+            timestamp: entry["timestamp"]
+          }
+        end
+        return_point = rewind_return_point(entries, current_leaf_id)
+        points = [return_point] + points if return_point
+        align_rewind_point_timestamps(points, picker_choice_width)
+      end
+
+      def rewind_return_point(entries, current_leaf_id)
+        return nil if @rewind_return_leaf_id.to_s.empty?
+        return nil if @rewind_return_leaf_id.to_s == current_leaf_id.to_s
+
+        entry = entries.find { |candidate| candidate["id"].to_s == @rewind_return_leaf_id.to_s }
+        return nil unless entry
+
+        {
+          return_leaf_id: @rewind_return_leaf_id,
+          label: "Return to where I was: #{truncate_rewind_text(rewind_return_text(entry))}",
+          timestamp: entry["timestamp"]
+        }
+      end
+
+      def align_rewind_point_timestamps(points, width)
+        labels = points.map { |point| point[:label].to_s }
+        label_width = labels.map(&:length).max.to_i
+        points.each do |point|
+          timestamp = relative_rewind_time(point[:timestamp])
+          next if timestamp.empty?
+
+          point[:label] = right_aligned_picker_metadata(point[:label], timestamp, width: width, minimum_label_width: label_width)
+        end
+      end
+
+      def right_aligned_picker_metadata(label, metadata, width:, minimum_label_width: 0)
+        label = label.to_s
+        metadata = metadata.to_s
+        fallback_width = minimum_label_width + metadata.length + 2
+        target_width = width.to_i.positive? ? width.to_i : fallback_width
+        label_width = [target_width - metadata.length - 2, 1].max
+        "#{truncate_picker_label(label, label_width).ljust(label_width)}  #{metadata}"
+      end
+
+      def truncate_picker_label(label, width)
+        return "" if width <= 0
+
+        text = label.to_s
+        return text if text.length <= width
+        return text.slice(0, width) if width <= 3
+
+        "#{text.slice(0, width - 3)}..."
+      end
+
+      def relative_rewind_time(timestamp)
+        time = Time.iso8601(timestamp.to_s).utc
+        seconds = [(Time.now.utc - time).to_i, 0].max
+        case seconds
+        when 0...60
+          "just now"
+        when 60...3600
+          minutes = seconds / 60
+          "#{minutes} min ago"
+        when 3600...86_400
+          hours = seconds / 3600
+          "#{hours} h ago"
+        else
+          days = seconds / 86_400
+          "#{days} d ago"
+        end
+      rescue ArgumentError
+        ""
+      end
+
+      def rewind_return_text(entry)
+        message = entry["message"]
+        text = full_message_text(message) if message.is_a?(Hash)
+        text.to_s.empty? ? entry["id"].to_s : text
+      end
+
+      def rewind_entry?(entry)
+        return false unless entry["type"] == "message"
+
+        message = entry["message"]
+        message.is_a?(Hash) && message_role(message) == "user" && !full_message_text(message).empty?
+      end
+
+      def rewind_point_label(entry, index, active)
+        marker = active ? "• " : ""
+        prefix = case index
+                 when 0 then "Last prompt"
+                 when 1 then "2 turns ago"
+                 else "#{index + 1} turns ago"
+                 end
+        "#{marker}#{prefix}: #{truncate_rewind_text(full_message_text(entry["message"] || {}))}"
+      end
+
+      def active_session_tree_entry_ids(entries, leaf_id)
+        by_id = entries.to_h { |entry| [entry["id"].to_s, entry] }
+        ids = []
+        seen = {}
+        current = by_id[leaf_id.to_s]
+        while current && !seen[current["id"].to_s]
+          seen[current["id"].to_s] = true
+          ids << current["id"].to_s
+          current = by_id[current["parentId"].to_s]
+        end
+        ids
+      end
+
+      def truncate_rewind_text(text)
+        text.to_s.gsub(/\s+/, " ").strip
+      end
+
+      def picker_choice_width
+        if @prompt.respond_to?(:picker_choice_width)
+          @prompt.picker_choice_width
+        else
+          96
+        end
       end
 
       def apply_session_tree_entry(entry)

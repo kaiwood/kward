@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added `z-ai/glm-5.2` to the static OpenRouter model choices.
+- Added `/rewind` for revisiting earlier user prompts and continuing from there as a branch, while `/tree` remains the advanced full session tree navigator.
 
 ### Changed
 

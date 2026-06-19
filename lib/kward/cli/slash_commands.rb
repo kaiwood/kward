@@ -54,6 +54,8 @@ module Kward
           [true, nil]
         when "clone"
           [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]
+        when "rewind"
+          [true, run_busy_local_command_and_requeue { rewind_session(session_store) }]
         when "tree"
           [true, run_busy_local_command_and_requeue { navigate_session_tree(session_store) }]
         when "copy"

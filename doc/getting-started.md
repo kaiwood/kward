@@ -98,6 +98,7 @@ Inside interactive Kward:
 /status             show session and context status
 /sessions           open the saved sessions picker
 /resume             alias for /sessions
+/rewind             revisit an earlier prompt
 /export notes.md    export the transcript
 /compact            summarize older context when a chat gets long
 /exit               leave Kward

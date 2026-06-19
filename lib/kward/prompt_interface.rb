@@ -270,6 +270,10 @@ module Kward
       answer.start_with?("y")
     end
 
+    def picker_choice_width
+      [overlay_card_width(screen_width) - 6, 1].max
+    end
+
     def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
       return nil if choices.empty? && !custom
 

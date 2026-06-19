@@ -311,6 +311,7 @@ module Kward
         input = expanded_input || input
         @footer_conversation = agent.conversation
         begin
+          @rewind_return_leaf_id = nil
           auto_name_active_session(display_input || input)
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }

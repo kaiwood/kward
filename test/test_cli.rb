@@ -1,6 +1,16 @@
 require_relative "test_helper"
 
 class TestCLI < KwardTestCase
+  def rewrite_session_timestamps(path, timestamps_by_id)
+    lines = File.readlines(path).map do |line|
+      record = JSON.parse(line)
+      timestamp = timestamps_by_id[record["id"]]
+      record["timestamp"] = timestamp.utc.iso8601(3) if timestamp
+      JSON.generate(record)
+    end
+    File.write(path, lines.join("\n") + "\n")
+  end
+
   class RecordingPromptInterface < FakePrompt
     attr_reader :options, :started
 
@@ -1732,6 +1742,154 @@ class TestCLI < KwardTestCase
     end
   end
 
+
+  def test_rewind_slash_command_selects_user_prompt_and_prefills_prompt
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      conversation.append_user("edit this prompt")
+      conversation.append_assistant("future reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/rewind", "/exit"], "edit this prompt")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+      loaded_session, loaded_conversation = store.load(session.path)
+
+      assert_equal ["Rewind>"], prompt.select_messages.last(1)
+      assert_equal "Rewind", prompt.select_titles.last
+      assert prompt.select_choices.last.all? { |choice| choice.include?("prompt") }
+      assert prompt.select_choices.last.first.include?("Last prompt: edit this prompt")
+      assert_equal ["edit this prompt"], prompt.prefilled_inputs
+      assert_equal "first reply", loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["content"]
+      assert_equal loaded_session.leaf_id, loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["id"]
+    end
+  end
+
+  def test_rewind_slash_command_can_return_to_where_user_was
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      conversation.append_assistant("first reply")
+      conversation.append_user("edit this prompt")
+      conversation.append_assistant("future reply")
+      prompt = FakeSettingsPrompt.new(
+        ["/resume #{session.path}", "/rewind", "/rewind", "/exit"],
+        []
+      )
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0|
+        @select_messages << message
+        @select_choices << choices
+        @select_titles << title
+        @select_initial_indices << initial_index
+        choices.find { |choice| choice.include?("Return to where I was") } || choices.find { |choice| choice.include?("Last prompt: edit this prompt") }
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+      loaded_session, loaded_conversation = store.load(session.path)
+
+      assert_equal ["edit this prompt"], prompt.prefilled_inputs
+      assert_includes prompt.select_choices[1].first, "Return to where I was: future reply"
+      assert_equal "future reply", loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["content"]
+      assert_equal loaded_session.leaf_id, loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["id"]
+    end
+  end
+
+  def test_rewind_slash_command_shows_only_user_prompts
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("root prompt")
+      conversation.append_assistant({
+        "role" => "assistant",
+        "content" => nil,
+        "tool_calls" => [tool_call("read_file", path: "README.md")]
+      })
+      conversation.append_tool(tool_call_id: "call_read_file", name: "read_file", content: "README contents")
+      conversation.append_assistant("assistant reply")
+      conversation.append_user("latest prompt")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/rewind", "/exit"], "root prompt")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      choices = prompt.select_choices.last
+      assert_equal 2, choices.length
+      assert choices.any? { |choice| choice.include?("root prompt") }
+      assert choices.any? { |choice| choice.include?("latest prompt") }
+      refute choices.any? { |choice| choice.include?("assistant reply") }
+      refute choices.any? { |choice| choice.include?("README contents") }
+      refute choices.any? { |choice| choice.include?("read_file") }
+    end
+  end
+
+  def test_rewind_slash_command_shows_relative_timestamps
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("older prompt")
+      older_entry = session.leaf_id
+      conversation.append_assistant("older reply")
+      conversation.append_user("newer prompt")
+      newer_entry = session.leaf_id
+      rewrite_session_timestamps(session.path, { older_entry => Time.now.utc - 14 * 60, newer_entry => Time.now.utc - 4 * 60 })
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/rewind", "/exit"], "older prompt")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      choices = prompt.select_choices.last
+      assert choices.any? { |choice| choice.include?("newer prompt") && choice.end_with?("4 min ago") }
+      assert choices.any? { |choice| choice.include?("older prompt") && choice.end_with?("14 min ago") }
+    end
+  end
+
+  def test_rewind_slash_command_uses_display_content_for_prefill
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("Plan this:\nfix bug\n", display_content: "/plan fix bug")
+      conversation.append_assistant("future reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/rewind", "/exit"], "/plan fix bug")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal ["/plan fix bug"], prompt.prefilled_inputs
+      assert prompt.select_choices.last.any? { |choice| choice.include?("Last prompt: /plan fix bug") }
+    end
+  end
+
+  def test_rewind_slash_command_without_composer_prefill_does_not_auto_run_selected_text
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      prompt = FakeSessionSelectNoPrefillPrompt.new(["/resume #{session.path}", "/rewind", "/exit"], "first prompt")
+      client = RecordingClient.new(["should not be used"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_empty client.seen_messages
+      assert_includes prompt.output.join("\n"), "Selected prompt for editing:\nfirst prompt"
+    end
+  end
 
   def test_tree_slash_command_selects_user_entry_and_prefills_prompt
     Dir.mktmpdir do |config_dir|

@@ -101,6 +101,8 @@ Use slash commands for local actions that should not go to the model:
 | `/resume` | alias for `/sessions`. |
 | `/name <name>` | name the current session. |
 | `/clone` | copy the current session into a new branch. |
+| `/rewind` | revisit an earlier prompt and try a different direction. |
+| `/tree` | inspect and navigate the full technical session tree. |
 | `/copy last` | copy the latest assistant answer. |
 | `/copy transcript` | copy the transcript as Markdown. |
 | `/export notes.md` | write the transcript to a Markdown file. |
@@ -137,6 +139,8 @@ Later:
 ```
 
 `/resume` remains available as an alias.
+
+Use `/rewind` when you want to go back to an earlier prompt and try a different direction. Kward shows user prompts from the current session, lets you edit a prior prompt, and continues from that point as a branch. Use `/tree` when you need the full technical session tree, including branches, assistant entries, tool calls, and tool results.
 
 Use `/compact` when a conversation gets long. Kward summarizes older context and keeps recent context active. After compaction, it may need to re-read files before editing them again.
 
