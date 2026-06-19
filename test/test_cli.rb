@@ -1400,7 +1400,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_resume_picker_is_covered_by_loading_spinner
+  def test_resume_picker_loads_sessions_with_spinner_before_opening_picker
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       saved = store.create
@@ -1420,14 +1420,17 @@ class TestCLI < KwardTestCase
 
       cli.interactive_loop
 
-      loading_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
       recent_index = prompt.events.index([:recent_tree, nil])
       select_index = prompt.events.index([:select_session])
-      assert loading_index
+      loading_start_index = prompt.events.index([:begin_busy_input, "You>", "loading"])
+      loading_finish_index = prompt.events.index([:finish_busy_input])
       assert recent_index
       assert select_index
-      assert_operator loading_index, :<, recent_index
-      assert_operator loading_index, :<, select_index
+      assert loading_start_index
+      assert loading_finish_index
+      assert_operator loading_start_index, :<, recent_index
+      assert_operator recent_index, :<, loading_finish_index
+      assert_operator loading_finish_index, :<, select_index
     end
   end
 

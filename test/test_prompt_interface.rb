@@ -579,6 +579,46 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_consecutive_escape_cancels_once
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e\e")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_nil prompt.select("Session>", ["first", "second"])
+    refute_includes strip_ansi(output.string), "You>"
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_cancel_restores_scroll_region_state
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_nil prompt.select("Session>", (1..12).map { |index| "choice #{index}" })
+    assert_equal 0, prompt.instance_variable_get(:@reserved_rows)
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_escape_with_pending_escape_timeout_cancels_once
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    prompt.send(:queue_pending_keys, "\e")
+
+    assert_nil prompt.select("Session>", ["first", "second"])
+    refute_includes strip_ansi(output.string), "You>"
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_submits_on_csi_u_enter
     input, writer = IO.pipe
     output = StringIO.new

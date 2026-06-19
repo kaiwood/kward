@@ -78,7 +78,7 @@ module Kward
 
       def handle_select_escape_sequence
         sequence = read_pending_escape_sequence
-        return SELECT_CANCEL if sequence.empty?
+        return SELECT_CANCEL if sequence.empty? || sequence.start_with?("\e")
 
         key_name = @reader.console.keys["\e#{sequence}"]
         case key_name
@@ -196,6 +196,7 @@ module Kward
         @mutex.synchronize do
           @select_state = nil
           clear_prompt_locked
+          restore_scroll_region_locked
           self.composer_input = ""
           self.composer_cursor = 0
           @asking = false

@@ -16,6 +16,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `/sessions` picker cancellation so Escape closes smoothly without a blink, while keeping the loading spinner visible as saved sessions are loaded.
 - Fixed root-prompt session tree navigation so it no longer persists an empty active branch that makes cloned sessions resume with a blank transcript.
 - Fixed `/resume` session picker entries to show cloned session ancestry as a tree.
 - Made `/tree` branch indentation more visible in the terminal session picker.

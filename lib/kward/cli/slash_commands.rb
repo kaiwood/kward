@@ -44,11 +44,18 @@ module Kward
         when "new"
           [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
         when "sessions", "resume"
-          [true, run_busy_local_command_and_requeue do
-            path = argument.to_s.strip
-            path = select_session_path(session_store) if session_store && path.empty?
-            resume_session(session_store, path)
-          end]
+          unless session_store
+            say_sessions_unavailable
+            return [true, nil]
+          end
+
+          path = argument.to_s.strip
+          if path.empty?
+            sessions = run_busy_local_command_and_requeue { session_store.recent_tree(limit: nil) }
+            path = select_session_path_from_sessions(sessions)
+          end
+          replacement_agent = path.to_s.empty? ? nil : run_busy_local_command_and_requeue { resume_session(session_store, path) }
+          [true, replacement_agent]
         when "name"
           run_busy_local_command_and_requeue { rename_session(argument) }
           [true, nil]
@@ -57,7 +64,7 @@ module Kward
         when "rewind"
           [true, run_busy_local_command_and_requeue { rewind_session(session_store) }]
         when "tree"
-          [true, run_busy_local_command_and_requeue { navigate_session_tree(session_store) }]
+          [true, navigate_session_tree(session_store)]
         when "copy"
           run_busy_local_command_and_requeue { copy_session_text(agent.conversation, argument) }
           [true, nil]
