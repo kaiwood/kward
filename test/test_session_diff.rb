@@ -57,6 +57,41 @@ class TestSessionDiff < KwardTestCase
     assert_equal({ additions: 1, deletions: 1 }, counts)
   end
 
+  def test_session_totals_are_net_for_repeated_edits_to_same_line
+    diff = Kward::SessionDiff.new
+
+    assert diff.add_diff(<<~DIFF)
+      --- file.txt
+      +++ file.txt
+      @@ -1,3 +1,3 @@
+       a
+      -b
+      +B
+       c
+    DIFF
+    assert diff.add_diff(<<~DIFF)
+      --- file.txt
+      +++ file.txt
+      @@ -1,3 +1,3 @@
+       a
+      -B
+      +beta
+       c
+    DIFF
+
+    assert_equal 1, diff.additions
+    assert_equal 1, diff.deletions
+  end
+
+  def test_session_totals_cancel_reverted_changes
+    diff = Kward::SessionDiff.new
+
+    diff.add_diff("--- file.txt\n+++ file.txt\n@@ -1,1 +1,1 @@\n-old\n+new\n")
+    diff.add_diff("--- file.txt\n+++ file.txt\n@@ -1,1 +1,1 @@\n-new\n+old\n")
+
+    assert diff.empty?
+  end
+
   def test_counts_truncated_diff_from_full_stats_marker
     counts = Kward::SessionDiff.count(<<~DIFF)
       --- file.txt
