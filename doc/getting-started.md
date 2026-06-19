@@ -96,7 +96,8 @@ Inside interactive Kward:
 /login              sign in or save provider credentials
 /model              choose a model
 /status             show session and context status
-/resume             resume a previous session
+/sessions           open the saved sessions picker
+/resume             alias for /sessions
 /export notes.md    export the transcript
 /compact            summarize older context when a chat gets long
 /exit               leave Kward

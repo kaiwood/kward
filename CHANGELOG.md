@@ -8,6 +8,10 @@ All notable changes to Kward will be documented in this file.
 
 - Added `z-ai/glm-5.2` to the static OpenRouter model choices.
 
+### Changed
+
+- Changed the saved session picker slash command to `/sessions`, with `/resume` kept as an alias.
+
 ### Fixed
 
 - Fixed `/resume` session picker entries to show cloned session ancestry as a tree.

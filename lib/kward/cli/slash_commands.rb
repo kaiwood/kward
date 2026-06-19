@@ -43,7 +43,7 @@ module Kward
           [true, nil]
         when "new"
           [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
-        when "resume"
+        when "sessions", "resume"
           [true, run_busy_local_command_and_requeue do
             path = argument.to_s.strip
             path = select_session_path(session_store) if session_store && path.empty?

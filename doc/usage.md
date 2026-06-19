@@ -97,7 +97,8 @@ Use slash commands for local actions that should not go to the model:
 | `/reasoning` | choose reasoning effort. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session. |
-| `/resume` | continue a previous session. |
+| `/sessions` | open the saved sessions picker or continue a previous session by path. |
+| `/resume` | alias for `/sessions`. |
 | `/name <name>` | name the current session. |
 | `/clone` | copy the current session into a new branch. |
 | `/copy last` | copy the latest assistant answer. |
@@ -132,8 +133,10 @@ Typical flow:
 Later:
 
 ```text
-/resume
+/sessions
 ```
+
+`/resume` remains available as an alias.
 
 Use `/compact` when a conversation gets long. Kward summarizes older context and keeps recent context active. After compaction, it may need to re-read files before editing them again.
 

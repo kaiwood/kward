@@ -1314,6 +1314,27 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sessions_explicit_session_path_loads_prior_messages
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("hello")
+      conversation.append_assistant("reply")
+      prompt = BannerPrompt.new(["/sessions #{saved.path}", "again", "/exit"])
+      client = RecordingClient.new(["second"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal "hello", client.seen_messages[0][1]["content"]
+      assert_equal "reply", client.seen_messages[0][2]["content"]
+      assert_equal "again", client.seen_messages[0][3][:content]
+      assert_equal 1, prompt.banner_count
+    end
+  end
+
   def test_resume_prompt_interface_preserves_scrollback_with_synchronized_redraw
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

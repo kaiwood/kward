@@ -188,7 +188,7 @@ Interactive CLI and RPC clients start fresh by default. To automatically resume 
 }
 ```
 
-The `/resume` command and RPC `sessions/resume` work regardless of this automatic resume setting.
+The `/sessions` command, `/resume` alias, and RPC `sessions/resume` work regardless of this automatic resume setting.
 
 ## Memory
 
