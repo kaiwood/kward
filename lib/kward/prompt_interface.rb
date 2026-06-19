@@ -131,7 +131,7 @@ module Kward
       @banner = Banner.new(message: banner_message, pixels: banner_pixels, screen_height: method(:screen_height))
     end
 
-    def start
+    def start(render: true)
       @mutex.synchronize do
         return if @started
 
@@ -140,7 +140,7 @@ module Kward
         @asking = true
         @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
         @output_io.print(BRACKETED_PASTE_ENABLE)
-        render_prompt_locked
+        render_prompt_locked if render
       end
     end
 
@@ -198,9 +198,10 @@ module Kward
     end
 
     def restore_transcript
+      start(render: false) unless @started
       @mutex.synchronize do
-        clear_prompt_for_output_locked
         @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
+        clear_prompt_for_output_locked unless @rendered_rows.zero? && @last_composer_rows.empty?
         @transcript_buffer.clear
         @visual_banner_count = 0
         @transcript_viewport_rows = 0
@@ -213,9 +214,9 @@ module Kward
     ensure
       @mutex.synchronize do
         @restoring_transcript = false
-        @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE)
         width, height = screen_size
         redraw_screen_locked(width: width, height: height)
+        @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE)
         @output_io.flush
       end
     end

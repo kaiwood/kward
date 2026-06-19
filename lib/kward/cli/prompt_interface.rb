@@ -25,7 +25,11 @@ module Kward
           banner_pixels: banner_enabled ? Kward::PromptInterface::BANNER_LOGO_PIXELS : nil,
           banner_message: banner_enabled ? Kward::PromptInterface::BANNER_MESSAGE : nil
         )
-        @prompt.start
+        if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
+          @prompt.start(render: false)
+        else
+          @prompt.start
+        end
       end
 
       def load_prompt_interface
