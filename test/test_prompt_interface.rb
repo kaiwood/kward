@@ -526,6 +526,35 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_does_not_wrap_at_edges
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@select_state, { choices: %w[first second], selection_index: 0, title: "Sessions", custom: false })
+
+    prompt.send(:select_previous_choice)
+    assert_equal 0, prompt.send(:selection_index)
+
+    prompt.instance_variable_get(:@select_state)[:selection_index] = 1
+    prompt.send(:select_next_choice)
+    assert_equal 1, prompt.send(:selection_index)
+  end
+
+  def test_prompt_interface_select_centers_long_list_scroll_window
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    choices = (1..12).map { |index| "choice #{index}" }
+    prompt.instance_variable_set(:@select_state, { choices: choices, selection_index: 0, title: "Sessions", custom: false })
+
+    assert_equal ["choice 1", "choice 2", "choice 3", "choice 4", "choice 5"], prompt.send(:visible_selection_matches, choices, height: 12)[:choices]
+
+    prompt.instance_variable_get(:@select_state)[:selection_index] = 2
+    assert_equal ["choice 1", "choice 2", "choice 3", "choice 4", "choice 5"], prompt.send(:visible_selection_matches, choices, height: 12)[:choices]
+
+    prompt.instance_variable_get(:@select_state)[:selection_index] = 3
+    assert_equal ["choice 2", "choice 3", "choice 4", "choice 5", "choice 6"], prompt.send(:visible_selection_matches, choices, height: 12)[:choices]
+
+    prompt.instance_variable_get(:@select_state)[:selection_index] = 11
+    assert_equal ["choice 8", "choice 9", "choice 10", "choice 11", "choice 12"], prompt.send(:visible_selection_matches, choices, height: 12)[:choices]
+  end
+
   def test_prompt_interface_select_filters_choices
     input, writer = IO.pipe
     output = StringIO.new

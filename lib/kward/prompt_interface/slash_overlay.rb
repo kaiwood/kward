@@ -58,14 +58,14 @@ module Kward
         matches = slash_overlay_matches
         return if matches.empty?
 
-        @slash_selection_index = (@slash_selection_index - 1) % matches.length
+        @slash_selection_index = previous_list_selection_index(@slash_selection_index, matches.length)
       end
 
       def select_next_slash_command
         matches = slash_overlay_matches
         return if matches.empty?
 
-        @slash_selection_index = (@slash_selection_index + 1) % matches.length
+        @slash_selection_index = next_list_selection_index(@slash_selection_index, matches.length)
       end
 
       def complete_selected_slash_command
@@ -92,8 +92,8 @@ module Kward
       end
 
       def visible_slash_overlay_matches(matches, height: screen_height)
-        max_rows = [[height - 7, 1].max, 8].min
-        start = [[@slash_selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
+        max_rows = max_overlay_list_rows(height)
+        start = centered_list_window_start(@slash_selection_index, matches.length, max_rows)
         { start: start, commands: matches[start, max_rows] || [] }
       end
 

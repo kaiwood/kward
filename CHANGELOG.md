@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed TUI list navigation to keep long `/sessions` and `/tree` pickers centered while scrolling, and removed wrap-around at list edges.
 - Changed the saved session picker slash command to `/sessions`, with `/resume` kept as an alias.
 
 ### Fixed

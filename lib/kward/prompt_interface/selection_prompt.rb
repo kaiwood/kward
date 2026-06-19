@@ -134,14 +134,14 @@ module Kward
         matches = selection_matches
         return if matches.empty?
 
-        @select_state[:selection_index] = (selection_index - 1) % matches.length
+        @select_state[:selection_index] = previous_list_selection_index(selection_index, matches.length)
       end
 
       def select_next_choice
         matches = selection_matches
         return if matches.empty?
 
-        @select_state[:selection_index] = (selection_index + 1) % matches.length
+        @select_state[:selection_index] = next_list_selection_index(selection_index, matches.length)
       end
 
       def select_insert_key(key)
@@ -232,8 +232,8 @@ module Kward
       end
 
       def visible_selection_matches(matches, height: screen_height)
-        max_rows = [[height - 7, 1].max, 8].min
-        start = [[selection_index - max_rows + 1, 0].max, [matches.length - max_rows, 0].max].min
+        max_rows = max_overlay_list_rows(height)
+        start = centered_list_window_start(selection_index, matches.length, max_rows)
         { start: start, choices: matches[start, max_rows] || [] }
       end
 

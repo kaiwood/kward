@@ -73,6 +73,30 @@ module Kward
         (" " * left) + row + (" " * right)
       end
 
+      def next_list_selection_index(index, count)
+        return 0 if count <= 0
+
+        [index + 1, count - 1].min
+      end
+
+      def previous_list_selection_index(index, count)
+        return 0 if count <= 0
+
+        [index - 1, 0].max
+      end
+
+      def centered_list_window_start(index, count, max_rows)
+        return 0 if count <= max_rows
+
+        last_start = count - max_rows
+        middle_offset = max_rows / 2
+        [[index - middle_offset, 0].max, last_start].min
+      end
+
+      def max_overlay_list_rows(height)
+        [[height - 7, 1].max, 8].min
+      end
+
       def overlay_left_padding(width, row_width)
         padding = [width - row_width, 0].max
         case @overlay_settings["alignment"]
