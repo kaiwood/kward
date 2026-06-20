@@ -30,6 +30,7 @@ module Kward
               render_prompt_locked if resized || footer_refreshed
             else
               result = handle_question_key(key)
+              result = drain_pending_question_keys_locked(result)
               render_prompt_locked unless result.is_a?(Hash) || result == SELECT_CANCEL
             end
           end
@@ -38,6 +39,13 @@ module Kward
 
           sleep 0.02 if key.nil?
         end
+      end
+
+      def drain_pending_question_keys_locked(result)
+        until result.is_a?(Hash) || result == SELECT_CANCEL || @pending_keys.empty?
+          result = handle_question_key(@pending_keys.shift)
+        end
+        result
       end
 
       def begin_question_prompt_state

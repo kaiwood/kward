@@ -299,6 +299,7 @@ module Kward
             render_prompt_locked if resized || footer_refreshed
           else
             result = handle_select_key(key)
+            result = drain_pending_select_keys_locked(result)
             render_prompt_locked unless result.is_a?(String) || select_action_result?(result) || result == SELECT_CANCEL
           end
         end

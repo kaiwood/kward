@@ -62,6 +62,13 @@ module Kward
         end
       end
 
+      def drain_pending_select_keys_locked(result)
+        until result.is_a?(String) || select_action_result?(result) || result == SELECT_CANCEL || @pending_keys.empty?
+          result = handle_select_key(@pending_keys.shift)
+        end
+        result
+      end
+
       def handle_select_csi_u_key(key)
         sequence = parse_csi_u_key(key)
         return false unless sequence

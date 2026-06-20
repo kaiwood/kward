@@ -835,11 +835,10 @@ class TestPromptInterface < KwardTestCase
     prompt.instance_variable_set(:@select_state, { choices: %w[first second third fourth], selection_index: 0, title: "Sessions", custom: false, action_keys: {}, search_active: false })
     prompt.define_singleton_method(:read_pending_escape_sequence) { "[B\e[B\e[B" }
 
-    prompt.send(:handle_select_key, "\e")
-    pending = prompt.instance_variable_get(:@pending_keys)
-    prompt.send(:handle_select_key, pending.shift)
-    prompt.send(:handle_select_key, pending.shift)
+    result = prompt.send(:handle_select_key, "\e")
+    prompt.send(:drain_pending_select_keys_locked, result)
 
+    assert_empty prompt.instance_variable_get(:@pending_keys)
     assert_equal 3, prompt.instance_variable_get(:@select_state)[:selection_index]
   end
 
@@ -913,10 +912,10 @@ class TestPromptInterface < KwardTestCase
     })
     prompt.define_singleton_method(:read_pending_escape_sequence) { "[B\e[B" }
 
-    prompt.send(:handle_question_key, "\e")
-    pending = prompt.instance_variable_get(:@pending_keys)
-    prompt.send(:handle_question_key, pending.shift)
+    result = prompt.send(:handle_question_key, "\e")
+    prompt.send(:drain_pending_question_keys_locked, result)
 
+    assert_empty prompt.instance_variable_get(:@pending_keys)
     assert_equal 2, prompt.instance_variable_get(:@question_state)[:selection_index]
   end
 
