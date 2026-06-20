@@ -6,8 +6,8 @@ module Kward
     module Layout
       private
 
-      def banner_rows(width)
-        @banner.rows(width)
+      def banner_rows(width, message: nil)
+        @banner.rows(width, message: message)
       end
 
       def banner_logo_rows

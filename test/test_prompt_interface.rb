@@ -2,10 +2,6 @@ require_relative "test_helper"
 require "pty"
 
 class TestPromptInterface < KwardTestCase
-  def bundled_test_banner_pixels
-    Kward::PromptInterface::BANNER_LOGO_PIXELS
-  end
-
   def test_busy_ctrl_c_returns_cancel_input
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.instance_variable_set(:@busy, true)
@@ -194,7 +190,6 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
       output: output,
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
@@ -202,7 +197,6 @@ class TestPromptInterface < KwardTestCase
 
     rendered = strip_ansi(output.string)
     refute_includes rendered, "State your business."
-    refute_includes output.string, "\e[48;2;"
     refute_includes output.string, "\e_G"
     refute_includes output.string, "\e]1337;File="
   end
@@ -212,7 +206,6 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
       output: output,
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
@@ -225,27 +218,30 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "\e]1337;File="
   end
 
-  def test_prompt_interface_visual_banner_is_replayed_on_redraw
+  def test_prompt_interface_startup_info_screen_is_replayed_on_redraw
     output = StringIO.new
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
       output: output,
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
     prompt.start
-    prompt.print_visual_banner
+    prompt.print_visual_banner("Kward is online.\n\nWorkspace   kaiwood/kward\nBranch      main\nPlugins     alpha.rb, beta.rb\n\nState your business.")
     output.truncate(0)
     output.rewind
 
     prompt.redraw
 
-    assert_includes strip_ansi(output.string), "State your business."
-    assert_includes output.string, "\e[48;2;"
+    rendered = strip_ansi(output.string)
+    assert_includes rendered, "Kward is online."
+    assert_includes rendered, "Workspace   kaiwood/kward"
+    assert_includes rendered, "Branch      main"
+    assert_includes rendered, "Plugins     alpha.rb, beta.rb"
+    assert_order rendered, "Kward is online.", "Workspace   kaiwood/kward", "Plugins     alpha.rb, beta.rb", "State your business."
   end
 
-  def test_prompt_interface_does_not_repaint_visual_banner_when_overlay_grows_composer
+  def test_prompt_interface_does_not_repaint_startup_info_screen_when_overlay_grows_composer
     output = StringIO.new
     original_width = TTY::Screen.method(:width)
     original_height = TTY::Screen.method(:height)
@@ -255,12 +251,11 @@ class TestPromptInterface < KwardTestCase
       input: StringIO.new,
       output: output,
       slash_commands: (1..8).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } },
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
     prompt.start
-    prompt.print_visual_banner
+    prompt.print_visual_banner("Kward is online.\n\nWorkspace   kaiwood/kward\nBranch      main\nPlugins     alpha.rb, beta.rb\n\nState your business.")
     output.truncate(0)
     output.rewind
 
@@ -268,15 +263,16 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:composer_cursor=, 1)
     prompt.send(:render_prompt_locked)
 
-    refute_includes strip_ansi(output.string), "State your business."
-    refute_includes output.string, "\e[48;2;"
+    rendered = strip_ansi(output.string)
+    refute_includes rendered, "Kward is online."
+    refute_includes rendered, "State your business."
     refute_includes output.string, TTY::Cursor.clear_screen
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
-  def test_prompt_interface_restores_visual_banner_after_overlay_resizes_composer
+  def test_prompt_interface_restores_startup_info_screen_after_overlay_resizes_composer
     output = StringIO.new
     original_width = TTY::Screen.method(:width)
     original_height = TTY::Screen.method(:height)
@@ -286,12 +282,11 @@ class TestPromptInterface < KwardTestCase
       input: StringIO.new,
       output: output,
       slash_commands: (1..8).map { |index| { name: "cmd#{index}", description: "Command #{index}.", argument_hint: "" } },
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
     prompt.start
-    prompt.print_visual_banner
+    prompt.print_visual_banner("Kward is online.\n\nWorkspace   kaiwood/kward\nBranch      main\nPlugins     alpha.rb, beta.rb\n\nState your business.")
     prompt.send(:composer_input=, "/")
     prompt.send(:composer_cursor=, 1)
     prompt.send(:render_prompt_locked)
@@ -302,8 +297,12 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:composer_cursor=, 0)
     prompt.send(:render_prompt_locked)
 
-    assert_includes strip_ansi(output.string), "State your business."
-    assert_includes output.string, "\e[48;2;"
+    rendered = strip_ansi(output.string)
+    assert_includes rendered, "Kward is online."
+    assert_includes rendered, "Workspace   kaiwood/kward"
+    assert_includes rendered, "Branch      main"
+    assert_includes rendered, "Plugins     alpha.rb, beta.rb"
+    assert_order rendered, "Kward is online.", "Workspace   kaiwood/kward", "Plugins     alpha.rb, beta.rb", "State your business."
     refute_includes output.string, TTY::Cursor.clear_screen
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
@@ -341,103 +340,40 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
-  def test_prompt_interface_renders_banner_from_pixel_data_without_decoding_png
+  def test_prompt_interface_renders_startup_info_screen
     output = StringIO.new
-    original_decoder = Kward::PixelLogo.method(:indexed_png_pixels)
-    Kward::PixelLogo.define_singleton_method(:indexed_png_pixels) { |_path| raise "PNG decoder should not be used" }
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
       output: output,
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
     prompt.start
-    prompt.print_visual_banner
+    prompt.print_visual_banner("Kward is online.\n\nWorkspace   kaiwood/kward\nBranch      main\nPlugins     alpha.rb, beta.rb\n\nState your business.")
 
-    assert_includes output.string, "\e[48;2;"
-    assert_includes output.string, "\e[38;2;"
-    assert_includes strip_ansi(output.string), "▀"
+    rendered = strip_ansi(output.string)
+    assert_includes rendered, "Kward is online."
+    assert_includes rendered, "Workspace   kaiwood/kward"
+    assert_includes rendered, "Branch      main"
+    assert_includes rendered, "Plugins     alpha.rb, beta.rb"
+    assert_order rendered, "Kward is online.", "Workspace   kaiwood/kward", "Plugins     alpha.rb, beta.rb", "State your business."
+    refute_includes output.string, "\e[48;2;"
     refute_includes output.string, "\e_G"
     refute_includes output.string, "\e]1337;File="
-  ensure
-    Kward::PixelLogo.define_singleton_method(:indexed_png_pixels, original_decoder) if original_decoder
   end
 
-  def test_prompt_interface_renders_centered_visual_banner_as_half_block_pixels_at_full_size
-    output = StringIO.new
-    original_width = TTY::Screen.method(:width)
+  def test_prompt_interface_limits_startup_info_screen_on_short_terminals
     original_height = TTY::Screen.method(:height)
-    TTY::Screen.define_singleton_method(:width) { 80 }
-    TTY::Screen.define_singleton_method(:height) { 30 }
-    prompt = Kward::PromptInterface.new(
-      input: StringIO.new,
-      output: output,
-      banner_pixels: bundled_test_banner_pixels,
-      banner_message: Kward::PromptInterface::BANNER_MESSAGE
-    )
-
-    prompt.start
-    prompt.print_visual_banner
-
-    color_index = output.string.index("\e[48;2;")
-    assert color_index
-    logo_row = strip_ansi(prompt.send(:banner_rows, 80).find { |row| row.include?("\e[48;2;") })
-    assert_equal 56, logo_row.length
-    assert_equal 16, prompt.send(:banner_logo_rows).length
-    assert_includes output.string, "\e[38;2;"
-    assert_includes strip_ansi(output.string), "▀"
-    refute_includes output.string, "\e_G"
-    refute_includes output.string, "\e]1337;File="
-    assert_includes strip_ansi(output.string), "                              State your business."
-    clear_index = output.string.rindex(TTY::Cursor.clear_line)
-    assert_operator clear_index, :<, color_index if clear_index
-  ensure
-    TTY::Screen.define_singleton_method(:width, original_width) if original_width
-    TTY::Screen.define_singleton_method(:height, original_height) if original_height
-  end
-
-  def test_prompt_interface_scales_visual_banner_down_on_short_terminals
-    output = StringIO.new
-    original_width = TTY::Screen.method(:width)
-    original_height = TTY::Screen.method(:height)
-    TTY::Screen.define_singleton_method(:width) { 100 }
-    TTY::Screen.define_singleton_method(:height) { 17 }
-    prompt = Kward::PromptInterface.new(
-      input: StringIO.new,
-      output: output,
-      banner_pixels: bundled_test_banner_pixels,
-      banner_message: Kward::PromptInterface::BANNER_MESSAGE
-    )
-
-    prompt.start
-    prompt.print_visual_banner
-
-    color_index = output.string.index("\e[48;2;")
-    assert color_index
-    logo_row = strip_ansi(prompt.send(:banner_rows, 100).find { |row| row.include?("\e[48;2;") })
-    assert_equal 66, logo_row.length
-    assert_equal 11, prompt.send(:banner_logo_rows).length
-    assert_includes strip_ansi(output.string), "                                        State your business."
-  ensure
-    TTY::Screen.define_singleton_method(:width, original_width) if original_width
-    TTY::Screen.define_singleton_method(:height, original_height) if original_height
-  end
-
-  def test_prompt_interface_hides_banner_logo_when_terminal_is_too_short
-    original_height = TTY::Screen.method(:height)
-    TTY::Screen.define_singleton_method(:height) { 9 }
+    TTY::Screen.define_singleton_method(:height) { 6 }
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
       output: StringIO.new,
-      banner_pixels: bundled_test_banner_pixels,
       banner_message: Kward::PromptInterface::BANNER_MESSAGE
     )
 
-    rows = prompt.send(:banner_rows, 80)
+    rows = prompt.send(:banner_rows, 80, message: "one\ntwo\nState your business.")
 
-    assert rows.any? { |row| row.include?("State your business.") }
-    refute rows.any? { |row| row.include?("\e[48;2;") }
+    assert_equal ["State your business.", ""], rows
   ensure
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end

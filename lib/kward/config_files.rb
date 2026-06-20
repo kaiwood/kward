@@ -193,12 +193,6 @@ module Kward
       composer["busy_help"] != false
     end
 
-    # Returns whether the terminal startup banner should be displayed.
-    def banner_enabled?(config = read_config)
-      banner = config["banner"].is_a?(Hash) ? config["banner"] : {}
-      banner["enabled"] != false
-    end
-
     # Returns whether file tools must stay inside the active workspace root.
     def workspace_guardrails_enabled?(config = read_config)
       tools = config["tools"].is_a?(Hash) ? config["tools"] : {}

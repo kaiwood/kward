@@ -222,9 +222,6 @@ module Kward
         when /\Ashow busy help/, /\Ahide busy help/
           set_composer_busy_help(!composer_busy_help?)
           runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
-        when /\Ashow startup banner/, /\Ahide startup banner/
-          set_banner_enabled(!banner_enabled?)
-          runtime_output("Startup banner #{banner_enabled? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
         when /\Aenable session auto-resume/, /\Adisable session auto-resume/
           set_session_auto_resume_enabled(!session_auto_resume_enabled?)
           runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
@@ -237,7 +234,6 @@ module Kward
           "Overlay alignment (#{settings["alignment"]})",
           "Overlay width (#{settings["width"]})",
           "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
-          "#{banner_enabled? ? "Hide" : "Show"} startup banner (currently #{on_off(banner_enabled?)})",
           "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
           "Back"
         ]
@@ -247,20 +243,12 @@ module Kward
         ConfigFiles.composer_busy_help?(safely_read_config.to_h)
       end
 
-      def banner_enabled?
-        ConfigFiles.banner_enabled?(safely_read_config.to_h)
-      end
-
       def session_auto_resume_enabled?
         ConfigFiles.session_auto_resume_enabled?(safely_read_config.to_h)
       end
 
       def set_composer_busy_help(enabled)
         update_nested_config("composer", "busy_help" => enabled)
-      end
-
-      def set_banner_enabled(enabled)
-        update_nested_config("banner", "enabled" => enabled)
       end
 
       def set_session_auto_resume_enabled(enabled)

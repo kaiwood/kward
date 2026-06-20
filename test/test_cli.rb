@@ -39,9 +39,9 @@ class TestCLI < KwardTestCase
       @banner_count = 0
     end
 
-    def print_visual_banner
+    def print_visual_banner(message = nil)
       @banner_count += 1
-      @output << "[visual banner]"
+      @output << (message || "[visual banner]")
     end
   end
 
@@ -1189,26 +1189,82 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       assert_equal 1, prompt.banner_count
-      assert_includes prompt.output, "[visual banner]"
+      output = prompt.output.join("\n")
+      assert_includes output, "Kward v#{Kward::VERSION} is online."
+      assert_includes output, "State your business."
       files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
       assert_equal 1, files.length
-      refute_includes File.read(files.first), "visual banner"
+      refute_includes File.read(files.first), "Kward v#{Kward::VERSION} is online."
     end
   end
 
-  def test_setup_interactive_prompt_disables_banner_from_config
-    Dir.mktmpdir do |config_dir|
-      config_path = File.join(config_dir, "config.json")
-      File.write(config_path, JSON.dump("banner" => { "enabled" => false }))
-      cli = RecordingPromptInterfaceCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TTY::Prompt.new)
-      with_env("KWARD_CONFIG_PATH" => config_path) do
-        cli.send(:setup_interactive_prompt)
-      end
+  def test_startup_plugins_value_lists_loaded_plugin_filenames
+    registry = Kward::PluginRegistry.new
+    registry.instance_variable_set(:@paths, ["/tmp/plugins/alpha.rb", "/tmp/plugins/beta.rb"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.instance_variable_set(:@plugin_registry, registry)
 
-      prompt = cli.instance_variable_get(:@prompt)
-      assert_equal true, prompt.started
-      assert_nil prompt.options[:banner_pixels]
-      assert_nil prompt.options[:banner_message]
+    assert_equal "alpha.rb, beta.rb", cli.send(:startup_plugins_value)
+  end
+
+  def test_startup_plugins_value_shows_none_without_loaded_plugins
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
+
+    assert_equal "none", cli.send(:startup_plugins_value)
+  end
+
+  def test_startup_info_screen_uses_color_when_enabled
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+    cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
+
+    output = cli.send(:startup_info_screen)
+
+    assert_includes output, "\e[32m●\e[0m Kward v#{Kward::VERSION} is online."
+    refute_includes output, "\e[36;1mKward\e[0m"
+    assert_includes output, "\e[90mWorkspace   \e[0m"
+    assert_includes output, "\e[1mState your business.\e[0m"
+    refute_includes output, "\e[33;1mState your business.\e[0m"
+    assert_includes Kward::ANSI.strip(output), "Plugins     none"
+  end
+
+  def test_startup_workspace_label_uses_parent_and_folder_outside_home
+    Dir.mktmpdir do |dir|
+      workspace = File.join(dir, "kaiwood", "kward")
+      FileUtils.mkdir_p(workspace)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      cli.instance_variable_set(:@working_directory, workspace)
+
+      with_env("HOME" => File.join(dir, "home")) do
+        assert_equal "kaiwood/kward", cli.send(:startup_workspace_label)
+      end
+    end
+  end
+
+  def test_startup_workspace_label_uses_parent_and_folder_for_nested_path_inside_home
+    Dir.mktmpdir do |home|
+      workspace = File.join(home, "Repositories", "github.com", "kaiwood", "kward")
+      FileUtils.mkdir_p(workspace)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      cli.instance_variable_set(:@working_directory, workspace)
+
+      with_env("HOME" => home) do
+        assert_equal "kaiwood/kward", cli.send(:startup_workspace_label)
+      end
+    end
+  end
+
+  def test_startup_workspace_label_uses_home_relative_path_for_direct_child_of_home
+    Dir.mktmpdir do |home|
+      workspace = File.join(home, "project")
+      FileUtils.mkdir_p(workspace)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      cli.instance_variable_set(:@working_directory, workspace)
+
+      with_env("HOME" => home) do
+        assert_equal "~/project", cli.send(:startup_workspace_label)
+      end
     end
   end
 

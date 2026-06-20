@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed the interactive startup screen to an info block.”
 - Changed shell command output capture to allow larger raw output for Kward's own compactor, preserving stdout/stderr structure and test failure summaries before model-context trimming.
 - Tightened the built-in system prompt wording to reduce repeated instruction tokens.
 - Changed generated runtime system prompts to use a stable timestamp anchor so time-based persona modifiers do not churn provider cache prefixes each turn.
@@ -18,6 +19,10 @@ All notable changes to Kward will be documented in this file.
 - Changed large search and fetched-content tool results to preserve file, line, URL, and heading anchors during model-context compaction.
 - Changed large tool results to be compacted before they enter model context while preserving full originals in session tool-execution records, reusing existing artifact ids for repeated outputs, avoiding storage for verbatim outputs, preserving short errors exactly, reverting automatically when compaction would not reduce context, and teaching conversation compaction to preserve tool artifact ids.
 - Changed model context-window resolution to prefer cached OpenRouter metadata, infer matching provider models from that metadata when possible, and use conservative fallbacks for unknown selected models.
+
+### Removed
+
+- Removed the `banner.enabled` config setting and `/settings` toggle for hiding the interactive startup screen.
 
 ### Added
 

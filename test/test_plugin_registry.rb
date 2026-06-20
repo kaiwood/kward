@@ -27,6 +27,7 @@ class TestPluginRegistry < KwardTestCase
         output = []
         context = Kward::PluginRegistry::Context.new(conversation: conversation, args: "Klingon", say_callback: lambda { |message| output << message })
 
+        assert_equal [plugin_path], registry.paths
         assert_equal "Say hello", command.description
         assert_equal "<name>", command.argument_hint
         assert_equal "done", command.handler.call("Klingon", context)

@@ -10,7 +10,6 @@ module Kward
         @limit = limit
         @text = +""
         @display_rows_cache_width = nil
-        @display_rows_cache_banner_count = nil
         @display_rows_cache = nil
       end
 
@@ -42,30 +41,23 @@ module Kward
         @text
       end
 
-      def viewport_text(row_count, width, visual_banner_count:, banner_rows:)
-        viewport_rows(row_count, width, visual_banner_count: visual_banner_count, banner_rows: banner_rows).join("\n")
+      def viewport_text(row_count, width)
+        viewport_rows(row_count, width).join("\n")
       end
 
-      def viewport_rows(row_count, width, visual_banner_count:, banner_rows:)
+      def viewport_rows(row_count, width)
         return [] unless row_count.positive?
 
-        rows = display_rows(width, visual_banner_count: visual_banner_count, banner_rows: banner_rows).last(row_count)
+        rows = display_rows(width).last(row_count)
         rows = ([""] * (row_count - rows.length)) + rows if rows.length < row_count
         rows
       end
 
-      def display_rows(width, visual_banner_count:, banner_rows:)
-        if @display_rows_cache_width == width && @display_rows_cache_banner_count == visual_banner_count && @display_rows_cache
-          return @display_rows_cache
-        end
+      def display_rows(width)
+        return @display_rows_cache if @display_rows_cache_width == width && @display_rows_cache
 
-        rows = []
-        visual_banner_count.times { rows.concat(banner_rows.call(width)) }
-        rows << "" if visual_banner_count.positive? && @text.empty?
-        rows.concat(text_display_rows(width))
         @display_rows_cache_width = width
-        @display_rows_cache_banner_count = visual_banner_count
-        @display_rows_cache = rows
+        @display_rows_cache = text_display_rows(width)
       end
 
       def text_display_rows(width)
@@ -77,7 +69,6 @@ module Kward
 
       def invalidate_display_rows_cache
         @display_rows_cache_width = nil
-        @display_rows_cache_banner_count = nil
         @display_rows_cache = nil
       end
     end

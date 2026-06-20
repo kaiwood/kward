@@ -1,3 +1,5 @@
+require "open3"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
@@ -13,7 +15,6 @@ module Kward
         prompt_interface = load_prompt_interface
         return unless prompt_interface
 
-        banner_enabled = ConfigFiles.banner_enabled?
         @prompt = prompt_interface.new(
           slash_commands: slash_command_entries,
           overlay_settings: ConfigFiles.overlay_settings,
@@ -22,8 +23,7 @@ module Kward
           busy_help: ConfigFiles.composer_busy_help?,
           attachment_badges: method(:composer_attachment_badges),
           attachment_parser: method(:composer_attachment_parser),
-          banner_pixels: banner_enabled ? Kward::PromptInterface::BANNER_LOGO_PIXELS : nil,
-          banner_message: banner_enabled ? Kward::PromptInterface::BANNER_MESSAGE : nil
+          banner_message: Kward::PromptInterface::BANNER_MESSAGE
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
           @prompt.start(render: false)
@@ -50,9 +50,80 @@ module Kward
         @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
       end
 
-      # Writes the visual banner output for the terminal CLI flow.
+      # Writes the startup info screen output for the terminal CLI flow.
       def print_visual_banner
-        @prompt.print_visual_banner if @prompt.respond_to?(:print_visual_banner)
+        return unless @prompt.respond_to?(:print_visual_banner)
+
+        @prompt.print_visual_banner(startup_info_screen)
+      end
+
+      def startup_info_screen
+        [
+          startup_status_line,
+          "",
+          startup_info_line("Workspace", startup_workspace_label),
+          startup_info_line("Branch", startup_branch_value),
+          startup_info_line("Plugins", startup_plugins_value),
+          "",
+          startup_brand_line
+        ].join("\n")
+      end
+
+      def startup_workspace_label
+        root = File.expand_path(current_workspace_root)
+        home = begin
+          Dir.home
+        rescue StandardError
+          nil
+        end
+        if home && (root == home || root.start_with?("#{home}/"))
+          relative = root.delete_prefix(home).sub(%r{\A/}, "")
+          return "~" if relative.empty?
+          return "~/#{relative}" unless relative.include?("/")
+        end
+
+        parent = File.basename(File.dirname(root))
+        name = File.basename(root)
+        parent.empty? || parent == "." ? name : "#{parent}/#{name}"
+      end
+
+      def startup_branch_value
+        git_root = startup_git_root(current_workspace_root)
+        return "not a repository" if git_root.to_s.empty?
+
+        branch = startup_git_output(%w[git branch --show-current], root: git_root)
+        branch = startup_git_output(%w[git rev-parse --short HEAD], root: git_root) if branch.empty?
+        branch.empty? ? "unknown" : branch
+      end
+
+      def startup_plugins_value
+        filenames = plugin_registry.paths.map { |path| File.basename(path) }
+        filenames.empty? ? "none" : filenames.join(", ")
+      end
+
+      def startup_status_line
+        "#{ANSI.colorize("●", :green, enabled: @color_enabled)} Kward v#{Kward::VERSION} is online."
+      end
+
+      def startup_info_line(label, value)
+        "#{ANSI.colorize(label.ljust(12), :gray, enabled: @color_enabled)}#{ANSI.colorize(value, :cyan, enabled: @color_enabled)}"
+      end
+
+      def startup_brand_line
+        ANSI.colorize(Kward::PromptInterface::BANNER_MESSAGE, :bold, enabled: @color_enabled)
+      end
+
+      def startup_git_root(root)
+        startup_git_output(%w[git rev-parse --show-toplevel], root: root)
+      end
+
+      def startup_git_output(command, root:)
+        output, status = Open3.capture2e(*command, chdir: root.to_s)
+        return "" unless status.success?
+
+        output.lines.first.to_s.strip
+      rescue StandardError
+        ""
       end
 
       def prompt_footer_renderer

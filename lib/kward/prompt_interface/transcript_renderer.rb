@@ -82,11 +82,11 @@ module Kward
       end
 
       def transcript_renderable?
-        @visual_banner_count.positive? || !@transcript_buffer.empty?
+        !@transcript_buffer.empty?
       end
 
       def transcript_display_rows(width)
-        @transcript_buffer.display_rows(width, visual_banner_count: @visual_banner_count, banner_rows: method(:banner_rows))
+        @transcript_buffer.display_rows(width)
       end
 
       def transcript_text_display_rows(width)

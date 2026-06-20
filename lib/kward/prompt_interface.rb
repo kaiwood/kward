@@ -41,7 +41,6 @@ module Kward
     FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_MAX_INPUT_ROWS = 6
     TRANSCRIPT_BUFFER_LIMIT = 200_000
-    BANNER_LOGO_PIXELS = Banner::LOGO_PIXELS
     BANNER_MESSAGE = Banner::MESSAGE
 
     include SlashOverlay
@@ -83,7 +82,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_pixels: nil, banner_message: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -107,7 +106,6 @@ module Kward
       @last_composer_rows = []
       @cursor_rendered_row = 0
       @transcript_buffer = TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
-      @visual_banner_count = 0
       @transcript_viewport_rows = 0
       @restoring_transcript = false
       @pending_keys = []
@@ -130,7 +128,7 @@ module Kward
       @busy_help = busy_help
       @attachment_badges = attachment_badges
       @attachment_parser = attachment_parser
-      @banner = Banner.new(message: banner_message, pixels: banner_pixels, screen_height: method(:screen_height))
+      @banner = Banner.new(message: banner_message, screen_height: method(:screen_height))
     end
 
     def start(render: true)
@@ -205,7 +203,6 @@ module Kward
         @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
         clear_prompt_for_output_locked unless @rendered_rows.zero? && @last_composer_rows.empty?
         @transcript_buffer.clear
-        @visual_banner_count = 0
         @transcript_viewport_rows = 0
         @stream_state.finish_block
         @stream_state.reset
@@ -432,20 +429,16 @@ module Kward
       end
     end
 
-    def print_visual_banner
+    def print_visual_banner(message = nil)
       @mutex.synchronize do
         width, height = screen_size
-        rows = banner_rows(width)
+        rows = banner_rows(width, message: message)
         return if rows.empty?
 
         with_synchronized_output_locked do
           prepare_transcript_output_locked
-          rows.each do |row|
-            write_visual_transcript_text_locked(row)
-            write_visual_transcript_text_locked("\n")
-          end
-          @visual_banner_count += 1
-          invalidate_transcript_display_rows_cache
+          write_transcript_text_locked(rows.join("\n"))
+          write_transcript_text_locked("\n")
           remember_transcript_viewport_locked(height)
           @stream_state.finish_block
           restore_composer_cursor_locked
@@ -489,7 +482,6 @@ module Kward
     def clear_transcript
       @mutex.synchronize do
         @transcript_buffer.clear
-        @visual_banner_count = 0
         @transcript_viewport_rows = 0
         @stream_state.finish_block
         @stream_state.reset

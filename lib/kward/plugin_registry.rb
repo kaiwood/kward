@@ -179,10 +179,14 @@ module Kward
       @footer_path = nil
       @transcript_event_handlers = []
       @prompt_context_renderers = []
+      @paths = []
     end
 
     # @return [String, nil] plugin file currently responsible for footer output
     attr_reader :footer_path
+
+    # @return [Array<String>] plugin files successfully loaded by this registry
+    attr_reader :paths
 
     def commands
       @commands.values
@@ -233,6 +237,7 @@ module Kward
       self.class.loading_registry = self
       self.class.loading_path = path
       Kernel.load(path)
+      @paths << path
     rescue StandardError => e
       warn "Warning: skipping Kward plugin #{path}: #{e.message}"
     ensure
