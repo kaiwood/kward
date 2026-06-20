@@ -443,11 +443,7 @@ module Kward
           return nil
         end
 
-        labels = points.map { |point| point[:label] }
-        choice = select_fork_point(labels)
-        return nil unless choice
-
-        point = points[labels.index(choice)]
+        point = select_fork_point_from_points(points)
         return nil unless point
 
         run_busy_local_command_and_requeue(activity: "forking") do
@@ -555,6 +551,10 @@ module Kward
           return nil
         end
 
+        select_fork_point_from_points(points)
+      end
+
+      def select_fork_point_from_points(points)
         labels = points.map { |point| point[:label] }
         choice = select_fork_point(labels)
         return nil unless choice
