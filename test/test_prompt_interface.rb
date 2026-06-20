@@ -45,6 +45,20 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, "You> "
   end
 
+  def test_prompt_interface_does_not_synchronize_routine_composer_render
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.send(:insert_string, "a")
+    prompt.send(:render_prompt_locked)
+
+    refute_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE
+    refute_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
+  end
+
   def test_prompt_interface_top_border_displays_model_and_reasoning
     output = StringIO.new
     status = lambda { "Codex gpt-5.5 · medium" }

@@ -6,23 +6,42 @@ module Kward
     module PromptRenderer
       private
 
-      def render_prompt_locked
+      def render_prompt_locked(synchronized: false)
         return unless @started && @asking
 
-        with_synchronized_output_locked do
-          handle_resize_locked
-          width, height = screen_size
-          rows, cursor_row, cursor_col = composer_layout(width, height)
-          ensure_scroll_region_locked(rows.length, width: width, height: height)
-          @rendered_rows = rows.length
-          render_composer_rows_locked(rows, height: height)
-          @cursor_rendered_row = cursor_row
-          @last_width = width
-          @last_height = height
-          move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
-          render_cursor_visibility_locked
+        width, height = screen_size
+        if width != @last_width || height != @last_height
+          with_synchronized_output_locked { render_prompt_body_locked }
+          @output_io.flush
+          return
+        end
+
+        rows, cursor_row, cursor_col = composer_layout(width, height)
+        synchronized ||= rows.length != @reserved_rows
+        if synchronized
+          with_synchronized_output_locked { render_prompt_layout_locked(rows, cursor_row, cursor_col, width, height) }
+        else
+          render_prompt_layout_locked(rows, cursor_row, cursor_col, width, height)
         end
         @output_io.flush
+      end
+
+      def render_prompt_body_locked
+        handle_resize_locked
+        width, height = screen_size
+        rows, cursor_row, cursor_col = composer_layout(width, height)
+        render_prompt_layout_locked(rows, cursor_row, cursor_col, width, height)
+      end
+
+      def render_prompt_layout_locked(rows, cursor_row, cursor_col, width, height)
+        ensure_scroll_region_locked(rows.length, width: width, height: height)
+        @rendered_rows = rows.length
+        render_composer_rows_locked(rows, height: height)
+        @cursor_rendered_row = cursor_row
+        @last_width = width
+        @last_height = height
+        move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
+        render_cursor_visibility_locked
       end
 
       def render_prompt_after_output_locked
