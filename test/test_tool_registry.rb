@@ -281,6 +281,21 @@ class TestToolRegistry < KwardTestCase
     assert_operator result.bytesize, :<, output.bytesize
   end
 
+  def test_tool_registry_preserves_test_failure_summaries_in_compacted_output
+    output = "Exit status: 1\n\nSTDOUT:\n" + Array.new(1_500) { |index| "progress #{index}" }.join("\n") + "\n  1) Failure:\nTestThing#test_breaks [test/test_thing.rb:12]:\nExpected true.\n\n42 runs, 100 assertions, 1 failures, 0 errors, 0 skips"
+    workspace = Object.new
+    workspace.define_singleton_method(:run_shell_command) { |_command, **_kwargs| output }
+    registry = Kward::ToolRegistry.new(workspace: workspace)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "ruby -Itest test/test_thing.rb"), conversation)
+
+    assert_includes result, "1) Failure:"
+    assert_includes result, "TestThing#test_breaks"
+    assert_includes result, "42 runs, 100 assertions, 1 failures, 0 errors, 0 skips"
+    assert_operator result.bytesize, :<, output.bytesize
+  end
+
   def test_retrieve_tool_output_returns_original_compacted_output
     output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["ERROR: important failure", "end"]).join("\n")
     search = FakeCodeSearch.new(output)

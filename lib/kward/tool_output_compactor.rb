@@ -15,6 +15,7 @@ module Kward
     ERROR_CONTEXT_LINES = 2
 
     ERROR_PATTERN = /\b(error|fatal|failed|failure|exception|traceback|panic|segmentation fault|assertion)\b/i.freeze
+    TEST_PATTERN = /(^\s*\d+\)\s|\b(\d+\s+(tests?|examples?|runs?|assertions?|failures?|errors?|skips?)|finished in|failures?:|seed\s+\d+)\b)/i.freeze
 
     def compact(tool_name, content, artifact_id: nil)
       text = normalize(content)
@@ -74,17 +75,17 @@ module Kward
     def selected_line_indexes(lines)
       indexes = []
       indexes.concat((0...[HEAD_LINES, lines.length].min).to_a)
-      indexes.concat(error_context_indexes(lines))
+      indexes.concat(priority_context_indexes(lines))
 
       tail_start = [lines.length - TAIL_LINES, 0].max
       indexes.concat((tail_start...lines.length).to_a)
       indexes.uniq.sort
     end
 
-    def error_context_indexes(lines)
+    def priority_context_indexes(lines)
       indexes = []
       lines.each_with_index do |line, index|
-        next unless line.match?(ERROR_PATTERN)
+        next unless line.match?(ERROR_PATTERN) || line.match?(TEST_PATTERN)
 
         first = [index - ERROR_CONTEXT_LINES, 0].max
         last = [index + ERROR_CONTEXT_LINES, lines.length - 1].min
