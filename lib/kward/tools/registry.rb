@@ -15,6 +15,7 @@ require_relative "search/code"
 require_relative "search/web"
 require_relative "search/web_fetch"
 require_relative "tool_call"
+require_relative "../tool_output_compactor"
 require_relative "../workspace"
 
 # Namespace for the Kward CLI agent runtime.
@@ -54,7 +55,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, tool_output_compactor: ToolOutputCompactor.new)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -63,6 +64,7 @@ module Kward
       @skills = skills
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
+      @tool_output_compactor = tool_output_compactor
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map(&:schema).freeze
     end
@@ -90,14 +92,15 @@ module Kward
                 end
       content = Conversation.normalize_tool_content(content)
 
+      model_content = @tool_output_compactor.compact(name, content)
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
         name: name,
-        content: content
+        content: model_content
       )
       conversation.append_tool_execution(tool_call: tool_call, content: content)
 
-      content
+      model_content
     end
 
     private

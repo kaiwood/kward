@@ -248,6 +248,23 @@ class TestToolRegistry < KwardTestCase
     assert_equal [{ "url" => "https://example.com" }], fetch.calls
   end
 
+  def test_tool_registry_compacts_large_tool_output_for_model_context
+    output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["ERROR: important failure", "end"]).join("\n")
+    search = FakeCodeSearch.new(output)
+    registry = Kward::ToolRegistry.new(code_search: search)
+    callback_content = nil
+    conversation = Kward::Conversation.new
+    conversation.on_tool_execution = lambda { |_tool_call, content| callback_content = content }
+
+    result = registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+
+    assert_includes result, "[Tool output compacted by Kward:"
+    assert_includes result, "ERROR: important failure"
+    assert_operator result.bytesize, :<, output.bytesize
+    assert_equal result, conversation.messages.last[:content]
+    assert_equal output, callback_content
+  end
+
   def test_tool_registry_normalizes_binary_tool_content_for_callbacks
     binary_content = +"fetched \xff content"
     binary_content.force_encoding(Encoding::ASCII_8BIT)

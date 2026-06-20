@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed large tool results to be compacted before they enter model context while preserving full originals in session tool-execution records.
 - Changed model context-window resolution to prefer cached OpenRouter metadata, infer matching provider models from that metadata when possible, and use conservative fallbacks for unknown selected models.
 
 ### Added
