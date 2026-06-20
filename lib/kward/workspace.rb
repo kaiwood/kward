@@ -69,6 +69,26 @@ module Kward
       "Error: #{e.message}"
     end
 
+    # Returns a compact outline of recognizable source-code declarations.
+    def summarize_file_structure(path)
+      resolved = workspace_path(path)
+      return "Error: not a file: #{path}" unless File.file?(resolved)
+
+      size = File.size(resolved)
+      return "Error: file too large: #{path} is #{size} bytes; limit is #{@max_file_bytes} bytes" if size > @max_file_bytes
+
+      content = File.read(resolved)
+      return "Error: not a text file: #{path}" if binary_content?(content)
+
+      lines = content.split("\n", -1)
+      outline = source_outline(lines)
+      return "No recognizable source structure found in #{path}." if outline.empty?
+
+      (["# File structure: #{path}", "- Lines: #{lines.length}", "- Bytes: #{content.bytesize}", "", "## Outline"] + outline).join("\n")
+    rescue SecurityError, Errno::ENOENT => e
+      "Error: #{e.message}"
+    end
+
     # Writes complete file content after enforcing read-before-write for
     # existing files.
     #

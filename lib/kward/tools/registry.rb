@@ -9,6 +9,7 @@ require_relative "list_directory"
 require_relative "read_file"
 require_relative "read_skill"
 require_relative "run_shell_command"
+require_relative "summarize_file_structure"
 require_relative "retrieve_tool_output"
 require_relative "web_search"
 require_relative "write_file"
@@ -113,7 +114,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(
-        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "retrieve_tool_output"
+        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "retrieve_tool_output"
       )
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools << @tools["read_skill"] if skills_available?
@@ -139,6 +140,7 @@ module Kward
         Tools::EditFile.new(workspace: @workspace),
         Tools::RunShellCommand.new(workspace: @workspace),
         Tools::CodeSearch.new(code_search: @code_search),
+        Tools::SummarizeFileStructure.new(workspace: @workspace),
         Tools::RetrieveToolOutput.new
       ]
     end

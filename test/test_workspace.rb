@@ -69,6 +69,20 @@ class TestWorkspace < KwardTestCase
     end
   end
 
+  def test_summarize_file_structure_returns_source_outline
+    with_temp_workspace do |workspace, dir|
+      File.write(File.join(dir, "structure.rb"), "module BigThing\n  class Runner\n    def call\n    end\n  end\nend\n")
+
+      result = workspace.summarize_file_structure("structure.rb")
+
+      assert_includes result, "# File structure: structure.rb"
+      assert_includes result, "- Lines: 7"
+      assert_includes result, "line 1: module BigThing"
+      assert_includes result, "line 2:   class Runner"
+      assert_includes result, "line 3:     def call"
+    end
+  end
+
   def test_read_file_returns_outline_for_large_source_files
     with_temp_workspace do |workspace, dir|
       lines = ["module BigThing", "  class Runner", "    def call", "    end", "  end", "end"] + Array.new(2_100) { |index| "# filler #{index}" }

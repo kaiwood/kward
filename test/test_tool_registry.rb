@@ -139,6 +139,12 @@ class TestToolRegistry < KwardTestCase
     refute_includes tool_names, "ask_user_question"
   end
 
+  def test_tool_schemas_include_summarize_file_structure
+    tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+    assert_includes tool_names, "summarize_file_structure"
+  end
+
   def test_read_file_schema_supports_offset_and_limit
     read_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "read_file" }
     properties = read_schema[:function][:parameters][:properties]
