@@ -909,6 +909,30 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_ask_user_question_handles_csi_u_backspace
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("maybe\e[127u\e[13u")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal [{ question: "Proceed?", answer: "mayb", custom: true }], prompt.ask_user_question([question_args("Proceed?")])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_ask_user_question_cancels_on_csi_u_escape
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("maybe\e[27u")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_nil prompt.ask_user_question([question_args("Proceed?")])
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_ask_user_question_accepts_bracketed_paste_custom_answer
     input, writer = IO.pipe
     output = StringIO.new
