@@ -19,6 +19,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed TUI selection search to start only after pressing `/`, hiding the composer cursor until search mode is active and supporting shell-style editing keys while searching.
 - Changed the `/sessions` picker to show right-aligned relative timestamps like `/rewind`.
 - Changed TUI list navigation to keep long `/sessions` and `/tree` pickers centered while scrolling, and removed wrap-around at list edges.
 - Changed the saved session picker slash command to `/sessions`, with `/resume` kept as an alias.

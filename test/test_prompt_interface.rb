@@ -556,14 +556,93 @@ class TestPromptInterface < KwardTestCase
     assert_equal ["choice 8", "choice 9", "choice 10", "choice 11", "choice 12"], prompt.send(:visible_selection_matches, choices, height: 12)[:choices]
   end
 
-  def test_prompt_interface_select_filters_choices
+  def test_prompt_interface_select_ignores_typing_until_search_is_started
     input, writer = IO.pipe
     output = StringIO.new
     writer.write("sec\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
+    assert_equal "first", prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_filters_choices_after_slash
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/sec\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
     assert_equal "second", prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_search_blocks_action_keys_until_escape
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    action_keys = prompt.send(:normalized_select_action_keys, { "c" => :clone })
+    prompt.instance_variable_set(:@select_state, { choices: ["first", "second"], selection_index: 0, title: "Sessions", custom: false, action_keys: action_keys, search_active: false })
+
+    assert prompt.send(:handle_select_key, "/")
+    assert_equal 0, prompt.send(:handle_select_key, "c")
+    assert_equal "c", prompt.send(:composer_input)
+    assert prompt.send(:handle_select_key, "\e[27u")
+    assert_empty prompt.send(:composer_input)
+    refute prompt.send(:select_search_active?)
+    assert_equal({ action: :clone, choice: "first" }, prompt.send(:handle_select_key, "c"))
+  end
+
+  def test_prompt_interface_select_search_supports_shell_style_editing_keys
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/ab\x01Z\x05X\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "ZabX", prompt.select("Session>", ["ZabX", "other"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_search_supports_shell_style_kill_and_yank_keys
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/hello world\x15\x19\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "hello world", prompt.select("Session>", ["hello world", "other"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_title_switches_to_search_while_searching
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/sec\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
+    stripped = strip_ansi(output.string)
+    assert_includes stripped, "╭ Search "
+    assert_includes stripped, "╭ Session "
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_hides_cursor_until_search_starts
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/sec\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+    assert_includes output.string, Kward::PromptInterface::CURSOR_SHOW
   ensure
     input&.close unless input&.closed?
   end

@@ -85,7 +85,7 @@ module Kward
       end
 
       def composer_title
-        label = @prompt_label.delete_suffix(">")
+        label = composer_title_label
         if @busy && @queued_count.positive?
           status_composer_text(busy_title("#{label} · #{@queued_count} queued"))
         elsif @busy && @steered_count.to_i.positive?
@@ -95,6 +95,12 @@ module Kward
         else
           status_composer_text(label)
         end
+      end
+
+      def composer_title_label
+        return "Search" if @select_state && select_search_active?
+
+        @prompt_label.delete_suffix(">")
       end
 
       def busy_title(text)

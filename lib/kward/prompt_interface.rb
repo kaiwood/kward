@@ -292,7 +292,7 @@ module Kward
         @queued_count = 0
         choice_labels = choices.map(&:to_s)
         selection_index = choice_labels.empty? ? 0 : [[initial_index.to_i, 0].max, choice_labels.length - 1].min
-        @select_state = { choices: choice_labels, selection_index: selection_index, title: title.to_s, custom: custom, action_keys: normalized_select_action_keys(action_keys) }
+        @select_state = { choices: choice_labels, selection_index: selection_index, title: title.to_s, custom: custom, action_keys: normalized_select_action_keys(action_keys), search_active: false }
         reset_history_navigation
         render_prompt_locked
       end

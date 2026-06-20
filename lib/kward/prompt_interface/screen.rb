@@ -55,6 +55,7 @@ module Kward
 
       def render_cursor_visibility_locked
         visible = !(@question_state && !selected_question_choice&.fetch(:custom, false))
+        visible = select_search_active? if @select_state
         set_cursor_visible_locked(visible)
       end
 

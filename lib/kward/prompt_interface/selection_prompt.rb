@@ -23,22 +23,25 @@ module Kward
         csi_result = handle_select_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        binding_result = handle_select_search_key_binding(key)
+        return binding_result unless binding_result == false
+
         key_name = @reader.console.keys[key]
         case key_name
         when :return, :enter
           select_current_choice
         when :backspace
-          select_delete_before_cursor
+          select_delete_before_cursor if select_search_active?
         when :delete
-          select_delete_at_cursor
+          select_delete_at_cursor if select_search_active?
         when :left
-          self.composer_cursor -= 1 if composer_cursor.positive?
+          select_move_cursor_left if select_search_active?
         when :right
-          self.composer_cursor += 1 if composer_cursor < composer_input.length
+          select_move_cursor_right if select_search_active?
         when :home
-          self.composer_cursor = 0
+          self.composer_cursor = 0 if select_search_active?
         when :end
-          self.composer_cursor = composer_input.length
+          self.composer_cursor = composer_input.length if select_search_active?
         when :up
           select_previous_choice
         when :down
@@ -48,11 +51,11 @@ module Kward
           when "\n", "\r"
             select_current_choice
           when "\b", "\x7F"
-            select_delete_before_cursor
+            select_delete_before_cursor if select_search_active?
           when "\e"
             handle_select_escape_sequence
           else
-            select_action_key(key) || select_insert_key(key)
+            select_typed_key(key)
           end
         end
       end
@@ -64,18 +67,41 @@ module Kward
         sequence = match[0]
         code = match[1].to_i
         modifiers = match[2].to_s
+        modifier = (modifiers.empty? ? "1" : modifiers).split(":", 2).first.to_i
         queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
 
         case code
         when 13
           select_current_choice
         when 27
-          SELECT_CANCEL
+          select_search_active? ? select_cancel_search : SELECT_CANCEL
         when 8, 127
-          select_delete_before_cursor
+          if select_search_active?
+            alt_modifier?(modifier) ? select_delete_word_before_cursor : select_delete_before_cursor
+          end
+          nil
+        when 4
+          select_delete_at_cursor if select_search_active?
           nil
         else
+          modified_result = handle_select_modified_csi_u_key(code, modifier)
+          return modified_result unless modified_result == false
+
           handle_select_printable_csi_u_key(code, modifiers)
+        end
+      end
+
+      def handle_select_modified_csi_u_key(code, modifier)
+        return false unless select_search_active?
+        return false unless ctrl_modifier?(modifier) || alt_modifier?(modifier)
+
+        normalized_code = code.to_i.chr.downcase.ord rescue code
+        if ctrl_modifier?(modifier)
+          handle_select_ctrl_key(normalized_code)
+        elsif alt_modifier?(modifier)
+          handle_select_alt_key(normalized_code)
+        else
+          false
         end
       end
 
@@ -84,11 +110,12 @@ module Kward
         return false unless code.between?(32, 126)
 
         key = code.chr(Encoding::UTF_8)
-        select_action_key(key) || select_insert_key(key)
+        select_typed_key(key)
       end
 
       def handle_select_escape_sequence
         sequence = read_pending_escape_sequence
+        return select_cancel_search if sequence.empty? && select_search_active?
         return SELECT_CANCEL if sequence.empty? || sequence.start_with?("\e")
 
         key_name = @reader.console.keys["\e#{sequence}"]
@@ -98,9 +125,9 @@ module Kward
         when :down
           select_next_choice
         when :left
-          self.composer_cursor -= 1 if composer_cursor.positive?
+          select_move_cursor_left if select_search_active?
         when :right
-          self.composer_cursor += 1 if composer_cursor < composer_input.length
+          select_move_cursor_right if select_search_active?
         end
         true
       end
@@ -118,7 +145,7 @@ module Kward
         end
 
         content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
-        select_insert_string(normalize_paste(content || ""))
+        select_insert_string(normalize_paste(content || "")) if select_search_active?
         queue_pending_keys(remaining) if remaining && !remaining.empty?
         true
       end
@@ -278,7 +305,7 @@ module Kward
       end
 
       def custom_selection_choice
-        return nil unless @select_state && @select_state[:custom]
+        return nil unless @select_state && @select_state[:custom] && select_search_active?
 
         value = composer_input.strip
         value.empty? ? nil : value
@@ -305,6 +332,163 @@ module Kward
         @select_state[:selection_index] = next_list_selection_index(selection_index, matches.length)
       end
 
+      def handle_select_search_key_binding(key)
+        return false unless select_search_active?
+
+        case key
+        when "\x01"
+          select_move_to_start_of_line
+        when "\x02"
+          select_move_cursor_left
+        when "\x04"
+          select_delete_at_cursor
+        when "\x05"
+          select_move_to_end_of_line
+        when "\x06"
+          select_move_cursor_right
+        when "\x08"
+          select_delete_before_cursor
+        when "\x0B"
+          select_kill_line_after_cursor
+        when "\x0C"
+          redraw_screen_locked
+        when "\x15"
+          select_kill_line_before_cursor
+        when "\x17"
+          select_delete_word_before_cursor
+        when "\x19"
+          select_yank_kill_buffer
+        when "\eb"
+          select_move_to_previous_word
+        when "\ed"
+          select_delete_word_after_cursor
+        when "\ef"
+          select_move_to_next_word
+        when "\e\b", "\e\x7F"
+          select_delete_word_before_cursor
+        else
+          false
+        end
+      end
+
+      def handle_select_ctrl_key(code)
+        case code
+        when 97
+          select_move_to_start_of_line
+        when 98
+          select_move_cursor_left
+        when 100
+          select_delete_at_cursor
+        when 101
+          select_move_to_end_of_line
+        when 102
+          select_move_cursor_right
+        when 104
+          select_delete_before_cursor
+        when 107
+          select_kill_line_after_cursor
+        when 108
+          redraw_screen_locked
+        when 117
+          select_kill_line_before_cursor
+        when 119
+          select_delete_word_before_cursor
+        when 121
+          select_yank_kill_buffer
+        else
+          false
+        end
+      end
+
+      def handle_select_alt_key(code)
+        case code
+        when 98
+          select_move_to_previous_word
+        when 100
+          select_delete_word_after_cursor
+        when 102
+          select_move_to_next_word
+        else
+          false
+        end
+      end
+
+      def select_typed_key(key)
+        return select_begin_search if key == "/" && !select_search_active?
+        return select_action_key(key) unless select_search_active?
+
+        select_insert_key(key)
+      end
+
+      def select_begin_search
+        return unless @select_state
+
+        @select_state[:search_active] = true
+        self.composer_input = ""
+        self.composer_cursor = 0
+        true
+      end
+
+      def select_cancel_search
+        return unless @select_state
+
+        @select_state[:search_active] = false
+        self.composer_input = ""
+        self.composer_cursor = 0
+        @select_state[:selection_index] = 0
+        true
+      end
+
+      def select_search_active?
+        @select_state && @select_state[:search_active]
+      end
+
+      def select_move_cursor_left
+        self.composer_cursor -= 1 if composer_cursor.positive?
+      end
+
+      def select_move_cursor_right
+        self.composer_cursor += 1 if composer_cursor < composer_input.length
+      end
+
+      def select_move_to_start_of_line
+        self.composer_cursor = 0
+      end
+
+      def select_move_to_end_of_line
+        self.composer_cursor = composer_input.length
+      end
+
+      def select_move_to_previous_word
+        @composer.move_to_previous_word
+      end
+
+      def select_move_to_next_word
+        @composer.move_to_next_word
+      end
+
+      def select_delete_word_before_cursor
+        reset_select_filter if @composer.delete_word_before_cursor
+      end
+
+      def select_delete_word_after_cursor
+        reset_select_filter if @composer.delete_word_after_cursor
+      end
+
+      def select_kill_line_before_cursor
+        reset_select_filter if @composer.kill_line_before_cursor
+      end
+
+      def select_kill_line_after_cursor
+        reset_select_filter if @composer.kill_line_after_cursor
+      end
+
+      def select_yank_kill_buffer
+        before = composer_input
+        @composer.yank_kill_buffer
+        reset_select_filter unless composer_input == before
+      end
+
       def select_insert_key(key)
         return unless key.is_a?(String) && key.length == 1 && key.match?(/[[:print:]]/)
 
@@ -316,7 +500,7 @@ module Kward
 
         self.composer_input = composer_input[0...composer_cursor] + string + composer_input[composer_cursor..]
         self.composer_cursor += string.length
-        @select_state[:selection_index] = 0 if @select_state
+        reset_select_filter
       end
 
       def select_delete_before_cursor
@@ -324,19 +508,23 @@ module Kward
 
         self.composer_input = composer_input[0...(composer_cursor - 1)] + composer_input[composer_cursor..]
         self.composer_cursor -= 1
-        @select_state[:selection_index] = 0 if @select_state
+        reset_select_filter
       end
 
       def select_delete_at_cursor
         return unless composer_cursor < composer_input.length
 
         self.composer_input = composer_input[0...composer_cursor] + composer_input[(composer_cursor + 1)..]
+        reset_select_filter
+      end
+
+      def reset_select_filter
         @select_state[:selection_index] = 0 if @select_state
       end
 
       def selection_matches
         choices = @select_state ? @select_state[:choices] : []
-        filter = composer_input.downcase.strip
+        filter = select_search_active? ? composer_input.downcase.strip : ""
         matches = filter.empty? ? choices : choices.select { |choice| choice.downcase.include?(filter) }
         clamp_selection_index(matches.length)
         matches
@@ -370,7 +558,7 @@ module Kward
         matches = selection_matches
         lines = [overlay_text_line(selection_overlay_help_text, :muted), overlay_blank_line]
         if matches.empty?
-          if @select_state && @select_state[:custom] && !composer_input.strip.empty?
+          if @select_state && @select_state[:custom] && select_search_active? && !composer_input.strip.empty?
             lines << overlay_choice_line("Use custom: #{composer_input.strip}", selected: true)
           else
             lines << overlay_text_line("No matches", :muted)
@@ -389,6 +577,7 @@ module Kward
 
       def selection_overlay_help_text
         text = "↑/↓ select · Enter open"
+        text = "#{text} · / search" unless select_search_active?
         action_keys = @select_state ? @select_state[:action_keys].to_h : {}
         action_keys.each do |key, action|
           text = "#{text} · #{key} #{action[:action]}"
