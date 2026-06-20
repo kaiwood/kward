@@ -166,20 +166,11 @@ module Kward
       end
 
       def handle_question_bracketed_paste_key(key)
-        text = key.to_s
-        return false unless text.start_with?(BRACKETED_PASTE_START)
+        paste = read_bracketed_paste(key)
+        return false unless paste
 
-        pasted = text[BRACKETED_PASTE_START.length..] || ""
-        until pasted.include?(BRACKETED_PASTE_END)
-          chunk = @reader.read_keypress(echo: false, raw: true)
-          break if chunk.nil?
-
-          pasted << chunk.to_s
-        end
-
-        content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
-        question_insert_string(normalize_paste(content || ""))
-        queue_pending_keys(remaining) if remaining && !remaining.empty?
+        question_insert_string(normalize_paste(paste[:content]))
+        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
         true
       end
 

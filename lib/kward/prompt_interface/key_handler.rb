@@ -137,8 +137,17 @@ module Kward
       end
 
       def handle_bracketed_paste_key(key)
+        paste = read_bracketed_paste(key)
+        return false unless paste
+
+        insert_paste(normalize_paste(paste[:content]))
+        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
+        true
+      end
+
+      def read_bracketed_paste(key)
         text = key.to_s
-        return false unless text.start_with?(BRACKETED_PASTE_START)
+        return nil unless text.start_with?(BRACKETED_PASTE_START)
 
         pasted = text[BRACKETED_PASTE_START.length..] || ""
         until pasted.include?(BRACKETED_PASTE_END)
@@ -149,9 +158,7 @@ module Kward
         end
 
         content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
-        insert_paste(normalize_paste(content || ""))
-        queue_pending_keys(remaining) if remaining && !remaining.empty?
-        true
+        { content: content || "", remaining: remaining }
       end
 
       def normalize_paste(content)
