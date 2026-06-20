@@ -69,6 +69,23 @@ class TestWorkspace < KwardTestCase
     end
   end
 
+  def test_read_file_returns_outline_for_large_source_files
+    with_temp_workspace do |workspace, dir|
+      lines = ["module BigThing", "  class Runner", "    def call", "    end", "  end", "end"] + Array.new(2_100) { |index| "# filler #{index}" }
+      File.write(File.join(dir, "big_source.rb"), lines.join("\n"))
+
+      result = workspace.read_file("big_source.rb")
+
+      assert_includes result, "File has 2106 lines"
+      assert_includes result, "Outline:"
+      assert_includes result, "line 1: module BigThing"
+      assert_includes result, "line 2:   class Runner"
+      assert_includes result, "line 3:     def call"
+      assert_includes result, "First 120 lines:"
+      assert_includes result, "Use read_file with offset=121"
+    end
+  end
+
   def test_read_file_supports_offset_and_limit
     with_temp_workspace do |workspace, dir|
       File.write(File.join(dir, "offset_limited_read.tmp"), "alpha\nbeta\ngamma")

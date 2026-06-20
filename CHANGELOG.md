@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Changed shell command output capture to allow larger raw output for Kward's own compactor, preserving stdout/stderr structure and test failure summaries before model-context trimming.
+- Changed large source-file reads to return an outline plus a short preview before requiring offset/limit continuation.
 - Changed large search and fetched-content tool results to preserve file, line, URL, and heading anchors during model-context compaction.
 - Changed large tool results to be compacted before they enter model context while preserving full originals in session tool-execution records.
 - Changed model context-window resolution to prefer cached OpenRouter metadata, infer matching provider models from that metadata when possible, and use conservative fallbacks for unknown selected models.

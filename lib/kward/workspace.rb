@@ -64,7 +64,7 @@ module Kward
       content = File.read(resolved)
       return "Error: not a text file: #{path}" if binary_content?(content)
 
-      read_file_slice(content, offset: offset, limit: limit)
+      large_file_outline_response(path, content, offset: offset, limit: limit) || read_file_slice(content, offset: offset, limit: limit)
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end
@@ -194,6 +194,42 @@ module Kward
 
     def relative_path(path)
       Pathname.new(path).relative_path_from(@root).to_s
+    end
+
+    def large_file_outline_response(path, content, offset:, limit:)
+      return nil unless offset.nil? && limit.nil?
+      lines = content.split("\n", -1)
+      return nil unless lines.length > @max_read_output_lines || content.bytesize > @max_read_output_bytes
+
+      outline = source_outline(lines)
+      return nil if outline.empty?
+
+      preview_limit = [120, @max_read_output_lines].min
+      preview = lines.first(preview_limit).join("\n")
+      [
+        "File has #{lines.length} lines (#{content.bytesize} bytes). Showing an outline and the first #{preview_limit} lines to reduce model context.",
+        "",
+        "Outline:",
+        outline.join("\n"),
+        "",
+        "First #{preview_limit} lines:",
+        preview,
+        "",
+        "[Use read_file with offset=#{preview_limit + 1} and limit to continue, or request a specific section from the outline.]"
+      ].join("\n")
+    end
+
+    def source_outline(lines)
+      outline = []
+      lines.each_with_index do |line, index|
+        stripped = line.strip
+        next unless stripped.match?(/\A(class|module|def)\s+/) || stripped.match?(/\A(function|async function)\s+/) || stripped.match?(/\A(export\s+)?(class|interface|type)\s+/)
+
+        indent = line[/\A\s*/].to_s.length
+        outline << "line #{index + 1}: #{'  ' * [indent / 2, 6].min}#{stripped}"
+        break if outline.length >= 80
+      end
+      outline
     end
 
     def read_file_slice(content, offset:, limit:)
