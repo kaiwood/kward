@@ -52,9 +52,19 @@ module Kward
           path = argument.to_s.strip
           if path.empty?
             sessions = run_busy_local_command_and_requeue { session_store.recent_tree(limit: nil) }
-            path = select_session_path_from_sessions(sessions)
+            path = select_session_path_from_sessions(sessions, session_store: session_store)
           end
-          replacement_agent = path.to_s.empty? ? nil : run_busy_local_command_and_requeue { resume_session(session_store, path) }
+          replacement_agent = if path.respond_to?(:conversation)
+                                path
+                              elsif path.is_a?(Hash) && path[:action] == :cloned
+                                run_busy_local_command_and_requeue { load_session(session_store, path[:path], message: "Cloned session") }
+                              elsif path.is_a?(Hash) && path[:action] == :clone
+                                run_busy_local_command_and_requeue(activity: "cloning") { clone_session_from_path(session_store, path[:path]) }
+                              elsif path.to_s.empty?
+                                nil
+                              else
+                                run_busy_local_command_and_requeue { resume_session(session_store, path) }
+                              end
           [true, replacement_agent]
         when "name"
           run_busy_local_command_and_requeue { rename_session(argument) }

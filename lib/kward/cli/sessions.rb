@@ -108,6 +108,13 @@ module Kward
         path = select_session_path(session_store) if path.empty?
         return nil if path.to_s.empty?
 
+        load_session(session_store, path, message: "Resumed session")
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        nil
+      end
+
+      def load_session(session_store, path, message: nil)
         previous_session = @active_session
         @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
         reset_session_diff(@active_session.path)
@@ -115,15 +122,12 @@ module Kward
         cleanup_replaced_session(previous_session)
         update_assistant_prompt(conversation)
         restore_prompt_transcript do
-          runtime_output("Resumed session: #{@active_session.path}")
+          runtime_output("#{message}: #{@active_session.path}") if message
           render_conversation_transcript(conversation)
         end
         agent = build_interactive_agent(conversation)
         @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
         agent
-      rescue StandardError => e
-        runtime_output("Error: #{e.message}")
-        nil
       end
 
       def navigate_session_tree(session_store)
@@ -420,6 +424,34 @@ module Kward
         agent
       end
 
+      def clone_session_from_path(session_store, path)
+        clone_path = clone_session_file_from_path(session_store, path)
+        load_session(session_store, clone_path, message: "Cloned session")
+      end
+
+      def clone_session_file_from_path(session_store, path)
+        source_session, source_conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        clone, = session_store.create_independent_from_conversation(source_conversation, parent_session: source_session)
+        clone.path
+      end
+
+      def clone_session_selection(session_store, sessions, labels, label)
+        source = sessions[labels.index(label)]
+        return nil unless source
+
+        clone_path = clone_session_file_from_path(session_store, source.path)
+        clone_info = session_store.recent_tree(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(clone_path) }
+        clone_info ||= session_store.recent(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(clone_path) }
+        return nil unless clone_info
+
+        source_index = sessions.index(source) || 0
+        clone_index = source_index + 1
+        sessions.insert(clone_index, clone_info)
+        label = session_label(clone_info)
+        labels.insert(clone_index, label)
+        { select_continue: true, choices: labels, selection_index: clone_index, action_choices: { label => { action: :cloned, path: clone_path } } }
+      end
+
       def copy_session_text(conversation, argument)
         target = copy_target(argument)
         unless target
@@ -501,10 +533,10 @@ module Kward
       end
 
       def select_session_path(session_store)
-        select_session_path_from_sessions(session_store.recent_tree(limit: nil))
+        select_session_path_from_sessions(session_store.recent_tree(limit: nil), session_store: session_store)
       end
 
-      def select_session_path_from_sessions(sessions)
+      def select_session_path_from_sessions(sessions, session_store: @session_store)
         if sessions.empty?
           runtime_output("No saved sessions found.")
           return nil
@@ -512,8 +544,15 @@ module Kward
 
         labels = sessions.map { |session| session_label(session) }
         if @prompt.respond_to?(:select)
-          choice = @prompt.select("Session>", labels)
+          choice = @prompt.select(
+            "Session>",
+            labels,
+            action_keys: { "c" => { action: :clone, activity: "cloning" } },
+            action_handlers: { clone: ->(label) { clone_session_selection(session_store, sessions, labels, label) } }
+          )
           return nil unless choice
+          return choice if choice.respond_to?(:conversation)
+          return choice if choice.is_a?(Hash)
 
           selected = sessions[labels.index(choice)]
           return selected&.path
@@ -527,6 +566,11 @@ module Kward
         else
           answer
         end
+      end
+
+      def session_selection_action(choice, sessions, labels)
+        selected = sessions[labels.index(choice[:choice])]
+        selected ? { action: choice[:action], path: selected.path } : nil
       end
 
       def session_label(session)

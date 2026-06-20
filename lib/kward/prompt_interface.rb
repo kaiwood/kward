@@ -70,6 +70,8 @@ module Kward
     EXIT_INPUT = :exit_input
     CANCEL_INPUT = :cancel_input
     SELECT_CANCEL = :select_cancel
+    SELECT_CONTINUE = :select_continue
+    SELECT_ACTION_MINIMUM_BUSY_SECONDS = 1.0
 
     # Submitted input string carrying optional display text for transcripts.
     class SubmittedInput < String
@@ -275,7 +277,7 @@ module Kward
       [overlay_card_width(screen_width) - 6, 1].max
     end
 
-    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
       return nil if choices.empty? && !custom
 
       start
@@ -290,7 +292,7 @@ module Kward
         @queued_count = 0
         choice_labels = choices.map(&:to_s)
         selection_index = choice_labels.empty? ? 0 : [[initial_index.to_i, 0].max, choice_labels.length - 1].min
-        @select_state = { choices: choice_labels, selection_index: selection_index, title: title.to_s, custom: custom }
+        @select_state = { choices: choice_labels, selection_index: selection_index, title: title.to_s, custom: custom, action_keys: normalized_select_action_keys(action_keys) }
         reset_history_navigation
         render_prompt_locked
       end
@@ -305,11 +307,18 @@ module Kward
             render_prompt_locked if resized || footer_refreshed
           else
             result = handle_select_key(key)
-            render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL
+            render_prompt_locked unless result.is_a?(String) || select_action_result?(result) || result == SELECT_CANCEL
           end
         end
 
-        if result.is_a?(String) || result == SELECT_CANCEL
+        if select_action_result?(result) && select_action_handler(result, action_handlers)
+          action_result = run_select_action(result, select_action_handler(result, action_handlers))
+          next if action_result == SELECT_CONTINUE
+
+          return action_result
+        end
+
+        if result.is_a?(String) || select_action_result?(result) || result == SELECT_CANCEL
           finish_select_prompt
           return result == SELECT_CANCEL ? nil : result
         end

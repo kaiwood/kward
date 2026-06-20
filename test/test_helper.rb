@@ -366,7 +366,7 @@ class KwardTestCase < Minitest::Test
       @select_initial_indices = []
     end
 
-    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
       @select_messages << message
       @select_choices << choices
       @select_titles << title
@@ -388,7 +388,7 @@ class KwardTestCase < Minitest::Test
       @select_initial_indices = []
     end
 
-    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
       @select_messages << message
       @select_choices << choices
       @select_titles << title
@@ -407,7 +407,7 @@ class KwardTestCase < Minitest::Test
       @selected_text = selected_text
     end
 
-    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
       @select_messages << message
       @select_choices << choices
       @select_titles << title

@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added `c` in the `/sessions` picker to clone the selected session and open the new clone, with a cloning spinner while it runs.
+
 ## [0.70.0] - 2026-06-19
 
 ### Added

@@ -50,7 +50,7 @@ module Kward
           when "\e"
             handle_select_escape_sequence
           else
-            select_insert_key(key)
+            select_action_key(key) || select_insert_key(key)
           end
         end
       end
@@ -61,6 +61,7 @@ module Kward
 
         sequence = match[0]
         code = match[1].to_i
+        modifiers = match[2].to_s
         queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
 
         case code
@@ -72,8 +73,16 @@ module Kward
           select_delete_before_cursor
           nil
         else
-          false
+          handle_select_printable_csi_u_key(code, modifiers)
         end
+      end
+
+      def handle_select_printable_csi_u_key(code, modifiers)
+        return false unless modifiers.empty? || modifiers == "1"
+        return false unless code.between?(32, 126)
+
+        key = code.chr(Encoding::UTF_8)
+        select_action_key(key) || select_insert_key(key)
       end
 
       def handle_select_escape_sequence
@@ -114,6 +123,117 @@ module Kward
 
       def select_current_choice
         selected_selection_choice || custom_selection_choice || SELECT_CANCEL
+      end
+
+      def select_action_key(key)
+        return nil unless key.is_a?(String) && key.length == 1
+
+        action_keys = @select_state ? @select_state[:action_keys].to_h : {}
+        action = action_keys[key]
+        choice = selected_selection_choice
+        action && choice ? action.merge(choice: choice) : nil
+      end
+
+      def select_action_result?(result)
+        result.is_a?(Hash) && result.key?(:action) && result.key?(:choice)
+      end
+
+      def select_action_handler(result, action_handlers)
+        action_handlers.to_h[result[:action]] || action_handlers.to_h[result[:action].to_s]
+      end
+
+      def run_select_action(result, handler)
+        begin_select_action(result[:activity])
+        minimum_busy_until = result[:activity] ? monotonic_now + SELECT_ACTION_MINIMUM_BUSY_SECONDS : nil
+        action_result = nil
+        action_error = nil
+        worker = Thread.new do
+          action_result = handler.call(result[:choice])
+        rescue StandardError => e
+          action_error = e
+        end
+
+        while worker.alive? || (minimum_busy_until && monotonic_now < minimum_busy_until)
+          tick_select_action_locked
+          sleep 0.02
+        end
+        worker.join
+        raise action_error if action_error
+
+        apply_select_action_result(action_result)
+      ensure
+        finish_select_action unless action_result == SELECT_CONTINUE || select_continue_result?(action_result)
+      end
+
+      def apply_select_action_result(result)
+        return SELECT_CONTINUE if result == SELECT_CONTINUE
+        return result unless select_continue_result?(result)
+
+        @mutex.synchronize do
+          if @select_state
+            @select_state[:choices] = Array(result[:choices]).map(&:to_s) if result.key?(:choices)
+            @select_state[:selection_index] = result[:selection_index].to_i if result.key?(:selection_index)
+          end
+          render_prompt_locked
+          @output_io.flush
+        end
+        SELECT_CONTINUE
+      end
+
+      def select_continue_result?(result)
+        result.is_a?(Hash) && result[:select_continue]
+      end
+
+      def begin_select_action(activity)
+        @mutex.synchronize do
+          @busy = true
+          @busy_activity = normalize_busy_activity(activity)
+          @asking = true
+          reset_spinner_locked
+          render_prompt_locked
+          @output_io.flush
+        end
+      end
+
+      def finish_select_action
+        @mutex.synchronize do
+          @busy = false
+          @busy_activity = "streaming"
+          @select_state&.delete(:busy_activity)
+          render_prompt_locked if @asking
+          @output_io.flush
+        end
+      end
+
+      def tick_select_action_locked
+        @mutex.synchronize do
+          resized = handle_resize_locked
+          spun = tick_spinner_locked
+          footer_refreshed = tick_footer_locked
+          render_prompt_locked if resized || spun || footer_refreshed
+          @output_io.flush if resized || spun || footer_refreshed
+        end
+      end
+
+      def normalized_select_action_keys(action_keys)
+        action_keys.to_h.each_with_object({}) do |(key, action), normalized|
+          next unless key.to_s.length == 1
+
+          normalized_action = normalized_select_action(action)
+          normalized[key.to_s] = normalized_action if normalized_action
+        end
+      end
+
+      def normalized_select_action(action)
+        if action.is_a?(Hash)
+          name = action[:action] || action["action"]
+          activity = action[:activity] || action["activity"]
+        else
+          name = action
+        end
+        return nil if name.to_s.empty?
+
+        { action: name.to_sym, activity: activity.to_s }.delete_if { |_key, value| value.to_s.empty? }
       end
 
       def custom_selection_choice
@@ -205,7 +325,7 @@ module Kward
 
       def selection_overlay_rows(width, height: screen_height)
         matches = selection_matches
-        lines = [overlay_text_line("↑/↓ select · Enter open · Esc cancel", :muted), overlay_blank_line]
+        lines = [overlay_text_line(selection_overlay_help_text, :muted), overlay_blank_line]
         if matches.empty?
           if @select_state && @select_state[:custom] && !composer_input.strip.empty?
             lines << overlay_choice_line("Use custom: #{composer_input.strip}", selected: true)
@@ -222,6 +342,15 @@ module Kward
           lines << overlay_choice_line(choice, selected: index == selection_index)
         end
         overlay_card_rows(selection_overlay_title, lines, width)
+      end
+
+      def selection_overlay_help_text
+        text = "↑/↓ select · Enter open"
+        action_keys = @select_state ? @select_state[:action_keys].to_h : {}
+        action_keys.each do |key, action|
+          text = "#{text} · #{key} #{action[:action]}"
+        end
+        "#{text} · Esc cancel"
       end
 
       def selection_overlay_title

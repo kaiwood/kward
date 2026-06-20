@@ -568,6 +568,56 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_action_key_returns_selected_choice
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("c")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal({ action: :clone, choice: "first" }, prompt.select("Session>", ["first", "second"], action_keys: { "c" => :clone }))
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_action_handler_keeps_modal_visible_while_busy
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("c")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    modal_active_during_action = nil
+    started_at = Time.now
+
+    result = prompt.select(
+      "Session>",
+      ["first"],
+      action_keys: { "c" => { action: :clone, activity: "cloning" } },
+      action_handlers: { clone: ->(choice) { modal_active_during_action = prompt.modal_active?; "cloned #{choice}" } }
+    )
+
+    assert_equal "cloned first", result
+    assert modal_active_during_action
+    assert_operator Time.now - started_at, :>=, Kward::PromptInterface::SELECT_ACTION_MINIMUM_BUSY_SECONDS
+    output_text = strip_ansi(output.string)
+    assert_includes output_text, "Sessions"
+    assert_includes output_text, "cloning"
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_action_key_accepts_csi_u_printable_key
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[99u")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal({ action: :clone, choice: "first" }, prompt.select("Session>", ["first"], action_keys: { "c" => :clone }))
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_escape_cancels
     input, writer = IO.pipe
     output = StringIO.new

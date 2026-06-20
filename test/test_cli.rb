@@ -143,7 +143,7 @@ class TestCLI < KwardTestCase
       @select_initial_indices = []
     end
 
-    def select(message, choices, title: "Sessions", custom: false, initial_index: 0)
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
       @select_messages << message
       @select_choices << choices
       @select_titles << title
@@ -1408,7 +1408,7 @@ class TestCLI < KwardTestCase
       saved.attach(conversation)
       conversation.append_user("hello")
       prompt = BusyPrompt.new(["/resume", "/exit"])
-      prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false|
+      prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false, **_kwargs|
         events << [:select_session]
         choices.first
       end
@@ -1662,6 +1662,35 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sessions_picker_clone_action_clones_and_shows_new_session
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new
+      source.attach(conversation)
+      conversation.append_user("saved prompt")
+      conversation.append_assistant("saved reply")
+      prompt = FakePrompt.new(["/sessions", "/exit"])
+      prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
+        result = action_handlers.fetch(action_keys.fetch("c")[:action]).call(choices.first)
+        cloned_label = result[:choices][result[:selection_index]]
+        result[:action_choices].fetch(cloned_label)
+      end
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 2, files.length
+      clone_path = (files - [source.path]).first
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Cloned session: #{clone_path}"
+      assert_includes output, "saved prompt"
+      assert_includes output, "saved reply"
+    end
+  end
+
   def test_export_renders_compaction_summary_content
     export_path = File.join(Dir.pwd, "tmp-cli-export.md")
     conversation = Kward::Conversation.new(system_message: nil)
@@ -1786,7 +1815,7 @@ class TestCLI < KwardTestCase
         ["/resume #{session.path}", "/rewind", "/rewind", "/exit"],
         []
       )
-      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0|
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, **_kwargs|
         @select_messages << message
         @select_choices << choices
         @select_titles << title
@@ -1927,7 +1956,7 @@ class TestCLI < KwardTestCase
       conversation.append_user("first prompt")
       conversation.append_assistant("first reply")
       prompt = BusySelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"])
-      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0|
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, **_kwargs|
         events << [:select, message, title, initial_index]
         choices.first
       end
@@ -1957,7 +1986,7 @@ class TestCLI < KwardTestCase
       conversation.append_assistant("first reply")
       conversation.append_user("edit this prompt")
       prompt = BusySelectPrompt.new(["/resume #{session.path}", "/tree", "/exit"])
-      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0|
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, **_kwargs|
         events << [:select, message, title, initial_index]
         choices.find { |choice| choice.include?("edit this prompt") } || choices.first
       end

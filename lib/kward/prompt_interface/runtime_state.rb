@@ -17,7 +17,7 @@ module Kward
       end
 
       def tick_spinner_locked
-        return false unless @busy && @queued_count.zero? && @started && @asking
+        return false unless spinner_active?
 
         now = monotonic_now
         elapsed = now - @last_spinner_tick
@@ -31,6 +31,11 @@ module Kward
 
       def spinner_frame
         SPINNER_FRAMES[@spinner_frame_index % SPINNER_FRAMES.length]
+      end
+
+      def spinner_active?
+        busy = @busy || (@select_state && @select_state[:busy_activity])
+        busy && @queued_count.zero? && @started && @asking
       end
 
       def tick_footer_locked
