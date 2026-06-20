@@ -17,6 +17,7 @@ module Kward
       "run_shell_command" => "bash",
       "list_directory" => "list_directory",
       "code_search" => "code_search",
+      "retrieve_tool_output" => "retrieve_tool_output",
       "web_search" => "web_search",
       "fetch_content" => "fetch_content",
       "fetch_raw" => "fetch_raw",

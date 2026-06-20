@@ -9,6 +9,7 @@ require_relative "list_directory"
 require_relative "read_file"
 require_relative "read_skill"
 require_relative "run_shell_command"
+require_relative "retrieve_tool_output"
 require_relative "web_search"
 require_relative "write_file"
 require_relative "search/code"
@@ -92,7 +93,8 @@ module Kward
                 end
       content = Conversation.normalize_tool_content(content)
 
-      model_content = @tool_output_compactor.compact(name, content)
+      artifact_id = conversation.store_tool_output_artifact(tool_name: name, content: content)
+      model_content = @tool_output_compactor.compact(name, content, artifact_id: artifact_id)
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
         name: name,
@@ -111,7 +113,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(
-        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search"
+        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "retrieve_tool_output"
       )
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools << @tools["read_skill"] if skills_available?
@@ -136,7 +138,8 @@ module Kward
         Tools::WriteFile.new(workspace: @workspace),
         Tools::EditFile.new(workspace: @workspace),
         Tools::RunShellCommand.new(workspace: @workspace),
-        Tools::CodeSearch.new(code_search: @code_search)
+        Tools::CodeSearch.new(code_search: @code_search),
+        Tools::RetrieveToolOutput.new
       ]
     end
 

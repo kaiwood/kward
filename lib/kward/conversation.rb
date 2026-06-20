@@ -1,3 +1,4 @@
+require "digest"
 require "set"
 require_relative "image_attachments"
 require_relative "message_access"
@@ -57,6 +58,8 @@ module Kward
     attr_accessor :plugin_registry
     # @return [String, nil] plugin prompt context used in the current system prompt
     attr_reader :last_plugin_prompt_context
+    # @return [Hash] original large tool outputs retained outside model context
+    attr_reader :tool_output_artifacts
 
     def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
@@ -85,6 +88,7 @@ module Kward
       @memory_context = memory_context
       @session_memories = Array(session_memories)
       @last_memory_retrieval = last_memory_retrieval
+      @tool_output_artifacts = {}
       @messages.concat(transcript_messages)
       @read_paths = Set.new(read_paths)
       @on_append = on_append
@@ -135,6 +139,24 @@ module Kward
 
     def append_tool_execution(tool_call:, content:)
       @on_tool_execution&.call(tool_call, content)
+    end
+
+    def store_tool_output_artifact(tool_name:, content:)
+      text = self.class.normalize_tool_content(content)
+      id = self.class.tool_output_artifact_id(tool_name: tool_name, content: text)
+      @tool_output_artifacts[id] = {
+        id: id,
+        tool_name: tool_name,
+        content: text,
+        bytes: text.bytesize,
+        created_at: Time.now.utc
+      }
+      id
+    end
+
+    def self.tool_output_artifact_id(tool_name:, content:)
+      digest = Digest::SHA256.hexdigest("#{tool_name}\0#{content}")[0, 16]
+      "toolout_#{digest}"
     end
 
     # @return [Array<Hash>] provider request context: current system prompt plus durable transcript

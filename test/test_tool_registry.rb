@@ -260,9 +260,24 @@ class TestToolRegistry < KwardTestCase
 
     assert_includes result, "[Tool output compacted by Kward:"
     assert_includes result, "ERROR: important failure"
+    assert_match(/Full output id: toolout_[a-f0-9]{16}/, result)
     assert_operator result.bytesize, :<, output.bytesize
     assert_equal result, conversation.messages.last[:content]
     assert_equal output, callback_content
+  end
+
+  def test_retrieve_tool_output_returns_original_compacted_output
+    output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["ERROR: important failure", "end"]).join("\n")
+    search = FakeCodeSearch.new(output)
+    registry = Kward::ToolRegistry.new(code_search: search)
+    conversation = Kward::Conversation.new
+
+    compacted = registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+    artifact_id = compacted[/toolout_[a-f0-9]{16}/]
+    result = registry.dispatch(tool_call("retrieve_tool_output", id: artifact_id, query: "important", limit: 1), conversation)
+
+    assert_includes result, "[Retrieved tool output #{artifact_id} matching \"important\""
+    assert_includes result, "ERROR: important failure"
   end
 
   def test_tool_registry_normalizes_binary_tool_content_for_callbacks

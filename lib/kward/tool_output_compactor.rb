@@ -16,7 +16,7 @@ module Kward
 
     ERROR_PATTERN = /\b(error|fatal|failed|failure|exception|traceback|panic|segmentation fault|assertion)\b/i.freeze
 
-    def compact(tool_name, content)
+    def compact(tool_name, content, artifact_id: nil)
       text = normalize(content)
       return text unless text.bytesize > MIN_BYTES
       return text if error_output?(text) && text.bytesize <= ERROR_OUTPUT_MAX_BYTES
@@ -25,7 +25,7 @@ module Kward
       return text if compacted == text
       return text if compacted.bytesize >= text.bytesize
 
-      header = compacted_header(tool_name, text, compacted)
+      header = compacted_header(tool_name, text, compacted, artifact_id: artifact_id)
       candidate = "#{header}\n\n#{compacted}"
       candidate.bytesize < text.bytesize ? candidate : text
     end
@@ -85,13 +85,19 @@ module Kward
       output.join("\n")
     end
 
-    def compacted_header(tool_name, original, compacted)
+    def compacted_header(tool_name, original, compacted, artifact_id: nil)
       [
         "[Tool output compacted by Kward: #{original.bytesize} bytes -> #{compacted.bytesize} bytes]",
         "Tool: #{tool_name}",
         "Preserved first #{HEAD_LINES} lines, last #{TAIL_LINES} lines, and error/failure context.",
-        "Full output is retained in session tool-execution records, outside model context."
+        retrieval_instruction(artifact_id)
       ].join("\n")
+    end
+
+    def retrieval_instruction(artifact_id)
+      return "Full output is retained outside model context." if artifact_id.to_s.empty?
+
+      "Full output id: #{artifact_id}. Use retrieve_tool_output to inspect it."
     end
   end
 end
