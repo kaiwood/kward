@@ -10,4 +10,13 @@ class TestToolOutputCompactor < KwardTestCase
 
     assert_equal content, result
   end
+
+  def test_short_error_output_stays_verbatim
+    content = "Exit status: 1\n\nSTDERR:\nERROR: exact short failure"
+    compactor = Kward::ToolOutputCompactor.new
+
+    result = compactor.compact("run_shell_command", content, artifact_id: "toolout_test")
+
+    assert_equal content, result
+  end
 end
