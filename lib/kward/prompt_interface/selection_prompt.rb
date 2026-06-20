@@ -533,19 +533,19 @@ module Kward
       end
 
       def select_move_cursor_left
-        self.composer_cursor -= 1 if composer_cursor.positive?
+        @composer.move_cursor_left
       end
 
       def select_move_cursor_right
-        self.composer_cursor += 1 if composer_cursor < composer_input.length
+        @composer.move_cursor_right
       end
 
       def select_move_to_start_of_line
-        self.composer_cursor = 0
+        @composer.move_to_start_of_line
       end
 
       def select_move_to_end_of_line
-        self.composer_cursor = composer_input.length
+        @composer.move_to_end_of_line
       end
 
       def select_move_to_previous_word
@@ -587,24 +587,16 @@ module Kward
       def select_insert_string(string)
         return if string.empty?
 
-        self.composer_input = composer_input[0...composer_cursor] + string + composer_input[composer_cursor..]
-        self.composer_cursor += string.length
+        @composer.insert_string(string)
         reset_select_filter
       end
 
       def select_delete_before_cursor
-        return unless composer_cursor.positive?
-
-        self.composer_input = composer_input[0...(composer_cursor - 1)] + composer_input[composer_cursor..]
-        self.composer_cursor -= 1
-        reset_select_filter
+        reset_select_filter if @composer.delete_before_cursor
       end
 
       def select_delete_at_cursor
-        return unless composer_cursor < composer_input.length
-
-        self.composer_input = composer_input[0...composer_cursor] + composer_input[(composer_cursor + 1)..]
-        reset_select_filter
+        reset_select_filter if @composer.delete_at_cursor
       end
 
       def reset_select_filter
