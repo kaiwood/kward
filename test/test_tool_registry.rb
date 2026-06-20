@@ -281,6 +281,20 @@ class TestToolRegistry < KwardTestCase
     assert_operator result.bytesize, :<, output.bytesize
   end
 
+  def test_tool_registry_preserves_search_result_anchors_in_compacted_output
+    output = (["# Code search", ""] + Array.new(1_500) { |index| "noise #{index}" } + ["## lib/kward/agent.rb:42", "- lib/kward/agent.rb:42: def run_turn", "https://github.com/kaiwood/kward/blob/main/lib/kward/agent.rb#L42"]).join("\n")
+    search = FakeCodeSearch.new(output)
+    registry = Kward::ToolRegistry.new(code_search: search)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("code_search", action: "repo_search"), conversation)
+
+    assert_includes result, "## lib/kward/agent.rb:42"
+    assert_includes result, "lib/kward/agent.rb:42: def run_turn"
+    assert_includes result, "https://github.com/kaiwood/kward"
+    assert_operator result.bytesize, :<, output.bytesize
+  end
+
   def test_tool_registry_preserves_test_failure_summaries_in_compacted_output
     output = "Exit status: 1\n\nSTDOUT:\n" + Array.new(1_500) { |index| "progress #{index}" }.join("\n") + "\n  1) Failure:\nTestThing#test_breaks [test/test_thing.rb:12]:\nExpected true.\n\n42 runs, 100 assertions, 1 failures, 0 errors, 0 skips"
     workspace = Object.new

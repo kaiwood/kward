@@ -16,6 +16,7 @@ module Kward
 
     ERROR_PATTERN = /\b(error|fatal|failed|failure|exception|traceback|panic|segmentation fault|assertion)\b/i.freeze
     TEST_PATTERN = /(^\s*\d+\)\s|\b(\d+\s+(tests?|examples?|runs?|assertions?|failures?|errors?|skips?)|finished in|failures?:|seed\s+\d+)\b)/i.freeze
+    SEARCH_PATTERN = /(^##\s+\S+|^[-*]\s+\S+|\S+:\d+:|https?:\/\/\S+)/.freeze
 
     def compact(tool_name, content, artifact_id: nil)
       text = normalize(content)
@@ -85,7 +86,7 @@ module Kward
     def priority_context_indexes(lines)
       indexes = []
       lines.each_with_index do |line, index|
-        next unless line.match?(ERROR_PATTERN) || line.match?(TEST_PATTERN)
+        next unless line.match?(ERROR_PATTERN) || line.match?(TEST_PATTERN) || line.match?(SEARCH_PATTERN)
 
         first = [index - ERROR_CONTEXT_LINES, 0].max
         last = [index + ERROR_CONTEXT_LINES, lines.length - 1].min
@@ -111,7 +112,7 @@ module Kward
       [
         "[Tool output compacted by Kward: #{original.bytesize} bytes -> #{compacted.bytesize} bytes]",
         "Tool: #{tool_name}",
-        "Preserved first #{HEAD_LINES} lines, last #{TAIL_LINES} lines, and error/failure context.",
+        "Preserved first #{HEAD_LINES} lines, last #{TAIL_LINES} lines, and error/failure/search context.",
         retrieval_instruction(artifact_id)
       ].join("\n")
     end
