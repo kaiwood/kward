@@ -8,13 +8,7 @@ module Kward
 
       def ask_single_user_question(question, index, total)
         @mutex.synchronize do
-          @prompt_label = "Answer>"
-          self.composer_input = ""
-          self.composer_cursor = 0
-          @pending_keys.clear
-          @asking = true
-          @busy = false
-          @queued_count = 0
+          prepare_modal_input_locked("Answer>")
           @question_state = {
             question: question[:question] || question["question"],
             header: question[:header] || question["header"],
@@ -23,7 +17,6 @@ module Kward
             index: index,
             total: total
           }
-          reset_history_navigation
           render_prompt_locked
         end
 

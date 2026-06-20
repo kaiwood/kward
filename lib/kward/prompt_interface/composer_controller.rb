@@ -175,6 +175,18 @@ module Kward
         @composer.reset_history_navigation
       end
 
+      def prepare_modal_input_locked(label, clear_attachments: false)
+        @prompt_label = label.to_s
+        self.composer_input = ""
+        self.composer_cursor = 0
+        @composer.clear_attachments if clear_attachments
+        @pending_keys.clear
+        @asking = true
+        @busy = false
+        @queued_count = 0
+        reset_history_navigation
+      end
+
       def submit_input
         value = submitted_input
         add_history(composer_input)

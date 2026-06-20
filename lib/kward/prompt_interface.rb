@@ -282,18 +282,10 @@ module Kward
 
       start
       @mutex.synchronize do
-        @prompt_label = message.to_s
-        self.composer_input = ""
-        self.composer_cursor = 0
-        @composer.clear_attachments
-                  @pending_keys.clear
-        @asking = true
-        @busy = false
-        @queued_count = 0
+        prepare_modal_input_locked(message, clear_attachments: true)
         choice_labels = choices.map(&:to_s)
         selection_index = choice_labels.empty? ? 0 : [[initial_index.to_i, 0].max, choice_labels.length - 1].min
         @select_state = { choices: choice_labels, selection_index: selection_index, title: title.to_s, custom: custom, action_keys: normalized_select_action_keys(action_keys), search_active: false }
-        reset_history_navigation
         render_prompt_locked
       end
 
