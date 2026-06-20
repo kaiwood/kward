@@ -46,8 +46,8 @@ module Kward
         reset_slash_selection
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
-              @composer.insert_string(string)
-            end
+        @composer.insert_string(string)
+      end
 
       def insert_paste(string)
         parsed = parse_attachments(string)
@@ -70,11 +70,11 @@ module Kward
       end
 
       def add_attachment(attachment)
-              @composer.add_attachment(attachment)
-            end
+        @composer.add_attachment(attachment)
+      end
 
       def delete_before_cursor
-              if @composer.cursor.zero?
+        if @composer.cursor.zero?
           remove_last_attachment
           return
         end
@@ -82,48 +82,48 @@ module Kward
         reset_slash_selection
         reset_history_navigation
         @composer.delete_before_cursor
-            end
+      end
 
       def remove_last_attachment
-              return unless @composer.remove_last_attachment
+        return unless @composer.remove_last_attachment
 
         reset_slash_selection
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
-            end
+      end
 
       def delete_at_cursor
-              return unless @composer.cursor < @composer.input.length
+        return unless @composer.cursor < @composer.input.length
 
         reset_slash_selection
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
         @composer.delete_at_cursor
-            end
+      end
 
       def move_cursor_left
-              @composer.move_cursor_left
-            end
+        @composer.move_cursor_left
+      end
 
       def move_cursor_right
-              @composer.move_cursor_right
-            end
+        @composer.move_cursor_right
+      end
 
       def move_to_start_of_line
-              @composer.move_to_start_of_line
-            end
+        @composer.move_to_start_of_line
+      end
 
       def move_to_end_of_line
-              @composer.move_to_end_of_line
-            end
+        @composer.move_to_end_of_line
+      end
 
       def move_to_previous_word
-              @composer.move_to_previous_word
-            end
+        @composer.move_to_previous_word
+      end
 
       def move_to_next_word
-              @composer.move_to_next_word
-            end
+        @composer.move_to_next_word
+      end
 
       def delete_at_cursor_or_exit
         composer_input.empty? ? exit_input : delete_at_cursor
@@ -132,44 +132,44 @@ module Kward
       def delete_word_before_cursor
         reset_slash_selection
         reset_history_navigation
-              @composer.delete_word_before_cursor
-            end
+        @composer.delete_word_before_cursor
+      end
 
       def delete_word_after_cursor
         reset_slash_selection
         reset_history_navigation
-              @composer.delete_word_after_cursor
-            end
+        @composer.delete_word_after_cursor
+      end
 
       def kill_line_before_cursor
         reset_slash_selection
         reset_history_navigation
-              @composer.kill_line_before_cursor
-            end
+        @composer.kill_line_before_cursor
+      end
 
       def kill_line_after_cursor
         reset_slash_selection
         reset_history_navigation
-              @composer.kill_line_after_cursor
-            end
+        @composer.kill_line_after_cursor
+      end
 
       def kill_range(start_index, end_index)
-              return unless @composer.kill_range(start_index, end_index)
+        return unless @composer.kill_range(start_index, end_index)
 
         reset_slash_selection
         reset_history_navigation
-            end
+      end
 
       def yank_kill_buffer
-              @composer.yank_kill_buffer
-            end
+        @composer.yank_kill_buffer
+      end
 
       def previous_word_boundary(index)
-              @composer.previous_word_boundary(index)
+        @composer.previous_word_boundary(index)
       end
 
       def next_word_boundary(index)
-              @composer.next_word_boundary(index)
+        @composer.next_word_boundary(index)
       end
 
       def word_separator?(char)
@@ -177,20 +177,20 @@ module Kward
       end
 
       def add_history(value)
-              @composer.add_history(value)
-            end
+        @composer.add_history(value)
+      end
 
       def recall_previous_history
-              @composer.recall_previous_history
-            end
+        @composer.recall_previous_history
+      end
 
       def recall_next_history
-              @composer.recall_next_history
-            end
+        @composer.recall_next_history
+      end
 
       def replace_input(value)
         @composer.replace_input(value)
-            end
+      end
 
       def prefill_input(value)
         @mutex.synchronize do
@@ -199,9 +199,8 @@ module Kward
       end
 
       def reset_history_navigation
-              @composer.reset_history_navigation
-            end
-
+        @composer.reset_history_navigation
+      end
 
       def submit_input
         value = submitted_input
