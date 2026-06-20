@@ -830,6 +830,38 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_search_accepts_bracketed_paste
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/\e[200~sec\e[201~\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_input_accepts_bracketed_paste
+    input, writer = IO.pipe
+    output = StringIO.new
+    captured = nil
+    writer.write("r\e[200~New name\e[201~\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    prompt.select(
+      "Session>",
+      ["first"],
+      action_keys: { "r" => { action: :rename, input_prompt: "Name>" } },
+      action_handlers: { rename: ->(_choice, input) { captured = input } }
+    )
+
+    assert_equal "New name", captured
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_submits_on_csi_u_enter
     input, writer = IO.pipe
     output = StringIO.new
@@ -873,6 +905,20 @@ class TestPromptInterface < KwardTestCase
     assert_includes stripped, "╰"
     assert_includes output.string, "\e[?25l"
     assert_includes output.string, "\e[?25h"
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_ask_user_question_accepts_bracketed_paste_custom_answer
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[200~maybe later\e[201~\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    answers = prompt.ask_user_question([question_args("Proceed?")])
+
+    assert_equal [{ question: "Proceed?", answer: "maybe later", custom: true }], answers
   ensure
     input&.close unless input&.closed?
   end
