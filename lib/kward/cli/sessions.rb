@@ -591,7 +591,7 @@ module Kward
         copy_index = source_index + 1
         sessions.insert(copy_index, copy_info)
         labels.replace(session_picker_labels(sessions))
-        { select_continue: true, choices: labels, selection_index: copy_index }
+        continue_session_selection(labels, copy_index)
       end
 
       def delete_session_selection(_session_store, sessions, labels, label)
@@ -603,7 +603,7 @@ module Kward
         sessions.delete_at(index)
         labels.replace(session_picker_labels(sessions))
         next_index = [index, labels.length - 1].min
-        { select_continue: true, choices: labels, selection_index: next_index }
+        continue_session_selection(labels, next_index)
       end
 
       def rename_session_selection(session_store, sessions, labels, label, name)
@@ -615,7 +615,11 @@ module Kward
         sessions.replace(updated)
         labels.replace(session_picker_labels(sessions))
         index = sessions.index { |session| File.expand_path(session.path) == File.expand_path(source.path) } || 0
-        { select_continue: true, choices: labels, selection_index: index }
+        continue_session_selection(labels, index)
+      end
+
+      def continue_session_selection(labels, selection_index)
+        { select_continue: true, choices: labels, selection_index: selection_index }
       end
 
       def copy_session_text(conversation, argument)
