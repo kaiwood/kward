@@ -27,6 +27,7 @@ module Kward
       return text if compacted == text
       return text if compacted.bytesize >= text.bytesize
 
+      artifact_id = yield if artifact_id.nil? && block_given?
       header = compacted_header(tool_name, text, compacted, artifact_id: artifact_id)
       candidate = "#{header}\n\n#{compacted}"
       candidate.bytesize < text.bytesize ? candidate : text

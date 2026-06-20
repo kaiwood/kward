@@ -262,6 +262,16 @@ class TestToolRegistry < KwardTestCase
     assert_equal [{ "url" => "https://example.com" }], fetch.calls
   end
 
+  def test_tool_registry_does_not_store_artifacts_for_uncompacted_output
+    search = FakeCodeSearch.new("small output")
+    registry = Kward::ToolRegistry.new(code_search: search)
+    conversation = Kward::Conversation.new
+
+    registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+
+    assert_empty conversation.tool_output_artifacts
+  end
+
   def test_tool_registry_compacts_large_tool_output_for_model_context
     output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["ERROR: important failure", "end"]).join("\n")
     search = FakeCodeSearch.new(output)

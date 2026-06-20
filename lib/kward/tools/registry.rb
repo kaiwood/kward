@@ -94,8 +94,10 @@ module Kward
                 end
       content = Conversation.normalize_tool_content(content)
 
-      artifact_id = conversation.store_tool_output_artifact(tool_name: name, content: content)
-      model_content = @tool_output_compactor.compact(name, content, artifact_id: artifact_id)
+      artifact_id = nil
+      model_content = @tool_output_compactor.compact(name, content) do
+        artifact_id ||= conversation.store_tool_output_artifact(tool_name: name, content: content)
+      end
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
         name: name,
