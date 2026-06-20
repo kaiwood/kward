@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added optional `compaction` telemetry logging for tool-output context savings.
 - Added a `summarize_file_structure` tool for compact source-file outlines before reading full files.
 - Added a `retrieve_tool_output` tool for inspecting original outputs that were compacted out of model context.
 - Added `kward openrouter refresh` and `kward openrouter list` for caching key-scoped text-capable OpenRouter models in the Kward cache directory.

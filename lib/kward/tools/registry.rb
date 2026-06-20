@@ -17,6 +17,7 @@ require_relative "search/code"
 require_relative "search/web"
 require_relative "search/web_fetch"
 require_relative "tool_call"
+require_relative "../telemetry/logger"
 require_relative "../tool_output_compactor"
 require_relative "../workspace"
 
@@ -57,7 +58,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, tool_output_compactor: ToolOutputCompactor.new)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -67,6 +68,7 @@ module Kward
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
       @tool_output_compactor = tool_output_compactor
+      @telemetry_logger = telemetry_logger
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map(&:schema).freeze
     end
@@ -98,6 +100,7 @@ module Kward
       model_content = @tool_output_compactor.compact(name, content) do
         artifact_id ||= conversation.store_tool_output_artifact(tool_name: name, content: content)
       end
+      log_tool_output_compaction(name, artifact_id: artifact_id, before: content, after: model_content) if model_content != content
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
         name: name,
@@ -109,6 +112,18 @@ module Kward
     end
 
     private
+
+    def log_tool_output_compaction(name, artifact_id:, before:, after:)
+      @telemetry_logger.log(
+        "compaction",
+        "tool_output",
+        "tool_name" => name,
+        "artifact_id" => artifact_id,
+        "bytes_before" => before.bytesize,
+        "bytes_after" => after.bytesize,
+        "bytes_saved" => before.bytesize - after.bytesize
+      )
+    end
 
     def build_tools
       all_tools.to_h { |tool| [tool.name, tool] }

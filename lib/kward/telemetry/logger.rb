@@ -8,13 +8,14 @@ require_relative "../rpc/redactor"
 module Kward
   # Append-only JSONL telemetry logger with secret-conscious error payloads.
   class TelemetryLogger
-    CATEGORIES = %w[tokens performance tools errors].freeze
+    CATEGORIES = %w[tokens performance tools errors compaction].freeze
     ENV_KEYS = {
       "enabled" => "KWARD_LOGGING",
       "tokens" => "KWARD_LOGGING_TOKENS",
       "performance" => "KWARD_LOGGING_PERFORMANCE",
       "tools" => "KWARD_LOGGING_TOOLS",
-      "errors" => "KWARD_LOGGING_ERRORS"
+      "errors" => "KWARD_LOGGING_ERRORS",
+      "compaction" => "KWARD_LOGGING_COMPACTION"
     }.freeze
     DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
@@ -101,7 +102,8 @@ module Kward
         "tokens" => truthy?(logging["tokens"]),
         "performance" => truthy?(logging["performance"]),
         "tools" => truthy?(logging["tools"]),
-        "errors" => truthy?(logging["errors"])
+        "errors" => truthy?(logging["errors"]),
+        "compaction" => truthy?(logging["compaction"])
       }
     rescue StandardError
       CATEGORIES.each_with_object({ "enabled" => false }) { |category, result| result[category] = false }
