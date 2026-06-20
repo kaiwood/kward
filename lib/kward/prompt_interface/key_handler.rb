@@ -166,13 +166,12 @@ module Kward
       end
 
       def handle_csi_u_key(key)
-        match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
-        return false unless match
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
 
-        sequence = match[0]
-        code = match[1].to_i
-        modifier = (match[2] || "1").split(":", 2).first.to_i
-        queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
         case code
         when 13
@@ -187,6 +186,21 @@ module Kward
         else
           handle_modified_csi_u_key(code, modifier)
         end
+      end
+
+      def parse_csi_u_key(key)
+        match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
+        return nil unless match
+
+        modifiers = match[2].to_s
+        modifier = (modifiers.empty? ? "1" : modifiers).split(":", 2).first.to_i
+        {
+          sequence: match[0],
+          code: match[1].to_i,
+          modifiers: modifiers,
+          modifier: modifier,
+          remaining: key.to_s[match[0].length..]
+        }
       end
 
       def handle_modified_csi_u_key(code, modifier)

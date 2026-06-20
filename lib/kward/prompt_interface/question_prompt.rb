@@ -127,12 +127,11 @@ module Kward
       end
 
       def handle_question_csi_u_key(key)
-        match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
-        return false unless match
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
 
-        sequence = match[0]
-        code = match[1].to_i
-        queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+        code = sequence[:code]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
         case code
         when 13
