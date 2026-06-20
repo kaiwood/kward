@@ -99,7 +99,8 @@ Use slash commands for local actions that should not go to the model:
 | `/new` | start a fresh session. |
 | `/sessions` | open the saved sessions picker or continue a previous session by path. |
 | `/resume` | alias for `/sessions`. |
-| `/name <name>` | name the current session. |
+| `/name <name>` | name or clear the current session. |
+| `/rename <name>` | rename the current session. |
 | `/clone` | copy the current session into a new branch. |
 | `/rewind` | revisit an earlier prompt and try a different direction. |
 | `/tree` | inspect and navigate the full technical session tree. |
@@ -126,7 +127,7 @@ Sessions are scoped to the workspace. Use them when work spans more than one ter
 Typical flow:
 
 ```text
-/name oauth cleanup
+/rename oauth cleanup
 # work with Kward
 /export oauth-notes.md
 /exit

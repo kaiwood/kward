@@ -401,13 +401,19 @@ module Kward
         SessionTreeRenderer.new(roots: roots, current_leaf_id: current_leaf_id).items
       end
 
-      def rename_session(argument)
+      def rename_session(argument, require_name: false)
         unless @active_session
           runtime_output("No active persisted session.")
           return
         end
 
-        @active_session.rename(argument)
+        name = argument.to_s.strip
+        if require_name && name.empty?
+          runtime_output("Usage: /rename <name>")
+          return
+        end
+
+        @active_session.rename(name)
         label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
         runtime_output(label)
       end

@@ -1254,6 +1254,33 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_rename_names_empty_session_and_keeps_it_on_exit
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/rename Useful", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 1, files.length
+      assert jsonl_records(files.first).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" }
+    end
+  end
+
+  def test_rename_requires_name
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/rename", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert prompt.output.any? { |line| line.include?("Usage: /rename <name>") }
+      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+    end
+  end
+
   def test_quit_exits_like_exit
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

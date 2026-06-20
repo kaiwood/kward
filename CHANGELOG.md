@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `/rename <name>` for renaming the current interactive session.
 - Added `c` in the `/sessions` picker to clone the selected session and open the new clone, with a cloning spinner while it runs.
 - Added `d d` in the `/sessions` picker to delete the selected session after an inline confirmation.
 

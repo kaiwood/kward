@@ -11,6 +11,7 @@ module Kward
       { name: "sessions", description: "Open the saved sessions picker.", argument_hint: "[path]" },
       { name: "resume", description: "Alias for /sessions.", argument_hint: "[path]" },
       { name: "name", description: "Name or clear the current session.", argument_hint: "[name]" },
+      { name: "rename", description: "Rename the current session.", argument_hint: "<name>" },
       { name: "clone", description: "Clone the current session.", argument_hint: "" },
       { name: "rewind", description: "Revisit an earlier prompt and try a different direction.", argument_hint: "" },
       { name: "tree", description: "Inspect and navigate the full technical session tree.", argument_hint: "" },
