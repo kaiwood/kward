@@ -101,13 +101,13 @@ module Kward
         when :delete
           question_delete_at_cursor
         when :left
-          self.composer_cursor -= 1 if composer_cursor.positive?
+          @composer.move_cursor_left
         when :right
-          self.composer_cursor += 1 if composer_cursor < composer_input.length
+          @composer.move_cursor_right
         when :home
-          self.composer_cursor = 0
+          @composer.move_to_start_of_line
         when :end
-          self.composer_cursor = composer_input.length
+          @composer.move_to_end_of_line
         when :up
           question_previous_choice
         when :down
@@ -158,9 +158,9 @@ module Kward
         when :down
           question_next_choice
         when :left
-          self.composer_cursor -= 1 if composer_cursor.positive?
+          @composer.move_cursor_left
         when :right
-          self.composer_cursor += 1 if composer_cursor < composer_input.length
+          @composer.move_cursor_right
         end
         true
       end
@@ -251,23 +251,19 @@ module Kward
       def question_insert_string(string)
         return if string.empty?
 
-        self.composer_input = composer_input[0...composer_cursor] + string + composer_input[composer_cursor..]
-        self.composer_cursor += string.length
+        @composer.insert_string(string)
         @question_state[:selection_index] = question_choices.length - 1 if @question_state
       end
 
       def question_delete_before_cursor
-        return unless composer_cursor.positive?
+        return unless @composer.delete_before_cursor
 
-        self.composer_input = composer_input[0...(composer_cursor - 1)] + composer_input[composer_cursor..]
-        self.composer_cursor -= 1
         @question_state[:selection_index] = question_choices.length - 1 if @question_state && !composer_input.empty?
       end
 
       def question_delete_at_cursor
-        return unless composer_cursor < composer_input.length
+        return unless @composer.delete_at_cursor
 
-        self.composer_input = composer_input[0...composer_cursor] + composer_input[(composer_cursor + 1)..]
         @question_state[:selection_index] = question_choices.length - 1 if @question_state && !composer_input.empty?
       end
 
