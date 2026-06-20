@@ -295,6 +295,22 @@ class TestToolRegistry < KwardTestCase
     assert_operator result.bytesize, :<, output.bytesize
   end
 
+  def test_tool_registry_preserves_fetched_content_headings_and_links_in_compacted_output
+    body = (["# Fetched content", "- URL: https://example.com/guide", "", "# Main Guide"] + Array.new(1_500) { |index| "paragraph #{index}" } + ["## Important Section", "https://example.com/guide#important"]).join("\n")
+    fetch = Object.new
+    fetch.define_singleton_method(:fetch_content) { |_args| body }
+    registry = Kward::ToolRegistry.new(web_fetch: fetch, web_search_enabled: true)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("fetch_content", url: "https://example.com/guide"), conversation)
+
+    assert_includes result, "# Fetched content"
+    assert_includes result, "# Main Guide"
+    assert_includes result, "## Important Section"
+    assert_includes result, "https://example.com/guide#important"
+    assert_operator result.bytesize, :<, body.bytesize
+  end
+
   def test_tool_registry_preserves_test_failure_summaries_in_compacted_output
     output = "Exit status: 1\n\nSTDOUT:\n" + Array.new(1_500) { |index| "progress #{index}" }.join("\n") + "\n  1) Failure:\nTestThing#test_breaks [test/test_thing.rb:12]:\nExpected true.\n\n42 runs, 100 assertions, 1 failures, 0 errors, 0 skips"
     workspace = Object.new

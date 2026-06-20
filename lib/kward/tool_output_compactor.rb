@@ -16,7 +16,7 @@ module Kward
 
     ERROR_PATTERN = /\b(error|fatal|failed|failure|exception|traceback|panic|segmentation fault|assertion)\b/i.freeze
     TEST_PATTERN = /(^\s*\d+\)\s|\b(\d+\s+(tests?|examples?|runs?|assertions?|failures?|errors?|skips?)|finished in|failures?:|seed\s+\d+)\b)/i.freeze
-    SEARCH_PATTERN = /(^##\s+\S+|^[-*]\s+\S+|\S+:\d+:|https?:\/\/\S+)/.freeze
+    SEARCH_PATTERN = /(^\#{1,6}\s+\S+|^[-*]\s+\S+|\S+:\d+:|https?:\/\/\S+)/.freeze
 
     def compact(tool_name, content, artifact_id: nil)
       text = normalize(content)
