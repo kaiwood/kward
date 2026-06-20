@@ -81,6 +81,23 @@ class TestWebSearch < KwardTestCase
     assert_equal "Error: provider must be one of: auto, exa, perplexity, gemini, duckduckgo", result
   end
 
+  def test_web_search_ignores_top_level_model_provider_config
+    mcp_payload = JSON.dump(
+      "result" => {
+        "content" => [{ "type" => "text", "text" => "Title: Exa Result\nURL: https://example.com/exa\nText: Exa snippet\n---" }]
+      }
+    )
+    http = FakeHttpClient.new(
+      ["POST_JSON", "https://mcp.exa.ai/mcp"] => fake_response(200, "data: #{mcp_payload}\n")
+    )
+    research = Kward::WebSearch.new(http_client: http, config: { "provider" => "OpenRouter" })
+
+    result = research.search("queries" => ["ruby"])
+
+    refute_includes result, "Error: provider must be one of"
+    assert_includes result, "Provider: exa"
+  end
+
   def test_web_search_uses_keyless_exa_mcp_by_default
     mcp_payload = JSON.dump(
       "result" => {

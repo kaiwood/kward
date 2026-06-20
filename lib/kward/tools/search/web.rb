@@ -619,8 +619,8 @@ module Kward
       return web_config[snake] if web_config.key?(snake)
       return web_config[camel] if web_config.key?(camel)
       return config[prefixed] if config.key?(prefixed)
-      return config[snake] if config.key?(snake)
-      return config[camel] if config.key?(camel)
+      return config[snake] if key.to_s != "provider" && config.key?(snake)
+      return config[camel] if key.to_s != "provider" && config.key?(camel)
 
       nil
     end
