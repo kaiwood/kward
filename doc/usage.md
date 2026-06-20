@@ -139,6 +139,8 @@ Later:
 /sessions
 ```
 
+In the sessions picker, press `r` to rename the highlighted session, `c` to clone it, `f` to fork from an earlier prompt, or `d` twice to delete it.
+
 `/resume` remains available as an alias.
 
 Use `/rewind` when you want to go back to an earlier prompt and try a different direction. Kward shows user prompts from the current session, lets you edit a prior prompt, and continues from that point as a branch. Use `/tree` when you need the full technical session tree, including branches, assistant entries, tool calls, and tool results.

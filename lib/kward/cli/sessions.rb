@@ -619,6 +619,18 @@ module Kward
         { select_continue: true, choices: labels, selection_index: next_index }
       end
 
+      def rename_session_selection(session_store, sessions, labels, label, name)
+        source = sessions[labels.index(label)]
+        return nil unless source
+
+        session_store.load(source.path).first.rename(name)
+        updated = session_store.recent_tree(limit: nil)
+        sessions.replace(updated)
+        labels.replace(session_picker_labels(sessions))
+        index = sessions.index { |session| File.expand_path(session.path) == File.expand_path(source.path) } || 0
+        { select_continue: true, choices: labels, selection_index: index }
+      end
+
       def copy_session_text(conversation, argument)
         target = copy_target(argument)
         unless target
@@ -730,10 +742,11 @@ module Kward
             "Session>",
             labels,
             initial_index: initial_index,
-            action_keys: { "c" => { action: :clone, activity: "cloning" }, "f" => { action: :fork, defer_finish_render: true }, "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } },
+            action_keys: { "c" => { action: :clone, activity: "cloning" }, "f" => { action: :fork, defer_finish_render: true }, "r" => { action: :rename, input_prompt: "Name>" }, "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } },
             action_handlers: {
               clone: ->(label) { clone_session_selection(session_store, sessions, labels, label) },
-              delete: ->(label) { delete_session_selection(session_store, sessions, labels, label) }
+              delete: ->(label) { delete_session_selection(session_store, sessions, labels, label) },
+              rename: ->(label, name) { rename_session_selection(session_store, sessions, labels, label, name) }
             }
           )
           return nil unless choice

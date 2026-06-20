@@ -23,6 +23,8 @@ module Kward
         csi_result = handle_select_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        return handle_select_input_key(key) if select_input_active?
+
         binding_result = handle_select_search_key_binding(key)
         return binding_result unless binding_result == false
 
@@ -72,16 +74,22 @@ module Kward
 
         case code
         when 13
-          select_current_choice
+          select_input_active? ? select_input_action_result : select_current_choice
         when 27
-          select_search_active? ? select_cancel_search : SELECT_CANCEL
+          if select_input_active?
+            clear_select_input
+          elsif select_search_active?
+            select_cancel_search
+          else
+            SELECT_CANCEL
+          end
         when 8, 127
-          if select_search_active?
+          if select_editing_active?
             alt_modifier?(modifier) ? select_delete_word_before_cursor : select_delete_before_cursor
           end
           nil
         when 4
-          select_delete_at_cursor if select_search_active?
+          select_delete_at_cursor if select_editing_active?
           nil
         else
           modified_result = handle_select_modified_csi_u_key(code, modifier)
@@ -92,7 +100,7 @@ module Kward
       end
 
       def handle_select_modified_csi_u_key(code, modifier)
-        return false unless select_search_active?
+        return false unless select_editing_active?
         return false unless ctrl_modifier?(modifier) || alt_modifier?(modifier)
 
         normalized_code = code.to_i.chr.downcase.ord rescue code
@@ -115,6 +123,7 @@ module Kward
 
       def handle_select_escape_sequence
         sequence = read_pending_escape_sequence
+        return clear_select_input if sequence.empty? && select_input_active?
         return select_cancel_search if sequence.empty? && select_search_active?
         return SELECT_CANCEL if sequence.empty? || sequence.start_with?("\e")
 
@@ -125,9 +134,9 @@ module Kward
         when :down
           select_next_choice
         when :left
-          select_move_cursor_left if select_search_active?
+          select_move_cursor_left if select_editing_active?
         when :right
-          select_move_cursor_right if select_search_active?
+          select_move_cursor_right if select_editing_active?
         end
         true
       end
@@ -145,7 +154,7 @@ module Kward
         end
 
         content, remaining = pasted.split(BRACKETED_PASTE_END, 2)
-        select_insert_string(normalize_paste(content || "")) if select_search_active?
+        select_insert_string(normalize_paste(content || "")) if select_editing_active?
         queue_pending_keys(remaining) if remaining && !remaining.empty?
         true
       end
@@ -161,6 +170,38 @@ module Kward
         end
 
         key == @select_state[:confirm_key] ? select_action_key(key) : true
+      end
+
+      def handle_select_input_key(key)
+        key_name = @reader.console.keys[key]
+        case key_name
+        when :return, :enter
+          select_input_action_result
+        when :backspace
+          select_delete_before_cursor
+        when :delete
+          select_delete_at_cursor
+        when :left
+          select_move_cursor_left
+        when :right
+          select_move_cursor_right
+        when :home
+          self.composer_cursor = 0
+        when :end
+          self.composer_cursor = composer_input.length
+        else
+          case key
+          when "\n", "\r"
+            select_input_action_result
+          when "\b", "\x7F"
+            select_delete_before_cursor
+          when "\e"
+            clear_select_input
+            true
+          else
+            handle_select_search_key_binding(key) || select_insert_key(key)
+          end
+        end
       end
 
       def select_action_key(key)
@@ -185,11 +226,46 @@ module Kward
           return true
         end
 
+        if action[:input_prompt]
+          @select_state[:input_action] = action
+          @select_state[:input_choice] = choice
+          @select_state[:input_prompt_label] = @prompt_label
+          @prompt_label = action[:input_prompt].to_s
+          self.composer_input = ""
+          self.composer_cursor = 0
+          return true
+        end
+
         action.merge(choice: choice)
       end
 
       def select_confirmation_active?
         @select_state && !@select_state[:confirm_key].to_s.empty?
+      end
+
+      def select_input_active?
+        @select_state && @select_state[:input_action]
+      end
+
+      def select_input_action_result
+        return unless @select_state
+
+        action = @select_state[:input_action].dup
+        choice = @select_state[:input_choice]
+        input = composer_input.strip
+        clear_select_input
+        action.merge(choice: choice, input: input).reject { |name, _value| name == :input_prompt }
+      end
+
+      def clear_select_input
+        return unless @select_state
+
+        @prompt_label = @select_state[:input_prompt_label].to_s unless @select_state[:input_prompt_label].to_s.empty?
+        @select_state.delete(:input_action)
+        @select_state.delete(:input_choice)
+        @select_state.delete(:input_prompt_label)
+        self.composer_input = ""
+        self.composer_cursor = 0
       end
 
       def clear_select_confirmation
@@ -214,7 +290,11 @@ module Kward
         action_result = nil
         action_error = nil
         worker = Thread.new do
-          action_result = handler.call(result[:choice])
+          action_result = if result.key?(:input) && handler.arity != 1
+                            handler.call(result[:choice], result[:input])
+                          else
+                            handler.call(result[:choice])
+                          end
         rescue StandardError => e
           action_error = e
         end
@@ -228,7 +308,7 @@ module Kward
 
         apply_select_action_result(action_result)
       ensure
-        finish_select_action unless action_result == SELECT_CONTINUE || select_continue_result?(action_result)
+        finish_select_action
       end
 
       def apply_select_action_result(result)
@@ -251,6 +331,8 @@ module Kward
       end
 
       def begin_select_action(activity)
+        return if activity.to_s.empty?
+
         @mutex.synchronize do
           @busy = true
           @busy_activity = normalize_busy_activity(activity)
@@ -296,13 +378,14 @@ module Kward
           activity = action[:activity] || action["activity"]
           confirm = action[:confirm] || action["confirm"]
           confirm_title = action[:confirm_title] || action["confirm_title"]
+          input_prompt = action[:input_prompt] || action["input_prompt"]
           defer_finish_render = action[:defer_finish_render] || action["defer_finish_render"]
         else
           name = action
         end
         return nil if name.to_s.empty?
 
-        { action: name.to_sym, activity: activity.to_s, confirm: confirm.to_s, confirm_title: confirm_title.to_s, defer_finish_render: defer_finish_render }.delete_if { |_key, value| value.to_s.empty? }
+        { action: name.to_sym, activity: activity.to_s, confirm: confirm.to_s, confirm_title: confirm_title.to_s, input_prompt: input_prompt.to_s, defer_finish_render: defer_finish_render }.delete_if { |_key, value| value.to_s.empty? }
       end
 
       def custom_selection_choice
@@ -334,7 +417,7 @@ module Kward
       end
 
       def handle_select_search_key_binding(key)
-        return false unless select_search_active?
+        return false unless select_editing_active?
 
         case key
         when "\x01"
@@ -415,6 +498,7 @@ module Kward
       end
 
       def select_typed_key(key)
+        return select_insert_key(key) if select_input_active?
         return select_begin_search if key == "/" && !select_search_active?
         return select_action_key(key) unless select_search_active?
 
@@ -442,6 +526,10 @@ module Kward
 
       def select_search_active?
         @select_state && @select_state[:search_active]
+      end
+
+      def select_editing_active?
+        select_search_active? || select_input_active?
       end
 
       def select_move_cursor_left
@@ -520,7 +608,7 @@ module Kward
       end
 
       def reset_select_filter
-        @select_state[:selection_index] = 0 if @select_state
+        @select_state[:selection_index] = 0 if @select_state && !select_input_active?
       end
 
       def selection_matches
@@ -581,6 +669,8 @@ module Kward
       end
 
       def selection_overlay_help_text
+        return "Renaming · Enter save · Esc cancel" if select_input_active?
+
         text = "↑/↓ select · Enter open"
         text = "#{text} · / search" unless select_search_active?
         action_keys = @select_state ? @select_state[:action_keys].to_h : {}

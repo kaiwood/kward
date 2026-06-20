@@ -697,6 +697,39 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_input_action_runs_handler_and_keeps_picker_open
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    handled = []
+
+    thread = Thread.new do
+      prompt.select(
+        "Session>",
+        ["first"],
+        action_keys: { "r" => { action: :rename, input_prompt: "Name>" } },
+        action_handlers: { rename: ->(choice, name) { handled << [choice, name]; { select_continue: true, choices: ["renamed"], selection_index: 0 } } }
+      )
+    end
+
+    writer.write("rRenamed\r")
+    sleep 0.05
+    writer.write("\e")
+    writer.close
+    thread.join(1)
+
+    assert_equal [["first", "Renamed"]], handled
+    output_text = strip_ansi(output.string)
+    assert_includes output_text, "Renaming · Enter save · Esc cancel"
+    assert_includes output_text, "Name"
+    assert_includes output_text, "renamed"
+    refute_includes output_text, "streaming"
+    assert_match(/#{Regexp.escape(Kward::PromptInterface::CURSOR_SHOW)}.*Renamed/m, output.string)
+  ensure
+    thread&.kill if thread&.alive?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_confirmed_action_requires_same_key_twice
     input, writer = IO.pipe
     output = StringIO.new

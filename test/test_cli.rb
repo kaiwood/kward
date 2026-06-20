@@ -1811,6 +1811,42 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sessions_picker_rename_action_keeps_picker_open
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new
+      source.attach(conversation)
+      conversation.append_user("saved prompt")
+      prompt = FakePrompt.new(["/sessions", "/exit"])
+      test = self
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
+        @select_messages ||= []
+        @select_choices ||= []
+        @select_initial_indices ||= []
+        @select_messages << message
+        @select_choices << choices
+        @select_initial_indices << initial_index
+        action = action_keys.fetch("r")
+        test.assert_equal :rename, action[:action]
+        test.assert_equal "Name>", action[:input_prompt]
+        result = action_handlers.fetch(:rename).call(choices.first, "Renamed session")
+        @select_choices << result[:choices]
+        @select_initial_indices << result[:selection_index]
+        nil
+      end
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      records = jsonl_records(source.path)
+      assert_equal "Renamed session", records.select { |record| record["type"] == "session_info" }.last["name"]
+      assert_equal ["Session>"], prompt.instance_variable_get(:@select_messages)
+      assert_includes prompt.instance_variable_get(:@select_choices).last[prompt.instance_variable_get(:@select_initial_indices).last], "Renamed session"
+    end
+  end
+
   def test_sessions_picker_delete_action_deletes_selected_session
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
