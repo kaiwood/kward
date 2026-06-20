@@ -12,7 +12,7 @@ class TestPrompts < KwardTestCase
 
     assert_includes content, "use web_search to discover sources"
     assert_includes content, "fetch_content for important human-readable pages"
-    assert_includes content, "Use fetch_raw for machine-readable resources"
+    assert_includes content, "fetch_raw for machine-readable resources"
   end
 
   def test_config_principles_prompt_appends_from_config_dir

@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Changed shell command output capture to allow larger raw output for Kward's own compactor, preserving stdout/stderr structure and test failure summaries before model-context trimming.
+- Tightened the built-in system prompt wording to reduce repeated instruction tokens.
 - Changed generated runtime system prompts to use a stable timestamp anchor so time-based persona modifiers do not churn provider cache prefixes each turn.
 - Changed tool schema properties to be emitted in deterministic key order for more stable provider request payloads.
 - Changed large source-file reads to return an outline plus a short preview before requiring offset/limit continuation.
