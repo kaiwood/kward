@@ -618,6 +618,54 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_confirmed_action_requires_same_key_twice
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("dd")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal(
+      { action: :delete, choice: "first" },
+      prompt.select("Session>", ["first"], action_keys: { "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } })
+    )
+    output_text = strip_ansi(output.string)
+    assert_includes output_text, "Delete session?"
+    assert_includes output_text, "Press d again to delete, Esc to cancel."
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_select_confirmed_action_escape_returns_to_picker
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    selected = nil
+    thread = Thread.new do
+      selected = prompt.select(
+        "Session>",
+        ["first"],
+        action_keys: {
+          "c" => :clone,
+          "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" }
+        }
+      )
+    end
+
+    writer.write("d")
+    sleep 0.05
+    writer.write("\e")
+    sleep 0.5
+    writer.write("c")
+    writer.close
+    thread.join(1)
+
+    assert_equal({ action: :clone, choice: "first" }, selected)
+  ensure
+    thread&.kill if thread&.alive?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_escape_cancels
     input, writer = IO.pipe
     output = StringIO.new

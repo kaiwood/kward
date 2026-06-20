@@ -1691,6 +1691,41 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sessions_picker_delete_action_deletes_selected_session
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new
+      source.attach(conversation)
+      conversation.append_user("saved prompt")
+      prompt = FakePrompt.new(["/sessions", "/exit"])
+      test = self
+      prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
+        test.assert_equal "Press d again to delete, Esc to cancel.", action_keys.fetch("d")[:confirm]
+        result = action_handlers.fetch(action_keys.fetch("d")[:action]).call(choices.first)
+        test.assert_equal [], result[:choices]
+        nil
+      end
+      original_new = Kward::SessionTrash.method(:new)
+      Kward::SessionTrash.define_singleton_method(:new) do |**_kwargs|
+        Object.new.tap do |trash|
+          trash.define_singleton_method(:delete) do |path|
+            File.delete(path) if File.exist?(path)
+            true
+          end
+        end
+      end
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      refute File.exist?(source.path)
+    ensure
+      Kward::SessionTrash.define_singleton_method(:new, original_new) if original_new
+    end
+  end
+
   def test_export_renders_compaction_summary_content
     export_path = File.join(Dir.pwd, "tmp-cli-export.md")
     conversation = Kward::Conversation.new(system_message: nil)
@@ -1768,7 +1803,8 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
-      assert_equal ["selected session — #{File.basename(saved.path)}"], prompt.select_choices.first
+      assert_equal 1, prompt.select_choices.first.length
+      assert_match(/\Aselected session — #{Regexp.escape(File.basename(saved.path))}\s+just now\z/, prompt.select_choices.first.first)
       assert_equal "selected session", client.seen_messages[0][1]["content"]
       assert_equal "again", client.seen_messages[0][3][:content]
     end
@@ -2160,8 +2196,8 @@ edit this prompt"
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
-      assert_equal "root session — #{File.basename(source.path)}", prompt.select_choices.first.first
-      assert_includes prompt.select_choices.first, "└─ clone session — #{File.basename(clone.path)}"
+      assert_match(/\Aroot session — #{Regexp.escape(File.basename(source.path))}\s+1 min ago\z/, prompt.select_choices.first.first)
+      assert prompt.select_choices.first.any? { |choice| choice.match?(/\A└─ clone session — #{Regexp.escape(File.basename(clone.path))}\s+just now\z/) }
     end
   end
 
@@ -2179,7 +2215,7 @@ edit this prompt"
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
-      assert_includes prompt.select_choices.first, "saved session — #{File.basename(saved.path)}"
+      assert prompt.select_choices.first.any? { |choice| choice.match?(/\Asaved session — #{Regexp.escape(File.basename(saved.path))}\s+just now\z/) }
       refute_path_exists empty.path
     end
   end
@@ -2213,7 +2249,7 @@ edit this prompt"
       cli.interactive_loop
 
       assert_equal ["Session>"], prompt.select_messages
-      assert prompt.select_choices.first.any? { |choice| choice.start_with?("Useful —") }
+      assert prompt.select_choices.first.any? { |choice| choice.match?(/\AUseful — .*\s+just now\z/) }
     end
   end
 

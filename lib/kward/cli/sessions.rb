@@ -299,7 +299,7 @@ module Kward
       end
 
       def relative_rewind_time(timestamp)
-        time = Time.iso8601(timestamp.to_s).utc
+        time = timestamp.is_a?(Time) ? timestamp.utc : Time.iso8601(timestamp.to_s).utc
         seconds = [(Time.now.utc - time).to_i, 0].max
         case seconds
         when 0...60
@@ -447,9 +447,21 @@ module Kward
         source_index = sessions.index(source) || 0
         clone_index = source_index + 1
         sessions.insert(clone_index, clone_info)
-        label = session_label(clone_info)
-        labels.insert(clone_index, label)
+        labels.replace(session_picker_labels(sessions))
+        label = labels[clone_index]
         { select_continue: true, choices: labels, selection_index: clone_index, action_choices: { label => { action: :cloned, path: clone_path } } }
+      end
+
+      def delete_session_selection(_session_store, sessions, labels, label)
+        source = sessions[labels.index(label)]
+        return nil unless source
+
+        SessionTrash.new.delete(source.path)
+        index = sessions.index(source) || labels.index(label) || 0
+        sessions.delete_at(index)
+        labels.replace(session_picker_labels(sessions))
+        next_index = [index, labels.length - 1].min
+        { select_continue: true, choices: labels, selection_index: next_index }
       end
 
       def copy_session_text(conversation, argument)
@@ -542,13 +554,16 @@ module Kward
           return nil
         end
 
-        labels = sessions.map { |session| session_label(session) }
+        labels = session_picker_labels(sessions)
         if @prompt.respond_to?(:select)
           choice = @prompt.select(
             "Session>",
             labels,
-            action_keys: { "c" => { action: :clone, activity: "cloning" } },
-            action_handlers: { clone: ->(label) { clone_session_selection(session_store, sessions, labels, label) } }
+            action_keys: { "c" => { action: :clone, activity: "cloning" }, "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } },
+            action_handlers: {
+              clone: ->(label) { clone_session_selection(session_store, sessions, labels, label) },
+              delete: ->(label) { delete_session_selection(session_store, sessions, labels, label) }
+            }
           )
           return nil unless choice
           return choice if choice.respond_to?(:conversation)
@@ -571,6 +586,17 @@ module Kward
       def session_selection_action(choice, sessions, labels)
         selected = sessions[labels.index(choice[:choice])]
         selected ? { action: choice[:action], path: selected.path } : nil
+      end
+
+      def session_picker_labels(sessions)
+        labels = sessions.map { |session| session_label(session) }
+        label_width = labels.map(&:length).max.to_i
+        sessions.zip(labels).map do |session, label|
+          timestamp = relative_rewind_time(session.modified_at)
+          next label if timestamp.empty?
+
+          right_aligned_picker_metadata(label, timestamp, width: picker_choice_width, minimum_label_width: label_width)
+        end
       end
 
       def session_label(session)

@@ -10,9 +10,6 @@ module Kward
         return select_current_choice if key.nil?
         return if handle_select_bracketed_paste_key(key)
 
-        csi_result = handle_select_csi_u_key(key)
-        return csi_result unless csi_result == false
-
         if key.is_a?(String) && key.length > 1
           token = next_key_token(key)
           if token.length < key.length
@@ -20,6 +17,11 @@ module Kward
             return handle_select_key(token)
           end
         end
+
+        return handle_select_confirmation_key(key) if select_confirmation_active?
+
+        csi_result = handle_select_csi_u_key(key)
+        return csi_result unless csi_result == false
 
         key_name = @reader.console.keys[key]
         case key_name
@@ -125,13 +127,50 @@ module Kward
         selected_selection_choice || custom_selection_choice || SELECT_CANCEL
       end
 
+      def handle_select_confirmation_key(key)
+        if key.to_s.start_with?("\e")
+          clear_select_confirmation
+          return true
+        end
+
+        key == @select_state[:confirm_key] ? select_action_key(key) : true
+      end
+
       def select_action_key(key)
         return nil unless key.is_a?(String) && key.length == 1
 
         action_keys = @select_state ? @select_state[:action_keys].to_h : {}
         action = action_keys[key]
         choice = selected_selection_choice
-        action && choice ? action.merge(choice: choice) : nil
+        return nil unless action && choice
+
+        if select_confirmation_active?
+          return nil unless key == @select_state[:confirm_key]
+
+          clear_select_confirmation
+          return action.merge(choice: choice).reject { |name, _value| name == :confirm || name == :confirm_title }
+        end
+
+        if action[:confirm]
+          @select_state[:confirm_key] = key
+          @select_state[:confirm_text] = action[:confirm].to_s
+          @select_state[:confirm_title] = action[:confirm_title].to_s
+          return true
+        end
+
+        action.merge(choice: choice)
+      end
+
+      def select_confirmation_active?
+        @select_state && !@select_state[:confirm_key].to_s.empty?
+      end
+
+      def clear_select_confirmation
+        return unless @select_state
+
+        @select_state.delete(:confirm_key)
+        @select_state.delete(:confirm_text)
+        @select_state.delete(:confirm_title)
       end
 
       def select_action_result?(result)
@@ -228,12 +267,14 @@ module Kward
         if action.is_a?(Hash)
           name = action[:action] || action["action"]
           activity = action[:activity] || action["activity"]
+          confirm = action[:confirm] || action["confirm"]
+          confirm_title = action[:confirm_title] || action["confirm_title"]
         else
           name = action
         end
         return nil if name.to_s.empty?
 
-        { action: name.to_sym, activity: activity.to_s }.delete_if { |_key, value| value.to_s.empty? }
+        { action: name.to_sym, activity: activity.to_s, confirm: confirm.to_s, confirm_title: confirm_title.to_s }.delete_if { |_key, value| value.to_s.empty? }
       end
 
       def custom_selection_choice
@@ -324,6 +365,8 @@ module Kward
       end
 
       def selection_overlay_rows(width, height: screen_height)
+        return selection_confirmation_rows(width) if select_confirmation_active?
+
         matches = selection_matches
         lines = [overlay_text_line(selection_overlay_help_text, :muted), overlay_blank_line]
         if matches.empty?
@@ -356,6 +399,15 @@ module Kward
       def selection_overlay_title
         title = @select_state && @select_state[:title].to_s
         title && !title.empty? ? title : "Sessions"
+      end
+
+      def selection_confirmation_rows(width)
+        title = @select_state[:confirm_title].to_s
+        title = "Confirm" if title.empty?
+        text = @select_state[:confirm_text].to_s
+        text = "Press #{@select_state[:confirm_key]} again to confirm, Esc to cancel." if text.empty?
+        lines = [overlay_text_line(text, :muted)]
+        overlay_card_rows(title, lines, width)
       end
 
       def visible_selection_matches(matches, height: screen_height)
