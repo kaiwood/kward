@@ -13,6 +13,7 @@ module Kward
       { name: "name", description: "Name or clear the current session.", argument_hint: "[name]" },
       { name: "rename", description: "Rename the current session.", argument_hint: "<name>" },
       { name: "clone", description: "Clone the current session.", argument_hint: "" },
+      { name: "fork", description: "Fork from an earlier prompt into a new session.", argument_hint: "" },
       { name: "rewind", description: "Revisit an earlier prompt and try a different direction.", argument_hint: "" },
       { name: "tree", description: "Inspect and navigate the full technical session tree.", argument_hint: "" },
       { name: "copy", description: "Copy clean session text to the clipboard.", argument_hint: "[last|transcript]" },

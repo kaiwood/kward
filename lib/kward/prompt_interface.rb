@@ -319,7 +319,7 @@ module Kward
         end
 
         if result.is_a?(String) || select_action_result?(result) || result == SELECT_CANCEL
-          finish_select_prompt
+          finish_select_prompt(render: !select_deferred_finish_render?(result))
           return result == SELECT_CANCEL ? nil : result
         end
 

@@ -54,17 +54,25 @@ module Kward
             sessions = run_busy_local_command_and_requeue { session_store.recent_tree(limit: nil) }
             path = select_session_path_from_sessions(sessions, session_store: session_store)
           end
-          replacement_agent = if path.respond_to?(:conversation)
-                                path
-                              elsif path.is_a?(Hash) && path[:action] == :cloned
-                                run_busy_local_command_and_requeue { load_session(session_store, path[:path], message: "Cloned session") }
-                              elsif path.is_a?(Hash) && path[:action] == :clone
-                                run_busy_local_command_and_requeue(activity: "cloning") { clone_session_from_path(session_store, path[:path]) }
-                              elsif path.to_s.empty?
-                                nil
-                              else
-                                run_busy_local_command_and_requeue { resume_session(session_store, path) }
-                              end
+          replacement_agent = nil
+          selection = path
+          loop do
+            replacement_agent = if selection.respond_to?(:conversation)
+                                  selection
+                                elsif selection.is_a?(Hash) && selection[:action] == :cloned
+                                  run_busy_local_command_and_requeue { load_session(session_store, selection[:path], message: "Cloned session") }
+                                elsif selection.is_a?(Hash) && selection[:action] == :clone
+                                  run_busy_local_command_and_requeue(activity: "cloning") { clone_session_from_path(session_store, selection[:path]) }
+                                elsif selection.is_a?(Hash) && selection[:action] == :fork
+                                  selection = reopen_sessions_after_fork(session_store, selection[:path], selection[:choice_label])
+                                  next
+                                elsif selection.to_s.empty?
+                                  nil
+                                else
+                                  run_busy_local_command_and_requeue { resume_session(session_store, selection) }
+                                end
+            break
+          end
           [true, replacement_agent]
         when "name"
           run_busy_local_command_and_requeue { rename_session(argument) }
@@ -74,6 +82,8 @@ module Kward
           [true, nil]
         when "clone"
           [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]
+        when "fork"
+          [true, fork_session(session_store)]
         when "rewind"
           [true, run_busy_local_command_and_requeue { rewind_session(session_store) }]
         when "tree"

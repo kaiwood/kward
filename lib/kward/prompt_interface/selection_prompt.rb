@@ -296,12 +296,13 @@ module Kward
           activity = action[:activity] || action["activity"]
           confirm = action[:confirm] || action["confirm"]
           confirm_title = action[:confirm_title] || action["confirm_title"]
+          defer_finish_render = action[:defer_finish_render] || action["defer_finish_render"]
         else
           name = action
         end
         return nil if name.to_s.empty?
 
-        { action: name.to_sym, activity: activity.to_s, confirm: confirm.to_s, confirm_title: confirm_title.to_s }.delete_if { |_key, value| value.to_s.empty? }
+        { action: name.to_sym, activity: activity.to_s, confirm: confirm.to_s, confirm_title: confirm_title.to_s, defer_finish_render: defer_finish_render }.delete_if { |_key, value| value.to_s.empty? }
       end
 
       def custom_selection_choice
@@ -541,15 +542,19 @@ module Kward
         @select_state[:selection_index] = count - 1 if count.positive? && selection_index >= count
       end
 
-      def finish_select_prompt
+      def finish_select_prompt(render: true)
         @mutex.synchronize do
           @select_state = nil
           self.composer_input = ""
           self.composer_cursor = 0
           @asking = true
-          render_prompt_locked
+          render_prompt_locked if render
           @output_io.flush
         end
+      end
+
+      def select_deferred_finish_render?(result)
+        result.is_a?(Hash) && result[:defer_finish_render]
       end
 
       def selection_overlay_rows(width, height: screen_height)

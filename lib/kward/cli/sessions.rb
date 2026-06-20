@@ -430,9 +430,147 @@ module Kward
         agent
       end
 
+      def fork_session(session_store)
+        return say_sessions_unavailable unless session_store
+        unless @active_session
+          runtime_output("No active persisted session.")
+          return nil
+        end
+
+        points = fork_points(session_store)
+        if points.empty?
+          runtime_output("No prompts to fork from.")
+          return nil
+        end
+
+        labels = points.map { |point| point[:label] }
+        choice = select_fork_point(labels)
+        return nil unless choice
+
+        point = points[labels.index(choice)]
+        return nil unless point
+
+        run_busy_local_command_and_requeue(activity: "forking") do
+          fork_session_from_point(session_store, point)
+        end
+      rescue StandardError => e
+        runtime_output("Fork error: #{e.message}")
+        nil
+      end
+
+      def fork_points(session_store)
+        fork_points_for_session(session_store, @active_session)
+      end
+
+      def fork_points_for_session(session_store, session)
+        entries = session_store.session_entries(session.path)
+        current_leaf_id = session.leaf_id || session_store.current_leaf(session.path)
+        active_path = active_session_tree_entry_ids(entries, current_leaf_id)
+        entries.each_with_index.filter_map do |entry, index|
+          next unless rewind_entry?(entry)
+          next unless active_path.include?(entry["id"].to_s)
+
+          {
+            entry: entry,
+            entry_index: index,
+            label: fork_point_label(entry),
+            timestamp: entry["timestamp"]
+          }
+        end.reverse.then { |points| align_rewind_point_timestamps(points, picker_choice_width) }
+      end
+
+      def fork_point_label(entry)
+        "Fork from: #{truncate_rewind_text(full_message_text(entry["message"] || {}))}"
+      end
+
+      def select_fork_point(labels)
+        if @prompt.respond_to?(:select)
+          return @prompt.select("Fork>", labels, title: "Fork")
+        end
+
+        numbered_labels = labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }
+        runtime_output((["Fork from:"] + numbered_labels).join("\n"))
+        answer = @prompt.ask("Fork point number>").to_s.strip
+        answer.match?(/\A\d+\z/) ? labels[answer.to_i - 1] : nil
+      end
+
+      def fork_session_from_point(session_store, point)
+        previous_session = @active_session
+        forked_session, conversation, selected_text = create_fork_from_point(session_store, previous_session, point)
+        @active_session = track_session(forked_session)
+        reset_session_diff(@active_session.path)
+        cleanup_replaced_session(previous_session)
+        update_assistant_prompt(conversation)
+        restore_prompt_transcript do
+          runtime_output("Forked session: #{@active_session.path}")
+          render_conversation_transcript(conversation)
+        end
+        prefill_selected_fork_text(selected_text)
+        agent = build_interactive_agent(conversation)
+        @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
+        agent
+      end
+
+      def create_fork_from_point(session_store, source_session, point)
+        entries = session_store.session_entries(source_session.path)
+        messages = entries[0...point[:entry_index]].filter_map { |entry| entry["message"] }
+        forked_session, conversation = session_store.create_independent_from_messages(
+          messages,
+          provider: current_model_provider,
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort,
+          parent_session: source_session
+        )
+        [forked_session, conversation, full_message_text(point[:entry]["message"] || {})]
+      end
+
+      def prefill_selected_fork_text(selected_text)
+        return if selected_text.to_s.empty?
+
+        if @prompt.respond_to?(:prefill_input)
+          @prompt.prefill_input(selected_text)
+        else
+          runtime_output("Selected prompt for editing:\n#{selected_text}")
+        end
+      end
+
       def clone_session_from_path(session_store, path)
         clone_path = clone_session_file_from_path(session_store, path)
         load_session(session_store, clone_path, message: "Cloned session")
+      end
+
+      def fork_session_from_path(session_store, path)
+        source_session, = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        point = select_fork_point_for_session(session_store, source_session)
+        return nil unless point
+
+        forked_session, = run_busy_local_command_and_requeue(activity: "forking") do
+          create_fork_from_point(session_store, source_session, point)
+        end
+        forked_session.path
+      end
+
+      def fork_session_from_picker(session_store, source_path)
+        source_session, = session_store.load(source_path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        point = select_fork_point_for_session(session_store, source_session)
+        return nil unless point
+
+        forked_session, = create_fork_from_point(session_store, source_session, point)
+        forked_session.path
+      end
+
+      def select_fork_point_for_session(session_store, session)
+        points = fork_points_for_session(session_store, session)
+        if points.empty?
+          runtime_output("No prompts to fork from.")
+          return nil
+        end
+
+        labels = points.map { |point| point[:label] }
+        choice = select_fork_point(labels)
+        return nil unless choice
+
+        points[labels.index(choice)]
       end
 
       def clone_session_file_from_path(session_store, path)
@@ -442,20 +580,31 @@ module Kward
       end
 
       def clone_session_selection(session_store, sessions, labels, label)
+        copy_session_selection(session_store, sessions, labels, label, action: :cloned) do |source|
+          clone_session_file_from_path(session_store, source.path)
+        end
+      end
+
+      def copy_session_selection(session_store, sessions, labels, label, action:)
         source = sessions[labels.index(label)]
         return nil unless source
 
-        clone_path = clone_session_file_from_path(session_store, source.path)
-        clone_info = session_store.recent_tree(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(clone_path) }
-        clone_info ||= session_store.recent(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(clone_path) }
-        return nil unless clone_info
+        copy_path = yield source
+        result = insert_session_copy(session_store, sessions, labels, source, copy_path)
+        copy_label = labels[result[:selection_index]]
+        result.merge(action_choices: { copy_label => { action: action, path: copy_path } })
+      end
+
+      def insert_session_copy(session_store, sessions, labels, source, copy_path)
+        copy_info = session_store.recent_tree(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(copy_path) }
+        copy_info ||= session_store.recent(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(copy_path) }
+        return nil unless copy_info
 
         source_index = sessions.index(source) || 0
-        clone_index = source_index + 1
-        sessions.insert(clone_index, clone_info)
+        copy_index = source_index + 1
+        sessions.insert(copy_index, copy_info)
         labels.replace(session_picker_labels(sessions))
-        label = labels[clone_index]
-        { select_continue: true, choices: labels, selection_index: clone_index, action_choices: { label => { action: :cloned, path: clone_path } } }
+        { select_continue: true, choices: labels, selection_index: copy_index }
       end
 
       def delete_session_selection(_session_store, sessions, labels, label)
@@ -554,7 +703,22 @@ module Kward
         select_session_path_from_sessions(session_store.recent_tree(limit: nil), session_store: session_store)
       end
 
-      def select_session_path_from_sessions(sessions, session_store: @session_store)
+      def reopen_sessions_after_fork(session_store, source_path, source_label)
+        fork_path = run_busy_local_command_and_requeue(activity: "forking") do
+          fork_session_from_picker(session_store, source_path)
+        end
+
+        sessions = session_store.recent_tree(limit: nil)
+        labels = session_picker_labels(sessions)
+        initial_index = if fork_path
+                          sessions.index { |session| File.expand_path(session.path) == File.expand_path(fork_path) }
+                        else
+                          labels.index(source_label)
+                        end
+        select_session_path_from_sessions(sessions, session_store: session_store, initial_index: initial_index || 0)
+      end
+
+      def select_session_path_from_sessions(sessions, session_store: @session_store, initial_index: 0)
         if sessions.empty?
           runtime_output("No saved sessions found.")
           return nil
@@ -565,7 +729,8 @@ module Kward
           choice = @prompt.select(
             "Session>",
             labels,
-            action_keys: { "c" => { action: :clone, activity: "cloning" }, "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } },
+            initial_index: initial_index,
+            action_keys: { "c" => { action: :clone, activity: "cloning" }, "f" => { action: :fork, defer_finish_render: true }, "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } },
             action_handlers: {
               clone: ->(label) { clone_session_selection(session_store, sessions, labels, label) },
               delete: ->(label) { delete_session_selection(session_store, sessions, labels, label) }
@@ -573,7 +738,7 @@ module Kward
           )
           return nil unless choice
           return choice if choice.respond_to?(:conversation)
-          return choice if choice.is_a?(Hash)
+          return choice[:path] ? choice : session_selection_action(choice, sessions, labels, defer_finish_render: choice[:defer_finish_render]) if choice.is_a?(Hash)
 
           selected = sessions[labels.index(choice)]
           return selected&.path
@@ -589,9 +754,13 @@ module Kward
         end
       end
 
-      def session_selection_action(choice, sessions, labels)
+      def session_selection_action(choice, sessions, labels, defer_finish_render: false)
         selected = sessions[labels.index(choice[:choice])]
-        selected ? { action: choice[:action], path: selected.path } : nil
+        return nil unless selected
+
+        { action: choice[:action], path: selected.path, choice_label: choice[:choice] }.tap do |action|
+          action[:defer_finish_render] = true if defer_finish_render
+        end
       end
 
       def session_picker_labels(sessions)

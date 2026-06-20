@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `/fork` for creating a new session from an earlier prompt and pre-filling that prompt for editing.
+- Added `f` in the `/sessions` picker to open the fork prompt selector for the selected session.
 - Added `/rename <name>` for renaming the current interactive session.
 - Added `c` in the `/sessions` picker to clone the selected session and open the new clone, with a cloning spinner while it runs.
 - Added `d d` in the `/sessions` picker to delete the selected session after an inline confirmation.

@@ -1718,6 +1718,99 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sessions_picker_fork_action_opens_fork_prompt_selector
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new
+      source.attach(conversation)
+      conversation.append_user("kept prompt")
+      conversation.append_assistant("kept reply")
+      conversation.append_user("saved prompt")
+      conversation.append_assistant("saved reply")
+      prompt = FakePrompt.new(["/sessions", "/exit"])
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
+        @select_messages ||= []
+        @select_titles ||= []
+        @select_choices ||= []
+        @select_initial_indices ||= []
+        @select_messages << message
+        @select_titles << title
+        @select_choices << choices
+        @select_initial_indices << initial_index
+        if message == "Session>" && @select_messages.count("Session>") == 1
+          action = action_keys.fetch("f")
+          { action: action.is_a?(Hash) ? action[:action] : action, choice: choices.first, defer_finish_render: action.is_a?(Hash) && action[:defer_finish_render] }
+        elsif message == "Session>"
+          @forked_label = choices[initial_index]
+          nil
+        else
+          choices.find { |choice| choice.include?("saved prompt") } || choices.first
+        end
+      end
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 2, files.length
+      fork_path = (files - [source.path]).first
+      fork_session, fork_conversation = store.load(fork_path)
+      fork_messages = fork_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      output = strip_ansi(prompt.output.join("\n"))
+
+      assert_equal ["Session>", "Fork>", "Session>"], prompt.instance_variable_get(:@select_messages)
+      assert_equal "Fork", prompt.instance_variable_get(:@select_titles)[1]
+      assert_empty prompt.prefilled_inputs
+      assert_equal prompt.instance_variable_get(:@forked_label), prompt.instance_variable_get(:@select_choices)&.last&.[](prompt.instance_variable_get(:@select_initial_indices)&.last)
+      assert_equal ["kept prompt", "kept reply"], fork_messages.map { |message| message["content"] || message[:content] }
+      assert_equal fork_session.leaf_id, fork_messages.last["id"]
+      refute_includes output, "Forked session: #{fork_path}"
+      refute_includes File.read(fork_path), "saved prompt"
+      refute_includes File.read(fork_path), "saved reply"
+      source_header = jsonl_records(source.path).find { |record| record["type"] == "session" }
+      fork_header = jsonl_records(fork_path).find { |record| record["type"] == "session" }
+      assert_equal source_header["id"], fork_header["parentId"]
+    end
+  end
+
+  def test_sessions_picker_repeated_fork_action_does_not_escape_as_agent
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new
+      source.attach(conversation)
+      conversation.append_user("kept prompt")
+      conversation.append_assistant("kept reply")
+      conversation.append_user("saved prompt")
+      conversation.append_assistant("saved reply")
+      prompt = FakePrompt.new(["/sessions"])
+      prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
+        @select_messages ||= []
+        @select_messages << message
+        if message == "Session>"
+          return nil if @select_messages.count("Session>") == 3
+
+          action = action_keys.fetch("f")
+          { action: action.is_a?(Hash) ? action[:action] : action, choice: choices[initial_index] || choices.first, defer_finish_render: action.is_a?(Hash) && action[:defer_finish_render] }
+        else
+          return nil if @select_messages.count("Fork>") == 2
+
+          choices.find { |choice| choice.include?("saved prompt") } || choices.first
+        end
+      end
+      client = RecordingClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      conversation = cli.interactive_loop
+
+      assert_kind_of Kward::Conversation, conversation
+      assert_equal ["Session>", "Fork>", "Session>", "Fork>", "Session>"], prompt.instance_variable_get(:@select_messages)
+      assert_equal 2, Dir.glob(File.join(store.session_dir, "*.jsonl")).length
+    end
+  end
+
   def test_sessions_picker_delete_action_deletes_selected_session
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
@@ -1837,6 +1930,60 @@ class TestCLI < KwardTestCase
     end
   end
 
+
+  def test_fork_slash_command_creates_new_session_from_selected_prompt
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("keep this")
+      conversation.append_assistant("kept reply")
+      conversation.append_user("edit this prompt")
+      conversation.append_assistant("future reply")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{session.path}", "/fork", "/exit"], "edit this prompt")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
+      assert_equal 2, files.length
+      fork_path = (files - [session.path]).first
+      fork_session, fork_conversation = store.load(fork_path)
+      fork_messages = fork_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
+      output = strip_ansi(prompt.output.join("\n"))
+
+      assert_equal ["Fork>"], prompt.select_messages.last(1)
+      assert_equal "Fork", prompt.select_titles.last
+      assert_equal ["edit this prompt"], prompt.prefilled_inputs
+      assert_equal ["keep this", "kept reply"], fork_messages.map { |message| message["content"] || message[:content] }
+      assert_equal fork_session.leaf_id, fork_messages.last["id"]
+      assert_includes output, "Forked session: #{fork_path}"
+      refute_includes File.read(fork_path), "edit this prompt"
+      refute_includes File.read(fork_path), "future reply"
+      source = jsonl_records(session.path).find { |record| record["type"] == "session" }
+      fork = jsonl_records(fork_path).find { |record| record["type"] == "session" }
+      assert_equal source["id"], fork["parentId"]
+    end
+  end
+
+  def test_fork_slash_command_without_composer_prefill_does_not_auto_run_selected_text
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("first prompt")
+      prompt = FakeSessionSelectNoPrefillPrompt.new(["/resume #{session.path}", "/fork", "/exit"], "first prompt")
+      client = RecordingClient.new(["should not be used"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_empty client.seen_messages
+      assert_includes prompt.output.join("\n"), "Selected prompt for editing:\nfirst prompt"
+    end
+  end
 
   def test_rewind_slash_command_selects_user_prompt_and_prefills_prompt
     Dir.mktmpdir do |config_dir|
