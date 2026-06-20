@@ -665,7 +665,10 @@ module Kward
         ## Critical Context
         - [Preserve important context, add new context needed to continue]
 
-        Keep each section concise. Preserve exact file paths, class names, module names, method names, constants, commands, spec names, migration names, error messages, user requirements, and unresolved problems. Do not invent work that did not happen.
+        ## Available Tool Artifacts
+        - [Preserve any toolout_* ids from compacted tool outputs, with what each id contains and why it may matter]
+
+        Keep each section concise. Preserve exact file paths, class names, module names, method names, constants, commands, spec names, migration names, error messages, toolout_* artifact ids, user requirements, and unresolved problems. Do not invent work that did not happen.
       PROMPT
 
       SPLIT_TURN_PROMPT = <<~PROMPT.strip.freeze
