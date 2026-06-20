@@ -190,12 +190,18 @@ module Kward
       def submit_input
         value = submitted_input
         add_history(composer_input)
+        clear_finished_input_locked(reset_history: true)
+        @output_io.flush
+        value
+      end
+
+      def clear_finished_input_locked(reset_history: false)
         if @busy
           clear_prompt_for_output_locked
           self.composer_input = ""
           self.composer_cursor = 0
           @composer.clear_attachments
-          reset_history_navigation
+          reset_history_navigation if reset_history
           @asking = true
           render_prompt_after_output_locked
         else
@@ -207,8 +213,6 @@ module Kward
           @rendered_rows = 0
           @cursor_rendered_row = 0
         end
-        @output_io.flush
-        value
       end
 
       def submitted_input
@@ -221,22 +225,7 @@ module Kward
       end
 
       def exit_input
-        if @busy
-          clear_prompt_for_output_locked
-          self.composer_input = ""
-          self.composer_cursor = 0
-          @composer.clear_attachments
-          @asking = true
-          render_prompt_after_output_locked
-        else
-          clear_prompt_locked
-          self.composer_input = ""
-          self.composer_cursor = 0
-          @composer.clear_attachments
-          @asking = false
-          @rendered_rows = 0
-          @cursor_rendered_row = 0
-        end
+        clear_finished_input_locked
         @output_io.flush
         EXIT_INPUT
       end
