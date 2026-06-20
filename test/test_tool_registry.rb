@@ -153,6 +153,14 @@ class TestToolRegistry < KwardTestCase
     assert_includes properties.keys, :limit
   end
 
+  def test_tool_schema_properties_are_deterministically_sorted
+    Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: [Kward::ConfigFiles::Skill.new(name: "planner")]).schemas.each do |schema|
+      keys = schema[:function][:parameters][:properties].keys.map(&:to_s)
+
+      assert_equal keys.sort, keys, "#{schema[:function][:name]} properties should be sorted"
+    end
+  end
+
   def test_tool_schemas_are_strict_output_contract
     Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: [Kward::ConfigFiles::Skill.new(name: "planner")]).schemas.each do |schema|
       parameters = schema[:function][:parameters]

@@ -24,8 +24,8 @@ module Kward
             description: @description,
             parameters: {
               type: "object",
-              properties: @properties,
-              required: @required,
+              properties: sorted_properties,
+              required: @required.sort,
               additionalProperties: false
             }
           }
@@ -33,6 +33,12 @@ module Kward
       end
 
       private
+
+      def sorted_properties
+        @properties.keys.sort_by(&:to_s).each_with_object({}) do |key, result|
+          result[key] = @properties[key]
+        end
+      end
 
       # Reads a tool argument while accepting symbol or string keys from restored calls.
       def argument(args, key, default = nil)
