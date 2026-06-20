@@ -38,24 +38,7 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
-  def test_openrouter_catalog_rpc_returns_catalog_models
-    client = ReloadableFakeClient.new([], "missing_kward_config.json")
-    def client.openrouter_catalog
-      [{ provider: "OpenRouter", id: "anthropic/claude-sonnet-4.5", current: false }]
-    end
-
-    messages = run_rpc([
-      { jsonrpc: "2.0", id: 1, method: "openrouter/catalog" },
-      { jsonrpc: "2.0", id: 2, method: "shutdown" }
-    ], client: client)
-
-    model = messages[0]["result"]["models"].first
-    assert_equal "OpenRouter", model["provider"]
-    assert_equal "anthropic/claude-sonnet-4.5", model["id"]
-    assert_equal "anthropic/claude-sonnet-4.5", model["name"]
-  end
-
-  def test_model_rpc_set_switches_to_selected_openrouter_catalog_model
+  def test_model_rpc_set_switches_to_selected_openrouter_model
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
       client = ReloadableFakeClient.new([], config_path)

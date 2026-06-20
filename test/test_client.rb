@@ -174,8 +174,7 @@ class TestClient < KwardTestCase
     assert_includes models, { provider: "Codex", id: "gpt-5.4", current: false }
     assert_includes models, { provider: "Codex", id: "gpt-5.4-mini", current: false }
     assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
-    assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
-    assert_includes models, { provider: "OpenRouter", id: "z-ai/glm-5.2", current: false }
+    refute models.any? { |model| model[:provider] == "OpenRouter" }
     assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
     assert_includes models, { provider: "Anthropic", id: "claude-sonnet-4-6", current: false }
     assert_includes models, { provider: "Anthropic", id: "claude-opus-4-8", current: false }
@@ -223,37 +222,43 @@ class TestClient < KwardTestCase
     end
   end
 
-  def test_openrouter_available_models_use_live_model_ids_when_available
+  def test_openrouter_available_models_use_cached_model_ids_when_available
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")
+      cache_path = File.join(dir, "cache", "openrouter_models.json")
       File.write(path, JSON.dump("provider" => "openrouter", "openrouter_model" => "stale/model"))
-      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
-      body = JSON.dump("data" => [{ "id" => "anthropic/claude-sonnet-4.5" }, { "id" => "openai/gpt-5.5" }])
+      FileUtils.mkdir_p(File.dirname(cache_path))
+      File.write(cache_path, JSON.dump(
+        "version" => 1,
+        "models" => [
+          { "id" => "anthropic/claude-sonnet-4.5" },
+          { "id" => "openai/gpt-5.5" }
+        ]
+      ))
+      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new(nil), config_path: path)
 
-      with_fake_http([fake_net_response(200, body)]) do |http|
+      with_fake_http([]) do |http|
         models = client.available_models
         cached_models = client.available_models
 
         assert_equal models, cached_models
         assert_includes models, { provider: "OpenRouter", id: "anthropic/claude-sonnet-4.5", current: false }
         assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.5", current: false }
-        assert_includes models, { provider: "OpenRouter", id: "stale/model", current: true }
+        refute_includes models, { provider: "OpenRouter", id: "stale/model", current: true }
         refute_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
-        openrouter_requests = http.requests.select { |request| request.uri == URI("https://openrouter.ai/api/v1/models") }
-        assert_equal 1, openrouter_requests.length
-        assert_equal "Bearer openrouter-token", openrouter_requests.first["Authorization"]
+        assert_empty http.requests
       end
     end
   end
 
-  def test_openrouter_available_models_fall_back_to_static_choices_when_fetch_fails
-    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+  def test_openrouter_available_models_fall_back_to_static_choices_when_cache_missing
+    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new(nil), anthropic_oauth: FakeAnthropicOAuth.new(nil), config_path: "missing_kward_config.json")
 
-    with_fake_http([fake_net_response(500, "error")]) do
+    with_fake_http([]) do |http|
       models = client.available_models
 
-      assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
-      assert_includes models, { provider: "OpenRouter", id: "z-ai/glm-5.2", current: false }
+      refute models.any? { |model| model[:provider] == "OpenRouter" }
+      assert_empty http.requests
     end
   end
 
@@ -266,28 +271,11 @@ class TestClient < KwardTestCase
       with_fake_http([]) do |http|
         models = client.available_models
 
-        assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
-        assert_includes models, { provider: "OpenRouter", id: "z-ai/glm-5.2", current: false }
+        refute models.any? { |model| model[:provider] == "OpenRouter" }
         assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
         refute models.any? { |model| model[:provider] == "Anthropic" }
         assert_empty http.requests
       end
-    end
-  end
-
-  def test_openrouter_catalog_fetches_full_catalog_without_authorization_header
-    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
-    body = JSON.dump("data" => [{ "id" => "google/gemini-pro" }, { "slug" => "meta/llama" }])
-
-    with_fake_http([fake_net_response(200, body)]) do |http|
-      models = client.openrouter_catalog
-
-      assert_equal [
-        { provider: "OpenRouter", id: "google/gemini-pro", current: false },
-        { provider: "OpenRouter", id: "meta/llama", current: false }
-      ], models
-      assert_equal URI("https://openrouter.ai/api/v1/models"), http.requests.first.uri
-      assert_nil http.requests.first["Authorization"]
     end
   end
 
@@ -390,22 +378,22 @@ class TestClient < KwardTestCase
     end
   end
 
-  def test_openrouter_defaults_to_openai_gpt_5_5
+  def test_openrouter_requires_configured_model
     with_env("OPENROUTER_MODEL" => nil) do
       client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
-      payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
+      error = assert_raises(RuntimeError) do
+        client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
+      end
 
-      assert_equal "openai/gpt-5.5", payload[:model]
-      assert_equal({ effort: "medium" }, payload[:reasoning])
-      refute payload.key?(:reasoning_effort)
+      assert_includes error.message, "OpenRouter model is not configured"
     end
   end
 
   def test_openrouter_payload_reads_reasoning_effort_from_config
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")
-      File.write(path, JSON.dump("openrouter_reasoning_effort" => "high"))
+      File.write(path, JSON.dump("openrouter_model" => "test/model", "openrouter_reasoning_effort" => "high"))
       client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
 
       payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [])
@@ -417,7 +405,7 @@ class TestClient < KwardTestCase
   def test_openrouter_payload_omits_reasoning_when_disabled
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
 
-    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [], reasoning: false)
+    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [], model: "test/model", reasoning: false)
 
     refute payload.key?(:reasoning)
   end
@@ -425,7 +413,7 @@ class TestClient < KwardTestCase
   def test_openrouter_payload_includes_max_tokens_when_limited
     client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil))
 
-    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [], max_tokens: 1234)
+    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }], [], model: "test/model", max_tokens: 1234)
 
     assert_equal 1234, payload[:max_tokens]
   end
@@ -630,7 +618,7 @@ class TestClient < KwardTestCase
   end
 
   def test_openrouter_retries_429_and_does_not_retry_401
-    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    client = Kward::Client.new(api_key: "token", model: "test/model", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     success_body = JSON.dump("choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }])
     retries = []
 
@@ -656,7 +644,7 @@ class TestClient < KwardTestCase
   end
 
   def test_openrouter_does_not_retry_provider_quota_429
-    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    client = Kward::Client.new(api_key: "token", model: "test/model", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     retries = []
 
     disable_sleep(client)
@@ -687,7 +675,7 @@ class TestClient < KwardTestCase
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       File.write(config_path, JSON.dump("logging" => { "enabled" => true, "tokens" => true, "performance" => true }))
-      client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: config_path)
+      client = Kward::Client.new(api_key: "token", model: "test/model", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: config_path)
       body = JSON.dump(
         "choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }],
         "usage" => { "prompt_tokens" => 42, "completion_tokens" => 7, "total_tokens" => 49 }
@@ -708,7 +696,7 @@ class TestClient < KwardTestCase
   end
 
   def test_openrouter_chat_persists_provider_model_and_usage
-    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    client = Kward::Client.new(api_key: "token", model: "test/model", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     body = JSON.dump(
       "choices" => [{ "message" => { "role" => "assistant", "content" => "ok" } }],
       "usage" => {
@@ -723,7 +711,7 @@ class TestClient < KwardTestCase
       message = client.chat([{ role: "user", content: "hello" }])
 
       assert_equal "OpenRouter", message["provider"]
-      assert_equal "openai/gpt-5.5", message["model"]
+      assert_equal "test/model", message["model"]
       assert_equal({
         "input_tokens" => 42,
         "output_tokens" => 7,
@@ -736,7 +724,7 @@ class TestClient < KwardTestCase
   end
 
   def test_openrouter_payload_strips_persisted_assistant_metadata
-    client = Kward::Client.new(api_key: "token", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    client = Kward::Client.new(api_key: "token", model: "test/model", openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     assistant = {
       "role" => "assistant",
       "content" => "ok",
@@ -746,7 +734,7 @@ class TestClient < KwardTestCase
       "tool_calls" => [tool_call("read_file", "path" => "README.md")]
     }
 
-    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }, assistant], [])
+    payload = client.send(:request_payload, "OpenRouter", [{ role: "user", content: "hello" }, assistant], [], model: "test/model")
     sent_assistant = payload[:messages].last
 
     assert_equal "assistant", sent_assistant[:role]

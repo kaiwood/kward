@@ -42,6 +42,7 @@ require_relative "cli/auth_commands"
 require_relative "cli/doctor"
 require_relative "cli/sysprompt"
 require_relative "cli/stats"
+require_relative "cli/openrouter_commands"
 require_relative "cli/runtime_helpers"
 require_relative "cli/slash_commands"
 require_relative "cli/memory_commands"
@@ -73,6 +74,7 @@ module Kward
     include CLI::Doctor
     include CLI::Sysprompt
     include CLI::Stats
+    include CLI::OpenRouterCommands
     include CLI::RuntimeHelpers
     include CLI::SlashCommands
     include CLI::MemoryCommands
@@ -191,6 +193,16 @@ module Kward
         raise ArgumentError, command_usage("stats") unless @argv[1] == "tokens"
 
         export_token_stats(@argv[2..] || [])
+        return
+      end
+
+      if @argv.first == "openrouter"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("openrouter")
+          return
+        end
+
+        handle_openrouter_command(@argv[1..] || [])
         return
       end
 

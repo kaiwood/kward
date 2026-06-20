@@ -83,7 +83,7 @@ Defaults:
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
 
-The interactive `/model` picker prefers OpenRouter models available to the configured API key when Kward can fetch them. `/openrouter/catalog` and RPC `openrouter/catalog` list the full OpenRouter catalog separately.
+The interactive `/model` picker reads cached OpenRouter models when available. Run `kward openrouter refresh` to fetch text-capable models available to the configured OpenRouter API key and cache them under `~/.kward/cache/openrouter_models.json`. Run `kward openrouter list` to inspect the cached model ids.
 
 ## Environment overrides
 

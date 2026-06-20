@@ -159,6 +159,28 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class ReloadTrackingClient < FakeClient
+    def initialize
+      super([])
+    end
+  end
+
+  def with_fake_net_http(responses)
+    fake_http = Object.new
+    fake_http.define_singleton_method(:requests) { @requests ||= [] }
+    fake_http.define_singleton_method(:request) do |request|
+      requests << request
+      responses.shift
+    end
+    original_start = Net::HTTP.method(:start)
+    Net::HTTP.define_singleton_method(:start) do |_host, _port, **_options, &block|
+      block.call(fake_http)
+    end
+    yield fake_http
+  ensure
+    Net::HTTP.define_singleton_method(:start, original_start) if original_start
+  end
+
   def with_clipboard_stub(copy_proc)
     original_new = Kward::Clipboard.method(:new)
     Kward::Clipboard.define_singleton_method(:new) do |**_kwargs|
@@ -3397,6 +3419,54 @@ edit this prompt"
 
       assert_equal 1, client.seen_messages.length
       assert_includes prompt.output.join("\n"), "messages=2"
+    end
+  end
+
+  def test_openrouter_refresh_caches_models_for_configured_key
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("openrouter_api_key" => "sk-or-secret"))
+      prompt = FakePrompt.new([])
+      client = ReloadTrackingClient.new
+      body = JSON.dump("data" => [
+        {
+          "id" => "anthropic/claude-sonnet-4.5",
+          "architecture" => { "input_modalities" => ["text"], "output_modalities" => ["text"] }
+        }
+      ])
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "OPENROUTER_API_KEY" => nil) do
+        with_fake_net_http([fake_net_response(200, body)]) do |http|
+          Kward::CLI.new(argv: ["openrouter", "refresh"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client).run
+
+          cache_path = File.join(dir, "cache", "openrouter_models.json")
+          cache = JSON.parse(File.read(cache_path))
+          assert_equal ["anthropic/claude-sonnet-4.5"], cache.fetch("models").map { |model| model.fetch("id") }
+          assert_equal URI("https://openrouter.ai/api/v1/models/user"), http.requests.first.uri
+          assert_equal "Bearer sk-or-secret", http.requests.first["Authorization"]
+          assert_equal 1, client.reload_count
+          assert_includes prompt.output.join("\n"), "Refreshed 1 OpenRouter text model"
+        end
+      end
+    end
+  end
+
+  def test_openrouter_list_prints_cached_models
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      cache_path = File.join(dir, "cache", "openrouter_models.json")
+      FileUtils.mkdir_p(File.dirname(cache_path))
+      File.write(config_path, JSON.dump("openrouter_api_key" => "sk-or-secret"))
+      File.write(cache_path, JSON.dump("version" => 1, "refreshed_at" => "2026-06-20T00:00:00Z", "models" => [{ "id" => "openai/gpt-5.5" }]))
+      prompt = FakePrompt.new([])
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "OPENROUTER_API_KEY" => nil) do
+        Kward::CLI.new(argv: ["openrouter", "list"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      end
+
+      output = prompt.output.join("\n")
+      assert_includes output, "OpenRouter models cached at 2026-06-20T00:00:00Z"
+      assert_includes output, "openai/gpt-5.5"
     end
   end
 

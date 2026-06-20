@@ -485,11 +485,6 @@ module Kward
         normalized
       end
 
-      def openrouter_catalog
-        models = @client.respond_to?(:openrouter_catalog) ? Array(@client.openrouter_catalog) : []
-        models.map { |model| normalize_model(model) }
-      end
-
       def current_model
         provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
         model = @client.respond_to?(:current_model) ? @client.current_model : nil

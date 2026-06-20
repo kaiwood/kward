@@ -49,7 +49,7 @@ module Kward
         "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate",
         "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"
       ].freeze
-      MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set", "openrouter/catalog"].freeze
+      MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set"].freeze
       AUTH_METHODS = [
         "auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider",
         "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"
@@ -166,8 +166,6 @@ module Kward
           prompts_expand(params)
         when "models/list"
           models_list
-        when "openrouter/catalog"
-          openrouter_catalog
         when "models/current"
           models_current
         when "models/set"
@@ -362,7 +360,8 @@ module Kward
             supported: true,
             methods: MODEL_METHODS,
             fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
-            scopedModels: false
+            scopedModels: false,
+            openRouterRefresh: { supported: false, reason: "cliOnlyCacheRefresh" }
           },
           runtime: {
             supported: true,
@@ -456,10 +455,6 @@ module Kward
 
       def models_list
         { models: @session_manager.available_models }
-      end
-
-      def openrouter_catalog
-        { models: @session_manager.openrouter_catalog }
       end
 
       def config_update(params)

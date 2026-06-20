@@ -32,9 +32,6 @@ module Kward
           models = run_busy_local_command_and_requeue { normalized_available_models }
           configure_model(agent.conversation, models: models)
           [true, nil]
-        when "openrouter/catalog"
-          run_busy_local_command_and_requeue { print_openrouter_catalog }
-          [true, nil]
         when "reasoning"
           configure_reasoning(agent.conversation)
           [true, nil]

@@ -53,6 +53,7 @@ module Kward
             #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
             #{command.call("kward doctor")}                       Check local Kward setup
             #{command.call("kward sysprompt")}                    Inspect the effective system prompt
+            #{command.call("kward openrouter refresh")}           Refresh cached OpenRouter models
             #{command.call("kward pan")}                          Start Pan mode web UI
             #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
 
@@ -65,6 +66,7 @@ module Kward
             #{command.call("doctor")}                             Check local Kward setup
             #{command.call("sysprompt")} [--raw]                  Inspect the effective system prompt
             #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
+            #{command.call("openrouter refresh|list")}             Refresh or list cached OpenRouter models
             #{command.call("pan")}                                Start Pan mode web UI
             #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
 
@@ -78,6 +80,7 @@ module Kward
             #{command.call("kward")} #{option.call('"Review this diff"')}
             #{command.call("git diff | kward")} #{option.call('"Review this diff"')}
             #{command.call("kward login openrouter")}
+            #{command.call("kward openrouter refresh")}
             #{command.call("kward stats tokens today --bucket hour")}
 
           Command names take precedence. Anything else is sent as a one-shot prompt.
@@ -125,6 +128,11 @@ module Kward
             usage: "kward stats tokens [range] [--bucket second|minute|hour|day|week|month|year] [--output path]",
             description: "Export local token telemetry as CSV.",
             examples: ["kward stats tokens today", "kward stats tokens today --bucket hour", "kward stats tokens week --output tokens.csv"]
+          },
+          "openrouter" => {
+            usage: "kward openrouter refresh|list",
+            description: "Refresh or list cached text-capable OpenRouter models available to your API key.",
+            examples: ["kward openrouter refresh", "kward openrouter --refresh", "kward openrouter list"]
           },
           "pan" => {
             usage: "kward pan",

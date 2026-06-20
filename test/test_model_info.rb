@@ -30,7 +30,6 @@ class TestModelInfo < KwardTestCase
     assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.5")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("OpenRouter", "anthropic/claude-opus-4.8")
     assert_equal 1_048_576, Kward::ModelInfo.context_window("OpenRouter", "google/gemini-3.1-pro-preview")
-    assert_equal 1_048_576, Kward::ModelInfo.context_window("OpenRouter", "z-ai/glm-5.2")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("Copilot", "claude-sonnet-4.6")
     assert_equal 1_048_576, Kward::ModelInfo.context_window("Copilot", "gemini-3.5-flash")
     assert_nil Kward::ModelInfo.context_window("OpenRouter", "unknown/model")
@@ -82,7 +81,6 @@ class TestModelInfo < KwardTestCase
     assert_equal %w[low medium high], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-opus-4-5").map(&:first)
     assert_empty Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-haiku-4-5")
     assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Copilot", "gpt-5-mini").map(&:first)
-    assert_equal %w[low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("OpenRouter", "z-ai/glm-5.2").map(&:first)
   end
 
   def test_copilot_reasoning_effort_uses_copilot_config_and_env

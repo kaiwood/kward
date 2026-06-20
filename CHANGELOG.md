@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `kward openrouter refresh` and `kward openrouter list` for caching key-scoped text-capable OpenRouter models in the Kward cache directory.
 - Added `/fork` for creating a new session from an earlier prompt and pre-filling that prompt for editing.
 - Added `f` in the `/sessions` picker to open the fork prompt selector for the selected session.
 - Added `/rename <name>` for renaming the current interactive session.
@@ -17,7 +18,6 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added `z-ai/glm-5.2` to the static OpenRouter model choices.
 - Added `/rewind` for revisiting earlier user prompts and continuing from there as a branch, while `/tree` remains the advanced full session tree navigator.
 
 ### Changed

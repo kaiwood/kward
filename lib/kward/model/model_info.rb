@@ -5,15 +5,10 @@ module Kward
   # Static and configured model metadata helpers.
   module ModelInfo
     DEFAULT_OPENAI_MODEL = "gpt-5.5"
-    DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.5"
     DEFAULT_COPILOT_MODEL = "gpt-5-mini"
     DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
     DEFAULT_REASONING_EFFORT = "medium"
     OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
-    OPENROUTER_MODEL_CHOICES = [
-      *OPENAI_MODEL_CHOICES.map { |model| "openai/#{model}" },
-      "z-ai/glm-5.2"
-    ].freeze
     ANTHROPIC_MODEL_CHOICES = %w[
       claude-opus-4-8
       claude-sonnet-4-6
@@ -118,9 +113,6 @@ module Kward
     GEMINI_CONTEXT_WINDOWS = [
       [/\Agemini-(?:2\.5-pro|3(?:\.1)?-pro|3(?:\.5)?-flash)/, 1_048_576]
     ].freeze
-    OPENROUTER_CONTEXT_WINDOWS = [
-      [/\Az-ai\/glm-5\.2\z/, 1_048_576]
-    ].freeze
 
     module_function
 
@@ -129,7 +121,7 @@ module Kward
 
       case provider
       when "OpenRouter"
-        env["OPENROUTER_MODEL"] || ConfigFiles.config_value(config, "openrouter_model", "model") || DEFAULT_OPENROUTER_MODEL
+        env["OPENROUTER_MODEL"] || ConfigFiles.config_value(config, "openrouter_model", "model")
       when "Copilot"
         normalize_copilot_model(env["COPILOT_MODEL"] || ConfigFiles.config_value(config, "copilot_model", "model") || DEFAULT_COPILOT_MODEL)
       when "Anthropic"
@@ -257,8 +249,6 @@ module Kward
       return pattern_context_window(OPENAI_CONTEXT_WINDOWS, text.delete_prefix("openai/")) if text.start_with?("openai/")
       return anthropic_context_window(text.delete_prefix("anthropic/")) if text.start_with?("anthropic/")
       return pattern_context_window(GEMINI_CONTEXT_WINDOWS, text.delete_prefix("google/")) if text.start_with?("google/")
-
-      pattern_context_window(OPENROUTER_CONTEXT_WINDOWS, text)
     end
 
     def copilot_context_window(id)
@@ -304,7 +294,6 @@ module Kward
 
     def openai_reasoning_effort_choices(id)
       text = id.to_s.delete_prefix("openai/")
-      return REASONING_EFFORT_CHOICES if text == "z-ai/glm-5.2"
       return REASONING_EFFORT_CHOICES if text.match?(/\Agpt-5\.[23]-codex/)
 
       OPENAI_REASONING_EFFORT_CHOICES

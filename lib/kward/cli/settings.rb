@@ -518,24 +518,6 @@ module Kward
         runtime_output("Model error: #{e.message}")
       end
 
-      # Writes the openrouter catalog output for the terminal CLI flow.
-      def print_openrouter_catalog
-        unless @client.respond_to?(:openrouter_catalog)
-          runtime_output("OpenRouter catalog is unavailable for this client.")
-          return
-        end
-
-        models = Array(@client.openrouter_catalog)
-        if models.empty?
-          runtime_output("No OpenRouter catalog models available.")
-        else
-          ids = models.map { |model| model[:id] || model["id"] || model }.map(&:to_s).reject(&:empty?)
-          runtime_output((["OpenRouter catalog:"] + ids).join("\n"))
-        end
-      rescue StandardError => e
-        runtime_output("OpenRouter catalog error: #{e.message}")
-      end
-
       def configure_reasoning(conversation = nil)
         unless model_overlay_available?
           runtime_output("Reasoning overlay is unavailable in this prompt.")

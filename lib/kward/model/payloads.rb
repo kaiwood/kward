@@ -21,6 +21,8 @@ module Kward
 
     def request_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       parts = build_context_parts(provider, messages, tools, model: model)
+      raise "OpenRouter model is not configured. Run `kward openrouter refresh` and select a cached model." if provider == "OpenRouter" && parts[:model].to_s.empty?
+
       payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
       payload[:reasoning] = { effort: reasoning || reasoning_effort("OpenRouter") } if provider == "OpenRouter" && reasoning != false
       payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?

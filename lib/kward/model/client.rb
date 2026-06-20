@@ -6,6 +6,7 @@ require_relative "../auth/github_oauth"
 require_relative "../auth/openai_oauth"
 require_relative "../cancellation"
 require_relative "../config_files"
+require_relative "../openrouter_model_cache"
 require_relative "context_overflow"
 require_relative "model_info"
 require_relative "payloads"
@@ -24,7 +25,6 @@ module Kward
   class Client
     include ModelPayloads
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
-    OPENROUTER_MODELS_URL = URI("https://openrouter.ai/api/v1/models")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     ANTHROPIC_URL = URI("https://api.anthropic.com/v1/messages")
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
@@ -32,7 +32,6 @@ module Kward
     COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
     ANTHROPIC_AUTH_ERROR = "No Anthropic OAuth login found. Run `ruby lib/main.rb login anthropic`."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
-    DEFAULT_OPENROUTER_MODEL = ModelInfo::DEFAULT_OPENROUTER_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
     RETRY_DELAYS = [1, 2].freeze
     NON_RETRYABLE_PROVIDER_LIMIT_PATTERNS = [
@@ -92,7 +91,6 @@ module Kward
       @telemetry_logger = telemetry_logger
       @copilot_models = nil
       @openrouter_models = nil
-      @openrouter_catalog = nil
     end
 
     def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil)
@@ -196,11 +194,10 @@ module Kward
 
       if provider_logged_in?("OpenRouter")
         openrouter_model = model_for("OpenRouter")
-        openrouter_choices = provider == "OpenRouter" ? openrouter_model_choices : ModelInfo::OPENROUTER_MODEL_CHOICES
+        openrouter_choices = openrouter_model_choices
         models += openrouter_choices.map do |id|
           { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
         end
-        models << { provider: "OpenRouter", id: openrouter_model, current: provider == "OpenRouter" } unless openrouter_choices.include?(openrouter_model)
       end
 
       if provider_logged_in?("Copilot")
@@ -224,13 +221,6 @@ module Kward
       models.sort_by { |model| [model[:provider], model[:id]] }
     end
 
-    # Fetches the full OpenRouter public model catalog for settings UIs.
-    def openrouter_catalog
-      fetch_openrouter_models(full_catalog: true).map do |id|
-        { provider: "OpenRouter", id: id, current: current_provider == "OpenRouter" && model_for("OpenRouter") == id }
-      end.sort_by { |model| model[:id] }
-    end
-
     # Projects messages/tools into the provider-specific context shape without sending it.
     def current_context_parts(messages, tools)
       build_context_parts(current_provider, messages, tools)
@@ -248,7 +238,6 @@ module Kward
       @config = load_config
       @copilot_models = nil
       @openrouter_models = nil
-      @openrouter_catalog = nil
     end
 
     private
@@ -495,43 +484,19 @@ module Kward
     end
 
     def openrouter_model_choices
-      live_models = fetch_openrouter_models(full_catalog: false)
-      choices = live_models.empty? ? ModelInfo::OPENROUTER_MODEL_CHOICES : live_models
-      choices.uniq
+      openrouter_cached_models.uniq
     end
 
-    def fetch_openrouter_models(full_catalog: false)
-      cache = full_catalog ? @openrouter_catalog : @openrouter_models
-      return cache if cache
-
-      token = openrouter_api_key.to_s
-      return [] if token.empty? && !full_catalog
-
-      request = Net::HTTP::Get.new(OPENROUTER_MODELS_URL)
-      request["Authorization"] = "Bearer #{token}" unless full_catalog || token.empty?
-      request["Accept"] = "application/json"
-
-      response = Net::HTTP.start(OPENROUTER_MODELS_URL.hostname, OPENROUTER_MODELS_URL.port, use_ssl: true) { |http| http.request(request) }
-      return [] unless response.is_a?(Net::HTTPSuccess)
-
-      models = parse_openrouter_models(response.body)
-      if full_catalog
-        @openrouter_catalog = models
-      else
-        @openrouter_models = models
-      end
+    def openrouter_cached_models
+      @openrouter_models ||= openrouter_model_cache.models.filter_map do |model|
+        model.is_a?(Hash) ? model["id"] || model[:id] : model
+      end.map(&:to_s).map(&:strip).reject(&:empty?)
     rescue StandardError
       []
     end
 
-    def parse_openrouter_models(body)
-      model_catalog_entries(body).filter_map do |entry|
-        if entry.is_a?(Hash)
-          entry["id"] || entry[:id] || entry["slug"] || entry[:slug]
-        else
-          entry
-        end
-      end.map(&:to_s).map(&:strip).reject(&:empty?).uniq
+    def openrouter_model_cache
+      OpenRouterModelCache.new(api_key: openrouter_api_key, path: File.join(File.dirname(@config_path), "cache", "openrouter_models.json"))
     end
 
     def copilot_model_choices

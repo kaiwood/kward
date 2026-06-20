@@ -103,8 +103,9 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::SessionManager::RPC_IMAGE_MIME_TYPES, capabilities["attachments"]["input"]["mimeTypes"]
     assert_equal Kward::RPC::SessionManager::RPC_ATTACHMENT_MAX_BYTES, capabilities["attachments"]["input"]["maxBytes"]
     assert_includes capabilities["models"]["methods"], "models/set"
-    assert_includes capabilities["models"]["methods"], "openrouter/catalog"
+    refute_includes capabilities["models"]["methods"], "openrouter/catalog"
     assert_equal false, capabilities["models"]["scopedModels"]
+    assert_equal({ "supported" => false, "reason" => "cliOnlyCacheRefresh" }, capabilities["models"]["openRouterRefresh"])
     assert_equal true, capabilities["runtime"]["supported"]
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]

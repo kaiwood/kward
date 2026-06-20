@@ -507,11 +507,7 @@ Returns `{ "memories": [] }`.
 
 ### `models/list`
 
-Returns known model entries from the current client/config backend. OpenRouter entries prefer models available to the configured OpenRouter API key when they can be fetched; otherwise Kward falls back to defaults/currently configured options. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`.
-
-### `openrouter/catalog`
-
-Returns the full OpenRouter model catalog as model entries. This is separate from `models/list`, which prefers models available to the configured API key. Models returned here may still fail at request time if the active OpenRouter key cannot access them.
+Returns known model entries from the current client/config backend. OpenRouter entries come from the local OpenRouter model cache when present; otherwise Kward falls back to defaults/currently configured options. Refresh the cache with the CLI-only `kward openrouter refresh` command. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`.
 
 ### `models/current`
 
