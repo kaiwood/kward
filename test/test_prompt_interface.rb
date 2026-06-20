@@ -830,6 +830,19 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_requeues_repeated_escape_sequences
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@select_state, { choices: %w[first second third fourth], selection_index: 0, title: "Sessions", custom: false, action_keys: {}, search_active: false })
+    prompt.define_singleton_method(:read_pending_escape_sequence) { "[B\e[B\e[B" }
+
+    prompt.send(:handle_select_key, "\e")
+    pending = prompt.instance_variable_get(:@pending_keys)
+    prompt.send(:handle_select_key, pending.shift)
+    prompt.send(:handle_select_key, pending.shift)
+
+    assert_equal 3, prompt.instance_variable_get(:@select_state)[:selection_index]
+  end
+
   def test_prompt_interface_select_search_accepts_bracketed_paste
     input, writer = IO.pipe
     output = StringIO.new
@@ -886,6 +899,25 @@ class TestPromptInterface < KwardTestCase
     ensure
       input&.close unless input&.closed?
     end
+  end
+
+  def test_prompt_interface_ask_user_question_requeues_repeated_escape_sequences
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 0,
+      index: 1,
+      total: 1
+    })
+    prompt.define_singleton_method(:read_pending_escape_sequence) { "[B\e[B" }
+
+    prompt.send(:handle_question_key, "\e")
+    pending = prompt.instance_variable_get(:@pending_keys)
+    prompt.send(:handle_question_key, pending.shift)
+
+    assert_equal 2, prompt.instance_variable_get(:@question_state)[:selection_index]
   end
 
   def test_prompt_interface_ask_user_question_selects_option

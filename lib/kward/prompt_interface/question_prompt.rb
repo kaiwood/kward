@@ -140,10 +140,15 @@ module Kward
       end
 
       def handle_question_escape_sequence
-        sequence = read_pending_escape_sequence
-        return SELECT_CANCEL if sequence.empty?
+        pending_sequence = read_pending_escape_sequence
+        return SELECT_CANCEL if pending_sequence.empty?
 
-        key_name = @reader.console.keys["\e#{sequence}"]
+        full_sequence = "\e#{pending_sequence}"
+        sequence = next_key_token(full_sequence)
+        queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
+        return SELECT_CANCEL if sequence == "\e"
+
+        key_name = @reader.console.keys[sequence]
         case key_name
         when :up
           question_previous_choice

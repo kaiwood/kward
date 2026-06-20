@@ -121,12 +121,17 @@ module Kward
       end
 
       def handle_select_escape_sequence
-        sequence = read_pending_escape_sequence
-        return clear_select_input if sequence.empty? && select_input_active?
-        return select_cancel_search if sequence.empty? && select_search_active?
-        return SELECT_CANCEL if sequence.empty? || sequence.start_with?("\e")
+        pending_sequence = read_pending_escape_sequence
+        return clear_select_input if pending_sequence.empty? && select_input_active?
+        return select_cancel_search if pending_sequence.empty? && select_search_active?
+        return SELECT_CANCEL if pending_sequence.empty?
 
-        key_name = @reader.console.keys["\e#{sequence}"]
+        full_sequence = "\e#{pending_sequence}"
+        sequence = next_key_token(full_sequence)
+        queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
+        return SELECT_CANCEL if sequence == "\e"
+
+        key_name = @reader.console.keys[sequence]
         case key_name
         when :up
           select_previous_choice
