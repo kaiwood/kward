@@ -5,14 +5,11 @@ require_relative "../message_access"
 module Kward
   # Estimates provider context usage and compaction pressure.
   class ContextUsage
-    OPENAI_CONTEXT_PROVIDERS = ["Codex", "OpenAI"].freeze
-
     def initialize(token_counter: TiktokenTokenCounter.new)
       @token_counter = token_counter
     end
 
     def call(provider:, model:, context_window:, context_parts:)
-      return nil unless OPENAI_CONTEXT_PROVIDERS.include?(provider.to_s)
       return nil unless context_window
 
       parts = redact_image_data(stringify_keys(context_parts || {}))
@@ -84,7 +81,13 @@ module Kward
   # Structured context usage result returned to frontends.
   class TiktokenTokenCounter
     def count(text, model:)
-      encoding(model).encode(text.to_s).length
+      text = text.to_s
+      tokenizer = encoding(model)
+      return rough_count(text) unless tokenizer.respond_to?(:encode)
+
+      tokenizer.encode(text).length
+    rescue StandardError
+      rough_count(text)
     end
 
     private
@@ -92,9 +95,13 @@ module Kward
     def encoding(model)
       require "tiktoken_ruby"
 
-      Tiktoken.encoding_for_model(model.to_s)
+      Tiktoken.encoding_for_model(model.to_s) || Tiktoken.get_encoding(encoding_name_for_model(model))
     rescue StandardError
-      Tiktoken.get_encoding(encoding_name_for_model(model))
+      Tiktoken.get_encoding(encoding_name_for_model(model)) if defined?(Tiktoken)
+    end
+
+    def rough_count(text)
+      [(text.length / 4.0).ceil, 1].max
     end
 
     def encoding_name_for_model(model)

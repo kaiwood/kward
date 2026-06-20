@@ -498,7 +498,7 @@ module Kward
         model = rpc_session.conversation.model || current[:id]
         reasoning_effort = rpc_session.conversation.reasoning_effort || current_reasoning_effort
         reasoning_effort = nil unless ModelInfo.reasoning_supported?(provider, model)
-        context_window = current[:contextWindow] if provider == current[:provider] && model == current[:id]
+        context_window = context_window_for(provider, model)
         normalize_model(
           provider: provider,
           id: model,
@@ -661,12 +661,28 @@ module Kward
       end
 
       def normalize_model(model)
+        unless model.key?(:contextWindow) || model.key?("contextWindow")
+          provider = model[:provider] || model["provider"]
+          id = model[:id] || model["id"] || model[:model] || model["model"]
+          model = model.merge(contextWindow: context_window_for(provider, id))
+        end
         ModelInfo.normalize(
           model,
           current_provider: (@client.current_provider if @client.respond_to?(:current_provider)),
           current_model: (@client.current_model if @client.respond_to?(:current_model)),
           current_reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
         )
+      end
+
+      def context_window_for(provider, model)
+        provider = ModelInfo.provider_label(provider)
+        return @client.context_window(provider, model) if @client.respond_to?(:context_window) && @client.method(:context_window).arity != 0
+
+        if @client.respond_to?(:current_context_window) && @client.respond_to?(:current_provider) && @client.respond_to?(:current_model)
+          return @client.current_context_window if provider == @client.current_provider && model == @client.current_model
+        end
+
+        ModelInfo.context_window(provider, model)
       end
 
       def active_persona_label(rpc_session)

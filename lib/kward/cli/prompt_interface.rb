@@ -107,7 +107,10 @@ module Kward
       def composer_context_window(provider = nil, model = nil)
         provider ||= current_footer_conversation.provider || (@client.respond_to?(:current_provider) ? @client.current_provider : "Codex")
         model ||= current_footer_conversation.model || (@client.respond_to?(:current_model) ? @client.current_model : ModelInfo::DEFAULT_OPENAI_MODEL)
-        ModelInfo.context_window(ModelInfo.provider_label(provider), model)
+        provider = ModelInfo.provider_label(provider)
+        return @client.context_window(provider, model) if @client.respond_to?(:context_window) && @client.method(:context_window).arity != 0
+
+        ModelInfo.context_window(provider, model)
       end
 
       def composer_context_usage(provider, model)

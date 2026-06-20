@@ -226,16 +226,27 @@ module Kward
       }
     end
 
-    def context_window(provider, id)
+    def context_window(provider, id, openrouter_models: nil)
       case provider
       when "Codex"
-        pattern_context_window(CODEX_CONTEXT_WINDOWS, id)
+        pattern_context_window(CODEX_CONTEXT_WINDOWS, id) ||
+          openrouter_inferred_context_window(provider, id, openrouter_models: openrouter_models) ||
+          conservative_context_window(id)
       when "OpenRouter"
-        openrouter_context_window(id)
+        openrouter_cached_context_window(openrouter_models, id) ||
+          openrouter_context_window(id) ||
+          conservative_openrouter_context_window(id) ||
+          conservative_unknown_context_window(id)
       when "Copilot"
-        copilot_context_window(id)
+        copilot_context_window(id) ||
+          openrouter_inferred_context_window(provider, id, openrouter_models: openrouter_models) ||
+          conservative_context_window(id) ||
+          conservative_unknown_context_window(id)
       when "Anthropic"
-        anthropic_context_window(id)
+        anthropic_context_window(id) ||
+          openrouter_inferred_context_window(provider, id, openrouter_models: openrouter_models) ||
+          conservative_context_window(normalize_anthropic_model(id)) ||
+          conservative_anthropic_context_window(id)
       end
     end
 
@@ -244,11 +255,87 @@ module Kward
       match&.last
     end
 
+    def openrouter_cached_context_window(models, id)
+      model = Array(models).find do |entry|
+        next false unless entry.respond_to?(:key?)
+
+        entry["id"].to_s == id.to_s || entry[:id].to_s == id.to_s
+      end
+      value = model && (model["contextWindow"] || model[:contextWindow] || model["context_window"] || model[:context_window])
+      positive_integer(value)
+    end
+
+    def openrouter_inferred_context_window(provider, id, openrouter_models: nil)
+      openrouter_equivalent_ids(provider, id).filter_map do |candidate|
+        openrouter_cached_context_window(openrouter_models, candidate)
+      end.min
+    end
+
+    def openrouter_equivalent_ids(provider, id)
+      text = id.to_s.strip
+      return [] if text.empty?
+
+      case provider
+      when "Codex"
+        ["openai/#{text.delete_prefix("openai/")}"]
+      when "Anthropic"
+        raw = text.delete_prefix("anthropic/")
+        normalized = normalize_anthropic_model(raw)
+        ["anthropic/#{raw}", "anthropic/#{normalized}"].uniq
+      when "Copilot"
+        copilot_openrouter_equivalent_ids(text)
+      else
+        []
+      end
+    end
+
+    def copilot_openrouter_equivalent_ids(id)
+      return ["openai/#{id.delete_prefix("openai/")}"] if id.start_with?("openai/") || id.match?(/\A(?:gpt-|o\d)/)
+      return ["google/#{id.delete_prefix("google/")}"] if id.start_with?("google/") || id.start_with?("gemini-")
+
+      if id.start_with?("anthropic/") || id.start_with?("claude-")
+        raw = id.delete_prefix("anthropic/")
+        normalized = normalize_anthropic_model(raw)
+        return ["anthropic/#{raw}", "anthropic/#{normalized}"].uniq
+      end
+
+      []
+    end
+
+    def positive_integer(value)
+      integer = Integer(value)
+      integer.positive? ? integer : nil
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    def conservative_context_window(id)
+      text = id.to_s
+      return 128_000 if text.match?(/\A(?:gpt-|o\d)/)
+      return 200_000 if text.start_with?("claude-")
+      return 128_000 if text.start_with?("gemini-")
+    end
+
+    def conservative_anthropic_context_window(id)
+      id.to_s.strip.empty? ? nil : 200_000
+    end
+
+    def conservative_unknown_context_window(id)
+      id.to_s.strip.empty? ? nil : 128_000
+    end
+
     def openrouter_context_window(id)
       text = id.to_s
       return pattern_context_window(OPENAI_CONTEXT_WINDOWS, text.delete_prefix("openai/")) if text.start_with?("openai/")
       return anthropic_context_window(text.delete_prefix("anthropic/")) if text.start_with?("anthropic/")
       return pattern_context_window(GEMINI_CONTEXT_WINDOWS, text.delete_prefix("google/")) if text.start_with?("google/")
+    end
+
+    def conservative_openrouter_context_window(id)
+      text = id.to_s
+      return conservative_context_window(text.delete_prefix("openai/")) if text.start_with?("openai/")
+      return conservative_context_window(normalize_anthropic_model(text.delete_prefix("anthropic/"))) if text.start_with?("anthropic/")
+      return conservative_context_window(text.delete_prefix("google/")) if text.start_with?("google/")
     end
 
     def copilot_context_window(id)

@@ -8,6 +8,10 @@ All notable changes to Kward will be documented in this file.
 
 - Fixed web-tool results with BINARY/ASCII-8BIT response bodies so RPC tool events and TUI rendering receive UTF-8-safe content.
 
+### Changed
+
+- Changed model context-window resolution to prefer cached OpenRouter metadata, infer matching provider models from that metadata when possible, and use conservative fallbacks for unknown selected models.
+
 ### Added
 
 - Added `kward openrouter refresh` and `kward openrouter list` for caching key-scoped text-capable OpenRouter models in the Kward cache directory.

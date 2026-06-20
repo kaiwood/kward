@@ -72,14 +72,23 @@ class TestContextUsage < KwardTestCase
     refute_includes token_counter.texts.first, "data:image/png;base64,abc"
   end
 
-  def test_omits_usage_for_non_openai_provider
+  def test_counts_usage_for_any_provider_with_a_context_window
     usage = Kward::ContextUsage.new(token_counter: CountingTokenCounter.new).call(
       provider: "OpenRouter",
-      model: "anthropic/claude-sonnet",
-      context_window: 200_000,
+      model: "z-ai/glm-5.2",
+      context_window: 128_000,
       context_parts: { messages: [{ role: "user", content: "hello" }], tools: [] }
     )
 
-    assert_nil usage
+    assert usage[:tokens] > 0
+    assert_equal 128_000, usage[:contextWindow]
+    assert_equal true, usage[:estimated]
+  end
+
+  def test_tiktoken_counter_falls_back_when_model_encoding_is_unknown
+    counter = Kward::TiktokenTokenCounter.new
+    counter.define_singleton_method(:encoding) { |_model| nil }
+
+    assert_operator counter.count("hello world", model: "z-ai/glm-5.2"), :>, 0
   end
 end

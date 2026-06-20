@@ -171,7 +171,12 @@ module Kward
     # Returns the known context window for the active provider/model pair.
     def current_context_window
       state = current_model_state
-      ModelInfo.context_window(state[:provider], state[:model])
+      context_window(state[:provider], state[:model])
+    end
+
+    # Returns the known context window for a provider/model pair.
+    def context_window(provider, model)
+      context_window_for(ModelInfo.provider_label(provider), model)
     end
 
     # Returns model choices suitable for settings UIs.
@@ -187,16 +192,16 @@ module Kward
       if provider_logged_in?("Codex")
         openai_model = model_for("Codex")
         models += ModelInfo::OPENAI_MODEL_CHOICES.map do |id|
-          { provider: "Codex", id: id, current: provider == "Codex" && openai_model == id }
+          model_entry("Codex", id, current: provider == "Codex" && openai_model == id)
         end
-        models << { provider: "Codex", id: openai_model, current: provider == "Codex" } unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
+        models << model_entry("Codex", openai_model, current: provider == "Codex") unless ModelInfo::OPENAI_MODEL_CHOICES.include?(openai_model)
       end
 
       if provider_logged_in?("OpenRouter")
         openrouter_model = model_for("OpenRouter")
         openrouter_choices = openrouter_model_choices
         models += openrouter_choices.map do |id|
-          { provider: "OpenRouter", id: id, current: provider == "OpenRouter" && openrouter_model == id }
+          model_entry("OpenRouter", id, current: provider == "OpenRouter" && openrouter_model == id)
         end
       end
 
@@ -204,17 +209,17 @@ module Kward
         copilot_model = model_for("Copilot")
         copilot_choices = provider == "Copilot" ? copilot_model_choices : static_copilot_model_choices
         models += copilot_choices.map do |id|
-          { provider: "Copilot", id: id, current: provider == "Copilot" && copilot_model == id }
+          model_entry("Copilot", id, current: provider == "Copilot" && copilot_model == id)
         end
-        models << { provider: "Copilot", id: copilot_model, current: provider == "Copilot" } unless copilot_choices.include?(copilot_model)
+        models << model_entry("Copilot", copilot_model, current: provider == "Copilot") unless copilot_choices.include?(copilot_model)
       end
 
       if provider_logged_in?("Anthropic")
         anthropic_model = model_for("Anthropic")
         models += ModelInfo::ANTHROPIC_MODEL_CHOICES.map do |id|
-          { provider: "Anthropic", id: id, current: provider == "Anthropic" && anthropic_model == id }
+          model_entry("Anthropic", id, current: provider == "Anthropic" && anthropic_model == id)
         end
-        models << { provider: "Anthropic", id: anthropic_model, current: provider == "Anthropic" } unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
+        models << model_entry("Anthropic", anthropic_model, current: provider == "Anthropic") unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
       end
 
       # Sort models by provider, then alphabetically by id
@@ -483,14 +488,31 @@ module Kward
       model.to_s.match?(/\Agpt-5(?:\.|-|\z)/)
     end
 
+    def model_entry(provider, id, current: false)
+      {
+        provider: provider,
+        id: id,
+        current: current,
+        contextWindow: context_window_for(provider, id)
+      }.compact
+    end
+
+    def context_window_for(provider, id)
+      ModelInfo.context_window(provider, id, openrouter_models: openrouter_cached_model_entries)
+    end
+
     def openrouter_model_choices
       openrouter_cached_models.uniq
     end
 
     def openrouter_cached_models
-      @openrouter_models ||= openrouter_model_cache.models.filter_map do |model|
+      openrouter_cached_model_entries.filter_map do |model|
         model.is_a?(Hash) ? model["id"] || model[:id] : model
       end.map(&:to_s).map(&:strip).reject(&:empty?)
+    end
+
+    def openrouter_cached_model_entries
+      @openrouter_models ||= openrouter_model_cache.models
     rescue StandardError
       []
     end

@@ -37,8 +37,12 @@ class TestClient < KwardTestCase
     client.define_singleton_method(:sleep_with_cancellation) { |_seconds, _cancellation| nil }
   end
 
+  def assert_includes_model(models, expected)
+    assert models.any? { |model| expected.all? { |key, value| model[key] == value } }, "Expected #{models.inspect} to include model matching #{expected.inspect}"
+  end
+
   def test_client_requires_openai_oauth_login_or_openrouter
-    client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil))
+    client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
     error = assert_raises(RuntimeError) do
       client.chat([{ role: "user", content: "hello" }])
@@ -170,18 +174,18 @@ class TestClient < KwardTestCase
 
     models = client.available_models
 
-    assert_includes models, { provider: "Codex", id: "gpt-5.5", current: true }
-    assert_includes models, { provider: "Codex", id: "gpt-5.4", current: false }
-    assert_includes models, { provider: "Codex", id: "gpt-5.4-mini", current: false }
-    assert_includes models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.5", current: true, contextWindow: 400_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.4", current: false, contextWindow: 1_050_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.4-mini", current: false, contextWindow: 400_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false, contextWindow: 128_000 }
     refute models.any? { |model| model[:provider] == "OpenRouter" }
-    assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
-    assert_includes models, { provider: "Anthropic", id: "claude-sonnet-4-6", current: false }
-    assert_includes models, { provider: "Anthropic", id: "claude-opus-4-8", current: false }
-    assert_includes models, { provider: "Anthropic", id: "claude-sonnet-4-5", current: false }
-    assert_includes models, { provider: "Anthropic", id: "claude-opus-4-5", current: false }
+    assert_includes_model models, { provider: "Copilot", id: "gpt-5-mini", current: false, contextWindow: 400_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-sonnet-4-6", current: false, contextWindow: 1_000_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-opus-4-8", current: false, contextWindow: 1_000_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-sonnet-4-5", current: false, contextWindow: 200_000 }
+    assert_includes_model models, { provider: "Anthropic", id: "claude-opus-4-5", current: false, contextWindow: 200_000 }
     refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "claude-sonnet-4.6" }
-    assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
+    assert_includes_model models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false, contextWindow: 1_048_576 }
   end
 
   def test_available_models_hide_providers_without_credentials
@@ -242,8 +246,8 @@ class TestClient < KwardTestCase
         cached_models = client.available_models
 
         assert_equal models, cached_models
-        assert_includes models, { provider: "OpenRouter", id: "anthropic/claude-sonnet-4.5", current: false }
-        assert_includes models, { provider: "OpenRouter", id: "openai/gpt-5.5", current: false }
+        assert_includes_model models, { provider: "OpenRouter", id: "anthropic/claude-sonnet-4.5", current: false, contextWindow: 200_000 }
+        assert_includes_model models, { provider: "OpenRouter", id: "openai/gpt-5.5", current: false, contextWindow: 1_050_000 }
         refute_includes models, { provider: "OpenRouter", id: "stale/model", current: true }
         refute_includes models, { provider: "OpenRouter", id: "openai/gpt-5.3-codex-spark", current: false }
         assert_empty http.requests
@@ -262,6 +266,22 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_context_window_for_other_providers_uses_openrouter_cache_when_static_metadata_is_missing
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      cache_path = File.join(dir, "cache", "openrouter_models.json")
+      File.write(path, JSON.dump("provider" => "copilot", "copilot_model" => "gpt-6-mini"))
+      FileUtils.mkdir_p(File.dirname(cache_path))
+      File.write(cache_path, JSON.dump(
+        "version" => 1,
+        "models" => [{ "id" => "openai/gpt-6-mini", "contextWindow" => 64_000 }]
+      ))
+      client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+
+      assert_equal 64_000, client.context_window("Copilot", "gpt-6-mini")
+    end
+  end
+
   def test_available_models_does_not_fetch_inactive_provider_catalogs
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")
@@ -272,7 +292,7 @@ class TestClient < KwardTestCase
         models = client.available_models
 
         refute models.any? { |model| model[:provider] == "OpenRouter" }
-        assert_includes models, { provider: "Copilot", id: "gpt-5-mini", current: false }
+        assert_includes_model models, { provider: "Copilot", id: "gpt-5-mini", current: false, contextWindow: 400_000 }
         refute models.any? { |model| model[:provider] == "Anthropic" }
         assert_empty http.requests
       end
@@ -295,10 +315,10 @@ class TestClient < KwardTestCase
         cached_models = client.available_models
 
         assert_equal models, cached_models
-        assert_includes models, { provider: "Copilot", id: "gpt-5-mini-2025-08-07", current: false }
-        assert_includes models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false }
+        assert_includes_model models, { provider: "Copilot", id: "gpt-5-mini-2025-08-07", current: false, contextWindow: 400_000 }
+        assert_includes_model models, { provider: "Copilot", id: "gemini-3.1-pro-preview", current: false, contextWindow: 1_048_576 }
         refute models.any? { |model| model[:provider] == "Copilot" && model[:id] == "hidden-model" }
-        assert_includes models, { provider: "Copilot", id: "stale-model", current: true }
+        assert_includes_model models, { provider: "Copilot", id: "stale-model", current: true, contextWindow: 128_000 }
         assert_equal 1, http.requests.length
         assert_equal URI("https://api.individual.githubcopilot.com/models"), http.requests.first.uri
       end
@@ -419,7 +439,7 @@ class TestClient < KwardTestCase
   end
 
   def test_openai_oauth_takes_precedence_over_openrouter_env
-    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new("oauth-token"))
+    client = Kward::Client.new(api_key: "openrouter-token", openai_access_token: nil, oauth: FakeOAuth.new("oauth-token"), config_path: "missing_kward_config.json")
 
     url, token, provider = client.send(:credentials)
 
@@ -502,7 +522,7 @@ class TestClient < KwardTestCase
   end
 
   def test_in_flight_steer_supported_for_codex_provider
-    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil))
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
     assert_equal true, client.supports_in_flight_steer?
   end
@@ -514,7 +534,7 @@ class TestClient < KwardTestCase
   end
 
   def test_openai_access_token_takes_precedence_over_saved_oauth
-    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new("oauth-token"))
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new("oauth-token"), config_path: "missing_kward_config.json")
 
     _url, token, provider = client.send(:credentials)
 

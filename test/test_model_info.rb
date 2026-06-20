@@ -32,7 +32,30 @@ class TestModelInfo < KwardTestCase
     assert_equal 1_048_576, Kward::ModelInfo.context_window("OpenRouter", "google/gemini-3.1-pro-preview")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("Copilot", "claude-sonnet-4.6")
     assert_equal 1_048_576, Kward::ModelInfo.context_window("Copilot", "gemini-3.5-flash")
-    assert_nil Kward::ModelInfo.context_window("OpenRouter", "unknown/model")
+    assert_equal 128_000, Kward::ModelInfo.context_window("OpenRouter", "unknown/model")
+  end
+
+  def test_openrouter_cached_context_window_wins_over_provider_patterns
+    models = [{ "id" => "openai/gpt-5.5", "contextWindow" => 123_456 }]
+
+    assert_equal 123_456, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.5", openrouter_models: models)
+  end
+
+  def test_context_window_can_be_inferred_from_openrouter_metadata_for_other_providers
+    models = [
+      { "id" => "openai/gpt-6-mini", "contextWindow" => 64_000 },
+      { "id" => "anthropic/claude-future-5", "contextWindow" => 128_000 },
+      { "id" => "google/gemini-future-pro", "contextWindow" => 96_000 }
+    ]
+
+    assert_equal 64_000, Kward::ModelInfo.context_window("Copilot", "gpt-6-mini", openrouter_models: models)
+    assert_equal 128_000, Kward::ModelInfo.context_window("Anthropic", "claude-future-5", openrouter_models: models)
+    assert_equal 96_000, Kward::ModelInfo.context_window("Copilot", "gemini-future-pro", openrouter_models: models)
+  end
+
+  def test_unknown_models_get_conservative_context_windows
+    assert_equal 128_000, Kward::ModelInfo.context_window("Copilot", "vendor-special")
+    assert_equal 200_000, Kward::ModelInfo.context_window("Anthropic", "claude-new-model")
   end
 
   def test_supports_images_excludes_codex_spark
