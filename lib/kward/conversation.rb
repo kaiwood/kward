@@ -111,13 +111,26 @@ module Kward
     end
 
     def append_tool(tool_call_id:, name:, content:)
-      content = normalize_tool_content(content) if content.is_a?(String)
       append_message({
         role: "tool",
         tool_call_id: tool_call_id,
         name: name,
-        content: content
+        content: self.class.normalize_tool_content(content)
       })
+    end
+
+    # Tool results may arrive as ASCII-8BIT (BINARY) strings, e.g. from
+    # Net::HTTP response bodies or shell command output. When such a string
+    # is later concatenated with a UTF-8 string containing non-ASCII bytes
+    # (during compaction or JSON serialization), Ruby raises
+    # Encoding::CompatibilityError. Re-tag BINARY strings as UTF-8 when the
+    # bytes are valid UTF-8; otherwise scrub so the content is always
+    # serializable and concatenable.
+    def self.normalize_tool_content(content)
+      return content unless content.is_a?(String) && content.encoding == Encoding::ASCII_8BIT
+
+      probe = content.dup.force_encoding(Encoding::UTF_8)
+      probe.valid_encoding? ? probe : probe.scrub
     end
 
     def append_tool_execution(tool_call:, content:)
@@ -240,20 +253,6 @@ module Kward
       @last_entry_compaction = false
       @on_append&.call(message)
       message
-    end
-
-    # Tool results may arrive as ASCII-8BIT (BINARY) strings, e.g. from
-    # Net::HTTP response bodies or shell command output. When such a string
-    # is later concatenated with a UTF-8 string containing non-ASCII bytes
-    # (during compaction or JSON serialization), Ruby raises
-    # Encoding::CompatibilityError. Re-tag BINARY strings as UTF-8 when the
-    # bytes are valid UTF-8; otherwise scrub so the content is always
-    # serializable and concatenable.
-    def normalize_tool_content(string)
-      return string unless string.encoding == Encoding::ASCII_8BIT
-
-      probe = string.dup.force_encoding(Encoding::UTF_8)
-      probe.valid_encoding? ? probe : probe.scrub
     end
 
   end

@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed web-tool results with BINARY/ASCII-8BIT response bodies so RPC tool events and TUI rendering receive UTF-8-safe content.
+
 ### Added
 
 - Added `kward openrouter refresh` and `kward openrouter list` for caching key-scoped text-capable OpenRouter models in the Kward cache directory.

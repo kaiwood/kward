@@ -248,6 +248,25 @@ class TestToolRegistry < KwardTestCase
     assert_equal [{ "url" => "https://example.com" }], fetch.calls
   end
 
+  def test_tool_registry_normalizes_binary_tool_content_for_callbacks
+    binary_content = +"fetched \xff content"
+    binary_content.force_encoding(Encoding::ASCII_8BIT)
+    fetch = Object.new
+    fetch.define_singleton_method(:fetch_content) { |_args| binary_content }
+    registry = Kward::ToolRegistry.new(web_fetch: fetch, web_search_enabled: true)
+    callback_content = nil
+    conversation = Kward::Conversation.new
+    conversation.on_tool_execution = lambda { |_tool_call, content| callback_content = content }
+
+    result = registry.dispatch(tool_call("fetch_content", url: "https://example.com"), conversation)
+
+    assert_equal Encoding::UTF_8, result.encoding
+    assert result.valid_encoding?
+    assert_equal result, conversation.messages.last[:content]
+    assert_equal result, callback_content
+    JSON.generate({ content: callback_content })
+  end
+
   def test_tool_registry_dispatches_code_search
     search = FakeCodeSearch.new("code result")
     registry = Kward::ToolRegistry.new(code_search: search)

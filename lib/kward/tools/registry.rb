@@ -1,4 +1,5 @@
 require_relative "../config_files"
+require_relative "../conversation"
 require_relative "ask_user_question"
 require_relative "code_search"
 require_relative "edit_file"
@@ -87,6 +88,7 @@ module Kward
                 else
                   "Unknown tool: #{name}"
                 end
+      content = Conversation.normalize_tool_content(content)
 
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
