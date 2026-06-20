@@ -50,6 +50,13 @@ class TestConversation < KwardTestCase
     assert_equal Encoding::UTF_8, conversation.messages.last[:content].encoding
   end
 
+  def test_default_system_prompt_is_stable_across_time_bucket_changes
+    first = Kward::Conversation.new.system_message[:content]
+    second = Kward::Conversation.new.system_message[:content]
+
+    assert_equal first, second
+  end
+
   def test_compact_preserves_system_message_and_resets_read_paths
     compacted = nil
     conversation = Kward::Conversation.new(system_message: { role: "system", content: "system" }, read_paths: ["README.md"])

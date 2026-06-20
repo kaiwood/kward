@@ -74,13 +74,13 @@ module Kward
           system_message = restored_system_message
         else
           @last_plugin_prompt_context = plugin_prompt_context
-          system_message = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: memory_context, plugin_context: @last_plugin_prompt_context)
+          system_message = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: memory_context, plugin_context: @last_plugin_prompt_context)
         end
       end
       @system_message = system_message
       @system_message_enabled = !@system_message.nil?
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort) : nil
+        compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time) : nil
       end
       @compaction_system_message = compaction_system_message
       @workspace_agents_mtime = workspace_agents_mtime
@@ -174,10 +174,10 @@ module Kward
       return nil unless @system_message_enabled
 
       @last_plugin_prompt_context = plugin_prompt_context
-      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, memory_context: @memory_context, plugin_context: @last_plugin_prompt_context)
+      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: @memory_context, plugin_context: @last_plugin_prompt_context)
       @system_message = replacement
       @on_system_message_change&.call(replacement)
-      @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort)
+      @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time)
       @workspace_agents_mtime = workspace_agents_mtime
       replacement
     end
@@ -263,6 +263,10 @@ module Kward
         end
       end
       [system_message, transcript_messages]
+    end
+
+    def prompt_time
+      Time.at(0)
     end
 
     def workspace_agents_mtime
