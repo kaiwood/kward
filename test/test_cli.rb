@@ -1689,6 +1689,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sessions_picker_clone_action_ignores_missing_inserted_copy
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      source = store.create
+      conversation = Kward::Conversation.new
+      source.attach(conversation)
+      conversation.append_user("saved prompt")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      sessions = store.recent_tree(limit: nil)
+      labels = cli.send(:session_picker_labels, sessions)
+
+      result = cli.send(:copy_session_selection, store, sessions, labels, labels.first, action: :cloned) do
+        File.join(store.session_dir, "missing.jsonl")
+      end
+
+      assert_nil result
+    end
+  end
+
   def test_sessions_picker_clone_action_clones_and_shows_new_session
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

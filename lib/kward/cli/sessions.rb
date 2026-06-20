@@ -591,6 +591,8 @@ module Kward
 
         copy_path = yield source
         result = insert_session_copy(session_store, sessions, labels, source, copy_path)
+        return nil unless result
+
         copy_label = labels[result[:selection_index]]
         result.merge(action_choices: { copy_label => { action: action, path: copy_path } })
       end
