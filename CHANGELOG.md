@@ -16,7 +16,7 @@ All notable changes to Kward will be documented in this file.
 - Changed tool schema properties to be emitted in deterministic key order for more stable provider request payloads.
 - Changed large source-file reads to return an outline plus a short preview before requiring offset/limit continuation.
 - Changed large search and fetched-content tool results to preserve file, line, URL, and heading anchors during model-context compaction.
-- Changed large tool results to be compacted before they enter model context while preserving full originals in session tool-execution records, avoiding storage for verbatim outputs, preserving short errors exactly, reverting automatically when compaction would not reduce context, and teaching conversation compaction to preserve tool artifact ids.
+- Changed large tool results to be compacted before they enter model context while preserving full originals in session tool-execution records, reusing existing artifact ids for repeated outputs, avoiding storage for verbatim outputs, preserving short errors exactly, reverting automatically when compaction would not reduce context, and teaching conversation compaction to preserve tool artifact ids.
 - Changed model context-window resolution to prefer cached OpenRouter metadata, infer matching provider models from that metadata when possible, and use conservative fallbacks for unknown selected models.
 
 ### Added

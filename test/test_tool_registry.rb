@@ -262,6 +262,21 @@ class TestToolRegistry < KwardTestCase
     assert_equal [{ "url" => "https://example.com" }], fetch.calls
   end
 
+  def test_tool_registry_reuses_artifact_for_repeated_large_output
+    output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["end"]).join("\n")
+    search = FakeCodeSearch.new(output)
+    registry = Kward::ToolRegistry.new(code_search: search)
+    conversation = Kward::Conversation.new
+
+    first = registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+    artifact_id = first[/toolout_[a-f0-9]{16}/]
+    second = registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+
+    assert_includes second, "Same as previous tool output #{artifact_id}"
+    assert_operator second.bytesize, :<, first.bytesize
+    assert_equal 1, conversation.tool_output_artifacts.length
+  end
+
   def test_tool_registry_does_not_store_artifacts_for_uncompacted_output
     search = FakeCodeSearch.new("small output")
     registry = Kward::ToolRegistry.new(code_search: search)

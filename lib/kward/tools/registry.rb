@@ -95,6 +95,10 @@ module Kward
                   "Unknown tool: #{name}"
                 end
       content = Conversation.normalize_tool_content(content)
+      duplicate_id = conversation.tool_output_artifact_id_for(tool_name: name, content: content)
+      if conversation.tool_output_artifacts.key?(duplicate_id)
+        content = "[Same as previous tool output #{duplicate_id}; not repeated. Use retrieve_tool_output to inspect it.]"
+      end
 
       artifact_id = nil
       model_content = @tool_output_compactor.compact(name, content) do

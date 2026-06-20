@@ -141,9 +141,13 @@ module Kward
       @on_tool_execution&.call(tool_call, content)
     end
 
+    def tool_output_artifact_id_for(tool_name:, content:)
+      self.class.tool_output_artifact_id(tool_name: tool_name, content: self.class.normalize_tool_content(content))
+    end
+
     def store_tool_output_artifact(tool_name:, content:)
       text = self.class.normalize_tool_content(content)
-      id = self.class.tool_output_artifact_id(tool_name: tool_name, content: text)
+      id = tool_output_artifact_id_for(tool_name: tool_name, content: text)
       @tool_output_artifacts[id] = {
         id: id,
         tool_name: tool_name,
