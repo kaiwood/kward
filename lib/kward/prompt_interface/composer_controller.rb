@@ -26,14 +26,6 @@ module Kward
         @composer.attachments
       end
 
-      def composer_kill_buffer
-        @composer.kill_buffer
-      end
-
-      def composer_kill_buffer=(value)
-        @composer.kill_buffer = value.to_s
-      end
-
       def insert_key(key)
         return unless key.is_a?(String) && key.length == 1 && key.match?(/[[:print:]]/)
 
@@ -153,27 +145,8 @@ module Kward
         @composer.kill_line_after_cursor
       end
 
-      def kill_range(start_index, end_index)
-        return unless @composer.kill_range(start_index, end_index)
-
-        reset_slash_selection
-        reset_history_navigation
-      end
-
       def yank_kill_buffer
         @composer.yank_kill_buffer
-      end
-
-      def previous_word_boundary(index)
-        @composer.previous_word_boundary(index)
-      end
-
-      def next_word_boundary(index)
-        @composer.next_word_boundary(index)
-      end
-
-      def word_separator?(char)
-        @composer.word_separator?(char)
       end
 
       def add_history(value)
