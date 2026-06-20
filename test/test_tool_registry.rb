@@ -266,6 +266,21 @@ class TestToolRegistry < KwardTestCase
     assert_equal output, callback_content
   end
 
+  def test_tool_registry_compacts_shell_sections_independently
+    output = "Exit status: 1\n\nSTDOUT:\n" + Array.new(2_000) { |index| "out #{index}" }.join("\n") + "\nSTDERR:\n" + Array.new(2_000) { |index| "err #{index}" }.join("\n") + "\nfatal: build failed"
+    workspace = Object.new
+    workspace.define_singleton_method(:run_shell_command) { |_command, **_kwargs| output }
+    registry = Kward::ToolRegistry.new(workspace: workspace)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "bundle exec rake"), conversation)
+
+    assert_includes result, "STDOUT:"
+    assert_includes result, "STDERR:"
+    assert_includes result, "fatal: build failed"
+    assert_operator result.bytesize, :<, output.bytesize
+  end
+
   def test_retrieve_tool_output_returns_original_compacted_output
     output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["ERROR: important failure", "end"]).join("\n")
     search = FakeCodeSearch.new(output)

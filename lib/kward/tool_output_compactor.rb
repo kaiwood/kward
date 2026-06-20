@@ -21,7 +21,7 @@ module Kward
       return text unless text.bytesize > MIN_BYTES
       return text if error_output?(text) && text.bytesize <= ERROR_OUTPUT_MAX_BYTES
 
-      compacted = compact_lines(text)
+      compacted = tool_name.to_s == "run_shell_command" ? compact_shell_output(text) : compact_lines(text)
       return text if compacted == text
       return text if compacted.bytesize >= text.bytesize
 
@@ -40,6 +40,27 @@ module Kward
 
     def error_output?(text)
       text.match?(ERROR_PATTERN)
+    end
+
+    def compact_shell_output(text)
+      sections = shell_sections(text)
+      return compact_lines(text) if sections.empty?
+
+      sections.map do |heading, body|
+        next heading if body.empty?
+
+        "#{heading}\n#{compact_lines(body)}"
+      end.join("\n")
+    end
+
+    def shell_sections(text)
+      parts = text.split(/\n(?=STDOUT:\n|STDERR:\n)/)
+      return [] if parts.length < 2
+
+      parts.map do |part|
+        heading, body = part.split("\n", 2)
+        [heading, body.to_s]
+      end
     end
 
     def compact_lines(text)
