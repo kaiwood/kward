@@ -580,21 +580,17 @@ module Kward
       end
 
       def clone_session_selection(session_store, sessions, labels, label)
-        copy_session_selection(session_store, sessions, labels, label, action: :cloned) do |source|
+        copy_session_selection(session_store, sessions, labels, label) do |source|
           clone_session_file_from_path(session_store, source.path)
         end
       end
 
-      def copy_session_selection(session_store, sessions, labels, label, action:)
+      def copy_session_selection(session_store, sessions, labels, label)
         source = sessions[labels.index(label)]
         return nil unless source
 
         copy_path = yield source
-        result = insert_session_copy(session_store, sessions, labels, source, copy_path)
-        return nil unless result
-
-        copy_label = labels[result[:selection_index]]
-        result.merge(action_choices: { copy_label => { action: action, path: copy_path } })
+        insert_session_copy(session_store, sessions, labels, source, copy_path)
       end
 
       def insert_session_copy(session_store, sessions, labels, source, copy_path)

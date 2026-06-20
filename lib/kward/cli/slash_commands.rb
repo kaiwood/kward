@@ -59,8 +59,6 @@ module Kward
           loop do
             replacement_agent = if selection.respond_to?(:conversation)
                                   selection
-                                elsif selection.is_a?(Hash) && selection[:action] == :cloned
-                                  run_busy_local_command_and_requeue { load_session(session_store, selection[:path], message: "Cloned session") }
                                 elsif selection.is_a?(Hash) && selection[:action] == :clone
                                   run_busy_local_command_and_requeue(activity: "cloning") { clone_session_from_path(session_store, selection[:path]) }
                                 elsif selection.is_a?(Hash) && selection[:action] == :fork

@@ -1701,7 +1701,7 @@ class TestCLI < KwardTestCase
       sessions = store.recent_tree(limit: nil)
       labels = cli.send(:session_picker_labels, sessions)
 
-      result = cli.send(:copy_session_selection, store, sessions, labels, labels.first, action: :cloned) do
+      result = cli.send(:copy_session_selection, store, sessions, labels, labels.first) do
         File.join(store.session_dir, "missing.jsonl")
       end
 
@@ -1709,7 +1709,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_clone_action_clones_and_shows_new_session
+  def test_sessions_picker_clone_action_clones_and_keeps_picker_open
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
@@ -1719,9 +1719,8 @@ class TestCLI < KwardTestCase
       conversation.append_assistant("saved reply")
       prompt = FakePrompt.new(["/sessions", "/exit"])
       prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
-        result = action_handlers.fetch(action_keys.fetch("c")[:action]).call(choices.first)
-        cloned_label = result[:choices][result[:selection_index]]
-        result[:action_choices].fetch(cloned_label)
+        @clone_result = action_handlers.fetch(action_keys.fetch("c")[:action]).call(choices.first)
+        nil
       end
       client = RecordingClient.new([])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
@@ -1731,10 +1730,12 @@ class TestCLI < KwardTestCase
       files = Dir.glob(File.join(store.session_dir, "*.jsonl"))
       assert_equal 2, files.length
       clone_path = (files - [source.path]).first
-      output = strip_ansi(prompt.output.join("\n"))
-      assert_includes output, "Cloned session: #{clone_path}"
-      assert_includes output, "saved prompt"
-      assert_includes output, "saved reply"
+      clone_result = prompt.instance_variable_get(:@clone_result)
+      cloned_label = clone_result[:choices][clone_result[:selection_index]]
+
+      assert_equal true, clone_result[:select_continue]
+      assert_includes cloned_label, File.basename(clone_path)
+      refute_includes strip_ansi(prompt.output.join("\n")), "Cloned session: #{clone_path}"
     end
   end
 
