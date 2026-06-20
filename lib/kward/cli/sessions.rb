@@ -539,17 +539,6 @@ module Kward
         load_session(session_store, clone_path, message: "Cloned session")
       end
 
-      def fork_session_from_path(session_store, path)
-        source_session, = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
-        point = select_fork_point_for_session(session_store, source_session)
-        return nil unless point
-
-        forked_session, = run_busy_local_command_and_requeue(activity: "forking") do
-          create_fork_from_point(session_store, source_session, point)
-        end
-        forked_session.path
-      end
-
       def fork_session_from_picker(session_store, source_path)
         source_session, = session_store.load(source_path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
         point = select_fork_point_for_session(session_store, source_session)
