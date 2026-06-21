@@ -1602,7 +1602,7 @@ class TestPromptInterface < KwardTestCase
 
     stripped = strip_ansi(output.string)
     assert_includes stripped, "dasdsadas\r\n"
-    assert_includes stripped, "\r\nTool>\r\nabcde"
+    assert_includes stripped, "\r\nTool> abcde"
     refute_includes stripped, "╯Tool>"
   end
 
@@ -1619,7 +1619,7 @@ class TestPromptInterface < KwardTestCase
     prompt.write_delta("reasoning text")
 
     stripped = strip_ansi(output.string)
-    assert_includes stripped, "Assistant>\r\nassistant text\r\n\r\nReasoning>\r\nreasoning text"
+    assert_includes stripped, "Assistant> assistant text\r\n\r\nReasoning> reasoning text"
   end
 
   def test_prompt_interface_advances_after_full_width_stream_chunk

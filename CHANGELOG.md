@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed transcript rendering so assistant, reasoning, and tool output starts on the same line as its label.
 - Changed the interactive startup screen to an info block.”
 - Changed shell command output capture to allow larger raw output for Kward's own compactor, preserving stdout/stderr structure and test failure summaries before model-context trimming.
 - Tightened the built-in system prompt wording to reduce repeated instruction tokens.

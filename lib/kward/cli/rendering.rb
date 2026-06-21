@@ -59,7 +59,7 @@ module Kward
         if prompt_interface?
           print_tool_result(tool_call, content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         else
-          @prompt.say("\n#{colored("Tool>", *tool_label_styles(content))}\n#{summary}\n")
+          @prompt.say("\n#{colored("Tool>", *tool_label_styles(content))} #{summary}\n")
         end
       end
 
@@ -71,7 +71,7 @@ module Kward
           print_block_delta(label, rendered)
           finish_stream_block
         else
-          @prompt.say("\n#{colored("#{transcript_label(label)}>", *label_styles(label))}\n#{rendered}\n")
+          @prompt.say("\n#{colored("#{transcript_label(label)}>", *label_styles(label))} #{rendered}\n")
         end
       end
 
@@ -320,7 +320,7 @@ module Kward
         return if @stream_block == label
 
         puts if @stream_block
-        puts "\n#{colored("#{transcript_label(label)}>", *label_styles(label))}"
+        print "\n#{colored("#{transcript_label(label)}>", *label_styles(label))} "
         @stream_block = label
       end
 

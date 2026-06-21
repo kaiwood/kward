@@ -11,7 +11,7 @@ module Kward
           prepare_transcript_output_locked unless @restoring_transcript
           if label && @stream_state.block != label
             ensure_transcript_block_separator_locked
-            write_transcript_text_locked("#{colored("#{transcript_label(label)}>", *label_styles(label))}\n")
+            write_transcript_text_locked("#{colored("#{transcript_label(label)}>", *label_styles(label))} ")
             @stream_state.start_block(label)
           end
           write_transcript_text_locked(delta) unless delta.empty?

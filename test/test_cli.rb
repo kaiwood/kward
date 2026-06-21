@@ -1617,9 +1617,9 @@ class TestCLI < KwardTestCase
 
       output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "You> inspect file"
-      assert_includes output, "Reasoning>\nNeed to inspect the file."
+      assert_includes output, "Reasoning> Need to inspect the file."
       assert_includes output, "I'll read it."
-      assert_includes output, "Tool>\nread_file: README.md"
+      assert_includes output, "Tool> read_file: README.md"
       refute_includes output, "Tool output>"
       assert_includes output, "1 lines, 16 bytes"
       refute_includes output, "README contents"
@@ -1650,9 +1650,9 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       output = strip_ansi(prompt.output.join("\n"))
-      assert_includes output, "Reasoning>\nNeed context."
+      assert_includes output, "Reasoning> Need context."
       refute_includes output, "Need inspect file first."
-      assert_includes output, "Tool>\nread_file: README.md"
+      assert_includes output, "Tool> read_file: README.md"
     end
   end
 
@@ -1702,7 +1702,7 @@ class TestCLI < KwardTestCase
       cli.send(:print_tool_result, tool_call("custom_tool", {}), content, line_limit: Kward::CLI::INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
     end.first
 
-    summary = strip_ansi(output).split("Tool>\n", 2).last
+    summary = strip_ansi(output).split("Tool> ", 2).last
     assert_equal 10, summary.lines.length
     assert_includes output, "line10"
     refute_includes output, "truncated"
@@ -1748,7 +1748,7 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       output = strip_ansi(prompt.output.join("\n"))
-      assert_includes output, "Tool>\ncustom_tool: line1"
+      assert_includes output, "Tool> custom_tool: line1"
       assert_includes output, "...[truncated 3 lines]"
       refute_includes output, "line12"
     end
