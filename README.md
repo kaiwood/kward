@@ -86,8 +86,11 @@ Advanced:
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
+- [Agent tools](doc/agent-tools.md): overview of model-callable tools, token-saving behavior, and tool categories.
+- [Workspace tools](doc/workspace-tools.md): local file, edit, and shell command tools.
 - [Web search](doc/web-search.md): live search providers and network behavior for the web search agent tool.
 - [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading for the code search agent tool.
+- [Context tools](doc/context-tools.md): skills, compacted output retrieval, and structured clarification questions.
 
 API reference:
 

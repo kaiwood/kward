@@ -28,6 +28,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Agent Tools documentation pages covering workspace tools, context tools, and token-saving tool-output behavior.
 - Added an API reference overview page and API docs navigation dropdown for generated Ruby indexes and key namespaces.
 - Added Turbolinks-style navigation to the generated documentation site for same-origin HTML links.
 - Added a `docs:check` Rake task and HTMLProofer development dependency for checking generated documentation links, images, and scripts.

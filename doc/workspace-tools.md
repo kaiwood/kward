@@ -1,0 +1,105 @@
+# Workspace tools
+
+Workspace tools let Kward inspect and change the local project. They are the tools behind prompts such as:
+
+```text
+Find where configuration is loaded.
+Add a focused test for this behavior.
+Run the related test file.
+```
+
+Kward normally chooses these tools itself. You do not need to know their exact names to use them, but understanding the boundaries helps explain why Kward sometimes reads before editing or asks before running broad checks.
+
+## Guardrails
+
+Workspace tools use the active workspace as their boundary. File paths are workspace-relative by default, and file tools are guarded so Kward does not edit arbitrary unread files.
+
+Important behavior:
+
+- Existing files must be read in the current conversation before `write_file` or `edit_file` can change them.
+- Reads are bounded to avoid pulling very large files into context by accident.
+- Edits use exact text replacement, so accidental partial or fuzzy changes fail instead of guessing.
+- Shell commands run as your operating-system user from the workspace. They are powerful and should be treated like commands you run yourself.
+
+## Reading the workspace
+
+### `list_directory`
+
+Lists entries in a workspace-relative directory. Kward uses it to discover project structure before reading specific files.
+
+Arguments:
+
+- `path`: workspace-relative directory.
+
+### `read_file`
+
+Reads a workspace text file. Output is capped, and Kward can continue with line offsets when it needs more detail.
+
+Arguments:
+
+- `path`: workspace-relative file path.
+- `offset`: optional 1-indexed start line.
+- `limit`: optional maximum number of lines.
+
+A successful read marks the resolved file path as read for the conversation, allowing later edits to that file.
+
+### `summarize_file_structure`
+
+Returns a compact outline of classes, modules, methods, and functions in a source file. Kward uses it when a file may be too large to read fully at first.
+
+Arguments:
+
+- `path`: workspace-relative source file path.
+
+This tool saves tokens by letting Kward identify relevant entry points before requesting exact line ranges with `read_file`.
+
+## Changing files
+
+### `write_file`
+
+Writes complete file content. Existing files must be read first. New files can be created when the path is inside the workspace.
+
+Arguments:
+
+- `path`: workspace-relative file path.
+- `content`: complete file content.
+
+Use full writes when replacing generated content or creating a new file. For small edits to existing files, Kward should usually prefer `edit_file`.
+
+### `edit_file`
+
+Applies one or more exact replacements to a file that has already been read.
+
+Arguments:
+
+- `path`: workspace-relative file path.
+- `edits`: array of replacements:
+  - `old_text`: unique exact text to replace.
+  - `new_text`: replacement text.
+
+Each `old_text` must match exactly once, and replacements must not overlap. This keeps edits deterministic and avoids broad fuzzy rewriting.
+
+## Running commands
+
+### `run_shell_command`
+
+Runs a shell command from the workspace root.
+
+Arguments:
+
+- `command`: command to run.
+- `timeout_seconds`: optional timeout, default 30 seconds.
+
+Kward uses shell commands for tests, linters, build checks, and simple repository inspection. Command output is bounded and may be compacted before it is sent back into model context, while the original output remains available in the session record.
+
+## Token behavior
+
+Workspace tools are intentionally incremental:
+
+1. list directories to find likely files,
+2. summarize large source files before reading everything,
+3. read focused line ranges,
+4. make exact edits,
+5. run focused verification commands.
+
+This keeps the model's context window focused on relevant evidence instead of flooding it with entire repositories or long command output.

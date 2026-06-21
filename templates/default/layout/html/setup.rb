@@ -34,8 +34,11 @@ module KwardDocsNavigation
     "doc/personas.md" => "file.personas.html",
     "doc/extensibility.md" => "file.extensibility.html",
     "doc/plugins.md" => "file.plugins.html",
+    "doc/agent-tools.md" => "file.agent-tools.html",
+    "doc/workspace-tools.md" => "file.workspace-tools.html",
     "doc/web-search.md" => "file.web-search.html",
     "doc/code-search.md" => "file.code-search.html",
+    "doc/context-tools.md" => "file.context-tools.html",
     "doc/rpc.md" => "file.rpc.html",
     "doc/releasing.md" => "file.releasing.html"
   }.freeze
