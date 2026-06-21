@@ -2926,6 +2926,16 @@ edit this prompt"
     input&.close unless input&.closed?
   end
 
+  def test_busy_input_queues_workers_list_command
+    prompt = PollingPrompt.new(["/workers"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    queued = []
+
+    cli.send(:collect_busy_input, queued, nil, Object.new)
+
+    assert_equal ["/workers"], queued
+  end
+
   def test_busy_input_queues_when_steering_submit_fails
     prompt = PollingPrompt.new(["fallback"])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))

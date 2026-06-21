@@ -160,7 +160,7 @@ module Kward
         poll_result = @prompt.poll_input
         case poll_result
         when String
-          return poll_result if handle_busy_scout_input(poll_result, agent)
+          return poll_result if handle_busy_scout_input(poll_result, agent, queued_inputs)
 
           if steering && !poll_result.strip.empty?
             begin
@@ -195,7 +195,7 @@ module Kward
         end
       end
 
-      def handle_busy_scout_input(input, agent)
+      def handle_busy_scout_input(input, agent, queued_inputs)
         return false unless agent
 
         command = input.to_s.strip
