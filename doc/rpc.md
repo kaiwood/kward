@@ -1,5 +1,7 @@
 # Kward RPC Protocol
 
+<div class="kward-no-toc"></div>
+
 Kward RPC is an experimental backend protocol for UI clients. It is versioned as protocol version `1`, but method names and payloads may still change while the UI integration is built.
 
 This page is for people building UI clients or integrations. If you use Kward from the terminal, you can skip it.
@@ -8,12 +10,6 @@ This page is for people building UI clients or integrations. If you use Kward fr
 
 ```bash
 kward rpc
-```
-
-From source:
-
-```bash
-ruby lib/main.rb rpc
 ```
 
 The process uses stdin/stdout exclusively for protocol messages. Diagnostics are written to stderr.

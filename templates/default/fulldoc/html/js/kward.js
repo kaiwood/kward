@@ -326,6 +326,12 @@ const rewriteGuideLinks = () => {
 }
 
 const setupTableOfContents = () => {
+  const existingToc = document.getElementById('toc')
+  if (document.querySelector('.kward-no-toc')) {
+    if (existingToc) existingToc.remove()
+    return
+  }
+
   const fileContents = document.getElementById('filecontents')
   const content = document.getElementById('content')
   if (!fileContents || !content || content.querySelector('#toc')) return
