@@ -30,7 +30,11 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/prompts.rb` - system prompt and prompt/skill discovery.
 - `lib/kward/config_files.rb` - config path handling.
 - `test/` - Minitest coverage.
-- `doc/` - user documentation.
+- `doc/` - user documentation and generated docs source pages.
+- `doc/api.md` - curated API reference overview used as the API docs landing page.
+- `templates/default/kward_navigation.rb` - shared generated-docs navigation data for guide/API dropdowns.
+- `templates/default/layout/` - YARD layout templates for normal generated docs pages.
+- `templates/default/fulldoc/` - YARD templates for generated full-list pages such as class, method, and file indexes.
 
 ## Common commands
 
@@ -64,6 +68,7 @@ ruby lib/main.rb "Explain this project"
 - This project uses Minitest. Add or update focused tests for behavior changes.
 - Network/auth behavior should be easy to test without real external calls; follow existing test patterns and stubs.
 - Keep CLI output stable unless the task is explicitly about UX copy.
+- Keep documentation current when behavior, configuration, extension points, commands, tools, RPC capabilities, or generated docs navigation changes.
 - Add user-facing changes to the `CHANGELOG.md` `[Unreleased]` section using grouped `### Added`, `### Changed`, `### Fixed`, or `### Removed` subsections.
 - When adding configuration, document default behavior and environment variable interactions.
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
