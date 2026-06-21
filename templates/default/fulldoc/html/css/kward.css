@@ -1192,22 +1192,26 @@ body.kward-docs .kward-home #footer {
   border-radius: 12px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
   display: none;
-  gap: 22px;
-  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(160px, 220px));
   left: 50%;
+  max-width: calc(100vw - 48px);
   opacity: 0;
-  padding: 28px 22px 22px;
+  padding: 20px;
   pointer-events: none;
   position: absolute;
   top: 100%;
   transform: translate(-50%, -8px);
   transition: opacity 140ms ease, transform 140ms ease;
-  width: min(920px, calc(100vw - 48px));
+  width: max-content;
+}
+
+.kward-advanced-nav-dropdown {
+  grid-template-columns: repeat(3, minmax(150px, 200px));
 }
 
 .kward-api-nav-dropdown {
-  grid-template-columns: repeat(2, minmax(170px, 1fr));
-  width: min(480px, calc(100vw - 48px));
+  grid-template-columns: repeat(2, minmax(170px, 210px));
 }
 
 .kward-nav-dropdown::before {

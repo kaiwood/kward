@@ -22,10 +22,24 @@
       <nav id="kward-primary-nav" class="kward-topnav" aria-label="Primary navigation">
         <a href="<%= url_for('index.html') %>" class="<%= 'active' if home_page? %>">Home</a>
         <div class="kward-nav-menu <%= 'active' if guide_page? %>">
-          <a class="kward-nav-menu-link" href="<%= url_for('file.README.html') %>">User Guides</a>
-          <button class="kward-nav-menu-button" type="button" aria-label="Expand user guides" aria-expanded="false">⌄</button>
+          <a class="kward-nav-menu-link" href="<%= url_for(guide_overview) %>">Guides</a>
+          <button class="kward-nav-menu-button" type="button" aria-label="Expand guides" aria-expanded="false">⌄</button>
           <div class="kward-nav-dropdown">
             <% guide_groups.each do |title, items| %>
+              <section>
+                <h2><%= h title %></h2>
+                <% items.each do |label, link| %>
+                  <a href="<%= url_for(link) %>"><%= h label %></a>
+                <% end %>
+              </section>
+            <% end %>
+          </div>
+        </div>
+        <div class="kward-nav-menu <%= 'active' if extension_page? %>">
+          <a class="kward-nav-menu-link" href="<%= url_for(extension_overview) %>">Advanced</a>
+          <button class="kward-nav-menu-button" type="button" aria-label="Expand advanced guides" aria-expanded="false">⌄</button>
+          <div class="kward-nav-dropdown kward-advanced-nav-dropdown">
+            <% extension_groups.each do |title, items| %>
               <section>
                 <h2><%= h title %></h2>
                 <% items.each do |label, link| %>

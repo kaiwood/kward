@@ -79,16 +79,19 @@ Feature guides:
 
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
+
+Advanced:
+
 - [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and extension choices.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
-- [Web search](doc/web-search.md): live search providers and network behavior.
-- [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading.
-
-Advanced/reference:
-
-- [API reference](doc/api.md): generated Ruby API entry points, indexes, and public API expectations.
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
+- [Web search](doc/web-search.md): live search providers and network behavior for the web search agent tool.
+- [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading for the code search agent tool.
+
+API reference:
+
+- [API reference](doc/api.md): generated Ruby API entry points, indexes, and public API expectations.
 
 ## Development
 

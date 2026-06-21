@@ -10,11 +10,14 @@ module KwardDocsNavigation
   }.freeze
   API_LINKS = ([API_OVERVIEW] + API_GROUPS.flat_map { |_title, items| items.map(&:last) }).freeze
 
+  EXTENSION_OVERVIEW = "file.extensibility.html"
+  EXTENSION_LINKS = ([EXTENSION_OVERVIEW] + EXTENSION_GROUPS.flat_map { |_title, items| items.map(&:last) }).uniq.freeze
+
   GUIDE_OVERVIEW = "file.README.html"
   GUIDE_LINKS = ([GUIDE_OVERVIEW] + GUIDE_GROUPS.flat_map { |_title, items| items.map(&:last) }).freeze
   GUIDE_SEARCH_FILES = [
     ["Overview", "README.md", GUIDE_OVERVIEW],
-    *GUIDE_GROUPS.flat_map do |_title, items|
+    *(GUIDE_GROUPS + EXTENSION_GROUPS).flat_map do |_title, items|
       items.map do |label, link|
         source = "doc/#{link.delete_prefix("file.").delete_suffix(".html")}.md"
         [label, source, link]
@@ -39,6 +42,10 @@ module KwardDocsNavigation
 
   def guide_overview
     GUIDE_OVERVIEW
+  end
+
+  def extension_overview
+    EXTENSION_OVERVIEW
   end
 
   def guide_search_index_json
@@ -71,7 +78,11 @@ module KwardDocsNavigation
   end
 
   def guide_file?
-    defined?(@file) && GUIDE_FILE_LINKS.key?(@file&.filename.to_s)
+    defined?(@file) && GUIDE_LINKS.include?(GUIDE_FILE_LINKS[@file&.filename.to_s])
+  end
+
+  def extension_file?
+    defined?(@file) && EXTENSION_LINKS.include?(GUIDE_FILE_LINKS[@file&.filename.to_s])
   end
 
   def api_file?
@@ -86,8 +97,12 @@ module KwardDocsNavigation
     (readme_file? && !options.index) || guide_file? || GUIDE_LINKS.include?(current_docs_path)
   end
 
+  def extension_page?
+    extension_file? || EXTENSION_LINKS.include?(current_docs_path)
+  end
+
   def api_page?
-    api_file? || API_LINKS.include?(current_docs_path) || (!home_page? && !guide_page?)
+    api_file? || API_LINKS.include?(current_docs_path) || (!home_page? && !guide_page? && !extension_page?)
   end
 
   def diskfile

@@ -16,19 +16,31 @@ module KwardDocsNavigationData
       "Feature guides",
       [
         ["Memory", "file.memory.html"],
-        ["Personas", "file.personas.html"],
+        ["Personas", "file.personas.html"]
+      ]
+    ]
+  ].freeze
+
+  EXTENSION_GROUPS = [
+    [
+      "Customize",
+      [
         ["Extensibility", "file.extensibility.html"],
-        ["Plugins", "file.plugins.html"],
-        ["Web search", "file.web-search.html"],
-        ["Code search", "file.code-search.html"]
+        ["Plugins", "file.plugins.html"]
       ]
     ],
     [
-      "Advanced/reference",
+      "Integrate",
       [
-        ["API reference", "file.api.html"],
         ["RPC protocol", "file.rpc.html"],
         ["Releasing", "file.releasing.html"]
+      ]
+    ],
+    [
+      "Agent tools",
+      [
+        ["Web search", "file.web-search.html"],
+        ["Code search", "file.code-search.html"]
       ]
     ]
   ].freeze
@@ -59,6 +71,10 @@ module KwardDocsNavigationData
 
   def guide_groups
     GUIDE_GROUPS
+  end
+
+  def extension_groups
+    EXTENSION_GROUPS
   end
 
   def api_groups
