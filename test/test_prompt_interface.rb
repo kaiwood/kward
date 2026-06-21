@@ -1290,9 +1290,9 @@ class TestPromptInterface < KwardTestCase
 
     assert_equal "/", prompt.ask("You>")
 
-    assert_includes output.string, "\e[38;2;155;255;0;1mSlash commands\e[0m"
-    assert_includes output.string, "\e[38;2;155;255;0;1m› /alpha — First command.\e[0m"
-    assert_includes output.string, "\e[38;2;155;255;0;1m› /beta — Second command.\e[0m"
+    assert_includes output.string, "\e[38;2;138;160;106;1mSlash commands\e[0m"
+    assert_includes output.string, "\e[38;2;138;160;106;1m› /alpha — First command.\e[0m"
+    assert_includes output.string, "\e[38;2;138;160;106;1m› /beta — Second command.\e[0m"
   ensure
     input&.close unless input&.closed?
   end
@@ -1303,7 +1303,7 @@ class TestPromptInterface < KwardTestCase
 
     row = prompt.send(:overlay_content_row, prompt.send(:overlay_choice_line, "A very long selected overlay item that must be truncated", selected: true), 18)
 
-    assert_match(/\e\[38;2;155;255;0;1m› A very long sele\e\[0m/, row)
+    assert_match(/\e\[38;2;138;160;106;1m› A very long sele\e\[0m/, row)
   end
 
   def test_prompt_interface_aligns_overlay_left_and_right

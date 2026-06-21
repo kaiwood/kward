@@ -32,7 +32,7 @@ module Kward
       def overlay_top_border(title, card_width)
         title = visible_truncate(title.to_s, [card_width - 4, 1].max)
         plain_length = ANSI.strip(title).length
-        colored("╭", :primary_green) + " #{colored(title, :bright_accent_green, :bold)} " + colored("─" * [card_width - plain_length - 4, 0].max, :primary_green) + colored("╮", :primary_green)
+        colored("╭", :primary_green) + " #{colored(title, :primary_green, :bold)} " + colored("─" * [card_width - plain_length - 4, 0].max, :primary_green) + colored("╮", :primary_green)
       end
 
       def overlay_bottom_border(card_width)
@@ -41,7 +41,7 @@ module Kward
 
       def overlay_content_row(row, inner_width)
         text = visible_truncate(row[:text], inner_width)
-        text = colored(text, :bright_accent_green, :bold) if row[:selected]
+        text = colored(text, :primary_green, :bold) if row[:selected]
         colored("│", :primary_green) + " " + visible_ljust(text, inner_width) + " " + colored("│", :primary_green)
       end
 
