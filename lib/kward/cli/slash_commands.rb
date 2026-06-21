@@ -206,7 +206,8 @@ module Kward
           session_store: interactive_session_store(agent),
           provider: current_model_provider,
           model: current_model_id,
-          reasoning_effort: current_reasoning_effort
+          reasoning_effort: current_reasoning_effort,
+          write_lock: (@worker_write_lock ||= Workers::WriteLock.new)
         )
       end
 
@@ -538,7 +539,8 @@ module Kward
           session_store: @session_store,
           provider: current_model_provider,
           model: current_model_id,
-          reasoning_effort: current_reasoning_effort
+          reasoning_effort: current_reasoning_effort,
+          write_lock: (@worker_write_lock ||= Workers::WriteLock.new)
         )
       end
 

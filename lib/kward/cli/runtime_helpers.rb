@@ -50,10 +50,13 @@ module Kward
       def build_worker_agent(conversation, role: "implementation")
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
+        writer_id = worker_writer_id(role)
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: @prompt,
-          allowed_tool_names: Workers::ToolPolicy.allowed_tool_names(role)
+          allowed_tool_names: Workers::ToolPolicy.allowed_tool_names(role),
+          write_lock: @worker_write_lock,
+          writer_id: writer_id
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
@@ -62,6 +65,15 @@ module Kward
           tool_registry: tool_registry,
           conversation: conversation
         )
+      end
+
+      def worker_writer_id(role)
+        return nil unless Workers::ToolPolicy.write_capable?(role)
+
+        @worker_write_lock ||= Workers::WriteLock.new
+        owner_id = role.to_s.empty? ? "implementation" : role.to_s
+        @worker_write_lock.acquire(owner_id)
+        owner_id
       end
 
       def handle_interactive_shell_command(input, agent)

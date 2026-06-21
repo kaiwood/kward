@@ -58,7 +58,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -68,6 +68,8 @@ module Kward
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
       @allowed_tool_names = allowed_tool_names&.map(&:to_s)
+      @write_lock = write_lock
+      @writer_id = writer_id
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @tools = build_tools.freeze
@@ -91,7 +93,11 @@ module Kward
       tool = @tools[name]
 
       content = if tool
-                  tool.call(args, conversation, cancellation: cancellation)
+                  if mutation_tool?(name) && !write_lock_owned?
+                    "Workspace write denied: another worker owns the write lock."
+                  else
+                    tool.call(args, conversation, cancellation: cancellation)
+                  end
                 else
                   "Unknown tool: #{name}"
                 end
@@ -128,6 +134,16 @@ module Kward
         "bytes_after" => after.bytesize,
         "bytes_saved" => before.bytesize - after.bytesize
       )
+    end
+
+    def mutation_tool?(name)
+      %w[edit_file write_file run_shell_command].include?(name.to_s)
+    end
+
+    def write_lock_owned?
+      return true unless @write_lock
+
+      @write_lock.owned_by?(@writer_id)
     end
 
     def build_tools

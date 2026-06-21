@@ -14,6 +14,10 @@ module Kward
           nil
         end
       end
+
+      def write_capable?(role)
+        allowed_tool_names(role).nil?
+      end
     end
   end
 end

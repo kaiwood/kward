@@ -119,7 +119,7 @@ module Kward
       READ_ONLY_TOOLS = Workers::ToolPolicy::READ_ONLY_TOOLS
       DEFAULT_TIMEOUT_SECONDS = Workers::Manager::DEFAULT_TIMEOUT_SECONDS
 
-      def initialize(store:, client: nil, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, client_factory: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil)
+      def initialize(store:, client: nil, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, client_factory: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil, write_lock: nil)
         @store = store
         @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
         @manager = Workers::Manager.new(
@@ -131,7 +131,8 @@ module Kward
           session_store: session_store,
           provider: provider,
           model: model,
-          reasoning_effort: reasoning_effort
+          reasoning_effort: reasoning_effort,
+          write_lock: write_lock
         )
       end
 

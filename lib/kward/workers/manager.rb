@@ -15,7 +15,7 @@ module Kward
     class Manager
       DEFAULT_TIMEOUT_SECONDS = 180
 
-      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil)
+      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil, write_lock: nil)
         @client_factory = client_factory
         @prompt = prompt
         @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
@@ -25,6 +25,7 @@ module Kward
         @provider = provider
         @model = model
         @reasoning_effort = reasoning_effort
+        @write_lock = write_lock
         @workers = {}
         @mutex = Mutex.new
       end
@@ -75,7 +76,9 @@ module Kward
         registry = ToolRegistry.new(
           workspace: Workspace.new(root: worker.workspace_root),
           prompt: @prompt,
-          allowed_tool_names: ToolPolicy.allowed_tool_names(worker.role)
+          allowed_tool_names: ToolPolicy.allowed_tool_names(worker.role),
+          write_lock: @write_lock,
+          writer_id: worker_writer_id(worker)
         )
         agent = Agent.new(client: @client_factory.call, tool_registry: registry, conversation: conversation)
         report = Timeout.timeout(@timeout_seconds, WorkerTimeoutError) do
@@ -96,6 +99,13 @@ module Kward
         worker.update_status(status, **values)
         @on_status_change&.call(worker)
         worker
+      end
+
+      def worker_writer_id(worker)
+        return nil unless ToolPolicy.write_capable?(worker.role)
+        return nil unless @write_lock&.acquire(worker.id)
+
+        worker.id
       end
 
       def attach_session(worker, conversation)
