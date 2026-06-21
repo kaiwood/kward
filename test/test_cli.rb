@@ -2973,6 +2973,10 @@ edit this prompt"
     assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "login"
   end
 
+  def test_workers_is_builtin_slash_command
+    assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "workers"
+  end
+
   def test_login_slash_command_selects_openai_provider_without_calling_client
     prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["OpenAI"])
     client = RecordingClient.new([])

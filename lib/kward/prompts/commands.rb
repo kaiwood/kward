@@ -26,6 +26,7 @@ module Kward
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "reload", description: "Reload installed plugins.", argument_hint: "" },
       { name: "scout", description: "Send or manage a read-only background scout.", argument_hint: "do <task>|list|show <id>|cancel <id>|dismiss <id>|use <id>" },
+      { name: "workers", description: "Open the worker pipeline.", argument_hint: "[new|do <task>]" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
       { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|relax|inspect|why|summarize]" }

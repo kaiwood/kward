@@ -28,6 +28,9 @@ module Kward
         when "scouts"
           print_scouts
           [true, nil]
+        when "workers"
+          handle_workers_command(argument, agent)
+          [true, nil]
         when "settings"
           configure_settings(agent.conversation)
           [true, nil]
@@ -142,6 +145,22 @@ module Kward
         nil
       end
 
+      def handle_workers_command(argument, agent)
+        action, value = argument.to_s.strip.split(/\s+/, 2)
+        case action
+        when nil, ""
+          open_worker_menu(agent)
+        when "list"
+          open_worker_list(agent)
+        when "new", "scout"
+          prompt_for_scout(agent)
+        when "do"
+          send_scout(value, agent)
+        else
+          runtime_output("Usage: /workers | /workers new | /workers do <task>")
+        end
+      end
+
       def handle_scout_command(argument, agent)
         action, value = argument.to_s.strip.split(/\s+/, 2)
         case action
@@ -215,22 +234,43 @@ module Kward
         end
       end
 
+      def open_worker_menu(agent)
+        return runtime_output("Usage: /workers | /workers new | /workers do <task>") unless @prompt.respond_to?(:select)
+
+        choice = @prompt.select(
+          "Workers",
+          ["New read-only worker", "List workers"],
+          title: "Workers",
+          custom: false
+        )
+        case choice
+        when "New read-only worker"
+          prompt_for_scout(agent)
+        when "List workers"
+          open_worker_list(agent)
+        end
+      end
+
       def prompt_for_scout(agent)
         topic = @prompt.ask("Scout task>") if @prompt.respond_to?(:ask)
         send_scout(topic, agent) unless topic.to_s.strip.empty?
       end
 
       def open_scout_list(agent)
+        open_worker_list(agent, title: "Scouts", empty_message: "No scouts in the pipeline.")
+      end
+
+      def open_worker_list(agent, title: "Workers", empty_message: "No workers in the pipeline.")
         return print_scouts unless @prompt.respond_to?(:select)
 
         jobs = scout_store.list
         if jobs.empty?
-          runtime_output("No scouts in the pipeline.")
+          runtime_output(empty_message)
           return
         end
 
-        labels = jobs.map { |job| scout_choice_label(job) }
-        choice = @prompt.select("Select scout", labels, title: "Scouts", custom: false)
+        labels = jobs.map { |job| worker_choice_label(job) }
+        choice = @prompt.select("Select worker", labels, title: title, custom: false)
         return unless choice
 
         selected = jobs[labels.index(choice)]
@@ -260,8 +300,12 @@ module Kward
       end
 
       def scout_choice_label(job)
+        worker_choice_label(job)
+      end
+
+      def worker_choice_label(job)
         error = job["status"] == "failed" && !job["error"].to_s.empty? ? " — #{job['error']}" : ""
-        "#{job.fetch('id')} [#{job.fetch('status')}] #{job.fetch('title')}#{error}"
+        "#{job.fetch('id')} [scout/#{job.fetch('status')}] #{job.fetch('title')}#{error}"
       end
 
       def show_scout(id)

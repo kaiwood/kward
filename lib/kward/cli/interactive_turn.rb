@@ -199,10 +199,10 @@ module Kward
         return false unless agent
 
         command = input.to_s.strip
-        return false unless command == "/scouts" || command.start_with?("/scout ")
+        return false unless command == "/scouts" || command == "/workers" || command.start_with?("/scout ") || command.start_with?("/workers ")
 
-        if command == "/scouts" || command == "/scout list"
-          queued_inputs << "/scout list"
+        if command == "/scouts" || command == "/scout list" || command == "/workers" || command == "/workers list"
+          queued_inputs << "/workers"
           @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
         else
           handle_local_slash_command(command, agent, nil)
