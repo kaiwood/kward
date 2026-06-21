@@ -3039,7 +3039,29 @@ edit this prompt"
       assert handled
       assert replacement
       assert_equal "worker answer", Kward::MessageAccess.content(replacement.conversation.messages.last)
+      refute_includes replacement.tool_registry.schemas.map { |schema| schema.dig(:function, :name) || schema.dig("function", "name") }, "write_file"
       refute_includes prompt.output.join, "Scout #{job.fetch('id')} [ready]"
+    end
+  end
+
+  def test_workers_list_includes_implementation_worker
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
+      conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
+      session.attach(conversation)
+      prompt = BusySelectPrompt.new([], selections: ["List workers", "implementation [implementation/active] Implementation", "Show"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@active_session, session)
+      agent = cli.send(:build_interactive_agent, conversation)
+
+      _handled, replacement = cli.send(:handle_local_slash_command, "/workers", agent, session_store)
+
+      assert replacement
+      assert_includes prompt.select_choices[1], "implementation [implementation/active] Implementation"
     end
   end
 

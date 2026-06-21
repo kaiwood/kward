@@ -278,7 +278,7 @@ module Kward
       def open_worker_list(agent, session_store, title: "Workers", empty_message: "No workers in the pipeline.")
         return print_scouts unless @prompt.respond_to?(:select)
 
-        jobs = scout_store.list
+        jobs = worker_jobs(agent)
         if jobs.empty?
           runtime_output(empty_message)
           return
@@ -289,7 +289,65 @@ module Kward
         return unless choice
 
         selected = jobs[labels.index(choice)]
-        open_scout_actions(selected.fetch("id"), agent, session_store) if selected
+        open_worker_actions(selected, agent, session_store) if selected
+      end
+
+      def worker_jobs(agent)
+        [implementation_worker_job(agent)].compact + scout_store.list
+      end
+
+      def implementation_worker_job(agent)
+        remember_implementation_worker(agent) if implementation_agent?(agent)
+        path = @implementation_worker_session_path || @active_session&.path
+        return nil if path.to_s.empty?
+
+        {
+          "id" => "implementation",
+          "title" => @implementation_worker_title || @active_session&.name || "Implementation",
+          "role" => "implementation",
+          "status" => implementation_agent?(agent) ? "active" : "idle",
+          "session_path" => path
+        }
+      end
+
+      def implementation_agent?(agent)
+        @active_worker_role.to_s.empty? || @active_worker_role == "implementation"
+      end
+
+      def remember_implementation_worker(agent)
+        return unless @active_session&.path
+        return unless implementation_agent?(agent)
+
+        @implementation_worker_session_path = @active_session.path
+        @implementation_worker_title = @active_session.name || "Implementation"
+      end
+
+      def open_worker_actions(job, agent, session_store)
+        return open_implementation_actions(job, session_store) if job["role"] == "implementation"
+
+        open_scout_actions(job.fetch("id"), agent, session_store)
+      end
+
+      def open_implementation_actions(job, session_store)
+        actions = ["Show", "Back to list"]
+        choice = @prompt.select("#{job.fetch('id')} — #{job.fetch('title')}", actions, title: "Worker", custom: false)
+        case choice
+        when "Show"
+          load_implementation_session(session_store, job)
+        when "Back to list"
+          open_worker_list(nil, session_store)
+        end
+      end
+
+      def load_implementation_session(session_store, job)
+        return runtime_output("Implementation session unavailable.") unless session_store
+
+        stop_live_worker_view
+        @active_worker_role = "implementation"
+        load_session(session_store, job.fetch("session_path"), message: "Showing implementation worker")
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        nil
       end
 
       def open_scout_actions(id, agent, session_store)
@@ -319,12 +377,14 @@ module Kward
       end
 
       def worker_choice_label(job)
+        role = job["role"] || "scout"
         error = job["status"] == "failed" && !job["error"].to_s.empty? ? " — #{job['error']}" : ""
-        "#{job.fetch('id')} [scout/#{job.fetch('status')}] #{job.fetch('title')}#{error}"
+        "#{job.fetch('id')} [#{role}/#{job.fetch('status')}] #{job.fetch('title')}#{error}"
       end
 
       def show_scout(id, session_store)
         job = require_scout(id)
+        remember_implementation_worker(nil) if @active_worker_role == "implementation"
         worker = @scout_runner&.worker(job.fetch("id"))
         path = worker_session_path(job) || worker&.session&.path
         return load_worker_session(session_store, path, job, worker: worker) if path
@@ -348,6 +408,8 @@ module Kward
         end
 
         agent = load_session(session_store, path, message: "Showing worker #{job.fetch('id')}")
+        agent = build_worker_agent(agent.conversation, role: job["role"] || "scout")
+        @active_worker_role = job["role"] || "scout"
         start_live_worker_view(worker, agent) if live_worker?(worker)
         agent
       rescue StandardError => e

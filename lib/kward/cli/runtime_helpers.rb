@@ -43,9 +43,18 @@ module Kward
       end
 
       def build_interactive_agent(conversation)
+        @active_worker_role = "implementation"
+        build_worker_agent(conversation, role: "implementation")
+      end
+
+      def build_worker_agent(conversation, role: "implementation")
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
-        tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
+        tool_registry = ToolRegistry.new(
+          workspace: workspace,
+          prompt: @prompt,
+          allowed_tool_names: Workers::ToolPolicy.allowed_tool_names(role)
+        )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
         Agent.new(

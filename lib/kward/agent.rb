@@ -31,7 +31,7 @@ module Kward
       @telemetry_logger = telemetry_logger
     end
 
-    attr_reader :conversation
+    attr_reader :conversation, :tool_registry
 
     # Adds a user message, compacts context when needed, and runs the turn.
     #
