@@ -53,7 +53,7 @@ end
 Start Kward and run:
 
 ```text
-/hello Kai
+/hello World
 ```
 
 ## Add a slash command
@@ -161,7 +161,7 @@ RPC clients can:
 
 - list plugin commands through `commands/list`,
 - run plugin commands through `commands/run`,
-- run plugin slash commands through `turns/start` input such as `/hello Kai`.
+- run plugin slash commands through `turns/start` input such as `/hello World`.
 
 Plugin command output is emitted through normal turn events without calling the model.
 
