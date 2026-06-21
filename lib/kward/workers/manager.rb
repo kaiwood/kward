@@ -3,6 +3,7 @@ require_relative "../agent"
 require_relative "../cancellation"
 require_relative "../conversation"
 require_relative "../model/client"
+require_relative "../session_store"
 require_relative "../tools/registry"
 require_relative "../workspace"
 require_relative "tool_policy"
@@ -14,12 +15,16 @@ module Kward
     class Manager
       DEFAULT_TIMEOUT_SECONDS = 180
 
-      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil)
+      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil)
         @client_factory = client_factory
         @prompt = prompt
         @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
         @timeout_seconds = timeout_seconds
         @on_status_change = on_status_change
+        @session_store = session_store
+        @provider = provider
+        @model = model
+        @reasoning_effort = reasoning_effort
         @workers = {}
         @mutex = Mutex.new
       end
@@ -60,9 +65,13 @@ module Kward
         update_status(worker, "running")
         conversation = Conversation.new(
           system_message: { role: "system", content: system_message(worker) },
-          workspace_root: worker.workspace_root
+          workspace_root: worker.workspace_root,
+          provider: @provider,
+          model: @model,
+          reasoning_effort: @reasoning_effort
         )
         worker.conversation = conversation
+        attach_session(worker, conversation)
         registry = ToolRegistry.new(
           workspace: Workspace.new(root: worker.workspace_root),
           prompt: @prompt,
@@ -87,6 +96,18 @@ module Kward
         worker.update_status(status, **values)
         @on_status_change&.call(worker)
         worker
+      end
+
+      def attach_session(worker, conversation)
+        return unless @session_store
+
+        session = @session_store.create(provider: @provider, model: @model, reasoning_effort: @reasoning_effort)
+        session.rename("#{worker.role}: #{worker.title}")
+        session.attach(conversation)
+        worker.session = session
+        @on_status_change&.call(worker)
+      rescue StandardError
+        nil
       end
 
       def worker_prompt(worker)

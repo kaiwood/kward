@@ -2983,6 +2983,34 @@ edit this prompt"
     assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "login"
   end
 
+  def test_workers_show_switches_to_worker_session
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      scout_store = Kward::Scouts::Store.new(path: File.join(config_dir, "scouts.json"))
+      session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
+      conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
+      session.attach(conversation)
+      conversation.append_user("worker task")
+      conversation.append_assistant("worker answer")
+      job = scout_store.create(prompt: "worker task", workspace_root: workspace)
+      scout_store.update(job.fetch("id"), "status" => "ready", "session_path" => session.path)
+      prompt = BusySelectPrompt.new([], selections: ["List workers", "#{job.fetch('id')} [scout/ready] worker task", "Show"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@scout_store, scout_store)
+      agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
+
+      handled, replacement = cli.send(:handle_local_slash_command, "/workers", agent, session_store)
+
+      assert handled
+      assert replacement
+      assert_equal "worker answer", Kward::MessageAccess.content(replacement.conversation.messages.last)
+      refute_includes prompt.output.join, "Scout #{job.fetch('id')} [ready]"
+    end
+  end
+
   def test_workers_is_builtin_slash_command
     assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "workers"
   end

@@ -23,14 +23,12 @@ module Kward
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
           [true, nil]
         when "scout"
-          handle_scout_command(argument, agent)
-          [true, nil]
+          [true, handle_scout_command(argument, agent, session_store)]
         when "scouts"
           print_scouts
           [true, nil]
         when "workers"
-          handle_workers_command(argument, agent)
-          [true, nil]
+          [true, handle_workers_command(argument, agent, session_store)]
         when "settings"
           configure_settings(agent.conversation)
           [true, nil]
@@ -145,41 +143,49 @@ module Kward
         nil
       end
 
-      def handle_workers_command(argument, agent)
+      def handle_workers_command(argument, agent, session_store)
         action, value = argument.to_s.strip.split(/\s+/, 2)
         case action
         when nil, ""
-          open_worker_menu(agent)
+          open_worker_menu(agent, session_store)
         when "list"
-          open_worker_list(agent)
+          open_worker_list(agent, session_store)
         when "new", "scout"
           prompt_for_scout(agent)
+          nil
         when "do"
           send_scout(value, agent)
+          nil
         else
           runtime_output("Usage: /workers | /workers new | /workers do <task>")
+          nil
         end
       end
 
-      def handle_scout_command(argument, agent)
+      def handle_scout_command(argument, agent, session_store)
         action, value = argument.to_s.strip.split(/\s+/, 2)
         case action
         when nil, ""
-          open_scout_menu(agent)
+          open_scout_menu(agent, session_store)
         when "do"
           send_scout(value, agent)
+          nil
         when "list"
-          open_scout_list(agent)
+          open_scout_list(agent, session_store)
         when "show", "open"
-          show_scout(value)
+          show_scout(value, session_store)
         when "cancel", "recall"
           cancel_scout(value)
+          nil
         when "dismiss", "drop"
           dismiss_scout(value)
+          nil
         when "use", "apply", "start"
           use_scout(value)
+          nil
         else
           send_scout(argument, agent)
+          nil
         end
       end
 
@@ -192,7 +198,16 @@ module Kward
         return @scout_runner if @scout_runner && @scout_runner_workspace_root == workspace_root
 
         @scout_runner_workspace_root = workspace_root
-        @scout_runner = Scouts::Runner.new(store: scout_store, client: Client.new, prompt: @prompt, workspace_root: workspace_root)
+        @scout_runner = Scouts::Runner.new(
+          store: scout_store,
+          client: Client.new,
+          prompt: @prompt,
+          workspace_root: workspace_root,
+          session_store: interactive_session_store(agent),
+          provider: current_model_provider,
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort
+        )
       end
 
       def send_scout(topic, agent)
@@ -217,7 +232,7 @@ module Kward
         runtime_output(lines.join("\n"))
       end
 
-      def open_scout_menu(agent)
+      def open_scout_menu(agent, session_store)
         return runtime_output("Usage: /scout do <task> | /scout list | /scout show <id> | /scout cancel <id> | /scout dismiss <id> | /scout use <id>") unless @prompt.respond_to?(:select)
 
         choice = @prompt.select(
@@ -230,11 +245,11 @@ module Kward
         when "Send a new scout"
           prompt_for_scout(agent)
         when "List scouts"
-          open_scout_list(agent)
+          open_scout_list(agent, session_store)
         end
       end
 
-      def open_worker_menu(agent)
+      def open_worker_menu(agent, session_store)
         return runtime_output("Usage: /workers | /workers new | /workers do <task>") unless @prompt.respond_to?(:select)
 
         choice = @prompt.select(
@@ -247,7 +262,7 @@ module Kward
         when "New read-only worker"
           prompt_for_scout(agent)
         when "List workers"
-          open_worker_list(agent)
+          open_worker_list(agent, session_store)
         end
       end
 
@@ -256,11 +271,11 @@ module Kward
         send_scout(topic, agent) unless topic.to_s.strip.empty?
       end
 
-      def open_scout_list(agent)
-        open_worker_list(agent, title: "Scouts", empty_message: "No scouts in the pipeline.")
+      def open_scout_list(agent, session_store)
+        open_worker_list(agent, session_store, title: "Scouts", empty_message: "No scouts in the pipeline.")
       end
 
-      def open_worker_list(agent, title: "Workers", empty_message: "No workers in the pipeline.")
+      def open_worker_list(agent, session_store, title: "Workers", empty_message: "No workers in the pipeline.")
         return print_scouts unless @prompt.respond_to?(:select)
 
         jobs = scout_store.list
@@ -274,10 +289,10 @@ module Kward
         return unless choice
 
         selected = jobs[labels.index(choice)]
-        open_scout_actions(selected.fetch("id"), agent) if selected
+        open_scout_actions(selected.fetch("id"), agent, session_store) if selected
       end
 
-      def open_scout_actions(id, agent)
+      def open_scout_actions(id, agent, session_store)
         job = require_scout(id)
         actions = ["Show"]
         actions << "Start from report" if job["status"] == "ready"
@@ -287,7 +302,7 @@ module Kward
         choice = @prompt.select("#{job.fetch('id')} — #{job.fetch('title')}", actions, title: "Scout", custom: false)
         case choice
         when "Show"
-          show_scout(job.fetch("id"))
+          show_scout(job.fetch("id"), session_store)
         when "Start from report"
           use_scout(job.fetch("id"))
         when "Cancel"
@@ -295,7 +310,7 @@ module Kward
         when "Dismiss"
           dismiss_scout(job.fetch("id"))
         when "Back to list"
-          open_scout_list(agent)
+          open_scout_list(agent, session_store)
         end
       end
 
@@ -308,9 +323,33 @@ module Kward
         "#{job.fetch('id')} [scout/#{job.fetch('status')}] #{job.fetch('title')}#{error}"
       end
 
-      def show_scout(id)
+      def show_scout(id, session_store)
         job = require_scout(id)
+        path = worker_session_path(job)
+        return load_worker_session(session_store, path, job) if path
+
         runtime_output(scout_report_text(job))
+        nil
+      end
+
+      def worker_session_path(job)
+        path = job["session_path"].to_s
+        return nil if path.empty?
+        return path if File.file?(path)
+
+        nil
+      end
+
+      def load_worker_session(session_store, path, job)
+        unless session_store
+          runtime_output(scout_report_text(job))
+          return nil
+        end
+
+        load_session(session_store, path, message: "Showing worker #{job.fetch('id')}")
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        nil
       end
 
       def scout_report_text(job)
@@ -362,7 +401,16 @@ module Kward
       end
 
       def scout_runner_for_existing_jobs
-        @scout_runner ||= Scouts::Runner.new(store: scout_store, client: Client.new, prompt: @prompt, workspace_root: current_workspace_root)
+        @scout_runner ||= Scouts::Runner.new(
+          store: scout_store,
+          client: Client.new,
+          prompt: @prompt,
+          workspace_root: current_workspace_root,
+          session_store: @session_store,
+          provider: current_model_provider,
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort
+        )
       end
 
     end

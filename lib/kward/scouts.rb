@@ -47,7 +47,9 @@ module Kward
           "started_at" => nil,
           "finished_at" => nil,
           "report" => nil,
-          "error" => nil
+          "error" => nil,
+          "session_id" => nil,
+          "session_path" => nil
         }
         update_jobs { |jobs| jobs << job }
         job
@@ -117,7 +119,7 @@ module Kward
       READ_ONLY_TOOLS = Workers::ToolPolicy::READ_ONLY_TOOLS
       DEFAULT_TIMEOUT_SECONDS = Workers::Manager::DEFAULT_TIMEOUT_SECONDS
 
-      def initialize(store:, client: nil, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, client_factory: nil)
+      def initialize(store:, client: nil, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, client_factory: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil)
         @store = store
         @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
         @manager = Workers::Manager.new(
@@ -125,7 +127,11 @@ module Kward
           prompt: prompt,
           workspace_root: @workspace_root,
           timeout_seconds: timeout_seconds,
-          on_status_change: method(:sync_worker)
+          on_status_change: method(:sync_worker),
+          session_store: session_store,
+          provider: provider,
+          model: model,
+          reasoning_effort: reasoning_effort
         )
       end
 
@@ -142,6 +148,10 @@ module Kward
         @store.update(id, "status" => "cancelled", "finished_at" => Scouts.now)
       end
 
+      def worker(id)
+        @manager.find(id)
+      end
+
       private
 
       def sync_worker(worker)
@@ -150,7 +160,9 @@ module Kward
           "started_at" => worker.started_at && worker.started_at.utc.iso8601(3),
           "finished_at" => worker.finished_at && worker.finished_at.utc.iso8601(3),
           "report" => worker.report,
-          "error" => worker.error
+          "error" => worker.error,
+          "session_id" => worker.session&.id,
+          "session_path" => worker.session&.path
         }.compact
         @store.update(worker.id, values)
       rescue StandardError

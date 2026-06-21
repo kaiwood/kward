@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added read-only background workers with `/workers` and `/scout`, persisted scout reports, and RPC scout methods for preparing future work.
+- Added read-only background workers with `/workers` and `/scout`, persisted scout reports, RPC scout methods, and session-backed worker transcript switching for preparing future work.
 
 ### Changed
 

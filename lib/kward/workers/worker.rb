@@ -9,7 +9,7 @@ module Kward
     class Worker
       STATUSES = %w[idle queued running ready failed cancelled archived].freeze
 
-      def initialize(id: SecureRandom.hex(4), title:, role:, workspace_root: Dir.pwd, status: "idle", prompt: nil, conversation: nil, cancellation: Cancellation.new, created_at: Time.now.utc)
+      def initialize(id: SecureRandom.hex(4), title:, role:, workspace_root: Dir.pwd, status: "idle", prompt: nil, conversation: nil, session: nil, cancellation: Cancellation.new, created_at: Time.now.utc)
         @id = id
         @title = title.to_s
         @role = role.to_s
@@ -17,6 +17,7 @@ module Kward
         @status = status.to_s
         @prompt = prompt.to_s
         @conversation = conversation
+        @session = session
         @cancellation = cancellation
         @created_at = created_at
         @updated_at = created_at
@@ -29,8 +30,8 @@ module Kward
         @event_queue = Queue.new
       end
 
-      attr_reader :id, :title, :role, :workspace_root, :prompt, :conversation, :cancellation, :created_at, :updated_at, :started_at, :finished_at, :report, :error, :thread, :event_history, :event_queue
-      attr_writer :conversation, :thread
+      attr_reader :id, :title, :role, :workspace_root, :prompt, :conversation, :session, :cancellation, :created_at, :updated_at, :started_at, :finished_at, :report, :error, :thread, :event_history, :event_queue
+      attr_writer :conversation, :session, :thread
 
       def status
         @status
@@ -60,6 +61,8 @@ module Kward
           "status" => status,
           "prompt" => prompt,
           "workspace_root" => workspace_root,
+          "session_id" => session&.id,
+          "session_path" => session&.path,
           "created_at" => timestamp(created_at),
           "updated_at" => timestamp(updated_at),
           "started_at" => timestamp(started_at),
