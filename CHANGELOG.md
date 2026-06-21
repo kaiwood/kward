@@ -21,10 +21,12 @@ All notable changes to Kward will be documented in this file.
 - Changed large search and fetched-content tool results to preserve file, line, URL, and heading anchors during model-context compaction.
 - Changed large tool results to be compacted before they enter model context while preserving full originals in session tool-execution records, reusing existing artifact ids for repeated outputs, avoiding storage for verbatim outputs, preserving short errors exactly, reverting automatically when compaction would not reduce context, and teaching conversation compaction to preserve tool artifact ids.
 - Changed model context-window resolution to prefer cached OpenRouter metadata, infer matching provider models from that metadata when possible, and use conservative fallbacks for unknown selected models.
+- Updated the authentication guide to describe model picker selection and OpenRouter model cache refresh/list commands.
 
 ### Removed
 
 - Removed the `banner.enabled` config setting and `/settings` toggle for hiding the interactive startup screen.
+- Removed the generated table of contents and source-checkout launch snippet from the RPC protocol guide.
 
 ### Added
 
