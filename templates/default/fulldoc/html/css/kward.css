@@ -10,6 +10,13 @@
   --kward-accent: #9caf35;
   --kward-accent-bright: #d2df62;
   --kward-code: #030604;
+  --kward-syntax-comment: #7f8b67;
+  --kward-syntax-constant: #f0bf6a;
+  --kward-syntax-keyword: #d2df62;
+  --kward-syntax-method: #b8d852;
+  --kward-syntax-string: #8fd15b;
+  --kward-syntax-symbol: #ff7f6f;
+  --kward-syntax-variable: #a7c884;
 }
 
 html {
@@ -345,6 +352,90 @@ body.kward-docs pre {
 
 body.kward-docs code {
   border-radius: 6px;
+}
+
+body.kward-docs pre.code .comment {
+  color: var(--kward-syntax-comment);
+  font-style: italic;
+}
+
+body.kward-docs pre.code .const,
+body.kward-docs pre.code .constant,
+body.kward-docs #content .summary_desc pre.code .const > .object_link a,
+body.kward-docs #content .docstring pre.code .const > .object_link a {
+  color: var(--kward-syntax-constant);
+}
+
+body.kward-docs pre.code .kw,
+body.kward-docs pre.code .rubyid_require,
+body.kward-docs pre.code .rubyid_extend,
+body.kward-docs pre.code .rubyid_include {
+  color: var(--kward-syntax-keyword);
+  font-weight: 700;
+}
+
+body.kward-docs pre.code .id,
+body.kward-docs #content .summary_desc pre.code .id > .object_link a,
+body.kward-docs #content .docstring pre.code .id > .object_link a {
+  color: var(--kward-syntax-method);
+}
+
+body.kward-docs pre.code .tstring_content,
+body.kward-docs pre.code .heredoc_beg,
+body.kward-docs pre.code .heredoc_end,
+body.kward-docs pre.code .qwords_beg,
+body.kward-docs pre.code .qwords_end,
+body.kward-docs pre.code .qwords_sep,
+body.kward-docs pre.code .words_beg,
+body.kward-docs pre.code .words_end,
+body.kward-docs pre.code .words_sep,
+body.kward-docs pre.code .qsymbols_beg,
+body.kward-docs pre.code .qsymbols_end,
+body.kward-docs pre.code .qsymbols_sep,
+body.kward-docs pre.code .symbols_beg,
+body.kward-docs pre.code .symbols_end,
+body.kward-docs pre.code .symbols_sep,
+body.kward-docs pre.code .tstring,
+body.kward-docs pre.code .dstring,
+body.kward-docs pre.code .regexp,
+body.kward-docs .dregexp {
+  color: var(--kward-syntax-string);
+}
+
+body.kward-docs pre.code .label,
+body.kward-docs pre.code .symbol {
+  color: var(--kward-syntax-symbol);
+}
+
+body.kward-docs pre.code .ivar,
+body.kward-docs pre.code .gvar,
+body.kward-docs pre.code .rubyid_backref,
+body.kward-docs pre.code .rubyid_nth_ref {
+  color: var(--kward-syntax-variable);
+}
+
+body.kward-docs pre.code .op,
+body.kward-docs pre.code .period,
+body.kward-docs pre.code .comma,
+body.kward-docs pre.code .lparen,
+body.kward-docs pre.code .rparen,
+body.kward-docs pre.code .lbrace,
+body.kward-docs pre.code .rbrace,
+body.kward-docs pre.code .lbracket,
+body.kward-docs pre.code .rbracket {
+  color: rgba(239, 232, 208, 0.74);
+}
+
+body.kward-docs pre.code a,
+body.kward-docs pre.code a:visited {
+  text-decoration-color: rgba(210, 223, 98, 0.45);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+body.kward-docs pre.code a:hover {
+  background: rgba(156, 175, 53, 0.16);
+  color: var(--kward-accent-bright);
 }
 
 body.kward-docs .copy-code-button {
