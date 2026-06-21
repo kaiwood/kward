@@ -15,7 +15,7 @@ module KwardDocsNavigationData
     [
       "Feature guides",
       [
-        ["Session management", "file.session-management.html"],
+        ["Sessions", "file.session-management.html"],
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"]
       ]

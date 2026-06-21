@@ -141,7 +141,7 @@ Later:
 
 In the sessions picker, press `r` to rename the highlighted session, `c` to clone it, `f` to fork from an earlier prompt, or `d` twice to delete it. `/resume` remains available as an alias for `/sessions`.
 
-For the full guide to context management, cloning, forking, rewinding, `/tree`, compaction, and exports, read [Session management](session-management.md).
+For the full guide to context management, cloning, forking, rewinding, `/tree`, compaction, and exports, read [Sessions](session-management.md).
 
 ## One-shot prompts
 

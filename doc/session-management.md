@@ -1,4 +1,4 @@
-# Session management
+# Sessions
 
 Sessions are Kward's way of keeping real work alive across time. An interactive chat is not just a scrollback buffer: it is saved as a session with messages, tool calls, tool results, compaction checkpoints, branches, and enough metadata for Kward to resume the work later.
 

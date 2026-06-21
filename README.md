@@ -77,7 +77,7 @@ Start here:
 
 Feature guides:
 
-- [Session management](doc/session-management.md): resume, clone, fork, rewind, compact, and navigate saved work.
+- [Sessions](doc/session-management.md): resume, clone, fork, rewind, compact, and navigate saved work.
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
 
