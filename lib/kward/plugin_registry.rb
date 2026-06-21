@@ -95,7 +95,19 @@ module Kward
       end
     end
 
-    # DSL object yielded by `Kward.plugin` blocks.
+    # Public DSL object yielded by `Kward.plugin` blocks.
+    #
+    # Plugin files normally interact with this object only through a block:
+    #
+    # @example Register a plugin command
+    #   Kward.plugin do |plugin|
+    #     plugin.command "hello", description: "Say hello" do |args, ctx|
+    #       name = args.strip.empty? ? "there" : args.strip
+    #       ctx.say "Hello, #{name}."
+    #     end
+    #   end
+    #
+    # @api public
     class DSL
       # Creates an object for trusted plugin loading and dispatch.
       def initialize(registry, path)
@@ -105,33 +117,53 @@ module Kward
 
       # Registers a slash command.
       #
+      # The command is available in the interactive CLI and through the RPC
+      # command bridge. Command names do not include the leading `/`.
+      #
       # @param name [String, #to_s] command name without the leading slash
       # @param description [String] short text shown in command listings
       # @param argument_hint [String] optional usage hint for arguments
       # @yieldparam args [String] text after the command name
       # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
       def command(name, description: "", argument_hint: "", &block)
         @registry.register_command(name, description: description, argument_hint: argument_hint, path: @path, &block)
       end
 
       # Registers or replaces the custom footer renderer.
       #
+      # Only one footer renderer is active. If multiple plugins register one,
+      # the later renderer replaces the earlier renderer.
+      #
       # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
       def footer(&block)
         @registry.register_footer(path: @path, &block)
       end
 
       # Registers a live transcript event observer.
       #
+      # Observer errors are caught and reported as warnings so a plugin cannot
+      # crash the active turn by raising from an event handler.
+      #
       # @yieldparam event [TranscriptEvent] normalized transcript event
       # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
       def on_transcript_event(&block)
         @registry.register_transcript_event(path: @path, &block)
       end
 
       # Registers prompt context text injected into future system prompts.
       #
+      # Keep this text short and never include secrets. The returned string can
+      # be sent to the active model as part of Kward's system instructions.
+      #
       # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
       def prompt_context(&block)
         @registry.register_prompt_context(path: @path, &block)
       end
@@ -334,6 +366,15 @@ module Kward
     end
   end
 
+  # Registers a trusted local plugin.
+  #
+  # This method is intended for Ruby files loaded from the user plugin
+  # directory. It raises if called outside plugin loading so workspace code
+  # cannot silently mutate Kward's runtime by merely being required.
+  #
+  # @yieldparam plugin [PluginRegistry::DSL] plugin registration DSL
+  # @return [Object, nil] the plugin block result
+  # @api public
   def self.plugin(&block)
     registry = PluginRegistry.loading_registry
     raise "Kward.plugin can only be called while loading a plugin" unless registry

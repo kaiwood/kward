@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html <%= "lang=\"#{html_lang}\"" unless html_lang.nil? %>>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="<%= charset %>">
+    <% stylesheets_full_list.each do |stylesheet| %>
+      <link rel="stylesheet" href="<%= mtime_url(stylesheet) %>" type="text/css" media="screen">
+    <% end %>
+
+    <% javascripts_full_list.each do |javascript| %>
+      <script type="text/javascript" charset="utf-8" src="<%= mtime_url(javascript) %>"></script>
+    <% end %>
+
+    <title><%= @list_title %></title>
+    <base id="base_target" target="_parent">
+  </head>
+  <body class="kward-docs kward-content-body kward-full-list-body">
+    <a href="#content" class="kward-skip-link">Skip to content</a>
+
+    <header class="kward-topbar">
+      <a class="kward-brand" href="index.html">
+        <img class="kward-brand-logo" src="images/kward_logo.png" alt="" aria-hidden="true">
+        <span>
+          <strong>Kward</strong>
+        </span>
+      </a>
+      <button class="kward-nav-toggle" type="button" aria-expanded="false" aria-controls="kward-primary-nav" aria-label="Toggle navigation menu" onclick="document.body.classList.toggle('kward-nav-open'); this.setAttribute('aria-expanded', document.body.classList.contains('kward-nav-open'))">
+        <span class="kward-nav-toggle-bar"></span>
+        <span class="kward-nav-toggle-bar"></span>
+        <span class="kward-nav-toggle-bar"></span>
+        <span class="kward-sr-only">Menu</span>
+      </button>
+      <nav id="kward-primary-nav" class="kward-topnav" aria-label="Primary navigation">
+        <a href="index.html">Home</a>
+        <div class="kward-nav-menu">
+          <a class="kward-nav-menu-link" href="file.README.html">User Guides</a>
+          <button class="kward-nav-menu-button" type="button" aria-label="Expand user guides" aria-expanded="false">⌄</button>
+          <div class="kward-nav-dropdown">
+            <% guide_groups.each do |title, items| %>
+              <section>
+                <h2><%= h title %></h2>
+                <% items.each do |label, link| %>
+                  <a href="<%= url_for(link) %>"><%= h label %></a>
+                <% end %>
+              </section>
+            <% end %>
+          </div>
+        </div>
+        <div class="kward-nav-menu active">
+          <a class="kward-nav-menu-link" href="file.api.html">API Docs</a>
+          <button class="kward-nav-menu-button" type="button" aria-label="Expand API docs" aria-expanded="false">⌄</button>
+          <div class="kward-nav-dropdown kward-api-nav-dropdown">
+            <% api_groups.each do |title, items| %>
+              <section>
+                <h2><%= h title %></h2>
+                <% items.each do |label, link| %>
+                  <a href="<%= url_for(link) %>"><%= h label %></a>
+                <% end %>
+              </section>
+            <% end %>
+          </div>
+        </div>
+      </nav>
+      <a class="kward-api-index-link" href="class_list.html">Search API index</a>
+    </header>
+
+    <main class="kward-page">
+      <div id="content" class="kward-content-page kward-api-page">
+        <div class="fixed_header">
+          <h1 id="full_list_header"><%= @list_title %></h1>
+          <div id="full_list_nav">
+            <% menu_lists.each do |list| %>
+              <span><a target="_self" href="<%= url_for_list list[:type] %>">
+                <%= list[:title] %>
+              </a></span>
+            <% end %>
+          </div>
+
+          <div id="search">
+            <label for="search-class">Search:</label>
+            <input id="search-class" type="text">
+          </div>
+        </div>
+
+        <ul id="full_list" class="<%= @list_class || @list_type %>">
+          <%= erb "full_list_#{@list_type}" %>
+        </ul>
+      </div>
+    </main>
+
+    <script type="text/javascript" charset="utf-8" src="js/kward.js"></script>
+  </body>
+</html>

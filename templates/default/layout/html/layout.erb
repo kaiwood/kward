@@ -35,13 +35,30 @@
             <% end %>
           </div>
         </div>
-        <a href="<%= url_for('Kward.html') %>" class="<%= 'active' if api_page? %>">API Docs</a>
+        <div class="kward-nav-menu <%= 'active' if api_page? %>">
+          <a class="kward-nav-menu-link" href="<%= url_for(api_overview) %>">API Docs</a>
+          <button class="kward-nav-menu-button" type="button" aria-label="Expand API docs" aria-expanded="false">⌄</button>
+          <div class="kward-nav-dropdown kward-api-nav-dropdown">
+            <% api_groups.each do |title, items| %>
+              <section>
+                <h2><%= h title %></h2>
+                <% items.each do |label, link| %>
+                  <a href="<%= url_for(link) %>"><%= h label %></a>
+                <% end %>
+              </section>
+            <% end %>
+          </div>
+        </div>
       </nav>
-      <form class="kward-guide-search" role="search">
-        <label class="kward-sr-only" for="kward-guide-search-input">Search user guides</label>
-        <input id="kward-guide-search-input" type="search" placeholder="Search guides" autocomplete="off" aria-label="Search user guides" aria-controls="kward-guide-search-results">
-        <div id="kward-guide-search-results" class="kward-guide-search-results" role="listbox" aria-label="Search results"></div>
-      </form>
+      <% if api_page? %>
+        <a class="kward-api-index-link" href="<%= url_for('class_list.html') %>">Search API index</a>
+      <% else %>
+        <form class="kward-guide-search" role="search">
+          <label class="kward-sr-only" for="kward-guide-search-input">Search user guides</label>
+          <input id="kward-guide-search-input" type="search" placeholder="Search guides" autocomplete="off" aria-label="Search user guides" aria-controls="kward-guide-search-results">
+          <div id="kward-guide-search-results" class="kward-guide-search-results" role="listbox" aria-label="Search results"></div>
+        </form>
+      <% end %>
       <script type="application/json" id="kward-guide-search-index"><%= guide_search_index_json %></script>
     </header>
 

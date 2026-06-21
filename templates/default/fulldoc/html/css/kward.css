@@ -131,10 +131,29 @@ body.kward-docs::before {
   width: 1px;
 }
 
-.kward-guide-search {
+.kward-guide-search,
+.kward-api-index-link {
   justify-self: end;
+}
+
+.kward-guide-search {
   position: relative;
   width: min(280px, 24vw);
+}
+
+.kward-api-index-link {
+  border: 1px solid rgba(156, 175, 53, 0.42);
+  border-radius: 999px;
+  color: var(--kward-ink);
+  padding: 10px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.kward-api-index-link:hover,
+.kward-api-index-link:focus {
+  background: rgba(156, 175, 53, 0.13);
+  color: var(--kward-accent-bright);
 }
 
 .kward-guide-search input {
@@ -364,7 +383,8 @@ body.kward-docs #footer {
   }
 
   .kward-topnav,
-  .kward-guide-search {
+  .kward-guide-search,
+  .kward-api-index-link {
     display: none;
   }
 
@@ -1094,6 +1114,11 @@ body.kward-docs .kward-home #footer {
   width: min(920px, calc(100vw - 48px));
 }
 
+.kward-api-nav-dropdown {
+  grid-template-columns: repeat(2, minmax(170px, 1fr));
+  width: min(480px, calc(100vw - 48px));
+}
+
 .kward-nav-dropdown::before {
   content: "";
   height: 18px;
@@ -1255,6 +1280,134 @@ body.kward-docs .kward-home #footer {
   .kward-home {
     width: calc(100% - 32px);
   }
+}
+
+/* YARD's class/method/file list pages use a separate full_list template. */
+.kward-full-list-body .kward-topbar {
+  position: relative;
+}
+
+.kward-full-list-body .kward-page {
+  padding-top: 40px;
+}
+
+.kward-full-list-body #content {
+  background: var(--kward-panel-strong);
+  border: 1px solid var(--kward-border);
+  border-radius: 14px;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.28);
+  padding: 38px;
+}
+
+.kward-full-list-body .fixed_header {
+  background: transparent;
+  height: auto;
+  margin: 0 0 24px;
+  padding: 0;
+  position: static;
+  width: auto;
+}
+
+.kward-full-list-body #full_list_header {
+  color: var(--kward-ink);
+  font-size: clamp(36px, 5vw, 62px);
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+  margin: 0 0 18px;
+  padding: 0;
+}
+
+.kward-full-list-body #full_list_nav {
+  color: var(--kward-muted);
+  font-size: 14px;
+  margin: 0 0 18px;
+}
+
+.kward-full-list-body #full_list_nav a,
+.kward-full-list-body #full_list_nav a:visited {
+  color: var(--kward-accent-bright);
+}
+
+.kward-full-list-body #full_list_nav a:hover {
+  color: #f0f7a0;
+}
+
+.kward-full-list-body #search {
+  color: var(--kward-muted);
+  font-size: 14px;
+  margin: 0;
+  padding: 0;
+  width: auto;
+}
+
+.kward-full-list-body #search input {
+  background: rgba(3, 6, 4, 0.72);
+  border: 1px solid rgba(156, 175, 53, 0.42);
+  border-radius: 999px;
+  color: var(--kward-ink);
+  font: inherit;
+  margin-left: 8px;
+  outline: none;
+  padding: 8px 12px;
+  width: min(260px, 60vw);
+}
+
+.kward-full-list-body #search input:focus {
+  border-color: var(--kward-accent-bright);
+  box-shadow: 0 0 0 3px rgba(156, 175, 53, 0.18);
+}
+
+.kward-full-list-body #full_list {
+  background: rgba(3, 6, 4, 0.42);
+  border: 1px solid rgba(156, 175, 53, 0.22);
+  border-radius: 12px;
+  font-size: 15px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.kward-full-list-body #full_list li {
+  color: var(--kward-muted);
+}
+
+.kward-full-list-body #full_list li.odd,
+.kward-full-list-body #full_list li.even {
+  background: transparent;
+}
+
+.kward-full-list-body #full_list li .item {
+  border-radius: 8px;
+  padding-bottom: 7px;
+  padding-top: 7px;
+}
+
+.kward-full-list-body #full_list .item:hover {
+  background: rgba(156, 175, 53, 0.13);
+}
+
+.kward-full-list-body #full_list a,
+.kward-full-list-body #full_list a:visited {
+  color: var(--kward-ink);
+}
+
+.kward-full-list-body #full_list a:hover {
+  color: var(--kward-accent-bright);
+}
+
+.kward-full-list-body #full_list li.clicked > .item {
+  background: rgba(156, 175, 53, 0.22);
+  color: var(--kward-ink);
+}
+
+.kward-full-list-body #full_list li.clicked > .item a,
+.kward-full-list-body #full_list li.clicked > .item a:visited {
+  color: var(--kward-accent-bright);
+}
+
+.kward-full-list-body #noresults {
+  background: transparent;
+  color: var(--kward-muted);
 }
 
 /* Pages no longer use YARD's iframe/sidebar layout. */

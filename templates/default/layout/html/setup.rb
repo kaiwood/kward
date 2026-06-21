@@ -1,38 +1,14 @@
 # frozen_string_literal: true
 
 require "json"
+require_relative "../../kward_navigation"
 
 module KwardDocsNavigation
-  GUIDE_GROUPS = [
-    [
-      "Start here",
-      [
-        ["Getting started", "file.getting-started.html"],
-        ["Usage", "file.usage.html"],
-        ["Configuration", "file.configuration.html"],
-        ["Authentication", "file.authentication.html"],
-        ["Troubleshooting", "file.troubleshooting.html"]
-      ]
-    ],
-    [
-      "Feature guides",
-      [
-        ["Memory", "file.memory.html"],
-        ["Personas", "file.personas.html"],
-        ["Extensibility", "file.extensibility.html"],
-        ["Plugins", "file.plugins.html"],
-        ["Web search", "file.web-search.html"],
-        ["Code search", "file.code-search.html"]
-      ]
-    ],
-    [
-      "Advanced/reference",
-      [
-        ["RPC protocol", "file.rpc.html"],
-        ["Releasing", "file.releasing.html"]
-      ]
-    ]
-  ].freeze
+  include KwardDocsNavigationData
+  API_FILE_LINKS = {
+    "doc/api.md" => API_OVERVIEW
+  }.freeze
+  API_LINKS = ([API_OVERVIEW] + API_GROUPS.flat_map { |_title, items| items.map(&:last) }).freeze
 
   GUIDE_OVERVIEW = "file.README.html"
   GUIDE_LINKS = ([GUIDE_OVERVIEW] + GUIDE_GROUPS.flat_map { |_title, items| items.map(&:last) }).freeze
@@ -60,10 +36,6 @@ module KwardDocsNavigation
     "doc/rpc.md" => "file.rpc.html",
     "doc/releasing.md" => "file.releasing.html"
   }.freeze
-
-  def guide_groups
-    GUIDE_GROUPS
-  end
 
   def guide_overview
     GUIDE_OVERVIEW
@@ -102,6 +74,10 @@ module KwardDocsNavigation
     defined?(@file) && GUIDE_FILE_LINKS.key?(@file&.filename.to_s)
   end
 
+  def api_file?
+    defined?(@file) && API_FILE_LINKS.key?(@file&.filename.to_s)
+  end
+
   def home_page?
     options.index && readme_file?
   end
@@ -111,7 +87,7 @@ module KwardDocsNavigation
   end
 
   def api_page?
-    !home_page? && !guide_page?
+    api_file? || API_LINKS.include?(current_docs_path) || (!home_page? && !guide_page?)
   end
 
   def diskfile
@@ -121,7 +97,7 @@ module KwardDocsNavigation
   end
 
   def rewrite_guide_links(html)
-    GUIDE_FILE_LINKS.each do |source, target|
+    GUIDE_FILE_LINKS.merge(API_FILE_LINKS).each do |source, target|
       html = html.gsub(%(href="#{source}"), %(href="#{target}"))
     end
     html

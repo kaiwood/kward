@@ -86,6 +86,7 @@ Feature guides:
 
 Advanced/reference:
 
+- [API reference](doc/api.md): generated Ruby API entry points, indexes, and public API expectations.
 - [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
 
