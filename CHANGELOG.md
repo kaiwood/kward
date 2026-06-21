@@ -28,6 +28,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a Session Management guide covering saved sessions, cloning, forking, rewinding, tree navigation, compaction, and exports.
 - Added Agent Tools documentation pages covering workspace tools, context tools, and token-saving tool-output behavior.
 - Added an API reference overview page and API docs navigation dropdown for generated Ruby indexes and key namespaces.
 - Added Turbolinks-style navigation to the generated documentation site for same-origin HTML links.

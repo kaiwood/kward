@@ -116,13 +116,13 @@ Prompt templates and plugins can add more slash commands.
 
 ## Sessions
 
-Interactive chats are saved under:
+Interactive chats are saved as workspace-scoped sessions under:
 
 ```text
 ~/.kward/sessions/
 ```
 
-Sessions are scoped to the workspace. Use them when work spans more than one terminal sitting.
+Use sessions when work spans more than one terminal sitting, or when you want to branch a conversation and try another direction.
 
 Typical flow:
 
@@ -139,13 +139,9 @@ Later:
 /sessions
 ```
 
-In the sessions picker, press `r` to rename the highlighted session, `c` to clone it, `f` to fork from an earlier prompt, or `d` twice to delete it.
+In the sessions picker, press `r` to rename the highlighted session, `c` to clone it, `f` to fork from an earlier prompt, or `d` twice to delete it. `/resume` remains available as an alias for `/sessions`.
 
-`/resume` remains available as an alias.
-
-Use `/rewind` when you want to go back to an earlier prompt and try a different direction. Kward shows user prompts from the current session, lets you edit a prior prompt, and continues from that point as a branch. Use `/tree` when you need the full technical session tree, including branches, assistant entries, tool calls, and tool results.
-
-Use `/compact` when a conversation gets long. Kward summarizes older context and keeps recent context active. After compaction, it may need to re-read files before editing them again.
+For the full guide to context management, cloning, forking, rewinding, `/tree`, compaction, and exports, read [Session management](session-management.md).
 
 ## One-shot prompts
 

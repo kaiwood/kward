@@ -5,6 +5,7 @@ const guideLinks = {
   'doc/configuration.md': 'file.configuration.html',
   'doc/authentication.md': 'file.authentication.html',
   'doc/troubleshooting.md': 'file.troubleshooting.html',
+  'doc/session-management.md': 'file.session-management.html',
   'doc/memory.md': 'file.memory.html',
   'doc/personas.md': 'file.personas.html',
   'doc/extensibility.md': 'file.extensibility.html',
