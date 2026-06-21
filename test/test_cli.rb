@@ -1619,7 +1619,7 @@ class TestCLI < KwardTestCase
       assert_includes output, "You> inspect file"
       assert_includes output, "Reasoning> Need to inspect the file."
       assert_includes output, "I'll read it."
-      assert_includes output, "Tool> read_file: README.md"
+      assert_includes output, "Tool> read_file: README.md\n\n1 lines, 16 bytes"
       refute_includes output, "Tool output>"
       assert_includes output, "1 lines, 16 bytes"
       refute_includes output, "README contents"
@@ -1652,7 +1652,7 @@ class TestCLI < KwardTestCase
       output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "Reasoning> Need context."
       refute_includes output, "Need inspect file first."
-      assert_includes output, "Tool> read_file: README.md"
+      assert_includes output, "Tool> read_file: README.md\n\n1 lines, 16 bytes"
     end
   end
 
@@ -1675,14 +1675,14 @@ class TestCLI < KwardTestCase
     read_output = capture_io do
       cli.send(:print_tool_result, tool_call("read_file", path: "README.md"), "line one\nline two\n")
     end.first
-    assert_includes read_output, "read_file: README.md"
+    assert_includes read_output, "read_file: README.md\n\n2 lines, 18 bytes"
     assert_includes read_output, "2 lines, 18 bytes"
     refute_includes read_output, "line one"
 
     shell_output = capture_io do
       cli.send(:print_tool_result, tool_call("run_shell_command", command: "echo ok"), "Exit status: 0\n\nSTDOUT:\nok\n\nSTDERR:\nwarn\n")
     end.first
-    assert_includes shell_output, "run_shell_command: echo ok"
+    assert_includes shell_output, "run_shell_command: echo ok\n\nExit status: 0"
     assert_includes shell_output, "Exit status: 0"
     assert_includes shell_output, "stdout (3 bytes):\nok"
     assert_includes shell_output, "stderr (5 bytes):\nwarn"
@@ -1703,7 +1703,7 @@ class TestCLI < KwardTestCase
     end.first
 
     summary = strip_ansi(output).split("Tool> ", 2).last
-    assert_equal 10, summary.lines.length
+    assert_equal 10, summary.lines.reject { |line| line == "\n" }.length
     assert_includes output, "line10"
     refute_includes output, "truncated"
   end
@@ -1748,7 +1748,7 @@ class TestCLI < KwardTestCase
       cli.interactive_loop
 
       output = strip_ansi(prompt.output.join("\n"))
-      assert_includes output, "Tool> custom_tool: line1"
+      assert_includes output, "Tool> custom_tool: line1\n\nline2"
       assert_includes output, "...[truncated 3 lines]"
       refute_includes output, "line12"
     end

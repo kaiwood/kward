@@ -59,7 +59,7 @@ module Kward
         if prompt_interface?
           print_tool_result(tool_call, content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         else
-          @prompt.say("\n#{colored("Tool>", *tool_label_styles(content))} #{summary}\n")
+          @prompt.say("\n#{colored("Tool>", *tool_label_styles(content))} #{tool_summary_display_text(summary)}\n")
         end
       end
 
@@ -298,8 +298,9 @@ module Kward
       def print_tool_result(tool_call, content, line_limit: nil)
         summary = tool_result_summary(tool_call, content)
         summary = limit_tool_output_lines(summary, line_limit) if line_limit
+        display_summary = tool_summary_display_text(summary)
         if prompt_interface?
-          summary = summary.end_with?("\n") ? summary : "#{summary}\n"
+          summary = display_summary.end_with?("\n") ? display_summary : "#{display_summary}\n"
           if @prompt.respond_to?(:write_stream_block)
             @prompt.write_stream_block("Tool", summary, finish: true)
           else
@@ -309,11 +310,15 @@ module Kward
           end
         else
           start_stream_block(tool_stream_label(content))
-          print summary
-          puts unless summary.end_with?("\n")
+          print display_summary
+          puts unless display_summary.end_with?("\n")
           $stdout.flush
           @stream_block = nil
         end
+      end
+
+      def tool_summary_display_text(summary)
+        summary.to_s.sub("\n", "\n\n")
       end
 
       def start_stream_block(label)
