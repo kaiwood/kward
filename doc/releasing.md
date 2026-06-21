@@ -10,7 +10,15 @@ Release steps before publishing:
    bundle exec rake test
    ```
 
-4. Generate documentation:
+4. Preview docs locally if you changed documentation or public APIs:
+
+   ```bash
+   bundle exec rake docs:serve
+   ```
+
+   YARD's built-in server reloads documentation on request while you edit. Open <http://localhost:8808/>.
+
+5. Generate documentation:
 
    ```bash
    bundle exec rake rdoc
@@ -19,14 +27,14 @@ Release steps before publishing:
 
    Pushes to `main` deploy the generated YARD site to GitHub Pages.
 
-5. Build the gem locally:
+6. Build the gem locally:
 
    ```bash
    gem build kward.gemspec
    ```
 
-6. Inspect the packaged files and confirm no local config, sessions, logs, or secrets are included.
-7. Install the built gem locally and smoke test the `kward` executable.
+7. Inspect the packaged files and confirm no local config, sessions, logs, or secrets are included.
+8. Install the built gem locally and smoke test the `kward` executable.
 
 Publish the built gem from the release checkout:
 

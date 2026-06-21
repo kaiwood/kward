@@ -97,7 +97,15 @@ Run tests:
 bundle exec rake test
 ```
 
-Build the YARD documentation site:
+Preview the YARD documentation site locally with reloads while editing:
+
+```bash
+bundle exec rake docs:serve
+```
+
+YARD includes this local server, so no extra gem is needed. Open <http://localhost:8808/>. Use `PORT=4000 bundle exec rake docs:serve` to choose another port.
+
+Build the static YARD documentation site for publishing:
 
 ```bash
 bundle exec rake docs:build

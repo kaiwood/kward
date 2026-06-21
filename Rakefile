@@ -26,6 +26,12 @@ YARD::Rake::YardocTask.new do |yard|
 end
 
 namespace :docs do
+  desc "Serve the YARD documentation site locally with reloads"
+  task :serve do
+    port = ENV.fetch("PORT", "8808")
+    sh "bundle exec yard server --reload --port #{port}"
+  end
+
   desc "Build the YARD documentation site"
   task build: :yard do
     FileUtils.touch("_yardoc/.nojekyll")

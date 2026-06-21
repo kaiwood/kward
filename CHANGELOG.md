@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a `docs:serve` Rake task for previewing the YARD documentation site locally with reloads.
 - Added optional `compaction` telemetry logging for tool-output context savings.
 - Added a `summarize_file_structure` tool for compact source-file outlines before reading full files.
 - Added a `retrieve_tool_output` tool for inspecting original outputs that were compacted out of model context.
