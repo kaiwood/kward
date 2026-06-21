@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.71.0] - 2026-06-21
+
 ### Fixed
 
 - Fixed generated YARD guide links so doc-to-doc Markdown links point at the generated `file.*.html` pages.

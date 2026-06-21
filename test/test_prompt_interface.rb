@@ -1572,7 +1572,7 @@ class TestPromptInterface < KwardTestCase
     prompt.write_delta(".git/\n.gitignore\nREADME.md\n")
 
     stripped = strip_ansi(output.string)
-    assert_includes stripped, "Tool output>\r\n.git/\r\n.gitignore\r\nREADME.md\r\n"
+    assert_includes stripped, "Tool output> .git/\r\n.gitignore\r\nREADME.md\r\n"
   end
 
   def test_prompt_interface_synchronizes_say_redraw
