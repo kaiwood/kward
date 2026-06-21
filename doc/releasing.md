@@ -16,7 +16,7 @@ Release steps before publishing:
    bundle exec rake docs:serve
    ```
 
-   YARD's built-in server reloads documentation on request while you edit. Open <http://localhost:8808/>.
+   The preview builds `_yardoc/`, serves it with WEBrick, and rebuilds in a fresh process when documentation sources, library code, or templates change. Refresh your browser after rebuilds.
 
 5. Generate documentation:
 

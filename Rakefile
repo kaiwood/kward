@@ -1,7 +1,29 @@
 require "fileutils"
 require "rdoc/task"
+require "webrick"
 require "yard"
 require "yard/rake/yardoc_task"
+
+DOCS_WATCH_GLOBS = [
+  ".yardopts",
+  "CHANGELOG.md",
+  "LICENSE",
+  "README.md",
+  "doc/**/*.md",
+  "lib/**/*.rb",
+  "templates/**/*"
+].freeze
+
+def docs_watch_snapshot
+  DOCS_WATCH_GLOBS.flat_map { |pattern| Dir.glob(pattern) }
+                  .select { |path| File.file?(path) }
+                  .uniq
+                  .to_h { |path| [path, File.mtime(path)] }
+end
+
+def rebuild_docs
+  system({ "DOCS_SERVE_REBUILD" => "1" }, "bundle", "exec", "rake", "docs:build") || abort("Documentation rebuild failed")
+end
 
 task default: :test
 
@@ -26,10 +48,45 @@ YARD::Rake::YardocTask.new do |yard|
 end
 
 namespace :docs do
-  desc "Serve the YARD documentation site locally with reloads"
-  task :serve do
-    port = ENV.fetch("PORT", "8808")
-    sh "bundle exec yard server --reload --port #{port}"
+  desc "Serve the built YARD documentation site locally and rebuild on changes"
+  task serve: :build do
+    port = Integer(ENV.fetch("PORT", "8808"))
+    server = WEBrick::HTTPServer.new(
+      BindAddress: "127.0.0.1",
+      DocumentRoot: File.expand_path("_yardoc", __dir__),
+      Port: port
+    )
+
+    server.mount_proc "/" do |request, response|
+      WEBrick::HTTPServlet::FileHandler.new(server, File.expand_path("_yardoc", __dir__)).service(request, response)
+      response["Cache-Control"] = "no-store"
+    end
+
+    watcher = Thread.new do
+      snapshot = docs_watch_snapshot
+
+      loop do
+        sleep 1
+        current_snapshot = docs_watch_snapshot
+        next if current_snapshot == snapshot
+
+        snapshot = current_snapshot
+        puts "Documentation changed; rebuilding _yardoc/. Refresh your browser when it finishes."
+        rebuild_docs
+        puts "Documentation rebuilt."
+      rescue StandardError => error
+        warn "Documentation rebuild failed: #{error.class}: #{error.message}"
+      end
+    end
+
+    trap("INT") { server.shutdown }
+    trap("TERM") { server.shutdown }
+
+    puts "Serving documentation at http://localhost:#{port}/"
+    puts "Watching documentation sources for changes. Refresh your browser after rebuilds."
+    server.start
+  ensure
+    watcher&.kill
   end
 
   desc "Build the YARD documentation site"

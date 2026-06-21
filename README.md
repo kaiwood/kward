@@ -97,13 +97,13 @@ Run tests:
 bundle exec rake test
 ```
 
-Preview the YARD documentation site locally with reloads while editing:
+Preview the built YARD documentation site locally with automatic rebuilds:
 
 ```bash
 bundle exec rake docs:serve
 ```
 
-YARD includes this local server, so no extra gem is needed. Open <http://localhost:8808/>. Use `PORT=4000 bundle exec rake docs:serve` to choose another port.
+The preview builds `_yardoc/`, serves it with WEBrick using `Cache-Control: no-store`, and rebuilds in a fresh process when documentation sources, library code, or templates change. Generated HTML, images, CSS, and JavaScript match the published site. Open <http://localhost:8808/> and refresh your browser after rebuilds. Use `PORT=4000 bundle exec rake docs:serve` to choose another port.
 
 Build the static YARD documentation site for publishing:
 
