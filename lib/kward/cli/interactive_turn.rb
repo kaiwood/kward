@@ -42,7 +42,7 @@ module Kward
 
         while worker.alive?
           begin
-            poll_result = collect_busy_input(queued_inputs, steering)
+            poll_result = collect_busy_input(queued_inputs, steering, agent)
             sleep 0.01
           rescue Interrupt
             poll_result = PromptInterface::CANCEL_INPUT
@@ -154,12 +154,14 @@ module Kward
         collect_busy_input(queued_inputs, nil)
       end
 
-      def collect_busy_input(queued_inputs, steering)
+      def collect_busy_input(queued_inputs, steering, agent = nil)
         return nil if @prompt.respond_to?(:modal_active?) && @prompt.modal_active?
 
         poll_result = @prompt.poll_input
         case poll_result
         when String
+          return poll_result if handle_busy_scout_input(poll_result, agent)
+
           if steering && !poll_result.strip.empty?
             begin
               steering.submit(poll_result)
@@ -183,14 +185,32 @@ module Kward
         drain_busy_input(queued_inputs, nil)
       end
 
-      def drain_busy_input(queued_inputs, steering)
+      def drain_busy_input(queued_inputs, steering, agent = nil)
         deadline = Time.now + 0.15
         loop do
-          poll_result = collect_busy_input(queued_inputs, steering)
+          poll_result = collect_busy_input(queued_inputs, steering, agent)
           break if Time.now > deadline && poll_result.nil?
 
           sleep 0.01
         end
+      end
+
+      def handle_busy_scout_input(input, agent)
+        return false unless agent
+
+        command = input.to_s.strip
+        return false unless command == "/scouts" || command.start_with?("/scout ")
+
+        if command == "/scouts" || command == "/scout list"
+          queued_inputs << "/scout list"
+          @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+        else
+          handle_local_slash_command(command, agent, nil)
+        end
+        true
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        true
       end
 
       def steering_supported?

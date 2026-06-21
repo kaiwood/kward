@@ -33,6 +33,7 @@ require_relative "session_trash"
 require_relative "session_tree_renderer"
 require_relative "starter_pack_installer"
 require_relative "steering"
+require_relative "scouts"
 require_relative "tools/tool_call"
 require_relative "tools/registry"
 require_relative "telemetry/stats"
@@ -161,6 +162,17 @@ module Kward
         raise ArgumentError, command_usage("doctor") unless @argv.length == 1
 
         print_doctor
+        return
+      end
+
+      if @argv.first == "count-tests"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("count-tests")
+          return
+        end
+        raise ArgumentError, command_usage("count-tests") unless @argv.length == 1
+
+        print_test_count
         return
       end
 

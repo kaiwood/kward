@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added read-only background scouts with `/scout`, `/scouts`, persisted scout reports, and RPC scout methods for preparing future work.
+
 ### Changed
 
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.

@@ -22,6 +22,12 @@ module Kward
         when "redraw"
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
           [true, nil]
+        when "scout"
+          handle_scout_command(argument, agent)
+          [true, nil]
+        when "scouts"
+          print_scouts
+          [true, nil]
         when "settings"
           configure_settings(agent.conversation)
           [true, nil]
@@ -134,6 +140,190 @@ module Kward
       rescue StandardError => e
         warn "Auto-compaction status unavailable: #{e.message}"
         nil
+      end
+
+      def handle_scout_command(argument, agent)
+        action, value = argument.to_s.strip.split(/\s+/, 2)
+        case action
+        when nil, ""
+          open_scout_menu(agent)
+        when "do"
+          send_scout(value, agent)
+        when "list"
+          open_scout_list(agent)
+        when "show", "open"
+          show_scout(value)
+        when "cancel", "recall"
+          cancel_scout(value)
+        when "dismiss", "drop"
+          dismiss_scout(value)
+        when "use", "apply", "start"
+          use_scout(value)
+        else
+          send_scout(argument, agent)
+        end
+      end
+
+      def scout_store
+        @scout_store ||= Scouts::Store.new
+      end
+
+      def scout_runner(agent)
+        workspace_root = interactive_workspace_root(agent)
+        return @scout_runner if @scout_runner && @scout_runner_workspace_root == workspace_root
+
+        @scout_runner_workspace_root = workspace_root
+        @scout_runner = Scouts::Runner.new(store: scout_store, client: Client.new, prompt: @prompt, workspace_root: workspace_root)
+      end
+
+      def send_scout(topic, agent)
+        if topic.to_s.strip.empty?
+          runtime_output("Usage: /scout do <task>")
+          return
+        end
+
+        job = scout_runner(agent).start(topic)
+        runtime_output("Scout #{job.fetch('id')} sent: #{job.fetch('title')}")
+      end
+
+      def print_scouts
+        jobs = scout_store.list
+        if jobs.empty?
+          runtime_output("No scouts in the pipeline.")
+          return
+        end
+
+        lines = ["Scouts"]
+        jobs.each { |job| lines << "  #{scout_choice_label(job)}" }
+        runtime_output(lines.join("\n"))
+      end
+
+      def open_scout_menu(agent)
+        return runtime_output("Usage: /scout do <task> | /scout list | /scout show <id> | /scout cancel <id> | /scout dismiss <id> | /scout use <id>") unless @prompt.respond_to?(:select)
+
+        choice = @prompt.select(
+          "Scout",
+          ["Send a new scout", "List scouts"],
+          title: "Scouts",
+          custom: false
+        )
+        case choice
+        when "Send a new scout"
+          prompt_for_scout(agent)
+        when "List scouts"
+          open_scout_list(agent)
+        end
+      end
+
+      def prompt_for_scout(agent)
+        topic = @prompt.ask("Scout task>") if @prompt.respond_to?(:ask)
+        send_scout(topic, agent) unless topic.to_s.strip.empty?
+      end
+
+      def open_scout_list(agent)
+        return print_scouts unless @prompt.respond_to?(:select)
+
+        jobs = scout_store.list
+        if jobs.empty?
+          runtime_output("No scouts in the pipeline.")
+          return
+        end
+
+        labels = jobs.map { |job| scout_choice_label(job) }
+        choice = @prompt.select("Select scout", labels, title: "Scouts", custom: false)
+        return unless choice
+
+        selected = jobs[labels.index(choice)]
+        open_scout_actions(selected.fetch("id"), agent) if selected
+      end
+
+      def open_scout_actions(id, agent)
+        job = require_scout(id)
+        actions = ["Show report"]
+        actions << "Start from report" if job["status"] == "ready"
+        actions << "Cancel" if %w[queued running].include?(job["status"])
+        actions << "Dismiss"
+        actions << "Back to list"
+        choice = @prompt.select("#{job.fetch('id')} — #{job.fetch('title')}", actions, title: "Scout", custom: false)
+        case choice
+        when "Show report"
+          show_scout(job.fetch("id"))
+        when "Start from report"
+          use_scout(job.fetch("id"))
+        when "Cancel"
+          cancel_scout(job.fetch("id"))
+        when "Dismiss"
+          dismiss_scout(job.fetch("id"))
+        when "Back to list"
+          open_scout_list(agent)
+        end
+      end
+
+      def scout_choice_label(job)
+        error = job["status"] == "failed" && !job["error"].to_s.empty? ? " — #{job['error']}" : ""
+        "#{job.fetch('id')} [#{job.fetch('status')}] #{job.fetch('title')}#{error}"
+      end
+
+      def show_scout(id)
+        job = require_scout(id)
+        text = scout_report_text(job)
+        if @prompt.respond_to?(:view_text)
+          @prompt.view_text(title: "Scout #{job.fetch('id')}", content: text)
+        else
+          runtime_output(text)
+        end
+      end
+
+      def scout_report_text(job)
+        lines = ["Scout #{job.fetch('id')} [#{job.fetch('status')}] #{job.fetch('title')}", ""]
+        if job["report"].to_s.empty?
+          lines << (job["error"].to_s.empty? ? "No report yet." : "Error: #{job['error']}")
+        else
+          lines << job["report"]
+        end
+        lines.join("\n")
+      end
+
+      def cancel_scout(id)
+        job = require_scout(id)
+        scout_runner_for_existing_jobs.cancel(job.fetch("id"))
+        runtime_output("Scout #{job.fetch('id')} cancelled.")
+      end
+
+      def dismiss_scout(id)
+        job = scout_store.dismiss(require_scout(id).fetch("id"))
+        runtime_output("Scout #{job.fetch('id')} dismissed.")
+      end
+
+      def use_scout(id)
+        job = require_scout(id)
+        unless job["status"] == "ready"
+          runtime_output("Scout #{job.fetch('id')} is #{job['status']}; only ready scouts can be used.")
+          return
+        end
+
+        scout_store.mark_started(job.fetch("id"))
+        @pending_inputs << <<~PROMPT
+          Use this scout report as preparation and implement the requested task.
+
+          Original request:
+          #{job["prompt"]}
+
+          Scout report:
+          #{job["report"]}
+        PROMPT
+        runtime_output("Scout #{job.fetch('id')} queued as the next task.")
+      end
+
+      def require_scout(id)
+        value = id.to_s.strip.delete_prefix("#")
+        raise ArgumentError, "Scout id is required" if value.empty?
+
+        scout_store.find(value) || raise(ArgumentError, "Unknown scout: #{value}")
+      end
+
+      def scout_runner_for_existing_jobs
+        @scout_runner ||= Scouts::Runner.new(store: scout_store, client: Client.new, prompt: @prompt, workspace_root: current_workspace_root)
       end
 
     end

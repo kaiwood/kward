@@ -58,7 +58,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -67,6 +67,7 @@ module Kward
       @skills = skills
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
+      @allowed_tool_names = allowed_tool_names&.map(&:to_s)
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @tools = build_tools.freeze
@@ -130,7 +131,9 @@ module Kward
     end
 
     def build_tools
-      all_tools.to_h { |tool| [tool.name, tool] }
+      tools = all_tools
+      tools = tools.select { |tool| @allowed_tool_names.include?(tool.name) } if @allowed_tool_names
+      tools.to_h { |tool| [tool.name, tool] }
     end
 
     def build_schema_tools
@@ -140,7 +143,7 @@ module Kward
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
-      tools
+      tools.compact
     end
 
     def all_tools
