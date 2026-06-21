@@ -351,6 +351,7 @@ module Kward
       agent&.conversation
     ensure
       begin
+        stop_live_worker_view if respond_to?(:stop_live_worker_view, true)
         @prompt.close if prompt_interface?
       ensure
         cleanup_unused_sessions

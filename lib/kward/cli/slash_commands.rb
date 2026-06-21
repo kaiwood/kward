@@ -325,8 +325,9 @@ module Kward
 
       def show_scout(id, session_store)
         job = require_scout(id)
-        path = worker_session_path(job)
-        return load_worker_session(session_store, path, job) if path
+        worker = @scout_runner&.worker(job.fetch("id"))
+        path = worker_session_path(job) || worker&.session&.path
+        return load_worker_session(session_store, path, job, worker: worker) if path
 
         runtime_output(scout_report_text(job))
         nil
@@ -340,16 +341,82 @@ module Kward
         nil
       end
 
-      def load_worker_session(session_store, path, job)
+      def load_worker_session(session_store, path, job, worker: nil)
         unless session_store
           runtime_output(scout_report_text(job))
           return nil
         end
 
-        load_session(session_store, path, message: "Showing worker #{job.fetch('id')}")
+        agent = load_session(session_store, path, message: "Showing worker #{job.fetch('id')}")
+        start_live_worker_view(worker, agent) if live_worker?(worker)
+        agent
       rescue StandardError => e
         runtime_output("Error: #{e.message}")
         nil
+      end
+
+      def live_worker?(worker)
+        worker && %w[queued running].include?(worker.status)
+      end
+
+      def start_live_worker_view(worker, agent)
+        return unless prompt_interface?
+
+        stop_live_worker_view
+        @live_worker_view = { worker: worker, stop: false, seen_events: worker.event_history.length }
+        runtime_output("Watching worker #{worker.id}; the view will update until it finishes.")
+        @live_worker_view[:thread] = Thread.new { run_live_worker_view(@live_worker_view, agent) }
+        @live_worker_view[:thread].report_on_exception = false
+      end
+
+      def stop_live_worker_view
+        view = @live_worker_view
+        return unless view
+
+        view[:stop] = true
+        view[:thread]&.join(0.2)
+        @live_worker_view = nil
+      end
+
+      def run_live_worker_view(view, agent)
+        markdown_chunks = []
+        stream_state = {
+          streamed: false,
+          last_flush: monotonic_now,
+          stream_block_open: false,
+          markdown_streams: {},
+          defer_assistant_streaming: false
+        }
+        until view[:stop]
+          worker = view.fetch(:worker)
+          events = worker.event_history[view[:seen_events]..] || []
+          events.each do |event|
+            notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
+            handle_live_worker_event(event, markdown_chunks, stream_state)
+          end
+          view[:seen_events] += events.length
+          flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: worker_finished?(worker))
+          break if worker_finished?(worker)
+
+          sleep 0.05
+        end
+      rescue StandardError => e
+        runtime_output("Worker view error: #{e.message}")
+      end
+
+      def handle_live_worker_event(event, markdown_chunks, stream_state)
+        case event
+        when Events::AssistantMessage
+          return if stream_state[:streamed]
+
+          render_assistant_message(event.message)
+        else
+          handle_interactive_event(event, markdown_chunks, stream_state)
+        end
+      end
+
+      def worker_finished?(worker)
+        %w[ready failed cancelled archived].include?(worker.status)
       end
 
       def scout_report_text(job)
