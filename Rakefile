@@ -1,4 +1,5 @@
 require "fileutils"
+require "html-proofer"
 require "rdoc/task"
 require "webrick"
 require "yard"
@@ -23,6 +24,24 @@ end
 
 def rebuild_docs
   system({ "DOCS_SERVE_REBUILD" => "1" }, "bundle", "exec", "rake", "docs:build") || abort("Documentation rebuild failed")
+end
+
+def rewrite_yard_markdown_links
+  guide_names = Dir.glob("doc/*.md").map { |path| File.basename(path, ".md") }
+
+  Dir.glob("_yardoc/**/*.html").each do |path|
+    html = File.read(path)
+    rewritten = html.gsub(/href=(["'])(?:(?:\.\.\/)?doc\/)?([a-z0-9-]+)\.md(#[^"']*)?\1/) do |match|
+      quote = Regexp.last_match(1)
+      guide_name = Regexp.last_match(2)
+      anchor = Regexp.last_match(3).to_s
+      next match unless guide_names.include?(guide_name)
+
+      "href=#{quote}file.#{guide_name}.html#{anchor}#{quote}"
+    end
+
+    File.write(path, rewritten) unless rewritten == html
+  end
 end
 
 task default: :test
@@ -91,6 +110,20 @@ namespace :docs do
 
   desc "Build the YARD documentation site"
   task build: :yard do
+    rewrite_yard_markdown_links
     FileUtils.touch("_yardoc/.nojekyll")
+  end
+
+  desc "Check generated documentation links and images"
+  task check: :build do
+    options = {
+      checks: ["Images", "Links", "Scripts"],
+      allow_missing_href: true,
+      disable_external: ENV["DOCS_CHECK_EXTERNAL"] != "1",
+      enforce_https: false,
+      ignore_urls: [/^$/]
+    }
+
+    HTMLProofer.check_directory("_yardoc", options).run
   end
 end

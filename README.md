@@ -113,6 +113,14 @@ bundle exec rake docs:build
 
 The generated site is written to `_yardoc/`. Pushes to `main` deploy that directory to GitHub Pages.
 
+Check generated documentation links, images, and scripts:
+
+```bash
+bundle exec rake docs:check
+```
+
+External link checks are disabled by default for stable local runs. Enable them with `DOCS_CHECK_EXTERNAL=1 bundle exec rake docs:check`.
+
 Generate the RDoc API documentation:
 
 ```bash

@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed generated YARD guide links so doc-to-doc Markdown links point at the generated `file.*.html` pages.
 - Fixed web-tool results with BINARY/ASCII-8BIT response bodies so RPC tool events and TUI rendering receive UTF-8-safe content.
 
 ### Changed
@@ -27,6 +28,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a `docs:check` Rake task and HTMLProofer development dependency for checking generated documentation links, images, and scripts.
 - Added a `docs:serve` Rake task and WEBrick development dependency for previewing the built YARD documentation site locally with automatic rebuilds.
 - Added optional `compaction` telemetry logging for tool-output context savings.
 - Added a `summarize_file_structure` tool for compact source-file outlines before reading full files.

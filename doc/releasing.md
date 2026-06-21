@@ -18,14 +18,15 @@ Release steps before publishing:
 
    The preview builds `_yardoc/`, serves it with WEBrick, and rebuilds in a fresh process when documentation sources, library code, or templates change. Refresh your browser after rebuilds.
 
-5. Generate documentation:
+5. Generate and check documentation:
 
    ```bash
    bundle exec rake rdoc
    bundle exec rake docs:build
+   bundle exec rake docs:check
    ```
 
-   Pushes to `main` deploy the generated YARD site to GitHub Pages.
+   `docs:check` validates generated internal links, images, and scripts. Pushes to `main` deploy the generated YARD site to GitHub Pages.
 
 6. Build the gem locally:
 
