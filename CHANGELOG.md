@@ -28,6 +28,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Turbolinks-style navigation to the generated documentation site for same-origin HTML links.
 - Added a `docs:check` Rake task and HTMLProofer development dependency for checking generated documentation links, images, and scripts.
 - Added a `docs:serve` Rake task and WEBrick development dependency for previewing the built YARD documentation site locally with automatic rebuilds.
 - Added optional `compaction` telemetry logging for tool-output context savings.

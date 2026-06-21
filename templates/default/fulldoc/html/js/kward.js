@@ -16,6 +16,75 @@ const guideLinks = {
 }
 
 let pageController = null
+let navigating = false
+
+const scrollToCurrentHash = () => {
+  if (!window.location.hash) {
+    window.scrollTo({ top: 0 })
+    return
+  }
+
+  const id = decodeURIComponent(window.location.hash.slice(1))
+  const target = document.getElementById(id) || document.getElementsByName(id)[0]
+  if (target) target.scrollIntoView()
+}
+
+const replacePage = async (url, pushState = true) => {
+  if (navigating) return
+  navigating = true
+  document.documentElement.classList.add('kward-navigating')
+
+  try {
+    const response = await fetch(url, { headers: { 'X-Requested-With': 'Kward-Docs' } })
+    if (!response.ok) throw new Error(`Navigation failed with ${response.status}`)
+
+    const html = await response.text()
+    const nextDocument = new DOMParser().parseFromString(html, 'text/html')
+    if (!nextDocument.body) throw new Error('Navigation response did not include a body')
+
+    document.title = nextDocument.title
+    document.body.className = nextDocument.body.className
+    document.body.innerHTML = nextDocument.body.innerHTML
+
+    if (pushState) window.history.pushState({ kwardDocs: true }, '', url)
+    initializePage()
+    scrollToCurrentHash()
+  } catch (_error) {
+    window.location.href = url
+  } finally {
+    navigating = false
+    document.documentElement.classList.remove('kward-navigating')
+  }
+}
+
+const isNavigableLink = (event, link) => {
+  if (event.defaultPrevented || event.button !== 0) return false
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false
+  if (link.target && link.target !== '_self') return false
+  if (link.download || link.dataset.noTurbo) return false
+
+  const url = new URL(link.href, window.location.href)
+  if (url.origin !== window.location.origin) return false
+  if (url.pathname === window.location.pathname && url.search === window.location.search) return false
+
+  return url.pathname === '/' || url.pathname.endsWith('/') || url.pathname.endsWith('.html')
+}
+
+const visitLink = (link) => replacePage(link.href)
+
+const setupTurbolinks = (signal) => {
+  document.addEventListener('click', (event) => {
+    const link = event.target.closest('a[href]')
+    if (!link || !isNavigableLink(event, link)) return
+
+    event.preventDefault()
+    visitLink(link)
+  }, { signal })
+
+  window.addEventListener('popstate', () => {
+    replacePage(window.location.href, false)
+  }, { signal })
+}
 
 const setupGuideSearch = (signal) => {
   const form = document.querySelector('.kward-guide-search')
@@ -151,7 +220,7 @@ const setupGuideSearch = (signal) => {
     } else if (event.key === 'Enter') {
       if (selectedIndex >= 0 && items[selectedIndex]) {
         event.preventDefault()
-        window.location.href = items[selectedIndex].href
+        visitLink(items[selectedIndex])
       }
     }
   }, { signal })
@@ -159,7 +228,7 @@ const setupGuideSearch = (signal) => {
   form.addEventListener('submit', (event) => {
     event.preventDefault()
     const firstResult = results.querySelector('a')
-    if (firstResult) window.location.href = firstResult.href
+    if (firstResult) visitLink(firstResult)
   }, { signal })
 
   document.addEventListener('click', (event) => {
@@ -285,6 +354,7 @@ const initializePage = () => {
   if (pageController) pageController.abort()
   pageController = new AbortController()
 
+  setupTurbolinks(pageController.signal)
   setupGuideSearch(pageController.signal)
   setupNavigation(pageController.signal)
   rewriteGuideLinks()
