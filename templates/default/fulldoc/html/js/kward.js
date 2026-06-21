@@ -321,6 +321,84 @@ const rewriteGuideLinks = () => {
   })
 }
 
+const setupTableOfContents = () => {
+  const fileContents = document.getElementById('filecontents')
+  const content = document.getElementById('content')
+  if (!fileContents || !content || content.querySelector('#toc')) return
+
+  const headingTags = ['h2', 'h3', 'h4', 'h5', 'h6']
+  if (fileContents.querySelectorAll('h1').length > 1) headingTags.unshift('h1')
+
+  const headings = Array.from(fileContents.querySelectorAll(headingTags.join(', ')))
+    .filter((heading) => !heading.closest('.method_details .docstring') && heading.id !== 'filecontents')
+  if (headings.length === 0) return
+
+  const topLevel = document.createElement('ol')
+  topLevel.className = 'top'
+
+  let currentList = topLevel
+  let currentItem = null
+  let counter = 0
+  let lastLevel = parseInt(headingTags[0].slice(1), 10)
+
+  headings.forEach((heading) => {
+    const level = parseInt(heading.tagName.slice(1), 10)
+
+    if (!heading.id) {
+      let proposedId = heading.getAttribute('toc-id')
+      if (!proposedId) {
+        proposedId = heading.textContent.replace(/[^a-z0-9-]/gi, '_')
+        if (document.getElementById(proposedId)) {
+          proposedId += counter
+          counter += 1
+        }
+      }
+      heading.id = proposedId
+    }
+
+    if (level > lastLevel) {
+      while (level > lastLevel) {
+        if (!currentItem) {
+          currentItem = document.createElement('li')
+          currentList.appendChild(currentItem)
+        }
+        const nestedList = document.createElement('ol')
+        currentItem.appendChild(nestedList)
+        currentList = nestedList
+        currentItem = null
+        lastLevel += 1
+      }
+    } else if (level < lastLevel) {
+      while (level < lastLevel && currentList.parentElement) {
+        currentList = currentList.parentElement.parentElement
+        lastLevel -= 1
+      }
+    }
+
+    const title = heading.getAttribute('toc-title') || heading.textContent
+    const item = document.createElement('li')
+    const link = document.createElement('a')
+    link.href = `#${heading.id}`
+    link.textContent = title
+    item.appendChild(link)
+    currentList.appendChild(item)
+    currentItem = item
+  })
+
+  const toc = document.createElement('div')
+  toc.id = 'toc'
+  toc.innerHTML = '<p class="title hide_toc"><a href="#"><strong>Table of Contents</strong></a></p>'
+  toc.appendChild(topLevel)
+  content.insertBefore(toc, content.firstChild)
+
+  const hideLink = toc.querySelector('.hide_toc')
+  hideLink.addEventListener('click', (event) => {
+    event.preventDefault()
+    const hidden = toc.classList.toggle('hidden')
+    topLevel.style.display = hidden ? 'none' : ''
+  })
+}
+
 const setupCodeCopy = () => {
   document.querySelectorAll('pre').forEach((block) => {
     if (block.closest('.code-copy-wrapper')) return
@@ -358,6 +436,7 @@ const initializePage = () => {
   setupGuideSearch(pageController.signal)
   setupNavigation(pageController.signal)
   rewriteGuideLinks()
+  setupTableOfContents()
   setupCodeCopy()
 }
 
