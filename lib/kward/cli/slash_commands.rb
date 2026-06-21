@@ -279,14 +279,14 @@ module Kward
 
       def open_scout_actions(id, agent)
         job = require_scout(id)
-        actions = ["Show report"]
+        actions = ["Show"]
         actions << "Start from report" if job["status"] == "ready"
         actions << "Cancel" if %w[queued running].include?(job["status"])
         actions << "Dismiss"
         actions << "Back to list"
         choice = @prompt.select("#{job.fetch('id')} — #{job.fetch('title')}", actions, title: "Scout", custom: false)
         case choice
-        when "Show report"
+        when "Show"
           show_scout(job.fetch("id"))
         when "Start from report"
           use_scout(job.fetch("id"))
@@ -310,12 +310,7 @@ module Kward
 
       def show_scout(id)
         job = require_scout(id)
-        text = scout_report_text(job)
-        if @prompt.respond_to?(:view_text)
-          @prompt.view_text(title: "Scout #{job.fetch('id')}", content: text)
-        else
-          runtime_output(text)
-        end
+        runtime_output(scout_report_text(job))
       end
 
       def scout_report_text(job)

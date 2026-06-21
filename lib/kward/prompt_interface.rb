@@ -13,7 +13,6 @@ require_relative "prompt_interface/stream_state"
 require_relative "prompt_interface/slash_overlay"
 require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
-require_relative "prompt_interface/text_viewer"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
@@ -47,7 +46,6 @@ module Kward
     include SlashOverlay
     include SelectionPrompt
     include QuestionPrompt
-    include TextViewer
     include OverlayRenderer
     include ComposerRenderer
     include ComposerController
@@ -118,7 +116,6 @@ module Kward
       @slash_overlay_dismissed_input = nil
       @select_state = nil
       @question_state = nil
-      @text_viewer_state = nil
       @last_width = screen_width
       @last_height = screen_height
       @reserved_rows = 0
@@ -345,7 +342,7 @@ module Kward
     end
 
     def modal_active?
-      @mutex.synchronize { !@question_state.nil? || !@select_state.nil? || !@text_viewer_state.nil? }
+      @mutex.synchronize { !@question_state.nil? || !@select_state.nil? }
     end
 
     def update_overlay_settings(settings)

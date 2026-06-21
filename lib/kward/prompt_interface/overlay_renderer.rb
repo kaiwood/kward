@@ -7,7 +7,6 @@ module Kward
       private
 
       def active_overlay_rows(width, height: screen_height)
-        return text_viewer_overlay_rows(width, height: height) if @text_viewer_state
         return question_overlay_rows(width) if @question_state
         return selection_overlay_rows(width, height: height) if @select_state
 
