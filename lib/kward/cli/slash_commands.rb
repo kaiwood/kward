@@ -70,10 +70,10 @@ module Kward
           end
           [true, replacement_agent]
         when "name"
-          run_busy_local_command_and_requeue { rename_session(argument) }
+          rename_session(argument)
           [true, nil]
         when "rename"
-          run_busy_local_command_and_requeue { rename_session(argument, require_name: true) }
+          rename_session(argument, require_name: true)
           [true, nil]
         when "clone"
           [true, run_busy_local_command_and_requeue { clone_session(session_store, agent) }]

@@ -496,9 +496,29 @@ module Kward
 
     def session_header(records, path)
       header = records.find { |record| record["type"] == "session" }
-      raise "Invalid Kward session file: #{path}" unless header && header["id"].to_s != ""
+      return header if header && header["id"].to_s != ""
 
-      header
+      recovered = recovered_session_header(records, path)
+      return recovered if recovered
+
+      raise "Invalid Kward session file: #{path}"
+    end
+
+    def recovered_session_header(records, path)
+      return nil unless records.any? { |record| ["message", "session_info", "system_prompt", "memory_state"].include?(record["type"]) }
+
+      basename = File.basename(path)
+      match = basename.match(/\A(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z)_(?<id>[0-9a-fA-F-]{36})\.jsonl\z/)
+      return nil unless match
+
+      timestamp = match[:timestamp].tr("-", ":").sub(/\A(\d{4}):(\d{2}):(\d{2})T/, "\\1-\\2-\\3T")
+      {
+        "type" => "session",
+        "version" => VERSION,
+        "id" => match[:id],
+        "timestamp" => timestamp,
+        "cwd" => @cwd
+      }
     end
 
     def session_named?(session)
@@ -756,8 +776,7 @@ module Kward
 
     def session_info(path)
       records = records_from_file(path)
-      header = records.find { |record| record["type"] == "session" }
-      return nil unless header && header["id"].to_s != ""
+      header = session_header(records, path)
 
       messages = restored_messages(records)
       name = session_name(records)

@@ -114,6 +114,25 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_load_recovers_header_missing_from_jsonl_session
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("saved prompt")
+      records = jsonl_records(session.path).reject { |record| record["type"] == "session" }
+      File.write(session.path, records.map { |record| JSON.generate(record) }.join("\n") + "\n")
+
+      loaded_session, loaded_conversation = store.load(session.path)
+      info = store.send(:session_info, session.path)
+
+      assert_equal session.id, loaded_session.id
+      assert_equal session.id, info.id
+      assert_equal ["saved prompt"], loaded_conversation.messages.map { |message| message["content"] || message[:content] }
+    end
+  end
+
   def test_recent_deletes_empty_unnamed_sessions
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

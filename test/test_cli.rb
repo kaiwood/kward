@@ -1359,6 +1359,20 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_name_does_not_enter_busy_state
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = BusyPrompt.new(["/name Useful", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      refute_includes prompt.events, [:begin_busy_input, "You>", "loading"]
+      assert prompt.output.any? { |line| line.include?("Named session: Useful") }
+      assert jsonl_records(Dir.glob(File.join(store.session_dir, "*.jsonl")).first).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" }
+    end
+  end
+
   def test_quit_exits_like_exit
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
