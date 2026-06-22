@@ -184,7 +184,7 @@ module Kward
         poll_result = @prompt.poll_input
         case poll_result
         when String
-          return poll_result if handle_busy_scout_input(poll_result, agent, queued_inputs)
+          return poll_result if handle_busy_worker_input(poll_result, agent, queued_inputs)
 
           if steering && !poll_result.strip.empty?
             begin
@@ -219,15 +219,12 @@ module Kward
         end
       end
 
-      def handle_busy_scout_input(input, agent, queued_inputs)
+      def handle_busy_worker_input(input, agent, queued_inputs)
         return false unless agent
 
         command = input.to_s.strip
-        return false unless command == "/scouts" || command == "/workers" || command.start_with?("/scout ") || command.start_with?("/workers ")
+        return false unless command == "/workers" || command.start_with?("/workers ")
 
-        if command == "/scouts" || command == "/scout list"
-          command = "/workers"
-        end
         _handled, replacement_agent = handle_local_slash_command(command, agent, @session_store)
         @busy_replacement_agent = replacement_agent if replacement_agent?(replacement_agent)
         restore_busy_input_prompt

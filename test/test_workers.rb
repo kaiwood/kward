@@ -3,20 +3,20 @@ require_relative "../lib/kward/workers"
 require_relative "../lib/kward/session_store"
 
 class TestWorkers < KwardTestCase
-  def test_scout_worker_runs_with_read_only_policy_and_records_report
+  def test_request_worker_runs_with_read_only_policy_and_records_report
     Dir.mktmpdir do |dir|
-      client = FakeClient.new([{ "role" => "assistant", "content" => "# Scout Report\nDone." }])
+      client = FakeClient.new([{ "role" => "assistant", "content" => "# Request Review\nDone." }])
       manager = Kward::Workers::Manager.new(
         client_factory: -> { client },
         workspace_root: dir
       )
 
-      worker = manager.start(role: "scout", prompt: "Explore tests")
+      worker = manager.start(role: "request", prompt: "Explore tests")
       wait_until(timeout: 1) { manager.find(worker.id).status == "ready" }
 
-      assert_equal "scout", worker.role
+      assert_equal "request", worker.role
       assert_equal "ready", worker.status
-      assert_equal "# Scout Report\nDone.", worker.report
+      assert_equal "# Request Review\nDone.", worker.report
       refute_empty worker.event_history
     end
   end
@@ -36,7 +36,7 @@ class TestWorkers < KwardTestCase
         model: "gpt-test"
       )
 
-      worker = manager.start(role: "scout", prompt: "Explore tests")
+      worker = manager.start(role: "request", prompt: "Explore tests")
       wait_until(timeout: 1) { worker.status == "ready" && worker.session }
 
       assert worker.session
@@ -48,7 +48,7 @@ class TestWorkers < KwardTestCase
   end
 
   def test_live_view_drains_new_worker_events
-    worker = Kward::Workers::Worker.new(id: "abc123", title: "Watch", role: "scout", status: "running", prompt: "Watch")
+    worker = Kward::Workers::Worker.new(id: "abc123", title: "Watch", role: "request", status: "running", prompt: "Watch")
     seen = []
     view = Kward::Workers::LiveView.new(worker: worker, agent: Object.new, renderer: ->(event, _agent) { seen << event }, poll_interval: 0.01).start
 
@@ -90,8 +90,8 @@ class TestWorkers < KwardTestCase
     end
   end
 
-  def test_tool_policy_limits_scout_tools
-    names = Kward::Workers::ToolPolicy.allowed_tool_names("scout")
+  def test_tool_policy_limits_request_tools
+    names = Kward::Workers::ToolPolicy.allowed_tool_names("request")
 
     assert_includes names, "read_file"
     refute_includes names, "write_file"
@@ -109,7 +109,7 @@ class TestWorkers < KwardTestCase
         on_status_change: ->(worker) { statuses << worker.status }
       )
 
-      worker = manager.start(role: "scout", prompt: "Explore")
+      worker = manager.start(role: "request", prompt: "Explore")
       wait_until(timeout: 1) { worker.status == "ready" }
 
       assert_includes statuses, "running"

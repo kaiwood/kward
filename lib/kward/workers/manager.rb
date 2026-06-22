@@ -138,38 +138,40 @@ module Kward
       end
 
       def worker_prompt(worker)
-        return scout_prompt(worker.prompt) if worker.role == "scout"
+        return request_prompt(worker.prompt) if worker.role == "request"
 
         worker.prompt
       end
 
       def system_message(worker)
-        return scout_system_message if worker.role == "scout"
+        return request_system_message if worker.role == "request"
 
         "You are a Kward worker. Complete the user's task carefully."
       end
 
-      def scout_system_message
+      def request_system_message
         <<~SYSTEM
-          You are a Kward scout: a read-only background researcher and planner for future coding work.
-          Inspect the workspace, map relevant terrain, and produce a practical report.
+          You are a Kward request worker running the read-only exploration phase.
+          Inspect the workspace, map relevant terrain, and produce a practical review for the user.
           Do not edit files, write files, delete files, alter configuration, or claim implementation work was done.
         SYSTEM
       end
 
-      def scout_prompt(prompt)
+      def request_prompt(prompt)
         <<~PROMPT
-          Scout this future coding task in read-only mode:
-
           #{prompt}
 
-          You are a scout, not an implementer. Explore the repository and any relevant documentation, but do not change files, configuration, or project state.
+          ---
 
-          Return a concise scout report with these sections:
-          # Scout Report: <title>
+          You are handling this as a structured Kward background request.
+          First perform a read-only exploration phase. Inspect relevant files and documentation, reason about the request, and prepare a reviewable result for the user.
+          Do not modify files, write files, delete files, alter configuration, run destructive commands, or claim implementation work was done.
+
+          Return a concise request review with these sections:
+          # Request Review: <title>
 
           ## Request
-          Restate the request.
+          Restate the user's request.
 
           ## Summary
           The short answer.
@@ -180,17 +182,19 @@ module Kward
           ## Findings
           What you discovered.
 
-          ## Recommended route
-          A practical implementation plan.
+          ## Recommended next step
+          A practical next step. If implementation appears useful, say so clearly, but do not implement it.
 
           ## Risks
           Important risks or unknowns.
 
-          ## Tests to run
-          Focused verification commands.
+          ## Verification
+          Focused verification commands or checks.
 
           ## Open questions
-          Decisions the user should make before implementation.
+          Decisions the user should make before proceeding.
+
+          End by asking: Should we proceed?
         PROMPT
       end
 

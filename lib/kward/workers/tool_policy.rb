@@ -8,7 +8,7 @@ module Kward
 
       def allowed_tool_names(role)
         case role.to_s
-        when "scout", "read_only"
+        when "request", "read_only"
           READ_ONLY_TOOLS
         else
           nil

@@ -150,7 +150,7 @@ class TestRPCServer < KwardTestCase
     assert_equal true, capabilities["workers"]["supported"]
     assert_equal ["workers/list", "workers/show"], capabilities["workers"]["methods"]
     assert_includes capabilities["workers"]["roles"], "implementation"
-    assert_includes capabilities["workers"]["roles"], "scout"
+    assert_includes capabilities["workers"]["roles"], "request"
     assert_equal "sessions", capabilities["workers"]["transcriptStorage"]
     assert_equal true, capabilities["commands"]["supported"]
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]

@@ -4,7 +4,7 @@ require_relative "../config_files"
 
 module Kward
   module Workers
-    # JSON-backed metadata store for non-scout worker records.
+    # JSON-backed metadata store for worker records.
     class Store
       def initialize(path: File.join(ConfigFiles.config_dir, "workers.json"))
         @path = path

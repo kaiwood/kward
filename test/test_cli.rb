@@ -106,8 +106,8 @@ class TestCLI < KwardTestCase
   class BusyWorkersCLI < Kward::CLI
     private
 
-    def send_scout(topic, _agent)
-      @prompt.say("Scout sent: #{topic}")
+    def send_worker_request(topic, _agent)
+      @prompt.say("Worker sent: #{topic}")
     end
   end
 
@@ -3008,7 +3008,7 @@ edit this prompt"
   end
 
   def test_busy_workers_new_read_only_does_not_replace_agent_with_prompt_output
-    prompt = BusyWorkersPrompt.new(["/workers"], selections: ["New read-only worker"], tasks: ["map the codebase"])
+    prompt = BusyWorkersPrompt.new(["/workers"], selections: ["New worker"], tasks: ["map the codebase"])
     cli = BusyWorkersCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
     agent = Object.new
     agent.define_singleton_method(:conversation) { Object.new }
@@ -3021,7 +3021,7 @@ edit this prompt"
     assert_nil cli.instance_variable_get(:@busy_replacement_agent)
     assert_equal [["You>", "streaming"]], prompt.busy_inputs
     assert_equal ["Workers"], prompt.select_messages
-    assert_includes prompt.output.join, "Scout sent: map the codebase"
+    assert_includes prompt.output.join, "Worker sent: map the codebase"
   end
 
   def test_interactive_session_store_is_reused_for_background_workers
@@ -3086,19 +3086,18 @@ edit this prompt"
       workspace = File.join(dir, "workspace")
       FileUtils.mkdir_p(workspace)
       session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
-      scout_store = Kward::Scouts::Store.new(path: File.join(config_dir, "scouts.json"))
+      worker_store = Kward::Workers::Store.new(path: File.join(config_dir, "workers.json"))
       session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
       conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
       session.attach(conversation)
-      job = scout_store.create(prompt: "worker task", workspace_root: workspace)
-      scout_store.update(job.fetch("id"), "status" => "running", "session_path" => session.path)
-      worker = Kward::Workers::Worker.new(id: job.fetch("id"), title: "worker task", role: "scout", workspace_root: workspace, status: "running", prompt: "worker task", conversation: conversation, session: session)
-      runner = Object.new
-      runner.define_singleton_method(:worker) { |id| id == worker.id ? worker : nil }
-      prompt = BusySelectPrompt.new([], selections: ["List workers", "#{job.fetch('id')} [scout/running] worker task", "Show"])
+      worker = Kward::Workers::Worker.new(id: "abc123", title: "worker task", role: "request", workspace_root: workspace, status: "running", prompt: "worker task", conversation: conversation, session: session)
+      manager = Object.new
+      manager.define_singleton_method(:list) { [worker] }
+      manager.define_singleton_method(:find) { |id| id == worker.id ? worker : nil }
+      prompt = BusySelectPrompt.new([], selections: ["List workers", "abc123 [request/running] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
-      cli.instance_variable_set(:@scout_store, scout_store)
-      cli.instance_variable_set(:@scout_runner, runner)
+      cli.instance_variable_set(:@worker_store, worker_store)
+      cli.instance_variable_set(:@worker_manager, manager)
       agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
 
       _handled, replacement = cli.send(:handle_local_slash_command, "/workers", agent, session_store)
@@ -3118,21 +3117,20 @@ edit this prompt"
       workspace = File.join(dir, "workspace")
       FileUtils.mkdir_p(workspace)
       session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
-      scout_store = Kward::Scouts::Store.new(path: File.join(config_dir, "scouts.json"))
+      worker_store = Kward::Workers::Store.new(path: File.join(config_dir, "workers.json"))
       worker_session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
       worker_conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
       worker_session.attach(worker_conversation)
       worker_conversation.append_user("worker task")
       worker_conversation.append_assistant("worker transcript")
-      job = scout_store.create(prompt: "worker task", workspace_root: workspace)
-      scout_store.update(job.fetch("id"), "status" => "running", "session_path" => worker_session.path)
-      worker = Kward::Workers::Worker.new(id: job.fetch("id"), title: "worker task", role: "scout", workspace_root: workspace, status: "running", prompt: "worker task", conversation: worker_conversation, session: worker_session)
-      runner = Object.new
-      runner.define_singleton_method(:worker) { |id| id == worker.id ? worker : nil }
-      prompt = BusyPollingSelectPrompt.new(["/workers"], selections: ["List workers", "#{job.fetch('id')} [scout/running] worker task", "Show"])
+      worker = Kward::Workers::Worker.new(id: "abc123", title: "worker task", role: "request", workspace_root: workspace, status: "running", prompt: "worker task", conversation: worker_conversation, session: worker_session)
+      manager = Object.new
+      manager.define_singleton_method(:list) { [worker] }
+      manager.define_singleton_method(:find) { |id| id == worker.id ? worker : nil }
+      prompt = BusyPollingSelectPrompt.new(["/workers"], selections: ["List workers", "abc123 [request/running] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
-      cli.instance_variable_set(:@scout_store, scout_store)
-      cli.instance_variable_set(:@scout_runner, runner)
+      cli.instance_variable_set(:@worker_store, worker_store)
+      cli.instance_variable_set(:@worker_manager, manager)
       implementation_conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
       agent = DelayedEventAgent.new(
         implementation_conversation,
@@ -3157,17 +3155,17 @@ edit this prompt"
       workspace = File.join(dir, "workspace")
       FileUtils.mkdir_p(workspace)
       session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
-      scout_store = Kward::Scouts::Store.new(path: File.join(config_dir, "scouts.json"))
+      worker_store = Kward::Workers::Store.new(path: File.join(config_dir, "workers.json"))
       session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
       conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
       session.attach(conversation)
       conversation.append_user("worker task")
       conversation.append_assistant("worker answer")
-      job = scout_store.create(prompt: "worker task", workspace_root: workspace)
-      scout_store.update(job.fetch("id"), "status" => "ready", "session_path" => session.path)
-      prompt = BusySelectPrompt.new([], selections: ["List workers", "#{job.fetch('id')} [scout/ready] worker task", "Show"])
+      worker = Kward::Workers::Worker.new(id: "abc123", title: "worker task", role: "request", workspace_root: workspace, status: "ready", prompt: "worker task", conversation: conversation, session: session)
+      worker_store.upsert(worker)
+      prompt = BusySelectPrompt.new([], selections: ["List workers", "abc123 [request/ready] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
-      cli.instance_variable_set(:@scout_store, scout_store)
+      cli.instance_variable_set(:@worker_store, worker_store)
       agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
 
       handled, replacement = cli.send(:handle_local_slash_command, "/workers", agent, session_store)
@@ -3176,7 +3174,7 @@ edit this prompt"
       assert replacement
       assert_equal "worker answer", Kward::MessageAccess.content(replacement.conversation.messages.last)
       refute_includes replacement.tool_registry.schemas.map { |schema| schema.dig(:function, :name) || schema.dig("function", "name") }, "write_file"
-      refute_includes prompt.output.join, "Scout #{job.fetch('id')} [ready]"
+      refute_includes prompt.output.join, "Worker abc123 [ready]"
     end
   end
 
@@ -3586,7 +3584,7 @@ edit this prompt"
 
   def test_composer_status_shows_spinner_for_running_visible_worker
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
-    worker = Kward::Workers::Worker.new(id: "def456", title: "Worker", role: "scout", status: "running")
+    worker = Kward::Workers::Worker.new(id: "def456", title: "Worker", role: "request", status: "running")
     cli.instance_variable_set(:@visible_worker_id, worker.id)
     cli.instance_variable_set(:@visible_worker, worker)
 

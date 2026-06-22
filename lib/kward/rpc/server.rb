@@ -4,8 +4,8 @@ require_relative "../config_files"
 require_relative "../memory/manager"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
-require_relative "../scouts"
 require_relative "../tools/registry"
+require_relative "../workers"
 require_relative "../workspace"
 require_relative "../telemetry/logger"
 require_relative "../telemetry/stats"
@@ -61,7 +61,6 @@ module Kward
         "memory/forget", "memory/promote", "memory/relax", "memory/inspect",
         "memory/why", "memory/summarize"
       ].freeze
-      SCOUT_METHODS = ["scouts/start", "scouts/list", "scouts/show", "scouts/cancel", "scouts/dismiss", "scouts/startTask"].freeze
       WORKER_METHODS = ["workers/list", "workers/show"].freeze
 
       # Creates the RPC server and its stateful managers.
@@ -72,9 +71,7 @@ module Kward
         @config_manager = ConfigManager.new
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
-        @scout_store = Scouts::Store.new
         @worker_store = Workers::Store.new
-        @scout_runners = {}
         @shutdown = false
       end
 
@@ -229,18 +226,6 @@ module Kward
           @session_manager.memory_why(session_id: params["sessionId"])
         when "memory/summarize"
           @session_manager.memory_summarize(session_id: params.fetch("sessionId"))
-        when "scouts/start"
-          scout_start(params)
-        when "scouts/list"
-          { scouts: @scout_store.list(include_dismissed: params["includeDismissed"] == true) }
-        when "scouts/show"
-          { scout: require_scout(params.fetch("id")) }
-        when "scouts/cancel"
-          scout_cancel(params.fetch("id"))
-        when "scouts/dismiss"
-          { scout: @scout_store.dismiss(params.fetch("id")) }
-        when "scouts/startTask"
-          scout_start_task(params)
         when "workers/list"
           workers_list(params)
         when "workers/show"
@@ -407,8 +392,7 @@ module Kward
             logout: true
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
-          scouts: { supported: true, readOnly: true, methods: SCOUT_METHODS, statuses: Scouts::STATUSES, storage: "json", notification: "scout/event" },
-          workers: { supported: true, methods: WORKER_METHODS, roles: ["implementation", "scout"], statuses: (Workers::Worker::STATUSES + Scouts::STATUSES).uniq, transcriptStorage: "sessions", metadataStorage: "json" },
+          workers: { supported: true, methods: WORKER_METHODS, roles: ["implementation", "request"], statuses: Workers::Worker::STATUSES, transcriptStorage: "sessions", metadataStorage: "json" },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
@@ -599,8 +583,7 @@ module Kward
       def workers_list(params)
         include_archived = params["includeArchived"] == true
         workers = @worker_store.list(include_archived: include_archived)
-        scouts = @scout_store.list(include_dismissed: include_archived).map { |scout| scout.merge("role" => "scout") }
-        { workers: workers + scouts }
+        { workers: workers }
       end
 
       def workers_show(params)
@@ -608,55 +591,7 @@ module Kward
         worker = @worker_store.find(id)
         return { worker: worker } if worker
 
-        scout = @scout_store.find(id)
-        return { worker: scout.merge("role" => "scout") } if scout
-
         raise ArgumentError, "Unknown worker: #{id}"
-      end
-
-      def scout_start(params)
-        runner = scout_runner(params["workspaceRoot"] || Dir.pwd)
-        scout = runner.start(params.fetch("prompt"))
-        notify("scout/event", { type: "created", scout: scout })
-        { scout: scout }
-      end
-
-      def scout_cancel(id)
-        scout = scout_runner_for_scout(id).cancel(id)
-        notify("scout/event", { type: "cancelled", scout: scout })
-        { scout: scout }
-      end
-
-      def scout_start_task(params)
-        scout = require_scout(params.fetch("id"))
-        raise ArgumentError, "Scout #{scout.fetch('id')} is #{scout['status']}; only ready scouts can be used." unless scout["status"] == "ready"
-
-        @scout_store.mark_started(scout.fetch("id"))
-        input = <<~PROMPT
-          Use this scout report as preparation and implement the requested task.
-
-          Original request:
-          #{scout["prompt"]}
-
-          Scout report:
-          #{scout["report"]}
-        PROMPT
-        @session_manager.start_turn(session_id: params.fetch("sessionId"), input: input)
-      end
-
-      def require_scout(id)
-        value = id.to_s.strip.delete_prefix("#")
-        @scout_store.find(value) || raise(ArgumentError, "Unknown scout: #{value}")
-      end
-
-      def scout_runner_for_scout(id)
-        scout = require_scout(id)
-        scout_runner(scout["workspace_root"] || Dir.pwd)
-      end
-
-      def scout_runner(workspace_root)
-        root = @session_manager.validate_workspace_root(workspace_root)
-        @scout_runners[root] ||= Scouts::Runner.new(store: @scout_store, client: Client.new, workspace_root: root)
       end
 
       def auth_login_with_api_key(params)
