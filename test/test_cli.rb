@@ -509,6 +509,32 @@ class TestCLI < KwardTestCase
     assert_includes prompt.events, [:finish_busy_input]
   end
 
+  def test_prompt_interface_interactive_turn_returns_after_question_answer_without_extra_input
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    client = FakeClient.new([
+      assistant_tool_call("ask_user_question", { questions: [question_args("Proceed?")] }),
+      { "role" => "assistant", "content" => "done" }
+    ])
+    registry = Kward::ToolRegistry.new(prompt: prompt, skills: [])
+    agent = Kward::Agent.new(client: client, tool_registry: registry, conversation: Kward::Conversation.new)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    queued_inputs = nil
+
+    thread = Thread.new { queued_inputs = cli.send(:run_interactive_turn, agent, "/plan fix", display_input: "/plan fix") }
+    wait_until { prompt.instance_variable_get(:@question_state) }
+    writer.write("\r")
+    thread.join(1)
+
+    refute thread.alive?, "turn should finish after the question answer without requiring another keypress"
+    assert_equal [], queued_inputs
+  ensure
+    thread&.kill if thread&.alive?
+    writer&.close unless writer&.closed?
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_interactive_turn_batches_streamed_deltas
     prompt = BusyPrompt.new([])
     events = 10.times.map { |index| Kward::Events::AssistantDelta.new(delta: index.to_s) }

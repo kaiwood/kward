@@ -10,6 +10,8 @@ module Kward
         pending = @pending_keys.shift unless @pending_keys.empty?
         return pending if pending
 
+        return nil if nonblock && @input_io.respond_to?(:wait_readable) && !@input_io.wait_readable(0)
+
         @reader.read_keypress(echo: false, raw: true, nonblock: nonblock)
       rescue TTY::Reader::InputInterrupt
         "\x03"

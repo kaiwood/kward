@@ -29,6 +29,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed worker dismissal so runtime workers are archived in memory as well as in the persisted worker store.
 - Fixed approved request workers so they transition into implementation workers instead of creating a duplicate worker list entry.
 - Fixed `ask_user_question` in the TUI so quick answers are not consumed by the busy composer before the question overlay is ready.
+- Fixed TUI nonblocking input polling so the busy composer does not freeze after answering `ask_user_question`.
 
 ## [0.71.0] - 2026-06-21
 
