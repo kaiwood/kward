@@ -3149,6 +3149,114 @@ edit this prompt"
     end
   end
 
+  def test_workers_dismiss_archives_runtime_worker
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      worker_store = Kward::Workers::Store.new(path: File.join(config_dir, "workers.json"))
+      worker = Kward::Workers::Worker.new(id: "abc123", title: "worker task", role: "request", workspace_root: workspace, status: "ready", prompt: "worker task")
+      worker_store.upsert(worker)
+      manager = Object.new
+      archived = []
+      manager.define_singleton_method(:list) { [worker].reject { |item| item.status == "archived" } }
+      manager.define_singleton_method(:find) { |id| id == worker.id ? worker : nil }
+      manager.define_singleton_method(:archive) { |id| archived << id; worker.update_status("archived") }
+      prompt = BusySelectPrompt.new([], selections: ["List workers", "abc123 [request/ready] worker task", "Dismiss"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@worker_store, worker_store)
+      cli.instance_variable_set(:@worker_manager, manager)
+      agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
+
+      handled, replacement = cli.send(:handle_local_slash_command, "/workers", agent, session_store)
+
+      assert handled
+      assert_nil replacement
+      assert_equal ["abc123"], archived
+      assert_equal "archived", worker.status
+      assert_equal "archived", worker_store.find("abc123").fetch("status")
+      refute_includes cli.send(:worker_jobs, agent).map { |job| job.fetch("id") }, "abc123"
+    end
+  end
+
+  def test_request_worker_yes_queues_implementation_worker
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      request_session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
+      request_conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
+      request_session.attach(request_conversation)
+      request_conversation.append_user("append baz")
+      request_conversation.append_assistant("Should we proceed?")
+      request_worker = Kward::Workers::Worker.new(id: "abc123", title: "append baz", role: "request", workspace_root: workspace, status: "ready", prompt: "append baz", conversation: request_conversation, session: request_session)
+      request_worker.update_status("ready", report: "# Request Review\nAppend baz.\n\nShould we proceed?")
+      client = RecordingClient.new(["implementation done"])
+      prompt = BusyPrompt.new(["yes", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: session_store)
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        prompt: prompt,
+        workspace_root: workspace,
+        session_store: session_store,
+        provider: "openai",
+        model: "gpt-test",
+        write_lock: Kward::Workers::WriteLock.new
+      )
+      cli.instance_variable_set(:@worker_manager, manager)
+      cli.instance_variable_set(:@worker_manager_workspace_root, Kward::ConfigFiles.canonical_workspace_root(workspace))
+      cli.instance_variable_set(:@visible_worker, request_worker)
+      cli.instance_variable_set(:@visible_worker_id, request_worker.id)
+      cli.instance_variable_set(:@active_worker_role, "request")
+      cli.instance_variable_set(:@active_session, request_session)
+      agent = cli.send(:build_worker_agent, request_conversation, role: "request")
+      cli.instance_variable_set(:@active_worker_role, "request")
+      cli.instance_variable_set(:@session_store, session_store)
+
+      cli.interactive_loop(agent: agent)
+
+      output = prompt.output.join
+      assert_includes output, "queued from request abc123"
+      wait_until(timeout: 1) { client.seen_messages.any? }
+      implementation_prompt = client.seen_messages.last.find { |message| message[:role] == "user" || message["role"] == "user" }
+      implementation_text = Kward::MessageAccess.content(implementation_prompt)
+      assert_includes implementation_text, "Original request:"
+      assert_includes implementation_text, "append baz"
+      assert_includes implementation_text, "Request review:"
+      assert_includes implementation_text, "Append baz."
+    end
+  end
+
+  def test_request_worker_non_approval_input_is_blocked
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
+      conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
+      session.attach(conversation)
+      worker = Kward::Workers::Worker.new(id: "abc123", title: "append baz", role: "request", workspace_root: workspace, status: "ready", prompt: "append baz", conversation: conversation, session: session)
+      client = RecordingClient.new([])
+      prompt = BusyPrompt.new(["what about tests?", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: session_store)
+      cli.instance_variable_set(:@visible_worker, worker)
+      cli.instance_variable_set(:@visible_worker_id, worker.id)
+      cli.instance_variable_set(:@active_worker_role, "request")
+      cli.instance_variable_set(:@active_session, session)
+      agent = cli.send(:build_worker_agent, conversation, role: "request")
+      cli.instance_variable_set(:@active_worker_role, "request")
+      cli.instance_variable_set(:@session_store, session_store)
+
+      cli.interactive_loop(agent: agent)
+
+      assert_empty client.seen_messages
+      assert_includes prompt.output.join, "read-only request review"
+    end
+  end
+
   def test_workers_show_switches_to_worker_session
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

@@ -87,9 +87,13 @@ module Kward
       def refresh_implementation_writer(agent)
         return agent unless @active_worker_role == "implementation"
         return agent unless agent&.respond_to?(:tool_registry)
-        return agent if agent.tool_registry.writer_id
+        return agent if agent.tool_registry.writer_id && @worker_write_lock&.owned_by?(agent.tool_registry.writer_id)
 
         build_interactive_agent(agent.conversation)
+      end
+
+      def release_implementation_writer
+        @worker_write_lock&.release("implementation")
       end
 
       def handle_interactive_shell_command(input, agent)

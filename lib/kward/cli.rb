@@ -329,6 +329,11 @@ module Kward
           agent = replacement_agent if replacement_agent?(replacement_agent)
         end
         next if handled
+        request_handled, request_replacement = handle_request_worker_input(command_input, agent, session_store)
+        if request_handled
+          agent = request_replacement if replacement_agent?(request_replacement)
+          next
+        end
         next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
 
         expanded_input = expand_prompt_template(input)
@@ -345,6 +350,8 @@ module Kward
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e
           runtime_output("Error: #{e.message}")
+        ensure
+          release_implementation_writer if @active_worker_role == "implementation"
         end
       end
 

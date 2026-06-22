@@ -276,8 +276,106 @@ module Kward
         end
       end
 
+      def handle_request_worker_input(input, agent, session_store)
+        return [false, nil] unless @active_worker_role == "request"
+
+        worker = visible_request_worker(agent)
+        return [false, nil] unless worker
+
+        text = input.to_s.strip
+        return [true, nil] if text.empty?
+        return [true, proceed_request_worker(worker.to_h, agent, session_store)] if proceed_request_input?(text)
+
+        runtime_output("Worker #{worker.id} is a read-only request review. Reply yes/proceed to queue implementation, or use /workers to switch workers.")
+        [true, nil]
+      end
+
+      def visible_request_worker(agent)
+        worker = @visible_worker
+        return worker if worker&.role == "request" && worker.status == "ready"
+
+        id = @visible_worker_id.to_s
+        return nil if id.empty? || id == "implementation"
+
+        worker = @worker_manager&.find(id)
+        return worker if worker&.role == "request" && worker.status == "ready"
+
+        job = worker_store.find(id)
+        return nil unless job && job["role"] == "request" && job["status"] == "ready"
+        return nil if job["session_path"].to_s.empty? || !session_matches_agent?(job["session_path"], agent)
+
+        Workers::Worker.new(
+          id: job.fetch("id"),
+          title: job.fetch("title"),
+          role: job.fetch("role"),
+          workspace_root: job["workspace_root"] || current_workspace_root,
+          status: job.fetch("status"),
+          prompt: job["prompt"]
+        ).tap { |restored| restored.update_status("ready", report: job["report"], error: job["error"]) }
+      end
+
+      def session_matches_agent?(path, agent)
+        return true unless agent.respond_to?(:conversation)
+        return false unless @active_session&.path
+
+        File.expand_path(path) == File.expand_path(@active_session.path)
+      end
+
+      def proceed_request_input?(input)
+        input.downcase.strip.match?(/\A(?:y|yes|yeah|yep|sure|ok|okay|go ahead|proceed|continue|implement|do it|please do|make it so)\b/)
+      end
+
+      def proceed_request_worker(job, agent, session_store)
+        return runtime_output("Worker #{job.fetch('id')} is not ready to proceed.") unless request_ready?(job)
+
+        release_implementation_writer
+        worker = worker_manager(agent || build_session_agent_for_worker(job, session_store)).start(
+          role: "implementation",
+          prompt: implementation_prompt_for_request(job),
+          title: "Implement #{job.fetch('title')}"
+        )
+        runtime_output("Worker #{worker.id} queued from request #{job.fetch('id')}: #{worker.title}")
+        wait_for_worker_session(worker)
+        load_worker_session(session_store, worker.session.path, worker.to_h, worker: worker) if worker.session&.path
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        nil
+      end
+
+      def wait_for_worker_session(worker, timeout: 1.0)
+        deadline = Time.now + timeout
+        until worker.session&.path || Time.now >= deadline
+          sleep 0.02
+        end
+      end
+
+      def build_session_agent_for_worker(job, session_store)
+        conversation = Conversation.new(workspace_root: job["workspace_root"] || session_store&.cwd || current_workspace_root)
+        build_worker_agent(conversation, role: "request")
+      end
+
+      def request_ready?(job)
+        job["role"] == "request" && job["status"] == "ready"
+      end
+
+      def implementation_prompt_for_request(job)
+        <<~PROMPT
+          The user reviewed and approved this Kward request. Continue in the write-capable implementation lane.
+
+          Original request:
+          #{job["prompt"]}
+
+          Request review:
+          #{job["report"].to_s.empty? ? "No saved review text is available. Use the request session transcript for context if needed." : job["report"]}
+
+          Implement the approved next step. Make the smallest correct change, preserve existing style, and run focused verification when practical.
+          If you change files, commit the changes and report the commit hash. If no file changes are needed, explain why.
+        PROMPT
+      end
+
       def open_background_worker_actions(job, session_store)
         actions = ["Show"]
+        actions << "Proceed" if request_ready?(job)
         actions << "Cancel" if %w[queued running].include?(job["status"])
         actions << "Dismiss"
         actions << "Back to list"
@@ -289,15 +387,25 @@ module Kward
           return runtime_output("Worker #{job.fetch('id')} session is not ready yet.") unless path
 
           load_worker_session(session_store, path, job, worker: worker)
+        when "Proceed"
+          proceed_request_worker(job, nil, session_store)
         when "Cancel"
           @worker_manager&.cancel(job.fetch("id"))
           runtime_output("Worker #{job.fetch('id')} cancelled.")
         when "Dismiss"
-          worker_store.archive(job.fetch("id"))
+          dismiss_worker(job.fetch("id"))
           runtime_output("Worker #{job.fetch('id')} dismissed.")
         when "Back to list"
           open_worker_list(nil, session_store)
         end
+      end
+
+      def dismiss_worker(id)
+        @worker_manager&.archive(id)
+      rescue ArgumentError
+        nil
+      ensure
+        worker_store.archive(id)
       end
 
       def load_implementation_session(session_store, job)
@@ -323,9 +431,12 @@ module Kward
           return nil
         end
 
+        release_implementation_writer
         agent = load_session(session_store, path, message: "Showing worker #{job.fetch('id')}")
-        agent = build_worker_agent(agent.conversation, role: job["role"] || "request")
-        @active_worker_role = job["role"] || "request"
+        release_implementation_writer
+        role = visible_session_role(job)
+        agent = build_worker_agent(agent.conversation, role: role)
+        @active_worker_role = role
         set_visible_worker(job.fetch("id"), status: job["status"], worker: worker)
         @prompt.redraw if @prompt.respond_to?(:redraw)
         start_live_worker_view(worker, agent) if live_worker?(worker)
@@ -333,6 +444,12 @@ module Kward
       rescue StandardError => e
         runtime_output("Error: #{e.message}")
         nil
+      end
+
+      def visible_session_role(job)
+        return "request" if job["id"] != "implementation" && job["role"] == "implementation"
+
+        job["role"] || "request"
       end
 
       def live_worker?(worker)

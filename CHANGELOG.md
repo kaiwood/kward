@@ -7,10 +7,12 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added structured request workers with `/workers`, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, persisted worker metadata, RPC worker list/show capabilities, and a reusable live worker event view.
+- Added request approval handling so replying `yes`, `proceed`, or similar from a ready request worker queues a write-capable implementation worker.
 
 ### Changed
 
 - Changed the composer status line to show the visible worker id before diff/context/model details, including a spinner for running or queued workers.
+- Changed write-capable background workers to wait in the queue for the write lock instead of failing immediately when another writer is active.
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
 
 ### Fixed
@@ -18,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn, without replacing the active agent with prompt output.
 - Fixed fresh interactive sessions so background workers reuse the active session store and can attach worker sessions.
 - Fixed busy worker session switching so the previous active turn no longer renders over the selected worker transcript after `Worker -> Show`.
+- Fixed worker dismissal so runtime workers are archived in memory as well as in the persisted worker store.
 
 ## [0.71.0] - 2026-06-21
 

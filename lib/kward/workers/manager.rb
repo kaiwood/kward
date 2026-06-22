@@ -48,7 +48,7 @@ module Kward
       end
 
       def list
-        @mutex.synchronize { @workers.values.sort_by(&:created_at) }
+        @mutex.synchronize { @workers.values.reject { |worker| worker.status == "archived" }.sort_by(&:created_at) }
       end
 
       def find(id)
@@ -62,10 +62,16 @@ module Kward
         update_status(worker, "cancelled")
       end
 
+      def archive(id)
+        worker = find(id) || raise(ArgumentError, "Unknown worker: #{id}")
+        worker.cancellation.cancel! if %w[queued running].include?(worker.status)
+        worker.thread.raise(Cancellation::CancelledError, "cancelled") if worker.thread&.alive?
+        update_status(worker, "archived")
+      end
+
       private
 
       def run_worker(worker)
-        update_status(worker, "running")
         conversation = Conversation.new(
           system_message: { role: "system", content: system_message(worker) },
           workspace_root: worker.workspace_root,
@@ -75,11 +81,8 @@ module Kward
         )
         worker.conversation = conversation
         attach_session(worker, conversation)
-        writer_id = worker_writer_id(worker)
-        if ToolPolicy.write_capable?(worker.role) && writer_id.nil?
-          update_status(worker, "failed", error: "Another worker owns the workspace write lock")
-          return
-        end
+        writer_id = wait_for_worker_writer(worker)
+        update_status(worker, "running")
         registry = ToolRegistry.new(
           workspace: Workspace.new(root: worker.workspace_root),
           prompt: @prompt,
@@ -105,18 +108,24 @@ module Kward
       end
 
       def update_status(worker, status, **values)
+        return worker if worker.status == "archived" && status.to_s != "archived"
+
         worker.update_status(status, **values)
         @worker_store&.upsert(worker)
         @on_status_change&.call(worker)
         worker
       end
 
-      def worker_writer_id(worker)
+      def wait_for_worker_writer(worker)
         return nil unless ToolPolicy.write_capable?(worker.role)
         return worker.id unless @write_lock
-        return nil unless @write_lock.acquire(worker.id)
 
-        worker.id
+        loop do
+          worker.cancellation.raise_if_cancelled!
+          return worker.id if @write_lock.acquire(worker.id)
+
+          sleep 0.1
+        end
       end
 
       def release_worker_writer(worker)
@@ -132,6 +141,7 @@ module Kward
         session.rename("#{worker.role}: #{worker.title}")
         session.attach(conversation)
         worker.session = session
+        @worker_store&.upsert(worker)
         @on_status_change&.call(worker)
       rescue StandardError
         nil

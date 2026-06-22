@@ -251,12 +251,38 @@ class KwardTestCase < Minitest::Test
     def initialize(responses)
       @responses = responses
       @seen_messages = []
+      @provider = "Codex"
+      @model = "fake-model"
+      @reasoning_effort = "medium"
+      @context_window = 200_000
     end
+
+    attr_accessor :provider, :model, :reasoning_effort, :context_window
 
     def chat(messages, tools: [], **_opts)
       @seen_messages << messages.map(&:dup)
       response = @responses.shift
       response.is_a?(Hash) ? response : { "role" => "assistant", "content" => response }
+    end
+
+    def current_provider
+      @provider
+    end
+
+    def current_model
+      @model
+    end
+
+    def current_reasoning_effort
+      @reasoning_effort
+    end
+
+    def current_context_window
+      @context_window
+    end
+
+    def context_window(_provider, _model)
+      @context_window
     end
   end
 

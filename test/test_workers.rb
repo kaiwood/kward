@@ -59,6 +59,23 @@ class TestWorkers < KwardTestCase
     view.stop
   end
 
+  def test_worker_manager_archives_runtime_worker
+    Dir.mktmpdir do |dir|
+      client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        workspace_root: dir
+      )
+
+      worker = manager.start(role: "request", prompt: "Explore tests")
+      wait_until(timeout: 1) { worker.status == "ready" }
+      manager.archive(worker.id)
+
+      assert_equal "archived", worker.status
+      assert_empty manager.list
+    end
+  end
+
   def test_worker_store_persists_worker_metadata
     Dir.mktmpdir do |dir|
       store = Kward::Workers::Store.new(path: File.join(dir, "workers.json"))
@@ -72,11 +89,11 @@ class TestWorkers < KwardTestCase
     end
   end
 
-  def test_write_capable_worker_fails_when_write_lock_is_owned
+  def test_write_capable_worker_waits_for_write_lock
     Dir.mktmpdir do |dir|
       write_lock = Kward::Workers::WriteLock.new
       assert write_lock.acquire("implementation")
-      client = FakeClient.new([{ "role" => "assistant", "content" => "should not run" }])
+      client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
       manager = Kward::Workers::Manager.new(
         client_factory: -> { client },
         workspace_root: dir,
@@ -84,9 +101,13 @@ class TestWorkers < KwardTestCase
       )
 
       worker = manager.start(role: "implementation", prompt: "Change files")
-      wait_until(timeout: 1) { worker.status == "failed" }
+      sleep 0.05
+      assert_equal "queued", worker.status
 
-      assert_equal "Another worker owns the workspace write lock", worker.error
+      write_lock.release("implementation")
+      wait_until(timeout: 1) { worker.status == "ready" }
+
+      assert_equal "done", worker.report
     end
   end
 
