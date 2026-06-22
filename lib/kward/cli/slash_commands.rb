@@ -153,6 +153,9 @@ module Kward
         when "new", "scout"
           prompt_for_scout(agent)
           nil
+        when "implement", "implementation"
+          send_implementation_worker(value, agent)
+          nil
         when "do"
           send_scout(value, agent)
           nil
@@ -211,6 +214,23 @@ module Kward
         )
       end
 
+      def worker_manager(agent)
+        workspace_root = interactive_workspace_root(agent)
+        return @worker_manager if @worker_manager && @worker_manager_workspace_root == workspace_root
+
+        @worker_manager_workspace_root = workspace_root
+        @worker_manager = Workers::Manager.new(
+          client_factory: -> { Client.new },
+          prompt: @prompt,
+          workspace_root: workspace_root,
+          session_store: interactive_session_store(agent),
+          provider: current_model_provider,
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort,
+          write_lock: (@worker_write_lock ||= Workers::WriteLock.new)
+        )
+      end
+
       def send_scout(topic, agent)
         if topic.to_s.strip.empty?
           runtime_output("Usage: /scout do <task>")
@@ -219,6 +239,18 @@ module Kward
 
         job = scout_runner(agent).start(topic)
         runtime_output("Scout #{job.fetch('id')} sent: #{job.fetch('title')}")
+      end
+
+      def send_implementation_worker(topic, agent)
+        if topic.to_s.strip.empty?
+          runtime_output("Usage: /workers implement <task>")
+          return
+        end
+
+        remember_implementation_worker(agent)
+        @worker_write_lock&.release("implementation")
+        worker = worker_manager(agent).start(role: "implementation", prompt: topic)
+        runtime_output("Implementation worker #{worker.id} started: #{worker.title}")
       end
 
       def print_scouts
@@ -255,13 +287,15 @@ module Kward
 
         choice = @prompt.select(
           "Workers",
-          ["New read-only worker", "List workers"],
+          ["New read-only worker", "New implementation worker", "List workers"],
           title: "Workers",
           custom: false
         )
         case choice
         when "New read-only worker"
           prompt_for_scout(agent)
+        when "New implementation worker"
+          prompt_for_implementation_worker(agent)
         when "List workers"
           open_worker_list(agent, session_store)
         end
@@ -270,6 +304,11 @@ module Kward
       def prompt_for_scout(agent)
         topic = @prompt.ask("Scout task>") if @prompt.respond_to?(:ask)
         send_scout(topic, agent) unless topic.to_s.strip.empty?
+      end
+
+      def prompt_for_implementation_worker(agent)
+        topic = @prompt.ask("Implementation task>") if @prompt.respond_to?(:ask)
+        send_implementation_worker(topic, agent) unless topic.to_s.strip.empty?
       end
 
       def open_scout_list(agent, session_store)
@@ -294,7 +333,8 @@ module Kward
       end
 
       def worker_jobs(agent)
-        [implementation_worker_job(agent)].compact + scout_store.list
+        background_workers = @worker_manager ? @worker_manager.list.map(&:to_h) : []
+        [implementation_worker_job(agent)].compact + background_workers + scout_store.list
       end
 
       def implementation_worker_job(agent)
@@ -324,7 +364,8 @@ module Kward
       end
 
       def open_worker_actions(job, agent, session_store)
-        return open_implementation_actions(job, session_store) if job["role"] == "implementation"
+        return open_implementation_actions(job, session_store) if job["id"] == "implementation"
+        return open_background_worker_actions(job, session_store) if job["role"] == "implementation"
 
         open_scout_actions(job.fetch("id"), agent, session_store)
       end
@@ -335,6 +376,26 @@ module Kward
         case choice
         when "Show"
           load_implementation_session(session_store, job)
+        when "Back to list"
+          open_worker_list(nil, session_store)
+        end
+      end
+
+      def open_background_worker_actions(job, session_store)
+        actions = ["Show"]
+        actions << "Cancel" if %w[queued running].include?(job["status"])
+        actions << "Back to list"
+        choice = @prompt.select("#{job.fetch('id')} — #{job.fetch('title')}", actions, title: "Worker", custom: false)
+        case choice
+        when "Show"
+          worker = @worker_manager&.find(job.fetch("id"))
+          path = job["session_path"] || worker&.session&.path
+          return runtime_output("Worker #{job.fetch('id')} session is not ready yet.") unless path
+
+          load_worker_session(session_store, path, job, worker: worker)
+        when "Cancel"
+          @worker_manager&.cancel(job.fetch("id"))
+          runtime_output("Worker #{job.fetch('id')} cancelled.")
         when "Back to list"
           open_worker_list(nil, session_store)
         end

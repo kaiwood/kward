@@ -47,6 +47,24 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_write_capable_worker_fails_when_write_lock_is_owned
+    Dir.mktmpdir do |dir|
+      write_lock = Kward::Workers::WriteLock.new
+      assert write_lock.acquire("implementation")
+      client = FakeClient.new([{ "role" => "assistant", "content" => "should not run" }])
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        workspace_root: dir,
+        write_lock: write_lock
+      )
+
+      worker = manager.start(role: "implementation", prompt: "Change files")
+      wait_until(timeout: 1) { worker.status == "failed" }
+
+      assert_equal "Another worker owns the workspace write lock", worker.error
+    end
+  end
+
   def test_tool_policy_limits_scout_tools
     names = Kward::Workers::ToolPolicy.allowed_tool_names("scout")
 

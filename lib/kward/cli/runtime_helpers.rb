@@ -72,8 +72,9 @@ module Kward
 
         @worker_write_lock ||= Workers::WriteLock.new
         owner_id = role.to_s.empty? ? "implementation" : role.to_s
-        @worker_write_lock.acquire(owner_id)
-        owner_id
+        return owner_id if @worker_write_lock.acquire(owner_id)
+
+        nil
       end
 
       def handle_interactive_shell_command(input, agent)

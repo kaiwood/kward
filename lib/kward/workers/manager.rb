@@ -73,12 +73,17 @@ module Kward
         )
         worker.conversation = conversation
         attach_session(worker, conversation)
+        writer_id = worker_writer_id(worker)
+        if ToolPolicy.write_capable?(worker.role) && writer_id.nil?
+          update_status(worker, "failed", error: "Another worker owns the workspace write lock")
+          return
+        end
         registry = ToolRegistry.new(
           workspace: Workspace.new(root: worker.workspace_root),
           prompt: @prompt,
           allowed_tool_names: ToolPolicy.allowed_tool_names(worker.role),
           write_lock: @write_lock,
-          writer_id: worker_writer_id(worker)
+          writer_id: writer_id
         )
         agent = Agent.new(client: @client_factory.call, tool_registry: registry, conversation: conversation)
         report = Timeout.timeout(@timeout_seconds, WorkerTimeoutError) do
@@ -93,6 +98,8 @@ module Kward
         update_status(worker, "cancelled")
       rescue StandardError => e
         update_status(worker, "failed", error: e.message)
+      ensure
+        release_worker_writer(worker)
       end
 
       def update_status(worker, status, **values)
@@ -103,9 +110,16 @@ module Kward
 
       def worker_writer_id(worker)
         return nil unless ToolPolicy.write_capable?(worker.role)
-        return nil unless @write_lock&.acquire(worker.id)
+        return worker.id unless @write_lock
+        return nil unless @write_lock.acquire(worker.id)
 
         worker.id
+      end
+
+      def release_worker_writer(worker)
+        return unless ToolPolicy.write_capable?(worker.role)
+
+        @write_lock&.release(worker.id)
       end
 
       def attach_session(worker, conversation)
