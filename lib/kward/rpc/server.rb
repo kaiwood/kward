@@ -62,6 +62,7 @@ module Kward
         "memory/why", "memory/summarize"
       ].freeze
       SCOUT_METHODS = ["scouts/start", "scouts/list", "scouts/show", "scouts/cancel", "scouts/dismiss", "scouts/startTask"].freeze
+      WORKER_METHODS = ["workers/list", "workers/show"].freeze
 
       # Creates the RPC server and its stateful managers.
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new)
@@ -72,6 +73,7 @@ module Kward
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @scout_store = Scouts::Store.new
+        @worker_store = Workers::Store.new
         @scout_runners = {}
         @shutdown = false
       end
@@ -239,6 +241,10 @@ module Kward
           { scout: @scout_store.dismiss(params.fetch("id")) }
         when "scouts/startTask"
           scout_start_task(params)
+        when "workers/list"
+          workers_list(params)
+        when "workers/show"
+          workers_show(params)
         when "auth/status"
           @auth_manager.status
         when "auth/providers"
@@ -402,6 +408,7 @@ module Kward
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           scouts: { supported: true, readOnly: true, methods: SCOUT_METHODS, statuses: Scouts::STATUSES, storage: "json", notification: "scout/event" },
+          workers: { supported: true, methods: WORKER_METHODS, roles: ["implementation", "scout"], statuses: (Workers::Worker::STATUSES + Scouts::STATUSES).uniq, transcriptStorage: "sessions", metadataStorage: "json" },
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
@@ -587,6 +594,24 @@ module Kward
         sections << { name: "Prompts", items: prompts } unless prompts.empty?
         sections << { name: "Plugins", items: plugins } unless plugins.empty?
         { sections: sections }
+      end
+
+      def workers_list(params)
+        include_archived = params["includeArchived"] == true
+        workers = @worker_store.list(include_archived: include_archived)
+        scouts = @scout_store.list(include_dismissed: include_archived).map { |scout| scout.merge("role" => "scout") }
+        { workers: workers + scouts }
+      end
+
+      def workers_show(params)
+        id = params.fetch("id").to_s.delete_prefix("#")
+        worker = @worker_store.find(id)
+        return { worker: worker } if worker
+
+        scout = @scout_store.find(id)
+        return { worker: scout.merge("role" => "scout") } if scout
+
+        raise ArgumentError, "Unknown worker: #{id}"
       end
 
       def scout_start(params)

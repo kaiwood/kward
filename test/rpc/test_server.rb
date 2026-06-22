@@ -16,6 +16,24 @@ class TestRPCServer < KwardTestCase
     assert_equal "native", capabilities["events"]["steering"]["mode"]
   end
 
+  def test_workers_list_returns_persisted_worker_metadata
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      File.write(File.join(config_dir, "workers.json"), JSON.pretty_generate([
+        { "id" => "worker1", "role" => "implementation", "status" => "ready", "title" => "Implement", "created_at" => "2026-01-01T00:00:00.000Z" }
+      ]))
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "workers/list" },
+        { jsonrpc: "2.0", id: 2, method: "workers/show", params: { id: "worker1" } },
+        { jsonrpc: "2.0", id: 3, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "worker1", messages[0]["result"]["workers"].first["id"]
+      assert_equal "implementation", messages[1]["result"]["worker"]["role"]
+    end
+  end
+
   def test_initialize_reports_auto_resume_enabled_config
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
@@ -56,7 +74,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi composer security export logging]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi composer security export logging workers]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -129,6 +147,11 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["memory"]["methods"], "memory/autoSummary/enable"
     assert_includes capabilities["memory"]["methods"], "memory/autoSummary/disable"
     assert_includes capabilities["memory"]["methods"], "memory/relax"
+    assert_equal true, capabilities["workers"]["supported"]
+    assert_equal ["workers/list", "workers/show"], capabilities["workers"]["methods"]
+    assert_includes capabilities["workers"]["roles"], "implementation"
+    assert_includes capabilities["workers"]["roles"], "scout"
+    assert_equal "sessions", capabilities["workers"]["transcriptStorage"]
     assert_equal true, capabilities["commands"]["supported"]
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]

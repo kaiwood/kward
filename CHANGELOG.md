@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added read-only background workers with `/workers` and `/scout`, persisted scout reports, RPC scout methods, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, write-capable background implementation workers, and persisted worker metadata for non-scout workers.
+- Added read-only background workers with `/workers` and `/scout`, persisted scout reports, RPC scout methods, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, write-capable background implementation workers, persisted worker metadata for non-scout workers, and RPC worker list/show capabilities.
 
 ### Changed
 
