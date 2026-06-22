@@ -194,6 +194,34 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class BusyPollingSelectPrompt < BusySelectPrompt
+    def initialize(inputs, selections: [])
+      super([], selections: selections)
+      @poll_inputs = inputs
+    end
+
+    def poll_input
+      @poll_inputs.shift
+    end
+  end
+
+  class DelayedEventAgent
+    attr_reader :conversation
+
+    def initialize(conversation, delay:, events:, answer: "")
+      @conversation = conversation
+      @delay = delay
+      @events = events
+      @answer = answer
+    end
+
+    def ask(_input, **_options)
+      sleep @delay
+      @events.each { |event| yield event }
+      @answer
+    end
+  end
+
   class SlowModelsClient < FakeClient
     def available_models
       sleep 0.05
@@ -3081,6 +3109,45 @@ edit this prompt"
       cli.send(:stop_live_worker_view)
       assert replacement
       assert_includes prompt.output.join, "live answer"
+    end
+  end
+
+  def test_busy_workers_show_suppresses_old_turn_rendering_after_switch
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      scout_store = Kward::Scouts::Store.new(path: File.join(config_dir, "scouts.json"))
+      worker_session = session_store.create(provider: "openai", model: "gpt-test", reasoning_effort: nil)
+      worker_conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
+      worker_session.attach(worker_conversation)
+      worker_conversation.append_user("worker task")
+      worker_conversation.append_assistant("worker transcript")
+      job = scout_store.create(prompt: "worker task", workspace_root: workspace)
+      scout_store.update(job.fetch("id"), "status" => "running", "session_path" => worker_session.path)
+      worker = Kward::Workers::Worker.new(id: job.fetch("id"), title: "worker task", role: "scout", workspace_root: workspace, status: "running", prompt: "worker task", conversation: worker_conversation, session: worker_session)
+      runner = Object.new
+      runner.define_singleton_method(:worker) { |id| id == worker.id ? worker : nil }
+      prompt = BusyPollingSelectPrompt.new(["/workers"], selections: ["List workers", "#{job.fetch('id')} [scout/running] worker task", "Show"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@scout_store, scout_store)
+      cli.instance_variable_set(:@scout_runner, runner)
+      implementation_conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
+      agent = DelayedEventAgent.new(
+        implementation_conversation,
+        delay: 0.05,
+        events: [Kward::Events::AssistantDelta.new(delta: "implementation overwrite")],
+        answer: "implementation final"
+      )
+
+      cli.send(:run_interactive_turn, agent, "implementation task")
+      cli.send(:stop_live_worker_view)
+
+      rendered = prompt.output.join
+      assert_includes rendered, "worker transcript"
+      refute_includes rendered, "implementation overwrite"
+      refute_includes rendered, "implementation final"
     end
   end
 

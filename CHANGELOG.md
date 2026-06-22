@@ -16,6 +16,7 @@ All notable changes to Kward will be documented in this file.
 
 - Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn, without replacing the active agent with prompt output.
 - Fixed fresh interactive sessions so background workers reuse the active session store and can attach worker sessions.
+- Fixed busy worker session switching so the previous active turn no longer renders over the selected worker transcript after `Worker -> Show`.
 
 ## [0.71.0] - 2026-06-21
 

@@ -53,7 +53,11 @@ module Kward
             cancellation.cancel!
             worker.raise(Cancellation::CancelledError, "cancelled") if worker.alive?
           end
-          drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
+          if busy_replacement_agent?
+            discard_interactive_events(event_queue, markdown_chunks, stream_state)
+          else
+            drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
+          end
         end
         begin
           worker.join
@@ -61,10 +65,14 @@ module Kward
           error ||= e
         end
         drain_busy_input(queued_inputs, nil) unless cancelled
-        drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
-        raise error if error && !error.is_a?(Cancellation::CancelledError)
+        if busy_replacement_agent?
+          discard_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
+        else
+          drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
+        end
+        raise error if error && !error.is_a?(Cancellation::CancelledError) && !busy_replacement_agent?
 
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless cancelled || stream_state[:streamed] || answer.to_s.empty?
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless cancelled || busy_replacement_agent? || stream_state[:streamed] || answer.to_s.empty?
         persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && queued_inputs.empty? && !cancelled
         queued_inputs
@@ -86,6 +94,21 @@ module Kward
         end
 
         flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: force)
+      end
+
+      def discard_interactive_events(event_queue, markdown_chunks, stream_state, force: false)
+        drained = 0
+        loop do
+          break if !force && drained >= INTERACTIVE_EVENT_DRAIN_LIMIT
+
+          event_queue.pop(true)
+          drained += 1
+        rescue ThreadError
+          break
+        end
+        markdown_chunks.clear
+        finish_stream_block if stream_state[:stream_block_open]
+        stream_state[:stream_block_open] = false
       end
 
       def handle_interactive_event(event, markdown_chunks, stream_state)
@@ -217,6 +240,10 @@ module Kward
 
       def replacement_agent?(object)
         object.respond_to?(:conversation) && object.respond_to?(:ask)
+      end
+
+      def busy_replacement_agent?
+        replacement_agent?(@busy_replacement_agent)
       end
 
       def restore_busy_input_prompt
