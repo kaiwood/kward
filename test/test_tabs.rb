@@ -115,6 +115,20 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_new_tabs_use_main_then_tab_default_labels
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.send(:setup_interactive_tabs, store, nil)
+      assert_equal ["Main"], prompt.tabs_updates.last[:labels]
+
+      cli.send(:handle_tab_command, "new", store)
+      assert_equal ["Main", "Tab"], prompt.tabs_updates.last[:labels]
+    end
+  end
+
   def test_idle_tab_switch_changes_active_tab
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
@@ -304,6 +318,7 @@ class TestTabs < KwardTestCase
       cli.send(:handle_tab_command, "name Ops", store)
 
       assert_equal ["Ops"], prompt.tabs_updates.last[:labels]
+      refute_includes prompt.tabs_updates.last[:labels].first, "1"
     end
   end
 

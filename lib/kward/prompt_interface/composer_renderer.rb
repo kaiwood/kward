@@ -197,7 +197,7 @@ module Kward
       end
 
       def tab_label(label, index)
-        "#{label.to_s.empty? ? index + 1 : label} Tab"
+        "#{index + 1} #{label.to_s.empty? ? "Tab" : label}"
       end
 
       def color_tab_border(row)

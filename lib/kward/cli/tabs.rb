@@ -52,7 +52,7 @@ module Kward
 
         if agent.nil? && (resumed_agent = resume_last_session(session_store))
           release_implementation_writer
-          @tabs << build_tab(@active_session, build_tab_agent(resumed_agent.conversation, @active_session))
+          @tabs << build_tab(@active_session, build_tab_agent(resumed_agent.conversation, @active_session), label: default_tab_label(0))
           return activate_tab(0, render: false)
         end
 
@@ -66,7 +66,7 @@ module Kward
           @active_session.attach(conversation)
           tab_agent = build_tab_agent(conversation, @active_session)
         end
-        @tabs << build_tab(@active_session, tab_agent)
+        @tabs << build_tab(@active_session, tab_agent, label: default_tab_label(0))
         activate_tab(0, render: false)
       end
 
@@ -78,8 +78,7 @@ module Kward
         paths.each_with_index do |path, index|
           session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
           track_session(session)
-          tab = build_tab(session, build_tab_agent(conversation, session))
-          tab.label = Array(data["labels"])[index].to_s
+          tab = build_tab(session, build_tab_agent(conversation, session), label: restored_tab_label(data, index))
           @tabs << tab
         rescue StandardError
           next
@@ -111,7 +110,7 @@ module Kward
         "tab:#{session&.id || object_id}"
       end
 
-      def build_tab(session, agent)
+      def build_tab(session, agent, label: nil)
         TabRuntime.new(
           session: session,
           agent: agent,
@@ -128,7 +127,7 @@ module Kward
           answer: nil,
           stream_state: new_tab_stream_state(agent),
           markdown_chunks: [],
-          label: nil
+          label: label
         )
       end
 
@@ -159,7 +158,7 @@ module Kward
         session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
         conversation = new_conversation(workspace_root: session_store.cwd)
         session.attach(conversation)
-        @tabs << build_tab(session, build_tab_agent(conversation, session))
+        @tabs << build_tab(session, build_tab_agent(conversation, session), label: default_tab_label(@tabs.length))
         @active_tab_index = @tabs.length - 1
         activate_tab(@active_tab_index)
       end
@@ -491,9 +490,18 @@ module Kward
 
       def tab_labels
         @tabs.each_with_index.map do |tab, index|
-          label = tab.label.to_s.empty? ? (index + 1).to_s : tab.label.to_s
+          label = tab.label.to_s.empty? ? default_tab_label(index) : tab.label.to_s
           tab.running? ? "#{label}*" : label
         end
+      end
+
+      def default_tab_label(index)
+        index.zero? ? "Main" : "Tab"
+      end
+
+      def restored_tab_label(data, index)
+        label = Array(data["labels"])[index].to_s
+        label.empty? ? default_tab_label(index) : label
       end
 
       def handle_tab_command(argument, session_store)
