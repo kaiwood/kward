@@ -47,6 +47,19 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_worker_store_persists_worker_metadata
+    Dir.mktmpdir do |dir|
+      store = Kward::Workers::Store.new(path: File.join(dir, "workers.json"))
+      worker = Kward::Workers::Worker.new(id: "abc123", title: "Implement", role: "implementation", workspace_root: dir, status: "queued", prompt: "Do it")
+
+      store.upsert(worker)
+      restored = Kward::Workers::Store.new(path: store.path).find("abc123")
+
+      assert_equal "implementation", restored.fetch("role")
+      assert_equal "Implement", restored.fetch("title")
+    end
+  end
+
   def test_write_capable_worker_fails_when_write_lock_is_owned
     Dir.mktmpdir do |dir|
       write_lock = Kward::Workers::WriteLock.new

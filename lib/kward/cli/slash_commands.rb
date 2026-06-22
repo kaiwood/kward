@@ -196,6 +196,10 @@ module Kward
         @scout_store ||= Scouts::Store.new
       end
 
+      def worker_store
+        @worker_store ||= Workers::Store.new
+      end
+
       def scout_runner(agent)
         workspace_root = interactive_workspace_root(agent)
         return @scout_runner if @scout_runner && @scout_runner_workspace_root == workspace_root
@@ -227,7 +231,8 @@ module Kward
           provider: current_model_provider,
           model: current_model_id,
           reasoning_effort: current_reasoning_effort,
-          write_lock: (@worker_write_lock ||= Workers::WriteLock.new)
+          write_lock: (@worker_write_lock ||= Workers::WriteLock.new),
+          worker_store: worker_store
         )
       end
 
@@ -333,7 +338,9 @@ module Kward
       end
 
       def worker_jobs(agent)
-        background_workers = @worker_manager ? @worker_manager.list.map(&:to_h) : []
+        runtime_worker_ids = @worker_manager ? @worker_manager.list.map(&:id) : []
+        background_workers = worker_store.list.reject { |job| runtime_worker_ids.include?(job["id"]) }
+        background_workers.concat(@worker_manager.list.map(&:to_h)) if @worker_manager
         [implementation_worker_job(agent)].compact + background_workers + scout_store.list
       end
 

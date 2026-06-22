@@ -1,4 +1,5 @@
 require_relative "workers/manager"
+require_relative "workers/store"
 require_relative "workers/tool_policy"
 require_relative "workers/write_lock"
 require_relative "workers/worker"
