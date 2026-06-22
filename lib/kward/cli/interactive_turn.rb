@@ -202,12 +202,11 @@ module Kward
         command = input.to_s.strip
         return false unless command == "/scouts" || command == "/workers" || command.start_with?("/scout ") || command.start_with?("/workers ")
 
-        if command == "/scouts" || command == "/scout list" || command == "/workers" || command == "/workers list"
-          queued_inputs << "/workers"
-          @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
-        else
-          handle_local_slash_command(command, agent, nil)
+        if command == "/scouts" || command == "/scout list"
+          command = "/workers"
         end
+        _handled, replacement_agent = handle_local_slash_command(command, agent, @session_store)
+        @busy_replacement_agent = replacement_agent if replacement_agent
         true
       rescue StandardError => e
         runtime_output("Error: #{e.message}")

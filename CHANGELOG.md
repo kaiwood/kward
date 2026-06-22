@@ -16,6 +16,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn.
 - Fixed generated YARD guide links so doc-to-doc Markdown links point at the generated `file.*.html` pages.
 - Fixed web-tool results with BINARY/ASCII-8BIT response bodies so RPC tool events and TUI rendering receive UTF-8-safe content.
 

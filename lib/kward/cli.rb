@@ -340,6 +340,8 @@ module Kward
           @rewind_return_leaf_id = nil
           auto_name_active_session(display_input || input)
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
+          agent = @busy_replacement_agent if @busy_replacement_agent
+          @busy_replacement_agent = nil
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e
           runtime_output("Error: #{e.message}")
