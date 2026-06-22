@@ -227,6 +227,36 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_tabs_run_turns_in_parallel_without_worker_write_lock
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      client = BlockingClient.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      second_tab = cli.send(:active_tab)
+
+      cli.send(:submit_tab_input, first_tab, "first")
+      client.started.pop
+      cli.send(:submit_tab_input, second_tab, "second")
+      wait_until { client.started.size.positive? }
+
+      assert first_tab.running?
+      assert second_tab.running?
+      assert_nil first_tab.agent.tool_registry.writer_id
+      assert_nil second_tab.agent.tool_registry.writer_id
+
+      client.release << true
+      client.release << true
+      first_tab.thread.join(1)
+      second_tab.thread.join(1)
+      assert_equal "ready", first_tab.status
+      assert_equal "ready", second_tab.status
+    end
+  end
+
   def test_replacement_agent_updates_active_tab_before_switching_away
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|

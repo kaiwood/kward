@@ -90,24 +90,13 @@ module Kward
         activate_tab(@active_tab_index)
       end
 
-      def build_tab_agent(conversation, session)
+      def build_tab_agent(conversation, _session)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
-        @worker_write_lock ||= Workers::WriteLock.new
-        tool_registry = ToolRegistry.new(
-          workspace: workspace,
-          prompt: @prompt,
-          allowed_tool_names: Workers::ToolPolicy.allowed_tool_names("implementation"),
-          write_lock: @worker_write_lock,
-          writer_id: tab_writer_id(session)
-        )
+        tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
         Agent.new(client: @client, tool_registry: tool_registry, conversation: conversation)
-      end
-
-      def tab_writer_id(session)
-        "tab:#{session&.id || object_id}"
       end
 
       def build_tab(session, agent, label: nil)
@@ -303,7 +292,8 @@ module Kward
         options = agent_display_options(display_input)
         options[:cancellation] = tab.cancellation
         options[:steering] = tab.steering if tab.steering
-        acquire_tab_writer(tab)
+        tab.status = "running"
+        update_prompt_tabs
         tab.answer = tab.agent.ask(input, **options) do |event|
           tab.record_event(event)
         end
@@ -314,26 +304,7 @@ module Kward
         tab.error = e.message
         tab.status = "failed"
       ensure
-        release_tab_writer(tab)
         finish_tab_turn(tab)
-      end
-
-      def acquire_tab_writer(tab)
-        writer_id = tab.agent.tool_registry.writer_id if tab.agent.respond_to?(:tool_registry)
-        return if writer_id.to_s.empty?
-        return unless @worker_write_lock
-
-        until @worker_write_lock.acquire(writer_id)
-          tab.cancellation&.raise_if_cancelled!
-          sleep 0.05
-        end
-        tab.status = "running"
-        update_prompt_tabs
-      end
-
-      def release_tab_writer(tab)
-        writer_id = tab.agent.tool_registry.writer_id if tab.agent.respond_to?(:tool_registry)
-        @worker_write_lock&.release(writer_id) unless writer_id.to_s.empty?
       end
 
       def finish_tab_turn(tab)
