@@ -65,6 +65,7 @@ module Kward
       def finish_question_prompt(saved_state)
         @mutex.synchronize do
           @question_state = nil
+          @question_prompt_active = false
           @select_state = saved_state[:select_state]
           @prompt_label = saved_state[:prompt_label]
           self.composer_input = saved_state[:input]

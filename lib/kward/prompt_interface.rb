@@ -117,6 +117,7 @@ module Kward
       @slash_overlay_dismissed_input = nil
       @select_state = nil
       @question_state = nil
+      @question_prompt_active = false
       @last_width = screen_width
       @last_height = screen_height
       @reserved_rows = 0
@@ -327,7 +328,10 @@ module Kward
       start
       saved_state = nil
       answers = []
-      @mutex.synchronize { saved_state = begin_question_prompt_state }
+      @mutex.synchronize do
+        @question_prompt_active = true
+        saved_state = begin_question_prompt_state
+      end
 
       questions.each_with_index do |question, index|
         answer = ask_single_user_question(question, index + 1, questions.length)
@@ -346,7 +350,7 @@ module Kward
     end
 
     def modal_active?
-      @mutex.synchronize { !@question_state.nil? || !@select_state.nil? }
+      @mutex.synchronize { @question_prompt_active || !@question_state.nil? || !@select_state.nil? }
     end
 
     def update_tabs(labels:, active_index: 0)

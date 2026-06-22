@@ -569,6 +569,37 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_ask_user_question_is_modal_before_question_state_is_rendered
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    question_prompt_active_before_question = nil
+    question_state_before_question = :unset
+    prompt.define_singleton_method(:begin_question_prompt_state) do
+      question_prompt_active_before_question = instance_variable_get(:@question_prompt_active)
+      question_state_before_question = instance_variable_get(:@question_state)
+      {
+        prompt_label: "You>",
+        input: "",
+        cursor: 0,
+        asking: true,
+        busy: false,
+        queued_count: 0,
+        steered_count: 0,
+        pending_keys: [],
+        select_state: nil
+      }
+    end
+    prompt.define_singleton_method(:ask_single_user_question) do |question, _index, _total|
+      { question: question[:question], answer: "Yes", custom: false }
+    end
+
+    answers = prompt.ask_user_question([question_args("Proceed?")])
+
+    assert question_prompt_active_before_question
+    assert_nil question_state_before_question
+    refute prompt.modal_active?
+    assert_equal [{ question: "Proceed?", answer: "Yes", custom: false }], answers
+  end
+
   def test_prompt_interface_select_uses_initial_index
     input, writer = IO.pipe
     output = StringIO.new
