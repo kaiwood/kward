@@ -24,6 +24,8 @@ module Kward
           [true, nil]
         when "workers"
           [true, handle_workers_command(argument, agent, session_store)]
+        when "tab"
+          [true, handle_tab_command(argument, session_store)]
         when "settings"
           configure_settings(agent.conversation)
           [true, nil]

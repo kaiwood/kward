@@ -17,17 +17,19 @@ module Kward
 
       data = JSON.parse(File.read(path))
       paths = Array(data["session_paths"]).map(&:to_s).reject(&:empty?)
+      labels = Array(data["labels"]).map(&:to_s)
       active_index = data["active_index"].to_i
-      { "session_paths" => paths, "active_index" => active_index }
+      { "session_paths" => paths, "labels" => labels, "active_index" => active_index }
     rescue JSON::ParserError
       { "session_paths" => [], "active_index" => 0 }
     end
 
-    def save(session_paths:, active_index:)
+    def save(session_paths:, active_index:, labels: [])
       paths = Array(session_paths).map(&:to_s).reject(&:empty?)
       PrivateFile.write_json(path, {
         "cwd" => @cwd,
         "session_paths" => paths,
+        "labels" => Array(labels).map(&:to_s),
         "active_index" => [[active_index.to_i, 0].max, [paths.length - 1, 0].max].min
       })
     end

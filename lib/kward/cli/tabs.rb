@@ -23,6 +23,7 @@ module Kward
         :answer,
         :stream_state,
         :markdown_chunks,
+        :label,
         keyword_init: true
       ) do
         def running?
@@ -74,10 +75,12 @@ module Kward
         paths = Array(data["session_paths"]).select { |path| File.file?(path.to_s) }
         return nil if paths.empty?
 
-        paths.each do |path|
+        paths.each_with_index do |path, index|
           session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
           track_session(session)
-          @tabs << build_tab(session, build_tab_agent(conversation, session))
+          tab = build_tab(session, build_tab_agent(conversation, session))
+          tab.label = Array(data["labels"])[index].to_s
+          @tabs << tab
         rescue StandardError
           next
         end
@@ -124,7 +127,8 @@ module Kward
           error: nil,
           answer: nil,
           stream_state: new_tab_stream_state(agent),
-          markdown_chunks: []
+          markdown_chunks: [],
+          label: nil
         )
       end
 
@@ -388,7 +392,7 @@ module Kward
 
       def handle_tab_busy_input(tab, input)
         command = input.to_s.strip
-        if command == "/workers" || command.start_with?("/workers ")
+        if command == "/workers" || command.start_with?("/workers ") || command == "/tab" || command.start_with?("/tab ")
           _handled, replacement_agent = handle_local_slash_command(command, tab.agent, @session_store)
           tab.agent = replacement_agent if replacement_agent?(replacement_agent)
           restore_busy_input_prompt
@@ -487,9 +491,79 @@ module Kward
 
       def tab_labels
         @tabs.each_with_index.map do |tab, index|
-          label = (index + 1).to_s
+          label = tab.label.to_s.empty? ? (index + 1).to_s : tab.label.to_s
           tab.running? ? "#{label}*" : label
         end
+      end
+
+      def handle_tab_command(argument, session_store)
+        action, value = argument.to_s.strip.split(/\s+/, 2)
+        case action
+        when nil, ""
+          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab name <label>")
+          nil
+        when /^\d+$/
+          switch_tab_number(action)
+          active_tab&.agent
+        when "move"
+          move_active_tab(value)
+          active_tab&.agent
+        when "close"
+          @pending_inputs.unshift("/exit") if close_active_tab == PromptInterface::EXIT_INPUT && defined?(@pending_inputs) && @pending_inputs
+          active_tab&.agent
+        when "new"
+          open_new_tab(session_store)
+          active_tab&.agent
+        when "name", "rename"
+          rename_active_tab(value)
+          active_tab&.agent
+        else
+          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab name <label>")
+          nil
+        end
+      end
+
+      def switch_tab_number(number)
+        index = number.to_i - 1
+        return switch_tab(index) if @tabs && index.between?(0, @tabs.length - 1)
+
+        runtime_output("Tab #{number} does not exist.")
+      end
+
+      def move_active_tab(value)
+        return runtime_output("Usage: /tab move 1-n|left|right") unless @tabs && @tabs.length > 1
+
+        target_index = case value.to_s.strip
+                       when /^\d+$/
+                         value.to_i - 1
+                       when "left"
+                         @active_tab_index - 1
+                       when "right"
+                         @active_tab_index + 1
+                       else
+                         return runtime_output("Usage: /tab move 1-n|left|right")
+                       end
+        return runtime_output("Tab #{value} does not exist.") unless target_index.between?(0, @tabs.length - 1)
+        return if target_index == @active_tab_index
+
+        save_active_tab_state
+        stop_tab_live_view
+        tab = @tabs.delete_at(@active_tab_index)
+        @tabs.insert(target_index, tab)
+        @active_tab_index = target_index
+        activate_tab(@active_tab_index)
+      end
+
+      def rename_active_tab(value)
+        tab = active_tab
+        return unless tab
+
+        name = value.to_s.strip
+        return runtime_output("Usage: /tab name <label>") if name.empty?
+
+        tab.label = name
+        update_prompt_tabs
+        persist_tabs
       end
 
       def active_tab_number
@@ -520,6 +594,7 @@ module Kward
 
         @tab_store.save(
           session_paths: @tabs.map { |tab| tab.session&.path }.compact,
+          labels: @tabs.map { |tab| tab.label.to_s },
           active_index: @active_tab_index
         )
       end

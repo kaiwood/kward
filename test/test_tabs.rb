@@ -244,6 +244,84 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_tab_slash_command_switches_active_tab
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      cli.send(:handle_tab_command, "new", store)
+
+      replacement = cli.send(:handle_tab_command, "1", store)
+
+      assert_equal cli.send(:active_tab).agent, replacement
+      assert_equal 0, cli.instance_variable_get(:@active_tab_index)
+      assert_equal 0, prompt.tabs_updates.last[:active_index]
+    end
+  end
+
+  def test_tab_slash_command_moves_active_tab
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      cli.send(:handle_tab_command, "new", store)
+
+      replacement = cli.send(:handle_tab_command, "move 1", store)
+
+      assert_equal cli.send(:active_tab).agent, replacement
+      assert_equal 0, cli.instance_variable_get(:@active_tab_index)
+      assert_equal cli.send(:active_tab), cli.instance_variable_get(:@tabs).first
+      assert_equal first_tab, cli.instance_variable_get(:@tabs).last
+    end
+  end
+
+  def test_tab_slash_command_moves_active_tab_left_and_right
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      cli.send(:handle_tab_command, "new", store)
+
+      cli.send(:handle_tab_command, "move left", store)
+      assert_equal 0, cli.instance_variable_get(:@active_tab_index)
+
+      cli.send(:handle_tab_command, "move right", store)
+      assert_equal 1, cli.instance_variable_get(:@active_tab_index)
+    end
+  end
+
+  def test_tab_slash_command_renames_active_tab_label
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+
+      cli.send(:handle_tab_command, "name Ops", store)
+
+      assert_equal ["Ops"], prompt.tabs_updates.last[:labels]
+    end
+  end
+
+  def test_tab_slash_command_closes_active_tab
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      cli.send(:handle_tab_command, "new", store)
+
+      replacement = cli.send(:handle_tab_command, "close", store)
+
+      assert_equal cli.send(:active_tab).agent, replacement
+      assert_equal 1, cli.instance_variable_get(:@tabs).length
+    end
+  end
+
   def test_running_tab_cannot_be_closed
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

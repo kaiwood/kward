@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added persistent numbered TUI tabs for session-backed conversations, including bottom composer tab rendering and configurable tab keybinding mode.
+- Added persistent numbered TUI tabs for session-backed conversations, including bottom composer tab rendering, configurable tab keybinding mode, and `/tab` commands for switching, moving, closing, opening, and naming tabs.
 - Added structured request workers with `/workers`, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, persisted worker metadata, RPC worker list/show capabilities, and a reusable live worker event view.
 - Added request approval handling so replying `yes`, `proceed`, or similar from a ready request worker transitions it into a queued write-capable implementation worker.
 

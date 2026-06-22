@@ -96,7 +96,14 @@ Use slash commands for local actions that should not go to the model:
 | `/model` | choose the active model. |
 | `/reasoning` | choose reasoning effort. |
 | `/status` | see session, model, and context status. |
-| `/new` | start a fresh session. |
+| `/new` | start a fresh session or tab when tabs are enabled. |
+| `/tab 2` | switch to tab 2. |
+| `/tab move 1` | move the active tab to position 1. |
+| `/tab move left` | move the active tab one position left. |
+| `/tab move right` | move the active tab one position right. |
+| `/tab close` | close the active tab. |
+| `/tab new` | open a new tab. |
+| `/tab name <label>` | rename the active tab label. |
 | `/sessions` | open the saved sessions picker or continue a previous session by path. |
 | `/resume` | alias for `/sessions`. |
 | `/name <name>` | name or clear the current session. |
