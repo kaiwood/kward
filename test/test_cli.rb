@@ -2996,9 +2996,22 @@ edit this prompt"
     input&.close unless input&.closed?
   end
 
+  def test_workers_command_requires_experimental_flag
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    agent = Kward::Agent.new(client: RecordingClient.new([]), tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+
+    handled, replacement = cli.send(:handle_local_slash_command, "/workers", agent, nil)
+
+    assert handled
+    assert_nil replacement
+    assert_includes prompt.output.join, "--experimental-workers"
+  end
+
   def test_busy_input_opens_workers_command_without_queuing
     prompt = PollingPrompt.new(["/workers"])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    cli.instance_variable_set(:@experimental_workers, true)
     queued = []
 
     cli.send(:collect_busy_input, queued, nil, Object.new)
@@ -3010,6 +3023,7 @@ edit this prompt"
   def test_busy_workers_new_read_only_does_not_replace_agent_with_prompt_output
     prompt = BusyWorkersPrompt.new(["/workers"], selections: ["New worker"], tasks: ["map the codebase"])
     cli = BusyWorkersCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    cli.instance_variable_set(:@experimental_workers, true)
     agent = Object.new
     agent.define_singleton_method(:conversation) { Object.new }
     agent.define_singleton_method(:ask) { |_input, **_options| "" }
@@ -3096,7 +3110,9 @@ edit this prompt"
       manager.define_singleton_method(:find) { |id| id == worker.id ? worker : nil }
       prompt = BusySelectPrompt.new([], selections: ["List workers", "abc123 [request/running] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_store, worker_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_manager, manager)
       agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
 
@@ -3129,7 +3145,9 @@ edit this prompt"
       manager.define_singleton_method(:find) { |id| id == worker.id ? worker : nil }
       prompt = BusyPollingSelectPrompt.new(["/workers"], selections: ["List workers", "abc123 [request/running] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_store, worker_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_manager, manager)
       implementation_conversation = Kward::Conversation.new(workspace_root: workspace, provider: "openai", model: "gpt-test")
       agent = DelayedEventAgent.new(
@@ -3165,7 +3183,9 @@ edit this prompt"
       manager.define_singleton_method(:archive) { |id| archived << id; worker.update_status("archived") }
       prompt = BusySelectPrompt.new([], selections: ["List workers", "abc123 [request/ready] worker task", "Dismiss"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_store, worker_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_manager, manager)
       agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
 
@@ -3205,6 +3225,7 @@ edit this prompt"
         model: "gpt-test",
         write_lock: Kward::Workers::WriteLock.new
       )
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_manager, manager)
       cli.instance_variable_set(:@worker_manager_workspace_root, Kward::ConfigFiles.canonical_workspace_root(workspace))
       cli.instance_variable_set(:@visible_worker, request_worker)
@@ -3245,6 +3266,7 @@ edit this prompt"
       cli.instance_variable_set(:@visible_worker, worker)
       cli.instance_variable_set(:@visible_worker_id, worker.id)
       cli.instance_variable_set(:@active_worker_role, "request")
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@active_session, session)
       agent = cli.send(:build_worker_agent, conversation, role: "request")
       cli.instance_variable_set(:@active_worker_role, "request")
@@ -3273,6 +3295,7 @@ edit this prompt"
       worker_store.upsert(worker)
       prompt = BusySelectPrompt.new([], selections: ["List workers", "abc123 [request/ready] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_store, worker_store)
       agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new, conversation: Kward::Conversation.new(workspace_root: workspace))
 
@@ -3314,6 +3337,7 @@ edit this prompt"
       session.attach(conversation)
       prompt = BusySelectPrompt.new([], selections: ["List workers", "implementation [implementation/active] Implementation", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
+      cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@active_session, session)
       agent = cli.send(:build_interactive_agent, conversation)
 
@@ -3324,8 +3348,17 @@ edit this prompt"
     end
   end
 
-  def test_workers_is_builtin_slash_command
-    assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "workers"
+  def test_workers_slash_entry_is_hidden_without_experimental_flag
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+    refute_includes cli.send(:slash_command_entries).map { |entry| entry[:name] }, "workers"
+  end
+
+  def test_workers_slash_entry_is_visible_with_experimental_flag
+    cli = Kward::CLI.new(argv: ["--experimental-workers"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+    cli.send(:extract_global_options, ["--experimental-workers"])
+
+    assert_includes cli.send(:slash_command_entries).map { |entry| entry[:name] }, "workers"
   end
 
   def test_login_slash_command_selects_openai_provider_without_calling_client

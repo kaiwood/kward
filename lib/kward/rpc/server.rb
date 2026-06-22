@@ -64,7 +64,7 @@ module Kward
       WORKER_METHODS = ["workers/list", "workers/show"].freeze
 
       # Creates the RPC server and its stateful managers.
-      def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new)
+      def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new, experimental_workers: false)
         @transport = Transport.new(input: input, output: output)
         @error_output = error_output
         @client = client
@@ -72,6 +72,7 @@ module Kward
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @worker_store = Workers::Store.new
+        @experimental_workers = experimental_workers
         @shutdown = false
       end
 
@@ -227,8 +228,10 @@ module Kward
         when "memory/summarize"
           @session_manager.memory_summarize(session_id: params.fetch("sessionId"))
         when "workers/list"
+          require_experimental_workers!
           workers_list(params)
         when "workers/show"
+          require_experimental_workers!
           workers_show(params)
         when "auth/status"
           @auth_manager.status
@@ -392,7 +395,7 @@ module Kward
             logout: true
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
-          workers: { supported: true, methods: WORKER_METHODS, roles: ["implementation", "request"], statuses: Workers::Worker::STATUSES, transcriptStorage: "sessions", metadataStorage: "json" },
+          workers: workers_capability,
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
@@ -433,6 +436,18 @@ module Kward
             content: "redacted-metadata-only"
           }
         }
+      end
+
+      def workers_capability
+        return { supported: false, reason: "experimentalWorkersFlagRequired", flag: "--experimental-workers" } unless @experimental_workers
+
+        { supported: true, methods: WORKER_METHODS, roles: ["implementation", "request"], statuses: Workers::Worker::STATUSES, transcriptStorage: "sessions", metadataStorage: "json" }
+      end
+
+      def require_experimental_workers!
+        return if @experimental_workers
+
+        raise NoMethodError, "workers require --experimental-workers"
       end
 
       def workspace_info(root)

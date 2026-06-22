@@ -23,6 +23,11 @@ module Kward
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
           [true, nil]
         when "workers"
+          unless experimental_workers_enabled?
+            runtime_output("Workers are experimental. Start Kward with --experimental-workers to enable /workers.")
+            return [true, nil]
+          end
+
           [true, handle_workers_command(argument, agent, session_store)]
         when "tab"
           [true, handle_tab_command(argument, session_store)]

@@ -21,11 +21,11 @@ module KwardRPCTestSupport
     messages
   end
 
-  def run_rpc(messages, client: KwardTestCase::FakeClient.new([]), env: {})
+  def run_rpc(messages, client: KwardTestCase::FakeClient.new([]), env: {}, experimental_workers: false)
     input = StringIO.new(messages.map { |message| framed(message) }.join)
     output = StringIO.new
     with_env(env) do
-      Kward::RPC::Server.new(input: input, output: output, error_output: StringIO.new, client: client).run
+      Kward::RPC::Server.new(input: input, output: output, error_output: StringIO.new, client: client, experimental_workers: experimental_workers).run
     end
     read_framed_messages(output)
   end

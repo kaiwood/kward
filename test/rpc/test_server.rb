@@ -27,7 +27,7 @@ class TestRPCServer < KwardTestCase
         { jsonrpc: "2.0", id: 1, method: "workers/list" },
         { jsonrpc: "2.0", id: 2, method: "workers/show", params: { id: "worker1" } },
         { jsonrpc: "2.0", id: 3, method: "shutdown" }
-      ], env: { "KWARD_CONFIG_PATH" => config_path })
+      ], env: { "KWARD_CONFIG_PATH" => config_path }, experimental_workers: true)
 
       assert_equal "worker1", messages[0]["result"]["workers"].first["id"]
       assert_equal "implementation", messages[1]["result"]["worker"]["role"]
@@ -147,11 +147,9 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["memory"]["methods"], "memory/autoSummary/enable"
     assert_includes capabilities["memory"]["methods"], "memory/autoSummary/disable"
     assert_includes capabilities["memory"]["methods"], "memory/relax"
-    assert_equal true, capabilities["workers"]["supported"]
-    assert_equal ["workers/list", "workers/show"], capabilities["workers"]["methods"]
-    assert_includes capabilities["workers"]["roles"], "implementation"
-    assert_includes capabilities["workers"]["roles"], "request"
-    assert_equal "sessions", capabilities["workers"]["transcriptStorage"]
+    assert_equal false, capabilities["workers"]["supported"]
+    assert_equal "experimentalWorkersFlagRequired", capabilities["workers"]["reason"]
+    assert_equal "--experimental-workers", capabilities["workers"]["flag"]
     assert_equal true, capabilities["commands"]["supported"]
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]

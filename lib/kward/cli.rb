@@ -104,6 +104,7 @@ module Kward
       @plugin_registry = nil
       @working_directory = nil
       @prompt_delimited = false
+      @experimental_workers = false
       @foreground_turn_active = false
       @color_enabled = ANSI.enabled?($stdout)
     end
@@ -197,7 +198,7 @@ module Kward
         end
         raise ArgumentError, command_usage("rpc") unless @argv.length == 1
 
-        Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
+        Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client, experimental_workers: @experimental_workers).run
         return
       end
 

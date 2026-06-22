@@ -7,7 +7,7 @@ module Kward
       private
 
       def prompt_templates
-        @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
+        @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: builtin_slash_command_names)
       end
 
       def plugin_registry
@@ -30,7 +30,7 @@ module Kward
       end
 
       def reserved_slash_command_names
-        BUILTIN_SLASH_COMMAND_NAMES + prompt_templates.map(&:command)
+        builtin_slash_command_names + prompt_templates.map(&:command)
       end
 
       def slash_command_entries
@@ -42,15 +42,29 @@ module Kward
           }
         end
         plugin_entries = plugin_commands.map(&:entry)
-        BUILTIN_SLASH_COMMANDS + prompt_entries + plugin_entries
+        builtin_slash_commands + prompt_entries + plugin_entries
       end
 
       def prompt_template_for(command)
         prompt_templates.find { |template| template.command == command }
       end
 
+      def builtin_slash_commands
+        return BUILTIN_SLASH_COMMANDS if experimental_workers_enabled?
+
+        BUILTIN_SLASH_COMMANDS.reject { |command| command[:name] == "workers" }
+      end
+
+      def builtin_slash_command_names
+        builtin_slash_commands.map { |command| command[:name] }
+      end
+
+      def experimental_workers_enabled?
+        @experimental_workers == true
+      end
+
       def expand_prompt_template(input)
-        PromptCommands.expand(input, templates: prompt_templates, reserved_commands: BUILTIN_SLASH_COMMAND_NAMES)
+        PromptCommands.expand(input, templates: prompt_templates, reserved_commands: builtin_slash_command_names)
       end
 
       def run_plugin_command(name, argument, agent)

@@ -200,6 +200,8 @@ module Kward
             @prompt_delimited = true
             remaining.concat(arguments[(index + 1)..] || [])
             break
+          when "--experimental-workers"
+            @experimental_workers = true
           when "--working-directory"
             index += 1
             raise ArgumentError, "Missing value for --working-directory" if index >= arguments.length
