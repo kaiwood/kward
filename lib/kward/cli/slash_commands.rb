@@ -173,7 +173,8 @@ module Kward
           model: current_model_id,
           reasoning_effort: current_reasoning_effort,
           write_lock: (@worker_write_lock ||= Workers::WriteLock.new),
-          worker_store: worker_store
+          worker_store: worker_store,
+          write_lane_available: -> { !@foreground_turn_active }
         )
       end
 
@@ -329,7 +330,9 @@ module Kward
         return runtime_output("Worker #{job.fetch('id')} is not ready to proceed.") unless request_ready?(job)
 
         release_implementation_writer
-        worker = worker_manager(agent || build_session_agent_for_worker(job, session_store)).start(
+        manager = worker_manager(agent || build_session_agent_for_worker(job, session_store))
+        worker = manager.continue(
+          job.fetch("id"),
           role: "implementation",
           prompt: implementation_prompt_for_request(job),
           title: "Implement #{job.fetch('title')}"
@@ -447,7 +450,7 @@ module Kward
       end
 
       def visible_session_role(job)
-        return "request" if job["id"] != "implementation" && job["role"] == "implementation"
+        return "read_only" if job["id"] != "implementation" && job["role"] == "implementation"
 
         job["role"] || "request"
       end

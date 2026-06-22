@@ -1,3 +1,4 @@
+require_relative "workers/git_guard"
 require_relative "workers/live_view"
 require_relative "workers/manager"
 require_relative "workers/store"

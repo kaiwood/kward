@@ -6,6 +6,7 @@ require_relative "../model/client"
 require_relative "../session_store"
 require_relative "../tools/registry"
 require_relative "../workspace"
+require_relative "git_guard"
 require_relative "tool_policy"
 require_relative "worker"
 
@@ -15,7 +16,7 @@ module Kward
     class Manager
       DEFAULT_TIMEOUT_SECONDS = 180
 
-      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil, write_lock: nil, worker_store: nil)
+      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil, write_lock: nil, worker_store: nil, git_guard: nil, write_lane_available: -> { true })
         @client_factory = client_factory
         @prompt = prompt
         @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
@@ -27,24 +28,27 @@ module Kward
         @reasoning_effort = reasoning_effort
         @write_lock = write_lock
         @worker_store = worker_store
+        @git_guard = git_guard || GitGuard.new(root: @workspace_root)
+        @write_lane_available = write_lane_available
         @workers = {}
         @mutex = Mutex.new
       end
 
       def start(role:, prompt:, title: nil, id: nil)
-        worker = Worker.new(
-          id: id || SecureRandom.hex(4),
-          title: title || title_for(prompt),
-          role: role,
-          prompt: prompt,
-          workspace_root: @workspace_root,
-          status: "queued"
-        )
-        @mutex.synchronize { @workers[worker.id] = worker }
-        @worker_store&.upsert(worker)
-        worker.thread = Thread.new { run_worker(worker) }
-        worker.thread.report_on_exception = false
-        worker
+        worker = build_worker(role: role, prompt: prompt, title: title, id: id)
+        enqueue(worker)
+      end
+
+      def continue(id, role:, prompt:, title: nil)
+        archived = nil
+        worker = build_worker(role: role, prompt: prompt, title: title, id: id)
+        @mutex.synchronize do
+          archived = @workers.delete(id.to_s)
+          @workers[worker.id] = worker
+        end
+        archived&.update_status("archived")
+        @worker_store&.archive(id) if archived || @worker_store&.find(id)
+        enqueue(worker, store: false)
       end
 
       def list
@@ -71,6 +75,25 @@ module Kward
 
       private
 
+      def build_worker(role:, prompt:, title: nil, id: nil)
+        Worker.new(
+          id: id || SecureRandom.hex(4),
+          title: title || title_for(prompt),
+          role: role,
+          prompt: prompt,
+          workspace_root: @workspace_root,
+          status: "queued"
+        )
+      end
+
+      def enqueue(worker, store: true)
+        @mutex.synchronize { @workers[worker.id] = worker }
+        @worker_store&.upsert(worker) if store
+        worker.thread = Thread.new { run_worker(worker) }
+        worker.thread.report_on_exception = false
+        worker
+      end
+
       def run_worker(worker)
         conversation = Conversation.new(
           system_message: { role: "system", content: system_message(worker) },
@@ -96,6 +119,7 @@ module Kward
             worker.record_event(event)
           end
         end
+        report = finalize_write_worker(worker, report)
         update_status(worker, "ready", report: report, error: "")
       rescue WorkerTimeoutError
         update_status(worker, "failed", error: "Worker timed out after #{@timeout_seconds} seconds")
@@ -118,14 +142,59 @@ module Kward
 
       def wait_for_worker_writer(worker)
         return nil unless ToolPolicy.write_capable?(worker.role)
-        return worker.id unless @write_lock
 
         loop do
           worker.cancellation.raise_if_cancelled!
+          wait_for_write_lane_available(worker)
+          wait_for_clean_workspace(worker)
+          return worker.id unless @write_lock
+
+          release_foreground_writer_if_clean
           return worker.id if @write_lock.acquire(worker.id)
 
           sleep 0.1
         end
+      end
+
+      def wait_for_write_lane_available(worker)
+        until @write_lane_available.call
+          worker.cancellation.raise_if_cancelled!
+          sleep 0.1
+        end
+      end
+
+      def wait_for_clean_workspace(worker)
+        return unless @git_guard.repository?
+
+        until @git_guard.clean?
+          worker.cancellation.raise_if_cancelled!
+          sleep 0.5
+        end
+      end
+
+      def release_foreground_writer_if_clean
+        return unless @write_lock&.owned_by?("implementation")
+        return unless @git_guard.repository?
+        return unless @git_guard.clean?
+
+        @write_lock.release("implementation")
+      end
+
+      def finalize_write_worker(worker, report)
+        return report unless ToolPolicy.write_capable?(worker.role)
+        return report unless @git_guard.repository?
+        return report if @git_guard.clean?
+
+        commit = @git_guard.commit_all(commit_message(worker))
+        unless commit.success?
+          raise "Worker changed files but commit failed: #{commit.output}"
+        end
+
+        [report, "", "Committed workspace changes: #{commit.commit}"].join("\n")
+      end
+
+      def commit_message(worker)
+        "Kward worker #{worker.id}: #{worker.title}"
       end
 
       def release_worker_writer(worker)

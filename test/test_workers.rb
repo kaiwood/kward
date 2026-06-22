@@ -59,6 +59,39 @@ class TestWorkers < KwardTestCase
     view.stop
   end
 
+  class FakeGitGuard
+    Result = Struct.new(:success, :stdout, :stderr, :commit, keyword_init: true) do
+      def success?
+        success
+      end
+
+      def output
+        [stdout, stderr].compact.reject(&:empty?).join("\n")
+      end
+    end
+
+    attr_reader :commits
+
+    def initialize(repository: true, clean_values: [true])
+      @repository = repository
+      @clean_values = clean_values
+      @commits = []
+    end
+
+    def repository?
+      @repository
+    end
+
+    def clean?
+      @clean_values.length > 1 ? @clean_values.shift : @clean_values.first
+    end
+
+    def commit_all(message)
+      @commits << message
+      Result.new(success: true, stdout: "", stderr: "", commit: "abc1234")
+    end
+  end
+
   def test_worker_manager_archives_runtime_worker
     Dir.mktmpdir do |dir|
       client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
@@ -73,6 +106,50 @@ class TestWorkers < KwardTestCase
 
       assert_equal "archived", worker.status
       assert_empty manager.list
+    end
+  end
+
+  def test_worker_manager_continue_replaces_request_with_implementation
+    Dir.mktmpdir do |dir|
+      store = Kward::Workers::Store.new(path: File.join(dir, "workers.json"))
+      client = FakeClient.new([
+        { "role" => "assistant", "content" => "review" },
+        { "role" => "assistant", "content" => "implemented" }
+      ])
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        workspace_root: dir,
+        worker_store: store,
+        git_guard: FakeGitGuard.new(repository: false)
+      )
+
+      request = manager.start(role: "request", prompt: "Explore tests", id: "abc123")
+      wait_until(timeout: 1) { request.status == "ready" }
+      implementation = manager.continue("abc123", role: "implementation", prompt: "Implement tests")
+      wait_until(timeout: 1) { implementation.status == "ready" }
+
+      assert_equal ["abc123"], manager.list.map(&:id)
+      assert_equal ["implementation"], manager.list.map(&:role)
+      assert_equal "implementation", store.find("abc123").fetch("role")
+      assert_equal "implemented", store.find("abc123").fetch("report")
+    end
+  end
+
+  def test_write_capable_worker_commits_dirty_workspace_after_run
+    Dir.mktmpdir do |dir|
+      git_guard = FakeGitGuard.new(clean_values: [true, false])
+      client = FakeClient.new([{ "role" => "assistant", "content" => "changed files" }])
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        workspace_root: dir,
+        git_guard: git_guard
+      )
+
+      worker = manager.start(role: "implementation", prompt: "Change files", id: "abc123")
+      wait_until(timeout: 1) { worker.status == "ready" }
+
+      assert_equal ["Kward worker abc123: Change files"], git_guard.commits
+      assert_includes worker.report, "Committed workspace changes: abc1234"
     end
   end
 

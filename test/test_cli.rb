@@ -3218,7 +3218,7 @@ edit this prompt"
       cli.interactive_loop(agent: agent)
 
       output = prompt.output.join
-      assert_includes output, "queued from request abc123"
+      assert_includes output, "Worker abc123 queued from request abc123"
       wait_until(timeout: 1) { client.seen_messages.any? }
       implementation_prompt = client.seen_messages.last.find { |message| message[:role] == "user" || message["role"] == "user" }
       implementation_text = Kward::MessageAccess.content(implementation_prompt)

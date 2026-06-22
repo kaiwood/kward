@@ -101,6 +101,7 @@ module Kward
       @plugin_registry = nil
       @working_directory = nil
       @prompt_delimited = false
+      @foreground_turn_active = false
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -344,6 +345,7 @@ module Kward
         begin
           @rewind_return_leaf_id = nil
           auto_name_active_session(display_input || input)
+          @foreground_turn_active = true if @active_worker_role == "implementation"
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
           agent = @busy_replacement_agent if replacement_agent?(@busy_replacement_agent)
           @busy_replacement_agent = nil
@@ -351,6 +353,7 @@ module Kward
         rescue StandardError => e
           runtime_output("Error: #{e.message}")
         ensure
+          @foreground_turn_active = false if @active_worker_role == "implementation"
           release_implementation_writer if @active_worker_role == "implementation"
         end
       end
