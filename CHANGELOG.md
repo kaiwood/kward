@@ -18,6 +18,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Alt+Backspace in alt tab-keybinding mode so terminals that emit Alt-W no longer close the active tab.
 - Fixed idle Ctrl+D in multi-tab TUI sessions so it closes only the active tab instead of exiting the app.
 - Fixed restored TUI tabs so startup renders the active restored session instead of the fresh-session banner.
 - Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn, without replacing the active agent with prompt output.

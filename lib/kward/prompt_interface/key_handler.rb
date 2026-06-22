@@ -326,7 +326,7 @@ module Kward
         case key
         when "\x14", "\e[116;5u"
           { tab_action: :new }
-        when "\x17", "\e[119;5u"
+        when "\e[119;5u"
           { tab_action: :close }
         when "\e[9;5u", "\e[27;5;9~", "\e[1;5I"
           { tab_action: :next }
@@ -348,8 +348,6 @@ module Kward
         case key
         when "\et", "\eT"
           { tab_action: :new }
-        when "\ew", "\eW"
-          { tab_action: :close }
         when "\e[1;3C", "\e[3C"
           { tab_action: :next }
         when "\e[1;3D", "\e[3D"

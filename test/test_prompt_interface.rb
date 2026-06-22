@@ -217,10 +217,39 @@ class TestPromptInterface < KwardTestCase
     prompt.update_tabs(labels: ["1"], active_index: 0)
 
     assert_equal({ tab_action: :new }, prompt.send(:handle_key, "\et"))
-    assert_equal({ tab_action: :close }, prompt.send(:handle_key, "\ew"))
     assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[1;3C"))
     assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[1;3D"))
     assert_equal({ tab_action: :select, index: 2 }, prompt.send(:handle_key, "\e3"))
+  end
+
+  def test_prompt_interface_alt_w_does_not_close_tab
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
+    prompt.update_tabs(labels: ["1", "2"], active_index: 0)
+    prompt.send(:composer_input=, "hello world")
+    prompt.send(:composer_cursor=, "hello world".length)
+
+    assert_nil prompt.send(:handle_key, "\ew")
+    assert_equal "hello world", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_alt_backspace_deletes_previous_word_with_tabs
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
+    prompt.update_tabs(labels: ["1", "2"], active_index: 0)
+    prompt.send(:composer_input=, "hello world")
+    prompt.send(:composer_cursor=, "hello world".length)
+
+    assert_equal true, prompt.send(:handle_key, "\e\x7F")
+    assert_equal "hello ", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_ctrl_w_deletes_previous_word_with_tabs
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "ctrl")
+    prompt.update_tabs(labels: ["1", "2"], active_index: 0)
+    prompt.send(:composer_input=, "hello world")
+    prompt.send(:composer_cursor=, "hello world".length)
+
+    assert_equal true, prompt.send(:handle_key, "\x17")
+    assert_equal "hello ", prompt.send(:composer_input)
   end
 
   def test_prompt_interface_ctrl_tab_keybindings_return_tab_actions
@@ -228,7 +257,7 @@ class TestPromptInterface < KwardTestCase
     prompt.update_tabs(labels: ["1"], active_index: 0)
 
     assert_equal({ tab_action: :new }, prompt.send(:handle_key, "\x14"))
-    assert_equal({ tab_action: :close }, prompt.send(:handle_key, "\x17"))
+    assert_equal({ tab_action: :close }, prompt.send(:handle_key, "\e[119;5u"))
     assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[9;5u"))
     assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[9;6u"))
     assert_equal({ tab_action: :select, index: 2 }, prompt.send(:handle_key, "\e[51;5u"))
