@@ -1020,6 +1020,25 @@ class TestPromptInterface < KwardTestCase
     assert_equal 2, prompt.instance_variable_get(:@question_state)[:selection_index]
   end
 
+  def test_prompt_interface_ask_user_question_handles_cursor_key_variants
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 0,
+      index: 1,
+      total: 1
+    })
+
+    ["\e[B", "\e[1;1B", "\e[1;2B", "\eOB"].each do |sequence|
+      prompt.instance_variable_get(:@question_state)[:selection_index] = 0
+      prompt.send(:handle_question_key, sequence)
+
+      assert_equal 1, prompt.instance_variable_get(:@question_state)[:selection_index], "#{sequence.inspect} should move down"
+    end
+  end
+
   def test_prompt_interface_ask_user_question_selects_option
     input, writer = IO.pipe
     output = StringIO.new

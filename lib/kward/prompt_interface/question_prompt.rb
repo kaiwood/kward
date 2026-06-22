@@ -94,8 +94,7 @@ module Kward
           end
         end
 
-        key_name = @reader.console.keys[key]
-        case key_name
+        case key_name_for(key)
         when :return, :enter
           current_question_answer
         when :backspace
@@ -157,8 +156,7 @@ module Kward
         queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
         return SELECT_CANCEL if sequence == "\e"
 
-        key_name = @reader.console.keys[sequence]
-        case key_name
+        case key_name_for(sequence)
         when :up
           question_previous_choice
         when :down

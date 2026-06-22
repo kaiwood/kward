@@ -40,8 +40,7 @@ module Kward
         binding_result = handle_composer_key_binding(key)
         return binding_result unless binding_result == false
 
-        key_name = @reader.console.keys[key]
-        case key_name
+        case key_name_for(key)
         when :return, :enter
           submit_input
         when :backspace
@@ -124,8 +123,7 @@ module Kward
         binding_result = handle_composer_key_binding(sequence)
         return binding_result unless binding_result == false
 
-        key_name = @reader.console.keys[sequence]
-        case key_name
+        case key_name_for(sequence)
         when :up
           slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
         when :down
@@ -257,6 +255,24 @@ module Kward
           end
         else
           false
+        end
+      end
+
+      def key_name_for(key)
+        cursor_key_name(key) || @reader.console.keys[key]
+      end
+
+      def cursor_key_name(key)
+        text = key.to_s
+        case text
+        when /\A\e\[[0-9;:]*A\z/, "\eOA"
+          :up
+        when /\A\e\[[0-9;:]*B\z/, "\eOB"
+          :down
+        when /\A\e\[[0-9;:]*C\z/, "\eOC"
+          :right
+        when /\A\e\[[0-9;:]*D\z/, "\eOD"
+          :left
         end
       end
 
