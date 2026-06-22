@@ -494,22 +494,17 @@ module Kward
         return unless prompt_interface?
 
         stop_live_worker_view
-        @live_worker_view = { worker: worker, stop: false, seen_events: worker.event_history.length }
+        renderer = live_worker_renderer(worker)
+        @live_worker_view = Workers::LiveView.new(worker: worker, agent: agent, renderer: renderer).start
         runtime_output("Watching worker #{worker.id}; the view will update until it finishes.")
-        @live_worker_view[:thread] = Thread.new { run_live_worker_view(@live_worker_view, agent) }
-        @live_worker_view[:thread].report_on_exception = false
       end
 
       def stop_live_worker_view
-        view = @live_worker_view
-        return unless view
-
-        view[:stop] = true
-        view[:thread]&.join(0.2)
+        @live_worker_view&.stop
         @live_worker_view = nil
       end
 
-      def run_live_worker_view(view, agent)
+      def live_worker_renderer(worker)
         markdown_chunks = []
         stream_state = {
           streamed: false,
@@ -518,21 +513,18 @@ module Kward
           markdown_streams: {},
           defer_assistant_streaming: false
         }
-        until view[:stop]
-          worker = view.fetch(:worker)
-          events = worker.event_history[view[:seen_events]..] || []
-          events.each do |event|
-            notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
-            handle_live_worker_event(event, markdown_chunks, stream_state)
+        lambda do |event, agent|
+          if event == :flush
+            flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: worker_finished?(worker))
+            next
           end
-          view[:seen_events] += events.length
-          flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: worker_finished?(worker))
-          break if worker_finished?(worker)
 
-          sleep 0.05
+          notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
+          handle_live_worker_event(event, markdown_chunks, stream_state)
+          flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: worker_finished?(worker))
+        rescue StandardError => e
+          runtime_output("Worker view error: #{e.message}")
         end
-      rescue StandardError => e
-        runtime_output("Worker view error: #{e.message}")
       end
 
       def handle_live_worker_event(event, markdown_chunks, stream_state)

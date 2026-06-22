@@ -47,6 +47,18 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_live_view_drains_new_worker_events
+    worker = Kward::Workers::Worker.new(id: "abc123", title: "Watch", role: "scout", status: "running", prompt: "Watch")
+    seen = []
+    view = Kward::Workers::LiveView.new(worker: worker, agent: Object.new, renderer: ->(event, _agent) { seen << event }, poll_interval: 0.01).start
+
+    worker.event_history << :event_one
+    worker.update_status("ready")
+
+    wait_until(timeout: 1) { seen.include?(:event_one) }
+    view.stop
+  end
+
   def test_worker_store_persists_worker_metadata
     Dir.mktmpdir do |dir|
       store = Kward::Workers::Store.new(path: File.join(dir, "workers.json"))
