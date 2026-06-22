@@ -145,14 +145,15 @@ module Kward
         label_left = 4
         @tabs.each_with_index.map do |label, index|
           text = tab_label(label, index)
+          width = ANSI.strip(text).length
           slot = {
             left: label_left - 2,
             label_left: label_left,
             label: text,
-            inner_width: text.length + 2,
-            width: text.length + 4
+            inner_width: width + 2,
+            width: width + 4
           }
-          label_left += text.length + 3
+          label_left += width + 3
           slot
         end
       end
@@ -187,17 +188,35 @@ module Kward
       def place_string(row, left, text)
         return if left >= row.length
 
-        text.each_char.with_index do |char, offset|
-          index = left + offset
-          break if index >= row.length
-          next if index.negative?
+        visible_offset = 0
+        last_index = nil
+        text.to_s.scan(/\e\[[0-9;:]*m|./m).each do |part|
+          if part.start_with?("\e")
+            index = visible_offset.positive? ? last_index : left
+            row[index] = row[index].to_s + part if index&.between?(0, row.length - 1)
+            next
+          end
 
-          row[index] = char
+          index = left + visible_offset
+          break if index >= row.length
+          row[index] = row[index].to_s.sub(/\A /, "") + part unless index.negative?
+          last_index = index
+          visible_offset += 1
         end
       end
 
       def tab_label(label, index)
-        "#{index + 1} #{label.to_s.empty? ? "Tab" : label}"
+        tab = normalize_tab_label(label)
+        name = tab[:name].empty? ? "Tab" : tab[:name]
+        color = tab[:color]
+        name = colored(name, color) if color
+        "#{index + 1} #{name}"
+      end
+
+      def normalize_tab_label(label)
+        return { name: label[:name].to_s, color: label[:color] } if label.is_a?(Hash)
+
+        { name: label.to_s, color: nil }
       end
 
       def color_tab_border(row)

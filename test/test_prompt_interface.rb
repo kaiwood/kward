@@ -212,6 +212,22 @@ class TestPromptInterface < KwardTestCase
     assert_includes rendered_rows.last, "╯"
   end
 
+  def test_prompt_interface_colorizes_only_tab_names
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@color_enabled, true)
+    prompt.update_tabs(labels: [{ name: "Main", color: :yellow }, { name: "Ops", color: :red }, { name: "Done", color: :green }], active_index: 0)
+
+    rows, = prompt.send(:composer_layout, 80)
+    tab_row = rows.last(2).first
+
+    assert_includes tab_row, "1 \e[33mMain\e[0m"
+    assert_includes tab_row, "2 \e[31mOps\e[0m"
+    assert_includes tab_row, "3 \e[32mDone\e[0m"
+    refute_includes tab_row, "\e[33m1"
+    assert_match(/1 Main.*2 Ops.*3 Done/, strip_ansi(tab_row))
+  end
+
   def test_prompt_interface_alt_tab_keybindings_return_tab_actions
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
     prompt.update_tabs(labels: ["1"], active_index: 0)

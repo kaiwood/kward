@@ -18,6 +18,14 @@ class TestTabs < KwardTestCase
       @tabs_updates << { labels: labels, active_index: active_index }
     end
 
+    def tab_update_names
+      @tabs_updates.last[:labels].map { |label| label.is_a?(Hash) ? label[:name] : label }
+    end
+
+    def tab_update_colors
+      @tabs_updates.last[:labels].map { |label| label.is_a?(Hash) ? label[:color] : nil }
+    end
+
     def restore_transcript
       yield
     end
@@ -79,16 +87,19 @@ class TestTabs < KwardTestCase
   class BlockingClient
     attr_reader :started, :release
 
-    def initialize
+    def initialize(result: { "role" => "assistant", "content" => "done" })
       @started = Queue.new
       @release = Queue.new
+      @result = result
     end
 
     def chat(messages, tools: [], on_assistant_delta: nil, **_options)
       @started << true
       @release.pop
-      on_assistant_delta&.call("done")
-      { "role" => "assistant", "content" => "done" }
+      raise @result if @result.is_a?(Exception)
+
+      on_assistant_delta&.call(@result["content"])
+      @result
     end
   end
 
@@ -122,10 +133,10 @@ class TestTabs < KwardTestCase
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
 
       cli.send(:setup_interactive_tabs, store, nil)
-      assert_equal ["Main"], prompt.tabs_updates.last[:labels]
+      assert_equal ["Main"], prompt.tab_update_names
 
       cli.send(:handle_tab_command, "new", store)
-      assert_equal ["Main", "Tab"], prompt.tabs_updates.last[:labels]
+      assert_equal ["Main", "Tab"], prompt.tab_update_names
     end
   end
 
@@ -144,7 +155,7 @@ class TestTabs < KwardTestCase
       assert_equal 1, cli.instance_variable_get(:@tabs).length
       assert_equal 0, cli.instance_variable_get(:@active_tab_index)
       refute_equal original_session.path, cli.send(:active_tab).session.path
-      assert_equal ["Main"], prompt.tabs_updates.last[:labels]
+      assert_equal ["Main"], prompt.tab_update_names
     end
   end
 
@@ -276,6 +287,52 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_tab_label_colors_reflect_runtime_state
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      client = BlockingClient.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      second_tab = cli.send(:active_tab)
+
+      cli.send(:submit_tab_input, first_tab, "first")
+      client.started.pop
+      assert_equal :yellow, prompt.tab_update_colors.first
+
+      client.release << true
+      first_tab.thread.join(1)
+      wait_until { prompt.tab_update_colors.first == :green }
+
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+      assert_nil prompt.tab_update_colors.first
+      assert_equal second_tab, cli.instance_variable_get(:@tabs).last
+    end
+  end
+
+  def test_tab_label_errors_and_cancelled_runs_are_red
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      client = BlockingClient.new(result: RuntimeError.new("boom"))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      failed_tab = cli.send(:active_tab)
+
+      cli.send(:submit_tab_input, failed_tab, "fail")
+      client.started.pop
+      client.release << true
+      failed_tab.thread.join(1)
+      wait_until { prompt.tab_update_colors.first == :red }
+
+      failed_tab.status = "cancelled"
+      cli.send(:update_prompt_tabs)
+      assert_equal :red, prompt.tab_update_colors.first
+    end
+  end
+
   def test_replacement_agent_updates_active_tab_before_switching_away
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
@@ -366,8 +423,8 @@ class TestTabs < KwardTestCase
 
       cli.send(:handle_tab_command, "name Ops", store)
 
-      assert_equal ["Ops"], prompt.tabs_updates.last[:labels]
-      refute_includes prompt.tabs_updates.last[:labels].first, "1"
+      assert_equal ["Ops"], prompt.tab_update_names
+      refute_includes prompt.tab_update_names.first, "1"
     end
   end
 

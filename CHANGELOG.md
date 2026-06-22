@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed TUI tabs to colorize tab names by state instead of appending `*` for running tabs: yellow while running, red after errors or cancellation, and green when a background tab finishes unread.
 - Changed TUI tabs to use unrestricted tab-local tool registries so tab turns can run independently without worker write-lock policy.
 - Changed the composer status line to show the visible worker id before diff/context/model details, including a spinner for running or queued workers.
 - Changed write-capable background workers to wait in the queue for the write lock, foreground activity, and a clean git working tree before starting.

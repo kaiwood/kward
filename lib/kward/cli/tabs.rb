@@ -24,6 +24,7 @@ module Kward
         :stream_state,
         :markdown_chunks,
         :label,
+        :unread,
         keyword_init: true
       ) do
         def running?
@@ -116,7 +117,8 @@ module Kward
           answer: nil,
           stream_state: new_tab_stream_state(agent),
           markdown_chunks: [],
-          label: label
+          label: label,
+          unread: false
         )
       end
 
@@ -194,6 +196,7 @@ module Kward
         tab.status = "idle"
         tab.error = nil
         tab.answer = nil
+        tab.unread = false
         tab.event_history.clear
         tab.seen_events = 0
         tab.queued_inputs.clear
@@ -226,6 +229,7 @@ module Kward
         @footer_conversation = tab.agent.conversation
         @footer_tool_registry = tab.agent.tool_registry if tab.agent.respond_to?(:tool_registry)
         update_assistant_prompt(tab.agent.conversation)
+        tab.unread = false
         update_prompt_tabs
         render_tab(tab) if render
         start_tab_live_view(tab) if tab.running?
@@ -274,6 +278,7 @@ module Kward
         prepare_memory_context(tab.agent.conversation, input) if tab.agent.respond_to?(:conversation)
         print_user_transcript(input, display_input: display_input) if prompt_interface?
         tab.status = "queued"
+        tab.unread = false
         tab.cancellation = Cancellation.new
         tab.steering = steering_supported? ? Steering.new : nil
         tab.error = nil
@@ -298,11 +303,14 @@ module Kward
           tab.record_event(event)
         end
         tab.status = "ready"
+        tab.unread = tab != active_tab
       rescue Cancellation::CancelledError
         tab.status = "cancelled"
+        tab.unread = false
       rescue StandardError => e
         tab.error = e.message
         tab.status = "failed"
+        tab.unread = false
       ensure
         finish_tab_turn(tab)
       end
@@ -462,8 +470,16 @@ module Kward
       def tab_labels
         @tabs.each_with_index.map do |tab, index|
           label = tab.label.to_s.empty? ? default_tab_label(index) : tab.label.to_s
-          tab.running? ? "#{label}*" : label
+          { name: label, color: tab_label_color(tab) }
         end
+      end
+
+      def tab_label_color(tab)
+        return :yellow if tab.running?
+        return :red if %w[failed cancelled].include?(tab.status.to_s)
+        return :green if tab.unread
+
+        nil
       end
 
       def default_tab_label(index)
