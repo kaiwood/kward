@@ -159,16 +159,57 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "│ custom footer"
   end
 
-  def test_prompt_interface_renders_bottom_tab_bar
+  def test_prompt_interface_renders_connected_tab_bar
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.update_tabs(labels: %w[1 2 3], active_index: 1)
 
     rows, = prompt.send(:composer_layout, 80)
-    rendered = strip_ansi(rows.join("\n"))
+    rendered_rows = rows.last(3).map { |row| strip_ansi(row) }
 
-    assert_includes rendered, "1"
-    assert_includes rendered, "[2]"
-    assert_includes rendered, "3"
+    assert_match(/\A╰─+╮ +╭─+╯\z/, rendered_rows[0])
+    assert_match(/1 Tab +│ 2 Tab │ +3 Tab/, rendered_rows[1])
+    assert_match(/\A +╰─+╯ +\z/, rendered_rows[2])
+    refute_includes rendered_rows.join("\n"), "[2]"
+  end
+
+  def test_prompt_interface_renders_connected_tab_bar_for_first_tab
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.update_tabs(labels: %w[1 2 3], active_index: 0)
+
+    rows, = prompt.send(:composer_layout, 80)
+    rendered_rows = rows.last(3).map { |row| strip_ansi(row) }
+
+    assert_match(/\A╰─+╮ +╭─+╯\z/, rendered_rows[0])
+    assert_match(/│ 1 Tab │ +2 Tab +3 Tab/, rendered_rows[1])
+    assert_match(/\A +╰─+╯ +\z/, rendered_rows[2])
+  end
+
+  def test_prompt_interface_keeps_tab_labels_stable_when_switching_tabs
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.update_tabs(labels: %w[1 2 3], active_index: 0)
+    rows, = prompt.send(:composer_layout, 80)
+    first_tab_row = strip_ansi(rows.last(2).first)
+
+    prompt.update_tabs(labels: %w[1 2 3], active_index: 1)
+    rows, = prompt.send(:composer_layout, 80)
+    second_tab_row = strip_ansi(rows.last(2).first)
+
+    assert_equal first_tab_row.index("1 Tab"), second_tab_row.index("1 Tab")
+    assert_equal first_tab_row.index("2 Tab"), second_tab_row.index("2 Tab")
+    assert_equal first_tab_row.index("3 Tab"), second_tab_row.index("3 Tab")
+  end
+
+  def test_prompt_interface_preserves_tab_borders_in_narrow_width
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.update_tabs(labels: %w[1 2 3], active_index: 1)
+
+    rows, = prompt.send(:composer_layout, 12)
+    rendered_rows = rows.map { |row| strip_ansi(row) }
+
+    assert_equal 3, rendered_rows.length
+    assert_equal 12, rendered_rows.last.length
+    assert_includes rendered_rows.last, "╰"
+    assert_includes rendered_rows.last, "╯"
   end
 
   def test_prompt_interface_alt_tab_keybindings_return_tab_actions

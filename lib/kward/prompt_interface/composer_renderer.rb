@@ -22,8 +22,11 @@ module Kward
         rows.concat(attachment_rows)
         rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
         rows << footer_row(content_width, footer_text) unless footer_text.empty?
-        rows << bottom_border(width)
-        rows << tab_bar_row(width) unless @tabs.empty?
+        if @tabs.empty?
+          rows << bottom_border(width)
+        else
+          rows.concat(tab_border_rows(width))
+        end
         cursor_row = overlay_rows.length + 1 + attachment_rows.length + input_cursor_row - visible_start
         cursor_col = 2 + [input_cursor_col, content_width - 1].min
         [rows, cursor_row, cursor_col]
@@ -123,12 +126,82 @@ module Kward
         colored("╰#{"─" * [width - 2, 0].max}╯", :primary_green)
       end
 
-      def tab_bar_row(width)
-        labels = @tabs.each_with_index.map do |label, index|
-          text = " #{label.empty? ? index + 1 : label} "
-          index == @active_tab_index ? colored("[#{text.strip}]", :primary_green, :bold) : " #{text.strip} "
+      def tab_border_rows(width)
+        return [bottom_border(width)] if width < 10
+
+        slots = tab_slots
+        active_slot = slots[@active_tab_index]
+        return [bottom_border(width)] unless active_slot
+        return [bottom_border(width)] if active_slot[:left] + active_slot[:width] > width
+
+        [
+          color_tab_border(bottom_tab_border_row(width, active_slot)),
+          color_tab_border(tab_bar_row(width, slots, active_slot)),
+          color_tab_border(active_tab_bottom_row(width, active_slot))
+        ]
+      end
+
+      def tab_slots
+        label_left = 4
+        @tabs.each_with_index.map do |label, index|
+          text = tab_label(label, index)
+          slot = {
+            left: label_left - 2,
+            label_left: label_left,
+            label: text,
+            inner_width: text.length + 2,
+            width: text.length + 4
+          }
+          label_left += text.length + 3
+          slot
         end
-        visible_truncate(labels.join(" "), width).ljust(width)
+      end
+
+      def bottom_tab_border_row(width, active_slot)
+        row = Array.new(width, " ")
+        place_string(row, 0, "╰#{"─" * [active_slot[:left] - 1, 0].max}╮")
+        place_string(row, active_slot[:left] + active_slot[:inner_width] + 1, "╭")
+        place_string(row, active_slot[:left] + active_slot[:inner_width] + 2, "─" * [width - active_slot[:left] - active_slot[:inner_width] - 3, 0].max)
+        place_string(row, width - 1, "╯")
+        row.join
+      end
+
+      def tab_bar_row(width, slots, active_slot)
+        row = Array.new(width, " ")
+        slots.each do |slot|
+          if slot == active_slot
+            place_string(row, slot[:left], "│ #{slot[:label]} │")
+          else
+            place_string(row, slot[:label_left], slot[:label])
+          end
+        end
+        row.join
+      end
+
+      def active_tab_bottom_row(width, active_slot)
+        row = Array.new(width, " ")
+        place_string(row, active_slot[:left], "╰#{"─" * active_slot[:inner_width]}╯")
+        row.join
+      end
+
+      def place_string(row, left, text)
+        return if left >= row.length
+
+        text.each_char.with_index do |char, offset|
+          index = left + offset
+          break if index >= row.length
+          next if index.negative?
+
+          row[index] = char
+        end
+      end
+
+      def tab_label(label, index)
+        "#{label.to_s.empty? ? index + 1 : label} Tab"
+      end
+
+      def color_tab_border(row)
+        row.gsub(/[╰╯╭╮│─]/) { |char| colored(char, :primary_green) }
       end
 
       def box_content_row(row, content_width)
