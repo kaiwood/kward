@@ -3044,6 +3044,23 @@ edit this prompt"
     end
   end
 
+  def test_refresh_implementation_writer_reacquires_released_lock
+    conversation = Kward::Conversation.new
+    prompt = BusySelectPrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    write_lock = Kward::Workers::WriteLock.new
+    assert write_lock.acquire("background")
+    cli.instance_variable_set(:@worker_write_lock, write_lock)
+    cli.instance_variable_set(:@active_worker_role, "implementation")
+    agent = cli.send(:build_worker_agent, conversation, role: "implementation")
+    assert_nil agent.tool_registry.writer_id
+
+    write_lock.release("background")
+    refreshed = cli.send(:refresh_implementation_writer, agent)
+
+    assert_equal "implementation", refreshed.tool_registry.writer_id
+  end
+
   def test_workers_list_includes_implementation_worker
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

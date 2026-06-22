@@ -77,6 +77,14 @@ module Kward
         nil
       end
 
+      def refresh_implementation_writer(agent)
+        return agent unless @active_worker_role == "implementation"
+        return agent unless agent&.respond_to?(:tool_registry)
+        return agent if agent.tool_registry.writer_id
+
+        build_interactive_agent(agent.conversation)
+      end
+
       def handle_interactive_shell_command(input, agent)
         command = input.to_s.sub(/\A!\s*/, "")
         if command.strip.empty?

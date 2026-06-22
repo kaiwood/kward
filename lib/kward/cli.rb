@@ -334,6 +334,7 @@ module Kward
         expanded_input = expand_prompt_template(input)
         display_input = display_input || input if expanded_input
         input = expanded_input || input
+        agent = refresh_implementation_writer(agent)
         @footer_conversation = agent.conversation
         begin
           @rewind_return_leaf_id = nil

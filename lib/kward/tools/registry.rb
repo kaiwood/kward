@@ -45,7 +45,7 @@ module Kward
     # Tool schemas advertised to the model for the current frontend and config.
     #
     # @return [Array<Hash>] tool schemas currently advertised to the model
-    attr_reader :schemas
+    attr_reader :schemas, :writer_id
 
     # Builds tool objects and the schema list for the current frontend/config.
     #
