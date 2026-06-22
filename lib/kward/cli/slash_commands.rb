@@ -145,24 +145,25 @@ module Kward
 
       def handle_workers_command(argument, agent, session_store)
         action, value = argument.to_s.strip.split(/\s+/, 2)
-        case action
-        when nil, ""
-          open_worker_menu(agent, session_store)
-        when "list"
-          open_worker_list(agent, session_store)
-        when "new", "scout"
-          prompt_for_scout(agent)
-          nil
-        when "implement", "implementation"
-          send_implementation_worker(value, agent)
-          nil
-        when "do"
-          send_scout(value, agent)
-          nil
-        else
-          runtime_output("Usage: /workers | /workers new | /workers do <task>")
-          nil
-        end
+        replacement_agent = case action
+                            when nil, ""
+                              open_worker_menu(agent, session_store)
+                            when "list"
+                              open_worker_list(agent, session_store)
+                            when "new", "scout"
+                              prompt_for_scout(agent)
+                              nil
+                            when "implement", "implementation"
+                              send_implementation_worker(value, agent)
+                              nil
+                            when "do"
+                              send_scout(value, agent)
+                              nil
+                            else
+                              runtime_output("Usage: /workers | /workers new | /workers do <task>")
+                              nil
+                            end
+        replacement_agent?(replacement_agent) ? replacement_agent : nil
       end
 
       def handle_scout_command(argument, agent, session_store)

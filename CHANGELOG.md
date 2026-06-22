@@ -12,11 +12,15 @@ All notable changes to Kward will be documented in this file.
 
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
 
+### Fixed
+
+- Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn, without replacing the active agent with prompt output.
+- Fixed fresh interactive sessions so background workers reuse the active session store and can attach worker sessions.
+
 ## [0.71.0] - 2026-06-21
 
 ### Fixed
 
-- Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn.
 - Fixed generated YARD guide links so doc-to-doc Markdown links point at the generated `file.*.html` pages.
 - Fixed web-tool results with BINARY/ASCII-8BIT response bodies so RPC tool events and TUI rendering receive UTF-8-safe content.
 

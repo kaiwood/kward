@@ -69,6 +69,48 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class BusyWorkersPrompt < FakePrompt
+    attr_reader :busy_inputs, :select_messages
+
+    def initialize(inputs, selections:, tasks:)
+      super(tasks)
+      @poll_inputs = inputs
+      @selections = selections
+      @busy_inputs = []
+      @select_messages = []
+    end
+
+    def poll_input
+      @poll_inputs.shift
+    end
+
+    def begin_busy_input(message, activity: "streaming")
+      @busy_inputs << [message, activity]
+    end
+
+    def modal_active?
+      false
+    end
+
+    def select(message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
+      @select_messages << message
+      @selections.shift || choices.first
+    end
+
+    def say(message)
+      super
+      Object.new
+    end
+  end
+
+  class BusyWorkersCLI < Kward::CLI
+    private
+
+    def send_scout(topic, _agent)
+      @prompt.say("Scout sent: #{topic}")
+    end
+  end
+
   class RecordingLoginCLI < Kward::CLI
     attr_reader :login_providers
 
@@ -2935,6 +2977,32 @@ edit this prompt"
 
     assert_empty queued
     assert_includes prompt.output.join, "Usage: /workers"
+  end
+
+  def test_busy_workers_new_read_only_does_not_replace_agent_with_prompt_output
+    prompt = BusyWorkersPrompt.new(["/workers"], selections: ["New read-only worker"], tasks: ["map the codebase"])
+    cli = BusyWorkersCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { Object.new }
+    agent.define_singleton_method(:ask) { |_input, **_options| "" }
+    queued = []
+
+    cli.send(:collect_busy_input, queued, nil, agent)
+
+    assert_empty queued
+    assert_nil cli.instance_variable_get(:@busy_replacement_agent)
+    assert_equal [["You>", "streaming"]], prompt.busy_inputs
+    assert_equal ["Workers"], prompt.select_messages
+    assert_includes prompt.output.join, "Scout sent: map the codebase"
+  end
+
+  def test_interactive_session_store_is_reused_for_background_workers
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+
+    session_store = cli.send(:interactive_session_store, nil)
+
+    assert_instance_of Kward::SessionStore, session_store
+    assert_same session_store, cli.instance_variable_get(:@session_store)
   end
 
   def test_busy_input_queues_when_steering_submit_fails

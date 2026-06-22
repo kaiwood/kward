@@ -206,11 +206,24 @@ module Kward
           command = "/workers"
         end
         _handled, replacement_agent = handle_local_slash_command(command, agent, @session_store)
-        @busy_replacement_agent = replacement_agent if replacement_agent
+        @busy_replacement_agent = replacement_agent if replacement_agent?(replacement_agent)
+        restore_busy_input_prompt
         true
       rescue StandardError => e
         runtime_output("Error: #{e.message}")
+        restore_busy_input_prompt
         true
+      end
+
+      def replacement_agent?(object)
+        object.respond_to?(:conversation) && object.respond_to?(:ask)
+      end
+
+      def restore_busy_input_prompt
+        return unless @prompt.respond_to?(:begin_busy_input)
+        return if @prompt.respond_to?(:modal_active?) && @prompt.modal_active?
+
+        @prompt.begin_busy_input("You>")
       end
 
       def steering_supported?

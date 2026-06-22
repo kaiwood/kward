@@ -326,7 +326,7 @@ module Kward
           end
           break if ["/exit", "/quit"].include?(command)
           handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
-          agent = replacement_agent if replacement_agent
+          agent = replacement_agent if replacement_agent?(replacement_agent)
         end
         next if handled
         next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
@@ -340,7 +340,7 @@ module Kward
           @rewind_return_leaf_id = nil
           auto_name_active_session(display_input || input)
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
-          agent = @busy_replacement_agent if @busy_replacement_agent
+          agent = @busy_replacement_agent if replacement_agent?(@busy_replacement_agent)
           @busy_replacement_agent = nil
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e

@@ -12,7 +12,7 @@ module Kward
         return @session_store if @session_store
         return nil if agent
 
-        SessionStore.new
+        @session_store = SessionStore.new
       end
 
       def resume_last_session(session_store)
