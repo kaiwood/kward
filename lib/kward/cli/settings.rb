@@ -222,6 +222,8 @@ module Kward
         when /\Ashow busy help/, /\Ahide busy help/
           set_composer_busy_help(!composer_busy_help?)
           runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
+        when /\Atab keybindings/
+          configure_tab_keybindings
         when /\Aenable session auto-resume/, /\Adisable session auto-resume/
           set_session_auto_resume_enabled(!session_auto_resume_enabled?)
           runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
@@ -234,6 +236,7 @@ module Kward
           "Overlay alignment (#{settings["alignment"]})",
           "Overlay width (#{settings["width"]})",
           "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
+          "Tab keybindings (#{composer_tab_keybindings})",
           "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
           "Back"
         ]
@@ -241,6 +244,24 @@ module Kward
 
       def composer_busy_help?
         ConfigFiles.composer_busy_help?(safely_read_config.to_h)
+      end
+
+      def composer_tab_keybindings
+        ConfigFiles.composer_tab_keybindings(safely_read_config.to_h)
+      end
+
+      def configure_tab_keybindings
+        selected = @prompt.select("Tab keybindings", tab_keybinding_choices, title: "Settings")
+        value = selected.to_s.split.first.to_s.downcase
+        return unless %w[auto ctrl alt].include?(value)
+
+        update_nested_config("composer", "tab_keybindings" => value)
+        runtime_output("Tab keybindings set to #{value}. Restart the TUI to apply this setting.")
+      end
+
+      def tab_keybinding_choices
+        current = composer_tab_keybindings
+        %w[auto ctrl alt].map { |value| value == current ? "#{value} (current)" : value }
       end
 
       def session_auto_resume_enabled?

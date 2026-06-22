@@ -159,6 +159,40 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "│ custom footer"
   end
 
+  def test_prompt_interface_renders_bottom_tab_bar
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.update_tabs(labels: %w[1 2 3], active_index: 1)
+
+    rows, = prompt.send(:composer_layout, 80)
+    rendered = strip_ansi(rows.join("\n"))
+
+    assert_includes rendered, "1"
+    assert_includes rendered, "[2]"
+    assert_includes rendered, "3"
+  end
+
+  def test_prompt_interface_alt_tab_keybindings_return_tab_actions
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
+    prompt.update_tabs(labels: ["1"], active_index: 0)
+
+    assert_equal({ tab_action: :new }, prompt.send(:handle_key, "\et"))
+    assert_equal({ tab_action: :close }, prompt.send(:handle_key, "\ew"))
+    assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[1;3C"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[1;3D"))
+    assert_equal({ tab_action: :select, index: 2 }, prompt.send(:handle_key, "\e3"))
+  end
+
+  def test_prompt_interface_ctrl_tab_keybindings_return_tab_actions
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "ctrl")
+    prompt.update_tabs(labels: ["1"], active_index: 0)
+
+    assert_equal({ tab_action: :new }, prompt.send(:handle_key, "\x14"))
+    assert_equal({ tab_action: :close }, prompt.send(:handle_key, "\x17"))
+    assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[9;5u"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[9;6u"))
+    assert_equal({ tab_action: :select, index: 2 }, prompt.send(:handle_key, "\e[51;5u"))
+  end
+
   def test_prompt_interface_renders_attachment_badge_rows
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, attachment_badges: ->(_input) { ["[image] screenshot.png · image/png · 12 KB"] })
     prompt.send(:composer_input=, "describe screenshot.png")

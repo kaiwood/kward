@@ -1,4 +1,5 @@
 require "io/console"
+require "rbconfig"
 require "thread"
 require "tty-cursor"
 require "tty-reader"
@@ -82,7 +83,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -129,6 +130,9 @@ module Kward
       @attachment_badges = attachment_badges
       @attachment_parser = attachment_parser
       @banner = Banner.new(message: banner_message, screen_height: method(:screen_height))
+      @tabs = []
+      @active_tab_index = 0
+      @tab_keybindings = normalize_tab_keybindings(tab_keybindings)
     end
 
     def start(render: true)
@@ -253,7 +257,7 @@ module Kward
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT
           end
         end
-        return result if result.is_a?(String)
+        return result if result.is_a?(String) || tab_action_result?(result)
         return nil if result == EXIT_INPUT
 
         sleep 0.02 if key.nil?
@@ -345,6 +349,40 @@ module Kward
       @mutex.synchronize { !@question_state.nil? || !@select_state.nil? }
     end
 
+    def update_tabs(labels:, active_index: 0)
+      @mutex.synchronize do
+        @tabs = Array(labels).map(&:to_s)
+        @active_tab_index = active_index.to_i
+        render_prompt_locked if @started && @asking
+      end
+    end
+
+    def composer_snapshot
+      @mutex.synchronize do
+        {
+          composer: @composer,
+          transcript_buffer: @transcript_buffer,
+          transcript_viewport_rows: @transcript_viewport_rows,
+          stream_state: @stream_state,
+          prompt_label: @prompt_label
+        }
+      end
+    end
+
+    def restore_composer_snapshot(snapshot)
+      @mutex.synchronize do
+        @composer = snapshot[:composer] || ComposerState.new
+        @transcript_buffer = snapshot[:transcript_buffer] || TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
+        @transcript_viewport_rows = snapshot[:transcript_viewport_rows].to_i
+        @stream_state = snapshot[:stream_state] || StreamState.new
+        @prompt_label = snapshot[:prompt_label].to_s.empty? ? "You>" : snapshot[:prompt_label].to_s
+        self.composer_input = @composer.input
+        self.composer_cursor = @composer.cursor
+        @last_composer_rows = []
+        redraw_screen_locked if @started
+      end
+    end
+
     def update_overlay_settings(settings)
       @mutex.synchronize do
         @overlay_settings = normalize_overlay_settings(settings)
@@ -418,7 +456,7 @@ module Kward
         end
 
         result = handle_key(key)
-        render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result)
+        render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || tab_action_result?(result)
         [EXIT_INPUT, CANCEL_INPUT].include?(result) ? result : result
       end
     end

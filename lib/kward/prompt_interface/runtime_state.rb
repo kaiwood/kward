@@ -59,6 +59,18 @@ module Kward
         ANSI.colorize(text, *styles, enabled: @color_enabled)
       end
 
+      def normalize_tab_keybindings(value)
+        text = value.to_s.downcase
+        return "ctrl" if text == "ctrl"
+        return "alt" if text == "alt"
+
+        RbConfig::CONFIG["host_os"].to_s.downcase.include?("darwin") ? "ctrl" : "alt"
+      end
+
+      def tab_action_result?(result)
+        result.is_a?(Hash) && result[:tab_action]
+      end
+
     end
   end
 end

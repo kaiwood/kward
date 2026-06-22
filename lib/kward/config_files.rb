@@ -72,7 +72,8 @@ module Kward
           "auto_summary" => false
         },
         "composer" => {
-          "busy_help" => true
+          "busy_help" => true,
+          "tab_keybindings" => "auto"
         },
         "sessions" => {
           "auto_resume" => false
@@ -191,6 +192,13 @@ module Kward
     def composer_busy_help?(config = read_config)
       composer = config["composer"].is_a?(Hash) ? config["composer"] : {}
       composer["busy_help"] != false
+    end
+
+    # Returns the configured tab keybinding family, or auto when unset/invalid.
+    def composer_tab_keybindings(config = read_config)
+      composer = config["composer"].is_a?(Hash) ? config["composer"] : {}
+      value = composer["tab_keybindings"].to_s.downcase
+      %w[auto ctrl alt].include?(value) ? value : "auto"
     end
 
     # Returns whether file tools must stay inside the active workspace root.

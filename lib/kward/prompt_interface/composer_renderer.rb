@@ -23,6 +23,7 @@ module Kward
         rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
         rows << footer_row(content_width, footer_text) unless footer_text.empty?
         rows << bottom_border(width)
+        rows << tab_bar_row(width) unless @tabs.empty?
         cursor_row = overlay_rows.length + 1 + attachment_rows.length + input_cursor_row - visible_start
         cursor_col = 2 + [input_cursor_col, content_width - 1].min
         [rows, cursor_row, cursor_col]
@@ -120,6 +121,14 @@ module Kward
 
       def bottom_border(width)
         colored("╰#{"─" * [width - 2, 0].max}╯", :primary_green)
+      end
+
+      def tab_bar_row(width)
+        labels = @tabs.each_with_index.map do |label, index|
+          text = " #{label.empty? ? index + 1 : label} "
+          index == @active_tab_index ? colored("[#{text.strip}]", :primary_green, :bold) : " #{text.strip} "
+        end
+        visible_truncate(labels.join(" "), width).ljust(width)
       end
 
       def box_content_row(row, content_width)

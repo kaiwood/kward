@@ -29,6 +29,7 @@ require_relative "model/retry_message"
 require_relative "rpc/server"
 require_relative "session_diff"
 require_relative "session_store"
+require_relative "tab_store"
 require_relative "session_trash"
 require_relative "session_tree_renderer"
 require_relative "starter_pack_installer"
@@ -49,6 +50,7 @@ require_relative "cli/slash_commands"
 require_relative "cli/memory_commands"
 require_relative "cli/settings"
 require_relative "cli/sessions"
+require_relative "cli/tabs"
 require_relative "cli/compaction"
 require_relative "cli/rendering"
 require_relative "cli/prompt_interface"
@@ -81,6 +83,7 @@ module Kward
     include CLI::MemoryCommands
     include CLI::Settings
     include CLI::Sessions
+    include CLI::Tabs
     include CLI::CompactionCommands
     include CLI::Rendering
     include CLI::PromptInterfaceSupport
@@ -290,7 +293,9 @@ module Kward
       setup_interactive_prompt
       session_store = interactive_session_store(agent)
       @resumed_last_session = false
-      if session_store && agent.nil?
+      if session_store && @prompt.respond_to?(:update_tabs)
+        agent = setup_interactive_tabs(session_store, agent)
+      elsif session_store && agent.nil?
         agent = resume_last_session(session_store) || build_new_session_agent(session_store)
       elsif session_store
         @active_session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
@@ -310,6 +315,12 @@ module Kward
 
       loop do
         input = @pending_inputs.shift || @prompt.ask("You>")
+        if input.is_a?(Hash) && input[:tab_action]
+          tab_result = handle_tab_action(input, session_store)
+          break if tab_result == PromptInterface::EXIT_INPUT
+          agent = active_tab[:agent] if active_tab
+          next
+        end
         break if input.nil?
 
         display_input = submitted_display_input(input)
@@ -347,6 +358,7 @@ module Kward
           auto_name_active_session(display_input || input)
           @foreground_turn_active = true if @active_worker_role == "implementation"
           pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
+          active_tab[:diff] = @session_diff if active_tab
           agent = @busy_replacement_agent if replacement_agent?(@busy_replacement_agent)
           @busy_replacement_agent = nil
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }

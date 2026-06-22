@@ -32,6 +32,9 @@ module Kward
           end
         end
 
+        tab_result = handle_tab_key_binding(key)
+        return tab_result unless tab_result == false
+
         binding_result = handle_composer_key_binding(key)
         return binding_result unless binding_result == false
 
@@ -112,6 +115,9 @@ module Kward
         queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
         return true if sequence == "\e" && dismiss_slash_overlay
         return true if handle_shift_enter_key(sequence)
+
+        tab_result = handle_tab_key_binding(sequence)
+        return tab_result unless tab_result == false
 
         binding_result = handle_composer_key_binding(sequence)
         return binding_result unless binding_result == false
@@ -288,7 +294,7 @@ module Kward
 
       def alt_key_sequence?(char)
         char = char.to_s
-        char.match?(/[[:alpha:]]/) || char == "\b" || char == "\x7F"
+        char.match?(/[[:alnum:]]/) || char == "\b" || char == "\x7F"
       end
 
       def shift_enter_sequence_for(key)
@@ -308,6 +314,56 @@ module Kward
         sequence
       rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
         sequence
+      end
+
+      def handle_tab_key_binding(key)
+        return false if @select_state || @question_state || @tabs.empty?
+
+        @tab_keybindings == "ctrl" ? handle_ctrl_tab_key_binding(key) : handle_alt_tab_key_binding(key)
+      end
+
+      def handle_ctrl_tab_key_binding(key)
+        case key
+        when "\x14", "\e[116;5u"
+          { tab_action: :new }
+        when "\x17", "\e[119;5u"
+          { tab_action: :close }
+        when "\e[9;5u", "\e[27;5;9~", "\e[1;5I"
+          { tab_action: :next }
+        when "\e[9;6u", "\e[27;6;9~", "\e[1;6I"
+          { tab_action: :previous }
+        else
+          ctrl_number_tab_action(key)
+        end
+      end
+
+      def ctrl_number_tab_action(key)
+        match = key.to_s.match(/\A\e\[((?:49)|(?:5[0-7]));5u\z/)
+        return false unless match
+
+        { tab_action: :select, index: match[1].to_i - 49 }
+      end
+
+      def handle_alt_tab_key_binding(key)
+        case key
+        when "\et", "\eT"
+          { tab_action: :new }
+        when "\ew", "\eW"
+          { tab_action: :close }
+        when "\e[1;3C", "\e[3C"
+          { tab_action: :next }
+        when "\e[1;3D", "\e[3D"
+          { tab_action: :previous }
+        else
+          alt_number_tab_action(key)
+        end
+      end
+
+      def alt_number_tab_action(key)
+        match = key.to_s.match(/\A\e([1-9])\z/)
+        return false unless match
+
+        { tab_action: :select, index: match[1].to_i - 1 }
       end
 
       def handle_composer_key_binding(key)
