@@ -44,6 +44,7 @@ module Kward
 
       def build_interactive_agent(conversation)
         @active_worker_role = "implementation"
+        set_visible_worker("implementation", status: "active")
         build_worker_agent(conversation, role: "implementation")
       end
 
@@ -65,6 +66,12 @@ module Kward
           tool_registry: tool_registry,
           conversation: conversation
         )
+      end
+
+      def set_visible_worker(id, status: nil, worker: nil)
+        @visible_worker_id = id.to_s
+        @visible_worker_status = status
+        @visible_worker = worker
       end
 
       def worker_writer_id(role)

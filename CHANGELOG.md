@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed the composer status line to show the visible worker id before diff/context/model details, including a spinner for running or queued workers.
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
 
 ### Fixed

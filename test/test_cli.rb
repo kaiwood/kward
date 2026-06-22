@@ -1659,7 +1659,7 @@ class TestCLI < KwardTestCase
 
       cli.interactive_loop
 
-      assert_equal "9% · Codex fake-model · medium", cli.send(:composer_status_text)
+      assert_equal "implementation · 9% · Codex fake-model · medium", cli.send(:composer_status_text)
       assert_equal "resumed context", seen_messages.last["content"] || seen_messages.last[:content]
       assert_equal 1, prompt.redraw_count
     end
@@ -3569,6 +3569,36 @@ edit this prompt"
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client)
 
     assert_equal "Copilot gemini-2.5-pro · n/a", cli.send(:composer_status_text)
+  end
+
+  def test_composer_status_shows_visible_worker_before_session_diff
+    context_usage = Object.new
+    def context_usage.call(**_kwargs)
+      { percent: 42 }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    cli.instance_variable_set(:@visible_worker_id, "abc123")
+    cli.instance_variable_set(:@visible_worker_status, "ready")
+    cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 7, deletions: 5))
+
+    assert_equal "abc123 · +7|-5 · 42% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
+  end
+
+  def test_composer_status_shows_spinner_for_running_visible_worker
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+    worker = Kward::Workers::Worker.new(id: "def456", title: "Worker", role: "scout", status: "running")
+    cli.instance_variable_set(:@visible_worker_id, worker.id)
+    cli.instance_variable_set(:@visible_worker, worker)
+
+    assert_match /\A[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] def456 · Codex fake-model · medium\z/, strip_ansi(cli.send(:composer_status_text))
+  end
+
+  def test_build_interactive_agent_marks_implementation_as_visible_worker
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+
+    cli.send(:build_interactive_agent, Kward::Conversation.new)
+
+    assert_equal "implementation · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
   end
 
   def test_composer_status_shows_session_diff_before_context_percentage

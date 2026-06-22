@@ -414,6 +414,7 @@ module Kward
 
         stop_live_worker_view
         @active_worker_role = "implementation"
+        set_visible_worker("implementation", status: "active")
         load_session(session_store, job.fetch("session_path"), message: "Showing implementation worker")
       rescue StandardError => e
         runtime_output("Error: #{e.message}")
@@ -480,6 +481,8 @@ module Kward
         agent = load_session(session_store, path, message: "Showing worker #{job.fetch('id')}")
         agent = build_worker_agent(agent.conversation, role: job["role"] || "scout")
         @active_worker_role = job["role"] || "scout"
+        set_visible_worker(job.fetch("id"), status: job["status"], worker: worker)
+        @prompt.redraw if @prompt.respond_to?(:redraw)
         start_live_worker_view(worker, agent) if live_worker?(worker)
         agent
       rescue StandardError => e
@@ -497,6 +500,7 @@ module Kward
         stop_live_worker_view
         renderer = live_worker_renderer(worker)
         @live_worker_view = Workers::LiveView.new(worker: worker, agent: agent, renderer: renderer).start
+        @prompt.redraw if @prompt.respond_to?(:redraw)
         runtime_output("Watching worker #{worker.id}; the view will update until it finishes.")
       end
 
@@ -517,6 +521,7 @@ module Kward
         lambda do |event, agent|
           if event == :flush
             flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: worker_finished?(worker))
+            @prompt.redraw if @prompt.respond_to?(:redraw)
             next
           end
 
