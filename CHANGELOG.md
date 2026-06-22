@@ -18,6 +18,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed idle Ctrl+D in multi-tab TUI sessions so it closes only the active tab instead of exiting the app.
+- Fixed restored TUI tabs so startup renders the active restored session instead of the fresh-session banner.
 - Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn, without replacing the active agent with prompt output.
 - Fixed fresh interactive sessions so background workers reuse the active session store and can attach worker sessions.
 - Fixed busy worker session switching so the previous active turn no longer renders over the selected worker transcript after `Worker -> Show`.

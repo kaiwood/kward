@@ -1780,6 +1780,33 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "╭ You "
   end
 
+  def test_prompt_interface_tab_view_snapshot_is_not_mutated_by_later_transcript_restore
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.say("first tab")
+    snapshot = prompt.tab_view_snapshot
+
+    prompt.restore_transcript do
+      prompt.say("second tab")
+    end
+
+    prompt.restore_tab_view_snapshot(snapshot)
+
+    assert_includes strip_ansi(snapshot[:transcript_buffer].to_s), "first tab"
+    refute_includes strip_ansi(snapshot[:transcript_buffer].to_s), "second tab"
+    assert_includes strip_ansi(prompt.instance_variable_get(:@transcript_buffer).to_s), "first tab"
+    refute_includes strip_ansi(prompt.instance_variable_get(:@transcript_buffer).to_s), "second tab"
+  end
+
+  def test_prompt_interface_tab_view_snapshot_is_not_mutated_by_later_stream_state_changes
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start_stream_block("Assistant")
+    snapshot = prompt.tab_view_snapshot
+
+    prompt.finish_stream_block
+
+    assert_equal "Assistant", snapshot[:stream_state].block
+  end
+
   def test_prompt_interface_restore_transcript_preserves_history_with_synchronized_redraw
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

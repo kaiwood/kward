@@ -178,6 +178,9 @@ module Kward
     # @return [String] workspace directory this store lists and creates sessions for
     attr_reader :cwd
 
+    # @return [String] configuration directory containing session and tab files
+    attr_reader :config_dir
+
     # Creates a new empty session file for the store's workspace directory.
     #
     # Parent fields record clone/fork ancestry; they do not imply live coupling

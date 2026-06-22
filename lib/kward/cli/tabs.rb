@@ -1,25 +1,72 @@
+require "thread"
+require_relative "../cancellation"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
   class CLI
-    # TUI session tab coordination.
+    # TUI session tab coordination and asynchronous turn execution.
     module Tabs
+      TabRuntime = Struct.new(
+        :session,
+        :agent,
+        :diff,
+        :snapshot,
+        :status,
+        :thread,
+        :cancellation,
+        :event_history,
+        :seen_events,
+        :queued_inputs,
+        :steering,
+        :error,
+        :answer,
+        :stream_state,
+        :markdown_chunks,
+        keyword_init: true
+      ) do
+        def running?
+          %w[queued running].include?(status.to_s)
+        end
+
+        def idle?
+          !running?
+        end
+
+        def record_event(event)
+          event_history << event
+        end
+      end
+
       private
 
       def setup_interactive_tabs(session_store, agent)
         @tabs = []
         @active_tab_index = 0
-        @tab_store = session_store ? TabStore.new(cwd: session_store.cwd) : nil
-        if session_store && agent.nil?
-          restored = restore_tabs(session_store)
-          return restored if restored
+        @tab_store = session_store ? TabStore.new(config_dir: session_store.config_dir, cwd: session_store.cwd) : nil
+        @tab_live_view = nil
+        @restored_tabs = false
+        restored = restore_tabs(session_store) if session_store && agent.nil?
+        return restored if restored
+
+        if agent.nil? && (resumed_agent = resume_last_session(session_store))
+          release_implementation_writer
+          @tabs << build_tab(@active_session, build_tab_agent(resumed_agent.conversation, @active_session))
+          return activate_tab(0, render: false)
         end
 
-        tab_agent = agent || build_new_session_agent(session_store)
+        if agent
+          @active_session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
+          @active_session.attach(agent.conversation)
+          tab_agent = build_tab_agent(agent.conversation, @active_session)
+        else
+          @active_session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
+          conversation = new_conversation(workspace_root: session_store.cwd)
+          @active_session.attach(conversation)
+          tab_agent = build_tab_agent(conversation, @active_session)
+        end
         @tabs << build_tab(@active_session, tab_agent)
-        update_prompt_tabs
-        persist_tabs
-        tab_agent
+        activate_tab(0, render: false)
       end
 
       def restore_tabs(session_store)
@@ -30,23 +77,55 @@ module Kward
         paths.each do |path|
           session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
           track_session(session)
-          @tabs << build_tab(session, build_interactive_agent(conversation))
+          @tabs << build_tab(session, build_tab_agent(conversation, session))
         rescue StandardError
           next
         end
         return nil if @tabs.empty?
 
         @active_tab_index = [[data["active_index"].to_i, 0].max, @tabs.length - 1].min
-        activate_tab(@active_tab_index, render: false)
+        @restored_tabs = true
+        activate_tab(@active_tab_index)
+      end
+
+      def build_tab_agent(conversation, session)
+        conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
+        workspace = configured_workspace(root: conversation.workspace_root)
+        @worker_write_lock ||= Workers::WriteLock.new
+        tool_registry = ToolRegistry.new(
+          workspace: workspace,
+          prompt: @prompt,
+          allowed_tool_names: Workers::ToolPolicy.allowed_tool_names("implementation"),
+          write_lock: @worker_write_lock,
+          writer_id: tab_writer_id(session)
+        )
+        @footer_conversation = conversation
+        @footer_tool_registry = tool_registry
+        Agent.new(client: @client, tool_registry: tool_registry, conversation: conversation)
+      end
+
+      def tab_writer_id(session)
+        "tab:#{session&.id || object_id}"
       end
 
       def build_tab(session, agent)
-        {
+        TabRuntime.new(
           session: session,
           agent: agent,
           diff: session&.path ? SessionDiff.from_session_file(session.path) : SessionDiff.new,
-          snapshot: nil
-        }
+          snapshot: nil,
+          status: "idle",
+          thread: nil,
+          cancellation: nil,
+          event_history: [],
+          seen_events: 0,
+          queued_inputs: [],
+          steering: nil,
+          error: nil,
+          answer: nil,
+          stream_state: new_tab_stream_state(agent),
+          markdown_chunks: []
+        )
       end
 
       def active_tab
@@ -72,23 +151,30 @@ module Kward
         return say_sessions_unavailable unless session_store
 
         save_active_tab_state
+        stop_tab_live_view
         session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
         conversation = new_conversation(workspace_root: session_store.cwd)
         session.attach(conversation)
-        @tabs << build_tab(session, build_interactive_agent(conversation))
+        @tabs << build_tab(session, build_tab_agent(conversation, session))
         @active_tab_index = @tabs.length - 1
         activate_tab(@active_tab_index)
       end
 
       def close_active_tab
+        tab = active_tab
+        if tab&.running?
+          runtime_output("Tab #{active_tab_number} is running and cannot be closed yet.")
+          return nil
+        end
+
         if @tabs.length <= 1
           @tabs.clear
           persist_tabs
           return PromptInterface::EXIT_INPUT
         end
 
-        tab = active_tab
-        tab[:session]&.delete_if_unused if tab && tab[:session].respond_to?(:delete_if_unused)
+        stop_tab_live_view
+        tab.session&.delete_if_unused if tab&.session.respond_to?(:delete_if_unused)
         @tabs.delete_at(@active_tab_index)
         @active_tab_index = [@active_tab_index, @tabs.length - 1].min
         activate_tab(@active_tab_index)
@@ -100,52 +186,344 @@ module Kward
         return unless index.between?(0, @tabs.length - 1)
 
         save_active_tab_state
+        stop_tab_live_view
         @active_tab_index = index
         activate_tab(index)
+      end
+
+      def replace_active_tab_agent(agent)
+        tab = active_tab
+        return agent unless tab
+
+        tab.session = @active_session
+        tab.agent = build_tab_agent(agent.conversation, tab.session)
+        tab.diff = @session_diff || (tab.session&.path ? SessionDiff.from_session_file(tab.session.path) : SessionDiff.new)
+        tab.snapshot = nil
+        tab.status = "idle"
+        tab.error = nil
+        tab.answer = nil
+        tab.event_history.clear
+        tab.seen_events = 0
+        tab.queued_inputs.clear
+        tab.steering = nil
+        tab.stream_state = new_tab_stream_state(tab.agent)
+        tab.markdown_chunks.clear
+        update_prompt_tabs
+        persist_tabs
+        tab.agent
       end
 
       def save_active_tab_state
         tab = active_tab
         return unless tab
 
-        tab[:snapshot] = @prompt.composer_snapshot if @prompt.respond_to?(:composer_snapshot)
-        tab[:diff] = @session_diff
+        if @prompt.respond_to?(:tab_view_snapshot)
+          tab.snapshot = @prompt.tab_view_snapshot
+        elsif @prompt.respond_to?(:composer_snapshot)
+          tab.snapshot = @prompt.composer_snapshot
+        end
+        tab.diff = @session_diff
       end
 
       def activate_tab(index, render: true)
         tab = @tabs[index]
         return nil unless tab
 
-        @active_session = tab[:session]
-        @session_diff = tab[:diff] || SessionDiff.new
-        @footer_conversation = tab[:agent].conversation
-        update_assistant_prompt(tab[:agent].conversation)
+        @active_session = tab.session
+        @session_diff = tab.diff || SessionDiff.new
+        @footer_conversation = tab.agent.conversation
+        @footer_tool_registry = tab.agent.tool_registry if tab.agent.respond_to?(:tool_registry)
+        update_assistant_prompt(tab.agent.conversation)
         update_prompt_tabs
-        if render && @prompt.respond_to?(:restore_composer_snapshot)
-          if tab[:snapshot]
-            @prompt.restore_composer_snapshot(tab[:snapshot])
+        render_tab(tab) if render
+        start_tab_live_view(tab) if tab.running?
+        persist_tabs
+        tab.agent
+      end
+
+      def render_tab(tab)
+        if tab.running? && tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot)
+          @prompt.restore_tab_view_snapshot(tab.snapshot)
+          return
+        end
+
+        restore_prompt_transcript do
+          if empty_tab_conversation?(tab.agent.conversation)
+            print_visual_banner
           else
-            restore_prompt_transcript { render_conversation_transcript(tab[:agent].conversation) }
+            render_conversation_transcript(tab.agent.conversation)
+          end
+          render_tab_error(tab) if tab.status == "failed"
+        end
+        @prompt.restore_composer_snapshot(tab.snapshot) if tab.snapshot && @prompt.respond_to?(:restore_composer_snapshot)
+      end
+
+      def empty_tab_conversation?(conversation)
+        conversation.messages.none? do |message|
+          role = message["role"] || message[:role]
+          role != "system"
+        end
+      end
+
+      def render_tab_error(tab)
+        runtime_output("Tab #{active_tab_number} error: #{tab.error}") unless tab.error.to_s.empty?
+      end
+
+      def submit_tab_input(tab, input, display_input: nil)
+        return if input.to_s.strip.empty?
+
+        save_active_tab_state
+        start_tab_turn(tab, input, display_input: display_input)
+        start_tab_live_view(tab) if tab == active_tab
+      end
+
+      def start_tab_turn(tab, input, display_input: nil)
+        stop_live_worker_view if respond_to?(:stop_live_worker_view, true)
+        prepare_memory_context(tab.agent.conversation, input) if tab.agent.respond_to?(:conversation)
+        print_user_transcript(input, display_input: display_input) if prompt_interface?
+        tab.status = "queued"
+        tab.cancellation = Cancellation.new
+        tab.steering = steering_supported? ? Steering.new : nil
+        tab.error = nil
+        tab.answer = nil
+        tab.event_history.clear
+        tab.seen_events = 0
+        tab.markdown_chunks.clear
+        tab.stream_state = new_tab_stream_state(tab.agent)
+        update_prompt_tabs
+        tab.thread = Thread.new { run_tab_turn(tab, input, display_input: display_input) }
+        tab.thread.report_on_exception = false
+        update_prompt_tabs
+      end
+
+      def run_tab_turn(tab, input, display_input: nil)
+        options = agent_display_options(display_input)
+        options[:cancellation] = tab.cancellation
+        options[:steering] = tab.steering if tab.steering
+        acquire_tab_writer(tab)
+        tab.answer = tab.agent.ask(input, **options) do |event|
+          tab.record_event(event)
+        end
+        tab.status = "ready"
+      rescue Cancellation::CancelledError
+        tab.status = "cancelled"
+      rescue StandardError => e
+        tab.error = e.message
+        tab.status = "failed"
+      ensure
+        release_tab_writer(tab)
+        finish_tab_turn(tab)
+      end
+
+      def acquire_tab_writer(tab)
+        writer_id = tab.agent.tool_registry.writer_id if tab.agent.respond_to?(:tool_registry)
+        return if writer_id.to_s.empty?
+        return unless @worker_write_lock
+
+        until @worker_write_lock.acquire(writer_id)
+          tab.cancellation&.raise_if_cancelled!
+          sleep 0.05
+        end
+        tab.status = "running"
+        update_prompt_tabs
+      end
+
+      def release_tab_writer(tab)
+        writer_id = tab.agent.tool_registry.writer_id if tab.agent.respond_to?(:tool_registry)
+        @worker_write_lock&.release(writer_id) unless writer_id.to_s.empty?
+      end
+
+      def finish_tab_turn(tab)
+        persist_memory_state(tab.agent.conversation) if tab.agent.respond_to?(:conversation)
+        auto_summarize_memory(tab.agent.conversation) if tab.agent.respond_to?(:conversation) && tab.queued_inputs.empty? && tab.status == "ready"
+        tab.diff = tab.session&.path ? SessionDiff.from_session_file(tab.session.path) : tab.diff
+        update_prompt_tabs
+      rescue StandardError
+        nil
+      end
+
+      def poll_active_tab_input
+        tab = active_tab
+        unless tab&.running?
+          input = @prompt.ask("You>")
+          return { tab_action: :close } if input.nil? && tab && @tabs.length > 1
+
+          return input
+        end
+
+        @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+        loop do
+          refresh_active_tab
+          poll_result = @prompt.poll_input
+          case poll_result
+          when Hash
+            if poll_result[:tab_action]
+              @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+              return poll_result
+            end
+          when PromptInterface::CANCEL_INPUT
+            tab.cancellation&.cancel!
+            tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
+          when PromptInterface::EXIT_INPUT
+            tab.queued_inputs << "/exit"
+            @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+          when String
+            handle_tab_busy_input(tab, poll_result)
+          end
+          return next_tab_queued_input(tab) if tab.idle? && !tab.queued_inputs.empty?
+          return :tab_idle if tab.idle?
+
+          sleep 0.01 if poll_result.nil?
+        end
+      ensure
+        @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input) && tab&.idle?
+      end
+
+      def next_tab_queued_input(tab)
+        input = tab.queued_inputs.shift
+        tab.queued_inputs.reverse_each { |queued| @pending_inputs.unshift(queued) } if defined?(@pending_inputs) && @pending_inputs
+        tab.queued_inputs.clear
+        input
+      end
+
+      def handle_tab_busy_input(tab, input)
+        command = input.to_s.strip
+        if command == "/workers" || command.start_with?("/workers ")
+          _handled, replacement_agent = handle_local_slash_command(command, tab.agent, @session_store)
+          tab.agent = replacement_agent if replacement_agent?(replacement_agent)
+          restore_busy_input_prompt
+          return
+        end
+
+        if tab.steering && !input.to_s.strip.empty?
+          begin
+            tab.steering.submit(input)
+            @prompt.set_steered_count(1) if @prompt.respond_to?(:set_steered_count)
+            return
+          rescue StandardError
+            # Fall through to queueing.
           end
         end
-        persist_tabs
-        tab[:agent]
+        tab.queued_inputs << input unless input.to_s.strip.empty?
+        @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+      end
+
+      def refresh_active_tab
+        tab = active_tab
+        return unless tab
+
+        if tab.thread && !tab.thread.alive? && tab.running?
+          tab.thread.join
+          tab.status = "ready" if tab.status == "running"
+        end
+        update_prompt_tabs
+      end
+
+      def start_tab_live_view(tab)
+        return unless prompt_interface?
+
+        stop_tab_live_view
+        @tab_live_view_stop = false
+        @tab_live_view = Thread.new { run_tab_live_view(tab) }
+        @tab_live_view.report_on_exception = false
+      end
+
+      def stop_tab_live_view
+        @tab_live_view_stop = true
+        @tab_live_view&.join(0.2)
+        @tab_live_view = nil
+      end
+
+      def run_tab_live_view(tab)
+        renderer = tab_live_renderer(tab)
+        until @tab_live_view_stop
+          events = tab.event_history[tab.seen_events..] || []
+          events.each { |event| renderer.call(event, tab.agent) }
+          tab.seen_events += events.length
+          if tab.idle?
+            renderer.call(:flush, tab.agent)
+            break
+          end
+          sleep 0.05
+        end
+      ensure
+        @tab_live_view_stop = false if @tab_live_view == Thread.current
+      end
+
+      def tab_live_renderer(tab)
+        lambda do |event, agent|
+          if event == :flush
+            flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state, force: true)
+            render_tab_answer(tab)
+            @prompt.redraw if @prompt.respond_to?(:redraw)
+            next
+          end
+
+          notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
+          handle_interactive_event(event, tab.markdown_chunks, tab.stream_state)
+          flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state)
+        rescue StandardError => e
+          runtime_output("Tab view error: #{e.message}")
+        end
+      end
+
+      def render_tab_answer(tab)
+        return unless tab.status == "ready"
+        return if tab.stream_state[:streamed]
+        return if tab.answer.to_s.empty?
+
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(tab.answer)}\n")
+      end
+
+      def new_tab_stream_state(agent)
+        {
+          streamed: false,
+          last_flush: monotonic_now,
+          stream_block_open: false,
+          markdown_streams: {},
+          defer_assistant_streaming: defer_assistant_streaming?(agent)
+        }
+      end
+
+      def tab_labels
+        @tabs.each_with_index.map do |tab, index|
+          label = (index + 1).to_s
+          tab.running? ? "#{label}*" : label
+        end
+      end
+
+      def active_tab_number
+        @active_tab_index.to_i + 1
       end
 
       def update_prompt_tabs
         return unless @prompt.respond_to?(:update_tabs)
 
-        @prompt.update_tabs(labels: @tabs.each_index.map { |index| (index + 1).to_s }, active_index: @active_tab_index)
+        @prompt.update_tabs(labels: tab_labels, active_index: @active_tab_index)
+      end
+
+      def stop_tabs
+        stop_tab_live_view
+        Array(@tabs).each do |tab|
+          next unless tab&.running?
+
+          tab.cancellation&.cancel!
+          tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
+          tab.thread&.join(0.2)
+        rescue StandardError
+          nil
+        end
       end
 
       def persist_tabs
         return unless @tab_store
 
         @tab_store.save(
-          session_paths: @tabs.map { |tab| tab[:session]&.path }.compact,
+          session_paths: @tabs.map { |tab| tab.session&.path }.compact,
           active_index: @active_tab_index
         )
       end
+
     end
   end
 end

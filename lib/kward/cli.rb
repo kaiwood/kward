@@ -308,19 +308,20 @@ module Kward
       update_assistant_prompt(agent.conversation)
       @footer_conversation = agent.conversation
 
-      print_visual_banner unless @resumed_last_session
+      print_visual_banner unless @resumed_last_session || @restored_tabs
       render_resumed_last_session_transcript(agent.conversation) if @resumed_last_session
 
       @pending_inputs = []
 
       loop do
-        input = @pending_inputs.shift || @prompt.ask("You>")
+        input = @pending_inputs.shift || (active_tab ? poll_active_tab_input : @prompt.ask("You>"))
         if input.is_a?(Hash) && input[:tab_action]
           tab_result = handle_tab_action(input, session_store)
           break if tab_result == PromptInterface::EXIT_INPUT
-          agent = active_tab[:agent] if active_tab
+          agent = active_tab.agent if active_tab
           next
         end
+        next if input == :tab_idle
         break if input.nil?
 
         display_input = submitted_display_input(input)
@@ -338,12 +339,16 @@ module Kward
           end
           break if ["/exit", "/quit"].include?(command)
           handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
-          agent = replacement_agent if replacement_agent?(replacement_agent)
+          if replacement_agent?(replacement_agent)
+            agent = active_tab ? replace_active_tab_agent(replacement_agent) : replacement_agent
+          end
         end
         next if handled
         request_handled, request_replacement = handle_request_worker_input(command_input, agent, session_store)
         if request_handled
-          agent = request_replacement if replacement_agent?(request_replacement)
+          if replacement_agent?(request_replacement)
+            agent = active_tab ? replace_active_tab_agent(request_replacement) : request_replacement
+          end
           next
         end
         next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
@@ -357,10 +362,14 @@ module Kward
           @rewind_return_leaf_id = nil
           auto_name_active_session(display_input || input)
           @foreground_turn_active = true if @active_worker_role == "implementation"
-          pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
-          active_tab[:diff] = @session_diff if active_tab
-          agent = @busy_replacement_agent if replacement_agent?(@busy_replacement_agent)
-          @busy_replacement_agent = nil
+          if active_tab
+            submit_tab_input(active_tab, input, display_input: display_input)
+            pending_inputs = []
+          else
+            pending_inputs = run_interactive_turn(agent, input, display_input: display_input)
+            agent = @busy_replacement_agent if replacement_agent?(@busy_replacement_agent)
+            @busy_replacement_agent = nil
+          end
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e
           runtime_output("Error: #{e.message}")
@@ -376,6 +385,7 @@ module Kward
       agent&.conversation
     ensure
       begin
+        stop_tabs if respond_to?(:stop_tabs, true)
         stop_live_worker_view if respond_to?(:stop_live_worker_view, true)
         @prompt.close if prompt_interface?
       ensure

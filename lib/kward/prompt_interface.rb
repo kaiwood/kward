@@ -361,26 +361,47 @@ module Kward
       @mutex.synchronize do
         {
           composer: @composer,
-          transcript_buffer: @transcript_buffer,
-          transcript_viewport_rows: @transcript_viewport_rows,
-          stream_state: @stream_state,
           prompt_label: @prompt_label
+        }
+      end
+    end
+
+    def tab_view_snapshot
+      @mutex.synchronize do
+        {
+          composer: @composer.dup,
+          prompt_label: @prompt_label.dup,
+          transcript_buffer: @transcript_buffer.dup,
+          transcript_viewport_rows: @transcript_viewport_rows,
+          stream_state: @stream_state.dup
         }
       end
     end
 
     def restore_composer_snapshot(snapshot)
       @mutex.synchronize do
-        @composer = snapshot[:composer] || ComposerState.new
+        restore_composer_snapshot_locked(snapshot)
+        redraw_screen_locked if @started
+      end
+    end
+
+    def restore_tab_view_snapshot(snapshot)
+      @mutex.synchronize do
+        restore_composer_snapshot_locked(snapshot)
         @transcript_buffer = snapshot[:transcript_buffer] || TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
         @transcript_viewport_rows = snapshot[:transcript_viewport_rows].to_i
         @stream_state = snapshot[:stream_state] || StreamState.new
-        @prompt_label = snapshot[:prompt_label].to_s.empty? ? "You>" : snapshot[:prompt_label].to_s
-        self.composer_input = @composer.input
-        self.composer_cursor = @composer.cursor
         @last_composer_rows = []
         redraw_screen_locked if @started
       end
+    end
+
+    def restore_composer_snapshot_locked(snapshot)
+      @composer = snapshot[:composer] || ComposerState.new
+      @prompt_label = snapshot[:prompt_label].to_s.empty? ? "You>" : snapshot[:prompt_label].to_s
+      self.composer_input = @composer.input
+      self.composer_cursor = @composer.cursor
+      @last_composer_rows = []
     end
 
     def update_overlay_settings(settings)

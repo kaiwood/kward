@@ -13,6 +13,12 @@ module Kward
         @display_rows_cache = nil
       end
 
+      def initialize_copy(source)
+        super
+        @text = source.text.dup
+        invalidate_display_rows_cache
+      end
+
       def to_s
         @text
       end

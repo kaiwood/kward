@@ -10,6 +10,13 @@ module Kward
         reset
       end
 
+      def initialize_copy(source)
+        super
+        @block = source.block&.dup
+        @col = source.col
+        @pending_wrap = source.pending_wrap?
+      end
+
       def reset
         @block = nil
         @col = 0
