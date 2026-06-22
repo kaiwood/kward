@@ -48,12 +48,7 @@ module Kward
           run_busy_local_command_and_requeue { reload_plugins(agent.conversation) }
           [true, nil]
         when "new"
-          if respond_to?(:active_tab, true) && active_tab
-            open_new_tab(session_store)
-            [true, active_tab&.agent]
-          else
-            [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
-          end
+          [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
         when "sessions", "resume"
           unless session_store
             say_sessions_unavailable

@@ -55,7 +55,7 @@ class TestTabs < KwardTestCase
       @poll_inputs.concat(inputs)
     end
 
-    def begin_busy_input(_message = "You>")
+    def begin_busy_input(_message = "You>", activity: "loading")
       @busy_started += 1
     end
 
@@ -126,6 +126,25 @@ class TestTabs < KwardTestCase
 
       cli.send(:handle_tab_command, "new", store)
       assert_equal ["Main", "Tab"], prompt.tabs_updates.last[:labels]
+    end
+  end
+
+  def test_new_command_replaces_active_tab_session_without_opening_tab
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      original_session = cli.send(:active_tab).session
+
+      handled, replacement = cli.send(:handle_local_slash_command, "/new", cli.send(:active_tab).agent, store)
+      cli.send(:replace_active_tab_agent, replacement)
+
+      assert handled
+      assert_equal 1, cli.instance_variable_get(:@tabs).length
+      assert_equal 0, cli.instance_variable_get(:@active_tab_index)
+      refute_equal original_session.path, cli.send(:active_tab).session.path
+      assert_equal ["Main"], prompt.tabs_updates.last[:labels]
     end
   end
 

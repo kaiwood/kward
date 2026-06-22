@@ -19,6 +19,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `/new` in TUI tabs so it starts a fresh session in the current tab instead of opening another tab.
 - Fixed Alt+Backspace in alt tab-keybinding mode so terminals that emit Alt-W no longer close the active tab.
 - Fixed idle Ctrl+D in multi-tab TUI sessions so it closes only the active tab instead of exiting the app.
 - Fixed restored TUI tabs so startup renders the active restored session instead of the fresh-session banner.
