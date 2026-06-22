@@ -150,30 +150,12 @@ module Kward
         reasoning = "n/a" unless ModelInfo.reasoning_supported?(provider, model) && !reasoning.to_s.empty?
         text = "#{provider} #{model} · #{reasoning}"
         parts = []
-        worker = composer_worker_text
-        parts << worker if worker
         diff = composer_session_diff_text
         parts << diff if diff
         usage = composer_context_usage(provider, model)
         parts << composer_context_percent_text(usage[:percent]) if usage
         parts << text
         parts.join(" · ")
-      end
-
-      def composer_worker_text
-        id = @visible_worker_id.to_s
-        return nil if id.empty?
-
-        status = @visible_worker&.status || @visible_worker_status
-        return id unless %w[queued running].include?(status.to_s)
-
-        "#{composer_worker_spinner} #{id}"
-      end
-
-      def composer_worker_spinner
-        frames = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏]
-        index = (Process.clock_gettime(Process::CLOCK_MONOTONIC) / 0.1).floor % frames.length
-        frames[index]
       end
 
       def composer_session_diff_text
