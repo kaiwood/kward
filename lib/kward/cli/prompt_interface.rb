@@ -25,7 +25,8 @@ module Kward
           attachment_parser: method(:composer_attachment_parser),
           banner_message: Kward::PromptInterface::BANNER_MESSAGE,
           tab_keybindings: ConfigFiles.composer_tab_keybindings,
-          editor_mode: ConfigFiles.editor_mode
+          editor_mode: ConfigFiles.editor_mode,
+          editor_mode_source: -> { ConfigFiles.editor_mode }
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
           @prompt.start(render: false)

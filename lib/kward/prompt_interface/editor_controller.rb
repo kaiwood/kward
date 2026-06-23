@@ -52,7 +52,7 @@ module Kward
           end
         end
 
-        @editor_state = EditorState.new(path: full_path, content: File.exist?(full_path) ? File.read(full_path) : "", new_file: !File.exist?(full_path), editor_mode: @editor_mode)
+        @editor_state = EditorState.new(path: full_path, content: File.exist?(full_path) ? File.read(full_path) : "", new_file: !File.exist?(full_path), editor_mode: current_editor_mode)
         @prompt_label = "Edit>"
         self.composer_input = ""
         self.composer_cursor = 0
@@ -65,6 +65,14 @@ module Kward
       rescue StandardError => e
         @file_editor_open_status = "Cannot edit #{path}: #{e.message}"
         false
+      end
+
+      def current_editor_mode
+        return normalize_editor_mode(@editor_mode_source.call) if @editor_mode_source.respond_to?(:call)
+
+        @editor_mode
+      rescue StandardError
+        @editor_mode
       end
 
       def close_editor

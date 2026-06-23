@@ -3204,6 +3204,29 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, Kward::PromptInterface::CURSOR_SHOW
   end
 
+  def test_prompt_interface_editor_mode_is_read_when_editor_opens
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      workspace = File.join(dir, "workspace")
+      Dir.mkdir(workspace)
+      File.write(File.join(workspace, "notes.txt"), "alpha")
+      Kward::ConfigFiles.write_config({ "editor" => { "mode" => "default" } }, config_path)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Dir.chdir(workspace) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "default", editor_mode_source: -> { Kward::ConfigFiles.editor_mode })
+          assert prompt.send(:open_editor, "notes.txt")
+          assert_equal "default", prompt.instance_variable_get(:@editor_state).editor_mode
+          prompt.send(:close_editor)
+
+          Kward::ConfigFiles.write_config({ "editor" => { "mode" => "vi" } }, config_path)
+          assert prompt.send(:open_editor, "notes.txt")
+          assert_equal "vi", prompt.instance_variable_get(:@editor_state).editor_mode
+        end
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_opens_in_normal_mode_and_requires_insert
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
