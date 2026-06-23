@@ -1,5 +1,5 @@
 require "digest"
-require_relative "../editor_mode"
+require_relative "../../editor_mode"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
