@@ -82,6 +82,9 @@ module Kward
         csi_result = handle_editor_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        shift_result = handle_editor_shift_navigation_key(key)
+        return shift_result unless shift_result == false
+
         binding_result = handle_editor_key_binding(key)
         return binding_result unless binding_result == false
 
@@ -99,18 +102,25 @@ module Kward
         case key
         when "\n", "\r"
           return editor_search_confirm if editor_search_active?
+          clear_editor_selection_before_edit
           @editor_state.insert("\n")
         when "\t"
+          clear_editor_selection_before_edit
           @editor_state.insert("  ") unless editor_search_active?
         when "\b", "\x7F"
+          clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
-        when "\x03", "\e"
+        when "\x03"
           return editor_search_cancel if editor_search_active?
+        when "\e"
+          return editor_search_cancel if editor_search_active?
+          return @editor_state.clear_selection if @editor_state.selection_active?
         when "\x11"
           quit_editor
         when "\x13"
           save_editor
         when "/"
+          clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_append(key) : editor_search_begin
         else
           key_name = key_name_for(key)
@@ -119,8 +129,9 @@ module Kward
 
           if editor_search_active?
             editor_search_append(key) if printable_key?(key)
-          else
-            @editor_state.insert(key) if printable_key?(key)
+          elsif printable_key?(key)
+            clear_editor_selection_before_edit
+            @editor_state.insert(key)
           end
         end
       end
@@ -138,13 +149,16 @@ module Kward
 
         case code
         when 13
+          clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_confirm : @editor_state.insert("\n")
         when 27
-          editor_search_cancel if editor_search_active?
+          editor_search_active? ? editor_search_cancel : @editor_state.clear_selection
         when 8, 127
+          clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
           nil
         when 4
+          clear_editor_selection_before_edit unless editor_search_active?
           @editor_state.delete_at_cursor unless editor_search_active?
           nil
         else
@@ -152,7 +166,25 @@ module Kward
           return false unless code.between?(32, 126)
 
           char = code.chr(Encoding::UTF_8)
+          clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_append(char) : @editor_state.insert(char)
+        end
+      end
+
+      def handle_editor_shift_navigation_key(key)
+        return false if editor_search_active?
+
+        case key
+        when "\e[1;2D", "\e[2D"
+          editor_extending_selection { @editor_state.move_left }
+        when "\e[1;2C", "\e[2C"
+          editor_extending_selection { @editor_state.move_right }
+        when "\e[1;2A", "\e[2A"
+          editor_extending_selection { @editor_state.move_up }
+        when "\e[1;2B", "\e[2B"
+          editor_extending_selection { @editor_state.move_down }
+        else
+          false
         end
       end
 
@@ -168,6 +200,8 @@ module Kward
           @editor_state.move_line_end unless editor_search_active?
         when "\x06"
           @editor_state.move_right unless editor_search_active?
+        when "\x00"
+          @editor_state.begin_selection unless editor_search_active?
         when "\x0B"
           @editor_state.kill_line_after_cursor unless editor_search_active?
         when "\x0E"
@@ -179,7 +213,7 @@ module Kward
         when "\x17"
           @editor_state.delete_word_before_cursor unless editor_search_active?
         when "\x19"
-          @editor_state.yank_kill_buffer unless editor_search_active?
+          editor_selection_active? ? copy_editor_selection : @editor_state.yank_kill_buffer unless editor_search_active?
         when "\e[D", "\eOD"
           @editor_state.move_left unless editor_search_active?
         when "\e[C", "\eOC"
@@ -209,6 +243,8 @@ module Kward
         normalized_code = code.to_i.chr.downcase.ord rescue code
         if ctrl_modifier?(modifier)
           case normalized_code
+          when 32
+            @editor_state.begin_selection unless editor_search_active?
           when 97
             @editor_state.move_line_start unless editor_search_active?
           when 98
@@ -236,7 +272,7 @@ module Kward
           when 119
             @editor_state.delete_word_before_cursor unless editor_search_active?
           when 121
-            @editor_state.yank_kill_buffer unless editor_search_active?
+            editor_selection_active? ? copy_editor_selection : @editor_state.yank_kill_buffer unless editor_search_active?
           else
             false
           end
@@ -335,6 +371,31 @@ module Kward
             false
           end
         end
+      end
+
+      def editor_extending_selection
+        @editor_state.selection_anchor ||= @editor_state.cursor
+        yield
+        true
+      end
+
+      def editor_selection_active?
+        @editor_state&.selection_active?
+      end
+
+      def clear_editor_selection_before_edit
+        @editor_state&.clear_selection
+      end
+
+      def copy_editor_selection
+        text = @editor_state.selected_text
+        return false if text.empty?
+
+        @output_io.print("\e]52;c;#{Base64.strict_encode64(text)}\a")
+        @output_io.flush if @output_io.respond_to?(:flush)
+        @editor_state.clear_selection
+        @editor_state.status = "Copied selection"
+        true
       end
 
       def editor_search_active?

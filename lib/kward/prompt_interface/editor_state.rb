@@ -7,7 +7,7 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :new_file, :kill_buffer
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :new_file, :kill_buffer, :selection_anchor
 
       def initialize(path:, content:, new_file: false)
         @path = path.to_s
@@ -24,6 +24,7 @@ module Kward
         @search_active = false
         @search_query = ""
         @kill_buffer = ""
+        @selection_anchor = nil
       end
 
       def initialize_copy(other)
@@ -36,6 +37,7 @@ module Kward
         @search_query = other.search_query.dup
         @kill_buffer = other.kill_buffer.dup
         @quit_confirmed = other.quit_confirmed
+        @selection_anchor = other.selection_anchor
       end
 
       def dirty?
@@ -153,6 +155,38 @@ module Kward
 
       def yank_kill_buffer
         insert(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
+      end
+
+      def begin_selection
+        @selection_anchor = @cursor
+        @status = "Selection started"
+      end
+
+      def clear_selection
+        @selection_anchor = nil
+      end
+
+      def selection_active?
+        !@selection_anchor.nil? && @selection_anchor != @cursor
+      end
+
+      def selection_range
+        return nil unless selection_active?
+
+        [@selection_anchor, @cursor].minmax
+      end
+
+      def selected_text
+        range = selection_range
+        return "" unless range
+
+        @buffer[range[0]...range[1]].to_s
+      end
+
+      def line_start_offset(line_index)
+        values = lines
+        line_index = [[line_index.to_i, 0].max, values.length - 1].min
+        values.first(line_index).sum { |line| line.length + 1 }
       end
 
       def begin_search
@@ -277,6 +311,7 @@ module Kward
       def changed!
         @overwrite_confirmed = false
         @quit_confirmed = false
+        @selection_anchor = nil
       end
     end
   end

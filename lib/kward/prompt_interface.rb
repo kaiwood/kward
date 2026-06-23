@@ -1,3 +1,4 @@
+require "base64"
 require "find"
 require "io/console"
 require "pathname"
