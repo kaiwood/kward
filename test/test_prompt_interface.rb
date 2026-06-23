@@ -1396,6 +1396,105 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(rows.join("\n")), "No matching files"
   end
 
+  def test_prompt_interface_dollar_file_overlay_opens_editor
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "main.rb"), "puts :hi\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+        prompt.send(:composer_input=, "$li")
+        prompt.send(:composer_cursor=, 3)
+
+        assert prompt.send(:open_selected_file_in_editor)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal File.realpath(File.join(dir, "lib", "main.rb")), editor.path
+        assert_equal "puts :hi\n", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_saves_file
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\x13")
+
+        assert_equal "!hello", File.read(path)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_warns_before_overwriting_changed_file
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "!")
+        sleep 0.01
+        File.write(path, "external")
+
+        prompt.send(:handle_editor_key, "\x13")
+        assert_equal "external", File.read(path)
+        assert_includes prompt.instance_variable_get(:@editor_state).status, "Press Ctrl+S again"
+
+        prompt.send(:handle_editor_key, "\x13")
+        assert_equal "!hello", File.read(path)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_jumps_to_match
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "alpha\nbeta\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        refute_kind_of String, prompt.send(:handle_editor_key, "/")
+        "beta".each_char do |char|
+          refute_kind_of String, prompt.send(:handle_editor_key, char)
+        end
+        refute_kind_of String, prompt.send(:handle_editor_key, "\r")
+
+        assert_equal [1, 0], prompt.instance_variable_get(:@editor_state).cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_layout_fills_available_height
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "one\ntwo\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        rows, = prompt.send(:composer_layout, 80, 20)
+
+        assert_equal 19, rows.length
+        assert_includes strip_ansi(rows.first), "Edit notes.txt"
+      end
+    end
+  ensure
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_prompt_interface_file_overlay_uses_git_ignored_project_files
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib"))

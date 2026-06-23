@@ -9,6 +9,7 @@ require "tty-screen"
 require_relative "ansi"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
+require_relative "prompt_interface/editor_state"
 require_relative "prompt_interface/transcript_buffer"
 require_relative "prompt_interface/transcript_renderer"
 require_relative "prompt_interface/prompt_renderer"
@@ -21,6 +22,7 @@ require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
+require_relative "prompt_interface/editor_controller"
 require_relative "prompt_interface/layout"
 require_relative "prompt_interface/screen"
 require_relative "prompt_interface/key_handler"
@@ -56,6 +58,7 @@ module Kward
     include OverlayRenderer
     include ComposerRenderer
     include ComposerController
+    include EditorController
     include Layout
     include Screen
     include KeyHandler
@@ -122,8 +125,12 @@ module Kward
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
       @file_selection_index = 0
+      @file_open_selection_index = 0
       @file_overlay_dismissed_token = nil
+      @file_open_dismissed_token = nil
+      @file_editor_open_status = nil
       @file_mention_paths = nil
+      @editor_state = nil
       @select_state = nil
       @question_state = nil
       @question_prompt_active = false

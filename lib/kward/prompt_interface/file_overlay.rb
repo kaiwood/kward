@@ -17,15 +17,32 @@ module Kward
       def dismiss_file_overlay
         return false unless file_overlay_visible?
 
-        @file_overlay_dismissed_token = active_file_mention_token
+        if file_open_overlay_visible?
+          @file_open_dismissed_token = active_file_open_token
+          @file_editor_open_status = nil
+        else
+          @file_overlay_dismissed_token = active_file_mention_token
+        end
         reset_file_selection
         true
       end
 
       def file_overlay_visible?
+        file_open_overlay_visible? || file_mention_overlay_visible?
+      end
+
+      def file_mention_overlay_visible?
         token = active_file_mention_token
         return false unless token
         return false if @file_overlay_dismissed_token == token
+
+        true
+      end
+
+      def file_open_overlay_visible?
+        token = active_file_open_token
+        return false unless token
+        return false if @file_open_dismissed_token == token
 
         true
       end
@@ -38,23 +55,38 @@ module Kward
       end
 
       def active_file_mention
+        active_file_token("@")
+      end
+
+      def active_file_open_token
+        open = active_file_open
+        return nil unless open
+
+        open[:token]
+      end
+
+      def active_file_open
+        active_file_token("$")
+      end
+
+      def active_file_token(prefix)
         input = composer_input.to_s
         cursor = composer_cursor
         return nil if cursor.negative? || cursor > input.length
 
         before_cursor = input[0...cursor].to_s
-        at_index = before_cursor.rindex("@")
-        return nil unless at_index
-        return nil if before_cursor[at_index...cursor].to_s.match?(/\s/)
+        prefix_index = before_cursor.rindex(prefix)
+        return nil unless prefix_index
+        return nil if before_cursor[prefix_index...cursor].to_s.match?(/\s/)
 
-        { start: at_index, finish: cursor, query: before_cursor[(at_index + 1)...cursor].to_s, token: before_cursor[at_index...cursor].to_s }
+        { start: prefix_index, finish: cursor, query: before_cursor[(prefix_index + 1)...cursor].to_s, token: before_cursor[prefix_index...cursor].to_s }
       end
 
       def file_overlay_matches
-        mention = active_file_mention
-        return [] unless mention
+        token = active_file_open || active_file_mention
+        return [] unless token
 
-        query = mention[:query].downcase
+        query = token[:query].downcase
         matches = project_file_paths.select do |path|
           file_mention_match?(path.downcase, query)
         end
@@ -122,6 +154,14 @@ module Kward
       end
 
       def selected_file_mention_path
+        selected_file_overlay_path if file_mention_overlay_visible?
+      end
+
+      def selected_file_open_path
+        selected_file_overlay_path if file_open_overlay_visible?
+      end
+
+      def selected_file_overlay_path
         return nil unless file_overlay_visible?
 
         matches = file_overlay_matches
@@ -165,11 +205,13 @@ module Kward
 
         visible = visible_file_overlay_matches(matches, height: height)
         start_index = visible[:start]
-        lines = visible[:paths].each_with_index.map do |path, offset|
+        lines = []
+        lines << overlay_text_line(@file_editor_open_status, :muted) if @file_editor_open_status && file_open_overlay_visible?
+        lines.concat(visible[:paths].each_with_index.map do |path, offset|
           index = start_index + offset
           overlay_choice_line(path, selected: index == @file_selection_index)
-        end
-        overlay_card_rows("Files", lines, width)
+        end)
+        overlay_card_rows(file_open_overlay_visible? ? "Open file" : "Files", lines, width)
       end
 
       def visible_file_overlay_matches(matches, height: screen_height)

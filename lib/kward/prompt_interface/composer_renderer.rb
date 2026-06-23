@@ -7,6 +7,7 @@ module Kward
       private
 
       def composer_layout(width, height = screen_height)
+        return editor_layout(width, height) if editor_active?
         return compact_composer_layout(width) if height < 4
         return question_composer_layout(width, height) if @question_state
 
@@ -30,6 +31,43 @@ module Kward
         cursor_row = overlay_rows.length + 1 + attachment_rows.length + input_cursor_row - visible_start
         cursor_col = 2 + [input_cursor_col, content_width - 1].min
         [rows, cursor_row, cursor_col]
+      end
+
+      def editor_layout(width, height = screen_height)
+        content_width = [width - 4, 1].max
+        bottom_rows = @tabs.empty? ? [bottom_border(width)] : tab_border_rows(width)
+        visible_count = [[height - 3 - bottom_rows.length, 1].max, 1].max
+        visible_count = [visible_count, height - 4].min if height > 4
+        visible_count = [visible_count, 1].max
+        line_index, column = @editor_state.cursor_line_and_column
+        @editor_state.viewport_row = [[@editor_state.viewport_row, line_index - visible_count + 1].max, line_index].min
+        @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
+        visible_lines = @editor_state.lines[@editor_state.viewport_row, visible_count] || []
+        visible_lines << "" while visible_lines.length < visible_count
+        rows = [editor_top_border(width)]
+        rows.concat(visible_lines.map { |line| box_content_row(visible_truncate(line, content_width), content_width) })
+        rows << footer_row(content_width, editor_status_text)
+        rows.concat(bottom_rows)
+        cursor_row = 1 + line_index - @editor_state.viewport_row
+        cursor_col = 2 + [column, content_width - 1].min
+        [rows, cursor_row, cursor_col]
+      end
+
+      def editor_top_border(width)
+        title = visible_truncate("Edit #{editor_display_path}#{@editor_state.dirty? ? " *" : ""}", [width - 4, 1].max)
+        plain_title = ANSI.strip(title)
+        "#{colored("╭", :primary_green)} #{title} #{colored("─" * [width - plain_title.length - 4, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
+      end
+
+      def editor_display_path
+        Pathname.new(@editor_state.path).relative_path_from(Pathname.new(Dir.pwd)).to_s
+      rescue StandardError
+        @editor_state.path
+      end
+
+      def editor_status_text
+        text = @editor_state.search_active ? "Search: #{@editor_state.search_query}" : @editor_state.status
+        visible_truncate(text, [screen_width - 4, 1].max)
       end
 
       def compact_composer_layout(width)

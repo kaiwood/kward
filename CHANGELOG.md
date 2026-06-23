@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
 - Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
 - Added a Git branch indicator to the TUI composer status, coloring it yellow when the working tree has uncommitted changes.

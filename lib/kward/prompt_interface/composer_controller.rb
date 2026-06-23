@@ -40,6 +40,8 @@ module Kward
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
         @file_overlay_dismissed_token = nil
+        @file_open_dismissed_token = nil
+        @file_editor_open_status = nil
         @composer.insert_string(string)
       end
 
@@ -77,6 +79,8 @@ module Kward
         reset_file_selection
         reset_history_navigation
         @file_overlay_dismissed_token = nil
+        @file_open_dismissed_token = nil
+        @file_editor_open_status = nil
         @composer.delete_before_cursor
       end
 
@@ -88,6 +92,8 @@ module Kward
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
         @file_overlay_dismissed_token = nil
+        @file_open_dismissed_token = nil
+        @file_editor_open_status = nil
       end
 
       def delete_at_cursor
@@ -98,6 +104,8 @@ module Kward
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
         @file_overlay_dismissed_token = nil
+        @file_open_dismissed_token = nil
+        @file_editor_open_status = nil
         @composer.delete_at_cursor
       end
 

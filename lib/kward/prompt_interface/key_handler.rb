@@ -21,6 +21,7 @@ module Kward
 
       def handle_key(key)
         return submit_input if key.nil?
+        return handle_editor_key(key) if editor_active?
         return if handle_bracketed_paste_key(key)
 
         csi_result = handle_csi_u_key(key)
@@ -42,7 +43,7 @@ module Kward
 
         case key_name_for(key)
         when :return, :enter
-          submit_input
+          file_open_overlay_visible? ? open_selected_file_in_editor : submit_input
         when :backspace
           delete_before_cursor
         when :delete
@@ -96,9 +97,9 @@ module Kward
         else
           case key
           when "\n", "\r"
-            submit_input
+            file_open_overlay_visible? ? open_selected_file_in_editor : submit_input
           when "\t"
-            complete_selected_file_mention || complete_selected_slash_command || insert_key(key)
+            open_selected_file_in_editor || complete_selected_file_mention || complete_selected_slash_command || insert_key(key)
           when "\b", "\x7F"
             delete_before_cursor
           when "\x04"
@@ -205,7 +206,13 @@ module Kward
 
         case code
         when 13
-          modifier == 2 ? insert_string("\n") : submit_input
+          if modifier == 2
+            insert_string("\n")
+          elsif file_open_overlay_visible?
+            open_selected_file_in_editor
+          else
+            submit_input
+          end
         when 27
           dismiss_file_overlay || dismiss_slash_overlay || false
         when 8, 127
