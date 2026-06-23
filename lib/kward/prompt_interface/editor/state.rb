@@ -408,8 +408,21 @@ module Kward
           return false
         end
 
-        index = if @search_direction == :backward
-          @buffer.rindex(query, [@cursor - 1, 0].max) || @buffer.rindex(query)
+        repeat_search(@search_direction, query)
+      end
+
+      def repeat_search(direction = @search_direction, query = @search_query)
+        query = query.to_s
+        if query.empty?
+          @status = "No previous search"
+          return false
+        end
+
+        @search_query = query
+        @search_direction = direction
+        index = if direction == :backward
+          search_from = @cursor.positive? ? @cursor - 1 : @buffer.length
+          @buffer.rindex(query, search_from) || @buffer.rindex(query)
         else
           @buffer.index(query, @cursor + 1) || @buffer.index(query)
         end
@@ -421,6 +434,20 @@ module Kward
           @status = "No match: #{query}"
           false
         end
+      end
+
+      def word_under_cursor
+        return "" if @buffer.empty?
+
+        index = [[@cursor, 0].max, @buffer.length - 1].min
+        index -= 1 while index.positive? && word_separator?(@buffer[index])
+        return "" if word_separator?(@buffer[index])
+
+        start_index = index
+        start_index -= 1 while start_index.positive? && !word_separator?(@buffer[start_index - 1])
+        end_index = index + 1
+        end_index += 1 while end_index < @buffer.length && !word_separator?(@buffer[end_index])
+        @buffer[start_index...end_index].to_s
       end
 
       def refresh_after_save(content)

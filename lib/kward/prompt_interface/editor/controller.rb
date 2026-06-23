@@ -447,6 +447,23 @@ module Kward
         true
       end
 
+      def editor_search_repeat(direction = nil)
+        direction ||= @editor_state.search_direction
+        @editor_state.repeat_search(direction)
+        true
+      end
+
+      def editor_search_word_under_cursor(direction = :forward)
+        query = @editor_state.word_under_cursor
+        if query.empty?
+          @editor_state.status = "No word under cursor"
+          return true
+        end
+
+        @editor_state.repeat_search(direction, query)
+        true
+      end
+
       def editor_page_rows
         [[screen_height - 6, 1].max, 10].min
       end

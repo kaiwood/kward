@@ -13,6 +13,8 @@ xx
 - Added `D` delete-to-end-of-line support to the TUI vi editor mode.
 - Added `P` paste-before support to the TUI vi editor mode.
 - Added `U`, Ctrl+R redo, and `.` repeat-last-change support to the TUI vi editor mode.
+- Added `?pattern` backward search support to the TUI vi editor mode.
+- Added vi search repeat keys `n` and `N`, plus word-under-cursor search keys `*` and `#`, to the TUI vi editor mode.
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
 - Added nano, emacs, and vi editor modes for the built-in TUI file editor, with nano as the default, emacs kill-ring support, and vi retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.

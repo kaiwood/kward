@@ -344,6 +344,14 @@ module Kward
           vi_change_lines(count, command)
         when "J"
           vi_join_lines(count, command)
+        when "n"
+          editor_search_repeat
+        when "N"
+          editor_search_repeat(vi_opposite_search_direction)
+        when "*"
+          editor_search_word_under_cursor(:forward)
+        when "#"
+          editor_search_word_under_cursor(:backward)
         when "U"
           vi_restore_current_line
         when /^r(.?)$/
@@ -382,6 +390,8 @@ module Kward
           @editor_state.status = ":"
         when "/"
           editor_search_begin
+        when "?"
+          editor_search_begin(:backward)
         else
           if body.start_with?("d") || body.start_with?("y") || body.start_with?("c")
             vi_operator_motion(body[0], body[1..], count, command)
@@ -741,6 +751,10 @@ module Kward
         @output_io.print("\e]52;c;#{Base64.strict_encode64(@editor_state.kill_buffer)}\a")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.status = status
+      end
+
+      def vi_opposite_search_direction
+        @editor_state.search_direction == :backward ? :forward : :backward
       end
 
       def vi_restore_current_line

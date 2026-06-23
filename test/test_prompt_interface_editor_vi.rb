@@ -379,6 +379,69 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_repeats_search_direction
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\nalpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "/")
+        "alpha".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\r")
+        assert_equal [2, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "n")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "N")
+        assert_equal [2, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_star_and_hash_search_word_under_cursor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma beta\nalpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 6)
+
+        prompt.send(:handle_editor_key, "*")
+        assert_equal [1, 6], editor.cursor_line_and_column
+        assert_equal :forward, editor.search_direction
+
+        prompt.send(:handle_editor_key, "#")
+        assert_equal [0, 6], editor.cursor_line_and_column
+        assert_equal :backward, editor.search_direction
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_question_mark_searches_backward
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\nalpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.move_file_end
+
+        prompt.send(:handle_editor_key, "?")
+        assert editor.search_active
+        assert_equal :backward, editor.search_direction
+        "alpha".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\r")
+
+        assert_equal [2, 0], editor.cursor_line_and_column
+        assert_equal "Found: alpha", editor.status
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_visual_yanks_character_selection_to_clipboard
     output = StringIO.new
     Dir.mktmpdir do |dir|
