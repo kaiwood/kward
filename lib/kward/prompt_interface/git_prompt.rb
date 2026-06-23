@@ -39,6 +39,7 @@ module Kward
 
       def handle_git_key(key)
         return git_submit_message if key.nil?
+        return if handle_git_bracketed_paste_key(key)
 
         csi_result = handle_git_csi_u_key(key)
         return csi_result unless csi_result == false
@@ -100,6 +101,15 @@ module Kward
 
           insert_key(code.chr(Encoding::UTF_8))
         end
+      end
+
+      def handle_git_bracketed_paste_key(key)
+        paste = read_bracketed_paste(key)
+        return false unless paste
+
+        insert_string(normalize_paste(paste[:content])) if git_composing?
+        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
+        true
       end
 
       def handle_git_named_key(key_name)

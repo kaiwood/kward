@@ -2261,6 +2261,14 @@ class TestPromptInterface < KwardTestCase
     assert_equal "ship it", prompt.send(:composer_input)
   end
 
+  def test_prompt_interface_git_message_accepts_bracketed_paste
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
+
+    assert_nil prompt.send(:handle_git_key, "\e[200~ship it now\e[201~")
+    assert_equal "ship it now", prompt.send(:composer_input)
+  end
+
   def test_prompt_interface_git_cursor_is_hidden_until_composing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
