@@ -164,15 +164,21 @@ This only hides the hint text; Ctrl+C still stops the current running response.
 
 ## Editor settings
 
-The built-in TUI file editor uses Kward's default editor keybindings unless vi mode is enabled:
+The built-in TUI file editor supports three keybinding modes. Nano is the default:
 
 ```json
 {
   "editor": {
-    "mode": "vi"
+    "mode": "nano"
   }
 }
 ```
+
+`mode` can be `nano`, `emacs`, or `vi`. The old `default` value is still accepted as an alias for `nano`. You can change this from `/settings` > Interface > Editor mode; newly opened editor buffers pick up the setting immediately.
+
+Nano mode uses pico/nano-style keys: `Ctrl+O` saves, `Ctrl+X` quits, `Ctrl+W` searches, `Ctrl+K` cuts the current line or marked selection, `Ctrl+U` pastes the cut buffer, `Ctrl+6`/`Ctrl+^` sets the mark, and `Alt+6` copies the marked selection.
+
+Emacs mode uses Emacs-style non-modal keys: `Ctrl+X Ctrl+S` saves, `Ctrl+X Ctrl+C` quits, `Ctrl+S` searches forward, `Ctrl+R` searches backward, `Ctrl+Space` sets the mark, `Ctrl+W` kills the region or previous word, `Alt+W` copies the region, `Ctrl+K` kills to end of line, `Ctrl+Y` yanks, and `Alt+Y` cycles the per-buffer kill ring after a yank.
 
 Vi mode opens files in normal mode and supports a compact classic-vi subset: normal/insert/command modes, character and line visual modes with `v`/`V`, `h/j/k/l`, word and line movement, counts, simple `d`/`y` operator motions, `dd`, `yy`, `p`, `/` search, `u` undo, and `:w`, `:q`, `:q!`, `:wq`, `:x`, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
 

@@ -76,7 +76,7 @@ module Kward
           "tab_keybindings" => "auto"
         },
         "editor" => {
-          "mode" => "default"
+          "mode" => "nano"
         },
         "sessions" => {
           "auto_resume" => false
@@ -208,7 +208,9 @@ module Kward
     def editor_mode(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       value = editor["mode"].to_s.downcase
-      %w[default vi].include?(value) ? value : "default"
+      return "nano" if value == "default"
+
+      %w[nano emacs vi].include?(value) ? value : "nano"
     end
 
     # Returns whether file tools must stay inside the active workspace root.

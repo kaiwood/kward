@@ -105,7 +105,7 @@ module Kward
       end
 
       def editor_status_text
-        text = @editor_state.search_active ? "Search: #{@editor_state.search_query}" : @editor_state.status
+        text = @editor_state.search_active ? "#{@editor_state.search_direction == :backward ? "Search backward" : "Search"}: #{@editor_state.search_query}" : @editor_state.status
         visible_truncate(text, [screen_width - 4, 1].max)
       end
 

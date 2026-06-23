@@ -2266,7 +2266,7 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       Kward::ConfigFiles.write_config({ "editor" => { "mode" => "default" } }, config_path)
-      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Editor mode (default)", "vi"])
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Editor mode (nano)", "vi"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
 
       with_env("KWARD_CONFIG_PATH" => config_path) do
@@ -2277,7 +2277,8 @@ class TestCLI < KwardTestCase
       assert_includes prompt.output.join("\n"), "Editor mode set to vi. New editor buffers will use this mode."
       editor_mode_index = prompt.select_messages.index("Editor mode")
       assert editor_mode_index
-      assert_includes prompt.select_choices[editor_mode_index], "default (current)"
+      assert_includes prompt.select_choices[editor_mode_index], "nano (current)"
+      assert_includes prompt.select_choices[editor_mode_index], "emacs"
       assert_includes prompt.select_choices[editor_mode_index], "vi"
     end
   end

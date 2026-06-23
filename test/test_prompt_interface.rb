@@ -3,21 +3,21 @@ require "pty"
 
 class TestPromptInterface < KwardTestCase
   def test_busy_ctrl_c_returns_cancel_input
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@busy, true)
 
     assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\x03")
   end
 
   def test_busy_csi_u_ctrl_c_returns_cancel_input
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@busy, true)
 
     assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\e[99;5u")
   end
 
   def test_non_busy_ctrl_c_raises_interrupt
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
 
     assert_raises(Interrupt) do
       prompt.send(:handle_key, "\x03")
@@ -25,7 +25,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_non_busy_csi_u_ctrl_c_raises_interrupt
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
 
     assert_raises(Interrupt) do
       prompt.send(:handle_key, "\e[99;5u")
@@ -78,7 +78,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_borders_use_primary_green
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@color_enabled, true)
     primary_green = "\e[38;2;138;160;106m"
 
@@ -160,7 +160,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_renders_connected_tab_bar
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(labels: %w[Main Tab Tab], active_index: 1)
 
     rows, = prompt.send(:composer_layout, 80)
@@ -173,7 +173,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_renders_connected_tab_bar_for_first_tab
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(labels: %w[Main Tab Tab], active_index: 0)
 
     rows, = prompt.send(:composer_layout, 80)
@@ -185,7 +185,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_keeps_tab_labels_stable_when_switching_tabs
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(labels: %w[Main Tab Tab], active_index: 0)
     rows, = prompt.send(:composer_layout, 80)
     first_tab_row = strip_ansi(rows.last(2).first)
@@ -200,7 +200,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_preserves_tab_borders_in_narrow_width
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(labels: %w[1 2 3], active_index: 1)
 
     rows, = prompt.send(:composer_layout, 12)
@@ -586,7 +586,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_ask_user_question_is_modal_before_question_state_is_rendered
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     question_prompt_active_before_question = nil
     question_state_before_question = :unset
     prompt.define_singleton_method(:begin_question_prompt_state) do
@@ -629,7 +629,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_select_does_not_wrap_at_edges
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@select_state, { choices: %w[first second], selection_index: 0, title: "Sessions", custom: false })
 
     prompt.send(:select_previous_choice)
@@ -641,7 +641,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_select_centers_long_list_scroll_window
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     choices = (1..12).map { |index| "choice #{index}" }
     prompt.instance_variable_set(:@select_state, { choices: choices, selection_index: 0, title: "Sessions", custom: false })
 
@@ -682,7 +682,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_select_search_blocks_action_keys_until_escape
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     action_keys = prompt.send(:normalized_select_action_keys, { "c" => :clone })
     prompt.instance_variable_set(:@select_state, { choices: ["first", "second"], selection_index: 0, title: "Sessions", custom: false, action_keys: action_keys, search_active: false })
 
@@ -932,7 +932,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_select_requeues_repeated_escape_sequences
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@select_state, { choices: %w[first second third fourth], selection_index: 0, title: "Sessions", custom: false, action_keys: {}, search_active: false })
     prompt.define_singleton_method(:read_pending_escape_sequence) { "[B\e[B\e[B" }
 
@@ -1002,7 +1002,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_ask_user_question_requeues_repeated_escape_sequences
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@question_state, {
       question: "Proceed?",
       header: "Confirm",
@@ -1021,7 +1021,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_ask_user_question_handles_cursor_key_variants
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@question_state, {
       question: "Proceed?",
       header: "Confirm",
@@ -1061,7 +1061,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_ask_user_question_printable_csi_u_enters_custom_answer
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@question_state, {
       question: "Proceed?",
       header: "Confirm",
@@ -1144,7 +1144,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_ask_user_question_renders_custom_text_in_composer_box
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@question_state, {
       question: "Proceed?",
       header: "Confirm",
@@ -1364,7 +1364,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_file_overlay_completes_active_mention_in_middle_of_input
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, ["doc/api.md", "lib/main.rb"])
     prompt.send(:composer_input=, "read @api please")
     prompt.send(:composer_cursor=, 9)
@@ -1375,7 +1375,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_file_overlay_down_selects_next_match
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
     prompt.send(:composer_input=, "@")
     prompt.send(:composer_cursor=, 1)
@@ -1386,7 +1386,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_file_overlay_shows_no_matches
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
     prompt.send(:composer_input=, "@missing")
     prompt.send(:composer_cursor=, 8)
@@ -1401,7 +1401,7 @@ class TestPromptInterface < KwardTestCase
       FileUtils.mkdir_p(File.join(dir, "lib"))
       File.write(File.join(dir, "lib", "main.rb"), "puts :hi\n")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
         prompt.send(:composer_input=, "$li")
         prompt.send(:composer_cursor=, 3)
@@ -1416,7 +1416,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_dollar_file_overlay_only_works_at_prompt_start
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
     prompt.send(:composer_input=, "open $README")
     prompt.send(:composer_cursor=, "open $README".length)
@@ -1431,7 +1431,7 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "ignored.log")
       File.write(path, "ignored\n")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@file_mention_paths, [])
         prompt.send(:composer_input=, "$ignored.log")
         prompt.send(:composer_cursor=, "$ignored.log".length)
@@ -1450,7 +1450,7 @@ class TestPromptInterface < KwardTestCase
       dir = File.realpath(dir)
       path = File.join(dir, "new.txt")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@file_mention_paths, [])
         prompt.send(:composer_input=, "$new.txt")
         prompt.send(:composer_cursor=, "$new.txt".length)
@@ -1463,6 +1463,7 @@ class TestPromptInterface < KwardTestCase
         assert_equal "", editor.buffer
         prompt.send(:handle_editor_key, "h")
         prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "\x18")
         prompt.send(:handle_editor_key, "\x13")
 
         assert_equal "hi", File.read(path)
@@ -1476,7 +1477,7 @@ class TestPromptInterface < KwardTestCase
       FileUtils.mkdir_p(File.join(dir, "plan"))
       path = File.join(dir, "plan", "editor.md")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@file_mention_paths, [])
         prompt.send(:composer_input=, "$plan/editor.md")
         prompt.send(:composer_cursor=, "$plan/editor.md".length)
@@ -1495,7 +1496,7 @@ class TestPromptInterface < KwardTestCase
   def test_prompt_interface_refuses_new_file_with_missing_parent
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@file_mention_paths, [])
         prompt.send(:composer_input=, "$missing/new.txt")
         prompt.send(:composer_cursor=, "$missing/new.txt".length)
@@ -1510,7 +1511,7 @@ class TestPromptInterface < KwardTestCase
   def test_prompt_interface_tab_does_not_open_typed_missing_file
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@file_mention_paths, [])
         prompt.send(:composer_input=, "$new.txt")
         prompt.send(:composer_cursor=, "$new.txt".length)
@@ -1526,7 +1527,7 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "alpha beta\ngamma delta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.cursor = editor.buffer.length
@@ -1557,7 +1558,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(1, 1)
@@ -1575,7 +1576,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(1, 1)
@@ -1593,7 +1594,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma delta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(1, 6)
@@ -1613,7 +1614,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\n\ntwo")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(1, 0)
@@ -1631,7 +1632,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\n")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(1, 0)
@@ -1649,7 +1650,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.cursor = editor.buffer.length
@@ -1674,7 +1675,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.update_tabs(labels: ["One", "Two"], active_index: 0)
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
@@ -1693,7 +1694,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.cursor = editor.buffer.length
@@ -1714,10 +1715,10 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
-        prompt.send(:handle_editor_key, "/")
+        prompt.send(:handle_editor_key, "\x13")
 
         prompt.send(:handle_editor_key, "\x15")
         prompt.send(:handle_editor_key, "\eb")
@@ -1732,7 +1733,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
@@ -1754,7 +1755,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
@@ -1771,7 +1772,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
@@ -1793,17 +1794,17 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         prompt.send(:handle_editor_key, "\x00")
         3.times { prompt.send(:handle_editor_key, "\x06") }
 
-        prompt.send(:handle_editor_key, "\x19")
+        prompt.send(:handle_editor_key, "\ew")
 
         assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("alp")}\a"
         refute editor.selection_active?
-        assert_equal "Copied selection", editor.status
+        assert_equal "Copied region", editor.status
       end
     end
   end
@@ -1812,7 +1813,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.cursor = editor.buffer.length
@@ -1829,7 +1830,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         prompt.send(:handle_editor_key, "\x00")
@@ -1847,7 +1848,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         prompt.send(:handle_editor_key, "\x00")
@@ -1865,7 +1866,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         prompt.instance_variable_set(:@color_enabled, true)
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "\x00")
@@ -1885,7 +1886,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         prompt.send(:handle_editor_key, "\e")
@@ -1899,9 +1900,9 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
-        prompt.send(:handle_editor_key, "/")
+        prompt.send(:handle_editor_key, "\x13")
 
         prompt.send(:handle_editor_key, "\e")
 
@@ -1916,10 +1917,11 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
 
         refute prompt.send(:editor_active?)
       end
@@ -1930,18 +1932,20 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "!")
 
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
 
         editor = prompt.instance_variable_get(:@editor_state)
         assert prompt.send(:editor_active?)
         assert editor.quit_confirmed
-        assert_includes editor.status, "Press Ctrl+Q again"
+        assert_includes editor.status, "Press C-x C-c again"
 
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
 
         refute prompt.send(:editor_active?)
       end
@@ -1952,16 +1956,18 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "!")
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
         prompt.send(:handle_editor_key, "?")
 
         editor = prompt.instance_variable_get(:@editor_state)
         refute editor.quit_confirmed
 
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
 
         assert prompt.send(:editor_active?)
         assert editor.quit_confirmed
@@ -1973,16 +1979,19 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "!")
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
+        prompt.send(:handle_editor_key, "\x18")
         prompt.send(:handle_editor_key, "\x13")
 
         editor = prompt.instance_variable_get(:@editor_state)
         refute editor.quit_confirmed
 
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
 
         refute prompt.send(:editor_active?)
       end
@@ -1993,10 +2002,11 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
-        prompt.send(:handle_editor_key, "\e[113;5u")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
 
         refute prompt.send(:editor_active?)
       end
@@ -2007,7 +2017,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         prompt.send(:handle_editor_key, "\x03")
@@ -2023,10 +2033,11 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\x18")
         prompt.send(:handle_editor_key, "\x13")
 
         assert_equal "!hello", File.read(path)
@@ -2040,16 +2051,18 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "!")
         sleep 0.01
         File.write(path, "external")
 
+        prompt.send(:handle_editor_key, "\x18")
         prompt.send(:handle_editor_key, "\x13")
         assert_equal "external", File.read(path)
         assert_includes prompt.instance_variable_get(:@editor_state).status, "Press Ctrl+S again"
 
+        prompt.send(:handle_editor_key, "\x18")
         prompt.send(:handle_editor_key, "\x13")
         assert_equal "!hello", File.read(path)
       end
@@ -2062,10 +2075,10 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "alpha\nbeta\n")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
-        refute_kind_of String, prompt.send(:handle_editor_key, "/")
+        refute_kind_of String, prompt.send(:handle_editor_key, "\x13")
         "beta".each_char do |char|
           refute_kind_of String, prompt.send(:handle_editor_key, char)
         end
@@ -2080,7 +2093,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\n")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         rows, = prompt.send(:composer_layout, 40, 10)
@@ -2100,7 +2113,7 @@ class TestPromptInterface < KwardTestCase
       content = (1..10).map { |index| "line #{index}" }.join("\n")
       File.write(File.join(dir, "notes.txt"), content)
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(9, 0)
@@ -2120,7 +2133,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(0, 2)
@@ -2138,7 +2151,7 @@ class TestPromptInterface < KwardTestCase
       content = (1..10).map { |index| "line #{index}" }.join("\n")
       File.write(File.join(dir, "notes.txt"), content)
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         rows, = prompt.send(:composer_layout, 40, 20)
@@ -2155,7 +2168,7 @@ class TestPromptInterface < KwardTestCase
       content = (1..10_000).map { |index| "line #{index}" }.join("\n")
       File.write(File.join(dir, "notes.txt"), content)
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.set_cursor_line_and_column(9_999, 0)
@@ -2172,7 +2185,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "abcdef")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         rows, = prompt.send(:composer_layout, 10, 6)
@@ -2187,7 +2200,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         rows, = prompt.send(:composer_layout, 40, 10)
@@ -2203,7 +2216,7 @@ class TestPromptInterface < KwardTestCase
   def test_prompt_interface_editor_empty_buffer_shows_line_one
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "new.txt", allow_new: true)
 
         rows, = prompt.send(:composer_layout, 40, 10)
@@ -2222,7 +2235,7 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "one\ntwo\n")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
 
         rows, = prompt.send(:composer_layout, 80, 20)
@@ -2243,7 +2256,7 @@ class TestPromptInterface < KwardTestCase
       File.write(File.join(dir, ".gitignore"), "ignored.log\n")
       system("git", "init", "--quiet", chdir: dir)
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
 
         paths = prompt.send(:project_file_paths)
 
@@ -2394,7 +2407,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_truncated_selected_overlay_item_keeps_color
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@color_enabled, true)
 
     row = prompt.send(:overlay_content_row, prompt.send(:overlay_choice_line, "A very long selected overlay item that must be truncated", selected: true), 18)
@@ -2900,7 +2913,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_tab_view_snapshot_is_not_mutated_by_later_transcript_restore
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.say("first tab")
     snapshot = prompt.tab_view_snapshot
 
@@ -2922,7 +2935,7 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         prompt.send(:handle_editor_key, "!")
         snapshot = prompt.tab_view_snapshot
@@ -2943,7 +2956,7 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         tab_without_editor = prompt.tab_view_snapshot
         assert prompt.send(:open_editor, "notes.txt")
         tab_with_editor = prompt.tab_view_snapshot
@@ -2963,7 +2976,7 @@ class TestPromptInterface < KwardTestCase
       path = File.join(dir, "notes.txt")
       File.write(path, "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         tab_without_editor = prompt.tab_view_snapshot
         assert prompt.send(:open_editor, "notes.txt")
 
@@ -2978,7 +2991,7 @@ class TestPromptInterface < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
         assert prompt.send(:open_editor, "notes.txt")
         first_snapshot = prompt.tab_view_snapshot
         second_snapshot = prompt.tab_view_snapshot
@@ -2995,7 +3008,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_tab_view_snapshot_is_not_mutated_by_later_stream_state_changes
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.start_stream_block("Assistant")
     snapshot = prompt.tab_view_snapshot
 
@@ -3110,7 +3123,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_uses_compact_composer_on_tiny_screens
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     original_height = TTY::Screen.method(:height)
     TTY::Screen.define_singleton_method(:height) { 3 }
     prompt.send(:composer_input=, "hello")
@@ -3126,7 +3139,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_caps_boxed_composer_height
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     value = (1..10).map { |index| "line #{index}" }.join("\n")
     prompt.send(:composer_input=, value)
     prompt.send(:composer_cursor=, value.length)
@@ -3139,7 +3152,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_git_overlay_renders_status_summary
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M lib/file.rb", "?? new.txt"], composing: false })
 
     rows = prompt.send(:git_overlay_rows, 80)
@@ -3152,7 +3165,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_git_tab_enters_commit_message_mode
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: false })
 
     assert_equal true, prompt.send(:handle_git_key, "\t")
@@ -3162,7 +3175,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_git_enter_submits_commit_message
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
     prompt.send(:composer_input=, "ship it")
     prompt.send(:composer_cursor=, "ship it".length)
@@ -3171,7 +3184,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_git_message_accepts_spaces
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
     "ship it".each_char { |char| prompt.send(:handle_git_key, char) }
 
@@ -3179,7 +3192,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_git_message_accepts_bracketed_paste
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
 
     assert_nil prompt.send(:handle_git_key, "\e[200~ship it now\e[201~")
@@ -3216,7 +3229,7 @@ class TestPromptInterface < KwardTestCase
         Dir.chdir(workspace) do
           prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "default", editor_mode_source: -> { Kward::ConfigFiles.editor_mode })
           assert prompt.send(:open_editor, "notes.txt")
-          assert_equal "default", prompt.instance_variable_get(:@editor_state).editor_mode
+          assert_equal "nano", prompt.instance_variable_get(:@editor_state).editor_mode
           prompt.send(:close_editor)
 
           Kward::ConfigFiles.write_config({ "editor" => { "mode" => "vi" } }, config_path)
@@ -3569,7 +3582,8 @@ class TestPromptInterface < KwardTestCase
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 
-        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x18")
+        prompt.send(:handle_editor_key, "\x03")
         assert prompt.send(:editor_active?)
 
         prompt.send(:handle_editor_key, "\x00")
@@ -3580,7 +3594,7 @@ class TestPromptInterface < KwardTestCase
   end
 
   def test_prompt_interface_git_escape_cancels
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: false })
 
     assert_equal Kward::PromptInterface::SELECT_CANCEL, prompt.send(:handle_git_key, "\e")

@@ -7,9 +7,9 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :vi_mode, :vi_pending, :vi_command, :undo_stack
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vi_mode, :vi_pending, :vi_command, :undo_stack
 
-      def initialize(path:, content:, new_file: false, editor_mode: "default")
+      def initialize(path:, content:, new_file: false, editor_mode: "nano")
         @path = path.to_s
         @new_file = new_file
         @original_content = content.to_s
@@ -18,19 +18,24 @@ module Kward
         @buffer = @original_content.dup
         @cursor = 0
         @viewport_row = 0
-        @status = "Ctrl+S save · Ctrl+Q quit · / search"
+        @status = nil
         @overwrite_confirmed = false
         @quit_confirmed = false
         @search_active = false
         @search_query = ""
+        @search_direction = :forward
         @kill_buffer = ""
         @selection_anchor = nil
-        @editor_mode = editor_mode.to_s == "vi" ? "vi" : "default"
+        @editor_mode = normalize_editor_mode(editor_mode)
+        @emacs_pending = nil
+        @kill_ring = []
+        @last_yank_range = nil
+        @last_yank_index = nil
         @vi_mode = @editor_mode == "vi" ? "normal" : nil
         @vi_pending = ""
         @vi_command = ""
         @undo_stack = []
-        @status = "NORMAL · i insert · :w save · :q quit" if vi?
+        @status = default_status
       end
 
       def initialize_copy(other)
@@ -41,14 +46,27 @@ module Kward
         @buffer = other.buffer.dup
         @status = other.status.dup
         @search_query = other.search_query.dup
+        @search_direction = other.search_direction
         @kill_buffer = other.kill_buffer.dup
         @quit_confirmed = other.quit_confirmed
         @selection_anchor = other.selection_anchor
         @editor_mode = other.editor_mode.dup
+        @emacs_pending = other.emacs_pending&.dup
+        @kill_ring = other.kill_ring.map(&:dup)
+        @last_yank_range = other.last_yank_range&.dup
+        @last_yank_index = other.last_yank_index
         @vi_mode = other.vi_mode&.dup
         @vi_pending = other.vi_pending.dup
         @vi_command = other.vi_command.dup
         @undo_stack = other.undo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
+      end
+
+      def nano?
+        @editor_mode == "nano"
+      end
+
+      def emacs?
+        @editor_mode == "emacs"
       end
 
       def vi?
@@ -191,6 +209,43 @@ module Kward
         insert(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
       end
 
+      def push_kill(text)
+        text = text.to_s
+        return false if text.empty?
+
+        @kill_buffer = text
+        @kill_ring.unshift(text)
+        @kill_ring.uniq!
+        @kill_ring = @kill_ring.first(30)
+        @last_yank_range = nil
+        @last_yank_index = nil
+        true
+      end
+
+      def yank_from_kill_ring
+        text = @kill_ring.first.to_s
+        return false if text.empty?
+
+        start_index = @cursor
+        insert(text)
+        @last_yank_range = [start_index, @cursor]
+        @last_yank_index = 0
+        true
+      end
+
+      def yank_pop
+        return false unless @last_yank_range && @last_yank_index
+        return false if @kill_ring.length < 2
+
+        @last_yank_index = (@last_yank_index + 1) % @kill_ring.length
+        text = @kill_ring[@last_yank_index]
+        start_index, end_index = @last_yank_range
+        replace_range(start_index, end_index, text)
+        @cursor = start_index + text.length
+        @last_yank_range = [start_index, @cursor]
+        true
+      end
+
       def begin_selection
         @selection_anchor = @cursor
         @status = "Selection started"
@@ -275,10 +330,20 @@ module Kward
         @kill_buffer = @buffer[start_index...end_index].to_s
       end
 
-      def begin_search
+      def copy_for_kill_ring(start_index, end_index)
+        start_index, end_index = [start_index, end_index].minmax
+        push_kill(@buffer[start_index...end_index].to_s)
+      end
+
+      def cut_range(start_index, end_index)
+        kill_range(start_index, end_index)
+      end
+
+      def begin_search(direction = :forward)
         @search_active = true
+        @search_direction = direction
         @search_query = +""
-        @status = "Search:"
+        @status = search_status_prefix
       end
 
       def cancel_search
@@ -288,12 +353,12 @@ module Kward
 
       def append_search(text)
         @search_query << text.to_s
-        @status = "Search: #{@search_query}"
+        @status = "#{search_status_prefix} #{@search_query}"
       end
 
       def delete_search_character
         @search_query = @search_query[0...-1].to_s
-        @status = "Search: #{@search_query}"
+        @status = "#{search_status_prefix} #{@search_query}"
       end
 
       def confirm_search
@@ -304,7 +369,11 @@ module Kward
           return false
         end
 
-        index = @buffer.index(query, @cursor + 1) || @buffer.index(query)
+        index = if @search_direction == :backward
+          @buffer.rindex(query, [@cursor - 1, 0].max) || @buffer.rindex(query)
+        else
+          @buffer.index(query, @cursor + 1) || @buffer.index(query)
+        end
         if index
           @cursor = index
           @status = "Found: #{query}"
@@ -349,7 +418,7 @@ module Kward
       def kill_range(start_index, end_index)
         return false if start_index == end_index
 
-        @kill_buffer = @buffer[start_index...end_index].to_s
+        push_kill(@buffer[start_index...end_index].to_s)
         @buffer = @buffer[0...start_index].to_s + @buffer[end_index..].to_s
         @cursor = start_index
         changed!
@@ -394,10 +463,34 @@ module Kward
         char.to_s.match?(/\s/)
       end
 
+      def search_status_prefix
+        @search_direction == :backward ? "Search backward:" : "Search:"
+      end
+
+      def normalize_editor_mode(value)
+        text = value.to_s.downcase
+        return "nano" if text == "default"
+
+        %w[nano emacs vi].include?(text) ? text : "nano"
+      end
+
+      def default_status
+        case @editor_mode
+        when "emacs"
+          "C-x C-s save · C-x C-c quit · C-s search"
+        when "vi"
+          "NORMAL · i insert · :w save · :q quit"
+        else
+          "^O save · ^X quit · ^W search"
+        end
+      end
+
       def changed!
         @overwrite_confirmed = false
         @quit_confirmed = false
         @selection_anchor = nil
+        @last_yank_range = nil
+        @last_yank_index = nil
       end
     end
   end

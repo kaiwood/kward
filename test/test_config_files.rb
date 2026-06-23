@@ -19,7 +19,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal false, config.dig("memory", "enabled")
       assert_equal false, config.dig("memory", "auto_summary")
       assert_equal true, config.dig("composer", "busy_help")
-      assert_equal "default", config.dig("editor", "mode")
+      assert_equal "nano", config.dig("editor", "mode")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
@@ -49,13 +49,15 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
-  def test_editor_mode_defaults_to_default_and_accepts_vi
-    assert_equal "default", Kward::ConfigFiles.editor_mode({})
-    assert_equal "default", Kward::ConfigFiles.editor_mode("editor" => {})
-    assert_equal "default", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "default" })
+  def test_editor_mode_defaults_to_nano_and_accepts_emacs_and_vi
+    assert_equal "nano", Kward::ConfigFiles.editor_mode({})
+    assert_equal "nano", Kward::ConfigFiles.editor_mode("editor" => {})
+    assert_equal "nano", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "default" })
+    assert_equal "nano", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "NANO" })
+    assert_equal "emacs", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "emacs" })
     assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "VI" })
     assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vi" })
-    assert_equal "default", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vim" })
+    assert_equal "nano", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vim" })
   end
 
   def test_workspace_guardrails_enabled_defaults_to_true_and_only_false_disables_it

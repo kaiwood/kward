@@ -274,7 +274,7 @@ module Kward
       def configure_editor_mode
         selected = @prompt.select("Editor mode", editor_mode_choices, title: "Settings")
         value = selected.to_s.split.first.to_s.downcase
-        return unless %w[default vi].include?(value)
+        return unless %w[nano emacs vi].include?(value)
 
         update_nested_config("editor", "mode" => value)
         runtime_output("Editor mode set to #{value}. New editor buffers will use this mode.")
@@ -282,7 +282,7 @@ module Kward
 
       def editor_mode_choices
         current = editor_mode
-        %w[default vi].map { |value| value == current ? "#{value} (current)" : value }
+        %w[nano emacs vi].map { |value| value == current ? "#{value} (current)" : value }
       end
 
       def session_auto_resume_enabled?
