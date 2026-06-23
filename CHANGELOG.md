@@ -36,6 +36,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed TUI nonblocking input polling so the busy composer does not freeze after answering `ask_user_question`.
 - Fixed TUI modal input isolation so busy composer polling cannot handle cursor keys or Enter after `ask_user_question` becomes active, without swallowing those modal keys.
 - Fixed sluggish TUI custom answers for `ask_user_question` by rendering typed text in the composer box instead of editing it inside the overlay row.
+- Fixed printable CSI-u keys, including Space in Ghostty, so typing immediately selects and edits custom `ask_user_question` answers.
 
 ## [0.71.0] - 2026-06-21
 

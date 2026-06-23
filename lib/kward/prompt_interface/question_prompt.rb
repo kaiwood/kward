@@ -132,6 +132,7 @@ module Kward
         return false unless sequence
 
         code = sequence[:code]
+        modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
         case code
@@ -143,8 +144,17 @@ module Kward
           question_delete_before_cursor
           nil
         else
-          false
+          question_insert_csi_u_character(code, modifier)
         end
+      end
+
+      def question_insert_csi_u_character(code, modifier)
+        return false unless modifier == 1
+
+        character = code.to_i.chr(Encoding::UTF_8) rescue nil
+        return false unless character&.match?(/[[:print:]]/)
+
+        question_insert_string(character)
       end
 
       def handle_question_escape_sequence
