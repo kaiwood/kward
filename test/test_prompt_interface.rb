@@ -1590,6 +1590,7 @@ class TestPromptInterface < KwardTestCase
     assert_nil result
     assert_empty prompt.send(:composer_input)
     assert_equal 1, prompt.instance_variable_get(:@question_state)[:selection_index]
+    assert_equal ["\e[A"], prompt.instance_variable_get(:@pending_keys)
   ensure
     thread&.kill if thread&.alive?
   end
@@ -1625,6 +1626,7 @@ class TestPromptInterface < KwardTestCase
     assert_nil result
     assert prompt.instance_variable_get(:@asking)
     assert_operator prompt.instance_variable_get(:@rendered_rows), :>, 0
+    assert_equal ["\r"], prompt.instance_variable_get(:@pending_keys)
   ensure
     thread&.kill if thread&.alive?
   end

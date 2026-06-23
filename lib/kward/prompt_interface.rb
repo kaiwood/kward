@@ -483,7 +483,10 @@ module Kward
           return nil
         end
 
-        return nil if modal_active_locked?
+        if modal_active_locked?
+          queue_pending_keys(key)
+          return nil
+        end
 
         result = handle_key(key)
         render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || tab_action_result?(result)

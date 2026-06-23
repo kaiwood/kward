@@ -33,7 +33,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed approved request workers so they transition into implementation workers instead of creating a duplicate worker list entry.
 - Fixed `ask_user_question` in the TUI so quick answers are not consumed by the busy composer before the question overlay is ready.
 - Fixed TUI nonblocking input polling so the busy composer does not freeze after answering `ask_user_question`.
-- Fixed TUI modal input isolation so busy composer polling cannot handle cursor keys or Enter after `ask_user_question` becomes active.
+- Fixed TUI modal input isolation so busy composer polling cannot handle cursor keys or Enter after `ask_user_question` becomes active, without swallowing those modal keys.
 - Fixed sluggish TUI custom answers for `ask_user_question` by rendering typed text in the composer box instead of editing it inside the overlay row.
 
 ## [0.71.0] - 2026-06-21
