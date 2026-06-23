@@ -170,6 +170,43 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_big_x_deletes_before_cursor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 3)
+
+        prompt.send(:handle_editor_key, "X")
+        assert_equal "alha", editor.buffer
+        assert_equal 2, editor.cursor
+
+        prompt.send(:handle_editor_key, "u")
+        assert_equal "alpha", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_big_x_supports_counts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 4)
+
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "X")
+
+        assert_equal "ala", editor.buffer
+        assert_equal 2, editor.cursor
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_dd_deletes_final_empty_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\n")

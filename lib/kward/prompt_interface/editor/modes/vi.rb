@@ -339,6 +339,8 @@ module Kward
           vi_open_line_above
         when "x"
           vi_record_undo { count.times { @editor_state.delete_at_cursor } }
+        when "X"
+          vi_record_undo { count.times { @editor_state.delete_before_cursor } }
         when "dd"
           vi_delete_lines(count)
         when "yy"
