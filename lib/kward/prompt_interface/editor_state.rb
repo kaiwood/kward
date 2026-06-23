@@ -1,4 +1,5 @@
 require "digest"
+require_relative "../editor_mode"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -482,10 +483,7 @@ module Kward
       end
 
       def normalize_editor_mode(value)
-        text = value.to_s.downcase
-        return "nano" if text == "default"
-
-        %w[nano emacs vi].include?(text) ? text : "nano"
+        EditorMode.normalize(value)
       end
 
       def default_status

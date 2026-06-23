@@ -68,10 +68,7 @@ module Kward
       end
 
       def normalize_editor_mode(value)
-        text = value.to_s.downcase
-        return "nano" if text == "default"
-
-        %w[nano emacs vi].include?(text) ? text : "nano"
+        EditorMode.normalize(value)
       end
 
       def tab_action_result?(result)

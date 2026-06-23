@@ -2,6 +2,7 @@ require "fileutils"
 require "json"
 require "yaml"
 require_relative "private_file"
+require_relative "editor_mode"
 require_relative "prompts/templates"
 require_relative "skills/registry"
 
@@ -207,10 +208,7 @@ module Kward
     # Returns the built-in TUI editor keymap mode.
     def editor_mode(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
-      value = editor["mode"].to_s.downcase
-      return "nano" if value == "default"
-
-      %w[nano emacs vi].include?(value) ? value : "nano"
+      EditorMode.normalize(editor["mode"])
     end
 
     # Returns whether file tools must stay inside the active workspace root.
