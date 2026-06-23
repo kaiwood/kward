@@ -43,7 +43,7 @@ module Kward
 
         case key_name_for(key)
         when :return, :enter
-          file_open_overlay_visible? ? open_selected_file_in_editor : submit_input
+          file_open_overlay_visible? ? open_selected_file_in_editor(fallback_to_typed_path: true) : submit_input
         when :backspace
           delete_before_cursor
         when :delete

@@ -1470,6 +1470,28 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_named_enter_opens_typed_new_file
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      FileUtils.mkdir_p(File.join(dir, "plan"))
+      path = File.join(dir, "plan", "editor.md")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.instance_variable_set(:@file_mention_paths, [])
+        prompt.send(:composer_input=, "$plan/editor.md")
+        prompt.send(:composer_cursor=, "$plan/editor.md".length)
+
+        assert_equal :return, prompt.send(:key_name_for, "\r")
+        assert prompt.send(:handle_key, "\r")
+        refute File.exist?(path)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert editor.new_file
+        assert_equal path, editor.path
+      end
+    end
+  end
+
   def test_prompt_interface_refuses_new_file_with_missing_parent
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do
