@@ -53,6 +53,7 @@ class TestConfigFiles < KwardTestCase
     assert_equal "default", Kward::ConfigFiles.editor_mode({})
     assert_equal "default", Kward::ConfigFiles.editor_mode("editor" => {})
     assert_equal "default", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "default" })
+    assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "VI" })
     assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vi" })
     assert_equal "default", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vim" })
   end

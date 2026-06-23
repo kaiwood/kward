@@ -2262,6 +2262,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_settings_interface_can_change_editor_mode
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "editor" => { "mode" => "default" } }, config_path)
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Editor mode (default)", "vi"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "vi", JSON.parse(File.read(config_path)).dig("editor", "mode")
+      assert_includes prompt.output.join("\n"), "Editor mode set to vi. New editor buffers will use this mode."
+      editor_mode_index = prompt.select_messages.index("Editor mode")
+      assert editor_mode_index
+      assert_includes prompt.select_choices[editor_mode_index], "default (current)"
+      assert_includes prompt.select_choices[editor_mode_index], "vi"
+    end
+  end
+
   def test_rewind_slash_command_can_return_to_where_user_was
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
