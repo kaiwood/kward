@@ -1,3 +1,4 @@
+require "shellwords"
 require_relative "test_helper"
 
 class TestCLI < KwardTestCase
@@ -9,6 +10,10 @@ class TestCLI < KwardTestCase
       JSON.generate(record)
     end
     File.write(path, lines.join("\n") + "\n")
+  end
+
+  def hide_composer_git_branch(cli)
+    cli.define_singleton_method(:composer_git_branch_text) { nil }
   end
 
   class RecordingPromptInterface < FakePrompt
@@ -1682,6 +1687,7 @@ class TestCLI < KwardTestCase
         { percent: 9 }
       end
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store, context_usage: context_usage)
+      hide_composer_git_branch(cli)
 
       cli.interactive_loop
 
@@ -3652,12 +3658,77 @@ edit this prompt"
     end
   end
 
+  def test_composer_status_includes_git_branch_before_session_diff
+    skip "git is not available" unless system("git", "--version", out: File::NULL, err: File::NULL)
+
+    Dir.mktmpdir do |workspace|
+      system("git", "init", "-b", "main", chdir: workspace, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.email", "test@example.com", chdir: workspace, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.name", "Test User", chdir: workspace, out: File::NULL, err: File::NULL)
+      File.write(File.join(workspace, "file.txt"), "one\n")
+      system("git", "add", "file.txt", chdir: workspace, out: File::NULL, err: File::NULL)
+      system("git", "commit", "-m", "initial", chdir: workspace, out: File::NULL, err: File::NULL)
+      context_usage = Object.new
+      def context_usage.call(**_kwargs)
+        { percent: 42 }
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+      cli.instance_variable_set(:@working_directory, workspace)
+      cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 7, deletions: 5))
+
+      assert_equal "main · +7|-5 · 42% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
+    end
+  end
+
+  def test_composer_status_colors_dirty_git_branch
+    skip "git is not available" unless system("git", "--version", out: File::NULL, err: File::NULL)
+
+    Dir.mktmpdir do |workspace|
+      system("git", "init", "-b", "main", chdir: workspace, out: File::NULL, err: File::NULL)
+      File.write(File.join(workspace, "dirty.txt"), "dirty\n")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+      cli.instance_variable_set(:@working_directory, workspace)
+      cli.instance_variable_set(:@color_enabled, true)
+
+      assert_includes cli.send(:composer_status_text), "\e[33mmain\e[0m · Codex fake-model"
+    end
+  end
+
+  def test_composer_status_hides_git_branch_outside_repository
+    Dir.mktmpdir do |workspace|
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+      cli.instance_variable_set(:@working_directory, workspace)
+
+      assert_equal "Codex fake-model · medium", cli.send(:composer_status_text)
+    end
+  end
+
+  def test_composer_status_falls_back_to_git_sha_without_branch
+    skip "git is not available" unless system("git", "--version", out: File::NULL, err: File::NULL)
+
+    Dir.mktmpdir do |workspace|
+      system("git", "init", "-b", "main", chdir: workspace, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.email", "test@example.com", chdir: workspace, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.name", "Test User", chdir: workspace, out: File::NULL, err: File::NULL)
+      File.write(File.join(workspace, "file.txt"), "one\n")
+      system("git", "add", "file.txt", chdir: workspace, out: File::NULL, err: File::NULL)
+      system("git", "commit", "-m", "initial", chdir: workspace, out: File::NULL, err: File::NULL)
+      sha = `git -C #{Shellwords.escape(workspace)} rev-parse --short HEAD`.strip
+      system("git", "checkout", "--detach", "HEAD", chdir: workspace, out: File::NULL, err: File::NULL)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+      cli.instance_variable_set(:@working_directory, workspace)
+
+      assert_equal "#{sha} · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
+    end
+  end
+
   def test_composer_status_includes_context_percentage_when_available
     context_usage = Object.new
     def context_usage.call(**_kwargs)
       { percent: 12.4 }
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    hide_composer_git_branch(cli)
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("Status report.")
     cli.instance_variable_set(:@footer_conversation, conversation)
@@ -3679,6 +3750,7 @@ edit this prompt"
     client.model = "gpt-5.5"
     client.reasoning_effort = "medium"
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client, context_usage: context_usage)
+    hide_composer_git_branch(cli)
     conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "gpt-5.5", reasoning_effort: "low")
     conversation.append_user("Status report.")
     cli.instance_variable_set(:@footer_conversation, conversation)
@@ -3696,6 +3768,7 @@ edit this prompt"
       { percent: percent }
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    hide_composer_git_branch(cli)
     cli.instance_variable_set(:@color_enabled, true)
 
     assert_includes cli.send(:composer_status_text), "49% · Codex fake-model"
@@ -3714,6 +3787,7 @@ edit this prompt"
       nil
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    hide_composer_git_branch(cli)
 
     assert_equal "Codex fake-model · medium", cli.send(:composer_status_text)
   end
@@ -3723,6 +3797,7 @@ edit this prompt"
     client.provider = "Copilot"
     client.model = "gpt-5-mini"
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client)
+    hide_composer_git_branch(cli)
 
     assert_equal "Copilot gpt-5-mini · medium", cli.send(:composer_status_text)
   end
@@ -3732,6 +3807,7 @@ edit this prompt"
     client.provider = "Copilot"
     client.model = "gemini-2.5-pro"
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client)
+    hide_composer_git_branch(cli)
 
     assert_equal "Copilot gemini-2.5-pro · n/a", cli.send(:composer_status_text)
   end
@@ -3742,6 +3818,7 @@ edit this prompt"
       { percent: 42 }
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    hide_composer_git_branch(cli)
     cli.instance_variable_set(:@visible_worker_id, "abc123")
     cli.instance_variable_set(:@visible_worker_status, "ready")
     cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 7, deletions: 5))
@@ -3751,6 +3828,7 @@ edit this prompt"
 
   def test_build_interactive_agent_keeps_worker_label_out_of_composer_status
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+    hide_composer_git_branch(cli)
 
     cli.send(:build_interactive_agent, Kward::Conversation.new)
 
@@ -3763,6 +3841,7 @@ edit this prompt"
       { percent: 42 }
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
+    hide_composer_git_branch(cli)
     cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 700, deletions: 572))
 
     assert_equal "+700|-572 · 42% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
@@ -3789,6 +3868,7 @@ edit this prompt"
       { percent: 10 }
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), context_usage: context_usage)
+    hide_composer_git_branch(cli)
 
     cli.send(:run_interactive_turn, agent, "hello")
 
@@ -3801,6 +3881,7 @@ edit this prompt"
     content = "Exit status: 0\n\nSTDOUT:\n--- file.txt\n+++ file.txt\n@@ -1,25 +0,0 @@\n" + (1..25).map { |index| "-line #{index}\n" }.join
     agent = EventAgent.new([Kward::Events::ToolResult.new(tool_call: tool_call("run_shell_command", command: "git diff"), content: content)])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    hide_composer_git_branch(cli)
 
     cli.send(:run_interactive_turn, agent, "hello")
 

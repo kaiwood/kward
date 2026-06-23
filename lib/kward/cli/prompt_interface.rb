@@ -150,6 +150,8 @@ module Kward
         reasoning = "n/a" unless ModelInfo.reasoning_supported?(provider, model) && !reasoning.to_s.empty?
         text = "#{provider} #{model} · #{reasoning}"
         parts = []
+        git = composer_git_branch_text
+        parts << git if git
         diff = composer_session_diff_text
         parts << diff if diff
         usage = composer_context_usage(provider, model)
@@ -164,6 +166,21 @@ module Kward
         additions = ANSI.colorize("+#{@session_diff.additions}", :green, enabled: @color_enabled)
         deletions = ANSI.colorize("-#{@session_diff.deletions}", :red, enabled: @color_enabled)
         "#{additions}|#{deletions}"
+      end
+
+      def composer_git_branch_text
+        git_root = startup_git_root(current_workspace_root)
+        return nil if git_root.to_s.empty?
+
+        branch = startup_git_output(%w[git branch --show-current], root: git_root)
+        branch = startup_git_output(%w[git rev-parse --short HEAD], root: git_root) if branch.empty?
+        branch = "unknown" if branch.empty?
+        color = composer_git_dirty?(git_root) ? :yellow : nil
+        ANSI.colorize(branch, color, enabled: @color_enabled)
+      end
+
+      def composer_git_dirty?(git_root)
+        !startup_git_output(%w[git status --porcelain --untracked-files=normal], root: git_root).empty?
       end
 
       def composer_context_percent_text(percent)
