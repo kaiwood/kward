@@ -9,6 +9,7 @@ module Kward
       def active_overlay_rows(width, height: screen_height)
         return question_overlay_rows(width) if @question_state
         return selection_overlay_rows(width, height: height) if @select_state
+        return git_overlay_rows(width, height: height) if @git_state
 
         slash_overlay_rows(width, height: height)
       end

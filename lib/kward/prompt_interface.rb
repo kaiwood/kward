@@ -14,6 +14,7 @@ require_relative "prompt_interface/stream_state"
 require_relative "prompt_interface/slash_overlay"
 require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
+require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
@@ -47,6 +48,7 @@ module Kward
     include SlashOverlay
     include SelectionPrompt
     include QuestionPrompt
+    include GitPrompt
     include OverlayRenderer
     include ComposerRenderer
     include ComposerController
@@ -118,6 +120,7 @@ module Kward
       @select_state = nil
       @question_state = nil
       @question_prompt_active = false
+      @git_state = nil
       @last_width = screen_width
       @last_height = screen_height
       @reserved_rows = 0
@@ -559,7 +562,7 @@ module Kward
     private
 
     def modal_active_locked?
-      @question_prompt_active || !@question_state.nil? || !@select_state.nil?
+      @question_prompt_active || !@question_state.nil? || !@select_state.nil? || !@git_state.nil?
     end
 
 

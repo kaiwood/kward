@@ -4056,6 +4056,72 @@ edit this prompt"
     end
   end
 
+  class GitPrompt < BusyPrompt
+    attr_reader :git_status_lines
+
+    def initialize(message)
+      super(["/git", "/exit"])
+      @message = message
+      @git_status_lines = nil
+    end
+
+    def ask(_message)
+      @inputs.shift
+    end
+
+    def git_commit_message(status_lines)
+      @git_status_lines = status_lines
+      @message
+    end
+  end
+
+  def test_git_slash_command_commits_all_uncommitted_changes
+    Dir.mktmpdir do |dir|
+      system("git", "init", chdir: dir, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.email", "test@example.com", chdir: dir)
+      system("git", "config", "user.name", "Test User", chdir: dir)
+      File.write(File.join(dir, "tracked.txt"), "old\n")
+      system("git", "add", "tracked.txt", chdir: dir)
+      system("git", "commit", "-m", "initial", chdir: dir, out: File::NULL, err: File::NULL)
+      File.write(File.join(dir, "tracked.txt"), "new\n")
+      File.write(File.join(dir, "untracked.txt"), "new\n")
+      prompt = GitPrompt.new("ship changes")
+      client = RecordingClient.new([])
+
+      Dir.chdir(dir) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new(workspace_root: dir))
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_includes prompt.git_status_lines, " M tracked.txt"
+      assert_includes prompt.git_status_lines, "?? untracked.txt"
+      assert_equal "ship changes", `git -C #{Shellwords.escape(dir)} log -1 --pretty=%s`.strip
+      assert_empty `git -C #{Shellwords.escape(dir)} status --short`.strip
+      assert_includes prompt.output.join("\n"), "Git commit succeeded"
+    end
+  end
+
+  def test_git_slash_command_surfaces_blank_message_failure
+    Dir.mktmpdir do |dir|
+      system("git", "init", chdir: dir, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.email", "test@example.com", chdir: dir)
+      system("git", "config", "user.name", "Test User", chdir: dir)
+      File.write(File.join(dir, "file.txt"), "new\n")
+      prompt = GitPrompt.new("")
+      client = RecordingClient.new([])
+
+      Dir.chdir(dir) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new(workspace_root: dir))
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_includes prompt.output.join("\n"), "Git commit failed"
+      refute_empty `git -C #{Shellwords.escape(dir)} status --short`.strip
+    end
+  end
+
   def test_interactive_plugin_slash_command_shows_running_spinner
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")

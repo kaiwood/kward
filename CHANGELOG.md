@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
 - Added a Git branch indicator to the TUI composer status, coloring it yellow when the working tree has uncommitted changes.
 - Added persistent numbered TUI tabs for session-backed conversations, including bottom composer tab rendering, configurable tab keybinding mode, and `/tab` commands for switching, moving, closing, opening, and naming tabs.
 - Added structured request workers with `/workers`, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, persisted worker metadata, RPC worker list/show capabilities, and a reusable live worker event view.

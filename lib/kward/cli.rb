@@ -55,6 +55,7 @@ require_relative "cli/compaction"
 require_relative "cli/rendering"
 require_relative "cli/prompt_interface"
 require_relative "cli/plugins"
+require_relative "cli/git"
 require_relative "cli/interactive_turn"
 require_relative "cli/tool_summaries"
 
@@ -88,6 +89,7 @@ module Kward
     include CLI::Rendering
     include CLI::PromptInterfaceSupport
     include CLI::Plugins
+    include CLI::GitCommands
     include CLI::InteractiveTurn
     include CLI::ToolSummaries
 

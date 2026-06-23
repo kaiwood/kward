@@ -2132,6 +2132,71 @@ class TestPromptInterface < KwardTestCase
     assert_includes rows.join("\n"), "line 10"
   end
 
+  def test_prompt_interface_git_overlay_renders_status_summary
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M lib/file.rb", "?? new.txt"], composing: false })
+
+    rows = prompt.send(:git_overlay_rows, 80)
+    rendered = strip_ansi(rows.join("\n"))
+
+    assert_includes rendered, "Git"
+    assert_includes rendered, "Tab message · Esc cancel"
+    assert_includes rendered, " M lib/file.rb"
+    assert_includes rendered, "?? new.txt"
+  end
+
+  def test_prompt_interface_git_tab_enters_commit_message_mode
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: false })
+
+    assert_equal true, prompt.send(:handle_git_key, "\t")
+
+    assert_equal "Commit>", prompt.instance_variable_get(:@prompt_label)
+    assert prompt.send(:git_composing?)
+  end
+
+  def test_prompt_interface_git_enter_submits_commit_message
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
+    prompt.send(:composer_input=, "ship it")
+    prompt.send(:composer_cursor=, "ship it".length)
+
+    assert_equal "ship it", prompt.send(:handle_git_key, "\r")
+  end
+
+  def test_prompt_interface_git_message_accepts_spaces
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
+    "ship it".each_char { |char| prompt.send(:handle_git_key, char) }
+
+    assert_equal "ship it", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_git_cursor_is_hidden_until_composing
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: false })
+    prompt.instance_variable_set(:@cursor_visible, true)
+
+    prompt.send(:render_cursor_visibility_locked)
+
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+
+    output.truncate(0)
+    output.rewind
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true })
+    prompt.send(:render_cursor_visibility_locked)
+
+    assert_includes output.string, Kward::PromptInterface::CURSOR_SHOW
+  end
+
+  def test_prompt_interface_git_escape_cancels
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: false })
+
+    assert_equal Kward::PromptInterface::SELECT_CANCEL, prompt.send(:handle_git_key, "\e")
+  end
+
   def test_prompt_interface_submits_on_csi_u_enter
     assert_equal "hello", ask_prompt_with_input("hello\e[13u")
   end

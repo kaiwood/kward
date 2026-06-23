@@ -56,6 +56,7 @@ module Kward
       def render_cursor_visibility_locked
         visible = !(@question_state && !selected_question_choice&.fetch(:custom, false))
         visible = select_editing_active? if @select_state
+        visible = git_composing? if @git_state
         set_cursor_visible_locked(visible)
       end
 

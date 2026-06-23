@@ -22,6 +22,9 @@ module Kward
         when "redraw"
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
           [true, nil]
+        when "git"
+          handle_git_command(agent)
+          [true, nil]
         when "workers"
           unless experimental_workers_enabled?
             runtime_output("Workers are experimental. Start Kward with --experimental-workers to enable /workers.")

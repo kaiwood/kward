@@ -1,0 +1,189 @@
+# Namespace for the Kward CLI agent runtime.
+module Kward
+  # Interactive terminal UI used by the CLI frontend.
+  class PromptInterface
+    # Git status/commit modal overlay support.
+    module GitPrompt
+      def git_commit_message(status_lines)
+        start
+        @mutex.synchronize do
+          prepare_modal_input_locked("Git>", clear_attachments: true)
+          @git_state = { status_lines: Array(status_lines).map(&:to_s), composing: false }
+          render_prompt_locked
+        end
+
+        loop do
+          key = read_key(nonblock: true)
+          result = nil
+          @mutex.synchronize do
+            if key.nil?
+              resized = handle_resize_locked
+              footer_refreshed = tick_footer_locked
+              render_prompt_locked if resized || footer_refreshed
+            else
+              result = handle_git_key(key)
+              render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL
+            end
+          end
+
+          if result.is_a?(String) || result == SELECT_CANCEL
+            finish_git_prompt
+            return result == SELECT_CANCEL ? nil : result
+          end
+
+          sleep 0.02 if key.nil?
+        end
+      end
+
+      private
+
+      def handle_git_key(key)
+        return git_submit_message if key.nil?
+
+        csi_result = handle_git_csi_u_key(key)
+        return csi_result unless csi_result == false
+
+        if key.is_a?(String) && key.length > 1
+          token = next_key_token(key)
+          if token.length < key.length
+            queue_pending_keys(key[token.length..])
+            return handle_git_key(token)
+          end
+        end
+
+        case key
+        when "\n", "\r"
+          return git_submit_message if git_composing?
+        when "\t"
+          return git_begin_message
+        when "\b", "\x7F"
+          return delete_before_cursor if git_composing?
+        when "\e"
+          return SELECT_CANCEL
+        end
+
+        key_name = key_name_for(key)
+        named_result = handle_git_named_key(key_name) if key_name
+        return named_result unless named_result == false || named_result.nil?
+
+        insert_key(key) if git_composing?
+      end
+
+      def handle_git_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+
+        case code
+        when 9
+          git_begin_message
+        when 13
+          git_submit_message if git_composing?
+        when 27
+          SELECT_CANCEL
+        when 8, 127
+          delete_before_cursor if git_composing?
+          nil
+        when 4
+          delete_at_cursor if git_composing?
+          nil
+        else
+          return false unless git_composing?
+
+          modified_result = handle_modified_csi_u_key(code, modifier)
+          return modified_result unless modified_result == false
+          return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
+          return false unless code.between?(32, 126)
+
+          insert_key(code.chr(Encoding::UTF_8))
+        end
+      end
+
+      def handle_git_named_key(key_name)
+        case key_name
+        when :return, :enter
+          git_submit_message if git_composing?
+        when :backspace
+          delete_before_cursor if git_composing?
+        when :delete
+          delete_at_cursor if git_composing?
+        when :left
+          move_cursor_left if git_composing?
+        when :right
+          move_cursor_right if git_composing?
+        when :home
+          move_to_start_of_line if git_composing?
+        when :end
+          move_to_end_of_line if git_composing?
+        else
+          false
+        end
+      end
+
+      def handle_git_escape_sequence
+        pending_sequence = read_pending_escape_sequence
+        return SELECT_CANCEL if pending_sequence.empty?
+
+        full_sequence = "\e#{pending_sequence}"
+        sequence = next_key_token(full_sequence)
+        queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
+        return SELECT_CANCEL if sequence == "\e"
+
+        handle_git_named_key(key_name_for(sequence))
+      end
+
+      def git_begin_message
+        return true if git_composing?
+
+        @git_state[:composing] = true if @git_state
+        @prompt_label = "Commit>"
+        self.composer_input = ""
+        self.composer_cursor = 0
+        true
+      end
+
+      def git_submit_message
+        return false unless git_composing?
+
+        value = composer_input.dup
+        add_history(composer_input)
+        value
+      end
+
+      def git_composing?
+        @git_state && @git_state[:composing]
+      end
+
+      def finish_git_prompt
+        @mutex.synchronize do
+          @git_state = nil
+          self.composer_input = ""
+          self.composer_cursor = 0
+          @asking = true
+          render_prompt_locked
+          @output_io.flush
+        end
+      end
+
+      def git_overlay_rows(width, height: screen_height)
+        return [] unless @git_state
+
+        help = git_composing? ? "Type commit message · Enter commit · Esc cancel" : "Tab message · Esc cancel"
+        lines = [overlay_text_line(help, :muted), overlay_blank_line]
+        status_lines = @git_state[:status_lines]
+        status_lines = ["No uncommitted changes."] if status_lines.empty?
+        max_status_rows = [max_overlay_list_rows(height), 1].max
+        status_lines.first(max_status_rows).each do |line|
+          lines << overlay_text_line(line)
+        end
+        if status_lines.length > max_status_rows
+          lines << overlay_text_line("… #{status_lines.length - max_status_rows} more", :muted)
+        end
+        overlay_card_rows("Git", lines, width)
+      end
+    end
+  end
+end
