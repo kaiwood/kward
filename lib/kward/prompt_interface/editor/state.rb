@@ -8,7 +8,7 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vi_mode, :vi_pending, :vi_command, :undo_stack
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vi_mode, :vi_pending, :vi_command, :undo_stack, :redo_stack, :vi_last_change
 
       def initialize(path:, content:, new_file: false, editor_mode: "nano")
         @path = path.to_s
@@ -36,6 +36,8 @@ module Kward
         @vi_pending = ""
         @vi_command = ""
         @undo_stack = []
+        @redo_stack = []
+        @vi_last_change = nil
         @status = default_status
       end
 
@@ -60,6 +62,8 @@ module Kward
         @vi_pending = other.vi_pending.dup
         @vi_command = other.vi_command.dup
         @undo_stack = other.undo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
+        @redo_stack = other.redo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
+        @vi_last_change = other.vi_last_change&.dup
       end
 
       def nano?
@@ -98,6 +102,7 @@ module Kward
       def push_undo
         @undo_stack << { buffer: @buffer.dup, cursor: @cursor }
         @undo_stack.shift while @undo_stack.length > 100
+        @redo_stack.clear
       end
 
       def undo
@@ -107,10 +112,28 @@ module Kward
           return false
         end
 
+        @redo_stack << { buffer: @buffer.dup, cursor: @cursor }
+        @redo_stack.shift while @redo_stack.length > 100
         @buffer = snapshot[:buffer]
         @cursor = [snapshot[:cursor], @buffer.length].min
         changed!
         @status = "Undo"
+        true
+      end
+
+      def redo
+        snapshot = @redo_stack.pop
+        unless snapshot
+          @status = "Already at newest change"
+          return false
+        end
+
+        @undo_stack << { buffer: @buffer.dup, cursor: @cursor }
+        @undo_stack.shift while @undo_stack.length > 100
+        @buffer = snapshot[:buffer]
+        @cursor = [snapshot[:cursor], @buffer.length].min
+        changed!
+        @status = "Redo"
         true
       end
 

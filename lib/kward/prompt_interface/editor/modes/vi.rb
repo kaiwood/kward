@@ -13,6 +13,7 @@ module Kward
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
+        return handle_vi_repeat_change if key == "." && @editor_state.vi_mode == "normal"
         return handle_vi_search_key(key) if editor_search_active?
         return handle_vi_command_key(key) if @editor_state.vi_mode == "command"
         return handle_vi_insert_key(key) if @editor_state.vi_mode == "insert"
@@ -57,6 +58,7 @@ module Kward
       def handle_vi_insert_key(key)
         return if handle_editor_bracketed_paste_key(key)
 
+        vi_record_insert_change_key(key)
         case key
         when "\e", "\x03", :escape
           vi_return_to_normal
@@ -99,6 +101,7 @@ module Kward
       def handle_vi_replace_key(key)
         return if handle_editor_bracketed_paste_key(key)
 
+        vi_record_insert_change_key(key)
         case key
         when "\e", "\x03", :escape
           vi_return_to_normal
@@ -225,13 +228,15 @@ module Kward
           vi_scroll_down
         when :ctrl_y
           vi_scroll_up
+        when :ctrl_r
+          @editor_state.redo
         else
           false
         end
       end
 
       def vi_normal_control_key?(key)
-        ["\n", "\r", "\b", "\x7F", "\x02", "\x04", "\x05", "\x06", "\x15", "\x19"].include?(key)
+        ["\n", "\r", "\b", "\x7F", "\x02", "\x04", "\x05", "\x06", "\x12", "\x15", "\x19"].include?(key)
       end
 
       def vi_visual_mode?
@@ -312,36 +317,37 @@ module Kward
           vi_scroll_down
         when "\x19"
           vi_scroll_up
+        when "\x12"
+          @editor_state.redo
         when "i"
-          @editor_state.vi_mode = "insert"
-          @editor_state.status = "INSERT · Esc normal"
+          vi_enter_insert_mode(command)
         when "I"
           @editor_state.move_line_first_non_blank
-          @editor_state.vi_mode = "insert"
-          @editor_state.status = "INSERT · Esc normal"
+          vi_enter_insert_mode(command)
         when "a"
           @editor_state.move_right
-          @editor_state.vi_mode = "insert"
-          @editor_state.status = "INSERT · Esc normal"
+          vi_enter_insert_mode(command)
         when "A"
           @editor_state.move_line_end
-          @editor_state.vi_mode = "insert"
-          @editor_state.status = "INSERT · Esc normal"
+          vi_enter_insert_mode(command)
         when "C"
-          vi_change_to_line_end
+          vi_change_to_line_end(command)
         when "D"
-          vi_delete_to_line_end
+          vi_delete_to_line_end(command)
         when "R"
           @editor_state.vi_mode = "replace"
           @editor_state.status = "REPLACE · Esc normal"
+          vi_begin_change_recording(command)
         when "s"
-          vi_substitute_characters(count)
+          vi_substitute_characters(count, command)
         when "S"
-          vi_change_lines(count)
+          vi_change_lines(count, command)
         when "J"
-          vi_join_lines(count)
+          vi_join_lines(count, command)
+        when "U"
+          vi_restore_current_line
         when /^r(.?)$/
-          vi_replace_single_character(Regexp.last_match(1), count)
+          vi_replace_single_character(Regexp.last_match(1), count, command)
         when "v"
           vi_begin_visual_mode("visual")
         when "V"
@@ -352,16 +358,22 @@ module Kward
           vi_open_line_above
         when "x"
           vi_record_undo { count.times { @editor_state.delete_at_cursor } }
+          vi_remember_change(command)
         when "X"
           vi_record_undo { count.times { @editor_state.delete_before_cursor } }
+          vi_remember_change(command)
         when "dd"
           vi_delete_lines(count)
+          vi_remember_change(command)
         when "cc"
-          vi_change_lines(count)
+          vi_change_lines(count, command)
         when "yy"
           vi_yank_lines(count)
         when "p"
           vi_record_undo { @editor_state.insert(@editor_state.kill_buffer) }
+          vi_remember_change(command)
+        when "P"
+          vi_paste_before(command)
         when "u"
           @editor_state.undo
         when ":"
@@ -372,7 +384,7 @@ module Kward
           editor_search_begin
         else
           if body.start_with?("d") || body.start_with?("y") || body.start_with?("c")
-            vi_operator_motion(body[0], body[1..], count)
+            vi_operator_motion(body[0], body[1..], count, command)
           else
             @editor_state.status = "Unknown command: #{command}"
           end
@@ -529,6 +541,17 @@ module Kward
         @editor_state.status = "INSERT · Esc normal"
       end
 
+      def vi_paste_before(command = nil)
+        text = @editor_state.kill_buffer.to_s
+        return false if text.empty?
+
+        vi_record_undo do
+          @editor_state.cursor = @editor_state.current_line_range.first if text.end_with?("\n")
+          @editor_state.insert(text)
+        end
+        vi_remember_change(command)
+      end
+
       def vi_delete_lines(count)
         start_index, end_index = vi_linewise_delete_range(count)
         @editor_state.copy_range(start_index, end_index)
@@ -555,12 +578,12 @@ module Kward
         vi_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}")
       end
 
-      def vi_change_lines(count)
+      def vi_change_lines(count, command = nil)
         start_index, end_index = vi_linewise_change_range(count)
         @editor_state.copy_range(start_index, end_index)
         vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @editor_state.cursor = start_index
-        vi_enter_insert_mode
+        vi_enter_insert_mode(command)
       end
 
       def vi_linewise_change_range(count)
@@ -571,18 +594,18 @@ module Kward
         [start_index, end_index]
       end
 
-      def vi_change_to_line_end
+      def vi_change_to_line_end(command = nil)
         start_index = @editor_state.cursor
         line, = @editor_state.cursor_line_and_column
         end_index = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
-        return vi_enter_insert_mode if start_index == end_index
+        return vi_enter_insert_mode(command) if start_index == end_index
 
         @editor_state.copy_range(start_index, end_index)
         vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-        vi_enter_insert_mode
+        vi_enter_insert_mode(command)
       end
 
-      def vi_delete_to_line_end
+      def vi_delete_to_line_end(command = nil)
         start_index = @editor_state.cursor
         line, = @editor_state.cursor_line_and_column
         end_index = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
@@ -591,17 +614,18 @@ module Kward
         @editor_state.copy_range(start_index, end_index)
         vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @editor_state.status = "Deleted"
+        vi_remember_change(command)
       end
 
-      def vi_substitute_characters(count)
+      def vi_substitute_characters(count, command = nil)
         start_index = @editor_state.cursor
         end_index = [start_index + count, @editor_state.buffer.length].min
         @editor_state.copy_range(start_index, end_index)
         vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-        vi_enter_insert_mode
+        vi_enter_insert_mode(command)
       end
 
-      def vi_replace_single_character(character, count)
+      def vi_replace_single_character(character, count, command = nil)
         return @editor_state.status = "Replacement character required" if character.to_s.empty?
 
         vi_record_undo do
@@ -611,9 +635,10 @@ module Kward
           end
         end
         @editor_state.move_left
+        vi_remember_change(command)
       end
 
-      def vi_join_lines(count)
+      def vi_join_lines(count, command = nil)
         line, = @editor_state.cursor_line_and_column
         join_count = [count, 2].max
         end_line = [line + join_count - 1, @editor_state.lines.length - 1].min
@@ -630,17 +655,19 @@ module Kward
             @editor_state.cursor = line_end
           end
         end
+        vi_remember_change(command)
       end
 
-      def vi_enter_insert_mode
+      def vi_enter_insert_mode(command = nil)
         @editor_state.vi_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
+        vi_begin_change_recording(command) if command
       end
 
-      def vi_operator_motion(operator, motion, count)
+      def vi_operator_motion(operator, motion, count, command = nil)
         motion_count, motion = vi_count_and_body(motion)
         count *= motion_count if motion_count.positive?
-        return vi_operator_linewise(operator, count) if motion == operator
+        return vi_operator_linewise(operator, count, command) if motion == operator
 
         start_index = @editor_state.cursor
         vi_apply_motion(motion, count)
@@ -653,22 +680,24 @@ module Kward
           @editor_state.copy_range(start_index, end_index)
           vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
           @editor_state.status = "Deleted"
+          vi_remember_change(command)
         when "c"
           @editor_state.copy_range(start_index, end_index)
           vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-          vi_enter_insert_mode
+          vi_enter_insert_mode(vi_build_change_command(operator, motion, count, motion_count))
         else
           vi_copy_range(start_index, end_index, "Yanked")
           @editor_state.cursor = start_index
         end
       end
 
-      def vi_operator_linewise(operator, count)
+      def vi_operator_linewise(operator, count, command = nil)
         case operator
         when "d"
           vi_delete_lines(count)
+          vi_remember_change(command)
         when "c"
-          vi_change_lines(count)
+          vi_change_lines(count, command)
         else
           vi_yank_lines(count)
         end
@@ -712,6 +741,51 @@ module Kward
         @output_io.print("\e]52;c;#{Base64.strict_encode64(@editor_state.kill_buffer)}\a")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.status = status
+      end
+
+      def vi_restore_current_line
+        line, = @editor_state.cursor_line_and_column
+        start_index = @editor_state.line_start_offset(line)
+        end_index = start_index + @editor_state.lines[line].to_s.length
+        original_line = @editor_state.original_content.split("\n", -1)[line].to_s
+        vi_record_undo { @editor_state.replace_range(start_index, end_index, original_line) }
+        @editor_state.status = "Restored line"
+      end
+
+      def handle_vi_repeat_change
+        change = @editor_state.vi_last_change
+        return @editor_state.status = "No change to repeat" unless change
+
+        change.dup.each { |key| handle_vi_key(key) }
+        true
+      end
+
+      def vi_begin_change_recording(command)
+        @editor_state.vi_last_change = vi_change_keys(command)
+      end
+
+      def vi_record_insert_change_key(key)
+        return unless @editor_state.vi_last_change
+        return if ["\x03"].include?(key)
+
+        @editor_state.vi_last_change << key
+      end
+
+      def vi_remember_change(command)
+        @editor_state.vi_last_change = vi_change_keys(command) if command
+      end
+
+      def vi_build_change_command(operator, motion, count, motion_count)
+        command = +""
+        command << count.to_s if count > 1 && motion_count.zero?
+        command << operator
+        command << motion_count.to_s if motion_count.positive?
+        command << motion
+        vi_change_keys(command)
+      end
+
+      def vi_change_keys(command)
+        Array(command).flat_map { |key| key.is_a?(String) ? key.each_char.to_a : key }
       end
 
       def vi_record_undo

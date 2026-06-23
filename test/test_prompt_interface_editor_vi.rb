@@ -501,6 +501,86 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_redo_restores_undone_change
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "x")
+        assert_equal "lpha", editor.buffer
+        prompt.send(:handle_editor_key, "u")
+        assert_equal "alpha", editor.buffer
+        prompt.send(:handle_editor_key, "\x12")
+        assert_equal "lpha", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_big_u_restores_current_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 0)
+
+        prompt.send(:handle_editor_key, "C")
+        "omega".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "alpha\nomega", editor.buffer
+
+        prompt.send(:handle_editor_key, "U")
+        assert_equal "alpha\nbeta", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_dot_repeats_last_simple_change
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one two three")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "w")
+        "1".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "1 two three", editor.buffer
+
+        editor.set_cursor_line_and_column(0, 2)
+        prompt.send(:handle_editor_key, ".")
+        assert_equal "1 1 three", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_big_p_pastes_before_cursor_or_current_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.kill_buffer = "X"
+        editor.set_cursor_line_and_column(1, 1)
+
+        prompt.send(:handle_editor_key, "P")
+        assert_equal "one\ntXwo\nthree", editor.buffer
+
+        editor.kill_buffer = "zero\n"
+        editor.set_cursor_line_and_column(2, 1)
+        prompt.send(:handle_editor_key, "P")
+        assert_equal "one\ntXwo\nzero\nthree", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_deletes_yanks_pastes_and_copies_clipboard
     output = StringIO.new
     Dir.mktmpdir do |dir|
