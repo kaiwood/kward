@@ -3313,6 +3313,42 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_dd_deletes_final_empty_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.move_file_end
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "d")
+
+        assert_equal "one\ntwo", editor.buffer
+        assert_equal "\n", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_dd_deletes_final_non_empty_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 0)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "d")
+
+        assert_equal "one", editor.buffer
+        assert_equal "\ntwo", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_big_i_and_big_a_insert_at_line_edges
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\nbeta")

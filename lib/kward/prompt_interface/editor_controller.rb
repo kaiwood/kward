@@ -1109,13 +1109,21 @@ module Kward
       end
 
       def vi_delete_lines(count)
+        start_index, end_index = vi_linewise_delete_range(count)
+        @editor_state.copy_range(start_index, end_index)
+        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        @editor_state.status = "Deleted #{count} line#{count == 1 ? "" : "s"}"
+      end
+
+      def vi_linewise_delete_range(count)
         line, = @editor_state.cursor_line_and_column
         start_index, = @editor_state.line_range(line)
         end_line = [line + count - 1, @editor_state.lines.length - 1].min
         _, end_index = @editor_state.line_range(end_line)
-        @editor_state.copy_range(start_index, end_index)
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-        @editor_state.status = "Deleted #{count} line#{count == 1 ? "" : "s"}"
+        if end_index == @editor_state.buffer.length && start_index.positive?
+          start_index -= 1
+        end
+        [start_index, end_index]
       end
 
       def vi_yank_lines(count)
