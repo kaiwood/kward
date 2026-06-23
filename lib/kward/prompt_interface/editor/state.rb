@@ -163,6 +163,12 @@ module Kward
         set_cursor_line_and_column(line, 0)
       end
 
+      def move_line_first_non_blank
+        line, = cursor_line_and_column
+        column = lines[line].to_s.index(/\S/) || 0
+        set_cursor_line_and_column(line, column)
+      end
+
       def move_line_end
         line, = cursor_line_and_column
         set_cursor_line_and_column(line, lines[line].length)

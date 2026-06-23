@@ -27,6 +27,7 @@ xx
 
 ### Fixed
 
+- Fixed `I` in the TUI vi editor mode so it inserts at the first non-blank character of the line, matching vi behavior.
 - Fixed TUI tab question prompts so a background tab's pending `ask_user_question` stays with that tab, marks it green while waiting, and opens only when the tab is active.
 - Fixed `/new` in TUI tabs so it starts a fresh session in the current tab instead of opening another tab.
 - Fixed Alt+Backspace in alt tab-keybinding mode so terminals that emit Alt-W no longer close the active tab.

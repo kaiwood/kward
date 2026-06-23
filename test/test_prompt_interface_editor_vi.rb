@@ -103,26 +103,26 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
-  def test_prompt_interface_vi_mode_big_i_and_big_a_insert_at_line_edges
+  def test_prompt_interface_vi_mode_big_i_inserts_at_first_non_blank_and_big_a_inserts_at_line_end
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
+      File.write(File.join(dir, "notes.txt"), "alpha\n  beta")
       Dir.chdir(dir) do
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
-        editor.set_cursor_line_and_column(1, 2)
+        editor.set_cursor_line_and_column(1, 4)
 
         prompt.send(:handle_editor_key, "I")
         assert_equal "insert", editor.vi_mode
         prompt.send(:handle_editor_key, "!")
         prompt.send(:handle_editor_key, "\e")
-        assert_equal "alpha\n!beta", editor.buffer
+        assert_equal "alpha\n  !beta", editor.buffer
 
         prompt.send(:handle_editor_key, "A")
         assert_equal "insert", editor.vi_mode
         prompt.send(:handle_editor_key, "?")
         prompt.send(:handle_editor_key, "\e")
-        assert_equal "alpha\n!beta?", editor.buffer
+        assert_equal "alpha\n  !beta?", editor.buffer
       end
     end
   end

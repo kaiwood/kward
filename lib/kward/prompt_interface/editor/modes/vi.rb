@@ -243,7 +243,7 @@ module Kward
           @editor_state.vi_mode = "insert"
           @editor_state.status = "INSERT · Esc normal"
         when "I"
-          @editor_state.move_line_start
+          @editor_state.move_line_first_non_blank
           @editor_state.vi_mode = "insert"
           @editor_state.status = "INSERT · Esc normal"
         when "a"
