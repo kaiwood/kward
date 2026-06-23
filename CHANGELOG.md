@@ -7,6 +7,7 @@ xx
 ### Added
 
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
+- Added an opt-in vi mode for the built-in TUI file editor with normal/insert/command modes, counts, simple operators, character and line visual modes, colon save/quit commands, yanking to the terminal clipboard, and basic undo.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
 - Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
 - Added a Git branch indicator to the TUI composer status, coloring it yellow when the working tree has uncommitted changes.

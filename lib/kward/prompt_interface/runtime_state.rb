@@ -67,6 +67,10 @@ module Kward
         RbConfig::CONFIG["host_os"].to_s.downcase.include?("darwin") ? "ctrl" : "alt"
       end
 
+      def normalize_editor_mode(value)
+        value.to_s.downcase == "vi" ? "vi" : "default"
+      end
+
       def tab_action_result?(result)
         result.is_a?(Hash) && result[:tab_action]
       end

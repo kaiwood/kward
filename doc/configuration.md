@@ -162,6 +162,20 @@ The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:
 
 This only hides the hint text; Ctrl+C still stops the current running response.
 
+## Editor settings
+
+The built-in TUI file editor uses Kward's default editor keybindings unless vi mode is enabled:
+
+```json
+{
+  "editor": {
+    "mode": "vi"
+  }
+}
+```
+
+Vi mode opens files in normal mode and supports a compact classic-vi subset: normal/insert/command modes, character and line visual modes with `v`/`V`, `h/j/k/l`, word and line movement, counts, simple `d`/`y` operator motions, `dd`, `yy`, `p`, `/` search, `u` undo, and `:w`, `:q`, `:q!`, `:wq`, `:x`, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
+
 ## Session settings
 
 Interactive CLI and RPC clients start fresh by default. To automatically resume the last active session for the current workspace:

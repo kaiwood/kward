@@ -7,9 +7,9 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :new_file, :kill_buffer, :selection_anchor
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :vi_mode, :vi_pending, :vi_command, :undo_stack
 
-      def initialize(path:, content:, new_file: false)
+      def initialize(path:, content:, new_file: false, editor_mode: "default")
         @path = path.to_s
         @new_file = new_file
         @original_content = content.to_s
@@ -25,6 +25,12 @@ module Kward
         @search_query = ""
         @kill_buffer = ""
         @selection_anchor = nil
+        @editor_mode = editor_mode.to_s == "vi" ? "vi" : "default"
+        @vi_mode = @editor_mode == "vi" ? "normal" : nil
+        @vi_pending = ""
+        @vi_command = ""
+        @undo_stack = []
+        @status = "NORMAL · i insert · :w save · :q quit" if vi?
       end
 
       def initialize_copy(other)
@@ -38,6 +44,15 @@ module Kward
         @kill_buffer = other.kill_buffer.dup
         @quit_confirmed = other.quit_confirmed
         @selection_anchor = other.selection_anchor
+        @editor_mode = other.editor_mode.dup
+        @vi_mode = other.vi_mode&.dup
+        @vi_pending = other.vi_pending.dup
+        @vi_command = other.vi_command.dup
+        @undo_stack = other.undo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
+      end
+
+      def vi?
+        @editor_mode == "vi"
       end
 
       def dirty?
@@ -59,6 +74,25 @@ module Kward
         line_index = [[line_index.to_i, 0].max, values.length - 1].min
         column = [[column.to_i, 0].max, values[line_index].length].min
         @cursor = values.first(line_index).sum { |line| line.length + 1 } + column
+      end
+
+      def push_undo
+        @undo_stack << { buffer: @buffer.dup, cursor: @cursor }
+        @undo_stack.shift while @undo_stack.length > 100
+      end
+
+      def undo
+        snapshot = @undo_stack.pop
+        unless snapshot
+          @status = "Already at oldest change"
+          return false
+        end
+
+        @buffer = snapshot[:buffer]
+        @cursor = [snapshot[:cursor], @buffer.length].min
+        changed!
+        @status = "Undo"
+        true
       end
 
       def insert(text)
@@ -167,13 +201,26 @@ module Kward
       end
 
       def selection_active?
-        !@selection_anchor.nil? && @selection_anchor != @cursor
+        return false if @selection_anchor.nil?
+        return true if vi? && @vi_mode == "visual_line"
+
+        @selection_anchor != @cursor
       end
 
       def selection_range
         return nil unless selection_active?
+        return visual_line_selection_range if vi? && @vi_mode == "visual_line"
 
         [@selection_anchor, @cursor].minmax
+      end
+
+      def visual_line_selection_range
+        anchor_line, = cursor_line_and_column_for(@selection_anchor)
+        cursor_line, = cursor_line_and_column
+        start_line, end_line = [anchor_line, cursor_line].minmax
+        start_index, = line_range(start_line)
+        _, end_index = line_range(end_line)
+        [start_index, end_index]
       end
 
       def selected_text
@@ -183,10 +230,49 @@ module Kward
         @buffer[range[0]...range[1]].to_s
       end
 
+      def cursor_line_and_column_for(offset)
+        before_cursor = @buffer[0...offset].to_s
+        [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
+      end
+
       def line_start_offset(line_index)
         values = lines
         line_index = [[line_index.to_i, 0].max, values.length - 1].min
         values.first(line_index).sum { |line| line.length + 1 }
+      end
+
+      def line_range(line_index)
+        start_index = line_start_offset(line_index)
+        end_index = start_index + lines[line_index].to_s.length
+        end_index += 1 if end_index < @buffer.length
+        [start_index, end_index]
+      end
+
+      def current_line_range
+        line, = cursor_line_and_column
+        line_range(line)
+      end
+
+      def move_file_start
+        @cursor = 0
+      end
+
+      def move_file_end
+        @cursor = @buffer.length
+      end
+
+      def replace_range(start_index, end_index, text)
+        start_index, end_index = [start_index, end_index].minmax
+        start_index = [[start_index, 0].max, @buffer.length].min
+        end_index = [[end_index, 0].max, @buffer.length].min
+        @buffer = @buffer[0...start_index].to_s + text.to_s + @buffer[end_index..].to_s
+        @cursor = [start_index, @buffer.length].min
+        changed!
+      end
+
+      def copy_range(start_index, end_index)
+        start_index, end_index = [start_index, end_index].minmax
+        @kill_buffer = @buffer[start_index...end_index].to_s
       end
 
       def begin_search

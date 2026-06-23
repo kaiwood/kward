@@ -75,6 +75,9 @@ module Kward
           "busy_help" => true,
           "tab_keybindings" => "auto"
         },
+        "editor" => {
+          "mode" => "default"
+        },
         "sessions" => {
           "auto_resume" => false
         },
@@ -199,6 +202,13 @@ module Kward
       composer = config["composer"].is_a?(Hash) ? config["composer"] : {}
       value = composer["tab_keybindings"].to_s.downcase
       %w[auto ctrl alt].include?(value) ? value : "auto"
+    end
+
+    # Returns the built-in TUI editor keymap mode.
+    def editor_mode(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      value = editor["mode"].to_s.downcase
+      %w[default vi].include?(value) ? value : "default"
     end
 
     # Returns whether file tools must stay inside the active workspace root.
