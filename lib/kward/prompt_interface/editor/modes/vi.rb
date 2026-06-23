@@ -540,7 +540,9 @@ module Kward
 
       def vi_operator_motion(operator, motion, count)
         motion_count, motion = vi_count_and_body(motion)
-        count = motion_count if motion_count.positive?
+        count *= motion_count if motion_count.positive?
+        return vi_operator_linewise(operator, count) if motion == operator
+
         start_index = @editor_state.cursor
         vi_apply_motion(motion, count)
         end_index = @editor_state.cursor
@@ -557,6 +559,10 @@ module Kward
           vi_copy_range(start_index, end_index, "Yanked")
           @editor_state.cursor = start_index
         end
+      end
+
+      def vi_operator_linewise(operator, count)
+        operator == "d" ? vi_delete_lines(count) : vi_yank_lines(count)
       end
 
       def vi_apply_motion(motion, count)

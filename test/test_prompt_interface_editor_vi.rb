@@ -506,6 +506,44 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_combines_operator_and_motion_counts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one two three four five")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "w")
+
+        assert_equal " five", editor.buffer
+        assert_equal "one two three four", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_combines_linewise_operator_counts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree\nfour\nfive")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "d")
+
+        assert_equal "five", editor.buffer
+        assert_equal "one\ntwo\nthree\nfour\n", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_supports_colon_commands
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")

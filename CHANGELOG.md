@@ -29,6 +29,7 @@ xx
 
 ### Fixed
 
+- Fixed TUI vi editor operator counts so command counts and motion counts are multiplied, matching vi behavior like `2d2w` and `2d2d`.
 - Fixed `I` in the TUI vi editor mode so it inserts at the first non-blank character of the line, matching vi behavior.
 - Fixed TUI tab question prompts so a background tab's pending `ask_user_question` stays with that tab, marks it green while waiting, and opens only when the tab is active.
 - Fixed `/new` in TUI tabs so it starts a fresh session in the current tab instead of opening another tab.
