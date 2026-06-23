@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 xx
 ### Added
 
+- Added `R` replace mode to the TUI vi editor mode.
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
 - Added nano, emacs, and vi editor modes for the built-in TUI file editor, with nano as the default, emacs kill-ring support, and vi retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.

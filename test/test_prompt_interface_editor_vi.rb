@@ -127,6 +127,48 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_big_r_replaces_existing_text_until_escape
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 6)
+
+        prompt.send(:handle_editor_key, "R")
+        assert_equal "replace", editor.vi_mode
+        prompt.send(:handle_editor_key, "G")
+        prompt.send(:handle_editor_key, "A")
+        prompt.send(:handle_editor_key, "M")
+        prompt.send(:handle_editor_key, "M")
+        prompt.send(:handle_editor_key, "A")
+        prompt.send(:handle_editor_key, "\e")
+
+        assert_equal "alpha GAMMA", editor.buffer
+        assert_equal "normal", editor.vi_mode
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_big_r_appends_after_end_of_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.move_line_end
+
+        prompt.send(:handle_editor_key, "R")
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\e")
+
+        assert_equal "alpha!", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_named_escape_and_ctrl_c_return_to_normal_mode
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
