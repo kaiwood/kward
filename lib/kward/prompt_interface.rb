@@ -403,6 +403,7 @@ module Kward
     def restore_composer_snapshot(snapshot)
       @mutex.synchronize do
         restore_composer_snapshot_locked(snapshot)
+        restore_editor_snapshot_locked(snapshot)
         redraw_screen_locked if @started
       end
     end
@@ -410,7 +411,7 @@ module Kward
     def restore_tab_view_snapshot(snapshot)
       @mutex.synchronize do
         restore_composer_snapshot_locked(snapshot)
-        @editor_state = snapshot[:editor_state]&.dup
+        restore_editor_snapshot_locked(snapshot)
         @transcript_buffer = snapshot[:transcript_buffer] || TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
         @transcript_viewport_rows = snapshot[:transcript_viewport_rows].to_i
         @stream_state = snapshot[:stream_state] || StreamState.new
@@ -425,6 +426,10 @@ module Kward
       self.composer_input = @composer.input
       self.composer_cursor = @composer.cursor
       @last_composer_rows = []
+    end
+
+    def restore_editor_snapshot_locked(snapshot)
+      @editor_state = snapshot[:editor_state]&.dup
     end
 
     def update_overlay_settings(settings)

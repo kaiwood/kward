@@ -1521,6 +1521,277 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_supports_unix_text_keybindings
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "notes.txt")
+      File.write(path, "alpha beta\ngamma delta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\x01")
+        assert_equal [1, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x05")
+        assert_equal [1, 11], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x02")
+        assert_equal [1, 10], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x06")
+        assert_equal [1, 11], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x17")
+        assert_equal "alpha beta\ngamma ", editor.buffer
+        assert_equal "delta", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "\x19")
+        assert_equal "alpha beta\ngamma delta", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_supports_unix_line_kill_keybindings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma delta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 6)
+
+        prompt.send(:handle_editor_key, "\x15")
+        assert_equal "alpha beta\ndelta", editor.buffer
+        assert_equal "gamma ", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "\x0B")
+        assert_equal "alpha beta\n", editor.buffer
+        assert_equal "delta", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_supports_alt_word_keybindings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\eb")
+        assert_equal 11, editor.cursor
+
+        prompt.send(:handle_editor_key, "\eb")
+        assert_equal 6, editor.cursor
+
+        prompt.send(:handle_editor_key, "\ef")
+        assert_equal 10, editor.cursor
+
+        prompt.send(:handle_editor_key, "\ed")
+        assert_equal "alpha beta", editor.buffer
+        assert_equal " gamma", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_supports_macos_option_arrow_word_keybindings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.update_tabs(labels: ["One", "Two"], active_index: 0)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\e[1;3D")
+        assert_equal 11, editor.cursor
+
+        prompt.send(:handle_editor_key, "\e[1;3C")
+        assert_equal editor.buffer.length, editor.cursor
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_supports_alt_backspace_and_delete_word_keybindings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\e\x7F")
+        assert_equal "alpha beta ", editor.buffer
+        assert_equal "gamma", editor.kill_buffer
+
+        editor.cursor = 0
+        prompt.send(:handle_editor_key, "\e[3;3~")
+        assert_equal " beta ", editor.buffer
+        assert_equal "alpha", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_ignores_file_editing_keybindings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:handle_editor_key, "/")
+
+        prompt.send(:handle_editor_key, "\x15")
+        prompt.send(:handle_editor_key, "\eb")
+
+        assert_equal "alpha beta", editor.buffer
+        assert editor.search_active
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_escape_does_not_close_editor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e")
+
+        assert prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_escape_still_cancels_search
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "/")
+
+        prompt.send(:handle_editor_key, "\e")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert prompt.send(:editor_active?)
+        refute editor.search_active
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_ctrl_q_closes_clean_editor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\x11")
+
+        refute prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_ctrl_q_warns_before_closing_dirty_editor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "!")
+
+        prompt.send(:handle_editor_key, "\x11")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert prompt.send(:editor_active?)
+        assert editor.quit_confirmed
+        assert_includes editor.status, "Press Ctrl+Q again"
+
+        prompt.send(:handle_editor_key, "\x11")
+
+        refute prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_edit_after_ctrl_q_warning_requires_new_warning
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "?")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        refute editor.quit_confirmed
+
+        prompt.send(:handle_editor_key, "\x11")
+
+        assert prompt.send(:editor_active?)
+        assert editor.quit_confirmed
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_save_after_ctrl_q_warning_allows_clean_close
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\x11")
+        prompt.send(:handle_editor_key, "\x13")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        refute editor.quit_confirmed
+
+        prompt.send(:handle_editor_key, "\x11")
+
+        refute prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_csi_u_ctrl_q_closes_clean_editor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[113;5u")
+
+        refute prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_ctrl_c_does_not_close_editor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\x03")
+
+        assert prompt.send(:editor_active?)
+      end
+    end
+  end
+
   def test_prompt_interface_editor_saves_file
     Dir.mktmpdir do |dir|
       dir = File.realpath(dir)
@@ -2299,6 +2570,26 @@ class TestPromptInterface < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
         assert_equal path, editor.path
         assert_equal "!hello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_composer_restore_applies_editor_snapshot_for_idle_tabs
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        tab_without_editor = prompt.tab_view_snapshot
+        assert prompt.send(:open_editor, "notes.txt")
+        tab_with_editor = prompt.tab_view_snapshot
+
+        prompt.restore_composer_snapshot(tab_without_editor)
+        assert_nil prompt.instance_variable_get(:@editor_state)
+
+        prompt.restore_composer_snapshot(tab_with_editor)
+        assert_equal path, prompt.instance_variable_get(:@editor_state).path
       end
     end
   end

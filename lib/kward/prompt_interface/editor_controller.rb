@@ -82,6 +82,9 @@ module Kward
         csi_result = handle_editor_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        binding_result = handle_editor_key_binding(key)
+        return binding_result unless binding_result == false
+
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -103,7 +106,8 @@ module Kward
           editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
         when "\x03", "\e"
           return editor_search_cancel if editor_search_active?
-          close_editor
+        when "\x11"
+          quit_editor
         when "\x13"
           save_editor
         when "/"
@@ -129,25 +133,14 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
-        if ctrl_modifier?(modifier)
-          char = begin
-            code.to_i.chr.downcase
-          rescue RangeError
-            nil
-          end
-          case char
-          when "c"
-            return editor_search_active? ? editor_search_cancel : close_editor
-          when "s"
-            return save_editor
-          end
-        end
+        binding_result = handle_editor_modified_csi_u_key(code, modifier)
+        return binding_result unless binding_result == false
 
         case code
         when 13
           editor_search_active? ? editor_search_confirm : @editor_state.insert("\n")
         when 27
-          editor_search_active? ? editor_search_cancel : close_editor
+          editor_search_cancel if editor_search_active?
         when 8, 127
           editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
           nil
@@ -160,6 +153,128 @@ module Kward
 
           char = code.chr(Encoding::UTF_8)
           editor_search_active? ? editor_search_append(char) : @editor_state.insert(char)
+        end
+      end
+
+      def handle_editor_key_binding(key)
+        case key
+        when "\x01"
+          @editor_state.move_line_start unless editor_search_active?
+        when "\x02"
+          @editor_state.move_left unless editor_search_active?
+        when "\x04"
+          @editor_state.delete_at_cursor unless editor_search_active?
+        when "\x05"
+          @editor_state.move_line_end unless editor_search_active?
+        when "\x06"
+          @editor_state.move_right unless editor_search_active?
+        when "\x0B"
+          @editor_state.kill_line_after_cursor unless editor_search_active?
+        when "\x15"
+          @editor_state.kill_line_before_cursor unless editor_search_active?
+        when "\x17"
+          @editor_state.delete_word_before_cursor unless editor_search_active?
+        when "\x19"
+          @editor_state.yank_kill_buffer unless editor_search_active?
+        when "\e[D", "\eOD"
+          @editor_state.move_left unless editor_search_active?
+        when "\e[C", "\eOC"
+          @editor_state.move_right unless editor_search_active?
+        when "\e[H", "\eOH", "\e[1~", "\e[7~"
+          @editor_state.move_line_start unless editor_search_active?
+        when "\e[F", "\eOF", "\e[4~", "\e[8~"
+          @editor_state.move_line_end unless editor_search_active?
+        when "\e[3~"
+          @editor_state.delete_at_cursor unless editor_search_active?
+        when "\eb", "\eB"
+          @editor_state.move_to_previous_word unless editor_search_active?
+        when "\ef", "\eF"
+          @editor_state.move_to_next_word unless editor_search_active?
+        when "\ed", "\eD"
+          @editor_state.delete_word_after_cursor unless editor_search_active?
+        when "\e\b", "\e\x7F"
+          @editor_state.delete_word_before_cursor unless editor_search_active?
+        else
+          handle_editor_modified_ansi_key(key) || false
+        end
+      end
+
+      def handle_editor_modified_csi_u_key(code, modifier)
+        return false unless ctrl_modifier?(modifier) || alt_modifier?(modifier)
+
+        normalized_code = code.to_i.chr.downcase.ord rescue code
+        if ctrl_modifier?(modifier)
+          case normalized_code
+          when 97
+            @editor_state.move_line_start unless editor_search_active?
+          when 98
+            @editor_state.move_left unless editor_search_active?
+          when 99
+            editor_search_cancel if editor_search_active?
+          when 100
+            @editor_state.delete_at_cursor unless editor_search_active?
+          when 101
+            @editor_state.move_line_end unless editor_search_active?
+          when 102
+            @editor_state.move_right unless editor_search_active?
+          when 107
+            @editor_state.kill_line_after_cursor unless editor_search_active?
+          when 113
+            quit_editor
+          when 115
+            save_editor
+          when 117
+            @editor_state.kill_line_before_cursor unless editor_search_active?
+          when 119
+            @editor_state.delete_word_before_cursor unless editor_search_active?
+          when 121
+            @editor_state.yank_kill_buffer unless editor_search_active?
+          else
+            false
+          end
+        elsif alt_modifier?(modifier)
+          case normalized_code
+          when 98
+            @editor_state.move_to_previous_word unless editor_search_active?
+          when 100
+            @editor_state.delete_word_after_cursor unless editor_search_active?
+          when 102
+            @editor_state.move_to_next_word unless editor_search_active?
+          else
+            false
+          end
+        else
+          false
+        end
+      end
+
+      def handle_editor_modified_ansi_key(key)
+        match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/)
+        if match
+          modifier = match[2].to_i
+          final = match[3]
+          return false unless alt_modifier?(modifier)
+
+          case final
+          when "C"
+            @editor_state.move_to_next_word unless editor_search_active?
+          when "D"
+            @editor_state.move_to_previous_word unless editor_search_active?
+          when "F"
+            @editor_state.move_line_end unless editor_search_active?
+          when "H"
+            @editor_state.move_line_start unless editor_search_active?
+          else
+            false
+          end
+        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
+          if alt_modifier?(match[1].to_i)
+            @editor_state.delete_word_after_cursor unless editor_search_active?
+          else
+            @editor_state.delete_at_cursor unless editor_search_active?
+          end
+        else
+          false
         end
       end
 
@@ -245,6 +360,16 @@ module Kward
 
       def editor_page_rows
         [[screen_height - 6, 1].max, 10].min
+      end
+
+      def quit_editor
+        return false unless @editor_state
+        return close_editor unless @editor_state.dirty?
+        return close_editor if @editor_state.quit_confirmed
+
+        @editor_state.quit_confirmed = true
+        @editor_state.status = "Unsaved changes. Press Ctrl+Q again to discard."
+        true
       end
 
       def save_editor

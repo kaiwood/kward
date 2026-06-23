@@ -7,7 +7,7 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :search_active, :search_query, :new_file
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :new_file, :kill_buffer
 
       def initialize(path:, content:, new_file: false)
         @path = path.to_s
@@ -18,10 +18,12 @@ module Kward
         @buffer = @original_content.dup
         @cursor = 0
         @viewport_row = 0
-        @status = "Ctrl+S save · Esc/Ctrl+C cancel · / search"
+        @status = "Ctrl+S save · Ctrl+Q quit · / search"
         @overwrite_confirmed = false
+        @quit_confirmed = false
         @search_active = false
         @search_query = ""
+        @kill_buffer = ""
       end
 
       def initialize_copy(other)
@@ -32,6 +34,8 @@ module Kward
         @buffer = other.buffer.dup
         @status = other.status.dup
         @search_query = other.search_query.dup
+        @kill_buffer = other.kill_buffer.dup
+        @quit_confirmed = other.quit_confirmed
       end
 
       def dirty?
@@ -119,6 +123,34 @@ module Kward
         set_cursor_line_and_column(line + rows.to_i, column)
       end
 
+      def move_to_previous_word
+        @cursor = previous_word_boundary(@cursor)
+      end
+
+      def move_to_next_word
+        @cursor = next_word_boundary(@cursor)
+      end
+
+      def delete_word_before_cursor
+        kill_range(previous_word_boundary(@cursor), @cursor)
+      end
+
+      def delete_word_after_cursor
+        kill_range(@cursor, next_word_boundary(@cursor))
+      end
+
+      def kill_line_before_cursor
+        kill_range(current_line_start, @cursor)
+      end
+
+      def kill_line_after_cursor
+        kill_range(@cursor, current_line_end)
+      end
+
+      def yank_kill_buffer
+        insert(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
+      end
+
       def begin_search
         @search_active = true
         @search_query = +""
@@ -165,6 +197,7 @@ module Kward
         @original_digest = Digest::SHA256.hexdigest(@original_content)
         refresh_file_marker
         @overwrite_confirmed = false
+        @quit_confirmed = false
         @status = "Saved #{@path}"
       end
 
@@ -189,8 +222,45 @@ module Kward
         @original_size = nil
       end
 
+      def kill_range(start_index, end_index)
+        return false if start_index == end_index
+
+        @kill_buffer = @buffer[start_index...end_index].to_s
+        @buffer = @buffer[0...start_index].to_s + @buffer[end_index..].to_s
+        @cursor = start_index
+        changed!
+        true
+      end
+
+      def current_line_start
+        @buffer.rindex("\n", @cursor - 1)&.+(1) || 0
+      end
+
+      def current_line_end
+        @buffer.index("\n", @cursor) || @buffer.length
+      end
+
+      def previous_word_boundary(index)
+        cursor = index
+        cursor -= 1 while cursor.positive? && word_separator?(@buffer[cursor - 1])
+        cursor -= 1 while cursor.positive? && !word_separator?(@buffer[cursor - 1])
+        cursor
+      end
+
+      def next_word_boundary(index)
+        cursor = index
+        cursor += 1 while cursor < @buffer.length && word_separator?(@buffer[cursor])
+        cursor += 1 while cursor < @buffer.length && !word_separator?(@buffer[cursor])
+        cursor
+      end
+
+      def word_separator?(char)
+        char.to_s.match?(/\s/)
+      end
+
       def changed!
         @overwrite_confirmed = false
+        @quit_confirmed = false
       end
     end
   end
