@@ -25,10 +25,11 @@ module Kward
         :markdown_chunks,
         :label,
         :unread,
+        :pending_question,
         keyword_init: true
       ) do
         def running?
-          %w[queued running].include?(status.to_s)
+          %w[queued running waiting_for_question].include?(status.to_s)
         end
 
         def idle?
@@ -37,6 +38,18 @@ module Kward
 
         def record_event(event)
           event_history << event
+        end
+      end
+
+      class TabQuestionPrompt
+        attr_accessor :tab
+
+        def initialize(cli)
+          @cli = cli
+        end
+
+        def ask_user_question(questions, cancellation: nil)
+          @cli.send(:ask_tab_user_question, @tab, questions, cancellation: cancellation)
         end
       end
 
@@ -94,10 +107,13 @@ module Kward
       def build_tab_agent(conversation, _session)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
-        tool_registry = ToolRegistry.new(workspace: workspace, prompt: @prompt)
+        prompt = TabQuestionPrompt.new(self)
+        tool_registry = ToolRegistry.new(workspace: workspace, prompt: prompt)
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
-        Agent.new(client: @client, tool_registry: tool_registry, conversation: conversation)
+        agent = Agent.new(client: @client, tool_registry: tool_registry, conversation: conversation)
+        agent.instance_variable_set(:@tab_question_prompt, prompt)
+        agent
       end
 
       def build_tab(session, agent, label: nil)
@@ -118,12 +134,56 @@ module Kward
           stream_state: new_tab_stream_state(agent),
           markdown_chunks: [],
           label: label,
-          unread: false
-        )
+          unread: false,
+          pending_question: nil
+        ).tap { |tab| assign_tab_question_prompt(agent, tab) }
       end
 
       def active_tab
         @tabs && @tabs[@active_tab_index]
+      end
+
+      def assign_tab_question_prompt(agent, tab)
+        prompt = agent.instance_variable_get(:@tab_question_prompt) if agent
+        prompt.tab = tab if prompt.respond_to?(:tab=)
+      end
+
+      def ask_tab_user_question(tab, questions, cancellation: nil)
+        return @prompt.ask_user_question(questions) unless tab
+        return "Error: ask_user_question requires interactive prompt support." unless @prompt.respond_to?(:ask_user_question)
+
+        request = {
+          questions: questions,
+          answers: Queue.new,
+          cancellation: cancellation
+        }
+        cancellation&.on_cancel { request[:answers] << nil }
+        tab.pending_question = request
+        tab.status = "waiting_for_question"
+        update_prompt_tabs
+
+        answers = request[:answers].pop
+        cancellation&.raise_if_cancelled!
+        answers
+      ensure
+        if tab&.pending_question.equal?(request)
+          tab.pending_question = nil
+          tab.status = "running" if tab.status == "waiting_for_question"
+          update_prompt_tabs
+        end
+      end
+
+      def service_active_tab_question
+        tab = active_tab
+        request = tab&.pending_question
+        return false unless request
+
+        tab.pending_question = nil
+        answers = @prompt.ask_user_question(request[:questions])
+        tab.status = "running" if tab.status == "waiting_for_question"
+        update_prompt_tabs
+        request[:answers] << answers
+        true
       end
 
       def handle_tab_action(action, session_store)
@@ -191,6 +251,7 @@ module Kward
 
         tab.session = @active_session
         tab.agent = build_tab_agent(agent.conversation, tab.session)
+        assign_tab_question_prompt(tab.agent, tab)
         tab.diff = @session_diff || (tab.session&.path ? SessionDiff.from_session_file(tab.session.path) : SessionDiff.new)
         tab.snapshot = nil
         tab.status = "idle"
@@ -234,6 +295,7 @@ module Kward
         render_tab(tab) if render
         start_tab_live_view(tab) if tab.running?
         persist_tabs
+        service_active_tab_question
         tab.agent
       end
 
@@ -336,6 +398,12 @@ module Kward
         @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
         loop do
           refresh_active_tab
+          if service_active_tab_question
+            return next_tab_queued_input(tab) if tab.idle? && !tab.queued_inputs.empty?
+            return :tab_idle if tab.idle?
+
+            next
+          end
           poll_result = @prompt.poll_input
           case poll_result
           when Hash
@@ -481,6 +549,7 @@ module Kward
       end
 
       def tab_label_color(tab)
+        return :green if tab.status.to_s == "waiting_for_question"
         return :yellow if tab.running?
         return :red if %w[failed cancelled].include?(tab.status.to_s)
         return :green if tab.unread

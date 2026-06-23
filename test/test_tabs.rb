@@ -103,6 +103,68 @@ class TestTabs < KwardTestCase
     end
   end
 
+  class BlockingQuestionClient
+    attr_reader :started, :release
+
+    def initialize(question)
+      @question = question
+      @started = Queue.new
+      @release = Queue.new
+      @calls = 0
+    end
+
+    def chat(_messages, tools: [], **_options)
+      @calls += 1
+      if @calls == 1
+        @started << true
+        @release.pop
+        {
+          "role" => "assistant",
+          "content" => nil,
+          "tool_calls" => [tool_call("ask_user_question", { questions: [@question] })]
+        }
+      else
+        { "role" => "assistant", "content" => "done" }
+      end
+    end
+
+    private
+
+    def tool_call(name, args)
+      {
+        "id" => "call_#{name}",
+        "type" => "function",
+        "function" => {
+          "name" => name,
+          "arguments" => JSON.dump(args)
+        }
+      }
+    end
+  end
+
+  class QuestionTabPrompt < TabPrompt
+    attr_reader :questions
+
+    def initialize(inputs = [])
+      super
+      @questions = Queue.new
+      @answers = Queue.new
+    end
+
+    def ask_user_question(questions)
+      @questions << questions
+      @answers.pop
+    end
+
+    def answer_question(answers)
+      @answers << answers
+    end
+
+    def asked_question?
+      !@questions.empty?
+    end
+  end
+
   def test_restored_tabs_render_active_session_on_startup
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|
@@ -309,6 +371,38 @@ class TestTabs < KwardTestCase
       cli.send(:handle_tab_action, { tab_action: :previous }, store)
       assert_nil prompt.tab_update_colors.first
       assert_equal second_tab, cli.instance_variable_get(:@tabs).last
+    end
+  end
+
+  def test_background_tab_question_waits_for_own_tab_and_marks_green
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = QuestionTabPrompt.new
+      question = question_args("Proceed?")
+      client = BlockingQuestionClient.new(question)
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      second_tab = cli.send(:active_tab)
+
+      cli.send(:submit_tab_input, first_tab, "first")
+      client.started.pop
+      client.release << true
+      wait_until { first_tab.status == "waiting_for_question" }
+
+      assert_equal second_tab, cli.send(:active_tab)
+      refute prompt.asked_question?
+      assert_equal :green, prompt.tab_update_colors.first
+
+      switch_thread = Thread.new { cli.send(:handle_tab_action, { tab_action: :previous }, store) }
+      wait_until { prompt.asked_question? }
+      assert_equal [question], prompt.questions.pop
+
+      prompt.answer_question([{ question: "Proceed?", answer: "Yes" }])
+      switch_thread.join(1)
+      first_tab.thread.join(1)
+      assert_equal "ready", first_tab.status
     end
   end
 
