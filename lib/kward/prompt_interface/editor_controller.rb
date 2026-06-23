@@ -170,6 +170,10 @@ module Kward
           @editor_state.move_right unless editor_search_active?
         when "\x0B"
           @editor_state.kill_line_after_cursor unless editor_search_active?
+        when "\x0E"
+          @editor_state.move_down unless editor_search_active?
+        when "\x10"
+          @editor_state.move_up unless editor_search_active?
         when "\x15"
           @editor_state.kill_line_before_cursor unless editor_search_active?
         when "\x17"
@@ -219,6 +223,10 @@ module Kward
             @editor_state.move_right unless editor_search_active?
           when 107
             @editor_state.kill_line_after_cursor unless editor_search_active?
+          when 110
+            @editor_state.move_down unless editor_search_active?
+          when 112
+            @editor_state.move_up unless editor_search_active?
           when 113
             quit_editor
           when 115

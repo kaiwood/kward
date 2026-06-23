@@ -144,7 +144,11 @@ module Kward
       end
 
       def kill_line_after_cursor
-        kill_range(@cursor, current_line_end)
+        if current_line_empty?
+          kill_range(empty_line_start, empty_line_end)
+        else
+          kill_range(@cursor, current_line_end)
+        end
       end
 
       def yank_kill_buffer
@@ -238,6 +242,18 @@ module Kward
 
       def current_line_end
         @buffer.index("\n", @cursor) || @buffer.length
+      end
+
+      def current_line_empty?
+        current_line_start == @cursor && current_line_end == @cursor
+      end
+
+      def empty_line_start
+        current_line_end == @buffer.length && @cursor.positive? ? @cursor - 1 : @cursor
+      end
+
+      def empty_line_end
+        current_line_end < @buffer.length ? current_line_end + 1 : current_line_end
       end
 
       def previous_word_boundary(index)
