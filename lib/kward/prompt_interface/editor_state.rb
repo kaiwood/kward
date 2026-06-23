@@ -185,6 +185,10 @@ module Kward
         @cursor = next_word_boundary(@cursor)
       end
 
+      def move_to_word_end
+        @cursor = next_word_end(@cursor)
+      end
+
       def delete_word_before_cursor
         kill_range(previous_word_boundary(@cursor), @cursor)
       end
@@ -456,6 +460,16 @@ module Kward
         cursor = index
         cursor += 1 while cursor < @buffer.length && word_separator?(@buffer[cursor])
         cursor += 1 while cursor < @buffer.length && !word_separator?(@buffer[cursor])
+        cursor
+      end
+
+      def next_word_end(index)
+        return 0 if @buffer.empty?
+
+        cursor = [[index.to_i, 0].max, @buffer.length - 1].min
+        cursor += 1 if cursor < @buffer.length - 1 && !word_separator?(@buffer[cursor])
+        cursor += 1 while cursor < @buffer.length && word_separator?(@buffer[cursor])
+        cursor += 1 while cursor < @buffer.length - 1 && !word_separator?(@buffer[cursor + 1])
         cursor
       end
 

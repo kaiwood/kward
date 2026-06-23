@@ -929,6 +929,8 @@ module Kward
           @editor_state.move_line_end
         when "w"
           count.times { @editor_state.move_to_next_word }
+        when "e"
+          count.times { @editor_state.move_to_word_end }
         when "b"
           count.times { @editor_state.move_to_previous_word }
         when "gg"
@@ -1140,7 +1142,7 @@ module Kward
         start_index = @editor_state.cursor
         vi_apply_motion(motion, count)
         end_index = @editor_state.cursor
-        if motion == "$"
+        if motion == "$" || motion == "e"
           end_index = [end_index + 1, @editor_state.buffer.length].min
         end
         return @editor_state.status = "Empty range" if start_index == end_index
@@ -1159,6 +1161,8 @@ module Kward
         case motion
         when "w"
           count.times { @editor_state.move_to_next_word }
+        when "e"
+          count.times { @editor_state.move_to_word_end }
         when "b"
           count.times { @editor_state.move_to_previous_word }
         when "$"

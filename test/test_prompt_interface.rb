@@ -3313,6 +3313,40 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_e_moves_to_end_of_word
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "e")
+        assert_equal 4, editor.cursor
+
+        prompt.send(:handle_editor_key, "e")
+        assert_equal 9, editor.cursor
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_e_works_as_operator_motion
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "e")
+
+        assert_equal " beta", editor.buffer
+        assert_equal "alpha", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_dd_deletes_final_empty_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\n")
