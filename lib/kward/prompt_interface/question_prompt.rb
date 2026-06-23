@@ -265,10 +265,23 @@ module Kward
       def question_composer_layout(width, height = screen_height)
         content_width = [width - 4, 1].max
         overlay_rows = active_overlay_rows(width, height: height)
-        rows = overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
-        return [rows, question_custom_cursor_row, question_custom_cursor_col(width)] if selected_question_choice&.fetch(:custom, false)
+        return question_custom_composer_layout(width, height, overlay_rows, content_width) if selected_question_choice&.fetch(:custom, false)
 
+        rows = overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
         [rows, overlay_rows.length + 1, 2]
+      end
+
+      def question_custom_composer_layout(width, height, overlay_rows, content_width)
+        input_layout_rows, input_cursor_row, input_cursor_col = input_layout(content_width)
+        max_input_rows = max_visible_input_rows(0, overlay_rows.length, 0, height: height)
+        visible_start = [[input_cursor_row - max_input_rows + 1, 0].max, [input_layout_rows.length - max_input_rows, 0].max].min
+        visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
+        rows = overlay_rows + [top_border(width)]
+        rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
+        rows << bottom_border(width)
+        cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
+        cursor_col = 2 + [input_cursor_col, content_width - 1].min
+        [rows, cursor_row, cursor_col]
       end
 
       def question_overlay_rows(width)
@@ -285,33 +298,13 @@ module Kward
         overlay_card_rows(title, lines, width)
       end
 
-      def question_custom_cursor_row
-        4 + question_choices.index { |choice| choice[:custom] }.to_i
-      end
-
-      def question_custom_cursor_col(width)
-        card_width = overlay_card_width(width)
-        left_padding = overlay_left_padding(width, card_width)
-        custom_prefix = selected_question_choice&.fetch(:custom, false) || !composer_input.empty? ? "Type something: " : "Type something."
-        visible_before_cursor = display_question_input(composer_input[0...composer_cursor])
-        [[left_padding + 2 + 2 + custom_prefix.length + visible_before_cursor.length, width - 1].min, 0].max
-      end
-
       def choice_text(choice, selected: false)
         if choice[:custom]
-          if selected || !composer_input.empty?
-            "Type something: #{display_question_input(composer_input)}"
-          else
-            "Type something."
-          end
+          selected ? "Type a custom answer below." : "Type something."
         else
           description = choice[:description].empty? ? "" : " — #{choice[:description]}"
           "#{choice[:label]}#{description}"
         end
-      end
-
-      def display_question_input(value)
-        value.to_s.gsub(/\s+/, " ")
       end
 
     end

@@ -1113,19 +1113,19 @@ class TestPromptInterface < KwardTestCase
 
     stripped = strip_ansi(output.string)
     assert_equal [{ question: "Proceed?", answer: "maybe", custom: true }], answers
-    assert_includes stripped, "Type something: maybe"
+    assert_includes stripped, "Type a custom answer below."
     assert_includes stripped, "╭ Answer"
-    refute_includes stripped, "│ maybe"
+    assert_includes stripped, "│ maybe"
     assert_includes output.string, "\e[?25l"
     assert_includes output.string, "\e[?25h"
-    assert_includes output.string, "\e[16;28H"
+    assert_includes output.string, "\e[19;8H"
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
     input&.close unless input&.closed?
   end
 
-  def test_prompt_interface_ask_user_question_keeps_trailing_space_visible_while_typing
+  def test_prompt_interface_ask_user_question_renders_custom_text_in_composer_box
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.instance_variable_set(:@question_state, {
       question: "Proceed?",
@@ -1135,16 +1135,16 @@ class TestPromptInterface < KwardTestCase
       index: 1,
       total: 1
     })
-    prompt.send(:composer_input=, "some")
-    prompt.send(:composer_cursor=, 4)
-    cursor_before_space = prompt.send(:question_custom_cursor_col, 120)
-
     prompt.send(:composer_input=, "some ")
     prompt.send(:composer_cursor=, 5)
 
-    assert_equal "some ", prompt.send(:display_question_input, "some ")
-    assert_equal cursor_before_space + 1, prompt.send(:question_custom_cursor_col, 120)
-    assert_includes strip_ansi(prompt.send(:question_overlay_rows, 120).join("\n")), "Type something: some "
+    rows, cursor_row, cursor_col = prompt.send(:question_composer_layout, 120, 20)
+    stripped = strip_ansi(rows.join("\n"))
+
+    assert_includes stripped, "Type a custom answer below."
+    assert_includes stripped, "│ some "
+    assert_operator cursor_row, :>, prompt.send(:question_overlay_rows, 120).length
+    assert_equal 7, cursor_col
   end
 
   def test_prompt_interface_ask_user_question_handles_multiple_questions
@@ -1492,22 +1492,6 @@ class TestPromptInterface < KwardTestCase
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "width" => "maximum" })
 
     assert_equal 120, prompt.send(:overlay_card_width, 120)
-  end
-
-  def test_prompt_interface_question_cursor_uses_overlay_alignment
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, overlay_settings: { "alignment" => "right" })
-    prompt.instance_variable_set(:@question_state, {
-      question: "Proceed?",
-      header: "Confirm",
-      options: [{ label: "Yes", description: "Continue." }],
-      selection_index: 1,
-      index: 1,
-      total: 1
-    })
-    prompt.send(:composer_input=, "maybe")
-    prompt.send(:composer_cursor=, 5)
-
-    assert_equal 49, prompt.send(:question_custom_cursor_col, 120)
   end
 
   def test_prompt_interface_reuses_history_with_up_arrow
