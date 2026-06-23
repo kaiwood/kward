@@ -709,6 +709,9 @@ module Kward
         csi_result = handle_vi_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        tab_result = handle_tab_key_binding(key)
+        return tab_result unless tab_result == false
+
         return handle_vi_search_key(key) if editor_search_active?
         return handle_vi_command_key(key) if @editor_state.vi_mode == "command"
         return handle_vi_insert_key(key) if @editor_state.vi_mode == "insert"

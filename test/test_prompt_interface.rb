@@ -3281,6 +3281,15 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_allows_ctrl_number_tab_switching
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi", tab_keybindings: "ctrl")
+    prompt.instance_variable_set(:@tabs, [Object.new, Object.new])
+    prompt.instance_variable_set(:@editor_state, Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "alpha", editor_mode: "vi"))
+
+    assert_equal({ tab_action: :select, index: 0 }, prompt.send(:handle_key, "\e[49;5u"))
+    assert_equal({ tab_action: :select, index: 1 }, prompt.send(:handle_key, "\e[50;5u"))
+  end
+
   def test_prompt_interface_vi_mode_opens_in_normal_mode_and_requires_insert
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
