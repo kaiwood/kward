@@ -412,12 +412,12 @@ module Kward
       def handle_emacs_key(key)
         return if handle_editor_bracketed_paste_key(key)
 
-        csi_result = handle_emacs_csi_u_key(key)
-        return csi_result unless csi_result == false
-
         if @editor_state.emacs_pending == "C-x"
           return handle_emacs_ctrl_x_key(key)
         end
+
+        csi_result = handle_emacs_csi_u_key(key)
+        return csi_result unless csi_result == false
 
         shift_result = handle_editor_shift_navigation_key(key)
         return shift_result unless shift_result == false
@@ -636,6 +636,7 @@ module Kward
 
       def handle_emacs_ctrl_x_key(key)
         @editor_state.emacs_pending = nil
+        key = emacs_ctrl_x_csi_u_key(key)
         case key
         when "\x13"
           save_editor
@@ -644,6 +645,21 @@ module Kward
         else
           @editor_state.status = "Unknown C-x command"
           true
+        end
+      end
+
+      def emacs_ctrl_x_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return key unless sequence && ctrl_modifier?(sequence[:modifier])
+
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        case ctrl_code(sequence[:code])
+        when 99
+          "\x03"
+        when 115
+          "\x13"
+        else
+          key
         end
       end
 

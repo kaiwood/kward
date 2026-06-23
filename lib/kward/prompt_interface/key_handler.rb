@@ -19,9 +19,14 @@ module Kward
         nil
       end
 
+      def handle_editor_input_key(key)
+        result = handle_editor_key(key)
+        result.is_a?(String) ? true : result
+      end
+
       def handle_key(key)
         return submit_input if key.nil?
-        return handle_editor_key(key) if editor_active?
+        return handle_editor_input_key(key) if editor_active?
         return if handle_bracketed_paste_key(key)
 
         csi_result = handle_csi_u_key(key)

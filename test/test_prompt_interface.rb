@@ -1751,6 +1751,26 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_status_strings_are_not_submitted_as_chat_input
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        refute_kind_of String, prompt.send(:handle_key, "\x00")
+        assert_equal "Selection started", editor.status
+        assert prompt.send(:editor_active?)
+
+        refute_kind_of String, prompt.send(:handle_key, "\x18")
+        assert_equal "C-x", editor.status
+        assert_equal "C-x", editor.emacs_pending
+        assert prompt.send(:editor_active?)
+      end
+    end
+  end
+
   def test_prompt_interface_editor_csi_u_ctrl_space_starts_selection
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
@@ -2023,6 +2043,27 @@ class TestPromptInterface < KwardTestCase
         prompt.send(:handle_editor_key, "\x03")
 
         assert prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_emacs_csi_u_ctrl_x_ctrl_s_saves_file
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\e[120;5u")
+        prompt.send(:handle_editor_key, "\e[115;5u")
+
+        assert_equal "!hello", File.read(path)
+        refute editor.search_active
+        assert_nil editor.emacs_pending
       end
     end
   end
