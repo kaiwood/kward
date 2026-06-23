@@ -186,7 +186,10 @@ module Kward
         when String
           return poll_result if handle_busy_worker_input(poll_result, agent, queued_inputs)
 
-          if steering && !poll_result.strip.empty?
+          if slash_command_input?(poll_result)
+            queued_inputs << poll_result
+            @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+          elsif steering && !poll_result.strip.empty?
             begin
               steering.submit(poll_result)
               @prompt.set_steered_count(1) if @prompt.respond_to?(:set_steered_count)
@@ -217,6 +220,10 @@ module Kward
 
           sleep 0.01
         end
+      end
+
+      def slash_command_input?(input)
+        input.to_s.strip.start_with?("/")
       end
 
       def handle_busy_worker_input(input, agent, queued_inputs)

@@ -377,6 +377,12 @@ module Kward
           return
         end
 
+        if slash_command_input?(input)
+          tab.queued_inputs << input
+          @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+          return
+        end
+
         if tab.steering && !input.to_s.strip.empty?
           begin
             tab.steering.submit(input)

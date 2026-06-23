@@ -3089,6 +3089,34 @@ edit this prompt"
     assert_equal ["fallback"], queued
   end
 
+  def test_busy_input_queues_slash_command_instead_of_steering
+    prompt = PollingPrompt.new(["/git"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    queued = []
+    submitted = []
+    steering = Object.new
+    steering.define_singleton_method(:submit) { |input| submitted << input }
+
+    cli.send(:collect_busy_input, queued, steering)
+
+    assert_equal ["/git"], queued
+    assert_empty submitted
+  end
+
+  def test_tab_busy_input_queues_slash_command_instead_of_steering
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    submitted = []
+    steering = Object.new
+    steering.define_singleton_method(:submit) { |input| submitted << input }
+    tab = Kward::CLI::Tabs::TabRuntime.new(queued_inputs: [], steering: steering)
+
+    cli.send(:handle_tab_busy_input, tab, "/git")
+
+    assert_equal ["/git"], tab.queued_inputs
+    assert_empty submitted
+  end
+
   def test_interactive_turn_steers_prompt_during_streaming_when_supported
     input, writer = IO.pipe
     output = StringIO.new
