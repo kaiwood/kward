@@ -1,4 +1,6 @@
+require "find"
 require "io/console"
+require "pathname"
 require "rbconfig"
 require "thread"
 require "tty-cursor"
@@ -12,6 +14,7 @@ require_relative "prompt_interface/transcript_renderer"
 require_relative "prompt_interface/prompt_renderer"
 require_relative "prompt_interface/stream_state"
 require_relative "prompt_interface/slash_overlay"
+require_relative "prompt_interface/file_overlay"
 require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
 require_relative "prompt_interface/git_prompt"
@@ -46,6 +49,7 @@ module Kward
     BANNER_MESSAGE = Banner::MESSAGE
 
     include SlashOverlay
+    include FileOverlay
     include SelectionPrompt
     include QuestionPrompt
     include GitPrompt
@@ -117,6 +121,9 @@ module Kward
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
+      @file_selection_index = 0
+      @file_overlay_dismissed_token = nil
+      @file_mention_paths = nil
       @select_state = nil
       @question_state = nil
       @question_prompt_active = false

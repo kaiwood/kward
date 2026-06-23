@@ -1328,6 +1328,75 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_shows_file_overlay_and_completes_selection
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("@li\t\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+
+    assert_equal "@lib/main.rb", prompt.ask("You>")
+    stripped = strip_ansi(output.string)
+    assert_includes stripped, "╭ Files"
+    assert_includes stripped, "› lib/main.rb"
+    assert_includes stripped, "╰"
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_file_overlay_completes_active_mention_in_middle_of_input
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@file_mention_paths, ["doc/api.md", "lib/main.rb"])
+    prompt.send(:composer_input=, "read @api please")
+    prompt.send(:composer_cursor=, 9)
+
+    assert prompt.send(:complete_selected_file_mention)
+    assert_equal "read @doc/api.md please", prompt.send(:composer_input)
+    assert_equal "read @doc/api.md".length, prompt.send(:composer_cursor)
+  end
+
+  def test_prompt_interface_file_overlay_down_selects_next_match
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.send(:composer_input=, "@")
+    prompt.send(:composer_cursor=, 1)
+
+    prompt.send(:handle_key, "\e[B")
+
+    assert_equal "lib/main.rb", prompt.send(:selected_file_mention_path)
+  end
+
+  def test_prompt_interface_file_overlay_shows_no_matches
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+    prompt.send(:composer_input=, "@missing")
+    prompt.send(:composer_cursor=, 8)
+
+    rows = prompt.send(:file_overlay_rows, 80)
+
+    assert_includes strip_ansi(rows.join("\n")), "No matching files"
+  end
+
+  def test_prompt_interface_file_overlay_uses_git_ignored_project_files
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "main.rb"), "")
+      File.write(File.join(dir, "ignored.log"), "")
+      File.write(File.join(dir, ".gitignore"), "ignored.log\n")
+      system("git", "init", "--quiet", chdir: dir)
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+        paths = prompt.send(:project_file_paths)
+
+        assert_includes paths, "lib/main.rb"
+        assert_includes paths, ".gitignore"
+        refute_includes paths, "ignored.log"
+      end
+    end
+  end
+
   def test_prompt_interface_shows_slash_overlay_and_completes_selection
     input, writer = IO.pipe
     output = StringIO.new

@@ -36,8 +36,10 @@ module Kward
         return if string.empty?
 
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
+        @file_overlay_dismissed_token = nil
         @composer.insert_string(string)
       end
 
@@ -72,7 +74,9 @@ module Kward
         end
 
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
+        @file_overlay_dismissed_token = nil
         @composer.delete_before_cursor
       end
 
@@ -80,16 +84,20 @@ module Kward
         return unless @composer.remove_last_attachment
 
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
+        @file_overlay_dismissed_token = nil
       end
 
       def delete_at_cursor
         return unless @composer.cursor < @composer.input.length
 
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
         @slash_overlay_dismissed_input = nil
+        @file_overlay_dismissed_token = nil
         @composer.delete_at_cursor
       end
 
@@ -123,25 +131,33 @@ module Kward
 
       def delete_word_before_cursor
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
+        @file_overlay_dismissed_token = nil
         @composer.delete_word_before_cursor
       end
 
       def delete_word_after_cursor
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
+        @file_overlay_dismissed_token = nil
         @composer.delete_word_after_cursor
       end
 
       def kill_line_before_cursor
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
+        @file_overlay_dismissed_token = nil
         @composer.kill_line_before_cursor
       end
 
       def kill_line_after_cursor
         reset_slash_selection
+        reset_file_selection
         reset_history_navigation
+        @file_overlay_dismissed_token = nil
         @composer.kill_line_after_cursor
       end
 

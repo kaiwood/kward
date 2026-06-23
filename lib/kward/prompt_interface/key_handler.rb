@@ -78,15 +78,27 @@ module Kward
         when :end
           move_to_end_of_line
         when :up
-          slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
+          if file_overlay_visible?
+            select_previous_file_mention
+          elsif slash_overlay_visible?
+            select_previous_slash_command
+          else
+            recall_previous_history
+          end
         when :down
-          slash_overlay_visible? ? select_next_slash_command : recall_next_history
+          if file_overlay_visible?
+            select_next_file_mention
+          elsif slash_overlay_visible?
+            select_next_slash_command
+          else
+            recall_next_history
+          end
         else
           case key
           when "\n", "\r"
             submit_input
           when "\t"
-            complete_selected_slash_command || insert_key(key)
+            complete_selected_file_mention || complete_selected_slash_command || insert_key(key)
           when "\b", "\x7F"
             delete_before_cursor
           when "\x04"
@@ -109,12 +121,12 @@ module Kward
 
       def handle_escape_sequence
         pending_sequence = read_pending_escape_sequence
-        return true if pending_sequence.empty? && dismiss_slash_overlay
+        return true if pending_sequence.empty? && (dismiss_file_overlay || dismiss_slash_overlay)
 
         full_sequence = "\e#{pending_sequence}"
         sequence = next_key_token(full_sequence)
         queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
-        return true if sequence == "\e" && dismiss_slash_overlay
+        return true if sequence == "\e" && (dismiss_file_overlay || dismiss_slash_overlay)
         return true if handle_shift_enter_key(sequence)
 
         tab_result = handle_tab_key_binding(sequence)
@@ -125,9 +137,21 @@ module Kward
 
         case key_name_for(sequence)
         when :up
-          slash_overlay_visible? ? select_previous_slash_command : recall_previous_history
+          if file_overlay_visible?
+            select_previous_file_mention
+          elsif slash_overlay_visible?
+            select_previous_slash_command
+          else
+            recall_previous_history
+          end
         when :down
-          slash_overlay_visible? ? select_next_slash_command : recall_next_history
+          if file_overlay_visible?
+            select_next_file_mention
+          elsif slash_overlay_visible?
+            select_next_slash_command
+          else
+            recall_next_history
+          end
         when :left
           move_cursor_left
         when :right
@@ -183,7 +207,7 @@ module Kward
         when 13
           modifier == 2 ? insert_string("\n") : submit_input
         when 27
-          dismiss_slash_overlay || false
+          dismiss_file_overlay || dismiss_slash_overlay || false
         when 8, 127
           alt_modifier?(modifier) ? delete_word_before_cursor : delete_before_cursor
           nil
