@@ -28,7 +28,7 @@ module Kward
         return if message.nil?
 
         result = run_busy_local_command_and_requeue(activity: "committing") do
-          git_commit_staged(git_root, message)
+          git_commit(git_root, message)
         end
         print_git_commit_result(result)
       end
@@ -79,6 +79,24 @@ module Kward
         return nil if path.empty?
 
         { path: path, staged: status[0] != " " && status[0] != "?" }
+      end
+
+      def git_commit(root, message)
+        return git_commit_staged(root, message) if git_staged_changes?(root)
+
+        add_output, add_status = Open3.capture2e("git", "add", "--all", chdir: root.to_s)
+        return { success: false, output: add_output } unless add_status.success?
+
+        git_commit_staged(root, message)
+      rescue StandardError => e
+        { success: false, output: e.message }
+      end
+
+      def git_staged_changes?(root)
+        _output, status = Open3.capture2e("git", "diff", "--cached", "--quiet", chdir: root.to_s)
+        !status.success?
+      rescue StandardError
+        false
       end
 
       def git_commit_staged(root, message)

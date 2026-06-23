@@ -4128,7 +4128,35 @@ edit this prompt"
     end
   end
 
-  def test_git_slash_command_commits_staged_changes_only
+  def test_git_slash_command_commits_all_changes_when_nothing_is_staged
+    Dir.mktmpdir do |dir|
+      system("git", "init", chdir: dir, out: File::NULL, err: File::NULL)
+      system("git", "config", "user.email", "test@example.com", chdir: dir)
+      system("git", "config", "user.name", "Test User", chdir: dir)
+      File.write(File.join(dir, "tracked.txt"), "old\n")
+      system("git", "add", "tracked.txt", chdir: dir)
+      system("git", "commit", "-m", "initial", chdir: dir, out: File::NULL, err: File::NULL)
+      File.write(File.join(dir, "tracked.txt"), "new\n")
+      File.write(File.join(dir, "untracked.txt"), "new\n")
+      prompt = GitPrompt.new("ship changes")
+      client = RecordingClient.new([])
+
+      Dir.chdir(dir) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+        agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: Kward::Conversation.new(workspace_root: dir))
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_includes prompt.git_status_lines, " M tracked.txt"
+      assert_includes prompt.git_status_lines, "?? untracked.txt"
+      assert_equal "ship changes", `git -C #{Shellwords.escape(dir)} log -1 --pretty=%s`.strip
+      assert_empty `git -C #{Shellwords.escape(dir)} status --short`.strip
+      assert_equal "new", File.read(File.join(dir, "tracked.txt")).strip
+      assert_includes prompt.output.join("\n"), "Git commit succeeded"
+    end
+  end
+
+  def test_git_slash_command_commits_staged_changes_when_any_file_is_staged
     Dir.mktmpdir do |dir|
       system("git", "init", chdir: dir, out: File::NULL, err: File::NULL)
       system("git", "config", "user.email", "test@example.com", chdir: dir)
@@ -4139,7 +4167,7 @@ edit this prompt"
       File.write(File.join(dir, "tracked.txt"), "new\n")
       File.write(File.join(dir, "untracked.txt"), "new\n")
       system("git", "add", "tracked.txt", chdir: dir)
-      prompt = GitPrompt.new("ship changes")
+      prompt = GitPrompt.new("ship staged")
       client = RecordingClient.new([])
 
       Dir.chdir(dir) do
@@ -4148,11 +4176,9 @@ edit this prompt"
         cli.interactive_loop(agent: agent)
       end
 
-      assert_includes prompt.git_status_lines, "?? untracked.txt"
-      assert_equal "ship changes", `git -C #{Shellwords.escape(dir)} log -1 --pretty=%s`.strip
+      assert_equal "ship staged", `git -C #{Shellwords.escape(dir)} log -1 --pretty=%s`.strip
       assert_equal "?? untracked.txt", `git -C #{Shellwords.escape(dir)} status --short`.strip
       assert_equal "new", File.read(File.join(dir, "tracked.txt")).strip
-      assert_includes prompt.output.join("\n"), "Git commit succeeded"
     end
   end
 
@@ -4176,7 +4202,7 @@ edit this prompt"
     end
   end
 
-  def test_git_slash_command_can_unstage_selected_file
+  def test_git_slash_command_commits_all_after_unstaging_last_staged_file
     Dir.mktmpdir do |dir|
       system("git", "init", chdir: dir, out: File::NULL, err: File::NULL)
       system("git", "config", "user.email", "test@example.com", chdir: dir)
@@ -4186,7 +4212,7 @@ edit this prompt"
       system("git", "commit", "-m", "initial", chdir: dir, out: File::NULL, err: File::NULL)
       File.write(File.join(dir, "file.txt"), "new\n")
       system("git", "add", "file.txt", chdir: dir)
-      prompt = GitPrompt.new("should fail", actions: [{ action: :toggle_stage, index: 0 }])
+      prompt = GitPrompt.new("ship all", actions: [{ action: :toggle_stage, index: 0 }])
       client = RecordingClient.new([])
 
       Dir.chdir(dir) do
@@ -4195,9 +4221,9 @@ edit this prompt"
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal "initial", `git -C #{Shellwords.escape(dir)} log -1 --pretty=%s`.strip
-      assert_equal "M file.txt", `git -C #{Shellwords.escape(dir)} status --short`.strip
-      assert_includes prompt.output.join("\n"), "Git commit failed"
+      assert_equal "ship all", `git -C #{Shellwords.escape(dir)} log -1 --pretty=%s`.strip
+      assert_empty `git -C #{Shellwords.escape(dir)} status --short`.strip
+      assert_includes prompt.output.join("\n"), "Git commit succeeded"
     end
   end
 

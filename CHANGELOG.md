@@ -18,7 +18,7 @@ xx
 
 ### Changed
 
-- Changed `/git` commits to use staged changes only instead of automatically staging all workspace changes.
+- Changed `/git` commits to use staged changes when present, or automatically stage all workspace changes when nothing is staged.
 - Changed TUI tabs to colorize tab names by state instead of appending `*` for running tabs: yellow while running, red after errors or cancellation, and green when a background tab finishes unread.
 - Changed TUI tabs to use unrestricted tab-local tool registries so tab turns can run independently without worker write-lock policy.
 - Changed the composer status line to show the visible worker id before diff/context/model details, including a spinner for running or queued workers.
