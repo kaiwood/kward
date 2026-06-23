@@ -10,6 +10,7 @@ xx
 - Added nano, emacs, and vi editor modes for the built-in TUI file editor, with nano as the default, emacs kill-ring support, and vi retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
 - Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
+- Added file-level stage/unstage toggling to the interactive `/git` overlay with `s` and Up/Down selection.
 - Added a Git branch indicator to the TUI composer status, coloring it yellow when the working tree has uncommitted changes.
 - Added persistent numbered TUI tabs for session-backed conversations, including bottom composer tab rendering, configurable tab keybinding mode, and `/tab` commands for switching, moving, closing, opening, and naming tabs.
 - Added structured request workers with `/workers`, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, persisted worker metadata, RPC worker list/show capabilities, and a reusable live worker event view.
@@ -17,6 +18,7 @@ xx
 
 ### Changed
 
+- Changed `/git` commits to use staged changes only instead of automatically staging all workspace changes.
 - Changed TUI tabs to colorize tab names by state instead of appending `*` for running tabs: yellow while running, red after errors or cancellation, and green when a background tab finishes unread.
 - Changed TUI tabs to use unrestricted tab-local tool registries so tab turns can run independently without worker write-lock policy.
 - Changed the composer status line to show the visible worker id before diff/context/model details, including a spinner for running or queued workers.

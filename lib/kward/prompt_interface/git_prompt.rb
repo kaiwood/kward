@@ -8,7 +8,7 @@ module Kward
         start
         @mutex.synchronize do
           prepare_modal_input_locked("Git>", clear_attachments: true)
-          @git_state = { status_lines: Array(status_lines).map(&:to_s), composing: false }
+          @git_state = git_state_for(status_lines)
           render_prompt_locked
         end
 
@@ -22,11 +22,18 @@ module Kward
               render_prompt_locked if resized || footer_refreshed
             else
               result = handle_git_key(key)
-              render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL
+              render_prompt_locked unless result.is_a?(String) || result == SELECT_CANCEL || git_action?(result)
             end
           end
 
-          if result.is_a?(String) || result == SELECT_CANCEL
+          if git_action?(result)
+            refreshed_status = block_given? ? yield(result) : status_lines
+            @mutex.synchronize do
+              selected_index = @git_state ? @git_state[:selected_index].to_i : 0
+              @git_state = git_state_for(refreshed_status, selected_index: selected_index)
+              render_prompt_locked
+            end
+          elsif result.is_a?(String) || result == SELECT_CANCEL
             finish_git_prompt
             return result == SELECT_CANCEL ? nil : result
           end
@@ -66,6 +73,8 @@ module Kward
         key_name = key_name_for(key)
         named_result = handle_git_named_key(key_name) if key_name
         return named_result unless named_result == false || named_result.nil?
+
+        return git_toggle_selected_file if key == "s" && !git_composing?
 
         insert_key(key) if git_composing?
       end
@@ -124,6 +133,10 @@ module Kward
           move_cursor_left if git_composing?
         when :right
           move_cursor_right if git_composing?
+        when :up
+          git_composing? ? false : git_move_selection(-1)
+        when :down
+          git_composing? ? false : git_move_selection(1)
         when :home
           move_to_start_of_line if git_composing?
         when :end
@@ -143,6 +156,33 @@ module Kward
         return SELECT_CANCEL if sequence == "\e"
 
         handle_git_named_key(key_name_for(sequence))
+      end
+
+      def git_state_for(status_lines, selected_index: 0)
+        lines = Array(status_lines).map(&:to_s)
+        selected_index = [[selected_index.to_i, 0].max, [lines.length - 1, 0].max].min
+        { status_lines: lines, composing: false, selected_index: selected_index }
+      end
+
+      def git_action?(result)
+        result.is_a?(Hash) && result[:action]
+      end
+
+      def git_move_selection(delta)
+        return false unless @git_state
+
+        count = @git_state[:status_lines].length
+        return true if count.zero?
+
+        @git_state[:selected_index] = [[@git_state[:selected_index].to_i + delta, 0].max, count - 1].min
+        true
+      end
+
+      def git_toggle_selected_file
+        return true unless @git_state
+        return true if @git_state[:status_lines].empty?
+
+        { action: :toggle_stage, index: @git_state[:selected_index].to_i }
       end
 
       def git_begin_message
@@ -181,13 +221,14 @@ module Kward
       def git_overlay_rows(width, height: screen_height)
         return [] unless @git_state
 
-        help = git_composing? ? "Type commit message · Enter commit · Esc cancel" : "Tab message · Esc cancel"
+        help = git_composing? ? "Type commit message · Enter commit · Esc cancel" : "↑/↓ select · s stage/unstage · Tab message · Esc cancel"
         lines = [overlay_text_line(help, :muted), overlay_blank_line]
         status_lines = @git_state[:status_lines]
         status_lines = ["No uncommitted changes."] if status_lines.empty?
         max_status_rows = [max_overlay_list_rows(height), 1].max
-        status_lines.first(max_status_rows).each do |line|
-          lines << overlay_text_line(line)
+        status_lines.first(max_status_rows).each_with_index do |line, index|
+          marker = index == @git_state[:selected_index].to_i ? "› " : "  "
+          lines << overlay_text_line("#{marker}#{line}")
         end
         if status_lines.length > max_status_rows
           lines << overlay_text_line("… #{status_lines.length - max_status_rows} more", :muted)
