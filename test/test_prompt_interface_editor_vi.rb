@@ -61,6 +61,64 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_supports_screen_position_movement
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), (0...20).map { |index| "  line#{index}" }.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.viewport_row = 5
+
+        prompt.send(:handle_editor_key, "H")
+        assert_equal [5, 2], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "M")
+        assert_equal [10, 2], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "L")
+        assert_equal [14, 2], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "H")
+        assert_equal [6, 2], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "L")
+        assert_equal [13, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_supports_page_and_scroll_movement
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), (0...30).map { |index| "line#{index}" }.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x06")
+        assert_equal [10, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x02")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x04")
+        assert_equal [5, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x15")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        assert_equal 0, editor.viewport_row
+        prompt.send(:handle_editor_key, "\x05")
+        assert_equal 1, editor.viewport_row
+        prompt.send(:handle_editor_key, "\x19")
+        assert_equal 0, editor.viewport_row
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_supports_space_and_backspace_movement
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")

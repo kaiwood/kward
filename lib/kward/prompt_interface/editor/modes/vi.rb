@@ -213,13 +213,25 @@ module Kward
           @editor_state.move_left
         when :return, :enter
           vi_move_to_relative_line_first_non_blank(1)
+        when :ctrl_b
+          @editor_state.page_up(editor_page_rows)
+        when :ctrl_f
+          @editor_state.page_down(editor_page_rows)
+        when :ctrl_d
+          @editor_state.page_down(vi_half_page_rows)
+        when :ctrl_u
+          @editor_state.page_up(vi_half_page_rows)
+        when :ctrl_e
+          vi_scroll_down
+        when :ctrl_y
+          vi_scroll_up
         else
           false
         end
       end
 
       def vi_normal_control_key?(key)
-        ["\n", "\r", "\b", "\x7F"].include?(key)
+        ["\n", "\r", "\b", "\x7F", "\x02", "\x04", "\x05", "\x06", "\x15", "\x19"].include?(key)
       end
 
       def vi_visual_mode?
@@ -281,6 +293,24 @@ module Kward
         when "G"
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
+        when "H"
+          vi_move_to_screen_line(count - 1)
+        when "M"
+          vi_move_to_screen_line(editor_page_rows / 2)
+        when "L"
+          vi_move_to_screen_line(editor_page_rows - count)
+        when "\x06"
+          @editor_state.page_down(editor_page_rows)
+        when "\x02"
+          @editor_state.page_up(editor_page_rows)
+        when "\x04"
+          @editor_state.page_down(vi_half_page_rows)
+        when "\x15"
+          @editor_state.page_up(vi_half_page_rows)
+        when "\x05"
+          vi_scroll_down
+        when "\x19"
+          vi_scroll_up
         when "i"
           @editor_state.vi_mode = "insert"
           @editor_state.status = "INSERT · Esc normal"
@@ -436,6 +466,27 @@ module Kward
       def vi_move_to_relative_line_first_non_blank(offset)
         line, = @editor_state.cursor_line_and_column
         @editor_state.move_to_line_first_non_blank(line + offset)
+      end
+
+      def vi_move_to_screen_line(offset)
+        @editor_state.move_to_line_first_non_blank(@editor_state.viewport_row + offset)
+      end
+
+      def vi_half_page_rows
+        [editor_page_rows / 2, 1].max
+      end
+
+      def vi_scroll_down
+        @editor_state.viewport_row = [@editor_state.viewport_row + 1, @editor_state.lines.length - 1].min
+        line, column = @editor_state.cursor_line_and_column
+        @editor_state.set_cursor_line_and_column(@editor_state.viewport_row, column) if line < @editor_state.viewport_row
+      end
+
+      def vi_scroll_up
+        @editor_state.viewport_row = [@editor_state.viewport_row - 1, 0].max
+        bottom_line = @editor_state.viewport_row + editor_page_rows - 1
+        line, column = @editor_state.cursor_line_and_column
+        @editor_state.set_cursor_line_and_column(bottom_line, column) if line > bottom_line
       end
 
       def vi_open_line_below
