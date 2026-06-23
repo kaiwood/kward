@@ -9,6 +9,8 @@ xx
 - Added `R` replace mode to the TUI vi editor mode.
 - Added classic vi normal-mode movement keys `^`, `+`, `-`, `_`, Enter, Space, Backspace, `H`, `M`, `L`, Ctrl+F, Ctrl+B, Ctrl+D, Ctrl+U, Ctrl+E, and Ctrl+Y to the TUI vi editor mode.
 - Added `X` delete-before-cursor support to the TUI vi editor mode.
+- Added vi change, substitute, replace-character, and join-line commands (`cc`, `C`, `cw`, `c$`, `s`, `S`, `r`, and `J`) to the TUI vi editor mode.
+- Added `D` delete-to-end-of-line support to the TUI vi editor mode.
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
 - Added nano, emacs, and vi editor modes for the built-in TUI file editor, with nano as the default, emacs kill-ring support, and vi retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.

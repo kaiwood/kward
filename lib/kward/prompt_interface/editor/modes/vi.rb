@@ -253,7 +253,8 @@ module Kward
       def vi_waiting_for_more?(command)
         return true if command.match?(/\A\d+\z/) && command != "0"
         return true if command.match?(/\A\d*g\z/)
-        return true if command.match?(/\A\d*[dy]\d*\z/)
+        return true if command.match?(/\A\d*[cdy]\d*\z/)
+        return true if command.match?(/\A\d*r\z/)
 
         false
       end
@@ -326,9 +327,21 @@ module Kward
           @editor_state.move_line_end
           @editor_state.vi_mode = "insert"
           @editor_state.status = "INSERT · Esc normal"
+        when "C"
+          vi_change_to_line_end
+        when "D"
+          vi_delete_to_line_end
         when "R"
           @editor_state.vi_mode = "replace"
           @editor_state.status = "REPLACE · Esc normal"
+        when "s"
+          vi_substitute_characters(count)
+        when "S"
+          vi_change_lines(count)
+        when "J"
+          vi_join_lines(count)
+        when /^r(.?)$/
+          vi_replace_single_character(Regexp.last_match(1), count)
         when "v"
           vi_begin_visual_mode("visual")
         when "V"
@@ -343,6 +356,8 @@ module Kward
           vi_record_undo { count.times { @editor_state.delete_before_cursor } }
         when "dd"
           vi_delete_lines(count)
+        when "cc"
+          vi_change_lines(count)
         when "yy"
           vi_yank_lines(count)
         when "p"
@@ -356,7 +371,7 @@ module Kward
         when "/"
           editor_search_begin
         else
-          if body.start_with?("d") || body.start_with?("y")
+          if body.start_with?("d") || body.start_with?("y") || body.start_with?("c")
             vi_operator_motion(body[0], body[1..], count)
           else
             @editor_state.status = "Unknown command: #{command}"
@@ -540,6 +555,88 @@ module Kward
         vi_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}")
       end
 
+      def vi_change_lines(count)
+        start_index, end_index = vi_linewise_change_range(count)
+        @editor_state.copy_range(start_index, end_index)
+        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        @editor_state.cursor = start_index
+        vi_enter_insert_mode
+      end
+
+      def vi_linewise_change_range(count)
+        line, = @editor_state.cursor_line_and_column
+        start_index = @editor_state.line_start_offset(line)
+        end_line = [line + count - 1, @editor_state.lines.length - 1].min
+        end_index = @editor_state.line_start_offset(end_line) + @editor_state.lines[end_line].to_s.length
+        [start_index, end_index]
+      end
+
+      def vi_change_to_line_end
+        start_index = @editor_state.cursor
+        line, = @editor_state.cursor_line_and_column
+        end_index = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
+        return vi_enter_insert_mode if start_index == end_index
+
+        @editor_state.copy_range(start_index, end_index)
+        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vi_enter_insert_mode
+      end
+
+      def vi_delete_to_line_end
+        start_index = @editor_state.cursor
+        line, = @editor_state.cursor_line_and_column
+        end_index = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
+        return @editor_state.status = "Empty range" if start_index == end_index
+
+        @editor_state.copy_range(start_index, end_index)
+        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        @editor_state.status = "Deleted"
+      end
+
+      def vi_substitute_characters(count)
+        start_index = @editor_state.cursor
+        end_index = [start_index + count, @editor_state.buffer.length].min
+        @editor_state.copy_range(start_index, end_index)
+        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vi_enter_insert_mode
+      end
+
+      def vi_replace_single_character(character, count)
+        return @editor_state.status = "Replacement character required" if character.to_s.empty?
+
+        vi_record_undo do
+          count.times do
+            @editor_state.delete_at_cursor
+            @editor_state.insert(character)
+          end
+        end
+        @editor_state.move_left
+      end
+
+      def vi_join_lines(count)
+        line, = @editor_state.cursor_line_and_column
+        join_count = [count, 2].max
+        end_line = [line + join_count - 1, @editor_state.lines.length - 1].min
+        return @editor_state.status = "Already at last line" if end_line == line
+
+        vi_record_undo do
+          (end_line - line).times do
+            line_end = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
+            next_line_start = line_end + 1
+            next_line_end = next_line_start + @editor_state.lines[line + 1].to_s.length
+            next_line = @editor_state.buffer[next_line_start...next_line_end].to_s.sub(/\A\s+/, "")
+            separator = next_line.empty? ? "" : " "
+            @editor_state.replace_range(line_end, next_line_end, separator + next_line)
+            @editor_state.cursor = line_end
+          end
+        end
+      end
+
+      def vi_enter_insert_mode
+        @editor_state.vi_mode = "insert"
+        @editor_state.status = "INSERT · Esc normal"
+      end
+
       def vi_operator_motion(operator, motion, count)
         motion_count, motion = vi_count_and_body(motion)
         count *= motion_count if motion_count.positive?
@@ -548,15 +645,18 @@ module Kward
         start_index = @editor_state.cursor
         vi_apply_motion(motion, count)
         end_index = @editor_state.cursor
-        if motion == "$" || motion == "e"
-          end_index = [end_index + 1, @editor_state.buffer.length].min
-        end
+        end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
         return @editor_state.status = "Empty range" if start_index == end_index
 
-        if operator == "d"
+        case operator
+        when "d"
           @editor_state.copy_range(start_index, end_index)
           vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
           @editor_state.status = "Deleted"
+        when "c"
+          @editor_state.copy_range(start_index, end_index)
+          vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+          vi_enter_insert_mode
         else
           vi_copy_range(start_index, end_index, "Yanked")
           @editor_state.cursor = start_index
@@ -564,7 +664,14 @@ module Kward
       end
 
       def vi_operator_linewise(operator, count)
-        operator == "d" ? vi_delete_lines(count) : vi_yank_lines(count)
+        case operator
+        when "d"
+          vi_delete_lines(count)
+        when "c"
+          vi_change_lines(count)
+        else
+          vi_yank_lines(count)
+        end
       end
 
       def vi_apply_motion(motion, count)

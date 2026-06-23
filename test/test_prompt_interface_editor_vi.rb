@@ -543,6 +543,118 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_big_d_deletes_to_end_of_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 6)
+
+        prompt.send(:handle_editor_key, "D")
+
+        assert_equal "alpha \ngamma", editor.buffer
+        assert_equal "beta", editor.kill_buffer
+        assert_equal "normal", editor.vi_mode
+
+        prompt.send(:handle_editor_key, "u")
+        assert_equal "alpha beta\ngamma", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_change_commands_enter_insert_mode
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "w")
+        assert_equal "insert", editor.vi_mode
+        "omega".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "omega beta\ngamma", editor.buffer
+
+        editor.set_cursor_line_and_column(0, 6)
+        prompt.send(:handle_editor_key, "C")
+        assert_equal "insert", editor.vi_mode
+        "delta".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "omega delta\ngamma", editor.buffer
+
+        editor.set_cursor_line_and_column(1, 2)
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "$")
+        assert_equal "insert", editor.vi_mode
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "omega delta\nga!", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_change_line_and_substitute_commands
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "c")
+        assert_equal "insert", editor.vi_mode
+        "one".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "one\nbeta\ngamma", editor.buffer
+
+        editor.set_cursor_line_and_column(1, 0)
+        prompt.send(:handle_editor_key, "S")
+        "two".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "one\ntwo\ngamma", editor.buffer
+
+        editor.set_cursor_line_and_column(2, 0)
+        prompt.send(:handle_editor_key, "s")
+        prompt.send(:handle_editor_key, "G")
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "one\ntwo\nGamma", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_replace_character_and_join_lines
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\n  beta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 1)
+
+        prompt.send(:handle_editor_key, "r")
+        prompt.send(:handle_editor_key, "O")
+        assert_equal "aOpha\n  beta\ngamma", editor.buffer
+        assert_equal "normal", editor.vi_mode
+
+        editor.set_cursor_line_and_column(0, 2)
+        prompt.send(:handle_editor_key, "2")
+        prompt.send(:handle_editor_key, "r")
+        prompt.send(:handle_editor_key, "x")
+        assert_equal "aOxxa\n  beta\ngamma", editor.buffer
+
+        prompt.send(:handle_editor_key, "g")
+        prompt.send(:handle_editor_key, "g")
+        prompt.send(:handle_editor_key, "J")
+        assert_equal "aOxxa beta\ngamma", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_combines_operator_and_motion_counts
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one two three four five")
