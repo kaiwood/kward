@@ -24,6 +24,7 @@ require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor_renderer"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
+require_relative "prompt_interface/editor/modes/vi"
 require_relative "prompt_interface/editor_controller"
 require_relative "prompt_interface/layout"
 require_relative "prompt_interface/screen"
@@ -61,6 +62,7 @@ module Kward
     include EditorRenderer
     include ComposerRenderer
     include ComposerController
+    include ViEditorMode
     include EditorController
     include Layout
     include Screen
