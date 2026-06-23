@@ -172,16 +172,17 @@ module Kward
       end
 
       def handle_vi_normal_key(key)
-        key_name = key_name_for(key)
-        return handle_vi_named_key(key_name) if key_name
-        return false unless key.is_a?(String)
-
         if key == "\e" || key == "\x03"
           @editor_state.vi_pending = ""
           vi_return_to_normal
           return true
         end
-        return true unless printable_key?(key)
+
+        key_name = key_name_for(key)
+        named_result = handle_vi_named_key(key_name) if key_name
+        return named_result unless named_result == false || named_result.nil?
+        return false unless key.is_a?(String)
+        return true unless printable_key?(key) || vi_normal_control_key?(key)
 
         pending = @editor_state.vi_pending.to_s + key
         if vi_waiting_for_more?(pending)
@@ -208,9 +209,17 @@ module Kward
           @editor_state.move_up
         when :down
           @editor_state.move_down
+        when :backspace
+          @editor_state.move_left
+        when :return, :enter
+          vi_move_to_relative_line_first_non_blank(1)
         else
           false
         end
+      end
+
+      def vi_normal_control_key?(key)
+        ["\n", "\r", "\b", "\x7F"].include?(key)
       end
 
       def vi_visual_mode?
@@ -241,16 +250,24 @@ module Kward
         count, body = vi_count_and_body(command)
         count = 1 if count.zero?
         case body
-        when "h"
+        when "h", "\b", "\x7F"
           count.times { @editor_state.move_left }
         when "j"
           count.times { @editor_state.move_down }
         when "k"
           count.times { @editor_state.move_up }
-        when "l"
+        when "l", " "
           count.times { @editor_state.move_right }
         when "0"
           @editor_state.move_line_start
+        when "^"
+          @editor_state.move_line_first_non_blank
+        when "+", "\n", "\r"
+          vi_move_to_relative_line_first_non_blank(count)
+        when "-"
+          vi_move_to_relative_line_first_non_blank(-count)
+        when "_"
+          vi_move_to_relative_line_first_non_blank(count - 1)
         when "$"
           @editor_state.move_line_end
         when "w"
@@ -416,6 +433,11 @@ module Kward
         [match[1].to_i, match[2]]
       end
 
+      def vi_move_to_relative_line_first_non_blank(offset)
+        line, = @editor_state.cursor_line_and_column
+        @editor_state.move_to_line_first_non_blank(line + offset)
+      end
+
       def vi_open_line_below
         line, = @editor_state.cursor_line_and_column
         line_end = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
@@ -498,13 +520,21 @@ module Kward
           @editor_state.move_line_end
         when "0"
           @editor_state.move_line_start
-        when "h"
+        when "^"
+          @editor_state.move_line_first_non_blank
+        when "+", "\n", "\r"
+          vi_move_to_relative_line_first_non_blank(count)
+        when "-"
+          vi_move_to_relative_line_first_non_blank(-count)
+        when "_"
+          vi_move_to_relative_line_first_non_blank(count - 1)
+        when "h", "\b", "\x7F"
           count.times { @editor_state.move_left }
         when "j"
           count.times { @editor_state.move_down }
         when "k"
           count.times { @editor_state.move_up }
-        when "l"
+        when "l", " "
           count.times { @editor_state.move_right }
         else
           @editor_state.status = "Unsupported motion: #{motion}"

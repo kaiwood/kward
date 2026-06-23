@@ -33,6 +33,51 @@ class TestPromptInterfaceEditorVi < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vi_mode_supports_classic_first_non_blank_movement
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "  one\n    two\nthree\n  four")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 5)
+
+        prompt.send(:handle_editor_key, "^")
+        assert_equal [0, 2], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "+")
+        assert_equal [1, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "-")
+        assert_equal [0, 2], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "3")
+        prompt.send(:handle_editor_key, "_")
+        assert_equal [2, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\r")
+        assert_equal [3, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vi_mode_supports_space_and_backspace_movement
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vi")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, " ")
+        assert_equal 1, editor.cursor
+
+        prompt.send(:handle_editor_key, "\b")
+        assert_equal 0, editor.cursor
+      end
+    end
+  end
+
   def test_prompt_interface_vi_mode_e_moves_to_end_of_word
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta gamma")

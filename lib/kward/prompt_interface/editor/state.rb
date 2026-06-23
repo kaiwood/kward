@@ -165,6 +165,11 @@ module Kward
 
       def move_line_first_non_blank
         line, = cursor_line_and_column
+        move_to_line_first_non_blank(line)
+      end
+
+      def move_to_line_first_non_blank(line_index)
+        line = [[line_index.to_i, 0].max, lines.length - 1].min
         column = lines[line].to_s.index(/\S/) || 0
         set_cursor_line_and_column(line, column)
       end
