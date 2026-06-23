@@ -7,13 +7,14 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :search_active, :search_query
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :search_active, :search_query, :new_file
 
-      def initialize(path:, content:)
+      def initialize(path:, content:, new_file: false)
         @path = path.to_s
+        @new_file = new_file
         @original_content = content.to_s
         @original_digest = Digest::SHA256.hexdigest(@original_content)
-        refresh_file_marker
+        refresh_file_marker unless new_file
         @buffer = @original_content.dup
         @cursor = 0
         @viewport_row = 0
@@ -149,6 +150,7 @@ module Kward
       end
 
       def refresh_after_save(content)
+        @new_file = false
         @original_content = content.to_s
         @original_digest = Digest::SHA256.hexdigest(@original_content)
         refresh_file_marker
@@ -157,6 +159,8 @@ module Kward
       end
 
       def file_changed_on_disk?
+        return false if new_file && !File.exist?(@path)
+        return true if new_file && File.exist?(@path)
         return true unless File.exist?(@path)
 
         File.read(@path) != @original_content

@@ -97,7 +97,7 @@ module Kward
         else
           case key
           when "\n", "\r"
-            file_open_overlay_visible? ? open_selected_file_in_editor : submit_input
+            file_open_overlay_visible? ? open_selected_file_in_editor(fallback_to_typed_path: true) : submit_input
           when "\t"
             open_selected_file_in_editor || complete_selected_file_mention || complete_selected_slash_command || insert_key(key)
           when "\b", "\x7F"
@@ -209,7 +209,7 @@ module Kward
           if modifier == 2
             insert_string("\n")
           elsif file_open_overlay_visible?
-            open_selected_file_in_editor
+            open_selected_file_in_editor(fallback_to_typed_path: true)
           else
             submit_input
           end

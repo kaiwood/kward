@@ -10,27 +10,49 @@ module Kward
         !@editor_state.nil?
       end
 
-      def open_selected_file_in_editor
+      def open_selected_file_in_editor(fallback_to_typed_path: false)
         path = selected_file_open_path
-        return false unless path
+        return open_editor(path) if path
+        return false unless fallback_to_typed_path
 
-        open_editor(path)
-        true
+        open_typed_file_path_in_editor
       end
 
-      def open_editor(path)
+      def open_typed_file_path_in_editor
+        file_open = active_file_open
+        return false unless file_open
+        if file_open[:query].empty?
+          @file_editor_open_status = "Type a file path after $"
+          return false
+        end
+
+        open_editor(file_open[:query], allow_new: true)
+      end
+
+      def open_editor(path, allow_new: false)
         full_path = File.expand_path(path.to_s, Dir.pwd)
         root = File.expand_path(Dir.pwd)
         unless full_path == root || full_path.start_with?("#{root}/")
           @file_editor_open_status = "Cannot edit file outside workspace"
           return false
         end
-        unless File.file?(full_path)
-          @file_editor_open_status = "Cannot edit missing file: #{path}"
+        if File.exist?(full_path) && !File.file?(full_path)
+          @file_editor_open_status = "Cannot edit non-file path: #{path}"
           return false
         end
+        unless File.exist?(full_path)
+          unless allow_new
+            @file_editor_open_status = "Cannot edit missing file: #{path}"
+            return false
+          end
+          parent = File.dirname(full_path)
+          unless Dir.exist?(parent)
+            @file_editor_open_status = "Cannot create file; parent directory is missing"
+            return false
+          end
+        end
 
-        @editor_state = EditorState.new(path: full_path, content: File.read(full_path))
+        @editor_state = EditorState.new(path: full_path, content: File.exist?(full_path) ? File.read(full_path) : "", new_file: !File.exist?(full_path))
         @prompt_label = "Edit>"
         self.composer_input = ""
         self.composer_cursor = 0

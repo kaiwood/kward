@@ -66,7 +66,10 @@ module Kward
       end
 
       def active_file_open
-        active_file_token("$")
+        token = active_file_token("$")
+        return nil unless token && token[:start].zero?
+
+        token
       end
 
       def active_file_token(prefix)

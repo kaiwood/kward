@@ -1415,6 +1415,90 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_dollar_file_overlay_only_works_at_prompt_start
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+    prompt.send(:composer_input=, "open $README")
+    prompt.send(:composer_cursor=, "open $README".length)
+
+    refute prompt.send(:file_open_overlay_visible?)
+    refute prompt.send(:file_overlay_visible?)
+  end
+
+  def test_prompt_interface_enter_opens_typed_existing_file_outside_narrowdown
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "ignored.log")
+      File.write(path, "ignored\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.instance_variable_set(:@file_mention_paths, [])
+        prompt.send(:composer_input=, "$ignored.log")
+        prompt.send(:composer_cursor=, "$ignored.log".length)
+
+        assert prompt.send(:open_selected_file_in_editor, fallback_to_typed_path: true)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal path, editor.path
+        assert_equal "ignored\n", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_enter_opens_new_file_without_creating_until_save
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "new.txt")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.instance_variable_set(:@file_mention_paths, [])
+        prompt.send(:composer_input=, "$new.txt")
+        prompt.send(:composer_cursor=, "$new.txt".length)
+
+        assert prompt.send(:open_selected_file_in_editor, fallback_to_typed_path: true)
+        refute File.exist?(path)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert editor.new_file
+        assert_equal "", editor.buffer
+        prompt.send(:handle_editor_key, "h")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "\x13")
+
+        assert_equal "hi", File.read(path)
+      end
+    end
+  end
+
+  def test_prompt_interface_refuses_new_file_with_missing_parent
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.instance_variable_set(:@file_mention_paths, [])
+        prompt.send(:composer_input=, "$missing/new.txt")
+        prompt.send(:composer_cursor=, "$missing/new.txt".length)
+
+        refute prompt.send(:open_selected_file_in_editor, fallback_to_typed_path: true)
+        assert_nil prompt.instance_variable_get(:@editor_state)
+        assert_includes prompt.instance_variable_get(:@file_editor_open_status), "parent directory is missing"
+      end
+    end
+  end
+
+  def test_prompt_interface_tab_does_not_open_typed_missing_file
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        prompt.instance_variable_set(:@file_mention_paths, [])
+        prompt.send(:composer_input=, "$new.txt")
+        prompt.send(:composer_cursor=, "$new.txt".length)
+
+        refute prompt.send(:open_selected_file_in_editor)
+        assert_nil prompt.instance_variable_get(:@editor_state)
+      end
+    end
+  end
+
   def test_prompt_interface_editor_saves_file
     Dir.mktmpdir do |dir|
       dir = File.realpath(dir)
