@@ -350,7 +350,7 @@ module Kward
     end
 
     def modal_active?
-      @mutex.synchronize { @question_prompt_active || !@question_state.nil? || !@select_state.nil? }
+      @mutex.synchronize { modal_active_locked? }
     end
 
     def update_tabs(labels:, active_index: 0)
@@ -480,6 +480,8 @@ module Kward
           return nil
         end
 
+        return nil if modal_active_locked?
+
         result = handle_key(key)
         render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || tab_action_result?(result)
         [EXIT_INPUT, CANCEL_INPUT].include?(result) ? result : result
@@ -556,7 +558,9 @@ module Kward
 
     private
 
-
+    def modal_active_locked?
+      @question_prompt_active || !@question_state.nil? || !@select_state.nil?
+    end
 
 
 

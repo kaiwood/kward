@@ -1574,6 +1574,77 @@ class TestPromptInterface < KwardTestCase
     assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
   end
 
+  def test_prompt_interface_busy_poll_does_not_handle_key_after_question_modal_activates
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    prompt.send(:add_history, "last prompt text")
+    ready = Queue.new
+    release = Queue.new
+    result = :unset
+    prompt.define_singleton_method(:read_key) do |nonblock: false|
+      ready << nonblock
+      release.pop
+      "\e[A"
+    end
+
+    thread = Thread.new { result = prompt.poll_input }
+    ready.pop
+    prompt.instance_variable_set(:@question_prompt_active, true)
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 1,
+      index: 1,
+      total: 1
+    })
+    release << true
+    thread.join(1)
+
+    refute thread.alive?
+    assert_nil result
+    assert_empty prompt.send(:composer_input)
+    assert_equal 1, prompt.instance_variable_get(:@question_state)[:selection_index]
+  ensure
+    thread&.kill if thread&.alive?
+  end
+
+  def test_prompt_interface_busy_poll_does_not_submit_after_question_modal_activates
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    ready = Queue.new
+    release = Queue.new
+    result = :unset
+    prompt.define_singleton_method(:read_key) do |nonblock: false|
+      ready << nonblock
+      release.pop
+      "\r"
+    end
+
+    thread = Thread.new { result = prompt.poll_input }
+    ready.pop
+    prompt.instance_variable_set(:@question_prompt_active, true)
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 0,
+      index: 1,
+      total: 1
+    })
+    release << true
+    thread.join(1)
+
+    refute thread.alive?
+    assert_nil result
+    assert prompt.instance_variable_get(:@asking)
+    assert_operator prompt.instance_variable_get(:@rendered_rows), :>, 0
+  ensure
+    thread&.kill if thread&.alive?
+  end
+
   def test_prompt_interface_advances_braille_spinner_while_busy
     input, writer = IO.pipe
     output = StringIO.new
