@@ -2282,6 +2282,64 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(prompt.instance_variable_get(:@transcript_buffer).to_s), "second tab"
   end
 
+  def test_prompt_interface_tab_view_snapshot_restores_editor_state
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "!")
+        snapshot = prompt.tab_view_snapshot
+
+        prompt.send(:close_editor)
+        prompt.restore_tab_view_snapshot(snapshot)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal path, editor.path
+        assert_equal "!hello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_tab_view_snapshot_clears_editor_when_restoring_tab_without_editor
+    Dir.mktmpdir do |dir|
+      dir = File.realpath(dir)
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        tab_without_editor = prompt.tab_view_snapshot
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.restore_tab_view_snapshot(tab_without_editor)
+
+        assert_nil prompt.instance_variable_get(:@editor_state)
+      end
+    end
+  end
+
+  def test_prompt_interface_tab_view_snapshot_does_not_share_editor_buffer
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+        assert prompt.send(:open_editor, "notes.txt")
+        first_snapshot = prompt.tab_view_snapshot
+        second_snapshot = prompt.tab_view_snapshot
+
+        prompt.restore_tab_view_snapshot(first_snapshot)
+        prompt.send(:handle_editor_key, "!")
+
+        prompt.restore_tab_view_snapshot(second_snapshot)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "hello", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_tab_view_snapshot_is_not_mutated_by_later_stream_state_changes
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.start_stream_block("Assistant")

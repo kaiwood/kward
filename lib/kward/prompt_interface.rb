@@ -392,6 +392,7 @@ module Kward
         {
           composer: @composer.dup,
           prompt_label: @prompt_label.dup,
+          editor_state: @editor_state&.dup,
           transcript_buffer: @transcript_buffer.dup,
           transcript_viewport_rows: @transcript_viewport_rows,
           stream_state: @stream_state.dup
@@ -409,6 +410,7 @@ module Kward
     def restore_tab_view_snapshot(snapshot)
       @mutex.synchronize do
         restore_composer_snapshot_locked(snapshot)
+        @editor_state = snapshot[:editor_state]&.dup
         @transcript_buffer = snapshot[:transcript_buffer] || TranscriptBuffer.new(limit: TRANSCRIPT_BUFFER_LIMIT)
         @transcript_viewport_rows = snapshot[:transcript_viewport_rows].to_i
         @stream_state = snapshot[:stream_state] || StreamState.new

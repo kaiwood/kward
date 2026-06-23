@@ -24,6 +24,16 @@ module Kward
         @search_query = ""
       end
 
+      def initialize_copy(other)
+        super
+        @path = other.path.dup
+        @original_content = other.original_content.dup
+        @original_digest = other.original_digest.dup
+        @buffer = other.buffer.dup
+        @status = other.status.dup
+        @search_query = other.search_query.dup
+      end
+
       def dirty?
         @buffer != @original_content
       end
