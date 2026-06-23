@@ -26,6 +26,7 @@ require_relative "prompt_interface/editor_renderer"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
 require_relative "prompt_interface/editor/modes/nano"
+require_relative "prompt_interface/editor/modes/emacs"
 require_relative "prompt_interface/editor/modes/vi"
 require_relative "prompt_interface/editor_controller"
 require_relative "prompt_interface/layout"
@@ -65,6 +66,7 @@ module Kward
     include ComposerRenderer
     include ComposerController
     include NanoEditorMode
+    include EmacsEditorMode
     include ViEditorMode
     include EditorController
     include Layout
