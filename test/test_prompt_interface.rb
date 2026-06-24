@@ -1396,6 +1396,18 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(rows.join("\n")), "No matching files"
   end
 
+  def test_prompt_interface_file_overlay_limits_matches
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, 250.times.map { |index| "lib/file#{index}.rb" })
+    prompt.send(:composer_input=, "@")
+    prompt.send(:composer_cursor=, 1)
+
+    matches = prompt.send(:file_overlay_matches)
+
+    assert_equal Kward::PromptInterface::FileOverlay::FILE_MENTION_RESULT_LIMIT, matches.length
+    assert_equal "lib/file199.rb", matches.last
+  end
+
   def test_prompt_interface_dollar_file_overlay_opens_editor
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib"))

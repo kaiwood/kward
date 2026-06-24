@@ -90,10 +90,14 @@ module Kward
         return [] unless token
 
         query = token[:query].downcase
-        matches = project_file_paths.select do |path|
-          file_mention_match?(path.downcase, query)
+        matches = []
+        project_file_path_entries.each do |entry|
+          next unless file_mention_match?(entry[:downcase], query)
+
+          matches << entry[:path]
+          break if matches.length >= FILE_MENTION_RESULT_LIMIT
         end
-        matches.first(FILE_MENTION_RESULT_LIMIT)
+        matches
       end
 
       def file_mention_match?(path, query)
@@ -114,6 +118,14 @@ module Kward
 
       def project_file_paths
         @file_mention_paths ||= discover_project_file_paths
+      end
+
+      def project_file_path_entries
+        paths = project_file_paths
+        return @file_mention_path_entries if @file_mention_path_entries_paths.equal?(paths) && @file_mention_path_entries
+
+        @file_mention_path_entries_paths = paths
+        @file_mention_path_entries = paths.map { |path| { path: path, downcase: path.downcase } }
       end
 
       def discover_project_file_paths
