@@ -119,8 +119,7 @@ module Kward
           clear_editor_selection_before_edit
           @editor_state.insert("  ") unless editor_search_active?
         when "\b", "\x7F"
-          clear_editor_selection_before_edit unless editor_search_active?
-          editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
+          editor_search_active? ? editor_search_delete_character : delete_editor_selection || @editor_state.delete_before_cursor
         when "\x03"
           return editor_search_cancel if editor_search_active?
         when "\e"
@@ -165,12 +164,10 @@ module Kward
         when 27
           editor_search_active? ? editor_search_cancel : @editor_state.clear_selection
         when 8, 127
-          clear_editor_selection_before_edit unless editor_search_active?
-          editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
+          editor_search_active? ? editor_search_delete_character : delete_editor_selection || @editor_state.delete_before_cursor
           nil
         when 4
-          clear_editor_selection_before_edit unless editor_search_active?
-          @editor_state.delete_at_cursor unless editor_search_active?
+          delete_editor_selection || @editor_state.delete_at_cursor unless editor_search_active?
           nil
         else
           return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
@@ -234,7 +231,7 @@ module Kward
         when "\e[F", "\eOF", "\e[4~", "\e[8~"
           @editor_state.move_line_end unless editor_search_active?
         when "\e[3~"
-          @editor_state.delete_at_cursor unless editor_search_active?
+          delete_editor_selection || @editor_state.delete_at_cursor unless editor_search_active?
         when "\eb", "\eB"
           @editor_state.move_to_previous_word unless editor_search_active?
         when "\ef", "\eF"
@@ -368,9 +365,9 @@ module Kward
           when :return, :enter
             @editor_state.insert("\n")
           when :backspace
-            @editor_state.delete_before_cursor
+            delete_editor_selection || @editor_state.delete_before_cursor
           when :delete
-            @editor_state.delete_at_cursor
+            delete_editor_selection || @editor_state.delete_at_cursor
           when :left
             @editor_state.move_left
           when :right
@@ -384,9 +381,9 @@ module Kward
           when :end
             @editor_state.move_line_end
           when :pageup
-            @editor_state.page_up(editor_scroll_page_rows)
+            scroll_editor_up(editor_scroll_page_rows)
           when :pagedown
-            @editor_state.page_down(editor_scroll_page_rows)
+            scroll_editor_down(editor_scroll_page_rows)
           else
             false
           end
@@ -407,14 +404,32 @@ module Kward
         @editor_state&.clear_selection
       end
 
+      def delete_editor_selection
+        range = @editor_state.selection_range
+        return false unless range
+
+        @editor_state.replace_range(range[0], range[1], "")
+        true
+      end
+
       def copy_editor_selection
         text = @editor_state.selected_text
         return false if text.empty?
 
+        @editor_state.copy_range(*@editor_state.selection_range)
         @output_io.print("\e]52;c;#{Base64.strict_encode64(text)}\a")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.clear_selection
         @editor_state.status = "Copied selection"
+        true
+      end
+
+      def cut_editor_selection
+        range = @editor_state.selection_range
+        return false unless range
+
+        @editor_state.cut_range(range[0], range[1])
+        @editor_state.status = "Cut selection"
         true
       end
 
@@ -469,7 +484,33 @@ module Kward
       end
 
       def editor_scroll_page_rows
-        [editor_page_rows / 2, 1].max
+        [editor_visible_line_count / 2, 1].max
+      end
+
+      def scroll_editor_up(rows)
+        visible_count = editor_visible_line_count
+        @editor_state.viewport_row = [@editor_state.viewport_row - rows.to_i, 0].max
+        keep_editor_cursor_in_view(visible_count)
+      end
+
+      def scroll_editor_down(rows)
+        visible_count = editor_visible_line_count
+        last_top_row = [@editor_state.lines.length - visible_count, 0].max
+        @editor_state.viewport_row = [@editor_state.viewport_row + rows.to_i, last_top_row].min
+        keep_editor_cursor_in_view(visible_count)
+      end
+
+      def keep_editor_cursor_in_view(visible_count)
+        line, column = @editor_state.cursor_line_and_column
+        top_line = @editor_state.viewport_row
+        bottom_line = top_line + visible_count - 1
+
+        if line < top_line
+          @editor_state.set_cursor_line_and_column(top_line, column)
+        elsif line > bottom_line
+          @editor_state.set_cursor_line_and_column(bottom_line, column)
+        end
+        true
       end
 
       def quit_editor(message = "Unsaved changes. Press Ctrl+Q again to discard.")

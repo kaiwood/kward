@@ -79,6 +79,95 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_uses_shift_selection_and_clipboard_shortcuts
+    output = StringIO.new
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        3.times { prompt.send(:handle_editor_key, "\e[1;2C") }
+        prompt.send(:handle_editor_key, "\x03")
+
+        assert_equal "alp", editor.kill_buffer
+        assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("alp")}\a"
+        refute editor.selection_active?
+
+        editor.cursor = editor.buffer.length
+        prompt.send(:handle_editor_key, "\x16")
+
+        assert_equal "alphaalp", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_backspace_and_delete_remove_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        3.times { prompt.send(:handle_editor_key, "\e[1;2C") }
+        prompt.send(:handle_editor_key, "\b")
+
+        assert_equal "ha", editor.buffer
+        assert_equal [0, 0], editor.cursor_line_and_column
+        refute editor.selection_active?
+
+        2.times { prompt.send(:handle_editor_key, "\e[1;2C") }
+        prompt.send(:handle_editor_key, "\e[3~")
+
+        assert_equal "", editor.buffer
+        refute editor.selection_active?
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_x_cuts_shift_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        3.times { prompt.send(:handle_editor_key, "\e[1;2C") }
+        prompt.send(:handle_editor_key, "\x18")
+
+        assert_equal "ha", editor.buffer
+        assert_equal "alp", editor.kill_buffer
+        refute editor.selection_active?
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_space_does_not_start_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x00")
+        refute editor.selection_active?
+        prompt.send(:handle_editor_key, "\e[C")
+        refute editor.selection_active?
+
+        prompt.send(:handle_editor_key, "\e[32;5u")
+        refute editor.selection_active?
+        prompt.send(:handle_editor_key, "\e[1;2C")
+
+        assert editor.selection_active?
+        assert_equal "l", editor.selected_text
+      end
+    end
+  end
+
   def test_prompt_interface_modern_ctrl_o_and_ctrl_x_do_not_save_or_close
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")
@@ -99,7 +188,7 @@ class TestPromptInterfaceEditor < KwardTestCase
 
   def test_prompt_interface_editor_page_keys_scroll_half_pages
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "notes.txt"), ("0".."9").to_a.join("\n"))
+      File.write(File.join(dir, "notes.txt"), ("0".."20").to_a.join("\n"))
       Dir.chdir(dir) do
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
         prompt.define_singleton_method(:screen_height) { 14 }
@@ -107,10 +196,12 @@ class TestPromptInterfaceEditor < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         prompt.send(:handle_editor_key, "\e[6~")
-        assert_equal [4, 0], editor.cursor_line_and_column
+        assert_equal 5, editor.viewport_row
+        assert_equal [5, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\e[5~")
-        assert_equal [0, 0], editor.cursor_line_and_column
+        assert_equal 0, editor.viewport_row
+        assert_equal [5, 0], editor.cursor_line_and_column
       end
     end
   end

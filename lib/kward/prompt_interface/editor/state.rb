@@ -554,7 +554,7 @@ module Kward
         when "vi"
           "NORMAL · i insert · :w save · :q quit"
         else
-          "Ctrl+S save · Ctrl+Q quit · Ctrl+F search"
+          "Ctrl+S save · Ctrl+Q quit · Ctrl+F search · Ctrl+C copy"
         end
       end
 

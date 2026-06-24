@@ -15,9 +15,7 @@ module Kward
         shift_result = handle_editor_shift_navigation_key(key)
         return shift_result unless shift_result == false
 
-        return editor_search_begin if key == "\x06" && !editor_search_active?
-
-        binding_result = handle_editor_key_binding(key)
+        binding_result = handle_modern_key_binding(key)
         return binding_result unless binding_result == false
 
         tab_result = handle_tab_key_binding(key)
@@ -40,8 +38,7 @@ module Kward
           clear_editor_selection_before_edit
           @editor_state.insert("  ") unless editor_search_active?
         when "\b", "\x7F"
-          clear_editor_selection_before_edit unless editor_search_active?
-          editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
+          editor_search_active? ? editor_search_delete_character : delete_editor_selection || @editor_state.delete_before_cursor
         when "\x03"
           return editor_search_cancel if editor_search_active?
         when "\e"
@@ -73,9 +70,43 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
-        if ctrl_modifier?(modifier) && ctrl_code(code) == 102
-          editor_search_active? ? editor_search_append(key) : editor_search_begin
+        if ctrl_modifier?(modifier)
+          handle_modern_ctrl_key(ctrl_code(code), key)
         else
+          handle_editor_csi_u_key(key)
+        end
+      end
+
+      def handle_modern_key_binding(key)
+        case key
+        when "\x00"
+          true
+        when "\x03"
+          editor_search_active? ? editor_search_cancel : copy_editor_selection
+        when "\x06"
+          editor_search_active? ? editor_search_append(key) : editor_search_begin
+        when "\x16"
+          @editor_state.yank_kill_buffer unless editor_search_active?
+        when "\x18"
+          cut_editor_selection unless editor_search_active?
+        else
+          handle_editor_key_binding(key)
+        end
+      end
+
+      def handle_modern_ctrl_key(code, key)
+        case code
+        when 99
+          editor_search_active? ? editor_search_cancel : copy_editor_selection
+        when 102
+          editor_search_active? ? editor_search_append(key) : editor_search_begin
+        when 118
+          @editor_state.yank_kill_buffer unless editor_search_active?
+        when 120
+          cut_editor_selection unless editor_search_active?
+        else
+          return false if code == 32
+
           handle_editor_csi_u_key(key)
         end
       end
