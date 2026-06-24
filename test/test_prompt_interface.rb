@@ -2383,6 +2383,26 @@ class TestPromptInterface < KwardTestCase
     assert prompt.send(:git_composing?)
   end
 
+  def test_prompt_interface_git_tab_returns_to_overlay_and_preserves_message_draft
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
+    prompt.send(:composer_input=, "ship it")
+    prompt.send(:composer_cursor=, 4)
+
+    assert_equal true, prompt.send(:handle_git_key, "\t")
+
+    assert_equal "Git>", prompt.instance_variable_get(:@prompt_label)
+    refute prompt.send(:git_composing?)
+    assert_equal "", prompt.send(:composer_input)
+
+    assert_equal true, prompt.send(:handle_git_key, "\t")
+
+    assert_equal "Commit>", prompt.instance_variable_get(:@prompt_label)
+    assert prompt.send(:git_composing?)
+    assert_equal "ship it", prompt.send(:composer_input)
+    assert_equal 4, prompt.send(:composer_cursor)
+  end
+
   def test_prompt_interface_git_enter_opens_selected_file_diff
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M one.rb", "?? two.rb"], composing: false, selected_index: 1 })
@@ -2405,6 +2425,22 @@ class TestPromptInterface < KwardTestCase
     "ship it".each_char { |char| prompt.send(:handle_git_key, char) }
 
     assert_equal "ship it", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_git_message_uses_composer_shortcuts
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
+    prompt.send(:composer_input=, "ship it now")
+    prompt.send(:composer_cursor=, "ship it now".length)
+
+    prompt.send(:handle_git_key, "\x01")
+    assert_equal 0, prompt.send(:composer_cursor)
+
+    prompt.send(:handle_git_key, "\x05")
+    assert_equal "ship it now".length, prompt.send(:composer_cursor)
+
+    prompt.send(:handle_git_key, "\e\x7F")
+    assert_equal "ship it ", prompt.send(:composer_input)
   end
 
   def test_prompt_interface_git_message_accepts_bracketed_paste

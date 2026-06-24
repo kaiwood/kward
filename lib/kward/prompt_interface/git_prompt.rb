@@ -67,7 +67,7 @@ module Kward
           return git_submit_message if git_composing?
           return git_open_selected_file_diff
         when "\t"
-          return git_begin_message
+          return git_composing? ? git_return_to_overlay : git_begin_message
         when "\b", "\x7F"
           return delete_before_cursor if git_composing?
         when "\e"
@@ -77,6 +77,9 @@ module Kward
         key_name = key_name_for(key)
         named_result = handle_git_named_key(key_name) if key_name
         return named_result unless named_result == false || named_result.nil?
+
+        binding_result = handle_composer_key_binding(key) if git_composing?
+        return binding_result unless binding_result == false || binding_result.nil?
 
         return git_toggle_selected_file if key == "s" && !git_composing?
 
@@ -93,13 +96,13 @@ module Kward
 
         case code
         when 9
-          git_begin_message
+          git_composing? ? git_return_to_overlay : git_begin_message
         when 13
           git_composing? ? git_submit_message : git_open_selected_file_diff
         when 27
           SELECT_CANCEL
         when 8, 127
-          delete_before_cursor if git_composing?
+          git_composing? && alt_modifier?(modifier) ? delete_word_before_cursor : delete_before_cursor if git_composing?
           nil
         when 4
           delete_at_cursor if git_composing?
@@ -165,7 +168,7 @@ module Kward
       def git_state_for(status_lines, selected_index: 0)
         lines = Array(status_lines).map(&:to_s)
         selected_index = [[selected_index.to_i, 0].max, [lines.length - 1, 0].max].min
-        { status_lines: lines, composing: false, selected_index: selected_index }
+        { status_lines: lines, composing: false, selected_index: selected_index, message_draft: "", message_cursor: 0 }
       end
 
       def git_action?(result)
@@ -234,6 +237,18 @@ module Kward
 
         @git_state[:composing] = true if @git_state
         @prompt_label = "Commit>"
+        self.composer_input = @git_state.fetch(:message_draft, "")
+        self.composer_cursor = [[@git_state.fetch(:message_cursor, composer_input.length).to_i, 0].max, composer_input.length].min
+        true
+      end
+
+      def git_return_to_overlay
+        return true unless git_composing?
+
+        @git_state[:message_draft] = composer_input.dup
+        @git_state[:message_cursor] = composer_cursor
+        @git_state[:composing] = false
+        @prompt_label = "Git>"
         self.composer_input = ""
         self.composer_cursor = 0
         true
@@ -265,7 +280,7 @@ module Kward
       def git_overlay_rows(width, height: screen_height)
         return [] unless @git_state
 
-        help = git_composing? ? "Type commit message · Enter commit · Esc cancel" : "↑/↓ select · Enter diff · s stage/unstage · Tab message · Esc cancel"
+        help = git_composing? ? "Type commit message · Enter commit · Tab overlay · Esc cancel" : "↑/↓ select · Enter diff · s stage/unstage · Tab message · Esc cancel"
         lines = [overlay_text_line(help, :muted), overlay_blank_line]
         status_lines = @git_state[:status_lines]
         status_lines = ["No uncommitted changes."] if status_lines.empty?

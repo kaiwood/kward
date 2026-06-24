@@ -45,6 +45,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `/git` commit-message editing so it supports the normal composer shortcuts and Tab returns to the Git overlay while preserving the draft.
 - Fixed TUI vibe editor operator counts so command counts and motion counts are multiplied, matching vibe behavior like `2d2w` and `2d2d`.
 - Fixed `I` in the TUI vibe editor mode so it inserts at the first non-blank character of the line, matching vibe behavior.
 - Fixed TUI tab question prompts so a background tab's pending `ask_user_question` stays with that tab, marks it green while waiting, and opens only when the tab is active.
