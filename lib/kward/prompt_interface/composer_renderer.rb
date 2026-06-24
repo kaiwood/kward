@@ -225,7 +225,8 @@ module Kward
       end
 
       def box_content_row(row, content_width)
-        "#{colored("│", :primary_green)} #{row[0, content_width].to_s.ljust(content_width)} #{colored("│", :primary_green)}"
+        content = visible_ljust(visible_truncate(row, content_width), content_width)
+        "#{colored("│", :primary_green)} #{content} #{colored("│", :primary_green)}"
       end
 
       def footer_row(content_width, text = footer_text)

@@ -23,6 +23,7 @@ require_relative "prompt_interface/question_prompt"
 require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor/renderer"
+require_relative "prompt_interface/editor/syntax_highlighter"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
 require_relative "prompt_interface/editor/modes/modern"
@@ -63,6 +64,7 @@ module Kward
     include GitPrompt
     include OverlayRenderer
     include EditorRenderer
+    include EditorSyntaxHighlighter
     include ComposerRenderer
     include ComposerController
     include ModernEditorMode
