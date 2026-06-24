@@ -65,11 +65,11 @@ module Kward
 
       def editor_line_number_gutter(line_index)
         number = (line_index + 1).to_s.rjust(editor_line_number_gutter_width - 3)
-        "#{number} │ "
+        colored("#{number} │ ", :dark_forest_green)
       end
 
       def editor_blank_line_number_gutter
-        " " * editor_line_number_gutter_width
+        colored(" " * editor_line_number_gutter_width, :dark_forest_green)
       end
 
       def editor_top_border(width)
