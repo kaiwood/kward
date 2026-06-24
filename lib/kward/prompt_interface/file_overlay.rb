@@ -161,7 +161,8 @@ module Kward
       end
 
       def ignored_project_directory?(relative)
-        relative == "." || relative == ".git" || relative.start_with?(".git/")
+        ignored_directories = %w[.git .yardoc _yardoc node_modules rdoc tmp vendor/bundle]
+        ignored_directories.include?(relative) || relative.start_with?(".git/")
       end
 
       def ignored_project_file?(relative)

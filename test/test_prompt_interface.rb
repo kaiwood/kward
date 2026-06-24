@@ -1553,6 +1553,27 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_file_overlay_fallback_scan_prunes_heavy_directories
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      FileUtils.mkdir_p(File.join(dir, "node_modules", "pkg"))
+      FileUtils.mkdir_p(File.join(dir, "tmp"))
+      File.write(File.join(dir, "lib", "main.rb"), "")
+      File.write(File.join(dir, "node_modules", "pkg", "index.js"), "")
+      File.write(File.join(dir, "tmp", "cache.txt"), "")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.define_singleton_method(:git_project_file_paths) { [] }
+
+        paths = prompt.send(:project_file_paths)
+
+        assert_includes paths, "lib/main.rb"
+        refute_includes paths, "node_modules/pkg/index.js"
+        refute_includes paths, "tmp/cache.txt"
+      end
+    end
+  end
+
   def test_prompt_interface_shows_slash_overlay_and_completes_selection
     input, writer = IO.pipe
     output = StringIO.new
