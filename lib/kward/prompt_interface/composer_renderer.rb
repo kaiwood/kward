@@ -258,7 +258,7 @@ module Kward
         []
       end
 
-      def max_visible_input_rows(attachment_count = 0, overlay_count = active_overlay_rows(screen_width).length, footer_count = footer_text.to_s.empty? ? 0 : 1, height: screen_height)
+      def max_visible_input_rows(attachment_count, overlay_count, footer_count, height: screen_height)
         input_cap = [COMPOSER_MAX_INPUT_ROWS - attachment_count, 1].max
         [[input_cap, height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
       end
