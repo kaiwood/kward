@@ -3,7 +3,7 @@
 All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
-xx
+
 ### Added
 
 - Added `R` replace mode to the TUI vi editor mode.
