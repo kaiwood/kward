@@ -1,7 +1,12 @@
 require "fileutils"
+require "tmpdir"
+
+KWARD_TEST_HOME = Dir.mktmpdir("kward-test-home")
+ENV["HOME"] = KWARD_TEST_HOME
+at_exit { FileUtils.remove_entry(KWARD_TEST_HOME) if Dir.exist?(KWARD_TEST_HOME) }
+
 require "minitest/autorun"
 require "stringio"
-require "tmpdir"
 require_relative "../lib/kward/ansi"
 require_relative "../lib/kward/model/client"
 require_relative "../lib/kward/conversation"
