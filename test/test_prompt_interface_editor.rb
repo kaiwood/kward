@@ -665,12 +665,12 @@ class TestPromptInterfaceEditor < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         prompt.send(:handle_editor_key, "\e[<65;1;1M")
-        assert_equal 3, editor.viewport_row
-        assert_equal [3, 0], editor.cursor_line_and_column
+        assert_equal 1, editor.viewport_row
+        assert_equal [1, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\e[<64;1;1M")
         assert_equal 0, editor.viewport_row
-        assert_equal [3, 0], editor.cursor_line_and_column
+        assert_equal [1, 0], editor.cursor_line_and_column
       end
     end
   end
@@ -700,8 +700,8 @@ class TestPromptInterfaceEditor < KwardTestCase
 
     prompt.send(:handle_editor_key, "\e[<65;1;1M")
 
-    assert_equal 3, editor.viewport_row
-    assert_equal [3, 0], editor.cursor_line_and_column
+    assert_equal 1, editor.viewport_row
+    assert_equal [1, 0], editor.cursor_line_and_column
   end
 
   def test_prompt_interface_editor_left_click_moves_cursor
@@ -753,6 +753,23 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_double_click_drag_extends_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[<0;16;3M")
+        prompt.send(:handle_editor_key, "\e[<0;16;3M")
+        prompt.send(:handle_editor_key, "\e[<32;14;4M")
+
+        assert_equal "beta\ngamm", editor.selected_text
+      end
+    end
+  end
+
   def test_prompt_interface_editor_triple_click_selects_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\nbravo\ncharlie")
@@ -796,9 +813,9 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt.send(:handle_editor_key, "\e[<0;8;3M")
         prompt.send(:handle_editor_key, "\e[<32;8;13M")
 
-        assert_equal 3, editor.viewport_row
+        assert_equal 1, editor.viewport_row
         assert editor.selection_active?
-        assert_equal [12, 0], editor.cursor_line_and_column
+        assert_equal [10, 0], editor.cursor_line_and_column
       end
     end
   end

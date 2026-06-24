@@ -263,8 +263,13 @@ module Kward
           @editor_mouse_drag_anchor = range[0]
           @editor_mouse_dragging = true
         when 2
-          finish_editor_mouse_drag
-          select_editor_word_at(position[:offset])
+          range = select_editor_word_at(position[:offset])
+          if range
+            @editor_mouse_drag_anchor = range[0]
+            @editor_mouse_dragging = true
+          else
+            finish_editor_mouse_drag
+          end
         else
           @editor_state.clear_selection
           @editor_state.cursor = position[:offset]
@@ -311,6 +316,7 @@ module Kward
 
         @editor_state.selection_anchor = range[0]
         @editor_state.cursor = range[1]
+        range
       end
 
       def select_editor_line_at(line_index)
@@ -875,7 +881,7 @@ module Kward
       end
 
       def editor_mouse_scroll_rows
-        3
+        1
       end
 
       def enable_editor_mouse_reporting
