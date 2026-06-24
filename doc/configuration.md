@@ -174,7 +174,7 @@ The built-in TUI file editor supports three keybinding modes. Modern is the defa
 }
 ```
 
-`mode` can be `modern`, `emacs`, or `vi`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` > Interface > Editor mode; newly opened editor buffers pick up the setting immediately.
+`mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` > Interface > Editor mode; newly opened editor buffers pick up the setting immediately.
 
 The editor automatically highlights Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
 
@@ -192,7 +192,7 @@ Modern mode uses composer-style keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` s
 
 Emacs mode uses Emacs-style non-modal keys: `Ctrl+X Ctrl+S` saves, `Ctrl+X Ctrl+C` quits, `Ctrl+S` searches forward, `Ctrl+R` searches backward, `Ctrl+Space` sets the mark, `Ctrl+W` kills the region or previous word, `Alt+W` copies the region, `Ctrl+K` kills to end of line, `Ctrl+Y` yanks, and `Alt+Y` cycles the per-buffer kill ring after a yank.
 
-Vi mode opens files in normal mode and supports a compact classic-vi subset: normal/insert/command modes, character and line visual modes with `v`/`V`, `h/j/k/l`, word and line movement, counts, simple `d`/`y` operator motions, `dd`, `yy`, `p`, `/` search, `u` undo, and `:w`, `:q`, `:q!`, `:wq`, `:x`, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
+Vibe mode opens files in normal mode and supports a compact classic-vibe subset: normal/insert/command modes, character and line visual modes with `v`/`V`, `h/j/k/l`, word and line movement, counts, simple `d`/`y` operator motions, `dd`, `yy`, `p`, `/` search, `u` undo, and `:w`, `:q`, `:q!`, `:wq`, `:x`, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
 
 ## Session settings
 

@@ -8,7 +8,7 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vi_mode, :vi_pending, :vi_command, :undo_stack, :redo_stack, :vi_last_change
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern")
         @path = path.to_s
@@ -32,12 +32,12 @@ module Kward
         @kill_ring = []
         @last_yank_range = nil
         @last_yank_index = nil
-        @vi_mode = @editor_mode == "vi" ? "normal" : nil
-        @vi_pending = ""
-        @vi_command = ""
+        @vibe_mode = @editor_mode == "vibe" ? "normal" : nil
+        @vibe_pending = ""
+        @vibe_command = ""
         @undo_stack = []
         @redo_stack = []
-        @vi_last_change = nil
+        @vibe_last_change = nil
         @status = default_status
       end
 
@@ -58,12 +58,12 @@ module Kward
         @kill_ring = other.kill_ring.map(&:dup)
         @last_yank_range = other.last_yank_range&.dup
         @last_yank_index = other.last_yank_index
-        @vi_mode = other.vi_mode&.dup
-        @vi_pending = other.vi_pending.dup
-        @vi_command = other.vi_command.dup
+        @vibe_mode = other.vibe_mode&.dup
+        @vibe_pending = other.vibe_pending.dup
+        @vibe_command = other.vibe_command.dup
         @undo_stack = other.undo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
         @redo_stack = other.redo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
-        @vi_last_change = other.vi_last_change&.dup
+        @vibe_last_change = other.vibe_last_change&.dup
       end
 
       def modern?
@@ -74,8 +74,8 @@ module Kward
         @editor_mode == "emacs"
       end
 
-      def vi?
-        @editor_mode == "vi"
+      def vibe?
+        @editor_mode == "vibe"
       end
 
       def dirty?
@@ -296,14 +296,14 @@ module Kward
 
       def selection_active?
         return false if @selection_anchor.nil?
-        return true if vi? && @vi_mode == "visual_line"
+        return true if vibe? && @vibe_mode == "visual_line"
 
         @selection_anchor != @cursor
       end
 
       def selection_range
         return nil unless selection_active?
-        return visual_line_selection_range if vi? && @vi_mode == "visual_line"
+        return visual_line_selection_range if vibe? && @vibe_mode == "visual_line"
 
         [@selection_anchor, @cursor].minmax
       end
@@ -551,7 +551,7 @@ module Kward
         case @editor_mode
         when "emacs"
           "C-x C-s save · C-x C-c quit · C-s search"
-        when "vi"
+        when "vibe"
           "NORMAL · i insert · :w save · :q quit"
         else
           "Ctrl+S save · Ctrl+Q quit · Ctrl+F search · Ctrl+C copy"

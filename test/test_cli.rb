@@ -2266,20 +2266,20 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       Kward::ConfigFiles.write_config({ "editor" => { "mode" => "default" } }, config_path)
-      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Editor mode (modern)", "vi"])
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Editor mode (modern)", "vibe"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
 
       with_env("KWARD_CONFIG_PATH" => config_path) do
         cli.interactive_loop
       end
 
-      assert_equal "vi", JSON.parse(File.read(config_path)).dig("editor", "mode")
-      assert_includes prompt.output.join("\n"), "Editor mode set to vi. New editor buffers will use this mode."
+      assert_equal "vibe", JSON.parse(File.read(config_path)).dig("editor", "mode")
+      assert_includes prompt.output.join("\n"), "Editor mode set to vibe. New editor buffers will use this mode."
       editor_mode_index = prompt.select_messages.index("Editor mode")
       assert editor_mode_index
       assert_includes prompt.select_choices[editor_mode_index], "modern (current)"
       assert_includes prompt.select_choices[editor_mode_index], "emacs"
-      assert_includes prompt.select_choices[editor_mode_index], "vi"
+      assert_includes prompt.select_choices[editor_mode_index], "vibe"
     end
   end
 

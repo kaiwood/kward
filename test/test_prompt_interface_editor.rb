@@ -1307,9 +1307,9 @@ class TestPromptInterfaceEditor < KwardTestCase
           assert_equal "modern", prompt.instance_variable_get(:@editor_state).editor_mode
           prompt.send(:close_editor)
 
-          Kward::ConfigFiles.write_config({ "editor" => { "mode" => "vi" } }, config_path)
+          Kward::ConfigFiles.write_config({ "editor" => { "mode" => "vibe" } }, config_path)
           assert prompt.send(:open_editor, "notes.txt")
-          assert_equal "vi", prompt.instance_variable_get(:@editor_state).editor_mode
+          assert_equal "vibe", prompt.instance_variable_get(:@editor_state).editor_mode
         end
       end
     end

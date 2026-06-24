@@ -9,18 +9,18 @@ All notable changes to Kward will be documented in this file.
 - Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop at a configurable frame rate (1–120 fps), supporting games, dashboards, and viewers with colored cell drawing, non-blocking key input, full composer state save/restore on exit, and Ctrl+C forced exit.
 - Added configurable syntax-based auto-indent on Enter for the built-in TUI file editor, including closing-token reindent and indentation-level Backspace behavior.
 - Added automatic syntax highlighting for Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL in the built-in TUI file editor when terminal color is enabled.
-- Added `R` replace mode to the TUI vi editor mode.
-- Added classic vi normal-mode movement keys `^`, `+`, `-`, `_`, Enter, Space, Backspace, `H`, `M`, `L`, Ctrl+F, Ctrl+B, Ctrl+D, Ctrl+U, Ctrl+E, and Ctrl+Y to the TUI vi editor mode.
-- Added `X` delete-before-cursor support to the TUI vi editor mode.
-- Added vi change, substitute, replace-character, and join-line commands (`cc`, `C`, `cw`, `c$`, `s`, `S`, `r`, and `J`) to the TUI vi editor mode.
-- Added `D` delete-to-end-of-line support to the TUI vi editor mode.
-- Added `P` paste-before support to the TUI vi editor mode.
-- Added `U`, Ctrl+R redo, and `.` repeat-last-change support to the TUI vi editor mode.
-- Added `?pattern` backward search support to the TUI vi editor mode.
-- Added vi search repeat keys `n` and `N`, plus word-under-cursor search keys `*` and `#`, to the TUI vi editor mode.
-- Added a "Feature Guide: Integrated Editor" docs page covering the `$` file-narrowing prefix, editor features, and the modern, emacs, and vi (vibe) keybinding modes with full keybinding tables.
+- Added `R` replace mode to the TUI vibe editor mode.
+- Added classic vibe normal-mode movement keys `^`, `+`, `-`, `_`, Enter, Space, Backspace, `H`, `M`, `L`, Ctrl+F, Ctrl+B, Ctrl+D, Ctrl+U, Ctrl+E, and Ctrl+Y to the TUI vibe editor mode.
+- Added `X` delete-before-cursor support to the TUI vibe editor mode.
+- Added vibe change, substitute, replace-character, and join-line commands (`cc`, `C`, `cw`, `c$`, `s`, `S`, `r`, and `J`) to the TUI vibe editor mode.
+- Added `D` delete-to-end-of-line support to the TUI vibe editor mode.
+- Added `P` paste-before support to the TUI vibe editor mode.
+- Added `U`, Ctrl+R redo, and `.` repeat-last-change support to the TUI vibe editor mode.
+- Added `?pattern` backward search support to the TUI vibe editor mode.
+- Added vibe search repeat keys `n` and `N`, plus word-under-cursor search keys `*` and `#`, to the TUI vibe editor mode.
+- Added a "Feature Guide: Integrated Editor" docs page covering the `$` file-narrowing prefix, editor features, and the modern, emacs, and vibe keybinding modes with full keybinding tables.
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
-- Added modern, emacs, and vi editor modes for the built-in TUI file editor, with modern as the default, emacs kill-ring support, and vi retaining its modal command set.
+- Added modern, emacs, and vibe editor modes for the built-in TUI file editor, with modern as the default, emacs kill-ring support, and vibe retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
 - Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
 - Added file-level stage/unstage toggling to the interactive `/git` overlay with `s` and Up/Down selection.
@@ -31,6 +31,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Renamed the built-in TUI file editor `vi` mode to `vibe`; existing `vi` config values are normalized to `vibe`.
 - Renamed the default built-in TUI file editor mode from `nano` to `modern` and changed its save/quit keys to Ctrl+S/Ctrl+Q.
 - Changed `/git` commits to use staged changes when present, or automatically stage all workspace changes when nothing is staged.
 - Changed TUI tabs to colorize tab names by state instead of appending `*` for running tabs: yellow while running, red after errors or cancellation, and green when a background tab finishes unread.
@@ -41,8 +42,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
-- Fixed TUI vi editor operator counts so command counts and motion counts are multiplied, matching vi behavior like `2d2w` and `2d2d`.
-- Fixed `I` in the TUI vi editor mode so it inserts at the first non-blank character of the line, matching vi behavior.
+- Fixed TUI vibe editor operator counts so command counts and motion counts are multiplied, matching vibe behavior like `2d2w` and `2d2d`.
+- Fixed `I` in the TUI vibe editor mode so it inserts at the first non-blank character of the line, matching vibe behavior.
 - Fixed TUI tab question prompts so a background tab's pending `ask_user_question` stays with that tab, marks it green while waiting, and opens only when the tab is active.
 - Fixed `/new` in TUI tabs so it starts a fresh session in the current tab instead of opening another tab.
 - Fixed Alt+Backspace in alt tab-keybinding mode so terminals that emit Alt-W no longer close the active tab.

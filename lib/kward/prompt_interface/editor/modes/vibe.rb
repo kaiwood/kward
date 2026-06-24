@@ -2,28 +2,28 @@
 module Kward
   # Interactive terminal UI used by the CLI frontend.
   class PromptInterface
-    # Vi-style keymap for the built-in composer file editor.
-    module ViEditorMode
+    # Vibe-style keymap for the built-in composer file editor.
+    module VibeEditorMode
       private
 
-      def handle_vi_key(key)
-        csi_result = handle_vi_csi_u_key(key)
+      def handle_vibe_key(key)
+        csi_result = handle_vibe_csi_u_key(key)
         return csi_result unless csi_result == false
 
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
-        return handle_vi_repeat_change if key == "." && @editor_state.vi_mode == "normal"
-        return handle_vi_search_key(key) if editor_search_active?
-        return handle_vi_command_key(key) if @editor_state.vi_mode == "command"
-        return handle_vi_insert_key(key) if @editor_state.vi_mode == "insert"
-        return handle_vi_replace_key(key) if @editor_state.vi_mode == "replace"
-        return handle_vi_visual_key(key) if vi_visual_mode?
+        return handle_vibe_repeat_change if key == "." && @editor_state.vibe_mode == "normal"
+        return handle_vibe_search_key(key) if editor_search_active?
+        return handle_vibe_command_key(key) if @editor_state.vibe_mode == "command"
+        return handle_vibe_insert_key(key) if @editor_state.vibe_mode == "insert"
+        return handle_vibe_replace_key(key) if @editor_state.vibe_mode == "replace"
+        return handle_vibe_visual_key(key) if vibe_visual_mode?
 
-        handle_vi_normal_key(key)
+        handle_vibe_normal_key(key)
       end
 
-      def handle_vi_csi_u_key(key)
+      def handle_vibe_csi_u_key(key)
         sequence = parse_csi_u_key(key)
         return false unless sequence
 
@@ -35,13 +35,13 @@ module Kward
 
         return editor_search_cancel if editor_search_active?
 
-        @editor_state.vi_command = ""
-        @editor_state.vi_pending = ""
+        @editor_state.vibe_command = ""
+        @editor_state.vibe_pending = ""
         @editor_state.clear_selection
-        vi_return_to_normal
+        vibe_return_to_normal
       end
 
-      def handle_vi_search_key(key)
+      def handle_vibe_search_key(key)
         case key
         when "\n", "\r"
           editor_search_confirm
@@ -55,36 +55,36 @@ module Kward
         true
       end
 
-      def handle_vi_insert_key(key)
+      def handle_vibe_insert_key(key)
         return if handle_editor_bracketed_paste_key(key)
 
-        vi_record_insert_change_key(key)
+        vibe_record_insert_change_key(key)
         case key
         when "\e", "\x03", :escape
-          vi_return_to_normal
+          vibe_return_to_normal
         when "\b", "\x7F"
-          vi_record_undo { editor_delete_before_cursor }
+          vibe_record_undo { editor_delete_before_cursor }
         when "\n", "\r"
-          vi_record_undo { editor_insert_newline }
+          vibe_record_undo { editor_insert_newline }
         else
           key_name = key_name_for(key)
-          named_result = handle_vi_insert_named_key(key_name) if key_name
+          named_result = handle_vibe_insert_named_key(key_name) if key_name
           return named_result unless named_result == false || named_result.nil?
 
-          vi_record_undo { editor_insert_printable(key) } if printable_key?(key)
+          vibe_record_undo { editor_insert_printable(key) } if printable_key?(key)
         end
       end
 
-      def handle_vi_insert_named_key(key_name)
+      def handle_vibe_insert_named_key(key_name)
         case key_name
         when :escape
-          vi_return_to_normal
+          vibe_return_to_normal
         when :return, :enter
-          vi_record_undo { editor_insert_newline }
+          vibe_record_undo { editor_insert_newline }
         when :backspace
-          vi_record_undo { editor_delete_before_cursor }
+          vibe_record_undo { editor_delete_before_cursor }
         when :delete
-          vi_record_undo { @editor_state.delete_at_cursor }
+          vibe_record_undo { @editor_state.delete_at_cursor }
         when :left
           @editor_state.move_left
         when :right
@@ -98,59 +98,59 @@ module Kward
         end
       end
 
-      def handle_vi_replace_key(key)
+      def handle_vibe_replace_key(key)
         return if handle_editor_bracketed_paste_key(key)
 
-        vi_record_insert_change_key(key)
+        vibe_record_insert_change_key(key)
         case key
         when "\e", "\x03", :escape
-          vi_return_to_normal
+          vibe_return_to_normal
         when "\b", "\x7F"
-          vi_record_undo { editor_delete_before_cursor }
+          vibe_record_undo { editor_delete_before_cursor }
         when "\n", "\r"
-          vi_record_undo { editor_insert_newline }
+          vibe_record_undo { editor_insert_newline }
         else
           key_name = key_name_for(key)
-          named_result = handle_vi_insert_named_key(key_name) if key_name
+          named_result = handle_vibe_insert_named_key(key_name) if key_name
           return named_result unless named_result == false || named_result.nil?
 
-          vi_record_undo { vi_replace_character(key) } if printable_key?(key)
+          vibe_record_undo { vibe_replace_character(key) } if printable_key?(key)
         end
       end
 
-      def vi_replace_character(key)
+      def vibe_replace_character(key)
         @editor_state.delete_at_cursor
         editor_insert_printable(key)
       end
 
-      def handle_vi_command_key(key)
+      def handle_vibe_command_key(key)
         case key
         when "\e", "\x03", :escape
-          @editor_state.vi_command = ""
-          vi_return_to_normal
+          @editor_state.vibe_command = ""
+          vibe_return_to_normal
         when "\b", "\x7F"
-          @editor_state.vi_command = @editor_state.vi_command[0...-1].to_s
-          @editor_state.status = ":#{@editor_state.vi_command}"
+          @editor_state.vibe_command = @editor_state.vibe_command[0...-1].to_s
+          @editor_state.status = ":#{@editor_state.vibe_command}"
         when "\n", "\r"
-          execute_vi_command(@editor_state.vi_command)
+          execute_vibe_command(@editor_state.vibe_command)
         else
           if printable_key?(key)
-            @editor_state.vi_command = @editor_state.vi_command.to_s + key
-            @editor_state.status = ":#{@editor_state.vi_command}"
+            @editor_state.vibe_command = @editor_state.vibe_command.to_s + key
+            @editor_state.status = ":#{@editor_state.vibe_command}"
           end
         end
         true
       end
 
-      def execute_vi_command(command)
+      def execute_vibe_command(command)
         command = command.to_s.strip
-        @editor_state.vi_mode = "normal"
-        @editor_state.vi_command = ""
+        @editor_state.vibe_mode = "normal"
+        @editor_state.vibe_command = ""
         case command
         when "w"
           save_editor
         when "q"
-          vi_quit_editor
+          vibe_quit_editor
         when "q!"
           close_editor
         when "wq"
@@ -167,43 +167,43 @@ module Kward
         true
       end
 
-      def vi_quit_editor
+      def vibe_quit_editor
         return close_editor unless @editor_state.dirty?
 
         @editor_state.status = "No write since last change (:q! overrides)"
         true
       end
 
-      def handle_vi_normal_key(key)
+      def handle_vibe_normal_key(key)
         if key == "\e" || key == "\x03"
-          @editor_state.vi_pending = ""
-          vi_return_to_normal
+          @editor_state.vibe_pending = ""
+          vibe_return_to_normal
           return true
         end
 
         key_name = key_name_for(key)
-        named_result = handle_vi_named_key(key_name) if key_name
+        named_result = handle_vibe_named_key(key_name) if key_name
         return named_result unless named_result == false || named_result.nil?
         return false unless key.is_a?(String)
-        return true unless printable_key?(key) || vi_normal_control_key?(key)
+        return true unless printable_key?(key) || vibe_normal_control_key?(key)
 
-        pending = @editor_state.vi_pending.to_s + key
-        if vi_waiting_for_more?(pending)
-          @editor_state.vi_pending = pending
+        pending = @editor_state.vibe_pending.to_s + key
+        if vibe_waiting_for_more?(pending)
+          @editor_state.vibe_pending = pending
           @editor_state.status = "NORMAL #{pending}"
           return true
         end
 
-        @editor_state.vi_pending = ""
-        execute_vi_normal_command(pending)
+        @editor_state.vibe_pending = ""
+        execute_vibe_normal_command(pending)
         true
       end
 
-      def handle_vi_named_key(key_name)
+      def handle_vibe_named_key(key_name)
         case key_name
         when :escape
-          @editor_state.vi_pending = ""
-          vi_return_to_normal
+          @editor_state.vibe_pending = ""
+          vibe_return_to_normal
         when :left
           @editor_state.move_left
         when :right
@@ -215,19 +215,19 @@ module Kward
         when :backspace
           @editor_state.move_left
         when :return, :enter
-          vi_move_to_relative_line_first_non_blank(1)
+          vibe_move_to_relative_line_first_non_blank(1)
         when :ctrl_b
           @editor_state.page_up(editor_page_rows)
         when :ctrl_f
           @editor_state.page_down(editor_page_rows)
         when :ctrl_d
-          @editor_state.page_down(vi_half_page_rows)
+          @editor_state.page_down(vibe_half_page_rows)
         when :ctrl_u
-          @editor_state.page_up(vi_half_page_rows)
+          @editor_state.page_up(vibe_half_page_rows)
         when :ctrl_e
-          vi_scroll_down
+          vibe_scroll_down
         when :ctrl_y
-          vi_scroll_up
+          vibe_scroll_up
         when :ctrl_r
           @editor_state.redo
         else
@@ -235,27 +235,27 @@ module Kward
         end
       end
 
-      def vi_normal_control_key?(key)
+      def vibe_normal_control_key?(key)
         ["\n", "\r", "\b", "\x7F", "\x02", "\x04", "\x05", "\x06", "\x12", "\x15", "\x19"].include?(key)
       end
 
-      def vi_visual_mode?
-        %w[visual visual_line].include?(@editor_state.vi_mode)
+      def vibe_visual_mode?
+        %w[visual visual_line].include?(@editor_state.vibe_mode)
       end
 
-      def vi_return_to_normal
-        @editor_state.vi_mode = "normal"
+      def vibe_return_to_normal
+        @editor_state.vibe_mode = "normal"
         @editor_state.status = "NORMAL · i insert · :w save · :q quit"
         true
       end
 
-      def vi_cancel_visual_mode
-        @editor_state.vi_pending = ""
+      def vibe_cancel_visual_mode
+        @editor_state.vibe_pending = ""
         @editor_state.clear_selection
-        vi_return_to_normal
+        vibe_return_to_normal
       end
 
-      def vi_waiting_for_more?(command)
+      def vibe_waiting_for_more?(command)
         return true if command.match?(/\A\d+\z/) && command != "0"
         return true if command.match?(/\A\d*g\z/)
         return true if command.match?(/\A\d*[cdy]\d*\z/)
@@ -264,8 +264,8 @@ module Kward
         false
       end
 
-      def execute_vi_normal_command(command)
-        count, body = vi_count_and_body(command)
+      def execute_vibe_normal_command(command)
+        count, body = vibe_count_and_body(command)
         count = 1 if count.zero?
         case body
         when "h", "\b", "\x7F"
@@ -281,11 +281,11 @@ module Kward
         when "^"
           @editor_state.move_line_first_non_blank
         when "+", "\n", "\r"
-          vi_move_to_relative_line_first_non_blank(count)
+          vibe_move_to_relative_line_first_non_blank(count)
         when "-"
-          vi_move_to_relative_line_first_non_blank(-count)
+          vibe_move_to_relative_line_first_non_blank(-count)
         when "_"
-          vi_move_to_relative_line_first_non_blank(count - 1)
+          vibe_move_to_relative_line_first_non_blank(count - 1)
         when "$"
           @editor_state.move_line_end
         when "w"
@@ -300,93 +300,93 @@ module Kward
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
         when "H"
-          vi_move_to_screen_line(count - 1)
+          vibe_move_to_screen_line(count - 1)
         when "M"
-          vi_move_to_screen_line(editor_page_rows / 2)
+          vibe_move_to_screen_line(editor_page_rows / 2)
         when "L"
-          vi_move_to_screen_line(editor_page_rows - count)
+          vibe_move_to_screen_line(editor_page_rows - count)
         when "\x06"
           @editor_state.page_down(editor_page_rows)
         when "\x02"
           @editor_state.page_up(editor_page_rows)
         when "\x04"
-          @editor_state.page_down(vi_half_page_rows)
+          @editor_state.page_down(vibe_half_page_rows)
         when "\x15"
-          @editor_state.page_up(vi_half_page_rows)
+          @editor_state.page_up(vibe_half_page_rows)
         when "\x05"
-          vi_scroll_down
+          vibe_scroll_down
         when "\x19"
-          vi_scroll_up
+          vibe_scroll_up
         when "\x12"
           @editor_state.redo
         when "i"
-          vi_enter_insert_mode(command)
+          vibe_enter_insert_mode(command)
         when "I"
           @editor_state.move_line_first_non_blank
-          vi_enter_insert_mode(command)
+          vibe_enter_insert_mode(command)
         when "a"
           @editor_state.move_right
-          vi_enter_insert_mode(command)
+          vibe_enter_insert_mode(command)
         when "A"
           @editor_state.move_line_end
-          vi_enter_insert_mode(command)
+          vibe_enter_insert_mode(command)
         when "C"
-          vi_change_to_line_end(command)
+          vibe_change_to_line_end(command)
         when "D"
-          vi_delete_to_line_end(command)
+          vibe_delete_to_line_end(command)
         when "R"
-          @editor_state.vi_mode = "replace"
+          @editor_state.vibe_mode = "replace"
           @editor_state.status = "REPLACE · Esc normal"
-          vi_begin_change_recording(command)
+          vibe_begin_change_recording(command)
         when "s"
-          vi_substitute_characters(count, command)
+          vibe_substitute_characters(count, command)
         when "S"
-          vi_change_lines(count, command)
+          vibe_change_lines(count, command)
         when "J"
-          vi_join_lines(count, command)
+          vibe_join_lines(count, command)
         when "n"
           editor_search_repeat
         when "N"
-          editor_search_repeat(vi_opposite_search_direction)
+          editor_search_repeat(vibe_opposite_search_direction)
         when "*"
           editor_search_word_under_cursor(:forward)
         when "#"
           editor_search_word_under_cursor(:backward)
         when "U"
-          vi_restore_current_line
+          vibe_restore_current_line
         when /^r(.?)$/
-          vi_replace_single_character(Regexp.last_match(1), count, command)
+          vibe_replace_single_character(Regexp.last_match(1), count, command)
         when "v"
-          vi_begin_visual_mode("visual")
+          vibe_begin_visual_mode("visual")
         when "V"
-          vi_begin_visual_mode("visual_line")
+          vibe_begin_visual_mode("visual_line")
         when "o"
-          vi_open_line_below
+          vibe_open_line_below
         when "O"
-          vi_open_line_above
+          vibe_open_line_above
         when "x"
-          vi_record_undo { count.times { @editor_state.delete_at_cursor } }
-          vi_remember_change(command)
+          vibe_record_undo { count.times { @editor_state.delete_at_cursor } }
+          vibe_remember_change(command)
         when "X"
-          vi_record_undo { count.times { @editor_state.delete_before_cursor } }
-          vi_remember_change(command)
+          vibe_record_undo { count.times { @editor_state.delete_before_cursor } }
+          vibe_remember_change(command)
         when "dd"
-          vi_delete_lines(count)
-          vi_remember_change(command)
+          vibe_delete_lines(count)
+          vibe_remember_change(command)
         when "cc"
-          vi_change_lines(count, command)
+          vibe_change_lines(count, command)
         when "yy"
-          vi_yank_lines(count)
+          vibe_yank_lines(count)
         when "p"
-          vi_record_undo { @editor_state.insert(@editor_state.kill_buffer) }
-          vi_remember_change(command)
+          vibe_record_undo { @editor_state.insert(@editor_state.kill_buffer) }
+          vibe_remember_change(command)
         when "P"
-          vi_paste_before(command)
+          vibe_paste_before(command)
         when "u"
           @editor_state.undo
         when ":"
-          @editor_state.vi_mode = "command"
-          @editor_state.vi_command = ""
+          @editor_state.vibe_mode = "command"
+          @editor_state.vibe_command = ""
           @editor_state.status = ":"
         when "/"
           editor_search_begin
@@ -394,41 +394,41 @@ module Kward
           editor_search_begin(:backward)
         else
           if body.start_with?("d") || body.start_with?("y") || body.start_with?("c")
-            vi_operator_motion(body[0], body[1..], count, command)
+            vibe_operator_motion(body[0], body[1..], count, command)
           else
             @editor_state.status = "Unknown command: #{command}"
           end
         end
       end
 
-      def handle_vi_visual_key(key)
+      def handle_vibe_visual_key(key)
         key_name = key_name_for(key)
-        return handle_vi_visual_named_key(key_name) if key_name
+        return handle_vibe_visual_named_key(key_name) if key_name
         if key == "\e" || key == "\x03"
-          vi_cancel_visual_mode
+          vibe_cancel_visual_mode
           return true
         end
         return true unless printable_key?(key)
 
         case key
         when "y"
-          vi_yank_visual_selection
+          vibe_yank_visual_selection
         when "d", "x"
-          vi_delete_visual_selection
+          vibe_delete_visual_selection
         when "c"
-          vi_change_visual_selection
+          vibe_change_visual_selection
         when "p"
-          vi_paste_visual_selection
+          vibe_paste_visual_selection
         else
-          vi_move_visual_selection(key)
+          vibe_move_visual_selection(key)
         end
         true
       end
 
-      def handle_vi_visual_named_key(key_name)
+      def handle_vibe_visual_named_key(key_name)
         case key_name
         when :escape
-          vi_cancel_visual_mode
+          vibe_cancel_visual_mode
         when :left
           @editor_state.move_left
         when :right
@@ -442,134 +442,134 @@ module Kward
         end
       end
 
-      def vi_begin_visual_mode(mode)
+      def vibe_begin_visual_mode(mode)
         @editor_state.clear_selection
         @editor_state.selection_anchor = @editor_state.cursor
-        @editor_state.vi_mode = mode
+        @editor_state.vibe_mode = mode
         @editor_state.status = mode == "visual_line" ? "VISUAL LINE" : "VISUAL"
         true
       end
 
-      def vi_move_visual_selection(key)
-        count, body = vi_count_and_body(key)
+      def vibe_move_visual_selection(key)
+        count, body = vibe_count_and_body(key)
         count = 1 if count.zero?
-        vi_apply_motion(body, count)
+        vibe_apply_motion(body, count)
       end
 
-      def vi_visual_range
+      def vibe_visual_range
         @editor_state.selection_range
       end
 
-      def vi_yank_visual_selection
-        range = vi_visual_range
+      def vibe_yank_visual_selection
+        range = vibe_visual_range
         return false unless range
 
-        vi_copy_range(range[0], range[1], "Yanked selection")
-        vi_cancel_visual_mode
+        vibe_copy_range(range[0], range[1], "Yanked selection")
+        vibe_cancel_visual_mode
       end
 
-      def vi_delete_visual_selection
-        range = vi_visual_range
+      def vibe_delete_visual_selection
+        range = vibe_visual_range
         return false unless range
 
         @editor_state.copy_range(range[0], range[1])
-        vi_record_undo { @editor_state.replace_range(range[0], range[1], "") }
-        vi_cancel_visual_mode
+        vibe_record_undo { @editor_state.replace_range(range[0], range[1], "") }
+        vibe_cancel_visual_mode
       end
 
-      def vi_change_visual_selection
-        range = vi_visual_range
+      def vibe_change_visual_selection
+        range = vibe_visual_range
         return false unless range
 
         @editor_state.copy_range(range[0], range[1])
-        vi_record_undo { @editor_state.replace_range(range[0], range[1], "") }
+        vibe_record_undo { @editor_state.replace_range(range[0], range[1], "") }
         @editor_state.clear_selection
-        @editor_state.vi_mode = "insert"
+        @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
       end
 
-      def vi_paste_visual_selection
-        range = vi_visual_range
+      def vibe_paste_visual_selection
+        range = vibe_visual_range
         return false unless range
 
         text = @editor_state.kill_buffer.to_s
-        vi_record_undo { @editor_state.replace_range(range[0], range[1], text) }
-        vi_cancel_visual_mode
+        vibe_record_undo { @editor_state.replace_range(range[0], range[1], text) }
+        vibe_cancel_visual_mode
       end
 
-      def vi_count_and_body(command)
+      def vibe_count_and_body(command)
         match = command.match(/\A(\d*)(.*)\z/)
         [match[1].to_i, match[2]]
       end
 
-      def vi_move_to_relative_line_first_non_blank(offset)
+      def vibe_move_to_relative_line_first_non_blank(offset)
         line, = @editor_state.cursor_line_and_column
         @editor_state.move_to_line_first_non_blank(line + offset)
       end
 
-      def vi_move_to_screen_line(offset)
+      def vibe_move_to_screen_line(offset)
         @editor_state.move_to_line_first_non_blank(@editor_state.viewport_row + offset)
       end
 
-      def vi_half_page_rows
+      def vibe_half_page_rows
         [editor_page_rows / 2, 1].max
       end
 
-      def vi_scroll_down
+      def vibe_scroll_down
         @editor_state.viewport_row = [@editor_state.viewport_row + 1, @editor_state.lines.length - 1].min
         line, column = @editor_state.cursor_line_and_column
         @editor_state.set_cursor_line_and_column(@editor_state.viewport_row, column) if line < @editor_state.viewport_row
       end
 
-      def vi_scroll_up
+      def vibe_scroll_up
         @editor_state.viewport_row = [@editor_state.viewport_row - 1, 0].max
         bottom_line = @editor_state.viewport_row + editor_page_rows - 1
         line, column = @editor_state.cursor_line_and_column
         @editor_state.set_cursor_line_and_column(bottom_line, column) if line > bottom_line
       end
 
-      def vi_open_line_below
+      def vibe_open_line_below
         line, = @editor_state.cursor_line_and_column
         line_end = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
-        vi_record_undo do
+        vibe_record_undo do
           @editor_state.cursor = line_end
           @editor_state.insert("\n")
         end
-        @editor_state.vi_mode = "insert"
+        @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
       end
 
-      def vi_open_line_above
+      def vibe_open_line_above
         line, = @editor_state.cursor_line_and_column
         start_index = @editor_state.line_start_offset(line)
-        vi_record_undo do
+        vibe_record_undo do
           @editor_state.cursor = start_index
           @editor_state.insert("\n")
           @editor_state.cursor = start_index
         end
-        @editor_state.vi_mode = "insert"
+        @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
       end
 
-      def vi_paste_before(command = nil)
+      def vibe_paste_before(command = nil)
         text = @editor_state.kill_buffer.to_s
         return false if text.empty?
 
-        vi_record_undo do
+        vibe_record_undo do
           @editor_state.cursor = @editor_state.current_line_range.first if text.end_with?("\n")
           @editor_state.insert(text)
         end
-        vi_remember_change(command)
+        vibe_remember_change(command)
       end
 
-      def vi_delete_lines(count)
-        start_index, end_index = vi_linewise_delete_range(count)
+      def vibe_delete_lines(count)
+        start_index, end_index = vibe_linewise_delete_range(count)
         @editor_state.copy_range(start_index, end_index)
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @editor_state.status = "Deleted #{count} line#{count == 1 ? "" : "s"}"
       end
 
-      def vi_linewise_delete_range(count)
+      def vibe_linewise_delete_range(count)
         line, = @editor_state.cursor_line_and_column
         start_index, = @editor_state.line_range(line)
         end_line = [line + count - 1, @editor_state.lines.length - 1].min
@@ -580,23 +580,23 @@ module Kward
         [start_index, end_index]
       end
 
-      def vi_yank_lines(count)
+      def vibe_yank_lines(count)
         line, = @editor_state.cursor_line_and_column
         start_index, = @editor_state.line_range(line)
         end_line = [line + count - 1, @editor_state.lines.length - 1].min
         _, end_index = @editor_state.line_range(end_line)
-        vi_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}")
+        vibe_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}")
       end
 
-      def vi_change_lines(count, command = nil)
-        start_index, end_index = vi_linewise_change_range(count)
+      def vibe_change_lines(count, command = nil)
+        start_index, end_index = vibe_linewise_change_range(count)
         @editor_state.copy_range(start_index, end_index)
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @editor_state.cursor = start_index
-        vi_enter_insert_mode(command)
+        vibe_enter_insert_mode(command)
       end
 
-      def vi_linewise_change_range(count)
+      def vibe_linewise_change_range(count)
         line, = @editor_state.cursor_line_and_column
         start_index = @editor_state.line_start_offset(line)
         end_line = [line + count - 1, @editor_state.lines.length - 1].min
@@ -604,57 +604,57 @@ module Kward
         [start_index, end_index]
       end
 
-      def vi_change_to_line_end(command = nil)
+      def vibe_change_to_line_end(command = nil)
         start_index = @editor_state.cursor
         line, = @editor_state.cursor_line_and_column
         end_index = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
-        return vi_enter_insert_mode(command) if start_index == end_index
+        return vibe_enter_insert_mode(command) if start_index == end_index
 
         @editor_state.copy_range(start_index, end_index)
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-        vi_enter_insert_mode(command)
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vibe_enter_insert_mode(command)
       end
 
-      def vi_delete_to_line_end(command = nil)
+      def vibe_delete_to_line_end(command = nil)
         start_index = @editor_state.cursor
         line, = @editor_state.cursor_line_and_column
         end_index = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
         return @editor_state.status = "Empty range" if start_index == end_index
 
         @editor_state.copy_range(start_index, end_index)
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @editor_state.status = "Deleted"
-        vi_remember_change(command)
+        vibe_remember_change(command)
       end
 
-      def vi_substitute_characters(count, command = nil)
+      def vibe_substitute_characters(count, command = nil)
         start_index = @editor_state.cursor
         end_index = [start_index + count, @editor_state.buffer.length].min
         @editor_state.copy_range(start_index, end_index)
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-        vi_enter_insert_mode(command)
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vibe_enter_insert_mode(command)
       end
 
-      def vi_replace_single_character(character, count, command = nil)
+      def vibe_replace_single_character(character, count, command = nil)
         return @editor_state.status = "Replacement character required" if character.to_s.empty?
 
-        vi_record_undo do
+        vibe_record_undo do
           count.times do
             @editor_state.delete_at_cursor
             @editor_state.insert(character)
           end
         end
         @editor_state.move_left
-        vi_remember_change(command)
+        vibe_remember_change(command)
       end
 
-      def vi_join_lines(count, command = nil)
+      def vibe_join_lines(count, command = nil)
         line, = @editor_state.cursor_line_and_column
         join_count = [count, 2].max
         end_line = [line + join_count - 1, @editor_state.lines.length - 1].min
         return @editor_state.status = "Already at last line" if end_line == line
 
-        vi_record_undo do
+        vibe_record_undo do
           (end_line - line).times do
             line_end = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
             next_line_start = line_end + 1
@@ -665,22 +665,22 @@ module Kward
             @editor_state.cursor = line_end
           end
         end
-        vi_remember_change(command)
+        vibe_remember_change(command)
       end
 
-      def vi_enter_insert_mode(command = nil)
-        @editor_state.vi_mode = "insert"
+      def vibe_enter_insert_mode(command = nil)
+        @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
-        vi_begin_change_recording(command) if command
+        vibe_begin_change_recording(command) if command
       end
 
-      def vi_operator_motion(operator, motion, count, command = nil)
-        motion_count, motion = vi_count_and_body(motion)
+      def vibe_operator_motion(operator, motion, count, command = nil)
+        motion_count, motion = vibe_count_and_body(motion)
         count *= motion_count if motion_count.positive?
-        return vi_operator_linewise(operator, count, command) if motion == operator
+        return vibe_operator_linewise(operator, count, command) if motion == operator
 
         start_index = @editor_state.cursor
-        vi_apply_motion(motion, count)
+        vibe_apply_motion(motion, count)
         end_index = @editor_state.cursor
         end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
         return @editor_state.status = "Empty range" if start_index == end_index
@@ -688,32 +688,32 @@ module Kward
         case operator
         when "d"
           @editor_state.copy_range(start_index, end_index)
-          vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+          vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
           @editor_state.status = "Deleted"
-          vi_remember_change(command)
+          vibe_remember_change(command)
         when "c"
           @editor_state.copy_range(start_index, end_index)
-          vi_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-          vi_enter_insert_mode(vi_build_change_command(operator, motion, count, motion_count))
+          vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+          vibe_enter_insert_mode(vibe_build_change_command(operator, motion, count, motion_count))
         else
-          vi_copy_range(start_index, end_index, "Yanked")
+          vibe_copy_range(start_index, end_index, "Yanked")
           @editor_state.cursor = start_index
         end
       end
 
-      def vi_operator_linewise(operator, count, command = nil)
+      def vibe_operator_linewise(operator, count, command = nil)
         case operator
         when "d"
-          vi_delete_lines(count)
-          vi_remember_change(command)
+          vibe_delete_lines(count)
+          vibe_remember_change(command)
         when "c"
-          vi_change_lines(count, command)
+          vibe_change_lines(count, command)
         else
-          vi_yank_lines(count)
+          vibe_yank_lines(count)
         end
       end
 
-      def vi_apply_motion(motion, count)
+      def vibe_apply_motion(motion, count)
         case motion
         when "w"
           count.times { @editor_state.move_to_next_word }
@@ -728,11 +728,11 @@ module Kward
         when "^"
           @editor_state.move_line_first_non_blank
         when "+", "\n", "\r"
-          vi_move_to_relative_line_first_non_blank(count)
+          vibe_move_to_relative_line_first_non_blank(count)
         when "-"
-          vi_move_to_relative_line_first_non_blank(-count)
+          vibe_move_to_relative_line_first_non_blank(-count)
         when "_"
-          vi_move_to_relative_line_first_non_blank(count - 1)
+          vibe_move_to_relative_line_first_non_blank(count - 1)
         when "h", "\b", "\x7F"
           count.times { @editor_state.move_left }
         when "j"
@@ -746,63 +746,63 @@ module Kward
         end
       end
 
-      def vi_copy_range(start_index, end_index, status)
+      def vibe_copy_range(start_index, end_index, status)
         @editor_state.copy_range(start_index, end_index)
         @output_io.print("\e]52;c;#{Base64.strict_encode64(@editor_state.kill_buffer)}\a")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.status = status
       end
 
-      def vi_opposite_search_direction
+      def vibe_opposite_search_direction
         @editor_state.search_direction == :backward ? :forward : :backward
       end
 
-      def vi_restore_current_line
+      def vibe_restore_current_line
         line, = @editor_state.cursor_line_and_column
         start_index = @editor_state.line_start_offset(line)
         end_index = start_index + @editor_state.lines[line].to_s.length
         original_line = @editor_state.original_content.split("\n", -1)[line].to_s
-        vi_record_undo { @editor_state.replace_range(start_index, end_index, original_line) }
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, original_line) }
         @editor_state.status = "Restored line"
       end
 
-      def handle_vi_repeat_change
-        change = @editor_state.vi_last_change
+      def handle_vibe_repeat_change
+        change = @editor_state.vibe_last_change
         return @editor_state.status = "No change to repeat" unless change
 
-        change.dup.each { |key| handle_vi_key(key) }
+        change.dup.each { |key| handle_vibe_key(key) }
         true
       end
 
-      def vi_begin_change_recording(command)
-        @editor_state.vi_last_change = vi_change_keys(command)
+      def vibe_begin_change_recording(command)
+        @editor_state.vibe_last_change = vibe_change_keys(command)
       end
 
-      def vi_record_insert_change_key(key)
-        return unless @editor_state.vi_last_change
+      def vibe_record_insert_change_key(key)
+        return unless @editor_state.vibe_last_change
         return if ["\x03"].include?(key)
 
-        @editor_state.vi_last_change << key
+        @editor_state.vibe_last_change << key
       end
 
-      def vi_remember_change(command)
-        @editor_state.vi_last_change = vi_change_keys(command) if command
+      def vibe_remember_change(command)
+        @editor_state.vibe_last_change = vibe_change_keys(command) if command
       end
 
-      def vi_build_change_command(operator, motion, count, motion_count)
+      def vibe_build_change_command(operator, motion, count, motion_count)
         command = +""
         command << count.to_s if count > 1 && motion_count.zero?
         command << operator
         command << motion_count.to_s if motion_count.positive?
         command << motion
-        vi_change_keys(command)
+        vibe_change_keys(command)
       end
 
-      def vi_change_keys(command)
+      def vibe_change_keys(command)
         Array(command).flat_map { |key| key.is_a?(String) ? key.each_char.to_a : key }
       end
 
-      def vi_record_undo
+      def vibe_record_undo
         before = @editor_state.buffer.dup
         @editor_state.push_undo
         yield

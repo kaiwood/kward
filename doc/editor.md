@@ -25,7 +25,7 @@ The integrated editor is small but practical:
 - **Syntax highlighting** for Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL when terminal color is enabled. Unknown file types render as plain text.
 - **Auto-indent** (on by default). Pressing `Enter` copies the current line's indentation, detects the file's indentation unit when possible, and applies lightweight syntax-based indentation for recognized file types. Typing obvious closing tokens such as `}`, Ruby/Lua `end`, and shell `fi`/`done`/`esac` re-indents the current line. Backspace in leading indentation removes one detected indentation unit instead of a single character.
 - **Undo and redo** with a per-buffer history of up to 100 entries.
-- **Incremental search** forward and backward, with repeat and word-under-cursor search in vi mode.
+- **Incremental search** forward and backward, with repeat and word-under-cursor search in vibe mode.
 - **Selection and clipboard**. Copy and cut write to the terminal clipboard via OSC 52 when supported, so pasted text is available in other applications.
 - **Two-step protection**. Saving a file that changed on disk asks you to confirm the overwrite. Quitting with unsaved changes asks you to confirm you want to discard them.
 - **Line-number gutter** and a status line that reflects the active mode and any prompts.
@@ -44,7 +44,7 @@ You can also set the mode in `config.json`:
 }
 ```
 
-`mode` can be `modern`, `emacs`, or `vi`. The old `default` value is still accepted as an alias for `modern`.
+`mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`.
 
 To disable auto-indent:
 
@@ -58,11 +58,11 @@ To disable auto-indent:
 
 See [Configuration](configuration.md) for the full editor settings reference.
 
-The three modes are described below in the order Modern, Emacs, then Vi (Vibe).
+The three modes are described below in the order Modern, Emacs, then Vibe.
 
 ## Modern mode
 
-Modern mode is the default keymap. It uses familiar composer-style chord keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` searches, and Shift plus an arrow extends the selection. It is the most conventional choice if you are not already an Emacs or vi user.
+Modern mode is the default keymap. It uses familiar composer-style chord keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` searches, and Shift plus an arrow extends the selection. It is the most conventional choice if you are not already an Emacs or Vibe user.
 
 | Key | Action |
 | --- | --- |
@@ -138,15 +138,13 @@ Emacs mode uses classic Emacs-style non-modal chords. The defining difference is
 | `Backspace` | Delete before cursor |
 | `Delete` / `C-d` | Delete character at cursor |
 
-## Vi (Vibe) mode
+## Vibe mode
 
-Vi mode is the modal keymap. Files open in normal mode, where keys are commands rather than inserted text. You enter insert mode to type, then press `Esc` to return to normal mode. It supports a compact classic-vi subset including counts, operators with motions, visual selection, and the `:` command line.
-
-The internal codename for this mode is Vibe, but it is selected and configured as `vi`.
+Vibe mode is the modal keymap. Files open in normal mode, where keys are commands rather than inserted text. You enter insert mode to type, then press `Esc` to return to normal mode. It supports a compact classic modal-editing subset including counts, operators with motions, visual selection, and the `:` command line.
 
 ### Normal mode
 
-Normal mode is the default when a file is opened in vi mode.
+Normal mode is the default when a file is opened in Vibe mode.
 
 | Key | Action |
 | --- | --- |

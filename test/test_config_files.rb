@@ -50,15 +50,15 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
-  def test_editor_mode_defaults_to_modern_and_accepts_emacs_and_vi
+  def test_editor_mode_defaults_to_modern_and_accepts_emacs_and_vibe
     assert_equal "modern", Kward::ConfigFiles.editor_mode({})
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => {})
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "default" })
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "modern" })
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "NANO" })
     assert_equal "emacs", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "emacs" })
-    assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "VI" })
-    assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vi" })
+    assert_equal "vibe", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "VI" })
+    assert_equal "vibe", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vibe" })
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vim" })
   end
 

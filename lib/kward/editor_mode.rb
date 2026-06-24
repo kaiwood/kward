@@ -2,7 +2,7 @@
 module Kward
   # Normalizes built-in TUI file editor mode names.
   module EditorMode
-    MODES = %w[modern emacs vi].freeze
+    MODES = %w[modern emacs vibe].freeze
     DEFAULT = "modern".freeze
 
     module_function
@@ -10,6 +10,7 @@ module Kward
     def normalize(value)
       text = value.to_s.downcase
       return DEFAULT if text == "default"
+      return "vibe" if text == "vi"
 
       MODES.include?(text) ? text : DEFAULT
     end

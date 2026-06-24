@@ -85,7 +85,7 @@ module Kward
 
       def handle_editor_key(key)
         return if key.nil?
-        return handle_vi_key(key) if @editor_state&.vi?
+        return handle_vibe_key(key) if @editor_state&.vibe?
         return handle_emacs_key(key) if @editor_state&.emacs?
         return handle_modern_key(key) if @editor_state&.modern?
         return if handle_editor_bracketed_paste_key(key)
