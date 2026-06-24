@@ -88,8 +88,17 @@ module Kward
         @editor_mode
       end
 
+      def current_editor_soft_wrap?
+        return @editor_soft_wrap_source.call != false if @editor_soft_wrap_source.respond_to?(:call)
+
+        @editor_soft_wrap != false
+      rescue StandardError
+        @editor_soft_wrap != false
+      end
+
       def close_editor
         disable_editor_mouse_reporting
+        @editor_text_width = nil
         @editor_state = nil
         @prompt_label = "You>"
         self.composer_input = ""
@@ -241,9 +250,9 @@ module Kward
         when "\e[1;2C", "\e[2C"
           editor_extending_selection { @editor_state.move_right }
         when "\e[1;2A", "\e[2A"
-          editor_extending_selection { @editor_state.move_up }
+          editor_extending_selection { editor_move_up }
         when "\e[1;2B", "\e[2B"
-          editor_extending_selection { @editor_state.move_down }
+          editor_extending_selection { editor_move_down }
         else
           false
         end
@@ -266,9 +275,9 @@ module Kward
         when "\x0B"
           @editor_state.kill_line_after_cursor unless editor_search_active?
         when "\x0E"
-          @editor_state.move_down unless editor_search_active?
+          editor_move_down unless editor_search_active?
         when "\x10"
-          @editor_state.move_up unless editor_search_active?
+          editor_move_up unless editor_search_active?
         when "\x15"
           @editor_state.kill_line_before_cursor unless editor_search_active?
         when "\x17"
@@ -321,9 +330,9 @@ module Kward
           when 107
             @editor_state.kill_line_after_cursor unless editor_search_active?
           when 110
-            @editor_state.move_down unless editor_search_active?
+            editor_move_down unless editor_search_active?
           when 112
-            @editor_state.move_up unless editor_search_active?
+            editor_move_up unless editor_search_active?
           when 113
             quit_editor
           when 115
@@ -426,9 +435,9 @@ module Kward
           when :right
             @editor_state.move_right
           when :up
-            @editor_state.move_up
+            editor_move_up
           when :down
-            @editor_state.move_down
+            editor_move_down
           when :home
             @editor_state.move_line_start
           when :end
@@ -541,9 +550,9 @@ module Kward
           when :right
             @editor_state.move_right
           when :up
-            @editor_state.move_up
+            editor_move_up
           when :down
-            @editor_state.move_down
+            editor_move_down
           when :home
             @editor_state.move_line_start
           when :end
@@ -562,6 +571,51 @@ module Kward
         @editor_state.selection_anchor ||= @editor_state.cursor
         yield
         true
+      end
+
+      def editor_move_up
+        return @editor_state.move_up unless current_editor_soft_wrap?
+
+        line, column = @editor_state.cursor_line_and_column
+        text_width = current_editor_text_width
+        row_start = editor_visual_row_start_column(line, column, text_width)
+        if row_start.positive?
+          target_column = row_start - text_width + column - row_start
+          return @editor_state.set_cursor_line_and_column(line, target_column)
+        end
+
+        @editor_state.move_up
+      end
+
+      def editor_move_down
+        return @editor_state.move_down unless current_editor_soft_wrap?
+
+        line, column = @editor_state.cursor_line_and_column
+        text_width = current_editor_text_width
+        row_start = editor_visual_row_start_column(line, column, text_width)
+        next_start = row_start + text_width
+        current_line = @editor_state.lines[line].to_s
+        if next_start < current_line.length
+          target_column = [next_start + column - row_start, current_line.length].min
+          return @editor_state.set_cursor_line_and_column(line, target_column)
+        end
+
+        @editor_state.move_down
+      end
+
+      def current_editor_text_width
+        return @editor_text_width if @editor_text_width
+
+        content_width = [screen_width - 4, 1].max
+        editor_text_width(content_width)
+      end
+
+      def sync_editor_wrap_state(text_width = current_editor_text_width)
+        return unless @editor_state
+
+        @editor_text_width = text_width
+        @editor_state.viewport_column = 0 if current_editor_soft_wrap?
+        text_width
       end
 
       def editor_selection_active?
@@ -683,13 +737,30 @@ module Kward
 
       def scroll_editor_down(rows)
         visible_count = editor_visible_line_count
-        last_top_row = [@editor_state.lines.length - visible_count, 0].max
+        last_top_row = if current_editor_soft_wrap?
+          [editor_visual_rows(current_editor_text_width).length - visible_count, 0].max
+        else
+          [@editor_state.lines.length - visible_count, 0].max
+        end
         @editor_state.viewport_row = [@editor_state.viewport_row + rows.to_i, last_top_row].min
         keep_editor_cursor_in_view(visible_count)
       end
 
       def keep_editor_cursor_in_view(visible_count)
         line, column = @editor_state.cursor_line_and_column
+        if current_editor_soft_wrap?
+          text_width = current_editor_text_width
+          top_row = @editor_state.viewport_row
+          bottom_row = top_row + visible_count - 1
+          while editor_visual_row_for(*@editor_state.cursor_line_and_column, text_width) > bottom_row && @editor_state.cursor.positive?
+            editor_move_up
+          end
+          while editor_visual_row_for(*@editor_state.cursor_line_and_column, text_width) < top_row && @editor_state.cursor < @editor_state.buffer.length
+            editor_move_down
+          end
+          return true
+        end
+
         top_line = @editor_state.viewport_row
         bottom_line = top_line + visible_count - 1
 

@@ -229,6 +229,9 @@ module Kward
         when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
           set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
           runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
+        when /\Aenable soft-wrap/, /\Adisable soft-wrap/
+          set_editor_soft_wrap_enabled(!editor_soft_wrap_enabled?)
+          runtime_output("Editor soft-wrap #{editor_soft_wrap_enabled? ? "enabled" : "disabled"}.")
         when /\Aenable session auto-resume/, /\Adisable session auto-resume/
           set_session_auto_resume_enabled(!session_auto_resume_enabled?)
           runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
@@ -244,6 +247,7 @@ module Kward
           "Tab keybindings (#{composer_tab_keybindings})",
           "Editor mode (#{editor_mode})",
           "#{editor_auto_close_pairs_enabled? ? "Disable" : "Enable"} auto-close pairs (currently #{on_off(editor_auto_close_pairs_enabled?)})",
+          "#{editor_soft_wrap_enabled? ? "Disable" : "Enable"} soft-wrap (currently #{on_off(editor_soft_wrap_enabled?)})",
           "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
           "Back"
         ]
@@ -295,6 +299,14 @@ module Kward
 
       def set_editor_auto_close_pairs_enabled(enabled)
         update_nested_config("editor", "auto_close_pairs" => enabled)
+      end
+
+      def editor_soft_wrap_enabled?
+        ConfigFiles.editor_soft_wrap?(safely_read_config.to_h)
+      end
+
+      def set_editor_soft_wrap_enabled(enabled)
+        update_nested_config("editor", "soft_wrap" => enabled)
       end
 
       def session_auto_resume_enabled?

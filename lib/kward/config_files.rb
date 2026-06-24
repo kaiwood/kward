@@ -79,7 +79,8 @@ module Kward
         "editor" => {
           "mode" => "modern",
           "auto_indent" => true,
-          "auto_close_pairs" => true
+          "auto_close_pairs" => true,
+          "soft_wrap" => true
         },
         "sessions" => {
           "auto_resume" => false
@@ -223,6 +224,12 @@ module Kward
     def editor_auto_close_pairs?(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       editor["auto_close_pairs"] != false
+    end
+
+    # Returns whether the built-in TUI editor should soft-wrap long lines.
+    def editor_soft_wrap?(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      editor["soft_wrap"] != false
     end
 
     # Returns whether file tools must stay inside the active workspace root.

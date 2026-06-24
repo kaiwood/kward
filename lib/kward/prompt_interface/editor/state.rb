@@ -9,7 +9,7 @@ module Kward
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer
-      attr_accessor :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :readonly, :diff_view
+      attr_accessor :cursor, :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -22,6 +22,7 @@ module Kward
         @buffer = @original_content.dup
         @cursor = 0
         @viewport_row = 0
+        @viewport_column = 0
         @status = nil
         @overwrite_confirmed = false
         @quit_confirmed = false
@@ -55,6 +56,7 @@ module Kward
         @search_direction = other.search_direction
         @kill_buffer = other.kill_buffer.dup
         @quit_confirmed = other.quit_confirmed
+        @viewport_column = other.viewport_column
         @selection_anchor = other.selection_anchor
         @editor_mode = other.editor_mode.dup
         @emacs_pending = other.emacs_pending&.dup

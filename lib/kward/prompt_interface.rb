@@ -114,7 +114,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -182,6 +182,8 @@ module Kward
       @editor_auto_indent_source = editor_auto_indent_source
       @editor_auto_close_pairs = editor_auto_close_pairs != false
       @editor_auto_close_pairs_source = editor_auto_close_pairs_source
+      @editor_soft_wrap = editor_soft_wrap != false
+      @editor_soft_wrap_source = editor_soft_wrap_source
     end
 
     def start(render: true)

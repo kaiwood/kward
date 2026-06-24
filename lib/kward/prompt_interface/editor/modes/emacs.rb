@@ -62,9 +62,9 @@ module Kward
             @editor_state.kill_line_after_cursor unless editor_search_active?
           end
         when "\x0E"
-          @editor_state.move_down unless editor_search_active?
+          editor_move_down unless editor_search_active?
         when "\x10"
-          @editor_state.move_up unless editor_search_active?
+          editor_move_up unless editor_search_active?
         when "\x12"
           editor_search_active? ? editor_search_append(key) : editor_search_begin(:backward)
         when "\x13"
@@ -141,9 +141,9 @@ module Kward
           when 107
             @editor_state.kill_line_after_cursor unless editor_search_active?
           when 110
-            @editor_state.move_down unless editor_search_active?
+            editor_move_down unless editor_search_active?
           when 112
-            @editor_state.move_up unless editor_search_active?
+            editor_move_up unless editor_search_active?
           when 114
             editor_search_active? ? editor_search_append(key) : editor_search_begin(:backward)
           when 115

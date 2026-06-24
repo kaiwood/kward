@@ -96,9 +96,9 @@ module Kward
         when :right
           @editor_state.move_right
         when :up
-          @editor_state.move_up
+          editor_move_up
         when :down
-          @editor_state.move_down
+          editor_move_down
         else
           false
         end
@@ -215,9 +215,9 @@ module Kward
         when :right
           @editor_state.move_right
         when :up
-          @editor_state.move_up
+          editor_move_up
         when :down
-          @editor_state.move_down
+          editor_move_down
         when :backspace
           @editor_state.move_left
         when :return, :enter
@@ -277,9 +277,9 @@ module Kward
         when "h", "\b", "\x7F"
           count.times { @editor_state.move_left }
         when "j"
-          count.times { @editor_state.move_down }
+          count.times { editor_move_down }
         when "k"
-          count.times { @editor_state.move_up }
+          count.times { editor_move_up }
         when "l", " "
           count.times { @editor_state.move_right }
         when "0"
@@ -443,9 +443,9 @@ module Kward
         when :right
           @editor_state.move_right
         when :up
-          @editor_state.move_up
+          editor_move_up
         when :down
-          @editor_state.move_down
+          editor_move_down
         else
           false
         end
@@ -745,9 +745,9 @@ module Kward
         when "h", "\b", "\x7F"
           count.times { @editor_state.move_left }
         when "j"
-          count.times { @editor_state.move_down }
+          count.times { editor_move_down }
         when "k"
-          count.times { @editor_state.move_up }
+          count.times { editor_move_up }
         when "l", " "
           count.times { @editor_state.move_right }
         else

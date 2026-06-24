@@ -1178,6 +1178,78 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_soft_wrap_wraps_long_lines_with_blank_continuation_gutter
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijkl")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        rows, = prompt.send(:composer_layout, 20, 8)
+        plain_rows = rows.map { |row| Kward::ANSI.strip(row) }
+
+        assert_includes plain_rows.join("\n"), "   1 │ abcdefghi"
+        assert_includes plain_rows.join("\n"), "       jkl"
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_horizontal_scrolls_when_soft_wrap_is_disabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijkl")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_soft_wrap: false)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        rows, _cursor_row, cursor_col = prompt.send(:composer_layout, 20, 8)
+        plain_rows = rows.map { |row| Kward::ANSI.strip(row) }
+
+        assert_includes plain_rows.join("\n"), "   1 │ efghijkl"
+        assert_equal 17, cursor_col
+        assert_equal 4, editor.viewport_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_soft_wrap_moves_down_by_visual_row
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijkl\nnext")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:composer_layout, 20, 8)
+
+        prompt.send(:handle_editor_named_key, :down)
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        assert_equal [0, 9], editor.cursor_line_and_column
+
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_soft_wrap_source_applies_immediately
+    enabled = true
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijkl")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_soft_wrap_source: -> { enabled })
+        assert prompt.send(:open_editor, "notes.txt")
+        rows, = prompt.send(:composer_layout, 20, 8)
+        assert_includes rows.map { |row| Kward::ANSI.strip(row) }.join("\n"), "       jkl"
+
+        enabled = false
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+        rows, = prompt.send(:composer_layout, 20, 8)
+
+        assert_includes rows.map { |row| Kward::ANSI.strip(row) }.join("\n"), "   1 │ efghijkl"
+      end
+    end
+  end
+
   def test_prompt_interface_editor_save_after_ctrl_q_warning_allows_clean_close
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")

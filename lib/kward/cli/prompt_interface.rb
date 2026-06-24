@@ -30,7 +30,9 @@ module Kward
           editor_auto_indent: ConfigFiles.editor_auto_indent?,
           editor_auto_indent_source: -> { ConfigFiles.editor_auto_indent? },
           editor_auto_close_pairs: ConfigFiles.editor_auto_close_pairs?,
-          editor_auto_close_pairs_source: -> { ConfigFiles.editor_auto_close_pairs? }
+          editor_auto_close_pairs_source: -> { ConfigFiles.editor_auto_close_pairs? },
+          editor_soft_wrap: ConfigFiles.editor_soft_wrap?,
+          editor_soft_wrap_source: -> { ConfigFiles.editor_soft_wrap? }
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
           @prompt.start(render: false)
