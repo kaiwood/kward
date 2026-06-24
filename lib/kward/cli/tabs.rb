@@ -291,6 +291,7 @@ module Kward
         @footer_tool_registry = tab.agent.tool_registry if tab.agent.respond_to?(:tool_registry)
         update_assistant_prompt(tab.agent.conversation)
         tab.unread = false
+        restore_tab_composer_snapshot(tab.snapshot)
         update_prompt_tabs
         render_tab(tab) if render
         start_tab_live_view(tab) if tab.running?
@@ -313,7 +314,13 @@ module Kward
           end
           render_tab_error(tab) if tab.status == "failed"
         end
-        @prompt.restore_composer_snapshot(tab.snapshot) if tab.snapshot && @prompt.respond_to?(:restore_composer_snapshot)
+        restore_tab_composer_snapshot(tab.snapshot)
+      end
+
+      def restore_tab_composer_snapshot(snapshot)
+        return unless @prompt.respond_to?(:restore_composer_snapshot)
+
+        @prompt.restore_composer_snapshot(snapshot || {})
       end
 
       def empty_tab_conversation?(conversation)

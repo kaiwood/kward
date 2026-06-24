@@ -45,6 +45,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed opening a new TUI tab from the built-in editor so the editor state stays with the original tab instead of appearing in the new tab.
 - Fixed `/git` commit-message editing so Shift+Enter inserts a newline instead of submitting the message.
 - Fixed sluggish TUI composer typing by throttling expensive composer status refreshes during key-repeat bursts.
 - Fixed `/git` commit-message editing so it supports the normal composer shortcuts and Tab returns to the Git overlay while preserving the draft.

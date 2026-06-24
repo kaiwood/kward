@@ -254,6 +254,36 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_new_tab_clears_active_editor_from_previous_tab
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        path = File.join(workspace, "notes.txt")
+        File.write(path, "hello")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+        prompt = TabPrompt.new
+        editor_state = nil
+        prompt.define_singleton_method(:tab_view_snapshot) do
+          { composer: :composer, prompt_label: "Edit>", editor_state: editor_state&.dup, transcript: output.dup }
+        end
+        prompt.define_singleton_method(:restore_composer_snapshot) do |snapshot|
+          restores << snapshot
+          editor_state = snapshot[:editor_state]&.dup
+        end
+        prompt.define_singleton_method(:editor_state) { editor_state }
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        editor_state = Kward::PromptInterface::EditorState.new(path: path, content: "hello")
+
+        cli.send(:handle_tab_action, { tab_action: :new }, store)
+
+        assert_nil prompt.editor_state
+        assert prompt.restores.last
+        assert_nil prompt.restores.last[:editor_state]
+        assert cli.instance_variable_get(:@tabs).first.snapshot[:editor_state]
+      end
+    end
+  end
+
   def test_new_empty_tab_renders_startup_screen_when_revisited
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
