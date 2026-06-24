@@ -49,12 +49,12 @@ module Kward
       def editor_render_line(line, line_index, text_width)
         visible = visible_truncate(line, text_width)
         range = @editor_state.selection_range
-        return editor_highlight_line(visible) unless range
+        return editor_highlight_line(visible, line_index) unless range
 
         line_start = @editor_state.line_start_offset(line_index)
         selection_start = [range[0] - line_start, 0].max
         selection_end = [range[1] - line_start, visible.length].min
-        return editor_highlight_line(visible) unless selection_start < selection_end
+        return editor_highlight_line(visible, line_index) unless selection_start < selection_end
 
         visible[0...selection_start].to_s + colored(visible[selection_start...selection_end].to_s, 7) + visible[selection_end..].to_s
       end

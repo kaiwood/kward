@@ -37,6 +37,48 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal "def call = \"ok\"", strip_ansi(rendered)
   end
 
+  def test_ruby_hash_comment_colors_full_comment_without_inner_highlighting
+    prompt = syntax_prompt(path: "example.rb")
+    rendered = prompt.send(:editor_render_line, "# Namespace for the Kward CLI agent runtime.", 0, 80)
+
+    assert_equal "# Namespace for the Kward CLI agent runtime.", strip_ansi(rendered)
+    assert_equal "\e[90m# Namespace for the Kward CLI agent runtime.\e[0m", rendered
+  end
+
+  def test_ruby_inline_comment_preserves_code_highlighting_before_comment
+    prompt = syntax_prompt(path: "example.rb")
+    rendered = prompt.send(:editor_render_line, "class Agent # return Kward", 0, 80)
+
+    assert_includes rendered, "\e[34mclass\e[0m"
+    assert_includes rendered, "\e[33mAgent\e[0m"
+    assert_includes rendered, "\e[90m# return Kward\e[0m"
+    refute_includes rendered, "\e[34mreturn\e[0m"
+  end
+
+  def test_ruby_hash_inside_string_is_not_treated_as_comment
+    prompt = syntax_prompt(path: "example.rb")
+    rendered = prompt.send(:editor_render_line, "value = \"not # comment\"", 0, 80)
+
+    assert_equal "value = \"not # comment\"", strip_ansi(rendered)
+    assert_includes rendered, "\e[32m\"not # comment\"\e[0m"
+    refute_includes rendered, "\e[90m# comment\e[0m"
+  end
+
+  def test_ruby_block_comment_colors_full_block_without_inner_highlighting
+    content = "=begin\nclass Agent\n=end\ndef call"
+    prompt = syntax_prompt(path: "example.rb", content: content)
+
+    start_line = prompt.send(:editor_render_line, "=begin", 0, 80)
+    inner_line = prompt.send(:editor_render_line, "class Agent", 1, 80)
+    end_line = prompt.send(:editor_render_line, "=end", 2, 80)
+    code_line = prompt.send(:editor_render_line, "def call", 3, 80)
+
+    assert_equal "\e[90m=begin\e[0m", start_line
+    assert_equal "\e[90mclass Agent\e[0m", inner_line
+    assert_equal "\e[90m=end\e[0m", end_line
+    assert_includes code_line, "\e[34mdef\e[0m"
+  end
+
   def test_markdown_highlighting_colorizes_headings_and_inline_code
     prompt = syntax_prompt(path: "README.md")
     heading = prompt.send(:editor_render_line, "# Title", 0, 80)

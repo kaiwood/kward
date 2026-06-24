@@ -9,7 +9,7 @@ module Kward
         false for if in module next nil not or redo rescue retry return self super then true
         undef unless until when while yield
       ].freeze
-      RUBY_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|#. *|#.*|:[a-zA-Z_]\w*[!?=]?|\b\d+(?:\.\d+)?\b|\b[A-Z]\w*\b|\b(?:#{Regexp.union(RUBY_KEYWORDS)})\b)/.freeze
+      RUBY_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|:[a-zA-Z_]\w*[!?=]?|\b\d+(?:\.\d+)?\b|\b[A-Z]\w*\b|\b(?:#{Regexp.union(RUBY_KEYWORDS)})\b)/.freeze
       MARKDOWN_PATTERN = /(`[^`\n]+`|!?\[[^\]\n]+\]\([^\)\n]+\)|(?:\*\*|__)[^\n]+?(?:\*\*|__)|(?:\*|_)[^\n]+?(?:\*|_))/.freeze
       RUBY_FILENAMES = %w[Gemfile Rakefile Guardfile Capfile Thorfile Vagrantfile].freeze
       RUBY_EXTENSIONS = %w[.rb .rake .gemspec].freeze
@@ -17,12 +17,12 @@ module Kward
 
       private
 
-      def editor_highlight_line(line)
+      def editor_highlight_line(line, line_index = nil)
         return line.to_s unless @color_enabled
 
         case editor_syntax_language
         when :ruby
-          editor_highlight_ruby(line)
+          editor_highlight_ruby(line, line_index)
         when :markdown
           editor_highlight_markdown(line)
         else
@@ -50,10 +50,56 @@ module Kward
         nil
       end
 
-      def editor_highlight_ruby(line)
+      def editor_highlight_ruby(line, line_index = nil)
+        text = line.to_s
+        return colored(text, :gray) if editor_ruby_block_comment_line?(line_index)
+
+        comment_index = editor_ruby_comment_index(text)
+        return editor_highlight_ruby_code(text) unless comment_index
+
+        editor_highlight_ruby_code(text[0...comment_index].to_s) + colored(text[comment_index..].to_s, :gray)
+      end
+
+      def editor_highlight_ruby_code(line)
         line.to_s.gsub(RUBY_PATTERN) do |token|
           editor_highlight_ruby_token(token)
         end
+      end
+
+      def editor_ruby_block_comment_line?(line_index)
+        return false unless line_index && @editor_state
+
+        in_comment = false
+        @editor_state.lines.first(line_index.to_i + 1).each_with_index do |line, index|
+          starts_block = line.match?(/\A=begin\b/)
+          ends_block = line.match?(/\A=end\b/)
+          return true if index == line_index && (in_comment || starts_block || ends_block)
+
+          in_comment = true if starts_block
+          in_comment = false if ends_block
+        end
+        false
+      end
+
+      def editor_ruby_comment_index(line)
+        quote = nil
+        escaped = false
+        line.to_s.each_char.with_index do |char, index|
+          if quote
+            if escaped
+              escaped = false
+            elsif char == "\\"
+              escaped = true
+            elsif char == quote
+              quote = nil
+            end
+          elsif char == "\"" || char == "'"
+            quote = char
+          elsif char == "#"
+            return index
+          end
+        end
+        nil
       end
 
       def editor_highlight_ruby_token(token)
