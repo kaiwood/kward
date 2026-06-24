@@ -8,7 +8,8 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :readonly, :diff_view
+      attr_reader :buffer
+      attr_accessor :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -68,6 +69,12 @@ module Kward
         @vibe_last_change = other.vibe_last_change&.dup
         @readonly = other.readonly
         @diff_view = other.diff_view
+        invalidate_lines_cache
+      end
+
+      def buffer=(value)
+        @buffer = value.to_s
+        invalidate_lines_cache
       end
 
       def readonly?
@@ -95,8 +102,10 @@ module Kward
       end
 
       def lines
-        values = @buffer.split("\n", -1)
-        values.empty? ? [""] : values
+        @lines_cache ||= begin
+          values = @buffer.split("\n", -1)
+          values.empty? ? [""] : values
+        end
       end
 
       def cursor_line_and_column
@@ -490,6 +499,10 @@ module Kward
 
       private
 
+      def invalidate_lines_cache
+        @lines_cache = nil
+      end
+
       def refresh_file_marker
         stat = File.stat(@path)
         @original_mtime = stat.mtime
@@ -579,6 +592,7 @@ module Kward
       end
 
       def changed!
+        invalidate_lines_cache
         @overwrite_confirmed = false
         @quit_confirmed = false
         @selection_anchor = nil
