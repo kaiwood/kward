@@ -77,7 +77,8 @@ module Kward
           "tab_keybindings" => "auto"
         },
         "editor" => {
-          "mode" => "modern"
+          "mode" => "modern",
+          "auto_indent" => true
         },
         "sessions" => {
           "auto_resume" => false
@@ -209,6 +210,12 @@ module Kward
     def editor_mode(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       EditorMode.normalize(editor["mode"])
+    end
+
+    # Returns whether the built-in TUI editor should auto-indent new lines.
+    def editor_auto_indent?(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      editor["auto_indent"] != false
     end
 
     # Returns whether file tools must stay inside the active workspace root.

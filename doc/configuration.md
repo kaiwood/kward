@@ -178,6 +178,16 @@ The built-in TUI file editor supports three keybinding modes. Modern is the defa
 
 The editor automatically highlights Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
 
+Auto-indent is enabled by default. Pressing Enter copies the current line indentation, detects the file's indentation unit when possible, and applies lightweight syntax-based indentation for recognized file types. When auto-indent is enabled, typing obvious closing tokens such as `}`, Ruby/Lua `end`, and shell `fi`/`done`/`esac` re-indents the current line, and Backspace in leading indentation removes one detected indentation unit. To disable it:
+
+```json
+{
+  "editor": {
+    "auto_indent": false
+  }
+}
+```
+
 Modern mode uses composer-style keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` searches, Shift+Arrow selects text, `Ctrl+C` copies, `Ctrl+X` cuts, `Ctrl+V` pastes the editor kill buffer, `Ctrl+A`/`Ctrl+E` move to the start/end of the line, `Ctrl+B` moves left, `Ctrl+K` kills to end of line, `Ctrl+U` kills to start of line, and `Alt+B`/`Alt+F` move by word.
 
 Emacs mode uses Emacs-style non-modal keys: `Ctrl+X Ctrl+S` saves, `Ctrl+X Ctrl+C` quits, `Ctrl+S` searches forward, `Ctrl+R` searches backward, `Ctrl+Space` sets the mark, `Ctrl+W` kills the region or previous word, `Alt+W` copies the region, `Ctrl+K` kills to end of line, `Ctrl+Y` yanks, and `Alt+Y` cycles the per-buffer kill ring after a yank.

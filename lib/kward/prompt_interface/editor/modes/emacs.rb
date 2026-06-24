@@ -34,13 +34,13 @@ module Kward
         when "\n", "\r"
           return editor_search_confirm if editor_search_active?
           clear_editor_selection_before_edit
-          @editor_state.insert("\n")
+          editor_insert_newline
         when "\t"
           clear_editor_selection_before_edit
           @editor_state.insert("  ") unless editor_search_active?
         when "\b", "\x7F"
           clear_editor_selection_before_edit unless editor_search_active?
-          editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
+          editor_search_active? ? editor_search_delete_character : editor_delete_before_cursor
         when "\x00"
           @editor_state.begin_selection unless editor_search_active?
         when "\x01"
@@ -109,7 +109,7 @@ module Kward
             editor_search_append(key) if printable_key?(key)
           elsif printable_key?(key)
             clear_editor_selection_before_edit
-            @editor_state.insert(key)
+            editor_insert_printable(key)
           end
         end
       end

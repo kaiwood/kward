@@ -114,12 +114,12 @@ module Kward
         when "\n", "\r"
           return editor_search_confirm if editor_search_active?
           clear_editor_selection_before_edit
-          @editor_state.insert("\n")
+          editor_insert_newline
         when "\t"
           clear_editor_selection_before_edit
           @editor_state.insert("  ") unless editor_search_active?
         when "\b", "\x7F"
-          editor_search_active? ? editor_search_delete_character : delete_editor_selection || @editor_state.delete_before_cursor
+          editor_search_active? ? editor_search_delete_character : delete_editor_selection || editor_delete_before_cursor
         when "\x03"
           return editor_search_cancel if editor_search_active?
         when "\e"
@@ -141,7 +141,7 @@ module Kward
             editor_search_append(key) if printable_key?(key)
           elsif printable_key?(key)
             clear_editor_selection_before_edit
-            @editor_state.insert(key)
+            editor_insert_printable(key)
           end
         end
       end
@@ -160,11 +160,11 @@ module Kward
         case code
         when 13
           clear_editor_selection_before_edit unless editor_search_active?
-          editor_search_active? ? editor_search_confirm : @editor_state.insert("\n")
+          editor_search_active? ? editor_search_confirm : editor_insert_newline
         when 27
           editor_search_active? ? editor_search_cancel : @editor_state.clear_selection
         when 8, 127
-          editor_search_active? ? editor_search_delete_character : delete_editor_selection || @editor_state.delete_before_cursor
+          editor_search_active? ? editor_search_delete_character : delete_editor_selection || editor_delete_before_cursor
           nil
         when 4
           delete_editor_selection || @editor_state.delete_at_cursor unless editor_search_active?
@@ -175,7 +175,7 @@ module Kward
 
           char = code.chr(Encoding::UTF_8)
           clear_editor_selection_before_edit unless editor_search_active?
-          editor_search_active? ? editor_search_append(char) : @editor_state.insert(char)
+          editor_search_active? ? editor_search_append(char) : editor_insert_printable(char)
         end
       end
 
@@ -363,9 +363,9 @@ module Kward
         else
           case key_name
           when :return, :enter
-            @editor_state.insert("\n")
+            editor_insert_newline
           when :backspace
-            delete_editor_selection || @editor_state.delete_before_cursor
+            delete_editor_selection || editor_delete_before_cursor
           when :delete
             delete_editor_selection || @editor_state.delete_at_cursor
           when :left

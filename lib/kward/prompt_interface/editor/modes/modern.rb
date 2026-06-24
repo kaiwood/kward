@@ -34,7 +34,7 @@ module Kward
           return editor_search_confirm if editor_search_active?
           modern_record_undo do
             clear_editor_selection_before_edit
-            @editor_state.insert("\n")
+            editor_insert_newline
           end
         when "\t"
           modern_record_undo do
@@ -42,7 +42,7 @@ module Kward
             @editor_state.insert("  ") unless editor_search_active?
           end
         when "\b", "\x7F"
-          editor_search_active? ? editor_search_delete_character : modern_record_undo { delete_editor_selection || @editor_state.delete_before_cursor }
+          editor_search_active? ? editor_search_delete_character : modern_record_undo { delete_editor_selection || editor_delete_before_cursor }
         when "\x03"
           return editor_search_cancel if editor_search_active?
         when "\e"
@@ -64,7 +64,7 @@ module Kward
           elsif printable_key?(key)
             modern_record_undo do
               clear_editor_selection_before_edit
-              @editor_state.insert(key)
+              editor_insert_printable(key)
             end
           end
         end

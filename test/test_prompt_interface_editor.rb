@@ -79,6 +79,175 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_auto_indent_copies_plain_text_indent
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "  alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "  alpha\n  ", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_auto_indent_uses_ruby_syntax_and_detected_width
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n    attr_reader :name\n  def call")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "class Example\n    attr_reader :name\n  def call\n    ", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_auto_indent_uses_tabs_when_detected
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.js"), "function test() {\n\treturn true;\nif (ready) {")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.js")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "function test() {\n\treturn true;\nif (ready) {\n\t", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_auto_indent_can_be_disabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "  alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_auto_indent: false)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "  alpha\n", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_reindents_javascript_closing_brace_before_insert
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.js"), "function test() {\n  if (ready) {\n    ")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.js")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "}")
+
+        assert_equal "function test() {\n  if (ready) {\n  }", editor.buffer
+        assert_equal [2, 3], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_reindents_ruby_end_after_word_completion
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n  def call\n    en")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "d")
+
+        assert_equal "class Example\n  def call\n  end", editor.buffer
+        assert_equal [2, 5], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_reindents_lua_end_and_shell_done
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "script.lua"), "function call()\n  en")
+      File.write(File.join(dir, "script.sh"), "while true\ndo\n  don")
+      Dir.chdir(dir) do
+        lua_prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert lua_prompt.send(:open_editor, "script.lua")
+        lua_editor = lua_prompt.instance_variable_get(:@editor_state)
+        lua_editor.cursor = lua_editor.buffer.length
+        lua_prompt.send(:handle_editor_key, "d")
+        assert_equal "function call()\nend", lua_editor.buffer
+
+        shell_prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert shell_prompt.send(:open_editor, "script.sh")
+        shell_editor = shell_prompt.instance_variable_get(:@editor_state)
+        shell_editor.cursor = shell_editor.buffer.length
+        shell_prompt.send(:handle_editor_key, "e")
+        assert_equal "while true\ndo\ndone", shell_editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_smart_backspace_deletes_detected_indent_unit
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n  def call\n    attr_reader :name\n  ")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\b")
+
+        assert_equal "class Example\n  def call\n    attr_reader :name\n", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_smart_backspace_is_disabled_with_auto_indent
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n  def call\n    attr_reader :name\n  ")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_auto_indent: false)
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\b")
+
+        assert_equal "class Example\n  def call\n    attr_reader :name\n ", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_reindent_and_closer_insert_undo_together
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.js"), "function test() {\n  if (ready) {\n    ")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.js")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "}")
+        prompt.send(:handle_editor_key, "\x1A")
+
+        assert_equal "function test() {\n  if (ready) {\n    ", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_modern_uses_shift_selection_and_clipboard_shortcuts
     output = StringIO.new
     Dir.mktmpdir do |dir|

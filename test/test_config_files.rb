@@ -20,6 +20,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal false, config.dig("memory", "auto_summary")
       assert_equal true, config.dig("composer", "busy_help")
       assert_equal "modern", config.dig("editor", "mode")
+      assert_equal true, config.dig("editor", "auto_indent")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
@@ -59,6 +60,13 @@ class TestConfigFiles < KwardTestCase
     assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "VI" })
     assert_equal "vi", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vi" })
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => { "mode" => "vim" })
+  end
+
+  def test_editor_auto_indent_defaults_to_true_and_only_false_disables_it
+    assert_equal true, Kward::ConfigFiles.editor_auto_indent?({})
+    assert_equal true, Kward::ConfigFiles.editor_auto_indent?("editor" => {})
+    assert_equal true, Kward::ConfigFiles.editor_auto_indent?("editor" => { "auto_indent" => true })
+    assert_equal false, Kward::ConfigFiles.editor_auto_indent?("editor" => { "auto_indent" => false })
   end
 
   def test_workspace_guardrails_enabled_defaults_to_true_and_only_false_disables_it

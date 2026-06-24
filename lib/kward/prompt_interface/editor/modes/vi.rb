@@ -63,15 +63,15 @@ module Kward
         when "\e", "\x03", :escape
           vi_return_to_normal
         when "\b", "\x7F"
-          vi_record_undo { @editor_state.delete_before_cursor }
+          vi_record_undo { editor_delete_before_cursor }
         when "\n", "\r"
-          vi_record_undo { @editor_state.insert("\n") }
+          vi_record_undo { editor_insert_newline }
         else
           key_name = key_name_for(key)
           named_result = handle_vi_insert_named_key(key_name) if key_name
           return named_result unless named_result == false || named_result.nil?
 
-          vi_record_undo { @editor_state.insert(key) } if printable_key?(key)
+          vi_record_undo { editor_insert_printable(key) } if printable_key?(key)
         end
       end
 
@@ -80,9 +80,9 @@ module Kward
         when :escape
           vi_return_to_normal
         when :return, :enter
-          vi_record_undo { @editor_state.insert("\n") }
+          vi_record_undo { editor_insert_newline }
         when :backspace
-          vi_record_undo { @editor_state.delete_before_cursor }
+          vi_record_undo { editor_delete_before_cursor }
         when :delete
           vi_record_undo { @editor_state.delete_at_cursor }
         when :left
@@ -106,9 +106,9 @@ module Kward
         when "\e", "\x03", :escape
           vi_return_to_normal
         when "\b", "\x7F"
-          vi_record_undo { @editor_state.delete_before_cursor }
+          vi_record_undo { editor_delete_before_cursor }
         when "\n", "\r"
-          vi_record_undo { @editor_state.insert("\n") }
+          vi_record_undo { editor_insert_newline }
         else
           key_name = key_name_for(key)
           named_result = handle_vi_insert_named_key(key_name) if key_name
@@ -120,7 +120,7 @@ module Kward
 
       def vi_replace_character(key)
         @editor_state.delete_at_cursor
-        @editor_state.insert(key)
+        editor_insert_printable(key)
       end
 
       def handle_vi_command_key(key)
