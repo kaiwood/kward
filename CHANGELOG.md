@@ -17,6 +17,7 @@ All notable changes to Kward will be documented in this file.
 - Added `U`, Ctrl+R redo, and `.` repeat-last-change support to the TUI vi editor mode.
 - Added `?pattern` backward search support to the TUI vi editor mode.
 - Added vi search repeat keys `n` and `N`, plus word-under-cursor search keys `*` and `#`, to the TUI vi editor mode.
+- Added a "Feature Guide: Integrated Editor" docs page covering the `$` file-narrowing prefix, editor features, and the modern, emacs, and vi (vibe) keybinding modes with full keybinding tables.
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
 - Added modern, emacs, and vi editor modes for the built-in TUI file editor, with modern as the default, emacs kill-ring support, and vi retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
