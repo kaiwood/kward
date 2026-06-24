@@ -22,6 +22,14 @@ module Kward
         plugin_registry.command_for(command)
       end
 
+      def interactive_commands
+        plugin_registry.interactive_commands
+      end
+
+      def interactive_command_for(command)
+        plugin_registry.interactive_command_for(command)
+      end
+
       def reload_plugins(conversation)
         @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
         conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
@@ -33,6 +41,33 @@ module Kward
         builtin_slash_command_names + prompt_templates.map(&:command)
       end
 
+      def run_interactive_command(name, argument, agent)
+        command = interactive_command_for(name)
+        return [false, nil] unless command
+        return [false, nil] unless prompt_interface? && @prompt.respond_to?(:start_interactive)
+
+        context = plugin_context(agent.conversation, argument)
+        controller = @prompt.start_interactive(title: "/#{name}", rows: command.rows, fps: command.fps)
+        command.handler.call(controller, context)
+        run_interactive_loop
+        [true, nil]
+      rescue StandardError => e
+        @prompt.finish_interactive if @prompt.respond_to?(:finish_interactive)
+        runtime_output("Interactive command /#{name} error: #{e.message}")
+        [true, nil]
+      end
+
+      def run_interactive_loop
+        loop do
+          result = @prompt.poll_input
+          if result == :interactive_exited || @prompt.interactive_exited?
+            @prompt.finish_interactive
+            break
+          end
+          sleep 0.01
+        end
+      end
+
       def slash_command_entries
         prompt_entries = prompt_templates.map do |template|
           {
@@ -42,7 +77,8 @@ module Kward
           }
         end
         plugin_entries = plugin_commands.map(&:entry)
-        builtin_slash_commands + prompt_entries + plugin_entries
+        interactive_entries = interactive_commands.map(&:entry)
+        builtin_slash_commands + prompt_entries + plugin_entries + interactive_entries
       end
 
       def prompt_template_for(command)

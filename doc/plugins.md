@@ -109,6 +109,69 @@ end
 
 Only one footer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning.
 
+## Add an interactive command
+
+Interactive commands take over the composer region with a Kward-driven render and
+input loop. The plugin receives a controller object with a canvas API for
+drawing colored cells and reading keys. This is useful for games, dashboards,
+viewers, and similar full-region interactive experiences.
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.interactive_command "demo", rows: 10, fps: 30, description: "Canvas demo" do |ui, ctx|
+    x = 0
+    ui.on_tick do |ui|
+      ui.clear_frame
+      ui.put(0, x, "X", :red)
+      x = (x + 1) % ui.width
+      key = ui.poll_key
+      return :exit if key == :ctrl_c || key == "q"
+    end
+  end
+end
+```
+
+Run it with `/demo` from the interactive TUI. The canvas renders inside the
+composer area for the specified number of rows. The transcript above stays
+intact.
+
+### Controller API
+
+The `ui` controller object passed to the handler block exposes:
+
+| Method | Description |
+| --- | --- |
+| `put(row, col, char, *colors)` | Place a character at a zero-based position with optional ANSI color styles |
+| `clear_frame` | Reset all canvas cells to blank |
+| `render` | Mark the canvas as ready for Kward to draw |
+| `poll_key` | Return the next pending key (non-blocking, nil if none) |
+| `exit` | Request that the interactive loop exit |
+| `on_tick { \|ui\| }` | Register a tick callback invoked each frame at the configured fps |
+| `width` | Canvas width in terminal columns |
+| `height` | Canvas height in terminal rows |
+| `fps` | Target frame rate |
+
+Keys are returned as symbols (`:left`, `:right`, `:up`, `:down`, `:return`) or
+raw strings for keys without a named mapping. Ctrl+C always exits the loop
+immediately.
+
+The tick callback runs at the configured frame rate (1–120 fps, default 30).
+Returning `:exit` from the tick callback ends the loop, same as calling
+`ui.exit`.
+
+### Lifecycle
+
+- The composer state is saved on entry and fully restored on exit (input text,
+  cursor, and transcript viewport).
+- Interactive mode is a distinct state from the busy-input spinner lifecycle —
+  no spinner or busy chrome is shown.
+- Ctrl+C, the plugin calling `exit`, or the tick callback returning `:exit`
+  all exit cleanly and restore the prior composer state.
+- Resize during interactive mode forces a clean exit and restore.
+
+Interactive commands require the TUI prompt interface. They are not available
+in piped/non-interactive mode or through RPC.
+
 ## Observe transcript events
 
 Use transcript events when you need to log or react to live activity:

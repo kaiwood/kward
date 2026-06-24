@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop at a configurable frame rate (1–120 fps), supporting games, dashboards, and viewers with colored cell drawing, non-blocking key input, full composer state save/restore on exit, and Ctrl+C forced exit.
 - Added configurable syntax-based auto-indent on Enter for the built-in TUI file editor, including closing-token reindent and indentation-level Backspace behavior.
 - Added automatic syntax highlighting for Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL in the built-in TUI file editor when terminal color is enabled.
 - Added `R` replace mode to the TUI vi editor mode.

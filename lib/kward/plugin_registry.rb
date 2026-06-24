@@ -23,6 +23,15 @@ module Kward
       end
     end
 
+    # Registered interactive command that takes over the composer region with a
+    # Kward-driven render and input loop. Like a slash command but with canvas
+    # rendering capabilities for games, dashboards, viewers, and similar uses.
+    InteractiveCommand = Struct.new(:name, :description, :argument_hint, :rows, :fps, :path, :handler, keyword_init: true) do
+      def entry
+        { name: name, description: description, argument_hint: argument_hint }
+      end
+    end
+
     # Read-only event passed to plugin transcript observers.
     TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
       def to_h
@@ -167,6 +176,24 @@ module Kward
       def prompt_context(&block)
         @registry.register_prompt_context(path: @path, &block)
       end
+
+      # Registers an interactive command that takes over the composer region with
+      # a Kward-driven render and input loop. The handler receives an
+      # interactive controller object with a canvas API for drawing colored
+      # cells and reading keys. Useful for games, dashboards, and viewers.
+      #
+      # @param name [String, #to_s] command name without the leading slash
+      # @param rows [Integer] fixed canvas height in terminal rows
+      # @param fps [Numeric] frame rate for tick callbacks (1-120, default 30)
+      # @param description [String] short text shown in command listings
+      # @param argument_hint [String] optional usage hint for arguments
+      # @yieldparam ui [Object] interactive controller with canvas and key API
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def interactive_command(name, rows:, fps: 30, description: "", argument_hint: "", &block)
+        @registry.register_interactive_command(name, rows: rows, fps: fps, description: description, argument_hint: argument_hint, path: @path, &block)
+      end
     end
 
     # Mutable singleton guard used while loading trusted plugin files.
@@ -207,6 +234,7 @@ module Kward
     def initialize(reserved_commands: [])
       @reserved_commands = reserved_commands.map(&:to_s)
       @commands = {}
+      @interactive_commands = {}
       @footer = nil
       @footer_path = nil
       @transcript_event_handlers = []
@@ -226,6 +254,14 @@ module Kward
 
     def command_for(name)
       @commands[name.to_s]
+    end
+
+    def interactive_commands
+      @interactive_commands.values
+    end
+
+    def interactive_command_for(name)
+      @interactive_commands[name.to_s]
     end
 
     def footer_renderer
@@ -301,6 +337,31 @@ module Kward
         name: name,
         description: description.to_s,
         argument_hint: argument_hint.to_s,
+        path: path,
+        handler: handler
+      )
+    end
+
+    def register_interactive_command(name, rows:, fps: 30, description: "", argument_hint: "", path: nil, &handler)
+      name = name.to_s
+      raise "Interactive command name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Interactive command /#{name} requires a handler" unless handler
+
+      if @reserved_commands.include?(name) || @commands.key?(name)
+        warn "Warning: skipping Kward interactive command /#{name}: reserved command"
+        return nil
+      end
+      if @interactive_commands.key?(name)
+        warn "Warning: skipping duplicate Kward interactive command /#{name}: #{path}"
+        return nil
+      end
+
+      @interactive_commands[name] = InteractiveCommand.new(
+        name: name,
+        description: description.to_s,
+        argument_hint: argument_hint.to_s,
+        rows: [[rows.to_i, 1].max, 1].max,
+        fps: [[fps.to_f, 1].max, 120].min,
         path: path,
         handler: handler
       )

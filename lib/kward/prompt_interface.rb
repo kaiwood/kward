@@ -31,6 +31,9 @@ require_relative "prompt_interface/editor/modes/modern"
 require_relative "prompt_interface/editor/modes/emacs"
 require_relative "prompt_interface/editor/modes/vi"
 require_relative "prompt_interface/editor/controller"
+require_relative "prompt_interface/interactive/controller"
+require_relative "prompt_interface/interactive/renderer"
+require_relative "prompt_interface/interactive/state"
 require_relative "prompt_interface/layout"
 require_relative "prompt_interface/screen"
 require_relative "prompt_interface/key_handler"
@@ -73,6 +76,8 @@ module Kward
     include EmacsEditorMode
     include ViEditorMode
     include EditorController
+    include InteractiveRenderer
+    include InteractiveState
     include Layout
     include Screen
     include KeyHandler
@@ -145,6 +150,8 @@ module Kward
       @file_editor_open_status = nil
       @file_mention_paths = nil
       @editor_state = nil
+      @interactive_state = nil
+      @last_interactive_tick = monotonic_now
       @select_state = nil
       @question_state = nil
       @question_prompt_active = false
@@ -388,6 +395,50 @@ module Kward
       @mutex.synchronize { modal_active_locked? }
     end
 
+    def interactive_active?
+      @mutex.synchronize { interactive_active_locked? }
+    end
+
+    def interactive_exited?
+      @mutex.synchronize do
+        return false unless @interactive_state
+
+        @interactive_state[:controller].exited?
+      end
+    end
+
+    def finish_interactive
+      @mutex.synchronize do
+        return unless @interactive_state
+
+        snapshot = @interactive_state[:snapshot]
+        @interactive_state = nil
+        restore_composer_snapshot_locked(snapshot)
+        redraw_screen_locked if @started
+        @output_io.flush
+      end
+    end
+
+    def start_interactive(title:, rows:, fps:)
+      snapshot = composer_snapshot
+      controller = InteractiveController.new(width: interactive_canvas_width, height: rows, fps: fps)
+      start
+      @mutex.synchronize do
+        @interactive_state = {
+          title: title.to_s,
+          rows: rows,
+          controller: controller,
+          snapshot: snapshot
+        }
+        @last_interactive_tick = monotonic_now
+        @asking = true
+        @busy = false
+        @last_composer_rows = []
+        render_prompt_locked
+      end
+      controller
+    end
+
     def update_tabs(labels:, active_index: 0)
       @mutex.synchronize do
         @tabs = Array(labels).map { |label| normalize_tab_label(label) }
@@ -514,6 +565,22 @@ module Kward
     def poll_input
       key = read_key(nonblock: true)
       @mutex.synchronize do
+        if interactive_active_locked?
+          if key.nil?
+            resized = handle_resize_locked
+            ticked = tick_interactive_locked
+            render_prompt_locked if resized || ticked
+            return :interactive_exited if @interactive_state[:controller].exited?
+            return nil
+          end
+
+          route_interactive_key(key)
+          ticked = tick_interactive_locked
+          render_prompt_locked if ticked
+          return :interactive_exited if @interactive_state[:controller].exited?
+          return nil
+        end
+
         if key.nil?
           resized = handle_resize_locked
           spun = tick_spinner_locked

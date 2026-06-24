@@ -2492,4 +2492,126 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_start_interactive_renders_canvas_in_composer_region
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 40 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    controller.clear_frame
+    controller.put(0, 0, "X", :red)
+    controller.put(1, 2, "O", :green)
+    controller.render
+    prompt.send(:render_prompt_locked)
+
+    plain = strip_ansi(output.string)
+    assert_includes plain, "╭ Test"
+    assert_includes plain, "X"
+    assert_includes plain, "O"
+    assert_includes plain, "Interactive"
+    assert_includes plain, "Ctrl+C exits"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_finish_interactive_restores_composer_state
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 40 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.send(:composer_input=, "hello world")
+    prompt.send(:render_prompt_locked)
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    controller.clear_frame
+    controller.render
+    prompt.send(:render_prompt_locked)
+
+    prompt.finish_interactive
+
+    assert prompt.send(:composer_input).include?("hello world")
+    refute prompt.send(:interactive_active_locked?)
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_interactive_ctrl_c_forces_exit
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    prompt.send(:handle_interactive_key, "\x03")
+
+    assert controller.exited?
+    assert prompt.interactive_exited?
+  end
+
+  def test_interactive_routes_keys_to_controller
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    prompt.send(:handle_interactive_key, "\e[D")
+
+    assert_equal :left, controller.poll_key
+  end
+
+  def test_interactive_poll_input_returns_exited_when_controller_exits
+    input, writer = IO.pipe
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    controller.exit
+
+    result = prompt.poll_input
+    assert_equal :interactive_exited, result
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_interactive_tick_invokes_on_tick_callback
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    tick_count = 0
+    controller.on_tick { |_ui| tick_count += 1 }
+    prompt.send(:instance_variable_set, :@last_interactive_tick, 0)
+
+    prompt.send(:tick_interactive_locked)
+
+    assert_equal 1, tick_count
+  end
+
+  def test_interactive_tick_returns_exit_from_callback
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    controller.on_tick { :exit }
+    prompt.send(:instance_variable_set, :@last_interactive_tick, 0)
+
+    prompt.send(:tick_interactive_locked)
+
+    assert controller.exited?
+  end
+
+  def test_interactive_active_false_by_default
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    refute prompt.interactive_active?
+    refute prompt.send(:interactive_active_locked?)
+  end
+
 end

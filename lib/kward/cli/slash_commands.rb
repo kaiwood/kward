@@ -105,7 +105,9 @@ module Kward
           run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
           [true, nil]
         else
-          if plugin_command_for(name)
+          if interactive_command_for(name) && prompt_interface? && @prompt.respond_to?(:start_interactive)
+            run_interactive_command(name, argument, agent)
+          elsif plugin_command_for(name)
             run_busy_local_command_and_requeue(activity: "running") { run_plugin_command(name, argument, agent) }
           else
             [false, nil]

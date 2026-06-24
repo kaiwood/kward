@@ -165,4 +165,109 @@ class TestPluginRegistry < KwardTestCase
     assert event.payload.frozen?
     assert_raises(FrozenError) { event.payload[:delta] = "changed" }
   end
+
+  def test_registers_interactive_command
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate do |plugin|
+      plugin.interactive_command "demo", rows: 10, fps: 60, description: "Demo canvas" do |ui, ctx|
+        ui.put(0, 0, "X", :red)
+      end
+    end
+
+    command = registry.interactive_command_for("demo")
+    assert command
+    assert_equal "demo", command.name
+    assert_equal "Demo canvas", command.description
+    assert_equal 10, command.rows
+    assert_equal 60.0, command.fps
+    assert_kind_of Proc, command.handler
+  end
+
+  def test_interactive_command_appears_in_entries
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate do |plugin|
+      plugin.interactive_command "demo", rows: 5 do |ui, ctx| end
+    end
+
+    entries = registry.interactive_commands.map(&:entry)
+    assert entries.any? { |entry| entry[:name] == "demo" }
+  end
+
+  def test_interactive_command_rejects_reserved_names
+    registry = Kward::PluginRegistry.new(reserved_commands: ["status"])
+
+    _stderr, warnings = capture_io do
+      registry.evaluate do |plugin|
+        plugin.interactive_command "status", rows: 5 do |ui, ctx| end
+      end
+    end
+
+    assert_nil registry.interactive_command_for("status")
+    assert_includes warnings, "reserved command"
+  end
+
+  def test_interactive_command_rejects_duplicates
+    registry = Kward::PluginRegistry.new
+
+    _stderr, warnings = capture_io do
+      registry.evaluate do |plugin|
+        plugin.interactive_command "demo", rows: 5 do |ui, ctx| end
+        plugin.interactive_command "demo", rows: 5 do |ui, ctx| end
+      end
+    end
+
+    assert registry.interactive_command_for("demo")
+    assert_includes warnings, "duplicate Kward interactive command /demo"
+  end
+
+  def test_interactive_command_rejects_name_collision_with_regular_command
+    registry = Kward::PluginRegistry.new
+
+    _stderr, warnings = capture_io do
+      registry.evaluate do |plugin|
+        plugin.command("demo") { |_args, _ctx| }
+        plugin.interactive_command "demo", rows: 5 do |ui, ctx| end
+      end
+    end
+
+    assert_nil registry.interactive_command_for("demo")
+    assert_includes warnings, "reserved command"
+  end
+
+  def test_interactive_command_clamps_rows_and_fps
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate do |plugin|
+      plugin.interactive_command "demo", rows: -5, fps: 999 do |ui, ctx| end
+    end
+
+    command = registry.interactive_command_for("demo")
+    assert_equal 1, command.rows
+    assert_equal 120, command.fps
+  end
+
+  def test_interactive_command_handler_receives_controller_and_context
+    registry = Kward::PluginRegistry.new
+    received_ui = nil
+    received_ctx = nil
+
+    registry.evaluate do |plugin|
+      plugin.interactive_command "demo", rows: 3 do |ui, ctx|
+        received_ui = ui
+        received_ctx = ctx
+      end
+    end
+
+    command = registry.interactive_command_for("demo")
+    conversation = Kward::Conversation.new(system_message: nil)
+    context = Kward::PluginRegistry::Context.new(conversation: conversation)
+    fake_controller = Object.new
+
+    command.handler.call(fake_controller, context)
+
+    assert_same fake_controller, received_ui
+    assert_same context, received_ctx
+  end
 end
