@@ -31,6 +31,12 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
         normalized_code = code.to_i.chr.downcase.ord rescue code
+        text = csi_u_text(sequence)
+        if !text.empty?
+          return editor_search_append(text) if editor_search_active?
+          return vibe_record_undo { editor_insert_printable(text) } if @editor_state.vibe_mode == "insert"
+          return vibe_record_undo { vibe_replace_character(text) } if @editor_state.vibe_mode == "replace"
+        end
         return false unless code == 27 || (ctrl_modifier?(modifier) && normalized_code == 99)
 
         return editor_search_cancel if editor_search_active?

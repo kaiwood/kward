@@ -183,7 +183,7 @@ module Kward
         when 13, 8, 127, 4
           modern_record_undo { handle_editor_csi_u_key(key) }
         else
-          if (sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1") && code.between?(32, 126)
+          if !sequence[:text].to_s.empty? || ((sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1") && code.between?(32, 126))
             modern_record_undo { handle_editor_csi_u_key(key) }
           else
             handle_editor_csi_u_key(key)

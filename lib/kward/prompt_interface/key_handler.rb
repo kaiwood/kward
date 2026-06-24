@@ -259,10 +259,14 @@ module Kward
       end
 
       def insert_csi_u_text(sequence)
-        text = sequence[:text].to_s
+        text = csi_u_text(sequence)
         return false if text.empty?
 
-        insert_string(text.split(":").map { |codepoint| codepoint.to_i.chr(Encoding::UTF_8) }.join)
+        insert_string(text)
+      end
+
+      def csi_u_text(sequence)
+        sequence[:text].to_s.split(":").map { |codepoint| codepoint.to_i.chr(Encoding::UTF_8) }.join
       end
 
       def handle_modified_csi_u_key(code, modifier)

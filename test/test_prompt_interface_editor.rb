@@ -121,6 +121,83 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_accepts_csi_u_shifted_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[97;2;65u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "Ahello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_undoes_csi_u_shifted_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[97;2;65u")
+        prompt.send(:handle_editor_key, "\x1A")
+
+        assert_equal "hello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_emacs_accepts_csi_u_shifted_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[97;2;65u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "Ahello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_insert_accepts_csi_u_shifted_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "i")
+
+        prompt.send(:handle_editor_key, "\e[97;2;65u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "Ahello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_normal_ignores_csi_u_shifted_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[97;2;65u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "hello", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_modern_ctrl_c_copies_selection
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello world")

@@ -47,6 +47,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed shifted CSI-u printable keys in the built-in TUI file editor, including terminals that encode Shift+A as decoded CSI-u text.
 - Fixed opening a new TUI tab from the built-in editor so the editor state stays with the original tab instead of appearing in the new tab.
 - Fixed `/git` commit-message editing so Shift+Enter inserts a newline instead of submitting the message.
 - Fixed sluggish TUI composer typing by throttling expensive composer status refreshes during key-repeat bursts.

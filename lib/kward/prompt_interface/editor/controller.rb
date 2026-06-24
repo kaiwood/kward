@@ -167,6 +167,8 @@ module Kward
 
         binding_result = handle_editor_modified_csi_u_key(code, modifier)
         return binding_result unless binding_result == false
+        text = csi_u_text(sequence)
+        return editor_insert_csi_u_text(text) unless text.empty?
 
         case code
         when 13
@@ -186,6 +188,14 @@ module Kward
 
           char = code.chr(Encoding::UTF_8)
           editor_search_active? ? editor_search_append(char) : editor_insert_printable(char)
+        end
+      end
+
+      def editor_insert_csi_u_text(text)
+        if editor_search_active?
+          editor_search_append(text)
+        else
+          editor_insert_printable(text)
         end
       end
 
