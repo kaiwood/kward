@@ -50,6 +50,7 @@ module Kward
       def handle_git_key(key)
         return git_submit_message if key.nil?
         return if handle_git_bracketed_paste_key(key)
+        return if git_composing? && handle_shift_enter_key(key)
 
         csi_result = handle_git_csi_u_key(key)
         return csi_result unless csi_result == false

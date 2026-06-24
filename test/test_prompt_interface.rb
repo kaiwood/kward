@@ -2468,6 +2468,18 @@ class TestPromptInterface < KwardTestCase
     assert_equal "ship it", prompt.send(:handle_git_key, "\r")
   end
 
+  def test_prompt_interface_git_shift_enter_inserts_message_newline
+    Kward::PromptInterface::SHIFT_ENTER_SEQUENCES.each do |sequence|
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+      prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
+      prompt.send(:composer_input=, "hello")
+      prompt.send(:composer_cursor=, "hello".length)
+
+      assert_nil prompt.send(:handle_git_key, sequence)
+      assert_equal "hello\n", prompt.send(:composer_input)
+    end
+  end
+
   def test_prompt_interface_git_message_accepts_spaces
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
