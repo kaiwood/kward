@@ -8,11 +8,13 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change
+      attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :readonly, :diff_view
 
-      def initialize(path:, content:, new_file: false, editor_mode: "modern")
+      def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
         @new_file = new_file
+        @readonly = readonly
+        @diff_view = diff_view
         @original_content = content.to_s
         @original_digest = Digest::SHA256.hexdigest(@original_content)
         refresh_file_marker unless new_file
@@ -64,6 +66,16 @@ module Kward
         @undo_stack = other.undo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
         @redo_stack = other.redo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
         @vibe_last_change = other.vibe_last_change&.dup
+        @readonly = other.readonly
+        @diff_view = other.diff_view
+      end
+
+      def readonly?
+        @readonly == true
+      end
+
+      def diff_view?
+        @diff_view == true
       end
 
       def modern?
@@ -548,6 +560,8 @@ module Kward
       end
 
       def default_status
+        return "Read-only diff · arrows/PageUp/PageDown move · Ctrl+F search · Ctrl+Q close" if readonly?
+
         case @editor_mode
         when "emacs"
           "C-x C-s save · C-x C-c quit · C-s search"

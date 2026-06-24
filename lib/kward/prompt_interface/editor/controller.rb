@@ -67,6 +67,17 @@ module Kward
         false
       end
 
+      def open_diff_viewer(path, content)
+        @editor_state = EditorState.new(path: path.to_s, content: content.to_s, new_file: true, editor_mode: current_editor_mode, readonly: true, diff_view: true)
+        @prompt_label = "Diff>"
+        self.composer_input = ""
+        self.composer_cursor = 0
+        @composer.clear_attachments
+        @pending_keys.clear
+        @asking = true
+        true
+      end
+
       def current_editor_mode
         return normalize_editor_mode(@editor_mode_source.call) if @editor_mode_source.respond_to?(:call)
 
@@ -85,6 +96,7 @@ module Kward
 
       def handle_editor_key(key)
         return if key.nil?
+        return handle_readonly_editor_key(key) if @editor_state&.readonly?
         return handle_vibe_key(key) if @editor_state&.vibe?
         return handle_emacs_key(key) if @editor_state&.emacs?
         return handle_modern_key(key) if @editor_state&.modern?
@@ -390,6 +402,121 @@ module Kward
         end
       end
 
+      def handle_readonly_editor_key(key)
+        return if handle_readonly_bracketed_paste_key(key)
+
+        if key.is_a?(String) && key.length > 1
+          token = next_key_token(key)
+          if token.length < key.length
+            queue_pending_keys(key[token.length..])
+            return handle_readonly_editor_key(token)
+          end
+        end
+
+        key_name = key_name_for(key)
+        named_result = handle_readonly_named_key(key_name) if key_name
+        return named_result unless named_result == false || named_result.nil?
+
+        case key
+        when "\x11"
+          close_editor
+        when "\x06"
+          editor_search_active? ? editor_search_append(key) : editor_search_begin
+        when "\x03"
+          editor_search_cancel if editor_search_active?
+        when "/"
+          editor_search_active? ? editor_search_append(key) : editor_search_begin
+        when "\b", "\x7F"
+          editor_search_delete_character if editor_search_active?
+        when "\n", "\r"
+          editor_search_confirm if editor_search_active?
+        when "\e"
+          editor_search_active? ? editor_search_cancel : close_editor
+        else
+          csi_result = handle_readonly_csi_u_key(key)
+          return csi_result unless csi_result == false
+
+          if editor_search_active?
+            editor_search_append(key) if printable_key?(key)
+          elsif printable_key?(key)
+            @editor_state.status = "Read-only diff"
+          end
+        end
+      end
+
+      def handle_readonly_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+
+        if ctrl_modifier?(modifier) && ctrl_code(code) == 102
+          return editor_search_active? ? editor_search_append(key) : editor_search_begin
+        end
+
+        case code
+        when 13
+          editor_search_confirm if editor_search_active?
+        when 27
+          editor_search_active? ? editor_search_cancel : close_editor
+        when 8, 127
+          editor_search_delete_character if editor_search_active?
+        else
+          return false unless editor_search_active?
+          return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
+          return false unless code.between?(32, 126)
+
+          editor_search_append(code.chr(Encoding::UTF_8))
+        end
+      end
+
+      def handle_readonly_bracketed_paste_key(key)
+        paste = read_bracketed_paste(key)
+        return false unless paste
+
+        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
+        @editor_state.status = "Read-only diff" unless editor_search_active?
+        true
+      end
+
+      def handle_readonly_named_key(key_name)
+        return false unless key_name
+
+        if editor_search_active?
+          case key_name
+          when :return, :enter
+            editor_search_confirm
+          when :backspace
+            editor_search_delete_character
+          else
+            false
+          end
+        else
+          case key_name
+          when :left
+            @editor_state.move_left
+          when :right
+            @editor_state.move_right
+          when :up
+            @editor_state.move_up
+          when :down
+            @editor_state.move_down
+          when :home
+            @editor_state.move_line_start
+          when :end
+            @editor_state.move_line_end
+          when :pageup
+            scroll_editor_up(editor_scroll_page_rows)
+          when :pagedown
+            scroll_editor_down(editor_scroll_page_rows)
+          else
+            false
+          end
+        end
+      end
+
       def editor_extending_selection
         @editor_state.selection_anchor ||= @editor_state.cursor
         yield
@@ -525,6 +652,10 @@ module Kward
 
       def save_editor
         return false unless @editor_state
+        if @editor_state.readonly?
+          @editor_state.status = "Read-only diff"
+          return true
+        end
 
         if @editor_state.file_changed_on_disk? && !@editor_state.overwrite_confirmed
           @editor_state.overwrite_confirmed = true

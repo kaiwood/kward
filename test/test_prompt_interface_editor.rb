@@ -1,6 +1,30 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditor < KwardTestCase
+  def test_prompt_interface_diff_viewer_is_read_only_and_closes_with_escape
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, "x")
+
+    assert_equal "-old\n+new\n", editor.buffer
+    assert_equal "Read-only diff", editor.status
+
+    prompt.send(:handle_editor_key, "\e")
+
+    refute prompt.send(:editor_active?)
+  end
+
+  def test_prompt_interface_diff_viewer_colors_added_and_removed_lines
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt.instance_variable_set(:@color_enabled, true)
+    assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
+
+    assert_includes prompt.send(:editor_render_diff_line, "+new"), "\e[32m+new\e[0m"
+    assert_includes prompt.send(:editor_render_diff_line, "-old"), "\e[31m-old\e[0m"
+  end
+
   def test_prompt_interface_modern_ctrl_s_saves_file
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")

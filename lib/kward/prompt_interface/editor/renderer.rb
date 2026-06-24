@@ -49,14 +49,29 @@ module Kward
       def editor_render_line(line, line_index, text_width)
         visible = visible_truncate(line, text_width)
         range = @editor_state.selection_range
-        return editor_highlight_line(visible, line_index) unless range
+        return editor_render_visible_line(visible, line_index) unless range
 
         line_start = @editor_state.line_start_offset(line_index)
         selection_start = [range[0] - line_start, 0].max
         selection_end = [range[1] - line_start, visible.length].min
-        return editor_highlight_line(visible, line_index) unless selection_start < selection_end
+        return editor_render_visible_line(visible, line_index) unless selection_start < selection_end
 
         visible[0...selection_start].to_s + colored(visible[selection_start...selection_end].to_s, 7) + visible[selection_end..].to_s
+      end
+
+      def editor_render_visible_line(line, line_index)
+        return editor_render_diff_line(line) if @editor_state.diff_view?
+
+        editor_highlight_line(line, line_index)
+      end
+
+      def editor_render_diff_line(line)
+        text = line.to_s
+        return colored(text, :green) if text.start_with?("+") && !text.start_with?("+++")
+        return colored(text, :red) if text.start_with?("-") && !text.start_with?("---")
+        return colored(text, :cyan) if text.start_with?("@@")
+
+        text
       end
 
       def editor_line_number_gutter_width
@@ -73,7 +88,9 @@ module Kward
       end
 
       def editor_top_border(width)
-        title = visible_truncate("Edit #{editor_display_path}#{@editor_state.dirty? ? " *" : ""}", [width - 4, 1].max)
+        title_prefix = @editor_state.diff_view? ? "Diff" : "Edit"
+        dirty_marker = @editor_state.dirty? && !@editor_state.readonly? ? " *" : ""
+        title = visible_truncate("#{title_prefix} #{editor_display_path}#{dirty_marker}", [width - 4, 1].max)
         plain_title = ANSI.strip(title)
         "#{colored("╭", :primary_green)} #{title} #{colored("─" * [width - plain_title.length - 4, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
       end

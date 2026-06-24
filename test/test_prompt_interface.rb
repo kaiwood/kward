@@ -2355,7 +2355,7 @@ class TestPromptInterface < KwardTestCase
     rendered = strip_ansi(rows.join("\n"))
 
     assert_includes rendered, "Git"
-    assert_includes rendered, "↑/↓ select · s stage/unstage · Tab message · Esc cancel"
+    assert_includes rendered, "↑/↓ select · Enter diff · s stage/unstage · Tab message · Esc cancel"
     assert_includes rendered, "›  M lib/file.rb"
     assert_includes rendered, "  ?? new.txt"
   end
@@ -2381,6 +2381,13 @@ class TestPromptInterface < KwardTestCase
 
     assert_equal "Commit>", prompt.instance_variable_get(:@prompt_label)
     assert prompt.send(:git_composing?)
+  end
+
+  def test_prompt_interface_git_enter_opens_selected_file_diff
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M one.rb", "?? two.rb"], composing: false, selected_index: 1 })
+
+    assert_equal({ action: :open_diff, index: 1 }, prompt.send(:handle_git_key, "\r"))
   end
 
   def test_prompt_interface_git_enter_submits_commit_message

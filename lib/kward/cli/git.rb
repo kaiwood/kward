@@ -23,7 +23,9 @@ module Kward
 
         status = git_status_lines(git_root)
         message = @prompt.git_commit_message(status) do |action|
-          status = handle_git_prompt_action(git_root, status, action)
+          result = handle_git_prompt_action(git_root, status, action)
+          status = result.is_a?(Hash) && result.key?(:status_lines) ? result[:status_lines] : result
+          result
         end
         return if message.nil?
 
@@ -55,8 +57,39 @@ module Kward
         case action[:action]
         when :toggle_stage
           toggle_git_stage(root, current_status[action[:index].to_i])
+          git_status_lines(root)
+        when :open_diff
+          status_line = current_status[action[:index].to_i]
+          { status_lines: git_status_lines(root), diff: git_diff_view(root, status_line) }
+        else
+          git_status_lines(root)
         end
-        git_status_lines(root)
+      end
+
+      def git_diff_view(root, status_line)
+        entry = parse_git_status_line(status_line)
+        return { path: "Git diff", content: "Unable to read Git status entry.\n" } if entry.nil?
+
+        output = entry[:untracked] ? git_untracked_file_diff(root, entry[:path]) : git_tracked_file_diff(root, entry[:path])
+        { path: entry[:path], content: output.empty? ? "No diff for #{entry[:path]}\n" : output }
+      end
+
+      def git_tracked_file_diff(root, path)
+        output, status = Open3.capture2e("git", "diff", "HEAD", "--", path, chdir: root.to_s)
+        status.success? ? output : "Unable to read diff for #{path}:\n#{output}"
+      rescue StandardError => e
+        "Unable to read diff for #{path}: #{e.message}\n"
+      end
+
+      def git_untracked_file_diff(root, path)
+        full_path = File.expand_path(path, root.to_s)
+        content = File.file?(full_path) ? File.read(full_path) : ""
+        lines = ["diff --git a/#{path} b/#{path}", "new file mode 100644", "--- /dev/null", "+++ b/#{path}", "@@ -0,0 +1,#{content.lines.length} @@"]
+        lines.concat(content.lines(chomp: true).map { |line| "+#{line}" })
+        lines << "\\ No newline at end of file" if !content.empty? && !content.end_with?("\n")
+        lines.join("\n") + "\n"
+      rescue StandardError => e
+        "Unable to read diff for #{path}: #{e.message}\n"
       end
 
       def toggle_git_stage(root, status_line)
@@ -78,7 +111,7 @@ module Kward
         path = path.split(" -> ", 2).last if status.include?("R") || status.include?("C")
         return nil if path.empty?
 
-        { path: path, staged: status[0] != " " && status[0] != "?" }
+        { path: path, staged: status[0] != " " && status[0] != "?", untracked: status == "??" }
       end
 
       def git_commit(root, message)

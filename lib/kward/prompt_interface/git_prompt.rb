@@ -27,10 +27,13 @@ module Kward
           end
 
           if git_action?(result)
-            refreshed_status = block_given? ? yield(result) : status_lines
+            action_result = block_given? ? yield(result) : status_lines
+            refreshed_status = git_action_status_lines(action_result)
+            open_git_diff_viewer(action_result[:diff]) if action_result.is_a?(Hash) && action_result[:diff]
             @mutex.synchronize do
               selected_index = @git_state ? @git_state[:selected_index].to_i : 0
               @git_state = git_state_for(refreshed_status, selected_index: selected_index)
+              @prompt_label = "Git>"
               render_prompt_locked
             end
           elsif result.is_a?(String) || result == SELECT_CANCEL
@@ -62,6 +65,7 @@ module Kward
         case key
         when "\n", "\r"
           return git_submit_message if git_composing?
+          return git_open_selected_file_diff
         when "\t"
           return git_begin_message
         when "\b", "\x7F"
@@ -91,7 +95,7 @@ module Kward
         when 9
           git_begin_message
         when 13
-          git_submit_message if git_composing?
+          git_composing? ? git_submit_message : git_open_selected_file_diff
         when 27
           SELECT_CANCEL
         when 8, 127
@@ -124,7 +128,7 @@ module Kward
       def handle_git_named_key(key_name)
         case key_name
         when :return, :enter
-          git_submit_message if git_composing?
+          git_composing? ? git_submit_message : git_open_selected_file_diff
         when :backspace
           delete_before_cursor if git_composing?
         when :delete
@@ -185,6 +189,46 @@ module Kward
         { action: :toggle_stage, index: @git_state[:selected_index].to_i }
       end
 
+      def git_open_selected_file_diff
+        return true unless @git_state
+        return true if @git_state[:status_lines].empty?
+
+        { action: :open_diff, index: @git_state[:selected_index].to_i }
+      end
+
+      def git_action_status_lines(action_result)
+        return action_result[:status_lines] if action_result.is_a?(Hash) && action_result.key?(:status_lines)
+
+        action_result
+      end
+
+      def open_git_diff_viewer(diff)
+        return unless diff.respond_to?(:[])
+
+        @mutex.synchronize do
+          open_diff_viewer(diff[:path].to_s, diff[:content].to_s)
+          render_prompt_locked
+        end
+        read_editor_until_closed
+      end
+
+      def read_editor_until_closed
+        while editor_active?
+          key = read_key(nonblock: true)
+          @mutex.synchronize do
+            if key.nil?
+              resized = handle_resize_locked
+              footer_refreshed = tick_footer_locked
+              render_prompt_locked if resized || footer_refreshed
+            else
+              handle_editor_key(key)
+              render_prompt_locked if editor_active?
+            end
+          end
+          sleep 0.02 if key.nil?
+        end
+      end
+
       def git_begin_message
         return true if git_composing?
 
@@ -221,7 +265,7 @@ module Kward
       def git_overlay_rows(width, height: screen_height)
         return [] unless @git_state
 
-        help = git_composing? ? "Type commit message · Enter commit · Esc cancel" : "↑/↓ select · s stage/unstage · Tab message · Esc cancel"
+        help = git_composing? ? "Type commit message · Enter commit · Esc cancel" : "↑/↓ select · Enter diff · s stage/unstage · Tab message · Esc cancel"
         lines = [overlay_text_line(help, :muted), overlay_blank_line]
         status_lines = @git_state[:status_lines]
         status_lines = ["No uncommitted changes."] if status_lines.empty?
