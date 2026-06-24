@@ -452,7 +452,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         prompt.send(:handle_editor_key, "v")
-        5.times { prompt.send(:handle_editor_key, "l") }
+        4.times { prompt.send(:handle_editor_key, "l") }
         assert_equal "visual", editor.vibe_mode
         assert_equal "alpha", editor.selected_text
 
@@ -462,6 +462,23 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         refute editor.selection_active?
         assert_equal "alpha", editor.kill_buffer
         assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("alpha")}\a"
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_visual_wraps_full_character_selection_in_quotes
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "string")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "v")
+        5.times { prompt.send(:handle_editor_key, "l") }
+        prompt.send(:handle_editor_key, "\"")
+
+        assert_equal "\"string\"", editor.buffer
       end
     end
   end
@@ -498,7 +515,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         prompt.send(:handle_editor_key, "v")
-        5.times { prompt.send(:handle_editor_key, "l") }
+        4.times { prompt.send(:handle_editor_key, "l") }
         prompt.send(:handle_editor_key, "d")
         assert_equal " beta", editor.buffer
         prompt.send(:handle_editor_key, "u")
@@ -506,7 +523,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
 
         editor.set_cursor_line_and_column(0, 0)
         prompt.send(:handle_editor_key, "v")
-        5.times { prompt.send(:handle_editor_key, "l") }
+        4.times { prompt.send(:handle_editor_key, "l") }
         prompt.send(:handle_editor_key, "c")
         assert_equal "insert", editor.vibe_mode
         prompt.send(:handle_editor_key, "A")
@@ -516,7 +533,6 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         editor.set_cursor_line_and_column(0, 0)
         editor.kill_buffer = "omega"
         prompt.send(:handle_editor_key, "v")
-        prompt.send(:handle_editor_key, "l")
         prompt.send(:handle_editor_key, "p")
         assert_equal "omega beta", editor.buffer
       end
@@ -906,6 +922,30 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         refute editor.selection_active?
       end
     end
+  end
+
+  def test_prompt_interface_vibe_insert_auto_closes_pairs
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "", editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "i")
+    prompt.send(:handle_editor_key, "(")
+
+    assert_equal "()", editor.buffer
+    assert_equal 1, editor.cursor
+  end
+
+  def test_prompt_interface_vibe_replace_auto_closes_pairs
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "x", editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "R")
+    prompt.send(:handle_editor_key, "[")
+
+    assert_equal "[]", editor.buffer
+    assert_equal 1, editor.cursor
   end
 
 end

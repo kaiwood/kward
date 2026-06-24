@@ -55,41 +55,9 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
-  def test_prompt_interface_modern_ctrl_f_starts_search
+  def test_prompt_interface_modern_slash_starts_search
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
-      Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
-        assert prompt.send(:open_editor, "notes.txt")
-
-        prompt.send(:handle_editor_key, "\x06")
-
-        editor = prompt.instance_variable_get(:@editor_state)
-        assert editor.search_active
-        assert_equal "Search:", editor.status
-      end
-    end
-  end
-
-  def test_prompt_interface_modern_csi_u_ctrl_f_starts_search
-    Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
-      Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
-        assert prompt.send(:open_editor, "notes.txt")
-
-        prompt.send(:handle_editor_key, "\e[102;5u")
-
-        editor = prompt.instance_variable_get(:@editor_state)
-        assert editor.search_active
-        assert_equal "Search:", editor.status
-      end
-    end
-  end
-
-  def test_prompt_interface_modern_slash_inserts_character
-    Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
         assert prompt.send(:open_editor, "notes.txt")
@@ -97,8 +65,58 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt.send(:handle_editor_key, "/")
 
         editor = prompt.instance_variable_get(:@editor_state)
+        assert editor.search_active
+        assert_equal :forward, editor.search_direction
+        assert_equal "Search:", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_question_mark_starts_reverse_search
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "?")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert editor.search_active
+        assert_equal :backward, editor.search_direction
+        assert_equal "Search backward:", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_f_moves_right
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\x06")
+
+        editor = prompt.instance_variable_get(:@editor_state)
         refute editor.search_active
-        assert_equal "/hello", editor.buffer
+        assert_equal 1, editor.cursor
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_csi_u_ctrl_f_moves_right
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[102;5u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        refute editor.search_active
+        assert_equal 1, editor.cursor
       end
     end
   end
@@ -334,6 +352,54 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert_equal "ha", editor.buffer
         assert_equal "alp", editor.kill_buffer
         refute editor.selection_active?
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_arrow_keys_move_to_line_and_document_boundaries
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = 8
+
+        prompt.send(:handle_editor_key, "\e[1;5C")
+        assert_equal [1, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[1;5D")
+        assert_equal [1, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[1;5B")
+        assert_equal editor.buffer.length, editor.cursor
+
+        prompt.send(:handle_editor_key, "\e[1;5A")
+        assert_equal 0, editor.cursor
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_alt_shift_left_and_right_select_wordwise
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = 6
+
+        prompt.send(:handle_editor_key, "\e[1;4C")
+        assert_equal "beta", editor.selected_text
+        assert_equal 10, editor.cursor
+
+        prompt.send(:handle_editor_key, "\e[1;4D")
+        refute editor.selection_active?
+        assert_equal 6, editor.cursor
+
+        prompt.send(:handle_editor_key, "\e[1;4D")
+        assert_equal "alpha ", editor.selected_text
+        assert_equal 0, editor.cursor
       end
     end
   end

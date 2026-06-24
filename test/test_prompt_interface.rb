@@ -2621,4 +2621,123 @@ class TestPromptInterface < KwardTestCase
     refute prompt.send(:interactive_active_locked?)
   end
 
+  def test_editor_auto_closes_pairs_and_skips_existing_closer
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "", editor_mode: "modern")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "(")
+    assert_equal "()", editor.buffer
+    assert_equal 1, editor.cursor
+
+    prompt.send(:handle_editor_key, ")")
+    assert_equal "()", editor.buffer
+    assert_equal 2, editor.cursor
+  end
+
+  def test_editor_auto_close_pairs_wraps_selection
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "alpha", editor_mode: "modern")
+    editor.cursor = 0
+    editor.begin_selection
+    editor.cursor = 5
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "[")
+
+    assert_equal "[alpha]", editor.buffer
+    assert_equal 7, editor.cursor
+    refute editor.selection_active?
+  end
+
+  def test_editor_auto_close_pairs_wraps_selection_in_quotes
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "alpha", editor_mode: "modern")
+    editor.cursor = 0
+    editor.begin_selection
+    editor.cursor = 5
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "\"")
+
+    assert_equal "\"alpha\"", editor.buffer
+    assert_equal 7, editor.cursor
+    refute editor.selection_active?
+  end
+
+  def test_editor_auto_close_pairs_wraps_backward_selection_in_quotes
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "alpha", editor_mode: "modern")
+    editor.cursor = 5
+    editor.begin_selection
+    editor.cursor = 0
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "'")
+
+    assert_equal "'alpha'", editor.buffer
+    assert_equal 7, editor.cursor
+    refute editor.selection_active?
+  end
+
+  def test_editor_auto_close_pairs_extends_quote_wrap_to_word_end
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "string", editor_mode: "modern")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    5.times { prompt.send(:handle_editor_key, "\e[1;2C") }
+    prompt.send(:handle_editor_key, "\"")
+
+    assert_equal "\"string\"", editor.buffer
+    assert_equal 8, editor.cursor
+    refute editor.selection_active?
+  end
+
+  def test_editor_auto_close_pairs_backspace_deletes_empty_pair
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "", editor_mode: "modern")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "{")
+    prompt.send(:handle_editor_key, "\b")
+
+    assert_equal "", editor.buffer
+    assert_equal 0, editor.cursor
+  end
+
+  def test_editor_auto_close_pairs_suppresses_quotes_inside_words
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "dont", editor_mode: "modern")
+    editor.cursor = 3
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "'")
+
+    assert_equal "don't", editor.buffer
+    assert_equal 4, editor.cursor
+  end
+
+  def test_editor_auto_close_pairs_can_be_disabled
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_auto_close_pairs: false)
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "", editor_mode: "modern")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "(")
+
+    assert_equal "(", editor.buffer
+    assert_equal 1, editor.cursor
+  end
+
+  def test_editor_bracketed_paste_does_not_auto_close_pairs
+    input = StringIO.new("(")
+    prompt = Kward::PromptInterface.new(input: input, output: StringIO.new, editor_mode: "modern")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "", editor_mode: "modern")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "\e[200~")
+
+    assert_equal "(", editor.buffer
+    assert_equal 1, editor.cursor
+  end
+
 end

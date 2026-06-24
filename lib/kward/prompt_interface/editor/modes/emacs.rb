@@ -108,7 +108,6 @@ module Kward
           if editor_search_active?
             editor_search_append(key) if printable_key?(key)
           elsif printable_key?(key)
-            clear_editor_selection_before_edit
             editor_insert_printable(key)
           end
         end

@@ -152,7 +152,6 @@ module Kward
           if editor_search_active?
             editor_search_append(key) if printable_key?(key)
           elsif printable_key?(key)
-            clear_editor_selection_before_edit
             editor_insert_printable(key)
           end
         end
@@ -186,7 +185,6 @@ module Kward
           return false unless code.between?(32, 126)
 
           char = code.chr(Encoding::UTF_8)
-          clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_append(char) : editor_insert_printable(char)
         end
       end

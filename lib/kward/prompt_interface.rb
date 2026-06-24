@@ -24,6 +24,7 @@ require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor/renderer"
 require_relative "prompt_interface/editor/syntax_highlighter"
+require_relative "prompt_interface/editor/auto_close_pairs"
 require_relative "prompt_interface/editor/auto_indent"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
@@ -69,6 +70,7 @@ module Kward
     include OverlayRenderer
     include EditorRenderer
     include EditorSyntaxHighlighter
+    include EditorAutoClosePairs
     include EditorAutoIndent
     include ComposerRenderer
     include ComposerController
@@ -111,7 +113,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -176,6 +178,8 @@ module Kward
       @editor_mode_source = editor_mode_source
       @editor_auto_indent = editor_auto_indent != false
       @editor_auto_indent_source = editor_auto_indent_source
+      @editor_auto_close_pairs = editor_auto_close_pairs != false
+      @editor_auto_close_pairs_source = editor_auto_close_pairs_source
     end
 
     def start(render: true)

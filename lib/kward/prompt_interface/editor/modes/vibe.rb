@@ -411,6 +411,9 @@ module Kward
         return true unless printable_key?(key)
 
         case key
+        when *EditorAutoClosePairs::AUTO_CLOSE_OPENERS
+          vibe_record_undo { editor_insert_printable(key) }
+          vibe_return_to_normal
         when "y"
           vibe_yank_visual_selection
         when "d", "x"

@@ -183,10 +183,13 @@ Auto-indent is enabled by default. Pressing Enter copies the current line indent
 ```json
 {
   "editor": {
-    "auto_indent": false
+    "auto_indent": false,
+    "auto_close_pairs": false
   }
 }
 ```
+
+`auto_indent` and `auto_close_pairs` both default to `true`. Set `auto_close_pairs` to `false` to disable automatic insertion of matching `()`, `[]`, `{}`, quotes, and backticks.
 
 Modern mode uses composer-style keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` searches, Shift+Arrow selects text, `Ctrl+C` copies, `Ctrl+X` cuts, `Ctrl+V` pastes the editor kill buffer, `Ctrl+A`/`Ctrl+E` move to the start/end of the line, `Ctrl+B` moves left, `Ctrl+K` kills to end of line, `Ctrl+U` kills to start of line, and `Alt+B`/`Alt+F` move by word.
 

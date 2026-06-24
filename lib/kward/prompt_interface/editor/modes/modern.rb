@@ -12,6 +12,9 @@ module Kward
         csi_result = handle_modern_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        modified_navigation_result = handle_modern_modified_navigation_key(key)
+        return modified_navigation_result unless modified_navigation_result == false
+
         shift_result = handle_editor_shift_navigation_key(key)
         return shift_result unless shift_result == false
 
@@ -48,6 +51,12 @@ module Kward
         when "\e"
           return editor_search_cancel if editor_search_active?
           return @editor_state.clear_selection if @editor_state.selection_active?
+        when "/"
+          clear_editor_selection_before_edit unless editor_search_active?
+          editor_search_active? ? editor_search_append(key) : editor_search_begin(:forward)
+        when "?"
+          clear_editor_selection_before_edit unless editor_search_active?
+          editor_search_active? ? editor_search_append(key) : editor_search_begin(:backward)
         when "\x11"
           quit_editor
         when "\x13"
@@ -62,10 +71,7 @@ module Kward
           if editor_search_active?
             editor_search_append(key) if printable_key?(key)
           elsif printable_key?(key)
-            modern_record_undo do
-              clear_editor_selection_before_edit
-              editor_insert_printable(key)
-            end
+            modern_record_undo { editor_insert_printable(key) }
           end
         end
       end
@@ -85,6 +91,27 @@ module Kward
         end
       end
 
+      def handle_modern_modified_navigation_key(key)
+        return false if editor_search_active?
+
+        case key
+        when "\e[1;5C", "\e[5C"
+          @editor_state.move_line_end
+        when "\e[1;5D", "\e[5D"
+          @editor_state.move_line_start
+        when "\e[1;5A", "\e[5A"
+          @editor_state.move_file_start
+        when "\e[1;5B", "\e[5B"
+          @editor_state.move_file_end
+        when "\e[1;4C", "\e[4C"
+          editor_extending_selection { @editor_state.move_to_next_word }
+        when "\e[1;4D", "\e[4D"
+          editor_extending_selection { @editor_state.move_to_previous_word }
+        else
+          false
+        end
+      end
+
       def handle_modern_key_binding(key)
         case key
         when "\x00"
@@ -92,7 +119,7 @@ module Kward
         when "\x03"
           editor_search_active? ? editor_search_cancel : copy_editor_selection
         when "\x06"
-          editor_search_active? ? editor_search_append(key) : editor_search_begin
+          @editor_state.move_right unless editor_search_active?
         when "\x16"
           modern_record_undo { @editor_state.yank_kill_buffer } unless editor_search_active?
         when "\x18"
@@ -108,7 +135,7 @@ module Kward
         when 99
           editor_search_active? ? editor_search_cancel : copy_editor_selection
         when 102
-          editor_search_active? ? editor_search_append(key) : editor_search_begin
+          @editor_state.move_right unless editor_search_active?
         when 118
           modern_record_undo { @editor_state.yank_kill_buffer } unless editor_search_active?
         when 120

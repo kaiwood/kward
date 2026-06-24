@@ -308,7 +308,7 @@ module Kward
 
       def selection_active?
         return false if @selection_anchor.nil?
-        return true if vibe? && @vibe_mode == "visual_line"
+        return true if vibe? && %w[visual visual_line].include?(@vibe_mode)
 
         @selection_anchor != @cursor
       end
@@ -316,8 +316,14 @@ module Kward
       def selection_range
         return nil unless selection_active?
         return visual_line_selection_range if vibe? && @vibe_mode == "visual_line"
+        return visual_character_selection_range if vibe? && @vibe_mode == "visual"
 
         [@selection_anchor, @cursor].minmax
+      end
+
+      def visual_character_selection_range
+        start_index, end_index = [@selection_anchor, @cursor].minmax
+        [start_index, [end_index + 1, @buffer.length].min]
       end
 
       def visual_line_selection_range

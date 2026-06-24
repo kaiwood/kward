@@ -78,7 +78,8 @@ module Kward
         },
         "editor" => {
           "mode" => "modern",
-          "auto_indent" => true
+          "auto_indent" => true,
+          "auto_close_pairs" => true
         },
         "sessions" => {
           "auto_resume" => false
@@ -216,6 +217,12 @@ module Kward
     def editor_auto_indent?(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       editor["auto_indent"] != false
+    end
+
+    # Returns whether the built-in TUI editor should auto-close typed pairs.
+    def editor_auto_close_pairs?(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      editor["auto_close_pairs"] != false
     end
 
     # Returns whether file tools must stay inside the active workspace root.

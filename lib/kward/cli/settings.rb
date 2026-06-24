@@ -226,6 +226,9 @@ module Kward
           configure_tab_keybindings
         when /\Aeditor mode/
           configure_editor_mode
+        when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
+          set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
+          runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
         when /\Aenable session auto-resume/, /\Adisable session auto-resume/
           set_session_auto_resume_enabled(!session_auto_resume_enabled?)
           runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
@@ -240,6 +243,7 @@ module Kward
           "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
           "Tab keybindings (#{composer_tab_keybindings})",
           "Editor mode (#{editor_mode})",
+          "#{editor_auto_close_pairs_enabled? ? "Disable" : "Enable"} auto-close pairs (currently #{on_off(editor_auto_close_pairs_enabled?)})",
           "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
           "Back"
         ]
@@ -283,6 +287,14 @@ module Kward
       def editor_mode_choices
         current = editor_mode
         %w[modern emacs vibe].map { |value| value == current ? "#{value} (current)" : value }
+      end
+
+      def editor_auto_close_pairs_enabled?
+        ConfigFiles.editor_auto_close_pairs?(safely_read_config.to_h)
+      end
+
+      def set_editor_auto_close_pairs_enabled(enabled)
+        update_nested_config("editor", "auto_close_pairs" => enabled)
       end
 
       def session_auto_resume_enabled?

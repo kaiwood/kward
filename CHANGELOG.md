@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added modern editor Ctrl+Arrow keybindings for line and document boundary movement, Alt+Shift+Left/Right wordwise selection, `/` and `?` search, and Ctrl+F move-right behavior.
+- Added auto-close pairs to the built-in TUI file editor for brackets, braces, parentheses, quotes, and backticks, with an `editor.auto_close_pairs` setting.
 - Added a read-only TUI diff viewer from `/git`, opened with Enter on a changed file and showing classic colored added/removed diff lines.
 - Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop at a configurable frame rate (1–120 fps), supporting games, dashboards, and viewers with colored cell drawing, non-blocking key input, full composer state save/restore on exit, and Ctrl+C forced exit.
 - Added configurable syntax-based auto-indent on Enter for the built-in TUI file editor, including closing-token reindent and indentation-level Backspace behavior.

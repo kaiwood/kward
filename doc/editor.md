@@ -64,7 +64,7 @@ The editor is intentionally compact, but it covers the basics you need for quick
 
 The editor has three keybinding modes:
 
-- **Modern**: default mode, with familiar shortcuts like `Ctrl+S`, `Ctrl+Q`, and `Ctrl+F`.
+- **Modern**: default mode, with familiar shortcuts like `Ctrl+S`, `Ctrl+Q`, `/` search, and `?` reverse search.
 - **Emacs**: non-modal Emacs-style chords, including `C-x C-s`, `C-x C-c`, and a per-buffer kill ring.
 - **Vibe**: modal editing inspired by classic vi/vim workflows, with normal, insert, replace, visual, and command modes.
 
@@ -88,15 +88,18 @@ You can also configure it in `config.json`:
 
 `mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`.
 
-To disable auto-indent:
+To disable auto-indent or auto-close pairs:
 
 ```json
 {
   "editor": {
-    "auto_indent": false
+    "auto_indent": false,
+    "auto_close_pairs": false
   }
 }
 ```
+
+Auto-close pairs inserts matching `()`, `[]`, `{}`, quotes, and backticks while editing.
 
 See [Configuration](configuration.md) for the full editor settings reference.
 
@@ -108,7 +111,8 @@ Modern mode is the default and is the easiest place to start. It uses common ter
 | --------------------- | ------------------------------------------------- |
 | `Ctrl+S`              | Save                                              |
 | `Ctrl+Q`              | Quit; press again to discard unsaved changes      |
-| `Ctrl+F`              | Search forward                                    |
+| `/`                   | Search forward                                    |
+| `?`                   | Search backward                                   |
 | `Ctrl+C`              | Copy selection, or cancel search                  |
 | `Ctrl+X`              | Cut selection                                     |
 | `Ctrl+V`              | Paste kill buffer                                 |
@@ -117,9 +121,16 @@ Modern mode is the default and is the easiest place to start. It uses common ter
 | `Ctrl+Shift+Z`        | Redo                                              |
 | `Ctrl+Space`          | Begin selection                                   |
 | `Shift+Arrow`         | Extend selection                                  |
+| `Ctrl+Right`          | Move to end of line                               |
+| `Ctrl+Left`           | Move to start of line                             |
+| `Ctrl+Up`             | Move to beginning of document                     |
+| `Ctrl+Down`           | Move to end of document                           |
+| `Alt+Shift+Left`      | Extend selection to previous word boundary        |
+| `Alt+Shift+Right`     | Extend selection to next word boundary            |
 | `Ctrl+A`              | Move to start of line                             |
 | `Ctrl+E`              | Move to end of line                               |
 | `Ctrl+B`              | Move left                                         |
+| `Ctrl+F`              | Move right                                        |
 | `Ctrl+N`              | Move down                                         |
 | `Ctrl+P`              | Move up                                           |
 | `Ctrl+K`              | Kill to end of line                               |

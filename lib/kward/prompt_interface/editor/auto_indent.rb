@@ -23,6 +23,9 @@ module Kward
 
       def editor_insert_printable(text)
         text = text.to_s
+        return if editor_insert_printable_with_pairs(text)
+
+        delete_editor_selection
         return @editor_state.insert(text) unless current_editor_auto_indent?
         return @editor_state.insert(text) unless text.length == 1
 
@@ -32,6 +35,7 @@ module Kward
       end
 
       def editor_delete_before_cursor
+        return true if editor_delete_auto_close_pair_before_cursor
         return @editor_state.delete_before_cursor unless current_editor_auto_indent?
         return @editor_state.delete_before_cursor unless editor_cursor_in_leading_indent?
 
