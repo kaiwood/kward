@@ -384,9 +384,9 @@ module Kward
           when :end
             @editor_state.move_line_end
           when :pageup
-            @editor_state.page_up(editor_page_rows)
+            @editor_state.page_up(editor_scroll_page_rows)
           when :pagedown
-            @editor_state.page_down(editor_page_rows)
+            @editor_state.page_down(editor_scroll_page_rows)
           else
             false
           end
@@ -466,6 +466,10 @@ module Kward
 
       def editor_page_rows
         [[screen_height - 6, 1].max, 10].min
+      end
+
+      def editor_scroll_page_rows
+        [editor_page_rows / 2, 1].max
       end
 
       def quit_editor(message = "Unsaved changes. Press Ctrl+Q again to discard.")

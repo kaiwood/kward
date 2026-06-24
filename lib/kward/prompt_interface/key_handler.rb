@@ -309,6 +309,10 @@ module Kward
           :right
         when /\A\e\[[0-9;:]*D\z/, "\eOD"
           :left
+        when "\e[5~"
+          :pageup
+        when "\e[6~"
+          :pagedown
         end
       end
 

@@ -97,6 +97,24 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_page_keys_scroll_half_pages
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), ("0".."9").to_a.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        prompt.define_singleton_method(:screen_height) { 14 }
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[6~")
+        assert_equal [4, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[5~")
+        assert_equal [0, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_editor_supports_unix_text_keybindings
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")
