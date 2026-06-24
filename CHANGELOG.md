@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a configurable `editor.bar_cursor` setting that makes editable built-in editor buffers request a vertical bar cursor by default and restore the terminal default cursor shape on exit.
 - Added built-in editor soft-wrap support, configurable with `editor.soft_wrap`, plus automatic horizontal scrolling when soft-wrap is disabled.
 - Added mouse-wheel scrolling, click-to-position, drag selection, double-click word selection, triple-click line selection, and edge auto-scroll dragging in the built-in editor and diff viewer while preserving native terminal scrolling outside the editor.
 - Added Modern editor Cmd+C handling for terminals that report Command-key CSI-u events, copying selections like Ctrl+C.

@@ -32,7 +32,9 @@ module Kward
           editor_auto_close_pairs: ConfigFiles.editor_auto_close_pairs?,
           editor_auto_close_pairs_source: -> { ConfigFiles.editor_auto_close_pairs? },
           editor_soft_wrap: ConfigFiles.editor_soft_wrap?,
-          editor_soft_wrap_source: -> { ConfigFiles.editor_soft_wrap? }
+          editor_soft_wrap_source: -> { ConfigFiles.editor_soft_wrap? },
+          editor_bar_cursor: ConfigFiles.editor_bar_cursor?,
+          editor_bar_cursor_source: -> { ConfigFiles.editor_bar_cursor? }
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
           @prompt.start(render: false)

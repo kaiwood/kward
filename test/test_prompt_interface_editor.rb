@@ -1,6 +1,47 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditor < KwardTestCase
+  def test_prompt_interface_editor_sets_and_restores_bar_cursor_by_default
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        output = StringIO.new
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+
+        assert prompt.send(:open_editor, "notes.txt")
+        assert_includes output.string, Kward::PromptInterface::CURSOR_SHAPE_BAR
+
+        prompt.send(:close_editor)
+        assert_includes output.string, Kward::PromptInterface::CURSOR_SHAPE_DEFAULT
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_does_not_set_bar_cursor_when_disabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        output = StringIO.new
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern", editor_bar_cursor: false)
+
+        assert prompt.send(:open_editor, "notes.txt")
+        refute_includes output.string, Kward::PromptInterface::CURSOR_SHAPE_BAR
+
+        prompt.send(:close_editor)
+        refute_includes output.string, Kward::PromptInterface::CURSOR_SHAPE_DEFAULT
+      end
+    end
+  end
+
+  def test_prompt_interface_diff_viewer_does_not_set_bar_cursor
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+
+    assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
+
+    refute_includes output.string, Kward::PromptInterface::CURSOR_SHAPE_BAR
+  end
+
   def test_prompt_interface_diff_viewer_is_read_only_and_closes_with_escape
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")

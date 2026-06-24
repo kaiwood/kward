@@ -23,6 +23,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("editor", "auto_indent")
       assert_equal true, config.dig("editor", "auto_close_pairs")
       assert_equal true, config.dig("editor", "soft_wrap")
+      assert_equal true, config.dig("editor", "bar_cursor")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
@@ -83,6 +84,13 @@ class TestConfigFiles < KwardTestCase
     assert_equal true, Kward::ConfigFiles.editor_soft_wrap?("editor" => {})
     assert_equal true, Kward::ConfigFiles.editor_soft_wrap?("editor" => { "soft_wrap" => true })
     assert_equal false, Kward::ConfigFiles.editor_soft_wrap?("editor" => { "soft_wrap" => false })
+  end
+
+  def test_editor_bar_cursor_defaults_to_true_and_only_false_disables_it
+    assert_equal true, Kward::ConfigFiles.editor_bar_cursor?({})
+    assert_equal true, Kward::ConfigFiles.editor_bar_cursor?("editor" => {})
+    assert_equal true, Kward::ConfigFiles.editor_bar_cursor?("editor" => { "bar_cursor" => true })
+    assert_equal false, Kward::ConfigFiles.editor_bar_cursor?("editor" => { "bar_cursor" => false })
   end
 
   def test_workspace_guardrails_enabled_defaults_to_true_and_only_false_disables_it

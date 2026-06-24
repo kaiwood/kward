@@ -2306,6 +2306,25 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_settings_interface_can_toggle_editor_bar_cursor
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "editor" => { "bar_cursor" => true } }, config_path)
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Disable bar cursor (currently on)"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal false, JSON.parse(File.read(config_path)).dig("editor", "bar_cursor")
+      assert_includes prompt.output.join("\n"), "Editor bar cursor disabled."
+      interface_index = prompt.select_messages.index("Interface")
+      assert interface_index
+      assert_includes prompt.select_choices[interface_index], "Disable bar cursor (currently on)"
+    end
+  end
+
   def test_rewind_slash_command_can_return_to_where_user_was
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

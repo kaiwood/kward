@@ -232,6 +232,9 @@ module Kward
         when /\Aenable soft-wrap/, /\Adisable soft-wrap/
           set_editor_soft_wrap_enabled(!editor_soft_wrap_enabled?)
           runtime_output("Editor soft-wrap #{editor_soft_wrap_enabled? ? "enabled" : "disabled"}.")
+        when /\Aenable bar cursor/, /\Adisable bar cursor/
+          set_editor_bar_cursor_enabled(!editor_bar_cursor_enabled?)
+          runtime_output("Editor bar cursor #{editor_bar_cursor_enabled? ? "enabled" : "disabled"}.")
         when /\Aenable session auto-resume/, /\Adisable session auto-resume/
           set_session_auto_resume_enabled(!session_auto_resume_enabled?)
           runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
@@ -248,6 +251,7 @@ module Kward
           "Editor mode (#{editor_mode})",
           "#{editor_auto_close_pairs_enabled? ? "Disable" : "Enable"} auto-close pairs (currently #{on_off(editor_auto_close_pairs_enabled?)})",
           "#{editor_soft_wrap_enabled? ? "Disable" : "Enable"} soft-wrap (currently #{on_off(editor_soft_wrap_enabled?)})",
+          "#{editor_bar_cursor_enabled? ? "Disable" : "Enable"} bar cursor (currently #{on_off(editor_bar_cursor_enabled?)})",
           "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
           "Back"
         ]
@@ -307,6 +311,14 @@ module Kward
 
       def set_editor_soft_wrap_enabled(enabled)
         update_nested_config("editor", "soft_wrap" => enabled)
+      end
+
+      def editor_bar_cursor_enabled?
+        ConfigFiles.editor_bar_cursor?(safely_read_config.to_h)
+      end
+
+      def set_editor_bar_cursor_enabled(enabled)
+        update_nested_config("editor", "bar_cursor" => enabled)
       end
 
       def session_auto_resume_enabled?

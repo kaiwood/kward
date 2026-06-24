@@ -97,6 +97,8 @@ module Kward
     SYNCHRONIZED_OUTPUT_DISABLE = "\e[?2026l".freeze
     CURSOR_SHOW = "\e[?25h".freeze
     CURSOR_HIDE = "\e[?25l".freeze
+    CURSOR_SHAPE_DEFAULT = "\e[0 q".freeze
+    CURSOR_SHAPE_BAR = "\e[6 q".freeze
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
     EXIT_INPUT = :exit_input
     CANCEL_INPUT = :cancel_input
@@ -114,7 +116,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -165,6 +167,7 @@ module Kward
       @reserved_rows = 0
       @color_enabled = ANSI.enabled?(output)
       @cursor_visible = true
+      @editor_bar_cursor_active = false
       @synchronized_output_depth = 0
       @overlay_settings = normalize_overlay_settings(overlay_settings)
       @footer = footer
@@ -184,6 +187,8 @@ module Kward
       @editor_auto_close_pairs_source = editor_auto_close_pairs_source
       @editor_soft_wrap = editor_soft_wrap != false
       @editor_soft_wrap_source = editor_soft_wrap_source
+      @editor_bar_cursor = editor_bar_cursor != false
+      @editor_bar_cursor_source = editor_bar_cursor_source
     end
 
     def start(render: true)
@@ -207,6 +212,7 @@ module Kward
         restore_scroll_region_locked
         @output_io.print(BRACKETED_PASTE_RESTORE)
         @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
+        restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
         @output_io.puts
         @output_io.flush

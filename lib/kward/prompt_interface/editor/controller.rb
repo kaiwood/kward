@@ -61,6 +61,7 @@ module Kward
         @file_overlay_dismissed_token = nil
         @file_open_dismissed_token = nil
         @asking = true
+        set_editor_bar_cursor_locked if current_editor_bar_cursor?
         enable_editor_mouse_reporting
         true
       rescue StandardError => e
@@ -96,8 +97,17 @@ module Kward
         @editor_soft_wrap != false
       end
 
+      def current_editor_bar_cursor?
+        return @editor_bar_cursor_source.call != false if @editor_bar_cursor_source.respond_to?(:call)
+
+        @editor_bar_cursor != false
+      rescue StandardError
+        @editor_bar_cursor != false
+      end
+
       def close_editor
         disable_editor_mouse_reporting
+        restore_editor_cursor_shape_locked
         @editor_text_width = nil
         @editor_state = nil
         @prompt_label = "You>"

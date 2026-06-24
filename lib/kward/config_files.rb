@@ -80,7 +80,8 @@ module Kward
           "mode" => "modern",
           "auto_indent" => true,
           "auto_close_pairs" => true,
-          "soft_wrap" => true
+          "soft_wrap" => true,
+          "bar_cursor" => true
         },
         "sessions" => {
           "auto_resume" => false
@@ -230,6 +231,12 @@ module Kward
     def editor_soft_wrap?(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       editor["soft_wrap"] != false
+    end
+
+    # Returns whether editable built-in TUI editor buffers should use a bar cursor.
+    def editor_bar_cursor?(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      editor["bar_cursor"] != false
     end
 
     # Returns whether file tools must stay inside the active workspace root.
