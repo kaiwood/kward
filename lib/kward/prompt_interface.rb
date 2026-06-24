@@ -58,6 +58,7 @@ module Kward
     SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
     SPINNER_INTERVAL = 0.1
     FOOTER_REFRESH_INTERVAL = 1.0
+    COMPOSER_STATUS_REFRESH_INTERVAL = 1.0
     COMPOSER_MAX_INPUT_ROWS = 6
     TRANSCRIPT_BUFFER_LIMIT = 200_000
     BANNER_MESSAGE = Banner::MESSAGE
@@ -130,6 +131,8 @@ module Kward
       @spinner_frame_index = 0
       @last_spinner_tick = monotonic_now
       @last_footer_refresh = monotonic_now
+      @last_composer_status_refresh = 0.0
+      @cached_composer_status_text = nil
       @prompt_label = "You>"
       @assistant_label = "Assistant"
       @stream_state = StreamState.new

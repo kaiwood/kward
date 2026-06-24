@@ -55,6 +55,22 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_DISABLE
   end
 
+  def test_prompt_interface_throttles_composer_status_during_typing
+    count = 0
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, composer_status: -> { count += 1; "status #{count}" })
+    prompt.start
+
+    10.times do
+      prompt.send(:handle_key, "a")
+      prompt.send(:render_prompt_locked)
+    end
+
+    assert_equal 1, count
+    assert_includes strip_ansi(output.string), "status 1"
+    refute_includes strip_ansi(output.string), "status 2"
+  end
+
   def test_prompt_interface_top_border_displays_model_and_reasoning
     output = StringIO.new
     status = lambda { "Codex gpt-5.5 · medium" }

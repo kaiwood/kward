@@ -50,6 +50,21 @@ module Kward
         true
       end
 
+      def cached_composer_status_text
+        return nil unless @composer_status
+
+        now = monotonic_now
+        elapsed = now - @last_composer_status_refresh.to_f
+        if @cached_composer_status_text.nil? || elapsed >= COMPOSER_STATUS_REFRESH_INTERVAL
+          text = @composer_status.call.to_s
+          @cached_composer_status_text = text.empty? ? nil : status_composer_text(text)
+          @last_composer_status_refresh = now
+        end
+        @cached_composer_status_text
+      rescue StandardError
+        @cached_composer_status_text = nil
+      end
+
       def monotonic_now
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end

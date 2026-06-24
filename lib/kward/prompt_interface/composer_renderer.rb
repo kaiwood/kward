@@ -79,7 +79,7 @@ module Kward
 
       def top_border(width)
         title = composer_title
-        status = composer_status_text
+        status = cached_composer_status_text
         if status
           gap = width - 2 - ANSI.strip(title).length - ANSI.strip(status).length
           if gap >= 0
@@ -111,13 +111,6 @@ module Kward
 
       def busy_title(text)
         @busy_help ? "#{text} · #{BUSY_HELP_TEXT}" : text
-      end
-
-      def composer_status_text
-        text = @composer_status&.call.to_s
-        return nil if text.empty?
-
-        status_composer_text(text)
       end
 
       def status_composer_text(text)
