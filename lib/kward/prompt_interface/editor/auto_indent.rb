@@ -25,7 +25,7 @@ module Kward
         text = text.to_s
         return if editor_insert_printable_with_pairs(text)
 
-        delete_editor_selection
+        clear_editor_selection_before_edit
         return @editor_state.insert(text) unless current_editor_auto_indent?
         return @editor_state.insert(text) unless text.length == 1
 
