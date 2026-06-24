@@ -105,7 +105,7 @@ module Kward
           when "\n", "\r"
             file_open_overlay_visible? ? open_selected_file_in_editor(fallback_to_typed_path: true) : submit_input
           when "\t"
-            open_selected_file_in_editor || complete_selected_file_mention || complete_selected_slash_command || insert_key(key)
+            handle_tab_completion_key
           when "\b", "\x7F"
             delete_before_cursor
           when "\x04"
@@ -124,6 +124,10 @@ module Kward
         return CANCEL_INPUT if @busy
 
         raise Interrupt
+      end
+
+      def handle_tab_completion_key
+        open_selected_file_in_editor || complete_selected_file_mention || complete_selected_slash_command || insert_key("\t")
       end
 
       def handle_escape_sequence
@@ -215,7 +219,7 @@ module Kward
           if ctrl_modifier?(modifier)
             shift_modifier?(modifier) ? { tab_action: :previous } : { tab_action: :next }
           else
-            insert_csi_u_text(sequence) || false
+            handle_tab_completion_key
           end
         when 13
           if modifier == 2

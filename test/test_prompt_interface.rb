@@ -1625,6 +1625,19 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_csi_u_tab_completes_slash_selection
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      slash_commands: [{ name: "plan", description: "Plan work.", argument_hint: "<task>" }]
+    )
+
+    prompt.send(:handle_key, "/")
+
+    assert_equal true, prompt.send(:handle_key, "\e[9;1;9u")
+    assert_equal "/plan ", prompt.send(:composer_input)
+  end
+
   def test_prompt_interface_escape_closes_slash_overlay_and_keeps_prompt_active
     input, writer = IO.pipe
     output = StringIO.new
