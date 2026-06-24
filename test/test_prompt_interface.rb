@@ -2360,6 +2360,19 @@ class TestPromptInterface < KwardTestCase
     assert_includes rendered, "  ?? new.txt"
   end
 
+  def test_prompt_interface_git_overlay_scrolls_to_selected_status_line
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    status_lines = (1..12).map { |index| " M file#{index}.rb" }
+    prompt.instance_variable_set(:@git_state, { status_lines: status_lines, composing: false, selected_index: 10 })
+
+    rows = prompt.send(:git_overlay_rows, 80, height: 15)
+    rendered = strip_ansi(rows.join("\n"))
+
+    assert_includes rendered, "… 4 above"
+    assert_includes rendered, "›  M file11.rb"
+    refute_includes rendered, " M file1.rb"
+  end
+
   def test_prompt_interface_git_tab_enters_commit_message_mode
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: false, selected_index: 0 })

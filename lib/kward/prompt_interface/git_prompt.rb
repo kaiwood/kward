@@ -226,13 +226,17 @@ module Kward
         status_lines = @git_state[:status_lines]
         status_lines = ["No uncommitted changes."] if status_lines.empty?
         max_status_rows = [max_overlay_list_rows(height), 1].max
-        status_lines.first(max_status_rows).each_with_index do |line, index|
-          marker = index == @git_state[:selected_index].to_i ? "› " : "  "
+        selected_index = @git_state[:selected_index].to_i
+        start_index = centered_list_window_start(selected_index, status_lines.length, max_status_rows)
+        visible_status_lines = status_lines[start_index, max_status_rows] || []
+        lines << overlay_text_line("… #{start_index} above", :muted) if start_index.positive?
+        visible_status_lines.each_with_index do |line, offset|
+          index = start_index + offset
+          marker = index == selected_index ? "› " : "  "
           lines << overlay_text_line("#{marker}#{line}")
         end
-        if status_lines.length > max_status_rows
-          lines << overlay_text_line("… #{status_lines.length - max_status_rows} more", :muted)
-        end
+        hidden_below = status_lines.length - start_index - visible_status_lines.length
+        lines << overlay_text_line("… #{hidden_below} more", :muted) if hidden_below.positive?
         overlay_card_rows("Git", lines, width)
       end
     end
