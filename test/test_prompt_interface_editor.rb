@@ -1,6 +1,102 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditor < KwardTestCase
+  def test_prompt_interface_modern_ctrl_s_saves_file
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\x13")
+
+        assert_equal "!hello", File.read(path)
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_q_closes_clean_editor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\x11")
+
+        refute prompt.send(:editor_active?)
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_f_starts_search
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\x06")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert editor.search_active
+        assert_equal "Search:", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_csi_u_ctrl_f_starts_search
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[102;5u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert editor.search_active
+        assert_equal "Search:", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_slash_inserts_character
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "/")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        refute editor.search_active
+        assert_equal "/hello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_o_and_ctrl_x_do_not_save_or_close
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\x0F")
+        prompt.send(:handle_editor_key, "\x18")
+
+        assert prompt.send(:editor_active?)
+        assert_equal "hello", File.read(path)
+      end
+    end
+  end
+
   def test_prompt_interface_editor_supports_unix_text_keybindings
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")
@@ -858,7 +954,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         Dir.chdir(workspace) do
           prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "default", editor_mode_source: -> { Kward::ConfigFiles.editor_mode })
           assert prompt.send(:open_editor, "notes.txt")
-          assert_equal "nano", prompt.instance_variable_get(:@editor_state).editor_mode
+          assert_equal "modern", prompt.instance_variable_get(:@editor_state).editor_mode
           prompt.send(:close_editor)
 
           Kward::ConfigFiles.write_config({ "editor" => { "mode" => "vi" } }, config_path)

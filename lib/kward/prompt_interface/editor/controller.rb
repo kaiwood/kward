@@ -87,7 +87,7 @@ module Kward
         return if key.nil?
         return handle_vi_key(key) if @editor_state&.vi?
         return handle_emacs_key(key) if @editor_state&.emacs?
-        return handle_nano_key(key) if @editor_state&.nano?
+        return handle_modern_key(key) if @editor_state&.modern?
         return if handle_editor_bracketed_paste_key(key)
 
         csi_result = handle_editor_csi_u_key(key)

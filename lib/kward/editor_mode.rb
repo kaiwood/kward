@@ -2,8 +2,8 @@
 module Kward
   # Normalizes built-in TUI file editor mode names.
   module EditorMode
-    MODES = %w[nano emacs vi].freeze
-    DEFAULT = "nano".freeze
+    MODES = %w[modern emacs vi].freeze
+    DEFAULT = "modern".freeze
 
     module_function
 

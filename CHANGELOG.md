@@ -16,7 +16,7 @@ xx
 - Added `?pattern` backward search support to the TUI vi editor mode.
 - Added vi search repeat keys `n` and `N`, plus word-under-cursor search keys `*` and `#`, to the TUI vi editor mode.
 - Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
-- Added nano, emacs, and vi editor modes for the built-in TUI file editor, with nano as the default, emacs kill-ring support, and vi retaining its modal command set.
+- Added modern, emacs, and vi editor modes for the built-in TUI file editor, with modern as the default, emacs kill-ring support, and vi retaining its modal command set.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
 - Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
 - Added file-level stage/unstage toggling to the interactive `/git` overlay with `s` and Up/Down selection.
@@ -27,6 +27,7 @@ xx
 
 ### Changed
 
+- Renamed the default built-in TUI file editor mode from `nano` to `modern` and changed its save/quit keys to Ctrl+S/Ctrl+Q.
 - Changed `/git` commits to use staged changes when present, or automatically stage all workspace changes when nothing is staged.
 - Changed TUI tabs to colorize tab names by state instead of appending `*` for running tabs: yellow while running, red after errors or cancellation, and green when a background tab finishes unread.
 - Changed TUI tabs to use unrestricted tab-local tool registries so tab turns can run independently without worker write-lock policy.

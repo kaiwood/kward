@@ -1,0 +1,84 @@
+# Namespace for the Kward CLI agent runtime.
+module Kward
+  # Interactive terminal UI used by the CLI frontend.
+  class PromptInterface
+    # Modern keymap for the built-in composer file editor.
+    module ModernEditorMode
+      private
+
+      def handle_modern_key(key)
+        return if handle_editor_bracketed_paste_key(key)
+
+        csi_result = handle_modern_csi_u_key(key)
+        return csi_result unless csi_result == false
+
+        shift_result = handle_editor_shift_navigation_key(key)
+        return shift_result unless shift_result == false
+
+        return editor_search_begin if key == "\x06" && !editor_search_active?
+
+        binding_result = handle_editor_key_binding(key)
+        return binding_result unless binding_result == false
+
+        tab_result = handle_tab_key_binding(key)
+        return tab_result unless tab_result == false
+
+        if key.is_a?(String) && key.length > 1
+          token = next_key_token(key)
+          if token.length < key.length
+            queue_pending_keys(key[token.length..])
+            return handle_modern_key(token)
+          end
+        end
+
+        case key
+        when "\n", "\r"
+          return editor_search_confirm if editor_search_active?
+          clear_editor_selection_before_edit
+          @editor_state.insert("\n")
+        when "\t"
+          clear_editor_selection_before_edit
+          @editor_state.insert("  ") unless editor_search_active?
+        when "\b", "\x7F"
+          clear_editor_selection_before_edit unless editor_search_active?
+          editor_search_active? ? editor_search_delete_character : @editor_state.delete_before_cursor
+        when "\x03"
+          return editor_search_cancel if editor_search_active?
+        when "\e"
+          return editor_search_cancel if editor_search_active?
+          return @editor_state.clear_selection if @editor_state.selection_active?
+        when "\x11"
+          quit_editor
+        when "\x13"
+          save_editor
+        else
+          key_name = key_name_for(key)
+          named_result = handle_editor_named_key(key_name) if key_name
+          return named_result unless named_result == false || named_result.nil?
+
+          if editor_search_active?
+            editor_search_append(key) if printable_key?(key)
+          elsif printable_key?(key)
+            clear_editor_selection_before_edit
+            @editor_state.insert(key)
+          end
+        end
+      end
+
+      def handle_modern_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+
+        if ctrl_modifier?(modifier) && ctrl_code(code) == 102
+          editor_search_active? ? editor_search_append(key) : editor_search_begin
+        else
+          handle_editor_csi_u_key(key)
+        end
+      end
+    end
+  end
+end

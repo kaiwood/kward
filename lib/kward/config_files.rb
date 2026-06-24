@@ -77,7 +77,7 @@ module Kward
           "tab_keybindings" => "auto"
         },
         "editor" => {
-          "mode" => "nano"
+          "mode" => "modern"
         },
         "sessions" => {
           "auto_resume" => false

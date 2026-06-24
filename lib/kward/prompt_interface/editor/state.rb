@@ -10,7 +10,7 @@ module Kward
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
       attr_accessor :buffer, :cursor, :viewport_row, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vi_mode, :vi_pending, :vi_command, :undo_stack, :redo_stack, :vi_last_change
 
-      def initialize(path:, content:, new_file: false, editor_mode: "nano")
+      def initialize(path:, content:, new_file: false, editor_mode: "modern")
         @path = path.to_s
         @new_file = new_file
         @original_content = content.to_s
@@ -66,8 +66,8 @@ module Kward
         @vi_last_change = other.vi_last_change&.dup
       end
 
-      def nano?
-        @editor_mode == "nano"
+      def modern?
+        @editor_mode == "modern"
       end
 
       def emacs?
@@ -554,7 +554,7 @@ module Kward
         when "vi"
           "NORMAL · i insert · :w save · :q quit"
         else
-          "^O save · ^X quit · ^W search"
+          "Ctrl+S save · Ctrl+Q quit · Ctrl+F search"
         end
       end
 
