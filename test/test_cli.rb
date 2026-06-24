@@ -1383,25 +1383,29 @@ class TestCLI < KwardTestCase
 
   def test_new_command_clears_prompt_transcript
     Dir.mktmpdir do |config_dir|
-      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
-      output = StringIO.new
-      input, writer = IO.pipe
-      writer.write("hello\r/new\r/exit\r")
-      writer.close
-      prompt = Kward::PromptInterface.new(input: input, output: output)
-      client = RecordingClient.new(["reply"])
-      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      Dir.mktmpdir do |workspace|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+        output = StringIO.new
+        input, writer = IO.pipe
+        writer.write("hello\r/new\r/exit\r")
+        writer.close
+        prompt = Kward::PromptInterface.new(input: input, output: output)
+        client = RecordingClient.new(["reply"])
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
-      cli.interactive_loop
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          cli.interactive_loop
+        end
 
-      assert_includes strip_ansi(output.string), "You> hello"
-      assert_includes output.string, TTY::Cursor.clear_screen
-      after_clear = output.string.split(TTY::Cursor.clear_screen).last
-      refute_includes strip_ansi(after_clear), "You> hello"
-      refute_includes strip_ansi(after_clear), "Kward>"
-      refute_includes strip_ansi(after_clear), "Started new session:"
-    ensure
-      input&.close unless input&.closed?
+        assert_includes strip_ansi(output.string), "You> hello"
+        assert_includes output.string, TTY::Cursor.clear_screen
+        after_clear = output.string.split(TTY::Cursor.clear_screen).last
+        refute_includes strip_ansi(after_clear), "You> hello"
+        refute_includes strip_ansi(after_clear), "Kward>"
+        refute_includes strip_ansi(after_clear), "Started new session:"
+      ensure
+        input&.close unless input&.closed?
+      end
     end
   end
 
