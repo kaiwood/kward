@@ -655,6 +655,55 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_mouse_wheel_scrolls_viewport
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), ("0".."20").to_a.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        prompt.define_singleton_method(:screen_height) { 14 }
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[<65;1;1M")
+        assert_equal 3, editor.viewport_row
+        assert_equal [3, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[<64;1;1M")
+        assert_equal 0, editor.viewport_row
+        assert_equal [3, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_enables_and_disables_mouse_reporting
+    output = StringIO.new
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        assert_includes output.string, "\e[?1000h\e[?1006h"
+
+        prompt.send(:close_editor)
+
+        assert_includes output.string, "\e[?1006l\e[?1000l"
+      end
+    end
+  end
+
+  def test_prompt_interface_diff_viewer_mouse_wheel_scrolls_viewport
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt.define_singleton_method(:screen_height) { 14 }
+    assert prompt.send(:open_diff_viewer, "notes.txt", ("0".."20").to_a.join("\n"))
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, "\e[<65;1;1M")
+
+    assert_equal 3, editor.viewport_row
+    assert_equal [3, 0], editor.cursor_line_and_column
+  end
+
   def test_prompt_interface_editor_supports_unix_text_keybindings
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")

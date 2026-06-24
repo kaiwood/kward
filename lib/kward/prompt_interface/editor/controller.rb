@@ -61,6 +61,7 @@ module Kward
         @file_overlay_dismissed_token = nil
         @file_open_dismissed_token = nil
         @asking = true
+        enable_editor_mouse_reporting
         true
       rescue StandardError => e
         @file_editor_open_status = "Cannot edit #{path}: #{e.message}"
@@ -75,6 +76,7 @@ module Kward
         @composer.clear_attachments
         @pending_keys.clear
         @asking = true
+        enable_editor_mouse_reporting
         true
       end
 
@@ -87,6 +89,7 @@ module Kward
       end
 
       def close_editor
+        disable_editor_mouse_reporting
         @editor_state = nil
         @prompt_label = "You>"
         self.composer_input = ""
@@ -96,6 +99,8 @@ module Kward
 
       def handle_editor_key(key)
         return if key.nil?
+        mouse_result = handle_editor_mouse_key(key)
+        return mouse_result unless mouse_result == false
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
         return handle_vibe_key(key) if @editor_state&.vibe?
         return handle_emacs_key(key) if @editor_state&.emacs?
@@ -197,6 +202,34 @@ module Kward
         else
           editor_insert_printable(text)
         end
+      end
+
+      def handle_editor_mouse_key(key)
+        event = parse_editor_mouse_key(key)
+        return false unless event
+
+        queue_pending_keys(event[:remaining]) unless event[:remaining].empty?
+        case event[:button]
+        when 64
+          scroll_editor_up(editor_mouse_scroll_rows)
+        when 65
+          scroll_editor_down(editor_mouse_scroll_rows)
+        else
+          true
+        end
+      end
+
+      def parse_editor_mouse_key(key)
+        match = key.to_s.match(/\A\e\[<(\d+);(\d+);(\d+)([Mm])/)
+        return nil unless match
+
+        {
+          button: match[1].to_i,
+          column: match[2].to_i,
+          row: match[3].to_i,
+          action: match[4],
+          remaining: key.to_s[match[0].length..].to_s
+        }
       end
 
       def handle_editor_shift_navigation_key(key)
@@ -620,6 +653,26 @@ module Kward
 
       def editor_scroll_page_rows
         [editor_visible_line_count / 2, 1].max
+      end
+
+      def editor_mouse_scroll_rows
+        3
+      end
+
+      def enable_editor_mouse_reporting
+        return if @editor_mouse_reporting_enabled
+
+        @output_io.print("\e[?1000h\e[?1006h")
+        @output_io.flush if @output_io.respond_to?(:flush)
+        @editor_mouse_reporting_enabled = true
+      end
+
+      def disable_editor_mouse_reporting
+        return unless @editor_mouse_reporting_enabled
+
+        @output_io.print("\e[?1006l\e[?1000l")
+        @output_io.flush if @output_io.respond_to?(:flush)
+        @editor_mouse_reporting_enabled = false
       end
 
       def scroll_editor_up(rows)
