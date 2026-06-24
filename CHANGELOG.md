@@ -7,7 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added built-in editor soft-wrap support, configurable with `editor.soft_wrap`, plus automatic horizontal scrolling when soft-wrap is disabled.
-- Added mouse-wheel scrolling in the built-in editor and diff viewer while preserving native terminal scrolling outside the editor.
+- Added mouse-wheel scrolling, click-to-position, drag selection, double-click word selection, triple-click line selection, and edge auto-scroll dragging in the built-in editor and diff viewer while preserving native terminal scrolling outside the editor.
 - Added Modern editor Cmd+C handling for terminals that report Command-key CSI-u events, copying selections like Ctrl+C.
 - Added TUI Ctrl+Tab and Ctrl+Shift+Tab shortcuts for next/previous tab navigation across tab keybinding modes.
 - Added modern editor Ctrl+Arrow keybindings for line and document boundary movement, Alt+Shift+Left/Right wordwise selection, `/` and `?` search, and Ctrl+F move-right behavior.

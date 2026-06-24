@@ -218,13 +218,19 @@ module Kward
         return false unless event
 
         queue_pending_keys(event[:remaining]) unless event[:remaining].empty?
-        case event[:button]
+        case event[:code]
         when 64
           scroll_editor_up(editor_mouse_scroll_rows)
         when 65
           scroll_editor_down(editor_mouse_scroll_rows)
         else
-          true
+          if event[:drag]
+            handle_editor_mouse_drag(event)
+          elsif event[:button].zero?
+            event[:release] ? finish_editor_mouse_drag : handle_editor_mouse_press(event)
+          else
+            true
+          end
         end
       end
 
@@ -232,13 +238,172 @@ module Kward
         match = key.to_s.match(/\A\e\[<(\d+);(\d+);(\d+)([Mm])/)
         return nil unless match
 
+        code = match[1].to_i
         {
-          button: match[1].to_i,
+          code: code,
+          button: code & 3,
           column: match[2].to_i,
           row: match[3].to_i,
           action: match[4],
+          release: match[4] == "m",
+          drag: (code & 32).positive?,
           remaining: key.to_s[match[0].length..].to_s
         }
+      end
+
+      def handle_editor_mouse_press(event)
+        position = editor_position_for_mouse_event(event)
+        return true unless position
+
+        now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        click_count = editor_mouse_click_count(event, now)
+        case click_count
+        when 3..Float::INFINITY
+          range = select_editor_line_at(position[:line])
+          @editor_mouse_drag_anchor = range[0]
+          @editor_mouse_dragging = true
+        when 2
+          finish_editor_mouse_drag
+          select_editor_word_at(position[:offset])
+        else
+          @editor_state.clear_selection
+          @editor_state.cursor = position[:offset]
+          @editor_mouse_drag_anchor = position[:offset]
+          @editor_mouse_dragging = true
+        end
+        @editor_last_click = { time: now, column: event[:column], row: event[:row], count: click_count }
+        true
+      end
+
+      def handle_editor_mouse_drag(event)
+        return true unless @editor_mouse_dragging
+
+        position = editor_drag_position_for_mouse_event(event)
+        return true unless position
+
+        @editor_state.selection_anchor = @editor_mouse_drag_anchor
+        @editor_state.cursor = position[:offset]
+        true
+      end
+
+      def finish_editor_mouse_drag
+        @editor_mouse_dragging = false
+        @editor_mouse_drag_anchor = nil
+        true
+      end
+
+      def editor_mouse_click_count(event, now)
+        return 1 unless editor_repeated_click?(event, now)
+
+        @editor_last_click[:count].to_i + 1
+      end
+
+      def editor_repeated_click?(event, now)
+        return false unless @editor_last_click
+        return false unless now - @editor_last_click[:time] <= 0.5
+
+        (@editor_last_click[:column] - event[:column]).abs <= 1 && (@editor_last_click[:row] - event[:row]).abs <= 1
+      end
+
+      def select_editor_word_at(offset)
+        range = @editor_state.word_range_at(offset)
+        return @editor_state.clear_selection unless range
+
+        @editor_state.selection_anchor = range[0]
+        @editor_state.cursor = range[1]
+      end
+
+      def select_editor_line_at(line_index)
+        range = @editor_state.line_range(line_index)
+        @editor_state.selection_anchor = range[0]
+        @editor_state.cursor = range[1]
+        range
+      end
+
+      def editor_drag_position_for_mouse_event(event)
+        scroll_editor_horizontally_for_drag(event)
+        top = editor_mouse_content_top_row
+        bottom = top + editor_visible_line_count - 1
+        if event[:row] < top
+          scroll_editor_up(editor_mouse_scroll_rows)
+          return editor_edge_position_for_mouse_event(event, @editor_state.viewport_row)
+        elsif event[:row] > bottom
+          scroll_editor_down(editor_mouse_scroll_rows)
+          return editor_edge_position_for_mouse_event(event, @editor_state.viewport_row + editor_visible_line_count - 1)
+        end
+
+        editor_position_for_mouse_event(event)
+      end
+
+      def editor_position_for_mouse_event(event)
+        row_offset = event[:row] - editor_mouse_content_top_row
+        return nil if row_offset.negative? || row_offset >= editor_visible_line_count
+
+        if current_editor_soft_wrap?
+          editor_wrapped_position_for_mouse(event, row_offset)
+        else
+          line_index = @editor_state.viewport_row + row_offset
+          editor_position_for_line_and_column(line_index, editor_mouse_column_for_event(event))
+        end
+      end
+
+      def editor_wrapped_position_for_mouse(event, row_offset)
+        editor_wrapped_position_for_visual_row(event, @editor_state.viewport_row + row_offset)
+      end
+
+      def editor_edge_position_for_mouse_event(event, row_index)
+        if current_editor_soft_wrap?
+          editor_wrapped_position_for_visual_row(event, row_index)
+        else
+          editor_position_for_line_and_column(row_index, editor_mouse_column_for_event(event))
+        end
+      end
+
+      def editor_wrapped_position_for_visual_row(event, row_index)
+        visual_row = editor_visual_rows(current_editor_text_width)[row_index]
+        return nil unless visual_row
+
+        column = visual_row[:column_offset] + editor_mouse_column_for_event(event)
+        editor_position_for_line_and_column(visual_row[:line_index], column)
+      end
+
+      def editor_position_for_line_and_column(line_index, column)
+        lines = @editor_state.lines
+        line_index = [[line_index.to_i, 0].max, lines.length - 1].min
+        column = [[column.to_i, 0].max, lines[line_index].to_s.length].min
+        @editor_state.set_cursor_line_and_column(line_index, column)
+        { line: line_index, column: column, offset: @editor_state.cursor }
+      end
+
+      def editor_bottom_mouse_line_index
+        [@editor_state.viewport_row + editor_visible_line_count - 1, @editor_state.lines.length - 1].min
+      end
+
+      def scroll_editor_horizontally_for_drag(event)
+        return if current_editor_soft_wrap?
+
+        if event[:column] < editor_mouse_text_left_column
+          @editor_state.viewport_column = [@editor_state.viewport_column.to_i - editor_mouse_scroll_rows, 0].max
+        elsif event[:column] > editor_mouse_text_right_column
+          @editor_state.viewport_column = @editor_state.viewport_column.to_i + editor_mouse_scroll_rows
+        end
+      end
+
+      def editor_mouse_column_for_event(event)
+        column = [event[:column] - editor_mouse_text_left_column, 0].max
+        current_editor_soft_wrap? ? column : column + @editor_state.viewport_column.to_i
+      end
+
+      def editor_mouse_text_left_column
+        3 + editor_line_number_gutter_width
+      end
+
+      def editor_mouse_text_right_column
+        editor_mouse_text_left_column + current_editor_text_width - 1
+      end
+
+      def editor_mouse_content_top_row
+        3
       end
 
       def handle_editor_shift_navigation_key(key)
@@ -716,7 +881,7 @@ module Kward
       def enable_editor_mouse_reporting
         return if @editor_mouse_reporting_enabled
 
-        @output_io.print("\e[?1000h\e[?1006h")
+        @output_io.print("\e[?1003h\e[?1006h")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_mouse_reporting_enabled = true
       end
@@ -724,7 +889,7 @@ module Kward
       def disable_editor_mouse_reporting
         return unless @editor_mouse_reporting_enabled
 
-        @output_io.print("\e[?1006l\e[?1000l")
+        @output_io.print("\e[?1006l\e[?1003l")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_mouse_reporting_enabled = false
       end

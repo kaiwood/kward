@@ -371,6 +371,19 @@ module Kward
         [start_index, end_index]
       end
 
+      def word_range_at(offset)
+        return nil if @buffer.empty?
+
+        index = [[offset.to_i, 0].max, @buffer.length - 1].min
+        return nil if word_separator?(@buffer[index])
+
+        start_index = index
+        start_index -= 1 while start_index.positive? && !word_separator?(@buffer[start_index - 1])
+        end_index = index + 1
+        end_index += 1 while end_index < @buffer.length && !word_separator?(@buffer[end_index])
+        [start_index, end_index]
+      end
+
       def current_line_range
         line, = cursor_line_and_column
         line_range(line)

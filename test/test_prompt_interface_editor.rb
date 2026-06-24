@@ -683,11 +683,11 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
         assert prompt.send(:open_editor, "notes.txt")
 
-        assert_includes output.string, "\e[?1000h\e[?1006h"
+        assert_includes output.string, "\e[?1003h\e[?1006h"
 
         prompt.send(:close_editor)
 
-        assert_includes output.string, "\e[?1006l\e[?1000l"
+        assert_includes output.string, "\e[?1006l\e[?1003l"
       end
     end
   end
@@ -702,6 +702,131 @@ class TestPromptInterfaceEditor < KwardTestCase
 
     assert_equal 3, editor.viewport_row
     assert_equal [3, 0], editor.cursor_line_and_column
+  end
+
+  def test_prompt_interface_editor_left_click_moves_cursor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbravo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[<0;12;4M")
+
+        assert_equal [1, 2], editor.cursor_line_and_column
+        refute editor.selection_active?
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_left_drag_selects_character_range
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbravo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[<0;11;3M")
+        prompt.send(:handle_editor_key, "\e[<32;14;3M")
+        prompt.send(:handle_editor_key, "\e[<0;14;3m")
+
+        assert_equal "lph", editor.selected_text
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_double_click_selects_word
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[<0;16;3M")
+        prompt.send(:handle_editor_key, "\e[<0;16;3M")
+
+        assert_equal "beta", editor.selected_text
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_triple_click_selects_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbravo\ncharlie")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        3.times { prompt.send(:handle_editor_key, "\e[<0;11;4M") }
+
+        assert_equal "bravo\n", editor.selected_text
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_triple_click_drag_extends_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbravo\ncharlie")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        3.times { prompt.send(:handle_editor_key, "\e[<0;11;4M") }
+        prompt.send(:handle_editor_key, "\e[<32;13;5M")
+
+        assert_equal "bravo\ncha", editor.selected_text
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_drag_below_viewport_scrolls_and_extends_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), ("0".."20").to_a.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        prompt.define_singleton_method(:screen_height) { 14 }
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\e[<0;8;3M")
+        prompt.send(:handle_editor_key, "\e[<32;8;13M")
+
+        assert_equal 3, editor.viewport_row
+        assert editor.selection_active?
+        assert_equal [12, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_left_click_accounts_for_horizontal_viewport
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijklmnopqrstuvwxyz")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_soft_wrap: false)
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.viewport_column = 10
+
+        prompt.send(:handle_editor_key, "\e[<0;12;3M")
+
+        assert_equal [0, 12], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_diff_viewer_left_click_moves_cursor
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_diff_viewer, "notes.txt", "alpha\nbravo")
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, "\e[<0;12;4M")
+
+    assert_equal [1, 2], editor.cursor_line_and_column
   end
 
   def test_prompt_interface_editor_supports_unix_text_keybindings
