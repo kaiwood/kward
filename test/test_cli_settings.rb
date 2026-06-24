@@ -87,6 +87,7 @@ class TestCLISettings < KwardTestCase
       client = Kward::Client.new(api_key: nil, openai_access_token: "openai-token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: config_path)
       agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      cli.instance_variable_set(:@working_directory, dir)
 
       with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_PROVIDER" => nil, "COPILOT_MODEL" => nil) do
         cli.interactive_loop(agent: agent)
@@ -107,6 +108,7 @@ class TestCLISettings < KwardTestCase
       client = Kward::Client.new(api_key: nil, openai_access_token: "openai-token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: config_path)
       agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      cli.instance_variable_set(:@working_directory, dir)
 
       with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_PROVIDER" => nil, "OPENAI_MODEL" => nil) do
         cli.interactive_loop(agent: agent)
