@@ -507,7 +507,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         prompt.send(:handle_editor_key, "!")
-        prompt.send(:handle_editor_key, "\x06")
+        prompt.send(:handle_editor_key, "/")
         prompt.send(:handle_editor_key, "\x1A")
 
         assert_equal "!hello", editor.buffer
