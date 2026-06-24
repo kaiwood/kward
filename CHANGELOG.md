@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Modern editor Cmd+C handling for terminals that report Command-key CSI-u events, copying selections like Ctrl+C.
 - Added TUI Ctrl+Tab and Ctrl+Shift+Tab shortcuts for next/previous tab navigation across tab keybinding modes.
 - Added modern editor Ctrl+Arrow keybindings for line and document boundary movement, Alt+Shift+Left/Right wordwise selection, `/` and `?` search, and Ctrl+F move-right behavior.
 - Added auto-close pairs to the built-in TUI file editor for brackets, braces, parentheses, quotes, and backticks, with an `editor.auto_close_pairs` setting.

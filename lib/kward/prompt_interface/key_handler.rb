@@ -340,6 +340,10 @@ module Kward
         ((modifier.to_i - 1) & 2).positive?
       end
 
+      def super_modifier?(modifier)
+        ((modifier.to_i - 1) & 8).positive?
+      end
+
       def shift_modifier?(modifier)
         ((modifier.to_i - 1) & 1).positive?
       end

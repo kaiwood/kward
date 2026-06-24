@@ -84,8 +84,8 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
-        if ctrl_modifier?(modifier)
-          handle_modern_ctrl_key(code, modifier, key)
+        if ctrl_modifier?(modifier) || super_modifier?(modifier)
+          handle_modern_modified_key(code, modifier, key)
         else
           handle_modern_editor_csi_u_key(key)
         end
@@ -129,8 +129,13 @@ module Kward
         end
       end
 
-      def handle_modern_ctrl_key(code, modifier, key)
+      def handle_modern_modified_key(code, modifier, key)
         normalized_code = ctrl_code(code)
+        if super_modifier?(modifier)
+          return editor_search_active? ? editor_search_cancel : copy_editor_selection if normalized_code == 99
+          return handle_modern_editor_csi_u_key(key) unless ctrl_modifier?(modifier)
+        end
+
         case normalized_code
         when 99
           editor_search_active? ? editor_search_cancel : copy_editor_selection

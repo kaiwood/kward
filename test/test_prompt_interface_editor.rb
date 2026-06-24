@@ -121,6 +121,48 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_ctrl_c_copies_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello world")
+      Dir.chdir(dir) do
+        output = StringIO.new
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.selection_anchor = 0
+        editor.cursor = 5
+
+        prompt.send(:handle_editor_key, "\x03")
+
+        assert_equal "hello", editor.kill_buffer
+        assert_equal "Copied selection", editor.status
+        refute editor.selection_active?
+        assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("hello")}\a"
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_csi_u_cmd_c_copies_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello world")
+      Dir.chdir(dir) do
+        output = StringIO.new
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.selection_anchor = 6
+        editor.cursor = 11
+
+        prompt.send(:handle_editor_key, "\e[99;9u")
+
+        assert_equal "world", editor.kill_buffer
+        assert_equal "Copied selection", editor.status
+        refute editor.selection_active?
+        assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("world")}\a"
+      end
+    end
+  end
+
   def test_prompt_interface_editor_auto_indent_copies_plain_text_indent
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "  alpha")
