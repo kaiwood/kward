@@ -146,7 +146,6 @@ module Kward
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
       @file_selection_index = 0
-      @file_open_selection_index = 0
       @file_overlay_dismissed_token = nil
       @file_open_dismissed_token = nil
       @file_editor_open_status = nil

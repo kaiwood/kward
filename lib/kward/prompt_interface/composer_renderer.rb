@@ -273,8 +273,7 @@ module Kward
       end
 
       def cursor_logical_position
-        before_cursor = composer_input[0...composer_cursor]
-        [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
+        @composer.cursor_logical_position
       end
 
     end
