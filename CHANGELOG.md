@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added automatic Ruby and Markdown syntax highlighting to the built-in TUI file editor when terminal color is enabled.
+- Added automatic syntax highlighting for Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL in the built-in TUI file editor when terminal color is enabled.
 - Added `R` replace mode to the TUI vi editor mode.
 - Added classic vi normal-mode movement keys `^`, `+`, `-`, `_`, Enter, Space, Backspace, `H`, `M`, `L`, Ctrl+F, Ctrl+B, Ctrl+D, Ctrl+U, Ctrl+E, and Ctrl+Y to the TUI vi editor mode.
 - Added `X` delete-before-cursor support to the TUI vi editor mode.

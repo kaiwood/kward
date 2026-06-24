@@ -16,6 +16,34 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal :markdown, prompt.send(:editor_detect_syntax_language, "notes.markdown")
   end
 
+  def test_detects_additional_languages_by_extension
+    prompt = syntax_prompt
+
+    {
+      "app.js" => :javascript,
+      "app.ts" => :typescript,
+      "data.json" => :json,
+      "config.yml" => :yaml,
+      "script.sh" => :shell,
+      "index.html" => :html,
+      "styles.css" => :css,
+      "styles.scss" => :scss,
+      "main.py" => :python,
+      "main.go" => :go,
+      "main.rs" => :rust,
+      "Main.java" => :java,
+      "Program.cs" => :csharp,
+      "main.c" => :c,
+      "main.cpp" => :cpp,
+      "App.swift" => :swift,
+      "Main.kt" => :kotlin,
+      "init.lua" => :lua,
+      "query.sql" => :sql
+    }.each do |path, language|
+      assert_equal language, prompt.send(:editor_detect_syntax_language, path), path
+    end
+  end
+
   def test_unknown_files_remain_plain
     prompt = syntax_prompt(path: "notes.txt")
 
@@ -89,6 +117,39 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_includes inline, "\e[2m`kward`\e[0m"
     assert_equal "# Title", strip_ansi(heading)
     assert_equal "Use `kward` now", strip_ansi(inline)
+  end
+
+  def test_additional_language_highlighting_colorizes_representative_tokens
+    examples = {
+      "app.js" => ["const Name = \"ok\" // comment", "\e[34mconst\e[0m", "\e[33mName\e[0m", "\e[90m// comment\e[0m"],
+      "app.ts" => ["interface User { name: string }", "\e[34minterface\e[0m", "\e[33mUser\e[0m"],
+      "data.json" => ["{ \"name\": \"Kward\", \"ok\": true }", "\e[36m\"name\"\e[0m", "\e[32m\"Kward\"\e[0m", "\e[34mtrue\e[0m"],
+      "config.yml" => ["name: Kward # comment", "\e[36mname\e[0m", "\e[90m# comment\e[0m"],
+      "script.sh" => ["if echo \"ok\" # comment", "\e[34mif\e[0m", "\e[32m\"ok\"\e[0m", "\e[90m# comment\e[0m"],
+      "index.html" => ["<a href=\"/\">Home</a>", "\e[34m<a href=\"/\">\e[0m", "\e[34m</a>\e[0m"],
+      "styles.css" => [".card { color: #fff; }", "\e[36m.card\e[0m", "\e[34mcolor\e[0m", "\e[35m#fff\e[0m"],
+      "styles.scss" => ["$color: #fff; .card { color: $color; }", "\e[35m#fff\e[0m", "\e[36m.card\e[0m"],
+      "main.py" => ["def call(): # comment", "\e[34mdef\e[0m", "\e[90m# comment\e[0m"],
+      "main.go" => ["func main() { return }", "\e[34mfunc\e[0m", "\e[34mreturn\e[0m"],
+      "main.rs" => ["fn main() { return 1 }", "\e[34mfn\e[0m", "\e[35m1\e[0m"],
+      "Main.java" => ["class Main { return; }", "\e[34mclass\e[0m", "\e[33mMain\e[0m"],
+      "Program.cs" => ["public class Program { string Name; }", "\e[34mpublic\e[0m", "\e[34mclass\e[0m"],
+      "main.c" => ["int main() { return 0; }", "\e[34mint\e[0m", "\e[35m0\e[0m"],
+      "main.cpp" => ["class Widget { public: int value; };", "\e[34mclass\e[0m", "\e[33mWidget\e[0m"],
+      "App.swift" => ["func call() -> String { return \"ok\" }", "\e[34mfunc\e[0m", "\e[33mString\e[0m"],
+      "Main.kt" => ["fun main(): String { return \"ok\" }", "\e[34mfun\e[0m", "\e[33mString\e[0m"],
+      "init.lua" => ["local value = 1 -- comment", "\e[34mlocal\e[0m", "\e[90m-- comment\e[0m"],
+      "query.sql" => ["SELECT name FROM users -- comment", "\e[34mSELECT\e[0m", "\e[34mFROM\e[0m", "\e[90m-- comment\e[0m"]
+    }
+
+    examples.each do |path, values|
+      line, *expected_tokens = values
+      prompt = syntax_prompt(path: path)
+      rendered = prompt.send(:editor_render_line, line, 0, 120)
+
+      expected_tokens.each { |token| assert_includes rendered, token, path }
+      assert_equal line, strip_ansi(rendered), path
+    end
   end
 
   def test_selection_overrides_syntax_highlighting

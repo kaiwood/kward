@@ -176,7 +176,7 @@ The built-in TUI file editor supports three keybinding modes. Modern is the defa
 
 `mode` can be `modern`, `emacs`, or `vi`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` > Interface > Editor mode; newly opened editor buffers pick up the setting immediately.
 
-The editor automatically highlights Ruby and Markdown files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
+The editor automatically highlights Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
 
 Modern mode uses composer-style keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` searches, Shift+Arrow selects text, `Ctrl+C` copies, `Ctrl+X` cuts, `Ctrl+V` pastes the editor kill buffer, `Ctrl+A`/`Ctrl+E` move to the start/end of the line, `Ctrl+B` moves left, `Ctrl+K` kills to end of line, `Ctrl+U` kills to start of line, and `Alt+B`/`Alt+F` move by word.
 
