@@ -211,6 +211,12 @@ module Kward
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
         case code
+        when 9
+          if ctrl_modifier?(modifier)
+            shift_modifier?(modifier) ? { tab_action: :previous } : { tab_action: :next }
+          else
+            insert_csi_u_text(sequence) || false
+          end
         when 13
           if modifier == 2
             insert_string("\n")
@@ -227,23 +233,32 @@ module Kward
         when 4
           delete_at_cursor_or_exit
         else
-          handle_modified_csi_u_key(code, modifier)
+          handle_modified_csi_u_key(code, modifier) || insert_csi_u_text(sequence)
         end
       end
 
       def parse_csi_u_key(key)
-        match = key.to_s.match(/\A\e\[(\d+)(?:;([\d:]+))?u/)
+        match = key.to_s.match(/\A\e\[(\d+)((?:;[\d:]*)*)u/)
         return nil unless match
 
-        modifiers = match[2].to_s
+        fields = match[2].to_s.split(";", -1)[1..] || []
+        modifiers = fields[0].to_s
         modifier = (modifiers.empty? ? "1" : modifiers).split(":", 2).first.to_i
         {
           sequence: match[0],
           code: match[1].to_i,
           modifiers: modifiers,
           modifier: modifier,
+          text: fields[1].to_s,
           remaining: key.to_s[match[0].length..]
         }
+      end
+
+      def insert_csi_u_text(sequence)
+        text = sequence[:text].to_s
+        return false if text.empty?
+
+        insert_string(text.split(":").map { |codepoint| codepoint.to_i.chr(Encoding::UTF_8) }.join)
       end
 
       def handle_modified_csi_u_key(code, modifier)
@@ -325,6 +340,10 @@ module Kward
         ((modifier.to_i - 1) & 2).positive?
       end
 
+      def shift_modifier?(modifier)
+        ((modifier.to_i - 1) & 1).positive?
+      end
+
       def handle_shift_enter_key(key)
         sequence = shift_enter_sequence_for(key)
         return false unless sequence
@@ -375,10 +394,27 @@ module Kward
         sequence
       end
 
+      CTRL_TAB_SEQUENCES = ["\e[9;5u", "\e[27;5;9~", "\e[1;5I"].freeze
+      CTRL_SHIFT_TAB_SEQUENCES = ["\e[9;6u", "\e[27;6;9~", "\e[1;6I", "\e[1;6Z"].freeze
+
       def handle_tab_key_binding(key)
         return false if @select_state || @question_state || @tabs.empty?
 
+        navigation_result = handle_ctrl_tab_navigation_key_binding(key)
+        return navigation_result unless navigation_result == false
+
         @tab_keybindings == "ctrl" ? handle_ctrl_tab_key_binding(key) : handle_alt_tab_key_binding(key)
+      end
+
+      def handle_ctrl_tab_navigation_key_binding(key)
+        case key
+        when *CTRL_TAB_SEQUENCES
+          { tab_action: :next }
+        when *CTRL_SHIFT_TAB_SEQUENCES
+          { tab_action: :previous }
+        else
+          false
+        end
       end
 
       def handle_ctrl_tab_key_binding(key)
@@ -387,10 +423,6 @@ module Kward
           { tab_action: :new }
         when "\e[119;5u"
           { tab_action: :close }
-        when "\e[9;5u", "\e[27;5;9~", "\e[1;5I"
-          { tab_action: :next }
-        when "\e[9;6u", "\e[27;6;9~", "\e[1;6I"
-          { tab_action: :previous }
         else
           ctrl_number_tab_action(key)
         end

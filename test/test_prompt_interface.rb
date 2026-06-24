@@ -254,6 +254,21 @@ class TestPromptInterface < KwardTestCase
     assert_equal({ tab_action: :select, index: 2 }, prompt.send(:handle_key, "\e3"))
   end
 
+  def test_prompt_interface_ctrl_tab_navigation_works_with_alt_tab_keybindings
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
+    prompt.update_tabs(labels: ["1"], active_index: 0)
+
+    assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[9;5u"))
+    assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[27;5;9~"))
+    assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[1;5I"))
+    assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[9;5;9u"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[9;6u"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[27;6;9~"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[1;6I"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[9;6;9u"))
+    assert_equal({ tab_action: :previous }, prompt.send(:handle_key, "\e[1;6Z"))
+  end
+
   def test_prompt_interface_alt_w_does_not_close_tab
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
     prompt.update_tabs(labels: ["1", "2"], active_index: 0)
@@ -540,7 +555,7 @@ class TestPromptInterface < KwardTestCase
     prompt.start
     prompt.close
 
-    assert_includes output.string, "\e[>1u"
+    assert_includes output.string, "\e[>25u"
     assert_includes output.string, "\e[r"
     assert_includes output.string, "\e[<u"
   end

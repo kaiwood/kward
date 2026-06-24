@@ -87,7 +87,7 @@ module Kward
     include RuntimeState
     include TranscriptRenderer
     include PromptRenderer
-    KEYBOARD_PROTOCOL_ENABLE = "\e[>1u".freeze
+    KEYBOARD_PROTOCOL_ENABLE = "\e[>25u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
     BRACKETED_PASTE_RESTORE = "\e[?2004l".freeze
