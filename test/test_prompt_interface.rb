@@ -2516,6 +2516,14 @@ class TestPromptInterface < KwardTestCase
     assert_equal "ship it", prompt.send(:composer_input)
   end
 
+  def test_prompt_interface_git_message_accepts_csi_u_shifted_text
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
+
+    assert_equal 1, prompt.send(:handle_git_key, "\e[97;2;65u")
+    assert_equal "A", prompt.send(:composer_input)
+  end
+
   def test_prompt_interface_git_message_uses_composer_shortcuts
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })

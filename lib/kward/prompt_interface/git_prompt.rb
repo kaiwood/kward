@@ -113,6 +113,7 @@ module Kward
 
           modified_result = handle_modified_csi_u_key(code, modifier)
           return modified_result unless modified_result == false
+          return insert_csi_u_text(sequence) unless sequence[:text].to_s.empty?
           return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
           return false unless code.between?(32, 126)
 
