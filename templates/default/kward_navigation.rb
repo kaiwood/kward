@@ -17,6 +17,7 @@ module KwardDocsNavigationData
       [
         ["Sessions", "file.session-management.html"],
         ["Integrated Editor", "file.editor.html"],
+        ["Git", "file.git.html"],
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"]
       ]
