@@ -1588,9 +1588,9 @@ body.kward-docs #main.kward-home {
 
 /* Code blocks own their copy action. */
 body.kward-docs .code-copy-wrapper {
+  display: flow-root;
   margin: 16px 0 24px;
   position: relative;
-  width: 100%;
 }
 
 body.kward-docs .code-copy-wrapper pre,
@@ -1602,11 +1602,14 @@ body.kward-docs .code-copy-wrapper pre.code {
 }
 
 body.kward-docs .code-copy-wrapper .copy-code-button {
+  background: #020503;
+  box-shadow: 0 0 0 4px #020503;
   float: none;
   margin: 0;
   position: absolute;
   right: 12px;
   top: 12px;
+  z-index: 2;
 }
 
 
