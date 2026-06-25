@@ -18,13 +18,21 @@ Install the gem:
 gem install kward
 ```
 
-Install the starter pack:
+Optionally install the starter pack:
 
 ```bash
 kward init
 ```
 
-The starter pack adds default prompts and a base `PRINCIPLES.md` under `~/.kward`. It does not overwrite existing files.
+The starter pack adds default prompts and a base `PRINCIPLES.md` under `~/.kward`. It does not overwrite existing files. It is safe to skip if you prefer to create your own instructions. It requires network access because it fetches the pack from GitHub.
+
+Verify your setup:
+
+```bash
+kward doctor
+```
+
+This checks your config, auth, writable directories, and workspace. Run `kward help` to see all available commands and examples.
 
 If you are working from a checkout instead:
 
@@ -49,6 +57,14 @@ Or from inside an interactive session:
 
 Kward supports OpenAI/ChatGPT, Anthropic Claude Pro/Max, OpenRouter, and experimental Copilot credentials. See [Authentication](authentication.md) when you need a specific provider.
 
+Confirm your credentials are saved:
+
+```bash
+kward auth status
+```
+
+If your provider offers multiple models, choose one inside Kward with `/model`.
+
 ## Start an interactive chat
 
 Run Kward from the project you want it to work on:
@@ -56,6 +72,12 @@ Run Kward from the project you want it to work on:
 ```bash
 cd ~/code/my-project
 kward
+```
+
+Or point Kward at a project without leaving your shell:
+
+```bash
+kward --working-directory ~/code/my-project
 ```
 
 Ask something concrete:
@@ -88,7 +110,7 @@ git diff | kward "Review this diff for bugs"
 
 One-shot prompts do not use Kward memory.
 
-## Useful first commands
+## Useful interactive commands
 
 Inside interactive Kward:
 
@@ -97,25 +119,10 @@ Inside interactive Kward:
 /model              choose a model
 /status             show session and context status
 /sessions           open the saved sessions picker
-/resume             alias for /sessions
 /rewind             revisit an earlier prompt
 /export notes.md    export the transcript
 /compact            summarize older context when a chat gets long
 /exit               leave Kward
-```
-
-## Run from source
-
-```bash
-ruby lib/main.rb login
-ruby lib/main.rb
-ruby lib/main.rb "Explain this project"
-```
-
-You can also run:
-
-```bash
-exe/kward
 ```
 
 ## Next steps
