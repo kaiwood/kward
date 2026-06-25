@@ -12,7 +12,7 @@ cd ~/code/project
 kward
 ```
 
-When running from source, replace `kward` with `ruby lib/main.rb`.
+When running from source, replace `kward` with `ruby lib/main.rb`. See [Getting started](getting-started.md) for install and sign-in.
 
 ## Common workflows
 
@@ -41,6 +41,14 @@ For larger reviews, use interactive mode so Kward can inspect related files:
 ```text
 Review the current git diff. If something looks risky, inspect the relevant files before recommending changes.
 ```
+
+To review and commit changes interactively, use `/git`:
+
+```text
+/git
+```
+
+It opens a staging overlay where you can stage or unstage files, preview diffs, and write a commit message without leaving Kward.
 
 ### Make a small code change
 
@@ -72,10 +80,12 @@ Useful shell commands:
 kward                          # start interactive chat
 kward "Explain this project"   # ask one question and exit
 kward help                     # show commands and examples
+kward version                  # show the installed version
 kward doctor                   # check local setup
 kward login                    # sign in or save credentials
 kward auth status              # show credential status without secrets
 kward sysprompt                # inspect assembled instructions
+kward stats tokens             # export local token telemetry as CSV
 kward rpc                      # start the experimental RPC backend
 ```
 
@@ -88,13 +98,15 @@ kward --working-directory ~/code/project "Summarize this repository"
 
 ## Interactive slash commands
 
-Use slash commands for local actions that should not go to the model:
+Slash commands run local actions in the current session. Most do not send a prompt to the model; exceptions like `/git` and `/workers` orchestrate local flows that may then trigger model work.
 
 | Command | Use it when you want to... |
 | --- | --- |
 | `/login` | sign in or save provider credentials. |
 | `/model` | choose the active model. |
 | `/reasoning` | choose reasoning effort. |
+| `/git` | review uncommitted changes, stage files, and commit. |
+| `/settings` | configure prompt overlays. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session in the current tab. |
 | `/tab 2` | switch to tab 2. |
@@ -114,9 +126,11 @@ Use slash commands for local actions that should not go to the model:
 | `/copy last` | copy the latest assistant answer. |
 | `/copy transcript` | copy the transcript as Markdown. |
 | `/export notes.md` | write the transcript to a Markdown file. |
-| `/compact [focus]` | summarize older context so a long chat can continue. |
+| `/compact [instructions]` | summarize older context so a long chat can continue. |
 | `/memory ...` | manage opt-in memory. |
 | `/redraw` | fix terminal drawing after resize or glitches. |
+| `/reload` | reload installed plugins. |
+| `/workers` | open the experimental worker pipeline (`[new|do <task>|list]`). |
 | `/exit` | leave Kward. |
 
 Prompt templates and plugins can add more slash commands.
@@ -188,7 +202,7 @@ Important guardrails:
 
 ## Images
 
-If the active model supports images, Kward can attach image paths, Markdown image links, `file://` URLs, or image data URLs pasted into the composer.
+If the active model supports images, Kward can attach image paths, Markdown image links, `file://` URLs, or image data URLs pasted into the composer. Supported formats are GIF, JPEG, PNG, and WebP, up to 20 MB per image.
 
 Use this for tasks such as:
 
