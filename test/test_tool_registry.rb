@@ -187,6 +187,31 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_context_budget_stats_reports_tool_savings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "demo.txt"), "hello world\n")
+      compactor = Object.new
+      def compactor.compact(name, content)
+        name == "read_file" ? "short" : content
+      end
+      registry = Kward::ToolRegistry.new(
+        workspace: Kward::Workspace.new(root: dir),
+        web_search_enabled: false,
+        tool_output_compactor: compactor,
+        context_budget_meter: Kward::ContextBudgetMeter.new
+      )
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      registry.dispatch(tool_call("read_file", path: "demo.txt"), conversation)
+      result = registry.dispatch(tool_call("context_budget_stats", {}), conversation)
+
+      assert_includes result, "# Context budget stats"
+      assert_includes result, "- Calls: 1"
+      assert_includes result, "- Saved bytes: 7"
+      assert_includes result, "- read_file: 1 call(s), 7 bytes saved"
+    end
+  end
+
   def test_read_file_schema_supports_offset_and_limit
     read_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "read_file" }
     properties = read_schema[:function][:parameters][:properties]

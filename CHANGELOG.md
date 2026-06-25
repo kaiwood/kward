@@ -9,6 +9,7 @@ All notable changes to Kward will be documented in this file.
 - Added explicit `read_file` context modes (`preview`, `outline`, `range`, `full`) and optional per-call byte budgets so agents can escalate file context gradually.
 - Added richer source outlines with declaration kinds, approximate line ranges, and lightweight recognition for common Ruby, JavaScript/TypeScript, Go, Rust, Java, and C# declarations.
 - Added a lightweight `context_for_task` workspace tool that builds budgeted task context from ranked files, source outlines, and matching excerpts.
+- Added `context_budget_stats` for approximate per-process context bytes and estimated tokens saved by tool output budgeting.
 - Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
 - Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
 - Added a read-only TUI diff viewer from `/git`

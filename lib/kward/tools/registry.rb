@@ -1,7 +1,9 @@
 require_relative "../config_files"
+require_relative "../context_budget_meter"
 require_relative "../conversation"
 require_relative "ask_user_question"
 require_relative "code_search"
+require_relative "context_budget_stats"
 require_relative "context_for_task"
 require_relative "edit_file"
 require_relative "fetch_content"
@@ -59,7 +61,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: ContextBudgetMeter.new)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -73,6 +75,7 @@ module Kward
       @writer_id = writer_id
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
+      @context_budget_meter = context_budget_meter
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map(&:schema).freeze
     end
@@ -112,6 +115,7 @@ module Kward
       model_content = @tool_output_compactor.compact(name, content) do
         artifact_id ||= conversation.store_tool_output_artifact(tool_name: name, content: content)
       end
+      record_context_budget(name, before: content, after: model_content)
       log_tool_output_compaction(name, artifact_id: artifact_id, before: content, after: model_content) if model_content != content
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
@@ -124,6 +128,21 @@ module Kward
     end
 
     private
+
+    def record_context_budget(name, before:, after:)
+      return unless @context_budget_meter
+      return if name.to_s == "context_budget_stats"
+
+      saved = @context_budget_meter.record(tool_name: name, original_bytes: before.bytesize, returned_bytes: after.bytesize)
+      @telemetry_logger.log(
+        "compaction",
+        "context_budget",
+        "tool_name" => name,
+        "bytes_before" => before.bytesize,
+        "bytes_after" => after.bytesize,
+        "bytes_saved" => saved
+      )
+    end
 
     def log_tool_output_compaction(name, artifact_id:, before:, after:)
       @telemetry_logger.log(
@@ -155,7 +174,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(
-        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "context_for_task", "retrieve_tool_output"
+        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "context_for_task", "context_budget_stats", "retrieve_tool_output"
       )
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools << @tools["read_skill"] if skills_available?
@@ -183,6 +202,7 @@ module Kward
         Tools::CodeSearch.new(code_search: @code_search),
         Tools::SummarizeFileStructure.new(workspace: @workspace),
         Tools::ContextForTask.new(workspace: @workspace),
+        Tools::ContextBudgetStats.new(context_budget_meter: @context_budget_meter),
         Tools::RetrieveToolOutput.new
       ]
     end

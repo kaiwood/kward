@@ -16,7 +16,7 @@ Tools are part of Kward's safety and context-management boundary:
 
 | Category | Tools | Guide |
 | --- | --- | --- |
-| Workspace tools | `list_directory`, `read_file`, `context_for_task`, `summarize_file_structure`, `write_file`, `edit_file`, `run_shell_command` | [Workspace tools](workspace-tools.md) |
+| Workspace tools | `list_directory`, `read_file`, `context_for_task`, `context_budget_stats`, `summarize_file_structure`, `write_file`, `edit_file`, `run_shell_command` | [Workspace tools](workspace-tools.md) |
 | Web tools | `web_search`, `fetch_content`, `fetch_raw` | [Web search](web-search.md) |
 | Code search | `code_search` | [Code search](code-search.md) |
 | Context and interaction tools | `read_skill`, `retrieve_tool_output`, `ask_user_question` | [Context tools](context-tools.md) |
@@ -27,6 +27,7 @@ Kward tries to keep tool context useful without flooding the model:
 
 - `read_file` reads bounded line ranges, supports continuation with `offset` and `limit`, and accepts explicit `preview`, `outline`, `range`, and `full` modes with optional per-call byte budgets.
 - `context_for_task` builds a task-shaped bundle from ranked files, outlines, and matching excerpts within a caller-supplied byte budget.
+- `context_budget_stats` reports approximate per-process bytes and estimated tokens saved by compaction and duplicate output replacement.
 - `summarize_file_structure` returns a compact outline for large source files before reading all code.
 - Search, fetch, and shell outputs are capped or compacted before model ingestion.
 - Repeated identical tool output is replaced with a short reference instead of being sent again.

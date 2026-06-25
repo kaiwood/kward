@@ -354,7 +354,7 @@ module Kward
             reasoning: { start: false, delta: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
             steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
-            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false, workspaceGuardrails: workspace_guardrails_enabled?, focusedContext: true },
+            tools: { call: true, update: false, result: true, normalizedMetadata: true, diffs: true, changedFiles: false, workspaceGuardrails: workspace_guardrails_enabled?, focusedContext: true, contextBudgetStats: true },
             errors: true,
             sessionUpdates: false
           },

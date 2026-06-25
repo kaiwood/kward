@@ -53,6 +53,14 @@ When called without `offset`, `limit`, or `mode` on a file that exceeds 2,000 li
 
 Binary files (detected by null bytes) return an error instead of content.
 
+### `context_budget_stats`
+
+Returns approximate context-budget savings for the current process. The report compares each raw tool result size with the model-facing result after compaction or duplicate replacement, includes per-tool totals, and estimates saved tokens using roughly four bytes per token.
+
+Arguments: none.
+
+These numbers are intentionally approximate and local to the running process. They are useful for seeing whether Kward's budgeting is helping, not for billing.
+
 ### `context_for_task`
 
 Builds a compact, task-shaped context bundle from likely workspace files. It ranks files by task terms, includes source outlines, and adds short matching excerpts while respecting an approximate byte budget. This is intentionally lightweight: it does not maintain a persistent index or semantic graph.
