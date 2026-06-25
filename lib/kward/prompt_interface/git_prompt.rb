@@ -109,6 +109,9 @@ module Kward
           delete_at_cursor if git_composing?
           nil
         else
+          if !git_composing? && code == "s".ord && (sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1")
+            return git_toggle_selected_file
+          end
           return false unless git_composing?
 
           modified_result = handle_modified_csi_u_key(code, modifier)

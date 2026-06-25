@@ -2664,6 +2664,13 @@ class TestPromptInterface < KwardTestCase
     assert_equal({ action: :toggle_stage, index: 1 }, prompt.send(:handle_git_key, "s"))
   end
 
+  def test_prompt_interface_git_s_accepts_csi_u_printable_key
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M one.rb", "?? two.rb"], composing: false, selected_index: 1 })
+
+    assert_equal({ action: :toggle_stage, index: 1 }, prompt.send(:handle_git_key, "\e[115u"))
+  end
+
   def test_prompt_interface_git_s_inserts_while_composing
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
