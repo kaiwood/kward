@@ -531,7 +531,14 @@ module Kward
       end
 
       def vibe_move_to_screen_line(offset)
-        @editor_state.move_to_line_first_non_blank(@editor_state.viewport_row + offset)
+        target_row = @editor_state.viewport_row + offset
+        if current_editor_soft_wrap?
+          visual_rows = editor_visual_rows(current_editor_text_width)
+          line_index = visual_rows[target_row]&.fetch(:line_index) || @editor_state.lines.length - 1
+          @editor_state.move_to_line_first_non_blank(line_index)
+        else
+          @editor_state.move_to_line_first_non_blank(target_row)
+        end
       end
 
       def vibe_half_page_rows

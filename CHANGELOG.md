@@ -24,6 +24,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed the editor vibe-mode `H`, `L`, and `M` screen-position keys (and page up/down, half-page, and scroll) so they use the actual rendered viewport height instead of a stale capped heuristic, making them respect the current window height. Also fixed `H`/`L`/`M` in soft-wrap mode so they translate visual-row offsets to logical lines instead of scrolling the viewport.
+
 ## [0.71.0] - 2026-06-21
 
 ### Fixed

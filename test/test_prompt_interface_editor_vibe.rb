@@ -91,6 +91,33 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_screen_position_respects_viewport_in_soft_wrap
+    original_height = TTY::Screen.method(:height)
+    original_width = TTY::Screen.method(:width)
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    TTY::Screen.define_singleton_method(:width) { 40 }
+    Dir.mktmpdir do |dir|
+      content = (0...30).map { |index| "  line #{index} with long wrapped content that fills the row" }.join("\n")
+      File.write(File.join(dir, "notes.txt"), content)
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:composer_layout, 40, 20)
+        assert prompt.send(:current_editor_soft_wrap?), "expected soft wrap to be active"
+
+        viewport_before = editor.viewport_row
+        prompt.send(:handle_editor_key, "L")
+        prompt.send(:composer_layout, 40, 20)
+        assert_equal viewport_before, editor.viewport_row,
+                     "L must not scroll the viewport in soft-wrap mode"
+      end
+    end
+  ensure
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+  end
+
   def test_prompt_interface_vibe_mode_supports_page_and_scroll_movement
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), (0...30).map { |index| "line#{index}" }.join("\n"))
