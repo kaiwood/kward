@@ -53,8 +53,10 @@ module Kward
       def vibe_csi_u_logical_key(sequence)
         code = sequence[:code]
         text = csi_u_text(sequence)
+        normalized_code = code.to_i.chr.downcase.ord rescue code
         return "\n" if code == 13
         return "\x7F" if [8, 127].include?(code)
+        return (normalized_code - 96).chr if ctrl_modifier?(sequence[:modifier]) && normalized_code.between?(97, 122)
         return text if text.length == 1 && printable_key?(text)
         return code.chr(Encoding::UTF_8) if sequence[:modifier] == 1 && code.between?(32, 126)
 

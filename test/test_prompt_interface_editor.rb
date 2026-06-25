@@ -305,6 +305,36 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_normal_handles_csi_u_ctrl_page_and_scroll_commands
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), (1..40).map { |line| "line #{line}" }.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.define_singleton_method(:screen_height) { 12 }
+
+        prompt.send(:handle_editor_key, "\e[102;5u")
+        assert_equal [8, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[98;5u")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[100;5u")
+        assert_equal [4, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[117;5u")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[101;5u")
+        assert_equal 1, editor.viewport_row
+
+        prompt.send(:handle_editor_key, "\e[121;5u")
+        assert_equal 0, editor.viewport_row
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_normal_handles_csi_u_shifted_commands
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello\nworld\n")
