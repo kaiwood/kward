@@ -28,10 +28,11 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/session-management.md` with `/copy`, `/name`, `/status`, auto-resume, trash-safe deletion, `/export` default path, picker delete confirmation clarification, and an RPC session API cross-link.
 - Expanded `doc/git.md` with multi-line commit messages via `Shift+Enter`, renamed/copied file handling, clean working tree behavior, RPC exclusion note, and an editor settings cross-link.
 - Expanded `doc/memory.md` with soft memory TTL and expiry, retrieval limits and scoring, file permissions, `/memory learn` alias, `/memory auto-summary disable`, `/memory promote` for workspace core to global, `/memory` usage hint, full RPC method list, corrected global core priority wording, and a configuration cross-link.
+- Expanded `doc/personas.md` with bare-string character definitions, raw instruction string as `default`, `label` fallback behavior, `kward sysprompt --raw`, `/settings` Personalization menu detail, Active instructions summary, time-of-day gap note, and a configuration cross-link.
 
 ### Fixed
 
-- Added vibe-mode normal commands for CSI-u `Ctrl+H` indentation movement and `Ctrl+L` end-of-line movement.
+- Added vibe-mode normal commands for CSI-u `Ctrl+J`/`Ctrl+K` indentation movement, while keeping `Ctrl+H` first-non-blank and `Ctrl+L` end-of-line movement.
 - Added composer-style readline shortcuts in vibe-mode editor insert mode.
 - Added vibe-mode editor `zz`, `zt`, and `zb` viewport positioning commands.
 - Fixed vibe-mode editor handling for CSI-u encoded Ctrl+f/Ctrl+b/Ctrl+d/Ctrl+u/Ctrl+e/Ctrl+y page and scroll shortcuts.

@@ -59,6 +59,10 @@ module Kward
         case normalized_code
         when 104
           @editor_state.move_line_first_non_blank
+        when 106
+          @editor_state.move_indentation_down
+        when 107
+          @editor_state.move_indentation_up
         when 108
           @editor_state.move_line_end
         else

@@ -61,6 +61,61 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_csi_u_ctrl_j_and_ctrl_k_move_by_indentation
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "root\n  one\n  two\n    child\n  three\nroot2")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 4)
+
+        prompt.send(:handle_editor_key, "\e[106;5u")
+        assert_equal [2, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[106;5u")
+        assert_equal [4, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[107;5u")
+        assert_equal [2, 4], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_plain_enter_keeps_relative_line_movement
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "root\n  one\n    child\n  two")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 4)
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal [2, 4], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_insert_ctrl_k_still_kills_to_line_end
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 5)
+
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "\e[107;5u")
+
+        assert_equal "alpha", editor.buffer
+        assert_equal " beta", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_screen_position_movement
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), (0...20).map { |index| "  line#{index}" }.join("\n"))
