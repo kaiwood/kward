@@ -130,7 +130,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/memory ...` | manage opt-in memory. |
 | `/redraw` | fix terminal drawing after resize or glitches. |
 | `/reload` | reload installed plugins. |
-| `/workers` | open the experimental worker pipeline (`[new|do <task>|list]`). |
+| `/workers` | open the experimental worker pipeline (`new`, `do <task>`, or `list`). |
 | `/exit` | leave Kward. |
 
 Prompt templates and plugins can add more slash commands.
