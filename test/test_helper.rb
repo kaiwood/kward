@@ -74,6 +74,14 @@ class KwardTestCase < Minitest::Test
     end
   end
 
+  def with_host_os(value)
+    previous = RbConfig::CONFIG["host_os"]
+    RbConfig::CONFIG["host_os"] = value
+    yield
+  ensure
+    RbConfig::CONFIG["host_os"] = previous
+  end
+
   def jsonl_records(path)
     File.readlines(path, chomp: true).filter_map do |line|
       JSON.parse(line)

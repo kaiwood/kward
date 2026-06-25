@@ -12,6 +12,9 @@ module Kward
         csi_result = handle_modern_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        indentation_navigation_result = handle_modern_indentation_navigation_key(key)
+        return indentation_navigation_result unless indentation_navigation_result == false
+
         modified_navigation_result = handle_modern_modified_navigation_key(key)
         return modified_navigation_result unless modified_navigation_result == false
 
@@ -89,6 +92,68 @@ module Kward
         else
           handle_modern_editor_csi_u_key(key)
         end
+      end
+
+      def handle_modern_indentation_navigation_key(key)
+        return false if editor_search_active?
+
+        case key
+        when *modern_indentation_key_sequences(:up)
+          modern_move_indentation { @editor_state.move_indentation_up }
+        when *modern_indentation_key_sequences(:down)
+          modern_move_indentation { @editor_state.move_indentation_down }
+        when *modern_indentation_key_sequences(:right)
+          modern_move_indentation { @editor_state.move_indentation_right }
+        when *modern_indentation_key_sequences(:select_up)
+          editor_extending_selection { @editor_state.move_indentation_up }
+        when *modern_indentation_key_sequences(:select_down)
+          editor_extending_selection { @editor_state.move_indentation_down }
+        when *modern_indentation_key_sequences(:select_right)
+          editor_extending_selection { @editor_state.move_indentation_right }
+        else
+          false
+        end
+      end
+
+      def modern_move_indentation
+        result = yield
+        @editor_state.clear_selection
+        result
+      end
+
+      def modern_indentation_key_sequences(action)
+        case [modern_indentation_modifier, action]
+        when [:alt, :up]
+          ["\e[1;3A", "\e[3A"]
+        when [:alt, :down]
+          ["\e[1;3B", "\e[3B"]
+        when [:alt, :right]
+          ["\e[1;3C", "\e[3C"]
+        when [:alt, :select_up]
+          ["\e[1;4A", "\e[4A"]
+        when [:alt, :select_down]
+          ["\e[1;4B", "\e[4B"]
+        when [:alt, :select_right]
+          ["\e[1;4C", "\e[4C"]
+        when [:ctrl, :up]
+          ["\e[1;5A", "\e[5A"]
+        when [:ctrl, :down]
+          ["\e[1;5B", "\e[5B"]
+        when [:ctrl, :right]
+          ["\e[1;5C", "\e[5C"]
+        when [:ctrl, :select_up]
+          ["\e[1;6A", "\e[6A"]
+        when [:ctrl, :select_down]
+          ["\e[1;6B", "\e[6B"]
+        when [:ctrl, :select_right]
+          ["\e[1;6C", "\e[6C"]
+        else
+          []
+        end
+      end
+
+      def modern_indentation_modifier
+        RbConfig::CONFIG["host_os"].to_s.downcase.include?("darwin") ? :alt : :ctrl
       end
 
       def handle_modern_modified_navigation_key(key)

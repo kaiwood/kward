@@ -247,6 +247,28 @@ module Kward
         @cursor = next_word_end(@cursor)
       end
 
+      def move_indentation_up
+        line, column = cursor_line_and_column
+        target_line = previous_indentation_line(line, indentation_level_for_line(line))
+        move_to_indentation_line(target_line, column)
+      end
+
+      def move_indentation_down
+        line, column = cursor_line_and_column
+        target_line = next_indentation_line(line, indentation_level_for_line(line))
+        move_to_indentation_line(target_line, column)
+      end
+
+      def move_indentation_right
+        line, column = cursor_line_and_column
+        indentation = indentation_level_for_line(line)
+        if column < indentation
+          set_cursor_line_and_column(line, indentation)
+        else
+          move_to_word_end
+        end
+      end
+
       def delete_word_before_cursor
         kill_range(previous_word_boundary(@cursor), @cursor)
       end
@@ -579,6 +601,61 @@ module Kward
         cursor += 1 while cursor < @buffer.length && word_separator?(@buffer[cursor])
         cursor += 1 while cursor < @buffer.length - 1 && !word_separator?(@buffer[cursor + 1])
         cursor
+      end
+
+      def indentation_level_for_line(line_index)
+        lines[line_index].to_s.index(/\S/) || 0
+      end
+
+      def empty_line?(line_index)
+        lines[line_index].to_s.strip.empty?
+      end
+
+      def move_to_indentation_line(line_index, column)
+        return if line_index.nil?
+
+        set_cursor_line_and_column(line_index, column)
+      end
+
+      def next_indentation_line(current_line, current_indentation)
+        end_line = lines.length - 1
+        return nil if current_line == end_line
+
+        next_line = current_line + 1
+        jumping_over_space = indentation_level_for_line(next_line) != current_indentation || empty_line?(next_line)
+
+        (next_line..end_line).each do |line_index|
+          indentation = indentation_level_for_line(line_index)
+          if jumping_over_space && indentation == current_indentation && !empty_line?(line_index)
+            return line_index
+          elsif !jumping_over_space && (indentation != current_indentation || empty_line?(line_index))
+            return line_index - 1
+          elsif !jumping_over_space && indentation == current_indentation && line_index == end_line
+            return line_index
+          end
+        end
+
+        nil
+      end
+
+      def previous_indentation_line(current_line, current_indentation)
+        return nil if current_line.zero?
+
+        previous_line = current_line - 1
+        jumping_over_space = indentation_level_for_line(previous_line) != current_indentation || empty_line?(previous_line)
+
+        previous_line.downto(0) do |line_index|
+          indentation = indentation_level_for_line(line_index)
+          if jumping_over_space && indentation == current_indentation && !empty_line?(line_index)
+            return line_index
+          elsif !jumping_over_space && (indentation != current_indentation || empty_line?(line_index))
+            return line_index + 1
+          elsif !jumping_over_space && indentation == current_indentation && line_index.zero?
+            return line_index
+          end
+        end
+
+        nil
       end
 
       def word_separator?(char)

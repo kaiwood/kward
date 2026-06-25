@@ -177,6 +177,119 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_indentation_moves_with_ctrl_arrows_off_macos
+    with_host_os("linux") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "root\n  one\n  two\n    child\n    child2\n  three\n\n  four\nroot2")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.set_cursor_line_and_column(1, 4)
+
+          prompt.send(:handle_editor_key, "\e[1;5B")
+          assert_equal [2, 4], editor.cursor_line_and_column
+
+          prompt.send(:handle_editor_key, "\e[1;5B")
+          assert_equal [5, 4], editor.cursor_line_and_column
+
+          prompt.send(:handle_editor_key, "\e[1;5B")
+          assert_equal [7, 4], editor.cursor_line_and_column
+
+          prompt.send(:handle_editor_key, "\e[1;5A")
+          assert_equal [5, 4], editor.cursor_line_and_column
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_indentation_moves_with_alt_arrows_on_macos
+    with_host_os("darwin") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "root\n  one\n    child\n  two")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.set_cursor_line_and_column(1, 3)
+
+          prompt.send(:handle_editor_key, "\e[1;3B")
+
+          assert_equal [3, 3], editor.cursor_line_and_column
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_indentation_right_jumps_to_content_then_word_end
+    with_host_os("linux") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "  alpha beta")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+
+          prompt.send(:handle_editor_key, "\e[1;5C")
+          assert_equal [0, 2], editor.cursor_line_and_column
+
+          prompt.send(:handle_editor_key, "\e[1;5C")
+          assert_equal [0, 6], editor.cursor_line_and_column
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_indentation_shift_arrows_extend_selection
+    with_host_os("linux") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "root\n  one\n  two\n    child\n  three")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.set_cursor_line_and_column(1, 2)
+          anchor = editor.cursor
+
+          prompt.send(:handle_editor_key, "\e[1;6B")
+
+          assert_equal anchor, editor.selection_anchor
+          assert editor.selection_active?
+          assert_equal [2, 2], editor.cursor_line_and_column
+          assert_equal "one\n  ", editor.selected_text
+
+          editor.clear_selection
+          editor.set_cursor_line_and_column(3, 0)
+          anchor = editor.cursor
+
+          prompt.send(:handle_editor_key, "\e[1;6C")
+
+          assert_equal anchor, editor.selection_anchor
+          assert_equal [3, 4], editor.cursor_line_and_column
+          assert_equal "    ", editor.selected_text
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_indentation_bindings_do_not_apply_to_emacs_mode
+    with_host_os("linux") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "root\n  one\n    child\n  two")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.set_cursor_line_and_column(1, 3)
+
+          prompt.send(:handle_editor_key, "\e[1;5B")
+
+          assert_equal [2, 3], editor.cursor_line_and_column
+        end
+      end
+    end
+  end
+
   def test_prompt_interface_modern_undoes_csi_u_shifted_text
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
@@ -807,49 +920,53 @@ class TestPromptInterfaceEditor < KwardTestCase
   end
 
   def test_prompt_interface_modern_ctrl_arrow_keys_move_to_line_and_document_boundaries
-    Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\ngamma")
-      Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
-        assert prompt.send(:open_editor, "notes.txt")
-        editor = prompt.instance_variable_get(:@editor_state)
-        editor.cursor = 8
+    with_host_os("darwin") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "alpha\nbeta\ngamma")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.cursor = 8
 
-        prompt.send(:handle_editor_key, "\e[1;5C")
-        assert_equal [1, 4], editor.cursor_line_and_column
+          prompt.send(:handle_editor_key, "\e[1;5C")
+          assert_equal [1, 4], editor.cursor_line_and_column
 
-        prompt.send(:handle_editor_key, "\e[1;5D")
-        assert_equal [1, 0], editor.cursor_line_and_column
+          prompt.send(:handle_editor_key, "\e[1;5D")
+          assert_equal [1, 0], editor.cursor_line_and_column
 
-        prompt.send(:handle_editor_key, "\e[1;5B")
-        assert_equal editor.buffer.length, editor.cursor
+          prompt.send(:handle_editor_key, "\e[1;5B")
+          assert_equal editor.buffer.length, editor.cursor
 
-        prompt.send(:handle_editor_key, "\e[1;5A")
-        assert_equal 0, editor.cursor
+          prompt.send(:handle_editor_key, "\e[1;5A")
+          assert_equal 0, editor.cursor
+        end
       end
     end
   end
 
   def test_prompt_interface_modern_alt_shift_left_and_right_select_wordwise
-    Dir.mktmpdir do |dir|
-      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
-      Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
-        assert prompt.send(:open_editor, "notes.txt")
-        editor = prompt.instance_variable_get(:@editor_state)
-        editor.cursor = 6
+    with_host_os("linux") do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, "notes.txt")
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.cursor = 6
 
-        prompt.send(:handle_editor_key, "\e[1;4C")
-        assert_equal "beta", editor.selected_text
-        assert_equal 10, editor.cursor
+          prompt.send(:handle_editor_key, "\e[1;4C")
+          assert_equal "beta", editor.selected_text
+          assert_equal 10, editor.cursor
 
-        prompt.send(:handle_editor_key, "\e[1;4D")
-        refute editor.selection_active?
-        assert_equal 6, editor.cursor
+          prompt.send(:handle_editor_key, "\e[1;4D")
+          refute editor.selection_active?
+          assert_equal 6, editor.cursor
 
-        prompt.send(:handle_editor_key, "\e[1;4D")
-        assert_equal "alpha ", editor.selected_text
-        assert_equal 0, editor.cursor
+          prompt.send(:handle_editor_key, "\e[1;4D")
+          assert_equal "alpha ", editor.selected_text
+          assert_equal 0, editor.cursor
+        end
       end
     end
   end
