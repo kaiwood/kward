@@ -86,12 +86,11 @@ module Kward
 
       def restore_tabs(session_store)
         data = @tab_store&.load || {}
-        paths = Array(data["session_paths"]).select { |path| File.file?(path.to_s) }
+        paths = Array(data["session_paths"]).map(&:to_s)
         return nil if paths.empty?
 
         paths.each_with_index do |path, index|
-          session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
-          track_session(session)
+          session, conversation = restore_tab_session(session_store, path)
           tab = build_tab(session, build_tab_agent(conversation, session), label: restored_tab_label(data, index))
           @tabs << tab
         rescue StandardError
@@ -102,6 +101,18 @@ module Kward
         @active_tab_index = [[data["active_index"].to_i, 0].max, @tabs.length - 1].min
         @restored_tabs = true
         activate_tab(@active_tab_index)
+      end
+
+      def restore_tab_session(session_store, path)
+        if File.file?(path)
+          session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+          return [track_session(session), conversation]
+        end
+
+        session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
+        conversation = new_conversation(workspace_root: session_store.cwd)
+        session.attach(conversation)
+        [session, conversation]
       end
 
       def build_tab_agent(conversation, _session)

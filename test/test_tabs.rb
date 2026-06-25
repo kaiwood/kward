@@ -188,6 +188,39 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_restore_tabs_keeps_empty_tab_slot_when_saved_session_was_cleaned_up
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+        used_session = store.create
+        conversation = Kward::Conversation.new(workspace_root: workspace)
+        used_session.attach(conversation)
+        conversation.append_user("kept prompt")
+        empty_session = store.create
+        empty_path = empty_session.path
+        Kward::TabStore.new(config_dir: config_dir, cwd: workspace).save(
+          session_paths: [used_session.path, empty_path],
+          labels: ["Main", "Scratch"],
+          active_index: 1
+        )
+        empty_session.delete_if_unused
+
+        prompt = TabPrompt.new
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+        cli.send(:setup_interactive_tabs, store, nil)
+
+        tabs = cli.instance_variable_get(:@tabs)
+        assert_equal 2, tabs.length
+        assert_equal used_session.path, tabs[0].session.path
+        refute_equal empty_path, tabs[1].session.path
+        assert File.file?(tabs[1].session.path)
+        assert_equal 1, cli.instance_variable_get(:@active_tab_index)
+        assert_equal ["Main", "Scratch"], prompt.tab_update_names
+      end
+    end
+  end
+
   def test_new_tabs_use_main_then_tab_default_labels
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
