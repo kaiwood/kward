@@ -41,6 +41,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed time-of-day persona modifiers so conversations use the current local time instead of a fixed epoch timestamp.
 - Added vibe-mode normal commands for CSI-u `Ctrl+J`/`Ctrl+K` indentation movement, while keeping `Ctrl+H` first-non-blank and `Ctrl+L` end-of-line movement.
 - Added composer-style readline shortcuts in vibe-mode editor insert mode.
 - Added vibe-mode editor `zz`, `zt`, and `zb` viewport positioning commands.

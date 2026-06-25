@@ -270,7 +270,7 @@ module Kward
     end
 
     def prompt_time
-      Time.at(0)
+      Time.now
     end
 
     def workspace_agents_mtime

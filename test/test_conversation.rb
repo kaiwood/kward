@@ -57,6 +57,18 @@ class TestConversation < KwardTestCase
     assert_equal first, second
   end
 
+  def test_time_of_day_persona_uses_current_time
+    with_persona_config("late_evening" => "You are tired and occasionally yawn.") do
+      with_time_now(Time.new(2024, 1, 1, 18, 0, 0)) do
+        refute_includes Kward::Conversation.new.system_message[:content], "You are tired and occasionally yawn."
+      end
+
+      with_time_now(Time.new(2024, 1, 1, 21, 0, 0)) do
+        assert_includes Kward::Conversation.new.system_message[:content], "You are tired and occasionally yawn."
+      end
+    end
+  end
+
   def test_compact_preserves_system_message_and_resets_read_paths
     compacted = nil
     conversation = Kward::Conversation.new(system_message: { role: "system", content: "system" }, read_paths: ["README.md"])
@@ -74,6 +86,32 @@ class TestConversation < KwardTestCase
     ], conversation.context_messages
     assert_empty conversation.read_paths
     assert_equal({ role: "assistant", content: "summary" }, compacted)
+  end
+
+  private
+
+  def with_persona_config(time_of_day)
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({
+        "personas" => {
+          "persona_modifiers" => {
+            "time_of_day" => time_of_day
+          }
+        }
+      }))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        yield
+      end
+    end
+  end
+
+  def with_time_now(value)
+    previous_now = Time.method(:now)
+    Time.define_singleton_method(:now) { value }
+    yield
+  ensure
+    Time.define_singleton_method(:now) { previous_now.call }
   end
 
 end
