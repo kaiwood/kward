@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Added vibe-mode normal commands for CSI-u `Ctrl+H` indentation movement and `Ctrl+L` end-of-line movement.
 - Added composer-style readline shortcuts in vibe-mode editor insert mode.
 - Added vibe-mode editor `zz`, `zt`, and `zb` viewport positioning commands.
 - Fixed vibe-mode editor handling for CSI-u encoded Ctrl+f/Ctrl+b/Ctrl+d/Ctrl+u/Ctrl+e/Ctrl+y page and scroll shortcuts.

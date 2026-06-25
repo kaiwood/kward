@@ -31,6 +31,11 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
         normalized_code = code.to_i.chr.downcase.ord rescue code
+        if @editor_state.vibe_mode == "normal" && ctrl_modifier?(modifier)
+          ctrl_result = handle_vibe_normal_ctrl_key(normalized_code)
+          return ctrl_result unless ctrl_result == false
+        end
+
         logical_key = vibe_csi_u_logical_key(sequence)
         if logical_key
           return handle_vibe_search_key(logical_key) if editor_search_active?
@@ -48,6 +53,17 @@ module Kward
         @editor_state.vibe_pending = ""
         @editor_state.clear_selection
         vibe_return_to_normal
+      end
+
+      def handle_vibe_normal_ctrl_key(normalized_code)
+        case normalized_code
+        when 104
+          @editor_state.move_line_first_non_blank
+        when 108
+          @editor_state.move_line_end
+        else
+          false
+        end
       end
 
       def vibe_csi_u_logical_key(sequence)

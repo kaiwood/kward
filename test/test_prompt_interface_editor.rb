@@ -425,6 +425,24 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_normal_handles_csi_u_ctrl_h_and_ctrl_l_line_commands
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "first\n    indented line")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 10)
+
+        prompt.send(:handle_editor_key, "\e[104;5u")
+        assert_equal [1, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[108;5u")
+        assert_equal [1, 17], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_normal_handles_csi_u_ctrl_page_and_scroll_commands
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), (1..40).map { |line| "line #{line}" }.join("\n"))
