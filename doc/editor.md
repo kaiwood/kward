@@ -123,12 +123,14 @@ Modern mode is the default and is the easiest place to start. It uses common ter
 | `Ctrl+Shift+Z`        | Redo                                              |
 | `Ctrl+Space`          | Begin selection                                   |
 | `Shift+Arrow`         | Extend selection                                  |
-| `Ctrl+Right`          | Move to end of line                               |
+| `Alt+Up` on macOS, `Ctrl+Up` elsewhere | Move up by indentation level          |
+| `Alt+Down` on macOS, `Ctrl+Down` elsewhere | Move down by indentation level    |
+| `Alt+Right` on macOS, `Ctrl+Right` elsewhere | Move to indentation, then word end |
+| `Alt+Shift+Up` on macOS, `Ctrl+Shift+Up` elsewhere | Select up by indentation level |
+| `Alt+Shift+Down` on macOS, `Ctrl+Shift+Down` elsewhere | Select down by indentation level |
+| `Alt+Shift+Right` on macOS, `Ctrl+Shift+Right` elsewhere | Select to indentation, then word end |
 | `Ctrl+Left`           | Move to start of line                             |
-| `Ctrl+Up`             | Move to beginning of document                     |
-| `Ctrl+Down`           | Move to end of document                           |
 | `Alt+Shift+Left`      | Extend selection to previous word boundary        |
-| `Alt+Shift+Right`     | Extend selection to next word boundary            |
 | `Ctrl+A`              | Move to start of line                             |
 | `Ctrl+E`              | Move to end of line                               |
 | `Ctrl+B`              | Move left                                         |
@@ -220,6 +222,8 @@ It supports a compact modal-editing set: counts, operators with motions, visual 
 | `+` / `Enter`           | Move to first non-blank of next line            |
 | `-`                     | Move to first non-blank of previous line        |
 | `_`                     | Move to first non-blank of current line         |
+| `Ctrl+J`                | Move down by indentation level                  |
+| `Ctrl+K`                | Move up by indentation level                    |
 | `Ctrl+F`                | Page down                                       |
 | `Ctrl+B`                | Page up                                         |
 | `Ctrl+D`                | Half page down                                  |

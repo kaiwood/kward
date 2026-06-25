@@ -108,7 +108,7 @@ Assistant> I found the failing test.
 Samantha> I found the failing test.
 ```
 
-This is not only decorative. It is the name Kward uses when rendering assistant messages in the terminal transcript. If no active persona label is available, Kward uses `Assistant>`.
+This is not only decorative. It is the name Kward uses when rendering assistant messages in the terminal transcript. If the active persona has no `label` field, Kward uses `Assistant>` instead — the character `key` is not used as a fallback label. If no persona is active at all, Kward also uses `Assistant>`.
 
 For RPC clients, the active label is also exposed as `activePersonaLabel` so a UI can show the same speaker identity.
 
@@ -163,6 +163,19 @@ You can also define characters as a map:
 }
 ```
 
+In the map form, the key is the character key. You can also use a bare string as the definition, which becomes the instruction; the transcript label then falls back to `Assistant>` unless you use a hash with `label`:
+
+```json
+{
+  "personas": {
+    "characters": {
+      "duck": "You are a patient rubber duck."
+    },
+    "default": "duck"
+  }
+}
+```
+
 The array form is easier to read and is recommended for new configs.
 
 `personas.crew` is accepted as a legacy alias for `personas.characters`.
@@ -179,13 +192,25 @@ Set `personas.default` to the character key you want by default:
 }
 ```
 
+`personas.default` can also be a raw instruction string instead of a character key. When the value does not match any character, Kward uses it directly as the persona instruction:
+
+```json
+{
+  "personas": {
+    "default": "You are a calm assistant."
+  }
+}
+```
+
+This is a quick way to set a persona without defining a `characters` entry.
+
 You can also change the default from interactive Kward:
 
 ```text
 /settings
 ```
 
-Then choose the personalization/default persona option.
+Choose **Personalization**, then **Default persona** to pick from your configured characters. The same menu also offers **Active instructions summary**, which shows the active persona label and whether `PRINCIPLES.md` and workspace `AGENTS.md` are present.
 
 ## Workspace-specific personas
 
@@ -268,7 +293,7 @@ anthropic_reasoning_effort
 copilot_reasoning_effort
 ```
 
-Personas do not choose the model and do not set reasoning effort by themselves. What personas can do is add extra character direction based on the active reasoning effort.
+Personas do not choose the model and do not set reasoning effort by themselves. What personas can do is add extra character direction based on the active reasoning effort. See [Configuration](configuration.md#provider-and-model-settings) for the full provider, model, and reasoning config reference.
 
 In plain English:
 
@@ -324,7 +349,7 @@ Example:
 }
 ```
 
-If no bucket matches, no time-of-day modifier is added.
+If no bucket matches, no time-of-day modifier is added. Hours 12:00-20:59 (noon through early evening) have no bucket, so no time-of-day modifier is applied during that window.
 
 ## Weekday modifiers
 
@@ -404,7 +429,11 @@ From the shell:
 kward sysprompt
 ```
 
-`kward sysprompt` shows the assembled prompt sections, including the persona text that would be used for a new conversation.
+`kward sysprompt` shows the assembled prompt sections, including the persona text that would be used for a new conversation. Add `--raw` to print the raw system prompt content without section formatting, which is useful for scripting or piping to another tool:
+
+```bash
+kward sysprompt --raw
+```
 
 ## When to use personas
 
