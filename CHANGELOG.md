@@ -36,6 +36,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/rpc.md` with corrected `sessions/tree` capability (supported, not unsupported), documented `sessions/tree`, `sessions/tree/setLabel`, `sessions/tree/navigate`, `logging/tokenCsv`, `workers/list`, and `workers/show` methods, added `workers`/`starterPack`/`logging` capability descriptions, and documented GitHub OAuth CLI-only limitation.
 - Expanded `doc/releasing.md` with Ruby version requirement note, focused test step, gemspec exclusion detail with `tar tf` inspection command, `rake rdoc` clarification, git commit/tag/push step, focused test guidance, and `gem yank` rollback guidance.
 - Expanded `doc/agent-tools.md` with write lock for workers, AGENTS.md auto-refresh on file change, tool output compaction strategy details, configuration cross-link for guardrails, and tool scoping for workers.
+- Expanded `doc/workspace-tools.md` with concrete file/read/command limits, large-file outline behavior, binary file detection, unified diff output for write/edit, shell command output format and timeout behavior, guardrails config cross-link, and agent-tools cross-link.
 
 ### Fixed
 
