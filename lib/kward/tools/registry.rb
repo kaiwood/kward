@@ -2,6 +2,7 @@ require_relative "../config_files"
 require_relative "../conversation"
 require_relative "ask_user_question"
 require_relative "code_search"
+require_relative "context_for_task"
 require_relative "edit_file"
 require_relative "fetch_content"
 require_relative "fetch_raw"
@@ -154,7 +155,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(
-        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "retrieve_tool_output"
+        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "context_for_task", "retrieve_tool_output"
       )
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools << @tools["read_skill"] if skills_available?
@@ -181,6 +182,7 @@ module Kward
         Tools::RunShellCommand.new(workspace: @workspace),
         Tools::CodeSearch.new(code_search: @code_search),
         Tools::SummarizeFileStructure.new(workspace: @workspace),
+        Tools::ContextForTask.new(workspace: @workspace),
         Tools::RetrieveToolOutput.new
       ]
     end

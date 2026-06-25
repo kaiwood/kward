@@ -18,6 +18,7 @@ module Kward
       "list_directory" => "list_directory",
       "code_search" => "code_search",
       "summarize_file_structure" => "summarize_file_structure",
+      "context_for_task" => "context_for_task",
       "retrieve_tool_output" => "retrieve_tool_output",
       "web_search" => "web_search",
       "fetch_content" => "fetch_content",

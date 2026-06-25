@@ -50,7 +50,7 @@ Detailed capability fields include:
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, and explicit unsupported import/update features.
 - `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
-- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, configured workspace guardrail status, and explicit unsupported shell changed-file detection/session update flags.
+- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, configured workspace guardrail status, focused context tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.

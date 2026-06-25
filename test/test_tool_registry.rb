@@ -163,6 +163,30 @@ class TestToolRegistry < KwardTestCase
     assert_includes tool_names, "summarize_file_structure"
   end
 
+  def test_tool_schemas_include_context_for_task
+    tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+    assert_includes tool_names, "context_for_task"
+  end
+
+  def test_context_for_task_returns_ranked_outlines_and_excerpts_within_budget
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "auth.rb"), "class AuthService\n  def validate_token(token)\n    token == 'valid'\n  end\nend\n")
+      File.write(File.join(dir, "lib", "billing.rb"), "class Billing\n  def charge\n  end\nend\n")
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      result = registry.dispatch(tool_call("context_for_task", task: "debug validate token", paths: ["lib"], budget: 2_000), conversation)
+
+      assert_includes result, "# Focused context"
+      assert_includes result, "## lib/auth.rb"
+      assert_includes result, "def validate_token(token)"
+      assert_includes result, "### Matching excerpts"
+      refute_includes result, "## lib/billing.rb"
+    end
+  end
+
   def test_read_file_schema_supports_offset_and_limit
     read_schema = Kward::ToolRegistry.new.schemas.find { |schema| schema[:function][:name] == "read_file" }
     properties = read_schema[:function][:parameters][:properties]

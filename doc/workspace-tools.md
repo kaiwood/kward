@@ -53,6 +53,18 @@ When called without `offset`, `limit`, or `mode` on a file that exceeds 2,000 li
 
 Binary files (detected by null bytes) return an error instead of content.
 
+### `context_for_task`
+
+Builds a compact, task-shaped context bundle from likely workspace files. It ranks files by task terms, includes source outlines, and adds short matching excerpts while respecting an approximate byte budget. This is intentionally lightweight: it does not maintain a persistent index or semantic graph.
+
+Arguments:
+
+- `task`: required task or question to gather context for.
+- `paths`: optional files or directories to focus. Defaults to the workspace root.
+- `budget`: optional approximate byte budget, default 4,000 and capped at 20,000.
+
+Use this when Kward needs orientation for a bug, review, implementation, or explanation before deciding which exact file ranges to read.
+
 ### `summarize_file_structure`
 
 Returns a compact outline of recognizable declarations in a source file, including line ranges and declaration kind where Kward can infer them. Kward uses it when a file may be too large to read fully at first.

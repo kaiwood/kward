@@ -115,6 +115,7 @@ class TestRPCServer < KwardTestCase
     assert_equal "turnSteered", capabilities["events"]["steering"]["event"]
     assert_equal true, capabilities["events"]["tools"]["normalizedMetadata"]
     assert_equal true, capabilities["events"]["tools"]["diffs"]
+    assert_equal true, capabilities["events"]["tools"]["focusedContext"]
     assert_equal false, capabilities["events"]["tools"]["changedFiles"]
     assert_equal false, capabilities["events"]["sessionUpdates"]
     assert_equal true, capabilities["attachments"]["input"]["supported"]
