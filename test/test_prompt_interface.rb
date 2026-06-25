@@ -2800,6 +2800,48 @@ class TestPromptInterface < KwardTestCase
     assert prompt.interactive_exited?
   end
 
+  def test_interactive_escape_forces_exit
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    prompt.send(:handle_interactive_key, "\e")
+
+    assert controller.exited?
+    assert prompt.interactive_exited?
+  end
+
+  def test_interactive_csi_u_escape_forces_exit
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    prompt.send(:handle_interactive_key, "\e[27u")
+
+    assert controller.exited?
+    assert prompt.interactive_exited?
+  end
+
+  def test_interactive_csi_u_space_routes_space_key_to_controller
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    prompt.send(:handle_interactive_key, "\e[32u")
+
+    assert_equal :space, controller.poll_key
+  end
+
+  def test_interactive_csi_u_printable_key_routes_character_to_controller
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    prompt.send(:handle_interactive_key, "\e[113u")
+
+    assert_equal "q", controller.poll_key
+  end
+
   def test_interactive_routes_keys_to_controller
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.start

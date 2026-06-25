@@ -51,6 +51,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed interactive plugin key handling so terminals using CSI-u keyboard protocol can quit with Escape and route Space/printable keys to plugins.
 - Fixed the `/git` overlay stage/unstage shortcut so `s` works in terminals that report printable keys with CSI-u keyboard protocol.
 - Fixed `ask_user_question` custom-answer editing so tabs remain visible and the composer supports shifted ASCII CSI-u printable keys, Shift+Enter newlines, and normal composer shortcuts without inserting private-use key-state events.
 - Fixed Enter between auto-closed editor pairs so block openers expand to an indented blank line before the closing delimiter.

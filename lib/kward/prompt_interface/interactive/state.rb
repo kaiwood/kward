@@ -14,13 +14,44 @@ module Kward
       def route_interactive_key(key)
         return false unless interactive_active_locked?
 
-        if key == "\x03"
-          @interactive_state[:controller].force_exit
+        interactive_key = interactive_csi_u_key(key)
+        unless interactive_key == false
+          return force_interactive_exit if interactive_key == :force_exit
+
+          @interactive_state[:controller].push_key(interactive_key)
           return true
         end
 
         name = key_name_for(key) if key.is_a?(String) && key.length >= 1
+        return force_interactive_exit if key == "\x03" || name == :escape
+
         @interactive_state[:controller].push_key(name || key)
+        true
+      end
+
+      def interactive_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+
+        return :force_exit if code == 27 || (code.to_i.chr.downcase == "c" && ctrl_modifier?(modifier))
+        return :return if code == 13
+        return :backspace if [8, 127].include?(code)
+        return :space if code == 32 && !ctrl_modifier?(modifier) && !alt_modifier?(modifier) && !super_modifier?(modifier)
+
+        text = csi_u_text(sequence)
+        return text unless text.empty?
+        return false if ctrl_modifier?(modifier) || alt_modifier?(modifier) || super_modifier?(modifier)
+        return code.chr(Encoding::UTF_8) if code.between?(32, 126)
+
+        false
+      end
+
+      def force_interactive_exit
+        @interactive_state[:controller].force_exit
         true
       end
 
