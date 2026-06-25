@@ -6,8 +6,9 @@ Tools are part of Kward's safety and context-management boundary:
 
 - schemas describe what the model is allowed to call,
 - Ruby tool objects validate and execute those calls,
-- workspace tools stay inside the active workspace by default,
+- workspace tools stay inside the active workspace by default (see [Configuration](configuration.md#tool-workspace-guardrails) for the guardrail setting),
 - file-changing tools require the file to be read first,
+- mutation tools (`edit_file`, `write_file`, `run_shell_command`) are gated by a write lock when agent workers are active, so only one worker can change the workspace at a time,
 - large outputs are bounded or compacted before they enter model context,
 - full tool outputs are kept in the session record for later inspection.
 
@@ -30,6 +31,8 @@ Kward tries to keep tool context useful without flooding the model:
 - Repeated identical tool output is replaced with a short reference instead of being sent again.
 - Compacted outputs are stored as artifacts that can be reopened with `retrieve_tool_output`.
 
+When a tool output exceeds 12 KB, Kward compacts it before sending it to the model. The compactor preserves the first 40 and last 40 lines, keeps lines matching error, test, or search-result patterns with 2 lines of surrounding context, and replaces omitted sections with `[... omitted lines ...]` markers. Shell command output is section-aware: STDOUT and STDERR sections are compacted separately. Compacted outputs include a header with the original and compacted byte counts and the artifact ID for retrieval. Error outputs under 8 KB are left intact so failure details stay visible.
+
 This lets the assistant reason from focused evidence while preserving access to original outputs when needed.
 
 ## How tools are exposed
@@ -39,5 +42,9 @@ This lets the assistant reason from focused evidence while preserving access to 
 - web tools can be hidden with web search configuration,
 - `read_skill` is advertised only when skills are available,
 - `ask_user_question` is advertised only when the frontend can display structured questions.
+
+When agent workers are active, the registry can scope each worker to a subset of tools via an allowed-tool-names filter, so workers only see the tools they need.
+
+When `write_file` or `edit_file` changes an `AGENTS.md` file in the workspace root, Kward automatically rebuilds the system message so the model picks up the new instructions without a restart.
 
 Unknown tool calls are recorded as tool results instead of crashing the session, so the model can recover and choose an advertised tool on the next turn.

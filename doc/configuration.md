@@ -206,6 +206,16 @@ Auto-indent is enabled by default. Pressing Enter copies the current line indent
 
 `auto_indent` and `auto_close_pairs` both default to `true`. Set `auto_close_pairs` to `false` to disable automatic insertion of matching `()`, `[]`, `{}`, quotes, and backticks.
 
+Line numbers are absolute by default. Set `line_numbers` to `relative` to show distances from the cursor line in editable buffers while keeping the current cursor line absolute:
+
+```json
+{
+  "editor": {
+    "line_numbers": "relative"
+  }
+}
+```
+
 Soft-wrap is enabled by default so long lines wrap within the editor width instead of scrolling. To disable it:
 
 ```json
