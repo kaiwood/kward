@@ -1583,10 +1583,7 @@ body.kward-docs #main.kward-home {
   justify-content: center;
 }
 
-/* The generated YARD TOC is useful for API pages but too noisy on guide pages. */
-.kward-guide-page #toc {
-  display: none;
-}
+/* The generated YARD TOC is shown on all docs pages. Use the `kward-no-toc` marker to suppress it per page. */
 
 
 /* Code blocks own their copy action. */
