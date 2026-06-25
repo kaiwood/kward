@@ -1,14 +1,14 @@
-```
-Three Modes for the Elven-kings under the sky,
-Seven Keymaps for the Dwarf-lords in their halls of stone,
-Nine Editors for Mortal Men doomed to compile,
-One Kward to rule them all,
-One Kward to find them,
-One Kward to bring them all and in the transcript bind them
-In the Land of Ruby where the agents lie.
-```
-
 # Integrated Editor
+
+<quote>
+Three Modes for the Elven-kings under the sky,<br>
+Seven Keymaps for the Dwarf-lords in their halls of stone,<br>
+Nine Editors for Mortal Men doomed to compile,<br>
+One Kward to rule them all,<br>
+One Kward to find them,<br>
+One Kward to bring them all and in the transcript bind them<br>
+In the Land of Ruby where the agents lie.<br>
+</quote>
 
 Kward includes a small terminal editor with 3 editing modes to choose from: Modern, Emacs and Vibe. It opens inside the chat composer, so you can jump into a file, make a change, save it, and return to the conversation without switching tools.
 
