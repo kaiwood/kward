@@ -86,6 +86,11 @@ module Kward
         EditorMode.normalize(value)
       end
 
+      def normalize_editor_line_numbers(value)
+        text = value.to_s.downcase
+        %w[absolute relative].include?(text) ? text : "absolute"
+      end
+
       def tab_action_result?(result)
         result.is_a?(Hash) && result[:tab_action]
       end

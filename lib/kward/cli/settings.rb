@@ -226,6 +226,8 @@ module Kward
           configure_tab_keybindings
         when /\Aeditor mode/
           configure_editor_mode
+        when /\Aeditor line numbers/
+          configure_editor_line_numbers
         when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
           set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
           runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
@@ -249,6 +251,7 @@ module Kward
           "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
           "Tab keybindings (#{composer_tab_keybindings})",
           "Editor mode (#{editor_mode})",
+          "Editor line numbers (#{editor_line_numbers})",
           "#{editor_auto_close_pairs_enabled? ? "Disable" : "Enable"} auto-close pairs (currently #{on_off(editor_auto_close_pairs_enabled?)})",
           "#{editor_soft_wrap_enabled? ? "Disable" : "Enable"} soft-wrap (currently #{on_off(editor_soft_wrap_enabled?)})",
           "#{editor_bar_cursor_enabled? ? "Disable" : "Enable"} bar cursor (currently #{on_off(editor_bar_cursor_enabled?)})",
@@ -295,6 +298,24 @@ module Kward
       def editor_mode_choices
         current = editor_mode
         %w[modern emacs vibe].map { |value| value == current ? "#{value} (current)" : value }
+      end
+
+      def editor_line_numbers
+        ConfigFiles.editor_line_numbers(safely_read_config.to_h)
+      end
+
+      def configure_editor_line_numbers
+        selected = @prompt.select("Editor line numbers", editor_line_number_choices, title: "Settings")
+        value = selected.to_s.split.first.to_s.downcase
+        return unless %w[absolute relative].include?(value)
+
+        update_nested_config("editor", "line_numbers" => value)
+        runtime_output("Editor line numbers set to #{value}.")
+      end
+
+      def editor_line_number_choices
+        current = editor_line_numbers
+        %w[absolute relative].map { |value| value == current ? "#{value} (current)" : value }
       end
 
       def editor_auto_close_pairs_enabled?

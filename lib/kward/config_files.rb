@@ -81,7 +81,8 @@ module Kward
           "auto_indent" => true,
           "auto_close_pairs" => true,
           "soft_wrap" => true,
-          "bar_cursor" => true
+          "bar_cursor" => true,
+          "line_numbers" => "absolute"
         },
         "sessions" => {
           "auto_resume" => false
@@ -237,6 +238,13 @@ module Kward
     def editor_bar_cursor?(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       editor["bar_cursor"] != false
+    end
+
+    # Returns the built-in TUI editor line-number display mode.
+    def editor_line_numbers(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      value = editor["line_numbers"].to_s.downcase
+      %w[absolute relative].include?(value) ? value : "absolute"
     end
 
     # Returns whether file tools must stay inside the active workspace root.

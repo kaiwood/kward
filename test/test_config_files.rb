@@ -24,6 +24,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("editor", "auto_close_pairs")
       assert_equal true, config.dig("editor", "soft_wrap")
       assert_equal true, config.dig("editor", "bar_cursor")
+      assert_equal "absolute", config.dig("editor", "line_numbers")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
@@ -91,6 +92,15 @@ class TestConfigFiles < KwardTestCase
     assert_equal true, Kward::ConfigFiles.editor_bar_cursor?("editor" => {})
     assert_equal true, Kward::ConfigFiles.editor_bar_cursor?("editor" => { "bar_cursor" => true })
     assert_equal false, Kward::ConfigFiles.editor_bar_cursor?("editor" => { "bar_cursor" => false })
+  end
+
+  def test_editor_line_numbers_defaults_to_absolute_and_accepts_relative
+    assert_equal "absolute", Kward::ConfigFiles.editor_line_numbers({})
+    assert_equal "absolute", Kward::ConfigFiles.editor_line_numbers("editor" => {})
+    assert_equal "absolute", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "absolute" })
+    assert_equal "relative", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "relative" })
+    assert_equal "relative", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "RELATIVE" })
+    assert_equal "absolute", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "hybrid" })
   end
 
   def test_workspace_guardrails_enabled_defaults_to_true_and_only_false_disables_it

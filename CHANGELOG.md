@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
 - Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
 - Added a read-only TUI diff viewer from `/git`
 - Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop
@@ -34,6 +35,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/plugins.md` with `/reload` for plugin development, complete interactive key symbol list, prompt context return contract, `interactive_command` options documentation, `ctx.say` availability in all handlers, and an extensibility cross-link.
 - Expanded `doc/rpc.md` with corrected `sessions/tree` capability (supported, not unsupported), documented `sessions/tree`, `sessions/tree/setLabel`, `sessions/tree/navigate`, `logging/tokenCsv`, `workers/list`, and `workers/show` methods, added `workers`/`starterPack`/`logging` capability descriptions, and documented GitHub OAuth CLI-only limitation.
 - Expanded `doc/releasing.md` with Ruby version requirement note, focused test step, gemspec exclusion detail with `tar tf` inspection command, `rake rdoc` clarification, git commit/tag/push step, focused test guidance, and `gem yank` rollback guidance.
+- Expanded `doc/agent-tools.md` with write lock for workers, AGENTS.md auto-refresh on file change, tool output compaction strategy details, configuration cross-link for guardrails, and tool scoping for workers.
 
 ### Fixed
 

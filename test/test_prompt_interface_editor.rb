@@ -2185,6 +2185,61 @@ class TestPromptInterfaceEditor < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_prompt_interface_editor_relative_line_numbers_show_distance_from_cursor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree\nfour\nfive")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", editor_line_numbers: "relative")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(2, 0)
+
+        rows, = prompt.send(:composer_layout, 40, 10)
+        text = strip_ansi(rows.join("\n"))
+
+        assert_includes text, "│    2 │ one"
+        assert_includes text, "│    1 │ two"
+        assert_includes text, "│    3 │ three"
+        assert_includes text, "│    1 │ four"
+        assert_includes text, "│    2 │ five"
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_relative_line_numbers_respect_dynamic_source
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        line_numbers = "absolute"
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", editor_line_numbers_source: -> { line_numbers })
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 0)
+
+        absolute_rows, = prompt.send(:composer_layout, 40, 10)
+        line_numbers = "relative"
+        relative_rows, = prompt.send(:composer_layout, 40, 10)
+
+        assert_includes strip_ansi(absolute_rows.join("\n")), "│    3 │ three"
+        assert_includes strip_ansi(relative_rows.join("\n")), "│    1 │ three"
+      end
+    end
+  end
+
+  def test_prompt_interface_diff_viewer_keeps_absolute_line_numbers_when_relative_is_enabled
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_line_numbers: "relative")
+    assert prompt.send(:open_diff_viewer, "notes.txt", "one\ntwo\nthree")
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.set_cursor_line_and_column(1, 0)
+
+    rows, = prompt.send(:composer_layout, 40, 10)
+    text = strip_ansi(rows.join("\n"))
+
+    assert_includes text, "│    1 │ one"
+    assert_includes text, "│    2 │ two"
+    assert_includes text, "│    3 │ three"
+  end
+
   def test_prompt_interface_editor_cursor_column_accounts_for_line_number_gutter
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo")

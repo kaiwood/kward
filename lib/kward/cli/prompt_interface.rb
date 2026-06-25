@@ -34,7 +34,9 @@ module Kward
           editor_soft_wrap: ConfigFiles.editor_soft_wrap?,
           editor_soft_wrap_source: -> { ConfigFiles.editor_soft_wrap? },
           editor_bar_cursor: ConfigFiles.editor_bar_cursor?,
-          editor_bar_cursor_source: -> { ConfigFiles.editor_bar_cursor? }
+          editor_bar_cursor_source: -> { ConfigFiles.editor_bar_cursor? },
+          editor_line_numbers: ConfigFiles.editor_line_numbers,
+          editor_line_numbers_source: -> { ConfigFiles.editor_line_numbers }
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
           @prompt.start(render: false)

@@ -151,8 +151,16 @@ module Kward
       end
 
       def editor_line_number_gutter(line_index)
-        number = (line_index + 1).to_s.rjust(editor_line_number_gutter_width - 3)
+        number = editor_display_line_number(line_index).to_s.rjust(editor_line_number_gutter_width - 3)
         colored("#{number} │ ", :dark_forest_green)
+      end
+
+      def editor_display_line_number(line_index)
+        return line_index + 1 unless current_editor_line_numbers == "relative"
+        return line_index + 1 if @editor_state.readonly?
+
+        cursor_line, = @editor_state.cursor_line_and_column
+        line_index == cursor_line ? line_index + 1 : (line_index - cursor_line).abs
       end
 
       def editor_blank_line_number_gutter

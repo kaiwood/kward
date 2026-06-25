@@ -105,6 +105,14 @@ module Kward
         @editor_bar_cursor != false
       end
 
+      def current_editor_line_numbers
+        return normalize_editor_line_numbers(@editor_line_numbers_source.call) if @editor_line_numbers_source.respond_to?(:call)
+
+        normalize_editor_line_numbers(@editor_line_numbers)
+      rescue StandardError
+        normalize_editor_line_numbers(@editor_line_numbers)
+      end
+
       def close_editor
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked

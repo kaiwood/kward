@@ -2287,6 +2287,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_settings_interface_can_set_editor_line_numbers
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "editor" => { "line_numbers" => "absolute" } }, config_path)
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Editor line numbers (absolute)", "relative"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "relative", JSON.parse(File.read(config_path)).dig("editor", "line_numbers")
+      assert_includes prompt.output.join("\n"), "Editor line numbers set to relative."
+      line_numbers_index = prompt.select_messages.index("Editor line numbers")
+      assert line_numbers_index
+      assert_includes prompt.select_choices[line_numbers_index], "absolute (current)"
+      assert_includes prompt.select_choices[line_numbers_index], "relative"
+    end
+  end
+
   def test_settings_interface_can_toggle_editor_soft_wrap
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
