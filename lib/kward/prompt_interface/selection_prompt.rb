@@ -101,7 +101,7 @@ module Kward
           modified_result = handle_select_modified_csi_u_key(code, modifier)
           return modified_result unless modified_result == false
 
-          handle_select_printable_csi_u_key(code, modifiers)
+          handle_select_printable_csi_u_key(sequence)
         end
       end
 
@@ -119,12 +119,13 @@ module Kward
         end
       end
 
-      def handle_select_printable_csi_u_key(code, modifiers)
-        return false unless modifiers.empty? || modifiers == "1"
-        return false unless code.between?(32, 126)
+      def handle_select_printable_csi_u_key(sequence)
+        text = csi_u_text(sequence)
+        return select_typed_key(text) unless text.empty?
+        return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
+        return false unless sequence[:code].between?(32, 126)
 
-        key = code.chr(Encoding::UTF_8)
-        select_typed_key(key)
+        select_typed_key(sequence[:code].chr(Encoding::UTF_8))
       end
 
       def handle_select_escape_sequence

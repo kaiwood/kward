@@ -6,37 +6,17 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added a Git feature guide covering the `/git` overlay, diff viewer, staging, and commit flow.
-- Added a configurable `editor.bar_cursor` setting that makes editable built-in editor buffers request a vertical bar cursor by default and restore the terminal default cursor shape on exit.
-- Added built-in editor soft-wrap support, configurable with `editor.soft_wrap`, plus automatic horizontal scrolling when soft-wrap is disabled.
-- Added mouse-wheel scrolling, click-to-position, drag selection, double-click word selection, triple-click line selection, and edge auto-scroll dragging in the built-in editor and diff viewer while preserving native terminal scrolling outside the editor.
-- Added Modern editor Cmd+C handling for terminals that report Command-key CSI-u events, copying selections like Ctrl+C.
-- Added TUI Ctrl+Tab and Ctrl+Shift+Tab shortcuts for next/previous tab navigation across tab keybinding modes.
-- Added modern editor Ctrl+Arrow keybindings for line and document boundary movement, Alt+Shift+Left/Right wordwise selection, `/` and `?` search, and Ctrl+F move-right behavior.
-- Added auto-close pairs to the built-in TUI file editor for brackets, braces, parentheses, quotes, and backticks, with an `editor.auto_close_pairs` setting.
-- Added a read-only TUI diff viewer from `/git`, opened with Enter on a changed file and showing classic colored added/removed diff lines.
-- Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop at a configurable frame rate (1–120 fps), supporting games, dashboards, and viewers with colored cell drawing, non-blocking key input, full composer state save/restore on exit, and Ctrl+C forced exit.
-- Added configurable syntax-based auto-indent on Enter for the built-in TUI file editor, including closing-token reindent and indentation-level Backspace behavior.
-- Added automatic syntax highlighting for Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL in the built-in TUI file editor when terminal color is enabled.
-- Added `R` replace mode to the TUI vibe editor mode.
-- Added classic vibe normal-mode movement keys `^`, `+`, `-`, `_`, Enter, Space, Backspace, `H`, `M`, `L`, Ctrl+F, Ctrl+B, Ctrl+D, Ctrl+U, Ctrl+E, and Ctrl+Y to the TUI vibe editor mode.
-- Added `X` delete-before-cursor support to the TUI vibe editor mode.
-- Added vibe change, substitute, replace-character, and join-line commands (`cc`, `C`, `cw`, `c$`, `s`, `S`, `r`, and `J`) to the TUI vibe editor mode.
-- Added `D` delete-to-end-of-line support to the TUI vibe editor mode.
-- Added `P` paste-before support to the TUI vibe editor mode.
-- Added `U`, Ctrl+R redo, and `.` repeat-last-change support to the TUI vibe editor mode.
-- Added `?pattern` backward search support to the TUI vibe editor mode.
-- Added vibe search repeat keys `n` and `N`, plus word-under-cursor search keys `*` and `#`, to the TUI vibe editor mode.
-- Added a "Feature Guide: Integrated Editor" docs page covering the `$` file-narrowing prefix, editor features, and the modern, emacs, and vibe keybinding modes with full keybinding tables.
-- Added a basic built-in TUI file editor opened from the composer with `$` file narrowing, using the composer area for full-height editing, slash search, Ctrl+S save, and two-step overwrite protection.
-- Added modern, emacs, and vibe editor modes for the built-in TUI file editor, with modern as the default, emacs kill-ring support, and vibe retaining its modal command set.
+- Added a read-only TUI diff viewer from `/git`
+- Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop
+- Added `$` to the TUI, to open files with the new editor
+- Added a builtin editor with 3 modes: moder, emacs and vibe.
 - Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
 - Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
 - Added file-level stage/unstage toggling to the interactive `/git` overlay with `s` and Up/Down selection.
 - Added a Git branch indicator to the TUI composer status, coloring it yellow when the working tree has uncommitted changes.
-- Added persistent numbered TUI tabs for session-backed conversations, including bottom composer tab rendering, configurable tab keybinding mode, and `/tab` commands for switching, moving, closing, opening, and naming tabs.
-- Added structured request workers with `/workers`, session-backed worker transcript switching, live transcript updates while viewing running workers, a first-class implementation worker for the foreground session, write-lock enforcement and foreground reacquisition for mutating worker tools, persisted worker metadata, RPC worker list/show capabilities, and a reusable live worker event view.
-- Added request approval handling so replying `yes`, `proceed`, or similar from a ready request worker transitions it into a queued write-capable implementation worker.
+- Added persistent numbered TUI tabs for session-backed conversations
+- Added experimental support for agent workers
+
 
 ### Changed
 

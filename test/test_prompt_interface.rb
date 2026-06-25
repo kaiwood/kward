@@ -735,6 +735,18 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_filters_choices_after_csi_u_slash_text
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[0;1;47usec\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal "second", prompt.select("Session>", ["first", "second"])
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_search_blocks_action_keys_until_escape
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     action_keys = prompt.send(:normalized_select_action_keys, { "c" => :clone })
