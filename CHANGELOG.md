@@ -50,6 +50,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Enter between auto-closed editor pairs so block openers expand to an indented blank line before the closing delimiter.
+- Fixed editor mouse reporting so the composer always forces terminal mouse reporting off for native selection, and stale mouse reports are ignored instead of inserted into the composer.
 - Fixed shifted CSI-u printable keys in the built-in TUI file editor, including terminals that encode Shift+A as decoded CSI-u text.
 - Fixed opening a new TUI tab from the built-in editor so the editor state stays with the original tab instead of appearing in the new tab.
 - Fixed `/git` commit-message editing so Shift+Enter inserts a newline instead of submitting the message.

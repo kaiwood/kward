@@ -32,6 +32,29 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_ignores_mouse_reporting_sequences_in_composer
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_equal true, prompt.send(:handle_key, "\e[<34;95;55M")
+    assert_equal "", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_ignores_mouse_reporting_sequence_bodies_in_composer
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_equal true, prompt.send(:handle_key, "[<34;95;55M")
+    assert_equal "", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_start_forces_mouse_reporting_off_outside_editor
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.start
+
+    assert_includes output.string, "\e[?1006l\e[?1003l"
+  end
+
   def test_prompt_interface_renders_empty_composer_before_typing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

@@ -18,6 +18,14 @@ module Kward
       def editor_insert_newline
         return @editor_state.insert("\n") unless current_editor_auto_indent?
 
+        block_indent = editor_multiline_block_indent
+        if block_indent
+          inner_indent, closing_indent = block_indent
+          @editor_state.insert("\n#{inner_indent}\n#{closing_indent}")
+          @editor_state.cursor -= closing_indent.length + 1
+          return
+        end
+
         @editor_state.insert("\n#{editor_newline_indent}")
       end
 
@@ -65,6 +73,33 @@ module Kward
         indent = base_indent.dup
         indent += editor_indent_unit if editor_line_opens_indent?(before_cursor, language)
         indent
+      end
+
+      def editor_multiline_block_indent
+        line_index, column = @editor_state.cursor_line_and_column
+        line = @editor_state.lines[line_index].to_s
+        before_cursor = line[0...column].to_s
+        base_indent = line[/\A[ \t]*/].to_s
+        language = editor_syntax_language
+        opens_indent = editor_line_opens_indent?(before_cursor, language)
+        paired_closer = editor_next_paired_closer
+        return nil unless paired_closer
+        return nil unless opens_indent || editor_auto_close_pair_opener_before_cursor?
+
+        [base_indent + editor_indent_unit, base_indent]
+      end
+
+      def editor_next_paired_closer
+        opener = editor_previous_character
+        closer = editor_next_character
+        return nil unless opener && closer
+        return nil unless PromptInterface::EditorAutoClosePairs::AUTO_CLOSE_PAIRS[opener] == closer
+
+        closer
+      end
+
+      def editor_auto_close_pair_opener_before_cursor?
+        PromptInterface::EditorAutoClosePairs::AUTO_CLOSE_PAIRS.key?(editor_previous_character)
       end
 
       def editor_indent_unit

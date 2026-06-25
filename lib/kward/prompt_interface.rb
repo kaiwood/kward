@@ -198,6 +198,7 @@ module Kward
         enter_raw_mode_locked
         @started = true
         @asking = true
+        disable_editor_mouse_reporting(force: true) unless editor_active?
         @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
         @output_io.print(BRACKETED_PASTE_ENABLE)
         render_prompt_locked if render
@@ -210,6 +211,7 @@ module Kward
 
         clear_prompt_for_output_locked
         restore_scroll_region_locked
+        disable_editor_mouse_reporting(force: true)
         @output_io.print(BRACKETED_PASTE_RESTORE)
         @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
         restore_editor_cursor_shape_locked
@@ -512,7 +514,15 @@ module Kward
     end
 
     def restore_editor_snapshot_locked(snapshot)
+      editor_was_active = editor_active?
       @editor_state = snapshot[:editor_state]&.dup
+      editor_is_active = editor_active?
+
+      if editor_is_active
+        enable_editor_mouse_reporting unless editor_was_active
+      else
+        disable_editor_mouse_reporting(force: true)
+      end
     end
 
     def update_overlay_settings(settings)

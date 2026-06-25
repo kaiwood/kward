@@ -224,17 +224,103 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
-  def test_prompt_interface_vibe_normal_ignores_csi_u_shifted_text
+  def test_prompt_interface_vibe_normal_handles_unmodified_csi_u_keys
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[106;1;106u")
+        prompt.send(:handle_editor_key, "\e[105;1;105u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal [1, 0], editor.cursor_line_and_column
+        assert_equal "insert", editor.vibe_mode
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_normal_handles_csi_u_enter
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello\nworld\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[13;1u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal [1, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_insert_handles_csi_u_enter
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
         assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "\e[105;1;105u")
 
-        prompt.send(:handle_editor_key, "\e[97;2;65u")
+        prompt.send(:handle_editor_key, "\e[13;1u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "\nhello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_normal_handles_csi_u_backspace
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = 2
+
+        prompt.send(:handle_editor_key, "\e[127;1u")
+
+        assert_equal 1, editor.cursor
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_insert_handles_csi_u_backspace
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:handle_editor_key, "\e[105;1;105u")
+        prompt.send(:handle_editor_key, "A")
+
+        prompt.send(:handle_editor_key, "\e[127;1u")
 
         editor = prompt.instance_variable_get(:@editor_state)
         assert_equal "hello", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_normal_handles_csi_u_shifted_commands
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello\nworld\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[118;2;86u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "visual_line", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, "\e[27;1u")
+        prompt.send(:handle_editor_key, "\e[103;2;71u")
+
+        assert_equal [2, 0], editor.cursor_line_and_column
       end
     end
   end
@@ -325,6 +411,42 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt.send(:handle_editor_key, "\n")
 
         assert_equal "function test() {\n\treturn true;\nif (ready) {\n\t", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_auto_indent_expands_auto_closed_block
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class HelloWorld ")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "{")
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "class HelloWorld {\n  \n}", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_auto_indent_expands_other_auto_close_pairs
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.js"), "call")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.js")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "(")
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "call(\n  \n)", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
       end
     end
   end
@@ -729,6 +851,43 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt.send(:close_editor)
 
         assert_includes output.string, "\e[?1006l\e[?1003l"
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_disables_mouse_reporting_when_restoring_snapshot_without_editor
+    output = StringIO.new
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+        snapshot_without_editor = prompt.tab_view_snapshot
+        assert prompt.send(:open_editor, "notes.txt")
+        output.truncate(0)
+        output.rewind
+
+        prompt.restore_tab_view_snapshot(snapshot_without_editor)
+
+        assert_includes output.string, "\e[?1006l\e[?1003l"
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_enables_mouse_reporting_when_restoring_snapshot_with_editor
+    output = StringIO.new
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        snapshot_with_editor = prompt.tab_view_snapshot
+        prompt.send(:close_editor)
+        output.truncate(0)
+        output.rewind
+
+        prompt.restore_tab_view_snapshot(snapshot_with_editor)
+
+        assert_includes output.string, "\e[?1003h\e[?1006h"
       end
     end
   end

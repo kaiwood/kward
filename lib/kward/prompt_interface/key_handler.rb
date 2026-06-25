@@ -28,6 +28,7 @@ module Kward
         return submit_input if key.nil?
         return handle_interactive_key(key) if interactive_active_locked?
         return handle_editor_input_key(key) if editor_active?
+        return true if handle_mouse_reporting_key(key)
         return if handle_bracketed_paste_key(key)
 
         csi_result = handle_csi_u_key(key)
@@ -135,6 +136,8 @@ module Kward
         return true if pending_sequence.empty? && (dismiss_file_overlay || dismiss_slash_overlay)
 
         full_sequence = "\e#{pending_sequence}"
+        return true if handle_mouse_reporting_key(full_sequence)
+
         sequence = next_key_token(full_sequence)
         queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
         return true if sequence == "\e" && (dismiss_file_overlay || dismiss_slash_overlay)
@@ -183,6 +186,15 @@ module Kward
 
         insert_paste(normalize_paste(paste[:content]))
         queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
+        true
+      end
+
+      def handle_mouse_reporting_key(key)
+        text = key.to_s
+        match = text.match(/\A(?:\e)?\[<\d+;\d+;\d+[Mm]/)
+        return false unless match
+
+        queue_pending_keys(text[match[0].length..]) if match[0].length < text.length
         true
       end
 

@@ -31,11 +31,14 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
         normalized_code = code.to_i.chr.downcase.ord rescue code
-        text = csi_u_text(sequence)
-        if !text.empty?
-          return editor_search_append(text) if editor_search_active?
-          return vibe_record_undo { editor_insert_printable(text) } if @editor_state.vibe_mode == "insert"
-          return vibe_record_undo { vibe_replace_character(text) } if @editor_state.vibe_mode == "replace"
+        logical_key = vibe_csi_u_logical_key(sequence)
+        if logical_key
+          return handle_vibe_search_key(logical_key) if editor_search_active?
+          return handle_vibe_command_key(logical_key) if @editor_state.vibe_mode == "command"
+          return handle_vibe_insert_key(logical_key) if @editor_state.vibe_mode == "insert"
+          return handle_vibe_replace_key(logical_key) if @editor_state.vibe_mode == "replace"
+          return handle_vibe_visual_key(logical_key) if vibe_visual_mode?
+          return handle_vibe_normal_key(logical_key) if @editor_state.vibe_mode == "normal"
         end
         return false unless code == 27 || (ctrl_modifier?(modifier) && normalized_code == 99)
 
@@ -45,6 +48,17 @@ module Kward
         @editor_state.vibe_pending = ""
         @editor_state.clear_selection
         vibe_return_to_normal
+      end
+
+      def vibe_csi_u_logical_key(sequence)
+        code = sequence[:code]
+        text = csi_u_text(sequence)
+        return "\n" if code == 13
+        return "\x7F" if [8, 127].include?(code)
+        return text if text.length == 1 && printable_key?(text)
+        return code.chr(Encoding::UTF_8) if sequence[:modifier] == 1 && code.between?(32, 126)
+
+        nil
       end
 
       def handle_vibe_search_key(key)

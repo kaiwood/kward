@@ -106,7 +106,7 @@ module Kward
       end
 
       def close_editor
-        disable_editor_mouse_reporting
+        disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked
         @editor_text_width = nil
         @editor_state = nil
@@ -902,8 +902,8 @@ module Kward
         @editor_mouse_reporting_enabled = true
       end
 
-      def disable_editor_mouse_reporting
-        return unless @editor_mouse_reporting_enabled
+      def disable_editor_mouse_reporting(force: false)
+        return unless force || @editor_mouse_reporting_enabled
 
         @output_io.print("\e[?1006l\e[?1003l")
         @output_io.flush if @output_io.respond_to?(:flush)
