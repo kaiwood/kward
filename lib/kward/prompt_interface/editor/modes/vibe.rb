@@ -280,6 +280,7 @@ module Kward
       def vibe_waiting_for_more?(command)
         return true if command.match?(/\A\d+\z/) && command != "0"
         return true if command.match?(/\A\d*g\z/)
+        return true if command.match?(/\A\d*z\z/)
         return true if command.match?(/\A\d*[cdy]\d*\z/)
         return true if command.match?(/\A\d*r\z/)
 
@@ -321,6 +322,12 @@ module Kward
         when "G"
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
+        when "zz"
+          vibe_position_cursor_line(:center)
+        when "zt"
+          vibe_position_cursor_line(:top)
+        when "zb"
+          vibe_position_cursor_line(:bottom)
         when "H"
           vibe_move_to_screen_line(count - 1)
         when "M"
@@ -540,6 +547,29 @@ module Kward
           @editor_state.move_to_line_first_non_blank(line_index)
         else
           @editor_state.move_to_line_first_non_blank(target_row)
+        end
+      end
+
+      def vibe_position_cursor_line(position)
+        row = if current_editor_soft_wrap?
+                editor_visual_row_for(*@editor_state.cursor_line_and_column, current_editor_text_width)
+              else
+                @editor_state.cursor_line_and_column.first
+              end
+        offset = case position
+                 when :top then 0
+                 when :bottom then editor_page_rows - 1
+                 else editor_page_rows / 2
+                 end
+        @editor_state.viewport_row = [[row - offset, 0].max, vibe_last_viewport_row].min
+      end
+
+      def vibe_last_viewport_row
+        visible_count = editor_page_rows
+        if current_editor_soft_wrap?
+          [editor_visual_rows(current_editor_text_width).length - visible_count, 0].max
+        else
+          [@editor_state.lines.length - visible_count, 0].max
         end
       end
 

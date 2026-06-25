@@ -305,6 +305,31 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_normal_handles_zz_zt_and_zb_viewport_commands
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), (1..40).map { |line| "line #{line}" }.join("\n"))
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.define_singleton_method(:screen_height) { 12 }
+        editor.set_cursor_line_and_column(20, 0)
+
+        prompt.send(:handle_editor_key, "z")
+        prompt.send(:handle_editor_key, "z")
+        assert_equal 16, editor.viewport_row
+
+        prompt.send(:handle_editor_key, "z")
+        prompt.send(:handle_editor_key, "t")
+        assert_equal 20, editor.viewport_row
+
+        prompt.send(:handle_editor_key, "z")
+        prompt.send(:handle_editor_key, "b")
+        assert_equal 13, editor.viewport_row
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_normal_handles_csi_u_ctrl_page_and_scroll_commands
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), (1..40).map { |line| "line #{line}" }.join("\n"))

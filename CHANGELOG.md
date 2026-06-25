@@ -24,6 +24,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Added vibe-mode editor `zz`, `zt`, and `zb` viewport positioning commands.
 - Fixed vibe-mode editor handling for CSI-u encoded Ctrl+f/Ctrl+b/Ctrl+d/Ctrl+u/Ctrl+e/Ctrl+y page and scroll shortcuts.
 - Fixed TUI tab restoration so empty tabs whose unused session files were cleaned up are restored as new sessions instead of being dropped and shifting later sessions into the wrong tab.
 - Fixed generated documentation pages with a table of contents so code blocks no longer leave a large vertical gap beside the TOC.
