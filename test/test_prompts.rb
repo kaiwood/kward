@@ -15,6 +15,14 @@ class TestPrompts < KwardTestCase
     assert_includes content, "fetch_raw for machine-readable resources"
   end
 
+  def test_base_prompt_includes_context_budget_guidance
+    content = Kward::Prompts.base_prompt
+
+    assert_includes content, "Prefer context_for_task"
+    assert_includes content, "read_file mode=\"outline\"/\"preview\""
+    assert_includes content, "use mode=\"full\" only when focused context is insufficient"
+  end
+
   def test_config_principles_prompt_appends_from_config_dir
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |workspace|

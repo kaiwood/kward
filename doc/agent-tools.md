@@ -23,7 +23,7 @@ Tools are part of Kward's safety and context-management boundary:
 
 ## How tools save tokens
 
-Kward tries to keep tool context useful without flooding the model:
+Kward tries to keep tool context useful without flooding the model. The built-in prompt tells Kward to start with focused context tools and escalate from outlines/previews to exact ranges before full-file reads:
 
 - `read_file` reads bounded line ranges, supports continuation with `offset` and `limit`, and accepts explicit `preview`, `outline`, `range`, and `full` modes with optional per-call byte budgets.
 - `context_for_task` builds a task-shaped bundle from ranked files, outlines, and matching excerpts within a caller-supplied byte budget.
