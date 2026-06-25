@@ -55,13 +55,13 @@ Binary files (detected by null bytes) return an error instead of content.
 
 ### `summarize_file_structure`
 
-Returns a compact outline of classes, modules, methods, and functions in a source file. Kward uses it when a file may be too large to read fully at first.
+Returns a compact outline of recognizable declarations in a source file, including line ranges and declaration kind where Kward can infer them. Kward uses it when a file may be too large to read fully at first.
 
 Arguments:
 
 - `path`: workspace-relative source file path.
 
-This tool saves tokens by letting Kward identify relevant entry points before requesting exact line ranges with `read_file`. The outline is capped at 80 entries. Binary files (detected by null bytes) return an error instead of content.
+This tool saves tokens by letting Kward identify relevant entry points before requesting exact line ranges with `read_file`. The outline is capped at 80 entries and recognizes common Ruby, JavaScript/TypeScript, Go, Rust, Java, and C#-style declarations with lightweight pattern matching rather than a full parser. Binary files (detected by null bytes) return an error instead of content.
 
 ## Changing files
 

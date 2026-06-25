@@ -77,9 +77,31 @@ class TestWorkspace < KwardTestCase
 
       assert_includes result, "# File structure: structure.rb"
       assert_includes result, "- Lines: 7"
-      assert_includes result, "line 1: module BigThing"
-      assert_includes result, "line 2:   class Runner"
-      assert_includes result, "line 3:     def call"
+      assert_includes result, "line 1: module BigThing (range 1-6, module)"
+      assert_includes result, "line 2:   class Runner (range 2-6, class)"
+      assert_includes result, "line 3:     def call (range 3-6, function)"
+    end
+  end
+
+  def test_summarize_file_structure_recognizes_common_language_declarations
+    with_temp_workspace do |workspace, dir|
+      File.write(File.join(dir, "structure.ts"), <<~TS)
+        export class Runner {
+          constructor(private readonly name: string) {}
+          async call(): Promise<void> {
+          }
+        }
+        export const helper = () => true
+        export interface Config { enabled: boolean }
+      TS
+
+      result = workspace.summarize_file_structure("structure.ts")
+
+      assert_includes result, "line 1: export class Runner { (range 1-5, class)"
+      assert_includes result, "line 2:   constructor(private readonly name: string) {} (method)"
+      assert_includes result, "line 3:   async call(): Promise<void> { (range 3-5, method)"
+      assert_includes result, "line 6: export const helper = () => true (function)"
+      assert_includes result, "line 7: export interface Config { enabled: boolean } (interface)"
     end
   end
 
