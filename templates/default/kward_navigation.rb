@@ -46,7 +46,8 @@ module KwardDocsNavigationData
         ["Workspace tools", "file.workspace-tools.html"],
         ["Web search", "file.web-search.html"],
         ["Code search", "file.code-search.html"],
-        ["Context tools", "file.context-tools.html"]
+        ["Context tools", "file.context-tools.html"],
+        ["Context budgeting", "file.context-budgeting.html"]
       ]
     ]
   ].freeze

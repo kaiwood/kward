@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 - Added a lightweight `context_for_task` workspace tool that builds budgeted task context from ranked files, source outlines, and matching excerpts.
 - Added `context_budget_stats` for approximate per-process context bytes and estimated tokens saved by tool output budgeting.
 - Added built-in prompt guidance to start with focused context tools and escalate gradually before full-file reads.
+- Added a Context budgeting guide under Agent tools covering focused context gathering, budgeted reads, output compaction, duplicate reuse, session compaction, and savings stats.
 - Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
 - Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
 - Added a read-only TUI diff viewer from `/git`
@@ -46,6 +47,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/code-search.md` with supported ecosystems list, per-action argument table, concrete limits (search results, context lines, line count, file size, scan limit, output truncation, HTTP timeout), file filtering behavior, and a configuration cross-link.
 - Expanded `doc/context-tools.md` with `ask_user_question` constraints (single-select, no preview, custom typed answers), `read_skill` path safety and 100 KB file size limit, `retrieve_tool_output` query output format, and cross-links to agent-tools and RPC question bridge.
 - Expanded `doc/editor.md` with Vibe mode `zz`/`zt`/`zb` viewport commands, insert mode readline shortcuts, visual mode auto-close wrapping, soft-wrap mention, configuration cross-link, and a Vibe design notes section explaining counts, `.`, operators, search, clipboard, and intentional omissions.
+- Expanded `doc/context-budgeting.md` with clarified `context_for_task` input vs output, `context_for_task` limits, corrected `read_file` mode descriptions, `max_bytes` cap explanation, `context_budget_stats` field details, and cross-links to workspace-tools, agent-tools, session-management, and configuration.
 
 ### Fixed
 

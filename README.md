@@ -91,6 +91,7 @@ Advanced:
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
 - [Agent tools](doc/agent-tools.md): overview of model-callable tools, token-saving behavior, and tool categories.
 - [Workspace tools](doc/workspace-tools.md): local file, edit, and shell command tools.
+- [Context budgeting](doc/context-budgeting.md): focused context gathering, budgeted reads, output compaction, and token-saving history.
 - [Web search](doc/web-search.md): live search providers and network behavior for the web search agent tool.
 - [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading for the code search agent tool.
 - [Context tools](doc/context-tools.md): skills, compacted output retrieval, and structured clarification questions.

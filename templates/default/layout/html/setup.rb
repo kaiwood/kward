@@ -39,6 +39,7 @@ module KwardDocsNavigation
     "doc/plugins.md" => "file.plugins.html",
     "doc/agent-tools.md" => "file.agent-tools.html",
     "doc/workspace-tools.md" => "file.workspace-tools.html",
+    "doc/context-budgeting.md" => "file.context-budgeting.html",
     "doc/web-search.md" => "file.web-search.html",
     "doc/code-search.md" => "file.code-search.html",
     "doc/context-tools.md" => "file.context-tools.html",

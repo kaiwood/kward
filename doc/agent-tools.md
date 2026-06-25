@@ -35,7 +35,7 @@ Kward tries to keep tool context useful without flooding the model. The built-in
 
 When a tool output exceeds 12 KB, Kward compacts it before sending it to the model. The compactor preserves the first 40 and last 40 lines, keeps lines matching error, test, or search-result patterns with 2 lines of surrounding context, and replaces omitted sections with `[... omitted lines ...]` markers. Shell command output is section-aware: STDOUT and STDERR sections are compacted separately. Compacted outputs include a header with the original and compacted byte counts and the artifact ID for retrieval. Error outputs under 8 KB are left intact so failure details stay visible.
 
-This lets the assistant reason from focused evidence while preserving access to original outputs when needed.
+This lets the assistant reason from focused evidence while preserving access to original outputs when needed. For a fuller overview of Kward's context budgeting and token-saving work, see [Context budgeting](context-budgeting.md).
 
 ## How tools are exposed
 
