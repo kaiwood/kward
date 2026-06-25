@@ -1132,6 +1132,81 @@ class TestPromptInterface < KwardTestCase
     assert_equal 2, prompt.instance_variable_get(:@question_state)[:selection_index]
   end
 
+  def test_prompt_interface_ask_user_question_printable_shift_csi_u_enters_custom_answer
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 0,
+      index: 1,
+      total: 1
+    })
+
+    prompt.send(:handle_question_key, "\e[65;2u")
+
+    assert_equal "A", prompt.send(:composer_input)
+    assert_equal 2, prompt.instance_variable_get(:@question_state)[:selection_index]
+  end
+
+  def test_prompt_interface_ask_user_question_ignores_private_use_csi_u_key_events
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 2,
+      index: 1,
+      total: 1
+    })
+
+    prompt.send(:handle_question_key, "\e[57447;2u")
+
+    assert_equal "", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_ask_user_question_custom_answer_uses_composer_shortcuts
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 2,
+      index: 1,
+      total: 1
+    })
+    prompt.send(:composer_input=, "hello world")
+    prompt.send(:composer_cursor=, "hello world".length)
+
+    prompt.send(:handle_question_key, "\eb")
+    prompt.send(:handle_question_key, "\ed")
+    prompt.send(:handle_question_key, "\x01")
+    prompt.send(:handle_question_key, "\x0B")
+    prompt.send(:handle_question_key, "\x19")
+
+    assert_equal "hello ", prompt.send(:composer_input)
+    assert_equal "hello ".length, prompt.send(:composer_cursor)
+    assert_equal 2, prompt.instance_variable_get(:@question_state)[:selection_index]
+  end
+
+  def test_prompt_interface_ask_user_question_renders_tabs
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.update_tabs(labels: %w[Main Ops], active_index: 1)
+    prompt.instance_variable_set(:@question_state, {
+      question: "Proceed?",
+      header: "Confirm",
+      options: question_args("Proceed?")[:options],
+      selection_index: 0,
+      index: 1,
+      total: 1
+    })
+
+    rows, = prompt.send(:composer_layout, 80, 24)
+    rendered_rows = rows.last(3).map { |row| strip_ansi(row) }
+
+    assert_match(/1 Main +│ 2 Ops │/, rendered_rows[1])
+  end
+
   def test_prompt_interface_ask_user_question_handles_csi_u_backspace
     input, writer = IO.pipe
     output = StringIO.new

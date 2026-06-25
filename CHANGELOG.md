@@ -50,6 +50,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `ask_user_question` custom-answer editing so tabs remain visible and the composer supports shifted ASCII CSI-u printable keys, Shift+Enter newlines, and normal composer shortcuts without inserting private-use key-state events.
 - Fixed Enter between auto-closed editor pairs so block openers expand to an indented blank line before the closing delimiter.
 - Fixed editor mouse reporting so the composer always forces terminal mouse reporting off for native selection, and stale mouse reports are ignored instead of inserted into the composer.
 - Fixed shifted CSI-u printable keys in the built-in TUI file editor, including terminals that encode Shift+A as decoded CSI-u text.

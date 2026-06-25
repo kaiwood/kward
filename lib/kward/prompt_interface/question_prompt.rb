@@ -82,6 +82,7 @@ module Kward
 
       def handle_question_key(key)
         return if handle_question_bracketed_paste_key(key)
+        return if handle_question_shift_enter_key(key)
 
         csi_result = handle_question_csi_u_key(key)
         return csi_result unless csi_result == false
@@ -94,6 +95,9 @@ module Kward
           end
         end
 
+        binding_result = handle_question_composer_key_binding(key)
+        return binding_result unless binding_result == false
+
         case key_name_for(key)
         when :return, :enter
           current_question_answer
@@ -102,13 +106,13 @@ module Kward
         when :delete
           question_delete_at_cursor
         when :left
-          @composer.move_cursor_left
+          move_cursor_left
         when :right
-          @composer.move_cursor_right
+          move_cursor_right
         when :home
-          @composer.move_to_start_of_line
+          move_to_start_of_line
         when :end
-          @composer.move_to_end_of_line
+          move_to_end_of_line
         when :up
           question_previous_choice
         when :down
@@ -137,24 +141,45 @@ module Kward
 
         case code
         when 13
-          current_question_answer
+          if modifier == 2
+            question_insert_string("\n")
+            nil
+          else
+            current_question_answer
+          end
         when 27
           SELECT_CANCEL
         when 8, 127
-          question_delete_before_cursor
+          alt_modifier?(modifier) ? question_delete_word_before_cursor : question_delete_before_cursor
           nil
         else
+          modified_result = handle_question_modified_csi_u_key(code, modifier)
+          return modified_result unless modified_result == false
+          return question_insert_csi_u_text(sequence) unless sequence[:text].to_s.empty?
+
           question_insert_csi_u_character(code, modifier)
         end
       end
 
+      def handle_question_modified_csi_u_key(code, modifier)
+        before = composer_input.dup
+        result = handle_modified_csi_u_key(code, modifier)
+        question_select_custom_choice if result != false && composer_input != before
+        result
+      end
+
+      def question_insert_csi_u_text(sequence)
+        text = csi_u_text(sequence)
+        return false if text.empty?
+
+        question_insert_string(text)
+      end
+
       def question_insert_csi_u_character(code, modifier)
-        return false unless modifier == 1
+        return false if ctrl_modifier?(modifier) || alt_modifier?(modifier) || super_modifier?(modifier)
+        return false unless code.between?(32, 126)
 
-        character = code.to_i.chr(Encoding::UTF_8) rescue nil
-        return false unless character&.match?(/[[:print:]]/)
-
-        question_insert_string(character)
+        question_insert_string(code.chr(Encoding::UTF_8))
       end
 
       def handle_question_escape_sequence
@@ -166,15 +191,18 @@ module Kward
         queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
         return SELECT_CANCEL if sequence == "\e"
 
+        binding_result = handle_question_composer_key_binding(sequence)
+        return binding_result unless binding_result == false
+
         case key_name_for(sequence)
         when :up
           question_previous_choice
         when :down
           question_next_choice
         when :left
-          @composer.move_cursor_left
+          move_cursor_left
         when :right
-          @composer.move_cursor_right
+          move_cursor_right
         end
         true
       end
@@ -253,23 +281,49 @@ module Kward
         question_insert_string(key)
       end
 
+      def handle_question_shift_enter_key(key)
+        sequence = shift_enter_sequence_for(key)
+        return false unless sequence
+
+        question_insert_string("\n")
+        queue_pending_keys(key[sequence.length..]) if key.length > sequence.length
+        true
+      end
+
+      def handle_question_composer_key_binding(key)
+        before = composer_input.dup
+        result = handle_composer_key_binding(key)
+        question_select_custom_choice if result != false && composer_input != before
+        result
+      end
+
       def question_insert_string(string)
         return if string.empty?
 
-        @composer.insert_string(string)
-        @question_state[:selection_index] = question_choices.length - 1 if @question_state
+        insert_string(string)
+        question_select_custom_choice
       end
 
       def question_delete_before_cursor
-        return unless @composer.delete_before_cursor
-
-        @question_state[:selection_index] = question_choices.length - 1 if @question_state && !composer_input.empty?
+        before = composer_input.dup
+        delete_before_cursor
+        question_select_custom_choice if composer_input != before && !composer_input.empty?
       end
 
       def question_delete_at_cursor
-        return unless @composer.delete_at_cursor
+        before = composer_input.dup
+        delete_at_cursor
+        question_select_custom_choice if composer_input != before && !composer_input.empty?
+      end
 
-        @question_state[:selection_index] = question_choices.length - 1 if @question_state && !composer_input.empty?
+      def question_delete_word_before_cursor
+        before = composer_input.dup
+        delete_word_before_cursor
+        question_select_custom_choice if composer_input != before && !composer_input.empty?
+      end
+
+      def question_select_custom_choice
+        @question_state[:selection_index] = question_choices.length - 1 if @question_state
       end
 
       def question_composer_layout(width, height = screen_height)
@@ -277,7 +331,8 @@ module Kward
         overlay_rows = active_overlay_rows(width, height: height)
         return question_custom_composer_layout(width, height, overlay_rows, content_width) if selected_question_choice&.fetch(:custom, false)
 
-        rows = overlay_rows + [top_border(width), box_content_row("", content_width), bottom_border(width)]
+        rows = overlay_rows + [top_border(width), box_content_row("", content_width)]
+        rows.concat(question_bottom_border_rows(width))
         [rows, overlay_rows.length + 1, 2]
       end
 
@@ -288,10 +343,14 @@ module Kward
         visible_rows = input_layout_rows[visible_start, max_input_rows] || [""]
         rows = overlay_rows + [top_border(width)]
         rows.concat(visible_rows.map { |row| box_content_row(row, content_width) })
-        rows << bottom_border(width)
+        rows.concat(question_bottom_border_rows(width))
         cursor_row = overlay_rows.length + 1 + input_cursor_row - visible_start
         cursor_col = 2 + [input_cursor_col, content_width - 1].min
         [rows, cursor_row, cursor_col]
+      end
+
+      def question_bottom_border_rows(width)
+        @tabs.empty? ? [bottom_border(width)] : tab_border_rows(width)
       end
 
       def question_overlay_rows(width)
