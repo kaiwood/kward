@@ -39,6 +39,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/workspace-tools.md` with concrete file/read/command limits, large-file outline behavior, binary file detection, unified diff output for write/edit, shell command output format and timeout behavior, guardrails config cross-link, and agent-tools cross-link.
 - Expanded `doc/web-search.md` with `PERPLEXITY_API_KEY` and `GEMINI_API_KEY` env var names, `web_search.provider` config setting, search output limits, HTTP timeout and redirect behavior, `fetch_content` extraction mode details, and a configuration cross-link.
 - Expanded `doc/code-search.md` with supported ecosystems list, per-action argument table, concrete limits (search results, context lines, line count, file size, scan limit, output truncation, HTTP timeout), file filtering behavior, and a configuration cross-link.
+- Expanded `doc/context-tools.md` with `ask_user_question` constraints (single-select, no preview, custom typed answers), `read_skill` path safety and 100 KB file size limit, `retrieve_tool_output` query output format, and cross-links to agent-tools and RPC question bridge.
 
 ### Fixed
 

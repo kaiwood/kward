@@ -11,6 +11,8 @@ Arguments:
 - `name`: skill name.
 - `path`: optional path inside the skill, default `SKILL.md`.
 
+Skill file paths must be relative and stay inside the skill folder. Absolute paths and path traversal are rejected. Files larger than 100 KB are also rejected.
+
 Skills are reusable instruction bundles stored in the Kward config directory. Kward advertises available skills by name and description, then reads the full skill only when it becomes relevant. That saves tokens because every skill does not need to be injected into every request.
 
 Typical uses:
@@ -39,6 +41,10 @@ This saves tokens in two ways:
 - repeated large outputs are not resent to the model,
 - follow-up reads can target only matching lines or a bounded line range.
 
+When a `query` is provided, matching lines are returned with 1-indexed line numbers prefixed. The result includes a header with the artifact id, query, and line range. When there are more results than the limit, a continuation notice with the next `offset` is included.
+
+For details on how tool outputs are compacted and when artifacts are created, see [Agent tools](agent-tools.md).
+
 ## `ask_user_question`
 
 `ask_user_question` asks one to four structured clarification questions through an interactive frontend.
@@ -49,9 +55,16 @@ Arguments:
 - each question has:
   - `header`: short label shown in the overlay,
   - `question`: the question text,
-  - `options`: two to four selectable answers with labels and descriptions.
+  - `options`: two to four selectable answers with `label` and `description`.
 
-This tool is advertised only when the active frontend supports structured questions. In terminal use, it lets Kward ask concise multiple-choice questions instead of guessing requirements. In RPC clients, the same question flow is bridged through UI events.
+Constraints:
+
+- `multiSelect` is unsupported; questions are single-select.
+- `preview` on options is unsupported.
+- Each option requires both `label` and `description`.
+- In terminal use, the picker also accepts custom typed answers beyond the provided options, so the user is not limited to the listed choices.
+
+This tool is advertised only when the active frontend supports structured questions. In terminal use, it lets Kward ask concise multiple-choice questions instead of guessing requirements. In RPC clients, the same question flow is bridged through UI events — see the [RPC question bridge](rpc.md#ui-question-bridge) for notification and response details.
 
 Good uses:
 
