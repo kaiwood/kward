@@ -2,7 +2,7 @@
 
 Kward reads user configuration from `~/.kward/config.json` by default. Most users do not need to edit this file by hand at first: use `/login`, `/model`, `/reasoning`, and `/settings` from inside Kward when possible.
 
-On first start, if the file does not exist, Kward creates a starter config with an active Kward persona, explicit disabled memory settings, and the default composer busy-help setting so you can inspect and edit them. Provider-specific model defaults are added only when you choose a provider/model. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
+On first start, if the file does not exist, Kward creates a starter config with an active Kward persona, explicit disabled memory settings, and the default composer busy-help setting so you can inspect and edit them. Provider-specific model defaults are added only when you choose a provider/model. See [Personas](personas.md) for configuring persona selection by workspace, model, or reasoning effort. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
 
 Small examples:
 
@@ -34,9 +34,10 @@ By default, Kward stores user data under `~/.kward`:
 ~/.kward/memory/
 ~/.kward/logs/
 ~/.kward/cache/
+~/.kward/plugins/
 ```
 
-When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files live beside that file instead. User plugins are the exception: they are loaded only from `~/.kward/plugins`.
+When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files live beside that file instead. User plugins are the exception: they are loaded only from `~/.kward/plugins`. See [Plugins](plugins.md) for writing and loading user plugins.
 
 ## Provider and model settings
 
@@ -47,6 +48,8 @@ Set `provider` to choose the active backend:
   "provider": "codex"
 }
 ```
+
+When `provider` is unset, Kward infers the backend from available credentials, defaulting to OpenAI/Codex when OAuth credentials are present. Set `provider` or `KWARD_PROVIDER` to select another backend explicitly.
 
 Supported values are:
 
@@ -73,7 +76,7 @@ Model settings:
 }
 ```
 
-`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `anthropic_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `openai_reasoning_effort`, `anthropic_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
+`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `anthropic_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `thinking_level` is an alias for `reasoning_effort` honored by all providers. For each provider, Kward resolves reasoning in this order: the provider-specific key (for example `openai_reasoning_effort`), then the generic `reasoning_effort`, then `thinking_level`, then the default `medium`. `openai_reasoning_effort`, `anthropic_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
 
 Defaults:
 
@@ -162,6 +165,18 @@ The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:
 
 This only hides the hint text; Ctrl+C still stops the current running response.
 
+`tab_keybindings` controls how the composer handles `Tab`:
+
+```json
+{
+  "composer": {
+    "tab_keybindings": "auto"
+  }
+}
+```
+
+`auto` (default) detects terminal support, `ctrl` uses `Ctrl+Tab`/`Shift+Tab` to cycle suggestions and indent, `alt` uses `Alt+Tab` for terminals where `Ctrl+Tab` is swallowed.
+
 ## Editor settings
 
 The built-in TUI file editor supports three keybinding modes. Modern is the default:
@@ -190,6 +205,16 @@ Auto-indent is enabled by default. Pressing Enter copies the current line indent
 ```
 
 `auto_indent` and `auto_close_pairs` both default to `true`. Set `auto_close_pairs` to `false` to disable automatic insertion of matching `()`, `[]`, `{}`, quotes, and backticks.
+
+Soft-wrap is enabled by default so long lines wrap within the editor width instead of scrolling. To disable it:
+
+```json
+{
+  "editor": {
+    "soft_wrap": false
+  }
+}
+```
 
 Editable editor buffers request a vertical bar cursor by default. Terminals that do not support cursor-shape escape sequences ignore this. To keep the terminal's normal cursor shape while editing:
 
