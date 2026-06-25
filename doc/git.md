@@ -38,6 +38,8 @@ Use the overlay to review and shape the commit:
 
 When you press `Tab`, the prompt changes from `Git>` to `Commit>`. Type the commit message and press `Enter` to commit. Press `Tab` again to return to the file list without losing the draft message.
 
+Use `Shift+Enter` to insert a newline if you need a multi-line commit message.
+
 ## Review changes with the diff viewer
 
 Highlight a file in the `/git` overlay and press `Enter`.
@@ -58,7 +60,7 @@ Useful keys in the diff viewer:
 
 After you close the viewer, Kward returns to the Git overlay with the file list refreshed.
 
-The diff viewer is read-only. It is meant for checking what changed, not editing. If you spot something you want to fix, close the viewer, return to chat, and ask Kward to make the change or open the file with the built-in editor using `$path/to/file`.
+The diff viewer is read-only. It is meant for checking what changed, not editing. If you spot something you want to fix, close the viewer, return to chat, and ask Kward to make the change or open the file with the built-in editor using `$path/to/file` (see [Configuration](configuration.md#editor-settings) for editor modes and settings).
 
 ## Example workflow
 
@@ -94,15 +96,19 @@ The status list refreshes after each toggle, so you can see what will be include
 
 For untracked files, the diff viewer shows the file as a new file with every line added. That makes it possible to review new files before staging them.
 
+Renamed or copied files (status codes `R` and `C`) appear in the list with their destination path after the `->` arrow, and the diff viewer shows the destination file.
+
 ## Git branch indicator
 
 In the interactive composer status line, Kward also shows the current Git branch or short commit SHA when the workspace is inside a repository. The indicator turns yellow when the working tree has uncommitted changes.
 
 This is just a lightweight status hint. Use `/git` when you want to review or commit the changes.
 
+If the working tree is clean when you run `/git`, the overlay shows `No uncommitted changes.` and there is nothing to stage or commit.
+
 ## Notes and limitations
 
-- `/git` is available in the interactive terminal UI, not in one-shot prompts.
+- `/git` is available in the interactive terminal UI, not in one-shot prompts or the RPC backend.
 - The command must run inside a Git repository.
 - The diff viewer compares tracked files against `HEAD` with `git diff HEAD -- <path>`.
 - The commit command uses `git commit -m <message>`.
