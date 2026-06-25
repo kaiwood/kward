@@ -12,6 +12,8 @@ Or inside interactive Kward:
 /login
 ```
 
+`/login` opens a provider picker; `kward login` accepts the provider as an argument.
+
 Use the provider you already have access to. You can change the active model later with `/model`.
 
 ## Choose a provider
@@ -54,6 +56,14 @@ If Kward asks for an OAuth client ID, add it to `~/.kward/config.json`:
 {
   "openai_oauth_client_id": "your-client-id"
 }
+```
+
+Kward ships with a built-in client ID, so this is only needed if login fails or you want to use your own.
+
+For a single shell session without OAuth, you can set an access token directly:
+
+```bash
+OPENAI_ACCESS_TOKEN=... kward
 ```
 
 ## Anthropic Claude Pro/Max
@@ -151,10 +161,21 @@ The model picker is the normal way to switch between configured providers and mo
 
 For one-off shell runs, `KWARD_PROVIDER` and provider-specific model environment variables remain available. See [Configuration](configuration.md) for the full list.
 
+## Custom auth file locations
+
+Each auth file has an environment variable override, useful for isolated or multi-account setups. When unset, they default to the paths shown above under `~/.kward/`.
+
+- `KWARD_AUTH_PATH` — OpenAI OAuth credentials (`auth.json`)
+- `KWARD_ANTHROPIC_AUTH_PATH` — Anthropic OAuth credentials (`anthropic_auth.json`)
+- `KWARD_GITHUB_AUTH_PATH` — GitHub OAuth credentials (`github_auth.json`)
+
+When `KWARD_CONFIG_PATH` points at a custom config file, the OpenRouter API key is stored in that file instead of `~/.kward/config.json`.
+
 ## Security notes
 
 - Auth files are written with file mode `0600` when possible.
 - Do not commit `~/.kward/config.json` or auth files.
 - Prefer environment variables for temporary credentials.
 - `kward auth status` shows credential status without printing secrets.
-- `kward auth logout` removes saved credentials.
+- `kward auth logout` removes **all** saved credentials at once: every OAuth file (OpenAI, Anthropic, GitHub) and the stored OpenRouter API key. There is no per-provider logout; to remove a single provider, delete its auth file by hand.
+- `kward doctor` reports which credentials are currently configured alongside other local checks.
