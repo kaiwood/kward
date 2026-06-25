@@ -305,6 +305,101 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_insert_handles_readline_navigation_shortcuts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello world")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:handle_editor_key, "i")
+        editor.set_cursor_line_and_column(0, 5)
+
+        prompt.send(:handle_editor_key, "\x01")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x05")
+        assert_equal [0, 11], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x02")
+        assert_equal [0, 10], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\x06")
+        assert_equal [0, 11], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_insert_handles_readline_editing_shortcuts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello world")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:handle_editor_key, "i")
+        editor.set_cursor_line_and_column(0, 5)
+
+        prompt.send(:handle_editor_key, "\x04")
+        assert_equal "helloworld", editor.buffer
+
+        prompt.send(:handle_editor_key, "\x0B")
+        assert_equal "hello", editor.buffer
+        assert_equal "world", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "\x19")
+        assert_equal "helloworld", editor.buffer
+
+        prompt.send(:handle_editor_key, "\x15")
+        assert_equal "", editor.buffer
+
+        editor.replace_range(0, editor.buffer.length, "hello world")
+        editor.set_cursor_line_and_column(0, 5)
+        prompt.send(:handle_editor_key, "\x17")
+        assert_equal " world", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_insert_handles_alt_word_shortcuts
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one two three")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:handle_editor_key, "i")
+        editor.set_cursor_line_and_column(0, 4)
+
+        prompt.send(:handle_editor_key, "\ef")
+        assert_equal [0, 7], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\eb")
+        assert_equal [0, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\ed")
+        assert_equal "one  three", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_insert_keeps_ctrl_c_as_normal_mode_escape
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:handle_editor_key, "i")
+
+        prompt.send(:handle_editor_key, "\x03")
+
+        assert_equal "normal", editor.vibe_mode
+        assert prompt.instance_variable_get(:@editor_state)
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_normal_handles_zz_zt_and_zb_viewport_commands
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), (1..40).map { |line| "line #{line}" }.join("\n"))

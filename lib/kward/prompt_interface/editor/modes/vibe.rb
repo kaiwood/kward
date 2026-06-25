@@ -89,11 +89,146 @@ module Kward
         when "\n", "\r"
           vibe_record_undo { editor_insert_newline }
         else
+          readline_result = handle_vibe_insert_readline_key(key)
+          return readline_result unless readline_result == false || readline_result.nil?
+
           key_name = key_name_for(key)
           named_result = handle_vibe_insert_named_key(key_name) if key_name
           return named_result unless named_result == false || named_result.nil?
 
           vibe_record_undo { editor_insert_printable(key) } if printable_key?(key)
+        end
+      end
+
+      def handle_vibe_insert_readline_key(key)
+        csi_result = handle_vibe_insert_readline_csi_u_key(key)
+        return csi_result unless csi_result == false
+
+        handle_vibe_insert_readline_ansi_key(key)
+      end
+
+      def handle_vibe_insert_readline_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        modifier = sequence[:modifier]
+        normalized_code = sequence[:code].to_i.chr.downcase.ord rescue sequence[:code]
+        if ctrl_modifier?(modifier)
+          return handle_vibe_insert_readline_ctrl_key(normalized_code)
+        elsif alt_modifier?(modifier)
+          return handle_vibe_insert_readline_alt_key(normalized_code)
+        end
+
+        false
+      end
+
+      def handle_vibe_insert_readline_ansi_key(key)
+        case key
+        when "\x01"
+          @editor_state.move_line_start
+        when "\x02"
+          @editor_state.move_left
+        when "\x04"
+          vibe_record_undo { @editor_state.delete_at_cursor }
+        when "\x05"
+          @editor_state.move_line_end
+        when "\x06"
+          @editor_state.move_right
+        when "\x0B"
+          vibe_record_undo { @editor_state.kill_line_after_cursor }
+        when "\x15"
+          vibe_record_undo { @editor_state.kill_line_before_cursor }
+        when "\x17"
+          vibe_record_undo { @editor_state.delete_word_before_cursor }
+        when "\x19"
+          vibe_record_undo { @editor_state.yank_kill_buffer }
+        when "\e[D", "\eOD"
+          @editor_state.move_left
+        when "\e[C", "\eOC"
+          @editor_state.move_right
+        when "\e[H", "\eOH", "\e[1~", "\e[7~"
+          @editor_state.move_line_start
+        when "\e[F", "\eOF", "\e[4~", "\e[8~"
+          @editor_state.move_line_end
+        when "\e[3~"
+          vibe_record_undo { @editor_state.delete_at_cursor }
+        when "\eb", "\eB"
+          @editor_state.move_to_previous_word
+        when "\ef", "\eF"
+          @editor_state.move_to_next_word
+        when "\ed", "\eD"
+          vibe_record_undo { @editor_state.delete_word_after_cursor }
+        when "\e\b", "\e\x7F"
+          vibe_record_undo { @editor_state.delete_word_before_cursor }
+        else
+          handle_vibe_insert_modified_ansi_key(key)
+        end
+      end
+
+      def handle_vibe_insert_readline_ctrl_key(normalized_code)
+        case normalized_code
+        when 97
+          @editor_state.move_line_start
+        when 98
+          @editor_state.move_left
+        when 100
+          vibe_record_undo { @editor_state.delete_at_cursor }
+        when 101
+          @editor_state.move_line_end
+        when 102
+          @editor_state.move_right
+        when 107
+          vibe_record_undo { @editor_state.kill_line_after_cursor }
+        when 117
+          vibe_record_undo { @editor_state.kill_line_before_cursor }
+        when 119
+          vibe_record_undo { @editor_state.delete_word_before_cursor }
+        when 121
+          vibe_record_undo { @editor_state.yank_kill_buffer }
+        else
+          false
+        end
+      end
+
+      def handle_vibe_insert_readline_alt_key(normalized_code)
+        case normalized_code
+        when 98
+          @editor_state.move_to_previous_word
+        when 100
+          vibe_record_undo { @editor_state.delete_word_after_cursor }
+        when 102
+          @editor_state.move_to_next_word
+        else
+          false
+        end
+      end
+
+      def handle_vibe_insert_modified_ansi_key(key)
+        match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/)
+        if match
+          modifier = match[2].to_i
+          final = match[3]
+          return false unless alt_modifier?(modifier)
+
+          case final
+          when "C"
+            @editor_state.move_to_next_word
+          when "D"
+            @editor_state.move_to_previous_word
+          when "F"
+            @editor_state.move_line_end
+          when "H"
+            @editor_state.move_line_start
+          else
+            false
+          end
+        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
+          return false unless alt_modifier?(match[1].to_i)
+
+          vibe_record_undo { @editor_state.delete_word_after_cursor }
+        else
+          false
         end
       end
 

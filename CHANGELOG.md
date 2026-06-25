@@ -21,9 +21,11 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
+- Documented the `composer.tab_keybindings`, `editor.soft_wrap`, `personas`, and `plugins` configuration options in `doc/configuration.md`, and clarified provider default behavior and `thinking_level` reasoning precedence.
 
 ### Fixed
 
+- Added composer-style readline shortcuts in vibe-mode editor insert mode.
 - Added vibe-mode editor `zz`, `zt`, and `zb` viewport positioning commands.
 - Fixed vibe-mode editor handling for CSI-u encoded Ctrl+f/Ctrl+b/Ctrl+d/Ctrl+u/Ctrl+e/Ctrl+y page and scroll shortcuts.
 - Fixed TUI tab restoration so empty tabs whose unused session files were cleaned up are restored as new sessions instead of being dropped and shifting later sessions into the wrong tab.
