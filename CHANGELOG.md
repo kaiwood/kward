@@ -20,12 +20,14 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed modern-mode editor modified-arrow navigation to move by indentation level, with platform-specific Alt/Ctrl bindings and shift-selection variants.
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
 - Documented the `composer.tab_keybindings`, `editor.soft_wrap`, `personas`, and `plugins` configuration options in `doc/configuration.md`, and clarified provider default behavior and `thinking_level` reasoning precedence.
 - Documented `OPENAI_ACCESS_TOKEN`, auth file path environment overrides (`KWARD_AUTH_PATH`, `KWARD_ANTHROPIC_AUTH_PATH`, `KWARD_GITHUB_AUTH_PATH`), `kward auth logout` behavior, and `kward doctor` auth reporting in `doc/authentication.md`.
 - Expanded `doc/troubleshooting.md` with sections for `kward doctor`, auth errors and token expiration, provider usage limits and billing, rate limiting and transient errors, context overflow, and a "Still stuck?" footer.
 - Expanded `doc/session-management.md` with `/copy`, `/name`, `/status`, auto-resume, trash-safe deletion, `/export` default path, picker delete confirmation clarification, and an RPC session API cross-link.
 - Expanded `doc/git.md` with multi-line commit messages via `Shift+Enter`, renamed/copied file handling, clean working tree behavior, RPC exclusion note, and an editor settings cross-link.
+- Expanded `doc/memory.md` with soft memory TTL and expiry, retrieval limits and scoring, file permissions, `/memory learn` alias, `/memory auto-summary disable`, `/memory promote` for workspace core to global, `/memory` usage hint, full RPC method list, corrected global core priority wording, and a configuration cross-link.
 
 ### Fixed
 

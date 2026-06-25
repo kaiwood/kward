@@ -51,7 +51,7 @@ Add a workspace-specific hint when it only applies to the current project:
 /memory add "This workspace uses Minitest."
 ```
 
-Use global core memory sparingly. It has higher priority than workspace memory.
+Use global core memory sparingly. It applies everywhere, so it has a wider blast radius than workspace memory.
 
 ## Let Kward summarize useful memories
 
@@ -59,6 +59,12 @@ Auto-summary is off by default. Enable it if you want Kward to learn recurring p
 
 ```text
 /memory auto-summary enable
+```
+
+Disable it again:
+
+```text
+/memory auto-summary disable
 ```
 
 This only runs when memory is enabled. It does not run for one-shot prompts.
@@ -69,9 +75,13 @@ You can also ask Kward to summarize the current session manually:
 /memory summarize
 ```
 
+`/memory learn` is an alias for `/memory summarize`.
+
 Kward is conservative about inferred memories and refuses to automatically persist emotional, intimate, romantic, or dependency-forming memories.
 
 ## Inspect what Kward remembers
+
+Running `/memory` with no argument prints a summary of all available subcommands.
 
 List active memories for the current workspace:
 
@@ -108,6 +118,12 @@ Promote a workspace hint when it should become a stronger rule:
 /memory promote soft_001
 ```
 
+`/memory promote` also works on workspace core memories, promoting them to global scope so they apply everywhere:
+
+```text
+/memory promote core_003
+```
+
 Relax a global memory back to the current workspace:
 
 ```text
@@ -124,7 +140,7 @@ Kward uses three layers:
 
 Core memories override soft memories. Soft memories are treated as hints, not facts.
 
-Kward does not inject every stored memory into every prompt. It retrieves a bounded set that appears relevant to the current turn.
+Kward does not inject every stored memory into every prompt. It retrieves a bounded set that appears relevant to the current turn: up to 6 core and 6 soft memories. Core memories are included by scope match (global and current workspace). Soft memories are scored by text and tag overlap with the current input, confidence level, and expiry, and only the top-scoring ones are injected.
 
 ## Where memory is stored
 
@@ -136,12 +152,16 @@ Default files:
 ~/.kward/memory/events.jsonl
 ```
 
+The memory directory is created with mode `0700` and each file with mode `0600`.
+
 `events.jsonl` stores a small audit trail for actions such as enable, add, retrieve, summarize, promote, and forget.
 
 When a soft memory is forgotten, its text is replaced with `[forgotten]` while inactive audit metadata can remain.
 
-If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead of under `~/.kward`.
+Soft memories have a time-to-live of 60 days by default. Each time a soft memory is retrieved, its `last_seen_at` timestamp is updated and its hit count is incremented. If a soft memory is not retrieved within its TTL window, it expires and is no longer injected into prompts. Forgotten and expired memories remain in the file for audit but are not shown in `/memory list`.
+
+If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead of under `~/.kward`. See [Configuration](configuration.md#memory) for the config-file representation.
 
 ## RPC support
 
-The experimental RPC backend exposes memory methods such as `memory/list`, `memory/add`, `memory/forget`, `memory/why`, and `memory/summarize`. See [RPC protocol](rpc.md) if you are building a client.
+The experimental RPC backend exposes memory methods including `memory/status`, `memory/enable`, `memory/disable`, `memory/autoSummary/enable`, `memory/autoSummary/disable`, `memory/list`, `memory/add`, `memory/addCore`, `memory/forget`, `memory/promote`, `memory/relax`, `memory/inspect`, `memory/why`, and `memory/summarize`. See the [RPC documentation](rpc.md#memory-methods) for the full protocol.
