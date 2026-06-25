@@ -10,9 +10,7 @@ One Kward to bring them all and in the transcript bind them<br>
 In the Land of Ruby where the agents lie.<br>
 </quote>
 
-Kward includes a small terminal editor with 3 editing modes to choose from: Modern, Emacs and Vibe. It opens inside the chat composer, so you can jump into a file, make a change, save it, and return to the conversation without switching tools.
-
-Use it when you want to make a small edit while staying in Kward. For larger refactors, a full editor may still be more comfortable.
+Kward includes a terminal editor with 3 editing modes to choose from: Modern, Emacs and Vibe. It opens inside the chat composer, so you can jump into a file, make a change, save it, and return to the conversation without switching tools.
 
 The editor is scoped to the current workspace. It only opens files inside that directory, which helps keep edits tied to the project you started Kward in.
 
