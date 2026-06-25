@@ -341,7 +341,41 @@ body.kward-docs a {
   color: var(--kward-accent-bright);
 }
 
-body.kward-docs pre {
+body.kward-docs #content quote,
+body.kward-docs #filecontents quote {
+  border-left: 3px solid var(--kward-accent);
+  color: var(--kward-ink);
+  display: block;
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.8;
+  margin: 28px 0;
+  padding: 8px 0 8px 46px;
+  position: relative;
+}
+
+body.kward-docs #content quote::before,
+body.kward-docs #filecontents quote::before {
+  color: var(--kward-accent);
+  content: "\201C";
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 80px;
+  font-style: normal;
+  left: 4px;
+  line-height: 1;
+  opacity: 0.55;
+  position: absolute;
+  top: -10px;
+}
+
+body.kward-docs #content quote br,
+body.kward-docs #filecontents quote br {
+  content: "";
+  display: block;
+  margin-bottom: 4px;
+}
+
+body.kward-docs #content pre {
   background: var(--kward-code);
   border: 1px solid rgba(149, 169, 52, 0.22);
   border-radius: 10px;
@@ -1984,6 +2018,17 @@ body.kward-docs ul.toplevel a:active {
     background: #f4f4f4;
     border: 1px solid #ccc;
     color: #000;
+  }
+
+  body.kward-docs #content quote,
+  body.kward-docs #filecontents quote {
+    border-left-color: #999;
+    color: #000;
+  }
+
+  body.kward-docs #content quote::before,
+  body.kward-docs #filecontents quote::before {
+    color: #999;
   }
 
   .kward-page {
