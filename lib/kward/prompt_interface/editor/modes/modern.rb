@@ -202,6 +202,13 @@ module Kward
         end
 
         case normalized_code
+        when 13
+          return false if editor_search_active?
+
+          modern_record_undo do
+            clear_editor_selection_before_edit
+            editor_insert_endwise_modifier_newline
+          end
         when 99
           editor_search_active? ? editor_search_cancel : copy_editor_selection
         when 102

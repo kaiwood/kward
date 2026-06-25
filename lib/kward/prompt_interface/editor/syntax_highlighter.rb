@@ -33,6 +33,26 @@ module Kward
           line_comment: "#",
           keywords: %w[if then else elif fi for while until do done case esac function in select time coproc true false]
         },
+        crystal: {
+          extensions: %w[.cr],
+          line_comment: "#",
+          keywords: %w[if unless while for do end enum struct macro union lib annotation def class module case begin until else elsif ensure rescue]
+        },
+        elixir: {
+          extensions: %w[.ex .exs],
+          line_comment: "#",
+          keywords: %w[def defp defmodule defprotocol defimpl defmacro do end fn case cond if unless try receive rescue after else true false nil]
+        },
+        julia: {
+          extensions: %w[.jl],
+          line_comment: "#",
+          keywords: %w[begin if while for try let quote function macro module baremodule struct mutable abstract primitive type do end else elseif catch finally true false nothing]
+        },
+        makefile: {
+          filenames: %w[Makefile makefile GNUmakefile],
+          line_comment: "#",
+          keywords: %w[ifeq ifneq ifdef ifndef else endif include define endef export unexport override]
+        },
         python: {
           extensions: %w[.py .pyw],
           line_comment: "#",

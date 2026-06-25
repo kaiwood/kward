@@ -675,7 +675,140 @@ class TestPromptInterfaceEditor < KwardTestCase
 
         prompt.send(:handle_editor_key, "\n")
 
-        assert_equal "class Example\n    attr_reader :name\n  def call\n    ", editor.buffer
+        assert_equal "class Example\n    attr_reader :name\n  def call\n    \n  end", editor.buffer
+        assert_equal [3, 4], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_adds_ruby_end
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "if condition")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "if condition\n  \nend", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_skips_existing_ruby_end
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "if condition\nend")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, "if condition".length)
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "if condition\n  \nend", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_ctrl_enter_from_middle_of_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "if condition")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 2)
+
+        prompt.send(:handle_editor_key, "\e[13;5u")
+
+        assert_equal "if condition\n  \nend", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_ctrl_enter_indents_already_closed_block
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "if condition\nend")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 2)
+
+        prompt.send(:handle_editor_key, "\e[13;5u")
+
+        assert_equal "if condition\n  \nend", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_handles_supported_languages
+    examples = {
+      "example.cr" => ["if condition", "end"],
+      "example.ex" => ["if condition do", "end"],
+      "example.jl" => ["if condition", "end"],
+      "example.lua" => ["if condition then", "end"],
+      "Makefile" => ["ifdef DEBUG", "endif"],
+      "example.sh" => ["if true; then", "fi"]
+    }
+
+    examples.each do |filename, (opening, closing)|
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, filename), opening)
+        Dir.chdir(dir) do
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+          assert prompt.send(:open_editor, filename)
+          editor = prompt.instance_variable_get(:@editor_state)
+          editor.cursor = editor.buffer.length
+
+          prompt.send(:handle_editor_key, "\n")
+
+          assert_equal "#{opening}\n  \n#{closing}", editor.buffer, filename
+          assert_equal [1, 2], editor.cursor_line_and_column, filename
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_ignores_comments_and_endless_methods
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "# if condition\ndef call = value")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, editor.lines[0].length)
+
+        prompt.send(:handle_editor_key, "\n")
+        assert_equal "# if condition\n", editor.buffer[0, "# if condition\n".length]
+
+        editor.set_cursor_line_and_column(2, editor.lines[2].length)
+        prompt.send(:handle_editor_key, "\n")
+
+        refute_includes editor.buffer, "def call = value\n  \nend"
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_endwise_is_disabled_with_auto_indent
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "if condition")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", editor_auto_indent: false)
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "if condition\n", editor.buffer
       end
     end
   end

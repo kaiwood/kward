@@ -31,6 +31,10 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
         normalized_code = code.to_i.chr.downcase.ord rescue code
+        if ctrl_modifier?(modifier) && code == 13 && %w[insert replace].include?(@editor_state.vibe_mode)
+          return vibe_record_undo { editor_insert_endwise_modifier_newline }
+        end
+
         if @editor_state.vibe_mode == "normal" && ctrl_modifier?(modifier)
           ctrl_result = handle_vibe_normal_ctrl_key(normalized_code)
           return ctrl_result unless ctrl_result == false

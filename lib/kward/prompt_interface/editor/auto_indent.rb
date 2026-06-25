@@ -17,6 +17,7 @@ module Kward
 
       def editor_insert_newline
         return @editor_state.insert("\n") unless current_editor_auto_indent?
+        return true if editor_insert_endwise_newline
 
         block_indent = editor_multiline_block_indent
         if block_indent

@@ -124,6 +124,11 @@ module Kward
 
         if ctrl_modifier?(modifier)
           case normalized_code
+          when 13
+            return false if editor_search_active?
+
+            clear_editor_selection_before_edit
+            editor_insert_endwise_modifier_newline
           when 32
             @editor_state.begin_selection unless editor_search_active?
           when 97

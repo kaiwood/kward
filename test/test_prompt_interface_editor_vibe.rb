@@ -1008,6 +1008,19 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_insert_endwise_ctrl_enter_from_middle_of_line
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "if condition", editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, editor)
+    editor.set_cursor_line_and_column(0, 2)
+
+    prompt.send(:handle_editor_key, "i")
+    prompt.send(:handle_editor_key, "\e[13;5u")
+
+    assert_equal "if condition\n  \nend", editor.buffer
+    assert_equal [1, 2], editor.cursor_line_and_column
+  end
+
   def test_prompt_interface_vibe_insert_auto_closes_pairs
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
     editor = Kward::PromptInterface::EditorState.new(path: "test.rb", content: "", editor_mode: "vibe")

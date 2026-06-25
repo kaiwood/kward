@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
 - Added a read-only TUI diff viewer from `/git`
 - Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop
 - Added `$` to the TUI, to open files with the new editor
