@@ -21,6 +21,8 @@ Plugins run inside the Kward process with your user permissions. Install only pl
 | Repository rules | `AGENTS.md` |
 | Local Ruby code or integration | plugin |
 
+See [Extensibility](extensibility.md) for the full overview of Kward's extension points and prompt assembly order.
+
 ## Where plugins live
 
 Kward loads top-level Ruby files from:
@@ -56,6 +58,8 @@ Start Kward and run:
 /hello World
 ```
 
+When developing plugins, use `/reload` inside Kward to reload all plugin files without restarting. This picks up changes to existing plugins and registers new ones, then rebuilds the system message.
+
 ## Add a slash command
 
 Use plugin commands for local actions that should not call the model.
@@ -77,7 +81,7 @@ A plugin command cannot replace a built-in command or prompt-template command.
 
 Prompt context is short text injected into future model requests.
 
-Use it for stable facts the model should know, not for large files or secrets.
+Use it for stable facts the model should know, not for large files or secrets. The block should return a string (injected into the system prompt) or `nil` (skipped). The example below uses Ruby's `next` to return `nil` early when the condition does not match.
 
 ```ruby
 Kward.plugin do |plugin|
@@ -116,6 +120,8 @@ input loop. The plugin receives a controller object with a canvas API for
 drawing colored cells and reading keys. This is useful for games, dashboards,
 viewers, and similar full-region interactive experiences.
 
+`interactive_command` accepts `description:` and `argument_hint:` keyword arguments, which appear in the slash command list and completion overlay just like regular plugin commands. `rows:` sets the fixed canvas height (minimum 1), and `fps:` sets the target frame rate (1–120, default 30).
+
 ```ruby
 Kward.plugin do |plugin|
   plugin.interactive_command "demo", rows: 10, fps: 30, description: "Canvas demo" do |ui, ctx|
@@ -151,9 +157,9 @@ The `ui` controller object passed to the handler block exposes:
 | `height` | Canvas height in terminal rows |
 | `fps` | Target frame rate |
 
-Keys are returned as symbols (`:left`, `:right`, `:up`, `:down`, `:return`) or
-raw strings for keys without a named mapping. Ctrl+C always exits the loop
-immediately.
+Keys are returned as symbols (`:left`, `:right`, `:up`, `:down`, `:return`,
+`:backspace`, `:space`, `:pageup`, `:pagedown`) or raw strings for keys
+without a named mapping. Ctrl+C always exits the loop immediately.
 
 The tick callback runs at the configured frame rate (1–120 fps, default 30).
 Returning `:exit` from the tick callback ends the loop, same as calling
@@ -213,6 +219,8 @@ Handlers receive a `ctx` object. Common methods:
 - `ctx.session_name`
 - `ctx.session_path`
 - `ctx.refresh_system_message!`
+
+These methods are available in all handler types: commands, footers, prompt context renderers, and transcript event observers. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called.
 
 The transcript is read-only. Use context methods instead of mutating Kward internals.
 
