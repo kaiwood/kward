@@ -48,14 +48,14 @@ Result fields:
 Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
-- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, and explicit unsupported import/tree/update features.
+- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, and explicit unsupported import/update features.
 - `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, configured workspace guardrail status, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
-- `auth`: Tauren auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, and provider logout for stored credentials.
+- `auth`: Tauren auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
@@ -63,6 +63,9 @@ Detailed capability fields include:
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
 - `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run. File-tool workspace guardrails are reported under `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
+- `workers`: experimental agent worker pipeline. Reports `supported: false` by default; set to `supported: true` with `methods: ["workers/list", "workers/show"]` when Kward is launched with `--experimental-workers`.
+- `starterPack`: explicitly unsupported (`supported: false`, reason `cliOnlyInstallCommand`). Use `kward init` from the shell.
+- `logging`: local redacted telemetry logging support, the log directory, enabled categories, `methods: ["logging/stats", "logging/tokenCsv"]`, `usageCsv` sub-capability with bucket support, JSONL format, rotation (10 MB, manual retention), config key `logging`, env prefix `KWARD_LOGGING`, and redacted-metadata-only content.
 
 ### `shutdown`
 
@@ -216,6 +219,37 @@ Closes the RPC session. Empty unnamed session files may be cleaned up.
 ### `sessions/transcript`
 
 Returns session metadata and full conversation messages. Assistant `reasoning_summary` values and existing `thinking`/`reasoning` content parts are restored as normalized `{ "type": "thinking", "thinking": "..." }` blocks before assistant text; reasoning is not merged into normal text blocks.
+
+### `sessions/tree`
+
+Params:
+
+- `sessionId`
+
+Returns the full branching session tree as flattened Tauren-compatible rows (`tauren-tree-items-v1`). Each row includes `entryId`, `parentId`, `role`, `text` (compact display text), `current` (whether it is the active leaf), `depth`, `isLast`, `ancestorContinues`, `activePath`, `selectable`, `label`, `labelTimestamp`, and `prefix` (tree-drawing connector string). User-message entries are selectable; assistant/tool entries are not.
+
+### `sessions/tree/setLabel`
+
+Params:
+
+- `sessionId`
+- `entryId`
+- `label`: optional display label override for the entry.
+
+Persists a label override for one tree entry and returns `{ "ok": true }`.
+
+### `sessions/tree/navigate`
+
+Params:
+
+- `sessionId`
+- `entryId`: a selectable entry ID from `sessions/tree`.
+- `summarize`: optional boolean; when true, Kward summarizes the abandoned branch before moving.
+- `customInstructions`: optional additional guidance for the summarizer.
+
+Moves the active branch to the selected tree entry. If the entry is a user message, its parent becomes the new active leaf and the user message text is returned as `editorText` so clients can place it into the composer for editing/resubmission. When `summarize` is true, a branch summary is generated and appended to the session before moving.
+
+Returns `{ "session": {}, "editorText": "...", "cancelled": false, "aborted": false }`. Fields with no value are omitted.
 
 ## Turn methods
 
@@ -379,7 +413,7 @@ Refreshes config-backed runtime state and returns `{ "ok": true, "message": "Res
 
 ## Logging methods
 
-The `logging` capability reports local redacted telemetry logging support, the log directory, enabled categories, and `methods: ["logging/stats"]`. Logging stats require logging to be enabled by config or environment for at least one category.
+The `logging` capability reports local redacted telemetry logging support, the log directory, enabled categories, `methods: ["logging/stats", "logging/tokenCsv"]`, `usageCsv` sub-capability with bucket support, JSONL format with 10 MB rotation and manual retention, config key `logging`, env prefix `KWARD_LOGGING`, and redacted-metadata-only content. Logging methods require logging to be enabled by config or environment for at least one category.
 
 ### `logging/stats`
 
@@ -390,6 +424,15 @@ Params:
 Accepted units are minutes, hours, days, weeks, months, and years. Ranges use UTC calendar periods: `1 month` means the current calendar month so far, and `2 months` means the previous month plus the current month so far. Invalid ranges return an invalid-params error with usage text.
 
 Returns structured stats for enabled categories only, including the requested range, log directory, record counts by category/event, `usageStats` token totals, performance duration summaries, tool call summaries, and error counts by event/class/provider/code. Error messages are not included in the stats response.
+
+### `logging/tokenCsv`
+
+Params:
+
+- `range`: optional duration string; defaults to `1 week`.
+- `bucket`: optional aggregation bucket: `second`, `minute`, `hour`, `day`, `week`, `month`, or `year`.
+
+Returns `{ "csv": "..." }` with token usage data as CSV. Accepted range units and calendar-period behavior match `logging/stats`. This is the RPC equivalent of `kward stats tokens`.
 
 ## Memory methods
 
@@ -638,6 +681,27 @@ Completes the login using the submitted code.
 ### `auth/loginStatus`
 
 Returns login status for a login ID.
+
+## Worker methods (experimental)
+
+Worker methods are available only when Kward is launched with `--experimental-workers`. The `workers` capability reports `supported: false` by default and `supported: true` with `methods: ["workers/list", "workers/show"]` when the flag is active.
+
+### `workers/list`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns the list of agent workers for the session.
+
+### `workers/show`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+- `workerId`: worker ID.
+
+Returns details for a specific worker.
 
 ## Security and privacy notes
 

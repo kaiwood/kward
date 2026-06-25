@@ -32,6 +32,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/personas.md` with bare-string character definitions, raw instruction string as `default`, `label` fallback behavior, `kward sysprompt --raw`, `/settings` Personalization menu detail, Active instructions summary, time-of-day gap note, and a configuration cross-link.
 - Expanded `doc/extensibility.md` with fixed skill frontmatter typo, `read_skill` tool and additional skill files, memory context in prompt assembly order, legacy config-directory `AGENTS.md` alias, prompt template `description` field purpose, `kward sysprompt --raw`, and configuration cross-links.
 - Expanded `doc/plugins.md` with `/reload` for plugin development, complete interactive key symbol list, prompt context return contract, `interactive_command` options documentation, `ctx.say` availability in all handlers, and an extensibility cross-link.
+- Expanded `doc/rpc.md` with corrected `sessions/tree` capability (supported, not unsupported), documented `sessions/tree`, `sessions/tree/setLabel`, `sessions/tree/navigate`, `logging/tokenCsv`, `workers/list`, and `workers/show` methods, added `workers`/`starterPack`/`logging` capability descriptions, and documented GitHub OAuth CLI-only limitation.
 
 ### Fixed
 
