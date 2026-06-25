@@ -37,6 +37,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/releasing.md` with Ruby version requirement note, focused test step, gemspec exclusion detail with `tar tf` inspection command, `rake rdoc` clarification, git commit/tag/push step, focused test guidance, and `gem yank` rollback guidance.
 - Expanded `doc/agent-tools.md` with write lock for workers, AGENTS.md auto-refresh on file change, tool output compaction strategy details, configuration cross-link for guardrails, and tool scoping for workers.
 - Expanded `doc/workspace-tools.md` with concrete file/read/command limits, large-file outline behavior, binary file detection, unified diff output for write/edit, shell command output format and timeout behavior, guardrails config cross-link, and agent-tools cross-link.
+- Expanded `doc/web-search.md` with `PERPLEXITY_API_KEY` and `GEMINI_API_KEY` env var names, `web_search.provider` config setting, search output limits, HTTP timeout and redirect behavior, `fetch_content` extraction mode details, and a configuration cross-link.
 
 ### Fixed
 

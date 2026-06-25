@@ -36,16 +36,18 @@ Kward should search first, then fetch important pages before relying on them.
 
 ## Network behavior
 
-Web tools are advertised to the model by default. Queries and fetched URLs are sent over the network to the selected provider or target host.
+Web tools are advertised to the model by default. Queries and fetched URLs are sent over the network to the selected provider or target host. See [Configuration](configuration.md#web-search) for the full `web_search` config reference including API key storage and the `provider` config setting.
 
 In automatic mode, provider fallback is:
 
 1. Exa API when `EXA_API_KEY` is configured, otherwise keyless Exa MCP.
-2. Perplexity API when configured and model-provider fallback is allowed.
-3. Gemini API with Google Search grounding when configured and model-provider fallback is allowed.
+2. Perplexity API when `PERPLEXITY_API_KEY` is configured and model-provider fallback is allowed.
+3. Gemini API with Google Search grounding when `GEMINI_API_KEY` is configured and model-provider fallback is allowed.
 4. DuckDuckGo HTML search, then bundled public SearXNG instances.
 
-You do not need an API key for basic web search, but keys can improve limits or provider choice.
+You do not need an API key for basic web search, but keys can improve limits or provider choice. The default provider can also be set in config as `web_search.provider`; the tool argument overrides it for a single call.
+
+Search output is capped at 8 KB total, with excerpts up to 300 characters and answer text up to 2,000 characters. HTTP requests use a 10-second timeout.
 
 ## Disable web tools
 
@@ -83,6 +85,10 @@ Arguments:
 - `max_bytes`: default 16384, capped at 131072.
 - `extract`: optional `auto`, `text`, or `markdown`.
 
+In `auto` mode (default), Kward detects HTML content and extracts readable text by stripping scripts, styles, navigation, and forms, preserving headings, paragraphs, lists, code blocks, and blockquotes. Non-HTML content is returned as cleaned text. Use `markdown` to format extracted headings and code blocks as Markdown, or `text` for plain text without formatting.
+
+Fetches follow up to 5 redirects and use a 10-second HTTP timeout.
+
 ### `fetch_raw`
 
 Reads a specific HTTP or HTTPS resource without readability extraction. Use it for JSON, YAML, XML, RSS, OpenAPI specs, and plain text.
@@ -92,3 +98,5 @@ Arguments:
 - `url`
 - `max_bytes`: default 16384, capped at 131072.
 - `accept`: optional HTTP `Accept` header.
+
+Fetches follow up to 5 redirects and use a 10-second HTTP timeout.
