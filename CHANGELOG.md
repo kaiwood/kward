@@ -33,6 +33,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/extensibility.md` with fixed skill frontmatter typo, `read_skill` tool and additional skill files, memory context in prompt assembly order, legacy config-directory `AGENTS.md` alias, prompt template `description` field purpose, `kward sysprompt --raw`, and configuration cross-links.
 - Expanded `doc/plugins.md` with `/reload` for plugin development, complete interactive key symbol list, prompt context return contract, `interactive_command` options documentation, `ctx.say` availability in all handlers, and an extensibility cross-link.
 - Expanded `doc/rpc.md` with corrected `sessions/tree` capability (supported, not unsupported), documented `sessions/tree`, `sessions/tree/setLabel`, `sessions/tree/navigate`, `logging/tokenCsv`, `workers/list`, and `workers/show` methods, added `workers`/`starterPack`/`logging` capability descriptions, and documented GitHub OAuth CLI-only limitation.
+- Expanded `doc/releasing.md` with Ruby version requirement note, focused test step, gemspec exclusion detail with `tar tf` inspection command, `rake rdoc` clarification, git commit/tag/push step, focused test guidance, and `gem yank` rollback guidance.
 
 ### Fixed
 
