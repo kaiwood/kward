@@ -57,6 +57,7 @@ The editor is intentionally compact, but it covers the basics you need for quick
 - Incremental search forward and backward.
 - Selection, copy, cut, and paste. Copy and cut also write to the terminal clipboard through OSC 52 when the terminal supports it.
 - A line-number gutter and a status line that shows the current mode and prompts.
+- Soft-wrap, enabled by default so long lines wrap within the editor width instead of scrolling sideways. Disable it with `editor.soft_wrap: false`.
 
 ## Choosing an editor mode
 
@@ -103,7 +104,7 @@ Line numbers are absolute by default. Set `editor.line_numbers` to `relative` to
 
 Editable editor buffers request a vertical bar cursor by default. Set `editor.bar_cursor` to `false` if you want Kward to leave the terminal cursor shape alone.
 
-See [Configuration](configuration.md) for the full editor settings reference.
+See [Configuration](configuration.md#editor-settings) for the full editor settings reference.
 
 ## Modern mode
 
@@ -174,7 +175,7 @@ Emacs mode is for users who prefer classic Emacs-style non-modal editing. Save a
 | `C-a`                 | Move to start of line                        |
 | `C-e`                 | Move to end of line                          |
 | `C-b`                 | Move left                                    |
-| `C-f`                 | Move right                                   |
+| `C-f`                 | Move right                                  |
 | `C-n`                 | Move down                                    |
 | `C-p`                 | Move up                                      |
 | `C-k`                 | Kill to end of line                          |
@@ -195,9 +196,11 @@ Emacs mode is for users who prefer classic Emacs-style non-modal editing. Save a
 
 ## Vibe mode
 
-Vibe mode is a modal editor aiming for feature parity of classic Vi. Files open in normal mode, where keys run commands. Press `i`, `a`, `o`, or another insert command to type text, then press `Esc` to return to normal mode.
+Vibe mode is a modal editor built for Kward, inspired by classic Vi and Vim. If you already know Vim, you will feel at home here. Files open in normal mode, where keys run commands. Press `i`, `a`, `o`, or another insert command to type text, then press `Esc` to return to normal mode.
 
-It supports a compact modal-editing set: counts, operators with motions, visual selection, search, repeat, and `:` commands.
+It supports a compact but practical modal-editing set: counts, operators with motions, visual selection, search, repeat (`.`), and `:` commands. It is not a full Vim clone — there are no macros, registers, splits, or ex-mode scripting. What it does cover is the everyday editing flow: move, change, delete, yank, paste, search, and save, all without leaving the keyboard or the conversation.
+
+The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `REPLACE`, or `:`) so you never lose track of where you are.
 
 ### Normal mode
 
@@ -219,6 +222,9 @@ It supports a compact modal-editing set: counts, operators with motions, visual 
 | `H`                     | Move to top of screen                           |
 | `M`                     | Move to middle of screen                        |
 | `L`                     | Move to bottom of screen                        |
+| `zz`                    | Center cursor line in viewport                  |
+| `zt`                    | Scroll cursor line to top of viewport           |
+| `zb`                    | Scroll cursor line to bottom of viewport         |
 | `+` / `Enter`           | Move to first non-blank of next line            |
 | `-`                     | Move to first non-blank of previous line        |
 | `_`                     | Move to first non-blank of current line         |
@@ -269,16 +275,36 @@ It supports a compact modal-editing set: counts, operators with motions, visual 
 
 ### Insert mode
 
-| Key              | Action                     |
-| ---------------- | -------------------------- |
-| type text        | Insert characters          |
-| `Enter`          | Insert newline             |
-| `Backspace`      | Delete before cursor       |
-| `Delete`         | Delete character at cursor |
-| `Arrow keys`     | Move cursor                |
-| `Esc` / `Ctrl+C` | Return to normal mode      |
+In insert mode, typed characters are inserted at the cursor. Press `Esc` or `Ctrl+C` to return to normal mode. Arrow keys move the cursor without leaving insert mode.
+
+Vibe insert mode also supports readline-style shortcuts for efficient editing without dropping back to normal mode:
+
+| Key              | Action                                   |
+| ---------------- | ---------------------------------------- |
+| type text        | Insert characters                        |
+| `Enter`          | Insert newline                           |
+| `Backspace`      | Delete before cursor                     |
+| `Delete`         | Delete character at cursor               |
+| `Ctrl+A`         | Move to start of line                    |
+| `Ctrl+E`         | Move to end of line                      |
+| `Ctrl+B`         | Move left                                |
+| `Ctrl+F`         | Move right                               |
+| `Ctrl+D`         | Delete character at cursor               |
+| `Ctrl+K`         | Kill to end of line                      |
+| `Ctrl+U`         | Kill to start of line                    |
+| `Ctrl+W`         | Delete word before cursor                |
+| `Ctrl+Y`         | Paste kill buffer                        |
+| `Alt+B`          | Move to previous word                    |
+| `Alt+F`          | Move to next word                        |
+| `Alt+D`          | Delete word after cursor                 |
+| `Alt+Backspace`  | Delete word before cursor                |
+| `Arrow keys`     | Move cursor                              |
+| `Home` / `End`   | Move to start / end of line              |
+| `Esc` / `Ctrl+C` | Return to normal mode                    |
 
 ### Replace mode
+
+Replace mode overwrites characters at the cursor instead of inserting. Each typed character replaces the character under the cursor and advances. Press `Esc` or `Ctrl+C` to return to normal mode.
 
 | Key              | Action                      |
 | ---------------- | --------------------------- |
@@ -291,18 +317,21 @@ It supports a compact modal-editing set: counts, operators with motions, visual 
 
 Enter visual mode with `v` for character selection or `V` for line selection. Move the cursor to extend the selection, then choose an action.
 
-| Key                      | Action               |
-| ------------------------ | -------------------- |
-| `Arrow keys` / `h j k l` | Extend selection     |
-| `y`                      | Yank selection       |
-| `d` / `x`                | Delete selection     |
-| `c`                      | Change selection     |
-| `p`                      | Paste over selection |
-| `Esc` / `Ctrl+C`         | Cancel visual mode   |
+| Key                      | Action                              |
+| ------------------------ | ----------------------------------- |
+| `Arrow keys` / `h j k l` | Extend selection                    |
+| `y`                      | Yank selection                       |
+| `d` / `x`                | Delete selection                     |
+| `c`                      | Change selection (delete and insert) |
+| `p`                      | Paste over selection                 |
+| auto-close opener        | Wrap selection in matching pair       |
+| `Esc` / `Ctrl+C`         | Cancel visual mode                   |
+
+Typing an opening bracket (`(`, `[`, `{`) or quote (`"`, `'`, `` ` ``) in visual mode wraps the selection in the matching pair, then returns to normal mode.
 
 ### Command mode
 
-Enter command mode with `:` from normal mode. Type a command and press `Enter`.
+Enter command mode with `:` from normal mode. Type a command and press `Enter`. Press `Esc` or `Ctrl+C` to cancel.
 
 | Command | Action                                     |
 | ------- | ------------------------------------------ |
@@ -312,3 +341,16 @@ Enter command mode with `:` from normal mode. Type a command and press `Enter`.
 | `:wq`   | Save and quit                              |
 | `:x`    | Save if changed, then quit                 |
 | `:N`    | Go to line `N`                             |
+
+### Vibe design notes
+
+Vibe mode is not trying to be Vim. It is a focused subset designed for quick edits inside a chat-based coding agent. Here is what to expect:
+
+- **Counts work with commands and motions**: `3dd` deletes three lines, `2w` moves two words, `5x` deletes five characters.
+- **`.` repeats the last change**: after `cw word Esc`, pressing `.` changes the next word the same way. Insert-mode keystrokes are recorded as part of the change.
+- **`/` and `?` search forward and backward**: `n` and `N` repeat the last search. `*` and `#` search for the word under the cursor.
+- **Operators with motions**: `d`, `y`, and `c` work with `w` (word), `e` (end of word), `b` (back word), `$` (end of line), `0` (start of line), and `^` (first non-blank).
+- **Yanks copy to the terminal clipboard**: when OSC 52 is supported, yanked text is also sent to the system clipboard, so you can paste into other applications.
+- **No registers, macros, or ex-mode**: these are intentionally omitted to keep the editor compact. If you need them, use your full terminal editor and reload the file in Kward.
+- **Viewport commands**: `zz`, `zt`, and `zb` reposition the cursor line to the center, top, or bottom of the viewport without moving the cursor itself — the same as Vim.
+- **Indentation navigation**: `Ctrl+J` and `Ctrl+K` jump to the next or previous indentation level, which is useful for navigating nested code blocks in Ruby and other indented languages.

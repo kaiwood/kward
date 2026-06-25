@@ -40,6 +40,7 @@ All notable changes to Kward will be documented in this file.
 - Expanded `doc/web-search.md` with `PERPLEXITY_API_KEY` and `GEMINI_API_KEY` env var names, `web_search.provider` config setting, search output limits, HTTP timeout and redirect behavior, `fetch_content` extraction mode details, and a configuration cross-link.
 - Expanded `doc/code-search.md` with supported ecosystems list, per-action argument table, concrete limits (search results, context lines, line count, file size, scan limit, output truncation, HTTP timeout), file filtering behavior, and a configuration cross-link.
 - Expanded `doc/context-tools.md` with `ask_user_question` constraints (single-select, no preview, custom typed answers), `read_skill` path safety and 100 KB file size limit, `retrieve_tool_output` query output format, and cross-links to agent-tools and RPC question bridge.
+- Expanded `doc/editor.md` with Vibe mode `zz`/`zt`/`zb` viewport commands, insert mode readline shortcuts, visual mode auto-close wrapping, soft-wrap mention, configuration cross-link, and a Vibe design notes section explaining counts, `.`, operators, search, clipboard, and intentional omissions.
 
 ### Fixed
 
