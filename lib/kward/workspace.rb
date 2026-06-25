@@ -54,7 +54,7 @@ module Kward
     # The returned string is user/model-facing and includes continuation notices
     # when output is truncated. Errors are returned as `"Error: ..."` strings so
     # tool calls can be persisted in the conversation without raising.
-    def read_file(path, offset: nil, limit: nil)
+    def read_file(path, offset: nil, limit: nil, mode: nil, max_bytes: nil)
       resolved = workspace_path(path)
       return "Error: not a file: #{path}" unless File.file?(resolved)
 
@@ -64,7 +64,24 @@ module Kward
       content = File.read(resolved)
       return "Error: not a text file: #{path}" if binary_content?(content)
 
-      large_file_outline_response(path, content, offset: offset, limit: limit) || read_file_slice(content, offset: offset, limit: limit)
+      read_mode = normalize_read_mode(mode)
+      return read_mode if read_mode.is_a?(String)
+
+      output_budget = read_output_budget(max_bytes)
+      return output_budget if output_budget.is_a?(String)
+
+      case read_mode
+      when :outline
+        file_structure_summary(path, content)
+      when :preview
+        read_file_slice(content, offset: offset, limit: limit || 120, max_bytes: output_budget)
+      when :range
+        read_file_slice(content, offset: offset, limit: limit, max_bytes: output_budget)
+      when :full
+        read_file_slice(content, offset: offset, limit: limit, max_bytes: output_budget)
+      else
+        large_file_outline_response(path, content, offset: offset, limit: limit) || read_file_slice(content, offset: offset, limit: limit, max_bytes: output_budget)
+      end
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end
@@ -80,11 +97,7 @@ module Kward
       content = File.read(resolved)
       return "Error: not a text file: #{path}" if binary_content?(content)
 
-      lines = content.split("\n", -1)
-      outline = source_outline(lines)
-      return "No recognizable source structure found in #{path}." if outline.empty?
-
-      (["# File structure: #{path}", "- Lines: #{lines.length}", "- Bytes: #{content.bytesize}", "", "## Outline"] + outline).join("\n")
+      file_structure_summary(path, content)
     rescue SecurityError, Errno::ENOENT => e
       "Error: #{e.message}"
     end
@@ -235,15 +248,23 @@ module Kward
         "First #{preview_limit} lines:",
         preview,
         "",
-        "[Use read_file with offset=#{preview_limit + 1} and limit to continue, or request a specific section from the outline.]"
+        "[Use read_file with mode=\"range\", offset=#{preview_limit + 1}, and limit to continue; mode=\"outline\" for only the outline; or request a specific section from the outline.]"
       ].join("\n")
+    end
+
+    def file_structure_summary(path, content)
+      lines = content.split("\n", -1)
+      outline = source_outline(lines)
+      return "No recognizable source structure found in #{path}." if outline.empty?
+
+      (["# File structure: #{path}", "- Lines: #{lines.length}", "- Bytes: #{content.bytesize}", "", "## Outline"] + outline).join("\n")
     end
 
     def source_outline(lines)
       outline = []
       lines.each_with_index do |line, index|
         stripped = line.strip
-        next unless stripped.match?(/\A(class|module|def)\s+/) || stripped.match?(/\A(function|async function)\s+/) || stripped.match?(/\A(export\s+)?(class|interface|type)\s+/)
+        next unless source_declaration?(stripped)
 
         indent = line[/\A\s*/].to_s.length
         outline << "line #{index + 1}: #{'  ' * [indent / 2, 6].min}#{stripped}"
@@ -252,7 +273,31 @@ module Kward
       outline
     end
 
-    def read_file_slice(content, offset:, limit:)
+    def source_declaration?(stripped)
+      stripped.match?(/\A(class|module|def)\s+/) ||
+        stripped.match?(/\A(function|async function)\s+/) ||
+        stripped.match?(/\A(export\s+)?(class|interface|type)\s+/)
+    end
+
+    def normalize_read_mode(mode)
+      return nil if mode.nil? || mode.to_s.empty?
+
+      value = mode.to_s.downcase
+      return value.to_sym if %w[preview outline range full].include?(value)
+
+      "Error: mode must be one of preview, outline, range, full"
+    end
+
+    def read_output_budget(max_bytes)
+      return @max_read_output_bytes if max_bytes.nil?
+
+      value = max_bytes.to_i
+      return "Error: max_bytes must be positive" unless value.positive?
+
+      [value, @max_read_output_bytes].min
+    end
+
+    def read_file_slice(content, offset:, limit:, max_bytes: @max_read_output_bytes)
       lines = content.split("\n", -1)
       lines = [""] if lines.empty?
       start_index = read_start_index(offset)
@@ -263,7 +308,7 @@ module Kward
 
       selected_end = user_limit ? [start_index + user_limit, lines.length].min : lines.length
       selected_lines = lines[start_index...selected_end]
-      truncated = truncate_read_lines(selected_lines)
+      truncated = truncate_read_lines(selected_lines, max_bytes: max_bytes)
       return truncated[:error] if truncated[:error]
 
       output = truncated[:content]
@@ -272,7 +317,8 @@ module Kward
           start_index: start_index,
           output_lines: truncated[:line_count],
           total_lines: lines.length,
-          truncated_by: truncated[:truncated_by]
+          truncated_by: truncated[:truncated_by],
+          max_bytes: max_bytes
         )
       elsif user_limit && selected_end < lines.length
         output << "\n\n[#{lines.length - selected_end} more lines in file. Use offset=#{selected_end + 1} to continue.]"
@@ -300,11 +346,11 @@ module Kward
       value
     end
 
-    def truncate_read_lines(lines)
+    def truncate_read_lines(lines, max_bytes: @max_read_output_bytes)
       first_line = lines.first.to_s
-      if first_line.bytesize > @max_read_output_bytes
+      if first_line.bytesize > max_bytes
         return {
-          error: "Error: first line is #{first_line.bytesize} bytes, exceeds #{@max_read_output_bytes} byte read limit. Use run_shell_command with sed/head to inspect smaller chunks."
+          error: "Error: first line is #{first_line.bytesize} bytes, exceeds #{max_bytes} byte read limit. Use run_shell_command with sed/head to inspect smaller chunks."
         }
       end
 
@@ -319,7 +365,7 @@ module Kward
 
         separator_bytes = output_lines.empty? ? 0 : 1
         next_bytes = line.bytesize + separator_bytes
-        if bytes + next_bytes > @max_read_output_bytes
+        if bytes + next_bytes > max_bytes
           truncated_by = "bytes"
           break
         end
@@ -336,10 +382,10 @@ module Kward
       }
     end
 
-    def read_truncation_notice(start_index:, output_lines:, total_lines:, truncated_by:)
+    def read_truncation_notice(start_index:, output_lines:, total_lines:, truncated_by:, max_bytes: @max_read_output_bytes)
       end_line = start_index + output_lines
       next_offset = end_line + 1
-      detail = truncated_by == "lines" ? "#{@max_read_output_lines} line limit" : "#{@max_read_output_bytes} byte limit"
+      detail = truncated_by == "lines" ? "#{@max_read_output_lines} line limit" : "#{max_bytes} byte limit"
       "\n\n[Showing lines #{start_index + 1}-#{end_line} of #{total_lines} (#{detail}). Use offset=#{next_offset} to continue.]"
     end
 

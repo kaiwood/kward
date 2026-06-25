@@ -25,7 +25,7 @@ Tools are part of Kward's safety and context-management boundary:
 
 Kward tries to keep tool context useful without flooding the model:
 
-- `read_file` reads bounded line ranges and supports continuation with `offset` and `limit`.
+- `read_file` reads bounded line ranges, supports continuation with `offset` and `limit`, and accepts explicit `preview`, `outline`, `range`, and `full` modes with optional per-call byte budgets.
 - `summarize_file_structure` returns a compact outline for large source files before reading all code.
 - Search, fetch, and shell outputs are capped or compacted before model ingestion.
 - Repeated identical tool output is replaced with a short reference instead of being sent again.

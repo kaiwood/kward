@@ -33,17 +33,23 @@ Arguments:
 
 ### `read_file`
 
-Reads a workspace text file. Output is capped, and Kward can continue with line offsets when it needs more detail.
+Reads a workspace text file. Output is capped, and Kward can continue with line offsets when it needs more detail. The tool also supports explicit context modes so Kward can start cheap and widen only when needed.
 
 Arguments:
 
 - `path`: workspace-relative file path.
 - `offset`: optional 1-indexed start line.
 - `limit`: optional maximum number of lines.
+- `mode`: optional context mode:
+  - `preview`: read a short preview slice, defaulting to 120 lines when `limit` is omitted.
+  - `outline`: return only the source declaration outline.
+  - `range`: read the requested `offset`/`limit` slice.
+  - `full`: read from `offset` until Kward's read caps stop the response.
+- `max_bytes`: optional per-call byte budget, capped by Kward's workspace read limit.
 
 A successful read marks the resolved file path as read for the conversation, allowing later edits to that file.
 
-When called without `offset` or `limit` on a file that exceeds 2,000 lines or 50 KB, Kward returns a structure outline (classes, modules, methods) plus the first 120 lines instead of truncating blindly. This helps identify relevant entry points before requesting specific line ranges.
+When called without `offset`, `limit`, or `mode` on a file that exceeds 2,000 lines or 50 KB, Kward returns a structure outline (classes, modules, methods) plus the first 120 lines instead of truncating blindly. This helps identify relevant entry points before requesting specific line ranges.
 
 Binary files (detected by null bytes) return an error instead of content.
 
@@ -107,10 +113,11 @@ The output format is `Exit status: N` followed by `STDOUT:` and `STDERR:` sectio
 Workspace tools are intentionally incremental:
 
 1. list directories to find likely files,
-2. summarize large source files before reading everything,
-3. read focused line ranges,
-4. make exact edits,
-5. run focused verification commands.
+2. use `read_file` with `mode: "outline"` or `summarize_file_structure` before reading everything,
+3. read focused line ranges with `mode: "range"`, `offset`, `limit`, and optional `max_bytes`,
+4. widen to `mode: "full"` only when focused context is insufficient,
+5. make exact edits,
+6. run focused verification commands.
 
 This keeps the model's context window focused on relevant evidence instead of flooding it with entire repositories or long command output.
 

@@ -96,7 +96,7 @@ class TestWorkspace < KwardTestCase
       assert_includes result, "line 2:   class Runner"
       assert_includes result, "line 3:     def call"
       assert_includes result, "First 120 lines:"
-      assert_includes result, "Use read_file with offset=121"
+      assert_includes result, "Use read_file with mode=\"range\", offset=121"
     end
   end
 
@@ -108,6 +108,31 @@ class TestWorkspace < KwardTestCase
       result = workspace.read_file("offset_limited_read.tmp", offset: 2, limit: 1)
 
       assert_equal "beta\n\n[1 more lines in file. Use offset=3 to continue.]", result
+    end
+  end
+
+  def test_read_file_modes_control_context_budget
+    with_temp_workspace do |workspace, dir|
+      File.write(File.join(dir, "budgeted.rb"), "class Budgeted\n  def call\n  end\nend\n# filler\n")
+      workspace = Kward::Workspace.new(root: dir, max_read_output_bytes: 100, max_read_output_lines: 100)
+
+      assert_equal "class Budgeted\n  def call\n  end\nend\n# filler\n", workspace.read_file("budgeted.rb", mode: "full")
+      assert_equal "class Budgeted\n  def call\n\n[Showing lines 1-2 of 6 (25 byte limit). Use offset=3 to continue.]", workspace.read_file("budgeted.rb", mode: "range", max_bytes: 25)
+      assert_includes workspace.read_file("budgeted.rb", mode: "outline"), "line 2:   def call"
+      assert_equal "Error: mode must be one of preview, outline, range, full", workspace.read_file("budgeted.rb", mode: "everything")
+    end
+  end
+
+  def test_read_file_preview_mode_defaults_to_short_slice
+    with_temp_workspace do |workspace, dir|
+      File.write(File.join(dir, "preview.tmp"), (1..150).map { |index| "line #{index}" }.join("\n"))
+      workspace = Kward::Workspace.new(root: dir, max_read_output_bytes: 5_000, max_read_output_lines: 500)
+
+      result = workspace.read_file("preview.tmp", mode: "preview")
+
+      assert_includes result, "line 120"
+      assert_includes result, "[30 more lines in file. Use offset=121 to continue.]"
+      refute_includes result, "line 121"
     end
   end
 

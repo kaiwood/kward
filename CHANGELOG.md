@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added explicit `read_file` context modes (`preview`, `outline`, `range`, `full`) and optional per-call byte budgets so agents can escalate file context gradually.
 - Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
 - Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
 - Added a read-only TUI diff viewer from `/git`
