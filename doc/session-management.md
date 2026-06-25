@@ -23,6 +23,8 @@ cd ~/code/project
 kward
 ```
 
+To automatically resume the last active session for the current workspace on startup, enable `sessions.auto_resume` in your config — see [Configuration](configuration.md#session-settings). When auto-resume is off (the default), Kward starts fresh each time and you can resume earlier work with `/sessions`.
+
 ## A normal session workflow
 
 Start a chat and give it a useful name:
@@ -30,6 +32,8 @@ Start a chat and give it a useful name:
 ```text
 /rename oauth cleanup
 ```
+
+`/rename` requires a name. Use `/name` without an argument to clear the current session name.
 
 Work normally:
 
@@ -71,9 +75,11 @@ Inside the picker you can:
 | `r` | rename the highlighted session. |
 | `c` | clone the highlighted session. |
 | `f` | fork the highlighted session from an earlier prompt. |
-| `d d` | delete the highlighted session after confirmation. |
+| `d` | start deleting the highlighted session. Press `d` again to confirm, or `Esc` to cancel. |
 
 Use names generously. A session named `oauth cleanup` or `release checklist` is much easier to find later than a timestamp.
+
+Deleted sessions are moved to your OS trash or recycle bin when a supported platform tool is available (Finder on macOS, `gio trash` or `trash-put` on Linux, Recycle Bin on Windows). If no trash tool is found, the session file is permanently deleted. You can recover accidentally deleted sessions from your trash.
 
 ## Clone a session
 
@@ -185,6 +191,17 @@ After compaction, Kward may need to re-read files before editing them again. Tha
 
 Compaction is also context management. It trades detailed old conversation for a concise working summary so Kward can spend tokens on the next task.
 
+## Copy session text to the clipboard
+
+Use `/copy` to copy conversation text without writing a file:
+
+```text
+/copy last         # copy the latest assistant response
+/copy transcript   # copy the full transcript as Markdown
+```
+
+With no argument, `/copy` defaults to `last`. Copying uses the terminal clipboard (OSC 52) when supported.
+
 ## Export a session
 
 Export when you want notes outside Kward:
@@ -193,7 +210,19 @@ Export when you want notes outside Kward:
 /export notes.md
 ```
 
+With no argument, `/export` writes a Markdown file beside the session file, derived from the session name with a `.md` extension.
+
 Exports are useful for handoff notes, review summaries, release records, or saving a human-readable transcript before deleting old sessions.
+
+## Check session status
+
+Use `/status` to see the active session name, file path, and auto-compaction reserve at a glance:
+
+```text
+/status
+```
+
+This is useful when you want to confirm which session you are in or check whether auto-compaction is active.
 
 ## Which command should I use?
 
@@ -201,12 +230,15 @@ Exports are useful for handoff notes, review summaries, release records, or savi
 | --- | --- |
 | Continue earlier work | `/sessions` or `/resume` |
 | Give the current session a better name | `/rename <name>` |
+| Clear the current session name | `/name` |
 | Keep the current state but try another future | `/clone` |
 | Start a separate session from before an earlier prompt | `/fork` |
 | Quickly retry an earlier prompt in this session | `/rewind` |
 | Inspect or navigate the full branch structure | `/tree` |
 | Reduce old context so a long session can continue | `/compact` |
+| Copy the last response or full transcript to clipboard | `/copy [last\|transcript]` |
 | Save a readable transcript | `/export <path>` |
+| Check the active session and compaction status | `/status` |
 
 ## Practical habits
 
@@ -218,3 +250,5 @@ Exports are useful for handoff notes, review summaries, release records, or savi
 - Compact when the conversation gets long, but keep the focus instruction specific.
 
 Sessions make Kward less like a single chat box and more like a workspace timeline. You can preserve context, branch it, compress it, and return to it when the work needs another pass.
+
+RPC clients have their own session API with equivalent create, resume, list, clone, fork, rename, and compaction methods. See the [RPC documentation](rpc.md#session-methods) for details.
