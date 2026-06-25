@@ -191,9 +191,9 @@ The built-in TUI file editor supports three keybinding modes. Modern is the defa
 
 `mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` > Interface > Editor mode; newly opened editor buffers pick up the setting immediately.
 
-The editor automatically highlights Ruby, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
+The editor automatically highlights Ruby, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
 
-Auto-indent is enabled by default. Pressing Enter copies the current line indentation, detects the file's indentation unit when possible, and applies lightweight syntax-based indentation for recognized file types. When auto-indent is enabled, typing obvious closing tokens such as `}`, Ruby/Lua `end`, and shell `fi`/`done`/`esac` re-indents the current line, and Backspace in leading indentation removes one detected indentation unit. To disable it:
+Auto-indent is enabled by default. Pressing Enter copies the current line indentation, detects the file's indentation unit when possible, and applies lightweight syntax-based indentation for recognized file types. For Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, Enter after a block opener inserts the matching closing keyword, and Ctrl+Enter can force that behavior from the middle of the line in terminals that report modified Enter keys. When auto-indent is enabled, typing obvious closing tokens such as `}`, Ruby/Lua `end`, and shell `fi`/`done`/`esac` re-indents the current line, and Backspace in leading indentation removes one detected indentation unit. To disable it:
 
 ```json
 {
