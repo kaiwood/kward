@@ -66,6 +66,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
       File.write(File.join(dir, "notes.txt"), (0...20).map { |index| "  line#{index}" }.join("\n"))
       Dir.chdir(dir) do
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        prompt.define_singleton_method(:screen_height) { 14 }
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
         editor.viewport_row = 5
@@ -95,6 +96,7 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
       File.write(File.join(dir, "notes.txt"), (0...30).map { |index| "line#{index}" }.join("\n"))
       Dir.chdir(dir) do
         prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        prompt.define_singleton_method(:screen_height) { 14 }
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
 

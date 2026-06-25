@@ -22,6 +22,8 @@ All notable changes to Kward will be documented in this file.
 
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
 
+### Fixed
+
 ## [0.71.0] - 2026-06-21
 
 ### Fixed

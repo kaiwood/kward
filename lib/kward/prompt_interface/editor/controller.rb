@@ -883,7 +883,7 @@ module Kward
       end
 
       def editor_page_rows
-        [[screen_height - 6, 1].max, 10].min
+        [editor_visible_line_count, 1].max
       end
 
       def editor_scroll_page_rows
