@@ -20,44 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
-- Renamed the built-in TUI file editor `vi` mode to `vibe`; existing `vi` config values are normalized to `vibe`.
-- Renamed the default built-in TUI file editor mode from `nano` to `modern` and changed its save/quit keys to Ctrl+S/Ctrl+Q.
-- Changed `/git` commits to use staged changes when present, or automatically stage all workspace changes when nothing is staged.
-- Changed TUI tabs to colorize tab names by state instead of appending `*` for running tabs: yellow while running, red after errors or cancellation, and green when a background tab finishes unread.
-- Changed TUI tabs to use unrestricted tab-local tool registries so tab turns can run independently without worker write-lock policy.
-- Changed the composer status line to show the visible worker id before diff/context/model details, including a spinner for running or queued workers.
-- Changed write-capable background workers to wait in the queue for the write lock, foreground activity, and a clean git working tree before starting.
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
-
-### Fixed
-
-- Fixed interactive plugin key handling so terminals using CSI-u keyboard protocol can quit with Escape and route Space/printable keys to plugins.
-- Fixed the `/git` overlay stage/unstage shortcut so `s` works in terminals that report printable keys with CSI-u keyboard protocol.
-- Fixed `ask_user_question` custom-answer editing so tabs remain visible and the composer supports shifted ASCII CSI-u printable keys, Shift+Enter newlines, and normal composer shortcuts without inserting private-use key-state events.
-- Fixed Enter between auto-closed editor pairs so block openers expand to an indented blank line before the closing delimiter.
-- Fixed editor mouse reporting so the composer always forces terminal mouse reporting off for native selection, and stale mouse reports are ignored instead of inserted into the composer.
-- Fixed shifted CSI-u printable keys in the built-in TUI file editor, including terminals that encode Shift+A as decoded CSI-u text.
-- Fixed opening a new TUI tab from the built-in editor so the editor state stays with the original tab instead of appearing in the new tab.
-- Fixed `/git` commit-message editing so Shift+Enter inserts a newline instead of submitting the message.
-- Fixed sluggish TUI composer typing by throttling expensive composer status refreshes during key-repeat bursts.
-- Fixed `/git` commit-message editing so it supports the normal composer shortcuts and Tab returns to the Git overlay while preserving the draft.
-- Fixed TUI vibe editor operator counts so command counts and motion counts are multiplied, matching vibe behavior like `2d2w` and `2d2d`.
-- Fixed `I` in the TUI vibe editor mode so it inserts at the first non-blank character of the line, matching vibe behavior.
-- Fixed TUI tab question prompts so a background tab's pending `ask_user_question` stays with that tab, marks it green while waiting, and opens only when the tab is active.
-- Fixed `/new` in TUI tabs so it starts a fresh session in the current tab instead of opening another tab.
-- Fixed Alt+Backspace in alt tab-keybinding mode so terminals that emit Alt-W no longer close the active tab.
-- Fixed idle Ctrl+D in multi-tab TUI sessions so it closes only the active tab instead of exiting the app.
-- Fixed restored TUI tabs so startup renders the active restored session instead of the fresh-session banner.
-- Fixed busy `/workers` handling so the worker UI opens immediately instead of being queued behind the active turn, without replacing the active agent with prompt output.
-- Fixed fresh interactive sessions so background workers reuse the active session store and can attach worker sessions.
-- Fixed busy worker session switching so the previous active turn no longer renders over the selected worker transcript after `Worker -> Show`.
-- Fixed worker dismissal so runtime workers are archived in memory as well as in the persisted worker store.
-- Fixed approved request workers so they transition into implementation workers instead of creating a duplicate worker list entry.
-- Fixed `ask_user_question` in the TUI so quick answers are not consumed by the busy composer before the question overlay is ready.
-- Fixed TUI nonblocking input polling so the busy composer does not freeze after answering `ask_user_question`.
-- Fixed TUI modal input isolation so busy composer polling cannot handle cursor keys or Enter after `ask_user_question` becomes active, without swallowing those modal keys.
-- Fixed sluggish TUI custom answers for `ask_user_question` by rendering typed text in the composer box instead of editing it inside the overlay row.
-- Fixed printable CSI-u keys, including Space in Ghostty, so typing immediately selects and edits custom `ask_user_question` answers.
 
 ## [0.71.0] - 2026-06-21
 
