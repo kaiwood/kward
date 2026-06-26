@@ -229,13 +229,14 @@ module Kward
       end
 
       def handle_vibe_insert_modified_ansi_key(key)
-        match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/)
-        if match
-          modifier = match[2].to_i
-          final = match[3]
-          return false unless alt_modifier?(modifier)
+        sequence = parse_modified_ansi_key(key)
+        return false unless sequence
 
-          case final
+        case sequence[:type]
+        when :cursor
+          return false unless alt_modifier?(sequence[:modifier])
+
+          case sequence[:final]
           when "C"
             @editor_state.move_to_next_word
           when "D"
@@ -247,8 +248,8 @@ module Kward
           else
             false
           end
-        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
-          return false unless alt_modifier?(match[1].to_i)
+        when :delete
+          return false unless alt_modifier?(sequence[:modifier])
 
           vibe_record_undo { @editor_state.delete_word_after_cursor }
         else

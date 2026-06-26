@@ -540,14 +540,23 @@ module Kward
         end
       end
 
-      def handle_modified_ansi_key(key)
-        match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/)
-        if match
-          modifier = match[2].to_i
-          final = match[3]
-          return false unless alt_modifier?(modifier)
+      def parse_modified_ansi_key(key)
+        if (match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/))
+          { type: :cursor, modifier: match[2].to_i, final: match[3] }
+        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
+          { type: :delete, modifier: match[1].to_i }
+        end
+      end
 
-          case final
+      def handle_modified_ansi_key(key)
+        sequence = parse_modified_ansi_key(key)
+        return false unless sequence
+
+        case sequence[:type]
+        when :cursor
+          return false unless alt_modifier?(sequence[:modifier])
+
+          case sequence[:final]
           when "C"
             move_to_next_word
           when "D"
@@ -559,8 +568,8 @@ module Kward
           else
             false
           end
-        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
-          alt_modifier?(match[1].to_i) ? delete_word_after_cursor : delete_at_cursor
+        when :delete
+          alt_modifier?(sequence[:modifier]) ? delete_word_after_cursor : delete_at_cursor
         else
           false
         end
