@@ -589,6 +589,26 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_repeats_registered_paste
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        editor.vibe_registers["a"] = "X"
+        editor.cursor = editor.buffer.index("two")
+        prompt.send(:handle_editor_key, '"')
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "p")
+        prompt.send(:handle_editor_key, ".")
+
+        assert_equal "one\nXXtwo\nthree", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_named_registers
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")

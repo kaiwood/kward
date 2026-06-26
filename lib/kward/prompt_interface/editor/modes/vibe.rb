@@ -501,6 +501,7 @@ module Kward
       end
 
       def execute_vibe_normal_command(command)
+        original_command = command
         register = nil
         if (register_match = command.match(/\A"([a-z])(.*)\z/))
           register = register_match[1]
@@ -622,9 +623,9 @@ module Kward
           vibe_store_active_register
         when "p"
           vibe_record_undo { @editor_state.insert(vibe_active_register_text) }
-          vibe_remember_change(command)
+          vibe_remember_change(original_command)
         when "P"
-          vibe_paste_before(command)
+          vibe_paste_before(original_command)
         when "u"
           @editor_state.undo
         when ":"
