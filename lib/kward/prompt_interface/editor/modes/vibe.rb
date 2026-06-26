@@ -1000,12 +1000,42 @@ module Kward
           vibe_a_word_target
         when "ir", "ar"
           vibe_ruby_block_target(text_object)
+        when "ip", "ap"
+          vibe_paragraph_target(text_object)
         else
           return vibe_pair_text_object_target(text_object) if VIBE_PAIR_TEXT_OBJECTS.key?(text_object[1])
 
           @editor_state.status = "Unsupported text object: #{text_object}"
           false
         end
+      end
+
+      def vibe_paragraph_target(text_object)
+        line, = @editor_state.cursor_line_and_column
+        lines = @editor_state.lines
+        if lines[line].to_s.strip.empty?
+          @editor_state.status = "Paragraph not found"
+          return false
+        end
+
+        start_line = line
+        start_line -= 1 while start_line.positive? && !lines[start_line - 1].to_s.strip.empty?
+        end_line = line
+        end_line += 1 while end_line < lines.length - 1 && !lines[end_line + 1].to_s.strip.empty?
+
+        if text_object == "ap"
+          if end_line < lines.length - 1 && lines[end_line + 1].to_s.strip.empty?
+            end_line += 1 while end_line < lines.length - 1 && lines[end_line + 1].to_s.strip.empty?
+          else
+            start_line -= 1 while start_line.positive? && lines[start_line - 1].to_s.strip.empty?
+          end
+        end
+
+        VibeOperatorTarget.new(
+          type: :characterwise,
+          start_index: @editor_state.line_range(start_line)[0],
+          end_index: @editor_state.line_range(end_line)[1]
+        )
       end
 
       def vibe_ruby_block_target(text_object)

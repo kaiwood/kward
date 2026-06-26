@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe paragraph text objects (`ip` and `ap`).
 - Added Vibe `%` matching-pair jump for parentheses, brackets, and braces.
 - Added Vibe editor pair text object aliases `b` for parentheses and `B` for braces.
 - Added Vibe editor Ruby block text objects (`ir` and `ar`) inspired by `rhysd/vim-textobj-ruby`.

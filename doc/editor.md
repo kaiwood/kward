@@ -259,6 +259,8 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `di(`/`ci(`/`yi(`       | Delete / change / yank inside a pair            |
 | `da(`/`ca(`/`ya(`       | Delete / change / yank around a pair            |
 | `dib` / `ciB`           | Pair aliases for parentheses/braces             |
+| `dip` / `cip` / `yip`   | Delete / change / yank inside a paragraph       |
+| `dap` / `cap` / `yap`   | Delete / change / yank around a paragraph       |
 | `dir` / `cir` / `yir`   | Delete / change / yank inside a Ruby block      |
 | `dar` / `car` / `yar`   | Delete / change / yank around a Ruby block      |
 | `yy`                    | Yank line                                       |

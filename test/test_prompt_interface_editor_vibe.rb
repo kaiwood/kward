@@ -850,6 +850,29 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_paragraph_text_objects
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\n\nthree\nfour\n\nfive")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(3, 1)
+
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "p")
+        assert_equal "three\nfour\n", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "p")
+        assert_equal "one\ntwo\n\nfive", editor.buffer
+        assert_equal "three\nfour\n\n", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_ruby_block_text_objects
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "example.rb"), <<~RUBY)
