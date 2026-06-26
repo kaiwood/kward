@@ -14,6 +14,9 @@ module Kward
         "{" => ["{", "}"], "}" => ["{", "}"],
         "\"" => ["\"", "\""], "'" => ["'", "'"]
       }.freeze
+      VIBE_RUBY_BLOCK_OPENERS = %w[if unless case while until for def module class do begin].freeze
+      VIBE_RUBY_PATHS = %w[Gemfile Rakefile Guardfile Capfile Vagrantfile].freeze
+      VIBE_RUBY_EXTENSIONS = %w[.rb .rake .gemspec].freeze
 
       VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, keyword_init: true) do
         def characterwise?
@@ -982,12 +985,102 @@ module Kward
           vibe_inner_word_target
         when "aw"
           vibe_a_word_target
+        when "ir", "ar"
+          vibe_ruby_block_target(text_object)
         else
           return vibe_pair_text_object_target(text_object) if VIBE_PAIR_TEXT_OBJECTS.key?(text_object[1])
 
           @editor_state.status = "Unsupported text object: #{text_object}"
           false
         end
+      end
+
+      def vibe_ruby_block_target(text_object)
+        unless vibe_ruby_file?
+          @editor_state.status = "Ruby text object requires Ruby file"
+          return false
+        end
+
+        block = vibe_enclosing_ruby_block
+        unless block
+          @editor_state.status = "Ruby block not found"
+          return false
+        end
+
+        start_line = block[:start_line]
+        end_line = block[:end_line]
+        if text_object.start_with?("i")
+          start_line += 1
+          end_line -= 1
+        end
+        if start_line > end_line
+          @editor_state.status = "Empty Ruby block"
+          return false
+        end
+
+        VibeOperatorTarget.new(
+          type: :characterwise,
+          start_index: @editor_state.line_range(start_line)[0],
+          end_index: @editor_state.line_range(end_line)[1]
+        )
+      end
+
+      def vibe_ruby_file?
+        path = File.basename(@editor_state.path.to_s)
+        VIBE_RUBY_PATHS.include?(path) || VIBE_RUBY_EXTENSIONS.include?(File.extname(path))
+      end
+
+      def vibe_enclosing_ruby_block
+        blocks = []
+        stack = []
+        @editor_state.lines.each_with_index do |line, line_index|
+          tokens = vibe_ruby_block_tokens(line)
+          tokens.each do |token|
+            if token == "end"
+              opener = stack.pop
+              blocks << opener.merge(end_line: line_index) if opener
+            elsif VIBE_RUBY_BLOCK_OPENERS.include?(token)
+              stack << { opener: token, start_line: line_index }
+            end
+          end
+        end
+
+        cursor_line, = @editor_state.cursor_line_and_column
+        blocks.select { |block| block[:start_line] <= cursor_line && cursor_line <= block[:end_line] }
+              .max_by { |block| block[:start_line] }
+      end
+
+      def vibe_ruby_block_tokens(line)
+        code = vibe_ruby_code_for_block_scan(line)
+        tokens = []
+        stripped = code.strip
+        opener = stripped.match(/\A(if|unless|case|while|until|for|def|module|class|begin)\b/)
+        tokens << opener[1] if opener
+        tokens << "do" if stripped.match?(/\bdo\b/)
+        tokens << "end" if stripped.match?(/\Aend\b/)
+        tokens
+      end
+
+      def vibe_ruby_code_for_block_scan(line)
+        code = +""
+        quote = nil
+        escaped = false
+        line.each_char do |char|
+          if quote
+            escaped = !escaped && char == "\\"
+            quote = nil if char == quote && !escaped
+            next
+          end
+
+          break if char == "#"
+          if ["'", '"'].include?(char)
+            quote = char
+            escaped = false
+            next
+          end
+          code << char
+        end
+        code
       end
 
       def vibe_pair_text_object_target(text_object)

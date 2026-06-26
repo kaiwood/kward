@@ -850,6 +850,170 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_ruby_block_text_objects
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), <<~RUBY)
+        def hoge(yo)
+          if yo
+            puts "yo!"
+          end
+          puts "everyone!"
+        end
+      RUBY
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(2, 4)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "def hoge(yo)\n  if yo\n  end\n  puts \"everyone!\"\nend\n", editor.buffer
+        assert_equal "    puts \"yo!\"\n", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "u")
+        editor.set_cursor_line_and_column(2, 4)
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "def hoge(yo)\n  puts \"everyone!\"\nend\n", editor.buffer
+        assert_equal "  if yo\n    puts \"yo!\"\n  end\n", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ruby_block_text_object_selects_enclosing_block
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), <<~RUBY)
+        def hoge(yo)
+          if yo
+            puts "yo!"
+          end
+          puts "everyone!"
+        end
+      RUBY
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(4, 4)
+
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "  if yo\n    puts \"yo!\"\n  end\n  puts \"everyone!\"\n", editor.kill_buffer
+        assert_equal File.read("example.rb"), editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_changes_ruby_block_inner_content
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "def hoge\n  puts :old\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 2)
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "def hoge\nend\n", editor.buffer
+        assert_equal "  puts :old\n", editor.kill_buffer
+        assert_equal "insert", editor.vibe_mode
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ruby_block_text_object_ignores_postfix_conditions
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), <<~RUBY)
+        def hoge
+          puts :ok if ready?
+          puts :done
+        end
+      RUBY
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 2)
+
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "  puts :ok if ready?\n  puts :done\n", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ruby_block_text_object_ignores_comments_and_strings
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), <<~RUBY)
+        def hoge
+          puts "if nope end"
+          # if nope
+          puts :ok
+        end
+      RUBY
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(3, 2)
+
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "  puts \"if nope end\"\n  # if nope\n  puts :ok\n", editor.kill_buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ruby_block_text_object_reports_empty_inner_block
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "def hoge\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "def hoge\nend\n", editor.buffer
+        assert_equal "Empty Ruby block", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ruby_block_text_object_requires_ruby_file
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.txt"), "def hoge\n  puts :ok\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+
+        assert_equal "def hoge\n  puts :ok\nend\n", editor.buffer
+        assert_equal "Ruby text object requires Ruby file", editor.status
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_pair_text_objects
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.rb"), "call(alpha, \"beta\", 'gamma')")
