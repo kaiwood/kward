@@ -649,13 +649,27 @@ module Kward
           vibe_switch_visual_selection_end
         when "G"
           vibe_visual_goto_line(command.match?(/\A\d+G\z/) ? count : nil)
+        when "gg"
+          vibe_visual_goto_line(command.match?(/\A\d+gg\z/) ? count : 1)
+        when "%"
+          vibe_jump_to_matching_pair
+        when /^([fFtT])(.?)$/
+          vibe_find_character(Regexp.last_match(1), Regexp.last_match(2), count)
+        when ";"
+          vibe_repeat_find_character
+        when ","
+          vibe_repeat_find_character(reverse: true)
         else
           vibe_move_visual_selection(body, count)
         end
       end
 
       def vibe_visual_waiting_for_more?(command)
-        command.match?(/\A[1-9]\d*\z/)
+        return true if command.match?(/\A[1-9]\d*\z/)
+        return true if command.match?(/\A\d*g\z/)
+        return true if command.match?(/\A\d*[fFtT]\z/)
+
+        false
       end
 
       def handle_vibe_visual_named_key(key_name)
