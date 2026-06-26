@@ -279,6 +279,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `o`                     | Switch active end of visual selection           |
 | `G` / `gg` / `N`motion  | Extend visual selection with counts/motions     |
 | `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |
+| `iw` / `a(` / `ip`      | Select visual text objects                      |
 | `/`                     | Search forward                                  |
 | `?`                     | Search backward                                 |
 | `n`                     | Repeat search                                   |

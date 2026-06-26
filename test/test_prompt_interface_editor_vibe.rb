@@ -589,6 +589,34 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_visual_text_objects_select_targets
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "call(alpha, beta)\n\ndef block\n  puts :ok\nend")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.index("alpha") + 1
+
+        prompt.send(:handle_editor_key, "v")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "w")
+        assert_equal "alpha", editor.selected_text
+
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "(")
+        assert_equal "(alpha, beta)", editor.selected_text
+
+        prompt.send(:handle_editor_key, "\e")
+        editor.cursor = editor.buffer.index("puts")
+        prompt.send(:handle_editor_key, "v")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "r")
+        assert_equal "  puts :ok\n", editor.selected_text
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_visual_advanced_motions_extend_selection
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "call(alpha)\ntwo\nthree")

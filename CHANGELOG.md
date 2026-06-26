@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe visual-mode text objects such as `iw`, `a(`, `ip`, and `ir`.
 - Added Vibe visual-mode advanced motions including `gg`, `%`, `f`/`F`/`t`/`T`, `;`, and `,`.
 - Added Vibe visual-mode counts for motions such as `2j` and `3G`.
 - Added Vibe visual-mode `G` to extend selections to the last line.

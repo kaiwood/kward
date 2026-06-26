@@ -655,6 +655,8 @@ module Kward
           vibe_jump_to_matching_pair
         when /^([fFtT])(.?)$/
           vibe_find_character(Regexp.last_match(1), Regexp.last_match(2), count)
+        when /\A[ai].\z/
+          vibe_select_text_object(body)
         when ";"
           vibe_repeat_find_character
         when ","
@@ -668,6 +670,7 @@ module Kward
         return true if command.match?(/\A[1-9]\d*\z/)
         return true if command.match?(/\A\d*g\z/)
         return true if command.match?(/\A\d*[fFtT]\z/)
+        return true if command.match?(/\A\d*[ai]\z/)
 
         false
       end
@@ -699,6 +702,15 @@ module Kward
         @editor_state.selection_anchor = @editor_state.cursor
         @editor_state.vibe_mode = mode
         @editor_state.status = mode == "visual_line" ? "VISUAL LINE" : "VISUAL"
+        true
+      end
+
+      def vibe_select_text_object(text_object)
+        target = vibe_text_object_target(text_object)
+        return false unless target
+
+        @editor_state.selection_anchor = target.start_index
+        @editor_state.cursor = [target.end_index - 1, target.start_index].max
         true
       end
 
