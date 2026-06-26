@@ -177,6 +177,21 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_ignores_malformed_csi_u_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[97;1;999999999999u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "hello", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_modern_indentation_moves_with_ctrl_arrows_off_macos
     with_host_os("linux") do
       Dir.mktmpdir do |dir|

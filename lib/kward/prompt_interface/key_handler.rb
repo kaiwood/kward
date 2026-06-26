@@ -272,13 +272,29 @@ module Kward
 
       def insert_csi_u_text(sequence)
         text = csi_u_text(sequence)
+        return true if text.empty? && csi_u_text_field?(sequence)
         return false if text.empty?
 
         insert_string(text)
       end
 
+      def csi_u_text_field?(sequence)
+        !sequence[:text].to_s.empty?
+      end
+
       def csi_u_text(sequence)
-        sequence[:text].to_s.split(":").map { |codepoint| codepoint.to_i.chr(Encoding::UTF_8) }.join
+        sequence[:text].to_s.split(":").map do |codepoint|
+          character = csi_u_codepoint_character(codepoint)
+          return "" unless character
+
+          character
+        end.join
+      end
+
+      def csi_u_codepoint_character(codepoint)
+        codepoint.to_i.chr(Encoding::UTF_8)
+      rescue RangeError
+        nil
       end
 
       def handle_modified_csi_u_key(code, modifier)

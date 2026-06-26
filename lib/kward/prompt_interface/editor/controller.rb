@@ -205,6 +205,7 @@ module Kward
         return binding_result unless binding_result == false
         text = csi_u_text(sequence)
         return editor_insert_csi_u_text(text) unless text.empty?
+        return true if csi_u_text_field?(sequence)
 
         case code
         when 13
