@@ -895,6 +895,10 @@ module Kward
         return false unless target
         return @editor_state.status = "Empty range" if target.start_index == target.end_index
 
+        vibe_apply_operator_to_target(operator, target, command, motion, count, motion_count)
+      end
+
+      def vibe_apply_operator_to_target(operator, target, command, motion, count, motion_count)
         case operator
         when "d"
           @editor_state.copy_range(target.start_index, target.end_index)
