@@ -448,6 +448,7 @@ module Kward
         return true if command.match?(/\A\d*g\z/)
         return true if command.match?(/\A\d*z\z/)
         return true if command.match?(/\A\d*[cdy]\d*\z/)
+        return true if command.match?(/\A\d*[cdy]\d*[ai]\z/)
         return true if command.match?(/\A\d*r\z/)
 
         false
@@ -930,11 +931,45 @@ module Kward
       end
 
       def vibe_operator_target(motion, count)
+        return vibe_text_object_target(motion) if motion.match?(/\A[ai].\z/)
+
         start_index = @editor_state.cursor
         return false unless vibe_apply_motion(motion, count)
 
         end_index = @editor_state.cursor
         end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
+        VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
+      end
+
+      def vibe_text_object_target(text_object)
+        case text_object
+        when "iw"
+          vibe_inner_word_target
+        when "aw"
+          vibe_a_word_target
+        else
+          @editor_state.status = "Unsupported text object: #{text_object}"
+          false
+        end
+      end
+
+      def vibe_inner_word_target
+        range = @editor_state.word_range_at(@editor_state.cursor)
+        return @editor_state.status = "No word under cursor" unless range
+
+        VibeOperatorTarget.new(type: :characterwise, start_index: range[0], end_index: range[1])
+      end
+
+      def vibe_a_word_target
+        range = @editor_state.word_range_at(@editor_state.cursor)
+        return @editor_state.status = "No word under cursor" unless range
+
+        start_index, end_index = range
+        if end_index < @editor_state.buffer.length && @editor_state.buffer[end_index].to_s.match?(/\s/)
+          end_index += 1 while end_index < @editor_state.buffer.length && @editor_state.buffer[end_index].to_s.match?(/\s/)
+        else
+          start_index -= 1 while start_index.positive? && @editor_state.buffer[start_index - 1].to_s.match?(/\s/)
+        end
         VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
       end
 

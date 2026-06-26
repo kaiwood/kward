@@ -803,6 +803,39 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_word_text_objects
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 7)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "w")
+        assert_equal "alpha  gamma", editor.buffer
+        assert_equal "beta", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "u")
+        editor.set_cursor_line_and_column(0, 7)
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "w")
+        assert_equal "beta ", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "w")
+        assert_equal "insert", editor.vibe_mode
+        "delta".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "alpha delta gamma", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_big_d_deletes_to_end_of_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma")
