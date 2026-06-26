@@ -51,6 +51,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed RPC session cleanup so empty placeholder cleanup no longer closes named or used idle sessions.
+- Fixed explicit RPC steering requests so unavailable steering fails instead of silently queueing a follow-up turn, and documented the `steeringApplied` turn event.
 - Fixed compacted tool-output retrieval so `retrieve_tool_output` can reopen original outputs after resuming saved sessions.
 - Fixed context budget stats so they are scoped to the active conversation and include savings from duplicate-output reuse.
 - Fixed time-of-day persona modifiers so conversations use the current local time instead of a fixed epoch timestamp.
