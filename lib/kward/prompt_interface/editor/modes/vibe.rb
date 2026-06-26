@@ -22,6 +22,14 @@ module Kward
         def characterwise?
           type == :characterwise
         end
+
+        def change_replacement_text
+          replacement_text.to_s
+        end
+
+        def change_cursor_index
+          start_index + replacement_cursor_offset.to_i
+        end
       end
 
       private
@@ -918,10 +926,9 @@ module Kward
           vibe_remember_change(command)
         when "c"
           @editor_state.copy_range(target.start_index, target.end_index)
-          replacement_text = target.replacement_text.to_s
           vibe_record_undo do
-            @editor_state.replace_range(target.start_index, target.end_index, replacement_text)
-            @editor_state.cursor = target.start_index + target.replacement_cursor_offset.to_i
+            @editor_state.replace_range(target.start_index, target.end_index, target.change_replacement_text)
+            @editor_state.cursor = target.change_cursor_index
           end
           vibe_enter_insert_mode(vibe_build_change_command(operator, motion, count, motion_count))
         else
