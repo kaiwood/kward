@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe visual-mode `J` to join selected lines.
 - Added Vibe `gv` to restore the previous visual selection.
 - Added Vibe visual-mode `>` and `<` to indent and outdent selected lines.
 - Added Vibe visual-mode text objects such as `iw`, `a(`, `ip`, and `ir`.

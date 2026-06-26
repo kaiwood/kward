@@ -662,6 +662,8 @@ module Kward
           vibe_indent_visual_selection(:right)
         when "<"
           vibe_indent_visual_selection(:left)
+        when "J"
+          vibe_join_visual_selection
         when "o"
           vibe_switch_visual_selection_end
         when "G"
@@ -793,6 +795,17 @@ module Kward
 
         text = @editor_state.kill_buffer.to_s
         vibe_record_undo { @editor_state.replace_range(range[0], range[1], text) }
+        vibe_cancel_visual_mode
+      end
+
+      def vibe_join_visual_selection
+        range = vibe_visual_range
+        return false unless range
+
+        start_line, = @editor_state.cursor_line_and_column_for(range[0])
+        end_line, = @editor_state.cursor_line_and_column_for([range[1] - 1, range[0]].max)
+        @editor_state.set_cursor_line_and_column(start_line, 0)
+        vibe_join_lines(end_line - start_line + 1)
         vibe_cancel_visual_mode
       end
 
