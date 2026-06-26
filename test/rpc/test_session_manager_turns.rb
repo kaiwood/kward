@@ -104,6 +104,7 @@ class TestRPCSessionManagerTurns < KwardTestCase
       events = manager.turn_events(turn_id: turn[:id])[:events]
       assert_equal 1, events.count { |event| event[:type] == "turnQueued" }
       assert events.any? { |event| event[:type] == "turnSteered" && event[:payload][:input] == "steer me" }
+      assert events.any? { |event| event[:type] == "steeringApplied" && event[:payload][:count] == 1 }
       assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta] == "before" }
       assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta] == "after" }
     end

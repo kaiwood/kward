@@ -310,6 +310,7 @@ Known event types:
 
 - `turnQueued`
 - `turnSteered`
+- `steeringApplied`
 - `turnStarted`
 - `reasoningDelta`
 - `assistantDelta`
@@ -325,6 +326,8 @@ Known event types:
 Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFinished`. Exactly one terminal `turnFinished` is emitted per turn with `status` set to `completed`, `failed`, or `canceled`; failed turns include a sanitized `{ "message": "...", "code": "...", "fatal": false }` error payload.
 
 `modelRetry` is emitted before Kward retries a transient model request failure. Its payload includes `provider`, `model`, `attempt`, `maxAttempts`, `delaySeconds`, and `error`.
+
+`steeringApplied` is emitted after queued steering input has been appended to conversation context. Its payload includes `count`, the number of steering messages applied.
 
 `toolCall` and `toolResult` payloads include canonical Tauren-normalized fields:
 

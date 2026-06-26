@@ -1122,6 +1122,8 @@ module Kward
           emit_turn_event(turn, "modelRetry", retry_event_payload(event))
         when Events::Steering
           emit_turn_event(turn, "turnSteered", { input: event.input, createdAt: event.created_at })
+        when Events::SteeringApplied
+          emit_turn_event(turn, "steeringApplied", { count: event.count })
         when Events::ToolCall
           emit_turn_event(turn, "toolCall", normalized_tool_event_payload(event.tool_call))
         when Events::ToolResult
