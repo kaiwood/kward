@@ -4,6 +4,12 @@ module Kward
   class PromptInterface
     # Vibe-style keymap for the built-in composer file editor.
     module VibeEditorMode
+      VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, keyword_init: true) do
+        def characterwise?
+          type == :characterwise
+        end
+      end
+
       private
 
       def handle_vibe_key(key)
@@ -903,27 +909,33 @@ module Kward
         count *= motion_count if motion_count.positive?
         return vibe_operator_linewise(operator, count, command) if motion == operator
 
+        target = vibe_operator_target(motion, count)
+        return false unless target
+        return @editor_state.status = "Empty range" if target.start_index == target.end_index
+
+        case operator
+        when "d"
+          @editor_state.copy_range(target.start_index, target.end_index)
+          vibe_record_undo { @editor_state.replace_range(target.start_index, target.end_index, "") }
+          @editor_state.status = "Deleted"
+          vibe_remember_change(command)
+        when "c"
+          @editor_state.copy_range(target.start_index, target.end_index)
+          vibe_record_undo { @editor_state.replace_range(target.start_index, target.end_index, "") }
+          vibe_enter_insert_mode(vibe_build_change_command(operator, motion, count, motion_count))
+        else
+          vibe_copy_range(target.start_index, target.end_index, "Yanked")
+          @editor_state.cursor = target.start_index
+        end
+      end
+
+      def vibe_operator_target(motion, count)
         start_index = @editor_state.cursor
         return false unless vibe_apply_motion(motion, count)
 
         end_index = @editor_state.cursor
         end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
-        return @editor_state.status = "Empty range" if start_index == end_index
-
-        case operator
-        when "d"
-          @editor_state.copy_range(start_index, end_index)
-          vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-          @editor_state.status = "Deleted"
-          vibe_remember_change(command)
-        when "c"
-          @editor_state.copy_range(start_index, end_index)
-          vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
-          vibe_enter_insert_mode(vibe_build_change_command(operator, motion, count, motion_count))
-        else
-          vibe_copy_range(start_index, end_index, "Yanked")
-          @editor_state.cursor = start_index
-        end
+        VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
       end
 
       def vibe_operator_linewise(operator, count, command = nil)
