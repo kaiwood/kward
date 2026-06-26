@@ -1080,6 +1080,49 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_uses_character_find_as_operator_motion
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "f")
+        prompt.send(:handle_editor_key, "b")
+        assert_equal "eta gamma", editor.buffer
+        assert_equal "alpha b", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "u")
+        editor.cursor = 0
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "t")
+        prompt.send(:handle_editor_key, "b")
+        assert_equal "beta gamma", editor.buffer
+        assert_equal "alpha ", editor.kill_buffer
+        assert_equal "insert", editor.vibe_mode
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_uses_percent_as_operator_motion
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "call(alpha)")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.index("(")
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "%")
+        assert_equal "call", editor.buffer
+        assert_equal "(alpha)", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_finds_characters_on_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta gamma")

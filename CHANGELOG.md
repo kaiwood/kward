@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe operator composition for character find motions and `%` matching-pair motion.
 - Added Vibe `f`/`F`/`t`/`T` character find motions with `;` and `,` repeat.
 - Added Vibe paragraph text objects (`ip` and `ap`).
 - Added Vibe `%` matching-pair jump for parentheses, brackets, and braces.

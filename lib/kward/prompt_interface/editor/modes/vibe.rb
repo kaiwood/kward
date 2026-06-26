@@ -471,6 +471,7 @@ module Kward
         return true if command.match?(/\A\d*z\z/)
         return true if command.match?(/\A\d*[cdy]\d*\z/)
         return true if command.match?(/\A\d*[cdy]\d*[ai]\z/)
+        return true if command.match?(/\A\d*[cdy]\d*[fFtT]\z/)
         return true if command.match?(/\A\d*[fFtT]\z/)
         return true if command.match?(/\A\d*r\z/)
 
@@ -949,12 +950,52 @@ module Kward
       def vibe_operator_target(motion, count)
         return vibe_text_object_target(motion) if motion.match?(/\A[ai].\z/)
         return vibe_word_motion_target(motion, count) if %w[w e b].include?(motion)
+        return vibe_find_motion_target(motion, count) if motion.match?(/\A[fFtT].\z/)
+        return vibe_percent_motion_target if motion == "%"
 
         start_index = @editor_state.cursor
         return false unless vibe_apply_motion(motion, count)
 
         end_index = @editor_state.cursor
         VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
+      end
+
+      def vibe_find_motion_target(motion, count)
+        start_index = @editor_state.cursor
+        command = motion[0]
+        char = motion[1]
+        reverse = %w[F T].include?(command)
+        before = %w[t T].include?(command)
+        end_index = vibe_find_character_index(char, count, reverse: reverse)
+        unless end_index
+          @editor_state.status = "Character not found: #{char}"
+          return false
+        end
+
+        motion_index = end_index
+        motion_index += reverse ? 1 : -1 if before
+        @editor_state.cursor = motion_index
+        target_end_index = if reverse
+                             before ? end_index + 1 : end_index
+                           else
+                             before ? end_index : end_index + 1
+                           end
+        VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: target_end_index)
+      end
+
+      def vibe_percent_motion_target
+        start_index = @editor_state.cursor
+        end_index = vibe_matching_pair_index(start_index)
+        unless end_index
+          @editor_state.status = "No matching pair under cursor"
+          return false
+        end
+
+        if end_index > start_index
+          VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index + 1)
+        else
+          VibeOperatorTarget.new(type: :characterwise, start_index: end_index, end_index: start_index + 1)
+        end
       end
 
       def vibe_word_motion_target(motion, count)
@@ -1205,17 +1246,26 @@ module Kward
       end
 
       def vibe_jump_to_matching_pair
+        index = vibe_matching_pair_index(@editor_state.cursor)
+        unless index
+          @editor_state.status = "No matching pair under cursor"
+          return false
+        end
+
+        @editor_state.cursor = index
+        true
+      end
+
+      def vibe_matching_pair_index(index)
         pairs = VIBE_PAIR_TEXT_OBJECTS.values.uniq.reject { |open_char, close_char| open_char == close_char }
         pairs.each do |open_char, close_char|
-          cursor = @editor_state.cursor
-          if @editor_state.buffer[cursor] == open_char
-            return @editor_state.cursor = vibe_find_forward_pair(cursor, open_char, close_char)
-          elsif @editor_state.buffer[cursor] == close_char
-            return @editor_state.cursor = vibe_find_backward_pair(cursor, open_char, close_char)
+          if @editor_state.buffer[index] == open_char
+            return vibe_find_forward_pair(index, open_char, close_char)
+          elsif @editor_state.buffer[index] == close_char
+            return vibe_find_backward_pair(index, open_char, close_char)
           end
         end
-        @editor_state.status = "No matching pair under cursor"
-        false
+        nil
       end
 
       def vibe_find_forward_pair(open_index, open_char, close_char)
