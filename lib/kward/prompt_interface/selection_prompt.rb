@@ -120,12 +120,11 @@ module Kward
       end
 
       def handle_select_printable_csi_u_key(sequence)
-        text = csi_u_text(sequence)
-        return select_typed_key(text) unless text.empty?
-        return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
-        return false unless sequence[:code].between?(32, 126)
+        text = csi_u_printable_text(sequence)
+        return true if text.nil? && csi_u_text_field?(sequence)
+        return false unless text
 
-        select_typed_key(sequence[:code].chr(Encoding::UTF_8))
+        select_typed_key(text)
       end
 
       def handle_select_escape_sequence

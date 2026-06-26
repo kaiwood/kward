@@ -271,15 +271,25 @@ module Kward
       end
 
       def insert_csi_u_text(sequence)
-        text = csi_u_text(sequence)
-        return true if text.empty? && csi_u_text_field?(sequence)
-        return false if text.empty?
+        text = csi_u_printable_text(sequence)
+        return true if text.nil? && csi_u_text_field?(sequence)
+        return false unless text
 
         insert_string(text)
       end
 
       def csi_u_text_field?(sequence)
         !sequence[:text].to_s.empty?
+      end
+
+      def csi_u_printable_text(sequence)
+        text = csi_u_text(sequence)
+        return text unless text.empty?
+        return nil if csi_u_text_field?(sequence)
+        return nil if ctrl_modifier?(sequence[:modifier]) || alt_modifier?(sequence[:modifier]) || super_modifier?(sequence[:modifier])
+        return nil unless sequence[:code].between?(32, 126)
+
+        sequence[:code].chr(Encoding::UTF_8)
       end
 
       def csi_u_text(sequence)

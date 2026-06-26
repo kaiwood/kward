@@ -203,8 +203,8 @@ module Kward
 
         binding_result = handle_editor_modified_csi_u_key(code, modifier)
         return binding_result unless binding_result == false
-        text = csi_u_text(sequence)
-        return editor_insert_csi_u_text(text) unless text.empty?
+        text = csi_u_printable_text(sequence)
+        return editor_insert_csi_u_text(text) if text
         return true if csi_u_text_field?(sequence)
 
         case code
@@ -220,11 +220,7 @@ module Kward
           delete_editor_selection || @editor_state.delete_at_cursor unless editor_search_active?
           nil
         else
-          return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
-          return false unless code.between?(32, 126)
-
-          char = code.chr(Encoding::UTF_8)
-          editor_search_active? ? editor_search_append(char) : editor_insert_printable(char)
+          false
         end
       end
 
@@ -710,10 +706,12 @@ module Kward
           editor_search_delete_character if editor_search_active?
         else
           return false unless editor_search_active?
-          return false unless sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1"
-          return false unless code.between?(32, 126)
 
-          editor_search_append(code.chr(Encoding::UTF_8))
+          text = csi_u_printable_text(sequence)
+          return true if text.nil? && csi_u_text_field?(sequence)
+          return false unless text
+
+          editor_search_append(text)
         end
       end
 

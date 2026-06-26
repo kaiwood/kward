@@ -42,10 +42,8 @@ module Kward
         return :backspace if [8, 127].include?(code)
         return :space if code == 32 && !ctrl_modifier?(modifier) && !alt_modifier?(modifier) && !super_modifier?(modifier)
 
-        text = csi_u_text(sequence)
-        return text unless text.empty?
-        return false if ctrl_modifier?(modifier) || alt_modifier?(modifier) || super_modifier?(modifier)
-        return code.chr(Encoding::UTF_8) if code.between?(32, 126)
+        text = csi_u_printable_text(sequence)
+        return text if text
 
         false
       end

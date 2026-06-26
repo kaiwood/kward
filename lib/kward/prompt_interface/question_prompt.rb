@@ -155,9 +155,8 @@ module Kward
         else
           modified_result = handle_question_modified_csi_u_key(code, modifier)
           return modified_result unless modified_result == false
-          return question_insert_csi_u_text(sequence) unless sequence[:text].to_s.empty?
 
-          question_insert_csi_u_character(code, modifier)
+          question_insert_csi_u_text(sequence)
         end
       end
 
@@ -169,17 +168,11 @@ module Kward
       end
 
       def question_insert_csi_u_text(sequence)
-        text = csi_u_text(sequence)
-        return false if text.empty?
+        text = csi_u_printable_text(sequence)
+        return true if text.nil? && csi_u_text_field?(sequence)
+        return false unless text
 
         question_insert_string(text)
-      end
-
-      def question_insert_csi_u_character(code, modifier)
-        return false if ctrl_modifier?(modifier) || alt_modifier?(modifier) || super_modifier?(modifier)
-        return false unless code.between?(32, 126)
-
-        question_insert_string(code.chr(Encoding::UTF_8))
       end
 
       def handle_question_escape_sequence
