@@ -266,6 +266,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `P`                     | Paste before cursor                             |
 | `u`                     | Undo                                            |
 | `Ctrl+R`                | Redo                                            |
+| `%`                     | Jump to matching pair                           |
 | `U`                     | Restore current line                            |
 | `.`                     | Repeat last change                              |
 | `v`                     | Visual character mode                           |

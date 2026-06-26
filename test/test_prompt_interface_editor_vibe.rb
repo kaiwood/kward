@@ -1057,6 +1057,28 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_percent_jumps_to_matching_pair
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "call(alpha, nested(beta))")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.index("(")
+
+        prompt.send(:handle_editor_key, "%")
+        assert_equal editor.buffer.rindex(")"), editor.cursor
+
+        prompt.send(:handle_editor_key, "%")
+        assert_equal editor.buffer.index("("), editor.cursor
+
+        editor.cursor = editor.buffer.index("alpha")
+        prompt.send(:handle_editor_key, "%")
+        assert_equal "No matching pair under cursor", editor.status
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_pair_text_object_aliases
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.rb"), "call(alpha) { beta }")

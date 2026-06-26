@@ -548,6 +548,8 @@ module Kward
           editor_search_word_under_cursor(:backward)
         when "U"
           vibe_restore_current_line
+        when "%"
+          vibe_jump_to_matching_pair
         when /^r(.?)$/
           vibe_replace_single_character(Regexp.last_match(1), count, command)
         when "v"
@@ -1117,6 +1119,48 @@ module Kward
           start_index: start_index,
           end_index: include_pair ? end_index + 1 : end_index
         )
+      end
+
+      def vibe_jump_to_matching_pair
+        pairs = VIBE_PAIR_TEXT_OBJECTS.values.uniq.reject { |open_char, close_char| open_char == close_char }
+        pairs.each do |open_char, close_char|
+          cursor = @editor_state.cursor
+          if @editor_state.buffer[cursor] == open_char
+            return @editor_state.cursor = vibe_find_forward_pair(cursor, open_char, close_char)
+          elsif @editor_state.buffer[cursor] == close_char
+            return @editor_state.cursor = vibe_find_backward_pair(cursor, open_char, close_char)
+          end
+        end
+        @editor_state.status = "No matching pair under cursor"
+        false
+      end
+
+      def vibe_find_forward_pair(open_index, open_char, close_char)
+        depth = 0
+        (open_index + 1...@editor_state.buffer.length).each do |index|
+          char = @editor_state.buffer[index]
+          depth += 1 if char == open_char
+          if char == close_char
+            return index if depth.zero?
+
+            depth -= 1
+          end
+        end
+        open_index
+      end
+
+      def vibe_find_backward_pair(close_index, open_char, close_char)
+        depth = 0
+        (close_index - 1).downto(0) do |index|
+          char = @editor_state.buffer[index]
+          depth += 1 if char == close_char
+          if char == open_char
+            return index if depth.zero?
+
+            depth -= 1
+          end
+        end
+        close_index
       end
 
       def vibe_delimited_pair_range(open_char, close_char)
