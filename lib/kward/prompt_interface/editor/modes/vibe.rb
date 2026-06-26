@@ -583,6 +583,8 @@ module Kward
         else
           if body.start_with?("d") || body.start_with?("y") || body.start_with?("c")
             vibe_operator_motion(body[0], body[1..], count, command)
+          elsif body.start_with?("z") && body.length > 1
+            execute_vibe_normal_command(body[1..])
           else
             @editor_state.status = "Unknown command: #{command}"
           end
