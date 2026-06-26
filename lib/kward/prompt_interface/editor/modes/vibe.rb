@@ -645,6 +645,10 @@ module Kward
           vibe_change_visual_selection
         when "p"
           vibe_paste_visual_selection
+        when ">"
+          vibe_indent_visual_selection(:right)
+        when "<"
+          vibe_indent_visual_selection(:left)
         when "o"
           vibe_switch_visual_selection_end
         when "G"
@@ -762,6 +766,25 @@ module Kward
 
         text = @editor_state.kill_buffer.to_s
         vibe_record_undo { @editor_state.replace_range(range[0], range[1], text) }
+        vibe_cancel_visual_mode
+      end
+
+      def vibe_indent_visual_selection(direction)
+        range = vibe_visual_range
+        return false unless range
+
+        start_line, = @editor_state.cursor_line_and_column_for(range[0])
+        end_line, = @editor_state.cursor_line_and_column_for([range[1] - 1, range[0]].max)
+        start_index = @editor_state.line_range(start_line)[0]
+        end_index = @editor_state.line_range(end_line)[1]
+        original_text = @editor_state.buffer[start_index...end_index].to_s
+        lines = @editor_state.lines[start_line..end_line].map do |line|
+          direction == :right ? "  #{line}" : line.sub(/\A(?:  |\t| )/, "")
+        end
+        replacement = lines.join("\n")
+        replacement += "\n" if original_text.end_with?("\n")
+
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, replacement) }
         vibe_cancel_visual_mode
       end
 
