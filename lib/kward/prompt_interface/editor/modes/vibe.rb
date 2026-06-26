@@ -630,6 +630,8 @@ module Kward
           vibe_paste_visual_selection
         when "o"
           vibe_switch_visual_selection_end
+        when "G"
+          vibe_visual_goto_line
         else
           vibe_move_visual_selection(key)
         end
@@ -663,6 +665,12 @@ module Kward
         @editor_state.selection_anchor = @editor_state.cursor
         @editor_state.vibe_mode = mode
         @editor_state.status = mode == "visual_line" ? "VISUAL LINE" : "VISUAL"
+        true
+      end
+
+      def vibe_visual_goto_line(line_number = nil)
+        line = line_number ? line_number - 1 : @editor_state.lines.length - 1
+        @editor_state.set_cursor_line_and_column(line, 0)
         true
       end
 
