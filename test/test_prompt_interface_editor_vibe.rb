@@ -850,6 +850,31 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_open_line_preserves_indentation
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "def hoge\n  puts :ok\nend")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 2)
+
+        prompt.send(:handle_editor_key, "o")
+        assert_equal "def hoge\n  puts :ok\n  \nend", editor.buffer
+        assert_equal [2, 2], editor.cursor_line_and_column
+        assert_equal "insert", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, "\e")
+        prompt.send(:handle_editor_key, "u")
+        editor.set_cursor_line_and_column(1, 2)
+        prompt.send(:handle_editor_key, "O")
+        assert_equal "def hoge\n  \n  puts :ok\nend", editor.buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
+        assert_equal "insert", editor.vibe_mode
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_paragraph_text_objects
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\n\nthree\nfour\n\nfive")

@@ -36,6 +36,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed Vibe `o` and `O` to preserve the current line indentation.
 - Changed modern-mode editor modified-arrow navigation to move by indentation level, with platform-specific Alt/Ctrl bindings and shift-selection variants.
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
 - Documented the `composer.tab_keybindings`, `editor.soft_wrap`, `personas`, and `plugins` configuration options in `doc/configuration.md`, and clarified provider default behavior and `thinking_level` reasoning precedence.

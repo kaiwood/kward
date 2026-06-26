@@ -771,10 +771,11 @@ module Kward
 
       def vibe_open_line_below
         line, = @editor_state.cursor_line_and_column
+        indentation = @editor_state.lines[line].to_s[/\A\s*/].to_s
         line_end = @editor_state.line_start_offset(line) + @editor_state.lines[line].to_s.length
         vibe_record_undo do
           @editor_state.cursor = line_end
-          @editor_state.insert("\n")
+          @editor_state.insert("\n#{indentation}")
         end
         @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
@@ -782,11 +783,12 @@ module Kward
 
       def vibe_open_line_above
         line, = @editor_state.cursor_line_and_column
+        indentation = @editor_state.lines[line].to_s[/\A\s*/].to_s
         start_index = @editor_state.line_start_offset(line)
         vibe_record_undo do
           @editor_state.cursor = start_index
-          @editor_state.insert("\n")
-          @editor_state.cursor = start_index
+          @editor_state.insert("#{indentation}\n")
+          @editor_state.cursor = start_index + indentation.length
         end
         @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
