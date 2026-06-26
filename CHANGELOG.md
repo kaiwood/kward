@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Modern editor multi-cursor support with `Ctrl+D` occurrence selection, `Alt+Shift+Up/Down` vertical cursors, and `Ctrl+Shift+L` selected-line cursor creation.
 - Added Vibe Ruby method navigation with `]m` and `[m`.
 - Added Vibe substitute commands such as `:%s/a/b/g` and `:1,3s/a/b/`.
 - Added Vibe macro recording and replay with `q`, `@`, and `@@`.

@@ -9,7 +9,7 @@ module Kward
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer
-      attr_accessor :cursor, :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
+      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -31,6 +31,7 @@ module Kward
         @search_direction = :forward
         @kill_buffer = ""
         @selection_anchor = nil
+        @secondary_selections = []
         @editor_mode = normalize_editor_mode(editor_mode)
         @emacs_pending = nil
         @kill_ring = []
@@ -66,6 +67,7 @@ module Kward
         @quit_confirmed = other.quit_confirmed
         @viewport_column = other.viewport_column
         @selection_anchor = other.selection_anchor
+        @secondary_selections = other.selections.drop(1).map { |selection| selection.dup }
         @editor_mode = other.editor_mode.dup
         @emacs_pending = other.emacs_pending&.dup
         @kill_ring = other.kill_ring.map(&:dup)
@@ -93,6 +95,62 @@ module Kward
       def buffer=(value)
         @buffer = value.to_s
         invalidate_lines_cache
+      end
+
+      def cursor
+        @cursor
+      end
+
+      def cursor=(value)
+        @cursor = clamp_offset(value)
+      end
+
+      def selection_anchor
+        @selection_anchor
+      end
+
+      def selection_anchor=(value)
+        @selection_anchor = value.nil? ? nil : clamp_offset(value)
+      end
+
+      def selections
+        normalize_secondary_selections
+        [primary_selection] + @secondary_selections.map(&:dup)
+      end
+
+      def multi_cursor?
+        normalize_secondary_selections
+        @secondary_selections.any?
+      end
+
+      def set_selections(values)
+        first, *rest = values.to_a
+        if first
+          @selection_anchor = first[:anchor]
+          @cursor = first[:cursor]
+        else
+          @selection_anchor = nil
+          @cursor = 0
+        end
+        @secondary_selections = rest.map { |selection| normalized_selection(selection) }
+        normalize_secondary_selections
+      end
+
+      def add_selection(anchor, cursor = anchor)
+        @secondary_selections << normalized_selection(anchor: anchor, cursor: cursor)
+        normalize_secondary_selections
+      end
+
+      def collapse_to_primary_selection
+        @secondary_selections = []
+        clear_selection
+      end
+
+      def secondary_cursor_offsets
+        normalize_secondary_selections
+        @secondary_selections.filter_map do |selection|
+          selection[:cursor] if selection[:anchor] == selection[:cursor]
+        end
       end
 
       def readonly?
@@ -132,14 +190,18 @@ module Kward
       end
 
       def set_cursor_line_and_column(line_index, column)
+        @cursor = offset_for_line_and_column(line_index, column)
+      end
+
+      def offset_for_line_and_column(line_index, column)
         values = lines
         line_index = [[line_index.to_i, 0].max, values.length - 1].min
         column = [[column.to_i, 0].max, values[line_index].length].min
-        @cursor = values.first(line_index).sum { |line| line.length + 1 } + column
+        values.first(line_index).sum { |line| line.length + 1 } + column
       end
 
       def push_undo
-        @undo_stack << { buffer: @buffer.dup, cursor: @cursor }
+        @undo_stack << editor_snapshot
         @undo_stack.shift while @undo_stack.length > 100
         @redo_stack.clear
       end
@@ -151,11 +213,10 @@ module Kward
           return false
         end
 
-        @redo_stack << { buffer: @buffer.dup, cursor: @cursor }
+        @redo_stack << editor_snapshot
         @redo_stack.shift while @redo_stack.length > 100
-        @buffer = snapshot[:buffer]
-        @cursor = [snapshot[:cursor], @buffer.length].min
-        changed!
+        restore_editor_snapshot(snapshot)
+        changed!(clear_selections: false)
         @status = "Undo"
         true
       end
@@ -167,11 +228,10 @@ module Kward
           return false
         end
 
-        @undo_stack << { buffer: @buffer.dup, cursor: @cursor }
+        @undo_stack << editor_snapshot
         @undo_stack.shift while @undo_stack.length > 100
-        @buffer = snapshot[:buffer]
-        @cursor = [snapshot[:cursor], @buffer.length].min
-        changed!
+        restore_editor_snapshot(snapshot)
+        changed!(clear_selections: false)
         @status = "Redo"
         true
       end
@@ -179,6 +239,7 @@ module Kward
       def insert(text)
         text = text.to_s
         return if text.empty?
+        return replace_selections(text) if multi_cursor?
 
         @buffer = @buffer[0...@cursor].to_s + text + @buffer[@cursor..].to_s
         @cursor += text.length
@@ -186,6 +247,7 @@ module Kward
       end
 
       def delete_before_cursor
+        return delete_before_selections if multi_cursor?
         return false if @cursor.zero?
 
         @buffer = @buffer[0...(@cursor - 1)].to_s + @buffer[@cursor..].to_s
@@ -195,6 +257,7 @@ module Kward
       end
 
       def delete_at_cursor
+        return delete_at_selections if multi_cursor?
         return false unless @cursor < @buffer.length
 
         @buffer = @buffer[0...@cursor].to_s + @buffer[(@cursor + 1)..].to_s
@@ -203,24 +266,54 @@ module Kward
       end
 
       def move_left
+        if multi_cursor?
+          return move_selection_cursors { |selection| [selection[:cursor] - 1, 0].max } if extending_selections?
+
+          return move_selections { |selection| collapse_or_move_left(selection) }
+        end
+
         @cursor -= 1 if @cursor.positive?
       end
 
       def move_right
+        if multi_cursor?
+          return move_selection_cursors { |selection| [selection[:cursor] + 1, @buffer.length].min } if extending_selections?
+
+          return move_selections { |selection| collapse_or_move_right(selection) }
+        end
+
         @cursor += 1 if @cursor < @buffer.length
       end
 
       def move_up
+        if multi_cursor?
+          return move_selection_cursors { |selection| move_offset_vertically(selection[:cursor], -1) } if extending_selections?
+
+          return move_selections { |selection| move_offset_vertically(selection[:cursor], -1) }
+        end
+
         line, column = cursor_line_and_column
         set_cursor_line_and_column(line - 1, column)
       end
 
       def move_down
+        if multi_cursor?
+          return move_selection_cursors { |selection| move_offset_vertically(selection[:cursor], 1) } if extending_selections?
+
+          return move_selections { |selection| move_offset_vertically(selection[:cursor], 1) }
+        end
+
         line, column = cursor_line_and_column
         set_cursor_line_and_column(line + 1, column)
       end
 
       def move_line_start
+        if multi_cursor?
+          return move_selection_cursors { |selection| line_start_for_offset(selection[:cursor]) } if extending_selections?
+
+          return move_selections { |selection| line_start_for_offset(selection[:cursor]) }
+        end
+
         line, = cursor_line_and_column
         set_cursor_line_and_column(line, 0)
       end
@@ -237,45 +330,99 @@ module Kward
       end
 
       def move_line_end
+        if multi_cursor?
+          return move_selection_cursors { |selection| line_end_for_offset(selection[:cursor]) } if extending_selections?
+
+          return move_selections { |selection| line_end_for_offset(selection[:cursor]) }
+        end
+
         line, = cursor_line_and_column
         set_cursor_line_and_column(line, lines[line].length)
       end
 
       def page_up(rows)
+        if multi_cursor?
+          return move_selection_cursors { |selection| move_offset_vertically(selection[:cursor], -rows.to_i) } if extending_selections?
+
+          return move_selections { |selection| move_offset_vertically(selection[:cursor], -rows.to_i) }
+        end
+
         line, column = cursor_line_and_column
         set_cursor_line_and_column(line - rows.to_i, column)
       end
 
       def page_down(rows)
+        if multi_cursor?
+          return move_selection_cursors { |selection| move_offset_vertically(selection[:cursor], rows.to_i) } if extending_selections?
+
+          return move_selections { |selection| move_offset_vertically(selection[:cursor], rows.to_i) }
+        end
+
         line, column = cursor_line_and_column
         set_cursor_line_and_column(line + rows.to_i, column)
       end
 
       def move_to_previous_word
+        if multi_cursor?
+          return move_selection_cursors { |selection| previous_word_boundary(selection[:cursor]) } if extending_selections?
+
+          return move_selections { |selection| previous_word_boundary(selection[:cursor]) }
+        end
+
         @cursor = previous_word_boundary(@cursor)
       end
 
       def move_to_next_word
+        if multi_cursor?
+          return move_selection_cursors { |selection| next_word_boundary(selection[:cursor]) } if extending_selections?
+
+          return move_selections { |selection| next_word_boundary(selection[:cursor]) }
+        end
+
         @cursor = next_word_boundary(@cursor)
       end
 
       def move_to_word_end
+        if multi_cursor?
+          return move_selection_cursors { |selection| next_word_end(selection[:cursor]) } if extending_selections?
+
+          return move_selections { |selection| next_word_end(selection[:cursor]) }
+        end
+
         @cursor = next_word_end(@cursor)
       end
 
       def move_indentation_up
+        if multi_cursor?
+          return move_selection_cursors { |selection| indentation_offset_for(selection[:cursor], :up) } if extending_selections?
+
+          return move_selections { |selection| indentation_offset_for(selection[:cursor], :up) }
+        end
+
         line, column = cursor_line_and_column
         target_line = previous_indentation_line(line, indentation_level_for_line(line))
         move_to_indentation_line(target_line, column)
       end
 
       def move_indentation_down
+        if multi_cursor?
+          return move_selection_cursors { |selection| indentation_offset_for(selection[:cursor], :down) } if extending_selections?
+
+          return move_selections { |selection| indentation_offset_for(selection[:cursor], :down) }
+        end
+
         line, column = cursor_line_and_column
         target_line = next_indentation_line(line, indentation_level_for_line(line))
         move_to_indentation_line(target_line, column)
       end
 
       def move_indentation_right
+        if multi_cursor?
+          return move_selection_cursors { |selection| indentation_right_offset_for(selection[:cursor]) } if extending_selections?
+
+          return move_selections { |selection| indentation_right_offset_for(selection[:cursor]) }
+        end
+
         line, column = cursor_line_and_column
         indentation = indentation_level_for_line(line)
         if column < indentation
@@ -286,18 +433,33 @@ module Kward
       end
 
       def delete_word_before_cursor
+        return apply_selection_edits { |selection| selection[:anchor] = previous_word_boundary(selection_range_for(selection)[0]); "" } if multi_cursor?
+
         kill_range(previous_word_boundary(@cursor), @cursor)
       end
 
       def delete_word_after_cursor
+        return apply_selection_edits { |selection| selection[:cursor] = next_word_boundary(selection_range_for(selection)[1]); "" } if multi_cursor?
+
         kill_range(@cursor, next_word_boundary(@cursor))
       end
 
       def kill_line_before_cursor
+        return apply_selection_edits { |selection| selection[:anchor] = line_start_for_offset(selection_range_for(selection)[0]); "" } if multi_cursor?
+
         kill_range(current_line_start, @cursor)
       end
 
       def kill_line_after_cursor
+        if multi_cursor?
+          return apply_selection_edits do |selection|
+            range = selection_range_for(selection)
+            selection[:cursor] = line_end_for_offset(range[1])
+            selection[:cursor] += 1 if range[0] == selection[:cursor] && selection[:cursor] < @buffer.length
+            ""
+          end
+        end
+
         if current_line_empty?
           kill_range(empty_line_start, empty_line_end)
         else
@@ -306,7 +468,7 @@ module Kward
       end
 
       def yank_kill_buffer
-        insert(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
+        replace_selections(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
       end
 
       def push_kill(text)
@@ -353,6 +515,7 @@ module Kward
 
       def clear_selection
         @selection_anchor = nil
+        @secondary_selections = []
       end
 
       def selection_active?
@@ -363,19 +526,25 @@ module Kward
       end
 
       def selection_range
-        return nil unless selection_active?
-        return visual_line_selection_range if vibe? && @vibe_mode == "visual_line"
-        return visual_character_selection_range if vibe? && @vibe_mode == "visual"
-        return visual_block_selection_ranges.first if vibe? && @vibe_mode == "visual_block"
+        return visual_line_selection_range if vibe? && @vibe_mode == "visual_line" && selection_active?
+        return visual_character_selection_range if vibe? && @vibe_mode == "visual" && selection_active?
+        return visual_block_selection_ranges.first if vibe? && @vibe_mode == "visual_block" && selection_active?
+        return nil unless primary_selection_active?
 
         [@selection_anchor, @cursor].minmax
       end
 
       def selection_ranges
-        return [] unless selection_active?
-        return visual_block_selection_ranges if vibe? && @vibe_mode == "visual_block"
+        if vibe? && %w[visual visual_line visual_block].include?(@vibe_mode) && selection_active?
+          return visual_block_selection_ranges if @vibe_mode == "visual_block"
 
-        [selection_range]
+          return [selection_range]
+        end
+
+        selections.filter_map do |selection|
+          range = selection_range_for(selection)
+          range if range[0] != range[1]
+        end
       end
 
       def visual_character_selection_range
@@ -411,10 +580,10 @@ module Kward
           return selection_ranges.map { |range| @buffer[range[0]...range[1]].to_s }.join("\n")
         end
 
-        range = selection_range
-        return "" unless range
+        ranges = selection_ranges
+        return "" if ranges.empty?
 
-        @buffer[range[0]...range[1]].to_s
+        ranges.map { |range| @buffer[range[0]...range[1]].to_s }.join("\n")
       end
 
       def cursor_line_and_column_for(offset)
@@ -470,6 +639,34 @@ module Kward
         changed!
       end
 
+      def replace_selections(text)
+        apply_selection_edits { |_selection| text.to_s }
+      end
+
+      def delete_before_selections
+        apply_selection_edits do |selection|
+          range = selection_range_for(selection)
+          if range[0] != range[1]
+            ""
+          elsif range[0].positive?
+            selection[:anchor] = range[0] - 1
+            ""
+          end
+        end
+      end
+
+      def delete_at_selections
+        apply_selection_edits do |selection|
+          range = selection_range_for(selection)
+          if range[0] != range[1]
+            ""
+          elsif range[1] < @buffer.length
+            selection[:cursor] = range[1] + 1
+            ""
+          end
+        end
+      end
+
       def copy_range(start_index, end_index)
         start_index, end_index = [start_index, end_index].minmax
         @kill_buffer = @buffer[start_index...end_index].to_s
@@ -482,6 +679,82 @@ module Kward
 
       def cut_range(start_index, end_index)
         kill_range(start_index, end_index)
+      end
+
+      def add_next_occurrence_selection
+        range = selection_range || word_range_at(@cursor)
+        unless range
+          @status = "No word under cursor"
+          return false
+        end
+
+        query = @buffer[range[0]...range[1]].to_s
+        if query.empty?
+          @status = "No word under cursor"
+          return false
+        end
+
+        existing_ranges = selection_ranges
+        existing_ranges = [range] if existing_ranges.empty?
+        start_after = existing_ranges.map(&:last).max || range[1]
+        if selection_range.nil?
+          @selection_anchor = range[0]
+          @cursor = range[1]
+          @status = "Selected: #{query}"
+          return true
+        end
+
+        match = next_occurrence_range(query, start_after, existing_ranges)
+        unless match
+          @status = "No more matches: #{query}"
+          return false
+        end
+
+        add_selection(match[0], match[1])
+        @status = "Added cursor for: #{query}"
+        true
+      end
+
+      def add_vertical_cursor(direction)
+        source = direction == :up ? selections.min_by { |selection| selection[:cursor] } : selections.max_by { |selection| selection[:cursor] }
+        line, column = cursor_line_and_column_for(source[:cursor])
+        target_line = direction == :up ? line - 1 : line + 1
+        if target_line.negative? || target_line >= lines.length
+          @status = direction == :up ? "No line above" : "No line below"
+          return false
+        end
+
+        target_column = [column, lines[target_line].to_s.length].min
+        offset = line_start_offset(target_line) + target_column
+        add_selection(offset, offset)
+        @status = direction == :up ? "Added cursor above" : "Added cursor below"
+        true
+      end
+
+      def selection_to_line_start_cursors
+        range = selection_range
+        unless range
+          @status = "No selection"
+          return false
+        end
+
+        start_line, = cursor_line_and_column_for(range[0])
+        end_line, end_column = cursor_line_and_column_for(range[1])
+        end_line -= 1 if end_column.zero? && end_line > start_line
+        set_selections((start_line..end_line).map do |line_index|
+          offset = line_start_offset(line_index)
+          { anchor: offset, cursor: offset }
+        end)
+        @status = "Created #{selections.length} cursors"
+        true
+      end
+
+      def extending_selections
+        previous = @extending_selections
+        @extending_selections = true
+        yield
+      ensure
+        @extending_selections = previous
       end
 
       def begin_search(direction = :forward)
@@ -582,6 +855,103 @@ module Kward
         @lines_cache = nil
       end
 
+      def clamp_offset(value)
+        [[value.to_i, 0].max, @buffer.length].min
+      end
+
+      def primary_selection
+        { anchor: @selection_anchor || @cursor, cursor: @cursor }
+      end
+
+      def primary_selection_active?
+        return false if @selection_anchor.nil?
+        return true if vibe? && %w[visual visual_line visual_block].include?(@vibe_mode)
+
+        @selection_anchor != @cursor
+      end
+
+      def normalized_selection(selection)
+        {
+          anchor: clamp_offset(selection[:anchor]),
+          cursor: clamp_offset(selection[:cursor])
+        }
+      end
+
+      def normalize_secondary_selections
+        @secondary_selections ||= []
+        seen = { [primary_selection[:anchor], primary_selection[:cursor]] => true }
+        @secondary_selections = @secondary_selections.filter_map do |selection|
+          normalized = normalized_selection(selection)
+          key = [normalized[:anchor], normalized[:cursor]]
+          next if seen[key]
+
+          seen[key] = true
+          normalized
+        end
+      end
+
+      def selection_range_for(selection)
+        [selection[:anchor], selection[:cursor]].minmax
+      end
+
+      def editor_snapshot
+        { buffer: @buffer.dup, selections: selections }
+      end
+
+      def restore_editor_snapshot(snapshot)
+        @buffer = snapshot[:buffer].to_s
+        if snapshot[:selections]
+          set_selections(snapshot[:selections])
+        else
+          @cursor = [snapshot[:cursor].to_i, @buffer.length].min
+          @selection_anchor = nil
+          @secondary_selections = []
+        end
+      end
+
+      def apply_selection_edits
+        edits = selections.filter_map do |selection|
+          edit_selection = selection.dup
+          replacement = yield(edit_selection)
+          next if replacement.nil?
+
+          range = selection_range_for(edit_selection)
+          { start: range[0], end: range[1], text: replacement.to_s }
+        end
+        return false if edits.empty?
+
+        new_selections = []
+        edits.sort_by { |edit| edit[:start] }.reverse_each do |edit|
+          delta = edit[:text].length - (edit[:end] - edit[:start])
+          new_selections.each do |selection|
+            selection[:anchor] += delta if selection[:anchor] >= edit[:end]
+            selection[:cursor] += delta if selection[:cursor] >= edit[:end]
+          end
+          @buffer = @buffer[0...edit[:start]].to_s + edit[:text] + @buffer[edit[:end]..].to_s
+          cursor = edit[:start] + edit[:text].length
+          new_selections << { anchor: cursor, cursor: cursor }
+        end
+        changed!(clear_selections: false)
+        set_selections(new_selections.sort_by { |selection| [selection[:cursor], selection[:anchor]] })
+        true
+      end
+
+      def next_occurrence_range(query, start_after, existing_ranges)
+        ranges = occurrence_ranges(query, start_after) + occurrence_ranges(query, 0, limit: start_after)
+        ranges.find { |range| existing_ranges.none? { |existing| existing == range } }
+      end
+
+      def occurrence_ranges(query, start_at, limit: @buffer.length)
+        ranges = []
+        index = @buffer.index(query, start_at)
+        while index && index < limit
+          range = [index, index + query.length]
+          ranges << range if range[1] <= limit
+          index = @buffer.index(query, index + query.length)
+        end
+        ranges
+      end
+
       def refresh_file_marker
         stat = File.stat(@path)
         @original_mtime = stat.mtime
@@ -602,11 +972,75 @@ module Kward
       end
 
       def current_line_start
-        @buffer.rindex("\n", @cursor - 1)&.+(1) || 0
+        line_start_for_offset(@cursor)
       end
 
       def current_line_end
-        @buffer.index("\n", @cursor) || @buffer.length
+        line_end_for_offset(@cursor)
+      end
+
+      def line_start_for_offset(offset)
+        @buffer.rindex("\n", offset.to_i - 1)&.+(1) || 0
+      end
+
+      def line_end_for_offset(offset)
+        @buffer.index("\n", offset.to_i) || @buffer.length
+      end
+
+      def move_selections
+        set_selections(selections.map do |selection|
+          offset = clamp_offset(yield(selection))
+          { anchor: offset, cursor: offset }
+        end)
+      end
+
+      def move_selection_cursors
+        set_selections(selections.map do |selection|
+          { anchor: selection[:anchor], cursor: clamp_offset(yield(selection)) }
+        end)
+      end
+
+      def extending_selections?
+        @extending_selections == true
+      end
+
+      def collapse_or_move_left(selection)
+        range = selection_range_for(selection)
+        return range[0] if range[0] != range[1]
+
+        [selection[:cursor] - 1, 0].max
+      end
+
+      def collapse_or_move_right(selection)
+        range = selection_range_for(selection)
+        return range[1] if range[0] != range[1]
+
+        [selection[:cursor] + 1, @buffer.length].min
+      end
+
+      def move_offset_vertically(offset, rows)
+        line, column = cursor_line_and_column_for(offset)
+        offset_for_line_and_column(line + rows.to_i, column)
+      end
+
+      def indentation_offset_for(offset, direction)
+        line, column = cursor_line_and_column_for(offset)
+        target_line = if direction == :up
+          previous_indentation_line(line, indentation_level_for_line(line))
+        else
+          next_indentation_line(line, indentation_level_for_line(line))
+        end
+        return offset if target_line.nil?
+
+        offset_for_line_and_column(target_line, column)
+      end
+
+      def indentation_right_offset_for(offset)
+        line, column = cursor_line_and_column_for(offset)
+        indentation = indentation_level_for_line(line)
+        return offset_for_line_and_column(line, indentation) if column < indentation
+
+        next_word_end(offset)
       end
 
       def current_line_empty?
@@ -725,11 +1159,14 @@ module Kward
         end
       end
 
-      def changed!
+      def changed!(clear_selections: true)
         invalidate_lines_cache
         @overwrite_confirmed = false
         @quit_confirmed = false
-        @selection_anchor = nil
+        if clear_selections
+          @selection_anchor = nil
+          @secondary_selections = []
+        end
         @last_yank_range = nil
         @last_yank_index = nil
       end

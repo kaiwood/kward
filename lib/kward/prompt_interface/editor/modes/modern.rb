@@ -12,6 +12,9 @@ module Kward
         csi_result = handle_modern_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        multi_cursor_result = handle_modern_multi_cursor_key(key)
+        return multi_cursor_result unless multi_cursor_result == false
+
         indentation_navigation_result = handle_modern_indentation_navigation_key(key)
         return indentation_navigation_result unless indentation_navigation_result == false
 
@@ -38,21 +41,16 @@ module Kward
         case key
         when "\n", "\r"
           return editor_search_confirm if editor_search_active?
-          modern_record_undo do
-            clear_editor_selection_before_edit
-            editor_insert_newline
-          end
+          modern_record_undo { modern_insert_text("\n") }
         when "\t"
-          modern_record_undo do
-            clear_editor_selection_before_edit
-            @editor_state.insert("  ") unless editor_search_active?
-          end
+          modern_record_undo { modern_insert_text("  ") unless editor_search_active? }
         when "\b", "\x7F"
-          editor_search_active? ? editor_search_delete_character : modern_record_undo { delete_editor_selection || editor_delete_before_cursor }
+          editor_search_active? ? editor_search_delete_character : modern_record_undo { modern_delete_before_cursor }
         when "\x03"
           return editor_search_cancel if editor_search_active?
         when "\e"
           return editor_search_cancel if editor_search_active?
+          return @editor_state.collapse_to_primary_selection if @editor_state.multi_cursor?
           return @editor_state.clear_selection if @editor_state.selection_active?
         when "/"
           clear_editor_selection_before_edit unless editor_search_active?
@@ -74,7 +72,7 @@ module Kward
           if editor_search_active?
             editor_search_append(key) if printable_key?(key)
           elsif printable_key?(key)
-            modern_record_undo { editor_insert_printable(key) }
+            modern_record_undo { modern_insert_printable(key) }
           end
         end
       end
@@ -92,6 +90,21 @@ module Kward
           handle_modern_modified_key(code, modifier, sequence)
         else
           handle_modern_editor_csi_u_key(sequence)
+        end
+      end
+
+      def handle_modern_multi_cursor_key(key)
+        return false if editor_search_active?
+
+        case key
+        when "\x04"
+          @editor_state.add_next_occurrence_selection
+        when "\e[1;4A", "\e[4A"
+          @editor_state.add_vertical_cursor(:up)
+        when "\e[1;4B", "\e[4B"
+          @editor_state.add_vertical_cursor(:down)
+        else
+          false
         end
       end
 
@@ -212,12 +225,21 @@ module Kward
           end
         when 99
           editor_search_active? ? editor_search_cancel : copy_editor_selection
+        when 100
+          return false if editor_search_active?
+
+          @editor_state.add_next_occurrence_selection
         when 102
           @editor_state.move_right unless editor_search_active?
         when 118
           modern_record_undo { @editor_state.yank_kill_buffer } unless editor_search_active?
         when 120
           modern_record_undo { cut_editor_selection } unless editor_search_active?
+        when 108
+          return false if editor_search_active?
+          return false unless modern_ctrl_shift_key?(code, modifier)
+
+          @editor_state.selection_to_line_start_cursors
         when 122
           return if editor_search_active?
 
@@ -246,18 +268,32 @@ module Kward
         modifier = sequence[:modifier]
         if ctrl_modifier?(modifier)
           normalized_code = ctrl_code(code)
+          return @editor_state.add_next_occurrence_selection if normalized_code == 100
+          if normalized_code == 108 && modern_ctrl_shift_key?(code, modifier)
+            return @editor_state.selection_to_line_start_cursors
+          end
+
           case normalized_code
-          when 100, 107, 117, 119, 121
+          when 107, 117, 119, 121
             return modern_record_undo { handle_parsed_editor_csi_u_key(sequence) }
           end
         end
 
         case code
-        when 13, 8, 127, 4
-          modern_record_undo { handle_parsed_editor_csi_u_key(sequence) }
+        when 13
+          return editor_search_confirm if editor_search_active?
+
+          modern_record_undo { modern_insert_text("\n") }
+        when 8, 127
+          editor_search_active? ? editor_search_delete_character : modern_record_undo { modern_delete_before_cursor }
+        when 4
+          modern_record_undo { delete_editor_selection || @editor_state.delete_at_cursor } unless editor_search_active?
         else
-          if !sequence[:text].to_s.empty? || ((sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1") && code.between?(32, 126))
-            modern_record_undo { handle_parsed_editor_csi_u_key(sequence) }
+          text = csi_u_printable_text(sequence)
+          if text
+            editor_search_active? ? editor_search_append(text) : modern_record_undo { modern_insert_printable(text) }
+          elsif csi_u_text_field?(sequence)
+            true
           else
             handle_parsed_editor_csi_u_key(sequence)
           end
@@ -273,9 +309,31 @@ module Kward
         true
       end
 
+      def modern_insert_printable(text)
+        return editor_insert_printable(text) unless @editor_state.multi_cursor?
+
+        @editor_state.replace_selections(text)
+      end
+
+      def modern_insert_text(text)
+        return @editor_state.replace_selections(text) if @editor_state.multi_cursor? || @editor_state.selection_ranges.any?
+
+        if text == "\n"
+          editor_insert_newline
+        else
+          @editor_state.insert(text)
+        end
+      end
+
+      def modern_delete_before_cursor
+        return @editor_state.delete_before_selections if @editor_state.multi_cursor?
+
+        delete_editor_selection || editor_delete_before_cursor
+      end
+
       def modern_record_undo
         before_buffer = @editor_state.buffer.dup
-        before_redo_stack = @editor_state.redo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
+        before_redo_stack = @editor_state.redo_stack.map { |entry| entry.merge(buffer: entry[:buffer].dup, selections: entry[:selections]&.map(&:dup)) }
         @editor_state.push_undo
         result = yield
         if @editor_state.buffer == before_buffer

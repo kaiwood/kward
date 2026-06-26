@@ -86,19 +86,40 @@ module Kward
 
       def editor_render_line(line, line_index, text_width, column_offset: 0)
         visible = line.to_s[column_offset.to_i, text_width].to_s
-        ranges = @editor_state.selection_ranges
         rendered = editor_render_visible_line(visible, line_index)
+        line_start = @editor_state.line_start_offset(line_index)
+        rendered = editor_overlay_line_selections(rendered, line_start, column_offset, visible.length)
+        editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible.length, text_width)
+      end
+
+      def editor_overlay_line_selections(rendered, line_start, column_offset, visible_length)
+        ranges = @editor_state.selection_ranges
         return rendered if ranges.empty?
 
-        line_start = @editor_state.line_start_offset(line_index)
         selection_ranges = ranges.filter_map do |range|
           selection_start = [range[0] - line_start - column_offset.to_i, 0].max
-          selection_end = [range[1] - line_start - column_offset.to_i, visible.length].min
+          selection_end = [range[1] - line_start - column_offset.to_i, visible_length].min
           [selection_start, selection_end] if selection_start < selection_end
         end
         return rendered if selection_ranges.empty?
 
         editor_overlay_selection(rendered, selection_ranges)
+      end
+
+      def editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible_length, text_width)
+        return rendered unless @color_enabled
+
+        cursor_columns = @editor_state.secondary_cursor_offsets.filter_map do |offset|
+          column = offset - line_start - column_offset.to_i
+          column if column >= 0 && column <= visible_length
+        end
+        return rendered if cursor_columns.empty?
+
+        if cursor_columns.include?(visible_length) && visible_length < text_width
+          rendered += " "
+        end
+
+        editor_overlay_selection(rendered, cursor_columns.map { |column| [column, column + 1] })
       end
 
       def editor_overlay_selection(rendered, selection_ranges)

@@ -761,8 +761,12 @@ module Kward
       end
 
       def editor_extending_selection
-        @editor_state.selection_anchor ||= @editor_state.cursor
-        yield
+        if @editor_state.multi_cursor?
+          @editor_state.extending_selections { yield }
+        else
+          @editor_state.selection_anchor ||= @editor_state.cursor
+          yield
+        end
         true
       end
 
@@ -820,10 +824,9 @@ module Kward
       end
 
       def delete_editor_selection
-        range = @editor_state.selection_range
-        return false unless range
+        return false unless @editor_state.selection_ranges.any?
 
-        @editor_state.replace_range(range[0], range[1], "")
+        @editor_state.replace_selections("")
         true
       end
 
@@ -831,7 +834,7 @@ module Kward
         text = @editor_state.selected_text
         return false if text.empty?
 
-        @editor_state.copy_range(*@editor_state.selection_range)
+        @editor_state.push_kill(text)
         @output_io.print("\e]52;c;#{Base64.strict_encode64(text)}\a")
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.clear_selection
@@ -840,10 +843,11 @@ module Kward
       end
 
       def cut_editor_selection
-        range = @editor_state.selection_range
-        return false unless range
+        text = @editor_state.selected_text
+        return false if text.empty?
 
-        @editor_state.cut_range(range[0], range[1])
+        @editor_state.push_kill(text)
+        @editor_state.replace_selections("")
         @editor_state.status = "Cut selection"
         true
       end

@@ -1178,6 +1178,160 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_ctrl_d_selects_next_occurrence_and_typing_replaces_all
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo baz foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x04")
+        assert_equal [[0, 3]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, "\x04")
+        assert_equal [[0, 3], [8, 11]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, "\x04")
+        assert_equal [[0, 3], [8, 11], [16, 19]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, "x")
+        assert_equal "x bar x baz x", editor.buffer
+
+        prompt.send(:handle_editor_key, "y")
+        assert_equal "xy bar xy baz xy", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_multi_cursor_typing_collapses_all_selections
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "x")
+
+        refute editor.selection_active?
+        assert editor.multi_cursor?
+        assert_empty editor.selection_ranges
+        assert_equal [{ anchor: 1, cursor: 1 }, { anchor: 7, cursor: 7 }], editor.selections
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_multi_cursor_moves_all_cursors_after_typing
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "x")
+        prompt.send(:handle_editor_key, "\e[D")
+        prompt.send(:handle_editor_key, "y")
+
+        assert_equal "yx bar yx", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_multi_cursor_shift_navigation_extends_all_cursors
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "x")
+        prompt.send(:handle_editor_key, "\e[1;2D")
+
+        assert_equal [[0, 1], [6, 7]], editor.selection_ranges
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_multi_cursor_handles_csi_u_printable_input
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\e[120;1u")
+        prompt.send(:handle_editor_key, "\e[121;1u")
+
+        assert_equal "xy bar xy", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_renders_secondary_cursor_at_line_end
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        prompt.instance_variable_set(:@color_enabled, true)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "x")
+
+        rows, = prompt.send(:composer_layout, 40, 10)
+        assert_includes rows.join("\n"), "x bar x\e[7m \e[27m"
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_alt_shift_down_adds_vertical_cursor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbravo\ncharlie")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 2)
+
+        prompt.send(:handle_editor_key, "\e[1;4B")
+        prompt.send(:handle_editor_key, "!")
+
+        assert_equal "al!pha\nbr!avo\ncharlie", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_shift_l_converts_selection_to_line_start_cursors
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.selection_anchor = 1
+        editor.cursor = 9
+
+        prompt.send(:handle_editor_key, "\e[76;6u")
+        prompt.send(:handle_editor_key, ">")
+
+        assert_equal ">one\n>two\n>three", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_modern_ctrl_o_and_ctrl_x_do_not_save_or_close
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")
