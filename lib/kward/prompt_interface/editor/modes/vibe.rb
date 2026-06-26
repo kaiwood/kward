@@ -4,6 +4,11 @@ module Kward
   class PromptInterface
     # Vibe-style keymap for the built-in composer file editor.
     module VibeEditorMode
+      VIBE_SIMPLE_MOTION_KEYS = [
+        "w", "e", "b", "$", "0", "^", "+", "\n", "\r", "-", "_",
+        "h", "\b", "\x7F", "j", "k", "l", " "
+      ].freeze
+
       VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, keyword_init: true) do
         def characterwise?
           type == :characterwise
@@ -458,32 +463,8 @@ module Kward
         count, body = vibe_count_and_body(command)
         count = 1 if count.zero?
         case body
-        when "h", "\b", "\x7F"
-          count.times { @editor_state.move_left }
-        when "j"
-          count.times { editor_move_down }
-        when "k"
-          count.times { editor_move_up }
-        when "l", " "
-          count.times { @editor_state.move_right }
-        when "0"
-          @editor_state.move_line_start
-        when "^"
-          @editor_state.move_line_first_non_blank
-        when "+", "\n", "\r"
-          vibe_move_to_relative_line_first_non_blank(count)
-        when "-"
-          vibe_move_to_relative_line_first_non_blank(-count)
-        when "_"
-          vibe_move_to_relative_line_first_non_blank(count - 1)
-        when "$"
-          @editor_state.move_line_end
-        when "w"
-          count.times { @editor_state.move_to_next_word }
-        when "e"
-          count.times { @editor_state.move_to_word_end }
-        when "b"
-          count.times { @editor_state.move_to_previous_word }
+        when *VIBE_SIMPLE_MOTION_KEYS
+          vibe_apply_motion(body, count)
         when "gg"
           @editor_state.move_file_start
         when "G"
