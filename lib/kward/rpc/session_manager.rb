@@ -709,20 +709,12 @@ module Kward
         pending_turn_count(rpc_session.id).zero?
       end
 
-      def active_session_count(workspace_root)
-        @mutex.synchronize { @sessions.values.count { |rpc_session| rpc_session.workspace_root == workspace_root } }
-      end
-
       def tool_calls(message)
         MessageAccess.tool_calls(message)
       end
 
       def message_role(message)
         MessageAccess.role(message)
-      end
-
-      def message_content(message)
-        MessageAccess.content(message)
       end
 
       def session_tree_helper(rpc_session)
