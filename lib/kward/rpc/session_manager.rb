@@ -469,13 +469,7 @@ module Kward
         rpc_session = fetch_session(session_id)
         command = plugin_registry.command_for(command.to_s.delete_prefix("/")) || raise(ArgumentError, "Unknown plugin command: #{command}")
         output = []
-        context = PluginRegistry::Context.new(
-          conversation: rpc_session.conversation,
-          args: arguments.to_s,
-          session: rpc_session.session,
-          workspace_root: rpc_session.workspace_root,
-          say_callback: lambda { |message| output << message.to_s }
-        )
+        context = plugin_context(rpc_session, args: arguments.to_s, say_callback: lambda { |message| output << message.to_s })
         result = command.handler.call(arguments.to_s, context)
         output = rpc_session.plugin_output.shift(rpc_session.plugin_output.length) + output
         { command: command.name, output: output, result: result.nil? ? nil : result.to_s }
@@ -1078,17 +1072,21 @@ module Kward
         turn_payload(turn)
       end
 
+      def plugin_context(rpc_session, args: nil, say_callback:)
+        PluginRegistry::Context.new(
+          conversation: rpc_session.conversation,
+          args: args,
+          session: rpc_session.session,
+          workspace_root: rpc_session.workspace_root,
+          say_callback: say_callback
+        )
+      end
+
       def run_plugin_turn(rpc_session, turn)
         turn.cancellation&.raise_if_cancelled!
         command = plugin_registry.command_for(turn.plugin_command_name) || raise(ArgumentError, "Unknown plugin command: #{turn.plugin_command_name}")
         output = []
-        context = PluginRegistry::Context.new(
-          conversation: rpc_session.conversation,
-          args: turn.plugin_arguments.to_s,
-          session: rpc_session.session,
-          workspace_root: rpc_session.workspace_root,
-          say_callback: lambda { |message| output << message.to_s }
-        )
+        context = plugin_context(rpc_session, args: turn.plugin_arguments.to_s, say_callback: lambda { |message| output << message.to_s })
         result = command.handler.call(turn.plugin_arguments.to_s, context)
         answer = (output + [result]).compact.map(&:to_s).reject(&:empty?).join("\n")
         unless answer.empty?
@@ -1101,12 +1099,7 @@ module Kward
       def notify_plugin_transcript_event(rpc_session, event)
         return if plugin_registry.transcript_event_handlers.empty?
 
-        context = PluginRegistry::Context.new(
-          conversation: rpc_session.conversation,
-          session: rpc_session.session,
-          workspace_root: rpc_session.workspace_root,
-          say_callback: lambda { |message| rpc_session.plugin_output << message.to_s }
-        )
+        context = plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
         plugin_registry.notify_transcript_event(event, context)
       end
 
@@ -1160,12 +1153,7 @@ module Kward
         return clear_footer_update(rpc_session) unless renderer
 
         text = begin
-          context = PluginRegistry::Context.new(
-            conversation: rpc_session.conversation,
-            session: rpc_session.session,
-            workspace_root: rpc_session.workspace_root,
-            say_callback: lambda { |message| rpc_session.plugin_output << message.to_s }
-          )
+          context = plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
           renderer.call(context).to_s.gsub(/\s+/, " ").strip
         rescue StandardError => e
           warn "Warning: Kward plugin footer error: #{e.message}"
