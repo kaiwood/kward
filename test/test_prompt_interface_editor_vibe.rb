@@ -822,6 +822,76 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_pair_text_objects
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "call(alpha, \"beta\", 'gamma')")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.index("alpha")
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "(")
+
+        assert_equal "call()", editor.buffer
+        assert_equal "alpha, \"beta\", 'gamma'", editor.kill_buffer
+        assert_equal "insert", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, "\e")
+        prompt.send(:handle_editor_key, "u")
+        editor.cursor = editor.buffer.index("beta")
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "\"")
+
+        assert_equal "call(alpha, \"\", 'gamma')", editor.buffer
+        assert_equal "beta", editor.kill_buffer
+        assert_equal "insert", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, "\e")
+        prompt.send(:handle_editor_key, "u")
+        editor.cursor = editor.buffer.index("gamma")
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "'")
+
+        assert_equal "call(alpha, \"beta\", '')", editor.buffer
+        assert_equal "gamma", editor.kill_buffer
+        assert_equal "insert", editor.vibe_mode
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_supports_around_pair_text_objects
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "call(alpha, \"beta\")")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.index("alpha")
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "(")
+
+        assert_equal "call", editor.buffer
+        assert_equal "(alpha, \"beta\")", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "u")
+        editor.cursor = editor.buffer.index("beta")
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "\"")
+
+        assert_equal "beta", editor.kill_buffer
+        assert_equal "call(alpha, \"beta\")", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_operator_word_motion_stops_at_code_punctuation
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.rb"), "initialize(msg=\"Hello, world!\")")

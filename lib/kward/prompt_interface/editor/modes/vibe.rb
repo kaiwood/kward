@@ -8,6 +8,12 @@ module Kward
         "w", "e", "b", "$", "0", "^", "+", "\n", "\r", "-", "_",
         "h", "\b", "\x7F", "j", "k", "l", " "
       ].freeze
+      VIBE_PAIR_TEXT_OBJECTS = {
+        "(" => ["(", ")"], ")" => ["(", ")"],
+        "[" => ["[", "]"], "]" => ["[", "]"],
+        "{" => ["{", "}"], "}" => ["{", "}"],
+        "\"" => ["\"", "\""], "'" => ["'", "'"]
+      }.freeze
 
       VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, keyword_init: true) do
         def characterwise?
@@ -977,9 +983,70 @@ module Kward
         when "aw"
           vibe_a_word_target
         else
+          return vibe_pair_text_object_target(text_object) if VIBE_PAIR_TEXT_OBJECTS.key?(text_object[1])
+
           @editor_state.status = "Unsupported text object: #{text_object}"
           false
         end
+      end
+
+      def vibe_pair_text_object_target(text_object)
+        include_pair = text_object.start_with?("a")
+        pair = VIBE_PAIR_TEXT_OBJECTS[text_object[1]]
+        range = pair[0] == pair[1] ? vibe_quote_pair_range(pair[0]) : vibe_delimited_pair_range(pair[0], pair[1])
+        return @editor_state.status = "No #{pair.join} pair around cursor" unless range
+
+        start_index, end_index = range
+        start_index += 1 unless include_pair
+        VibeOperatorTarget.new(
+          type: :characterwise,
+          start_index: start_index,
+          end_index: include_pair ? end_index + 1 : end_index
+        )
+      end
+
+      def vibe_delimited_pair_range(open_char, close_char)
+        buffer = @editor_state.buffer
+        cursor = @editor_state.cursor
+        depth = 0
+        open_index = nil
+        cursor.downto(0) do |index|
+          char = buffer[index]
+          depth += 1 if char == close_char
+          if char == open_char
+            if depth.zero?
+              open_index = index
+              break
+            end
+            depth -= 1
+          end
+        end
+        return nil unless open_index
+
+        depth = 0
+        close_index = nil
+        (open_index + 1...buffer.length).each do |index|
+          char = buffer[index]
+          depth += 1 if char == open_char
+          if char == close_char
+            if depth.zero?
+              close_index = index
+              break
+            end
+            depth -= 1
+          end
+        end
+        close_index ? [open_index, close_index] : nil
+      end
+
+      def vibe_quote_pair_range(quote)
+        buffer = @editor_state.buffer
+        cursor = @editor_state.cursor
+        open_index = buffer.rindex(quote, cursor)
+        return nil unless open_index
+
+        close_index = buffer.index(quote, open_index + 1)
+        close_index ? [open_index, close_index] : nil
       end
 
       def vibe_inner_word_target

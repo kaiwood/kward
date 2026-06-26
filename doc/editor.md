@@ -256,6 +256,8 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `dw` / `yw` / `cw`      | Delete / yank / change with motion              |
 | `diw` / `yiw` / `ciw`   | Delete / yank / change inner word               |
 | `daw` / `yaw` / `caw`   | Delete / yank / change a word plus spacing      |
+| `di(`/`ci(`/`yi(`       | Delete / change / yank inside a pair            |
+| `da(`/`ca(`/`ya(`       | Delete / change / yank around a pair            |
 | `yy`                    | Yank line                                       |
 | `p`                     | Paste after cursor                              |
 | `P`                     | Paste before cursor                             |
