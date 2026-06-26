@@ -87,8 +87,7 @@ module Kward
       end
 
       def normalize_editor_line_numbers(value)
-        text = value.to_s.downcase
-        %w[absolute relative].include?(text) ? text : "absolute"
+        EditorMode.normalize_line_numbers(value)
       end
 
       def tab_action_result?(result)
