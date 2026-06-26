@@ -491,6 +491,8 @@ module Kward
         return true if command.match?(/\A\d*[cdy]\d*[fFtT]\z/)
         return true if command.match?(/\A\d*[fFtT]\z/)
         return true if command.match?(/\A\d*r\z/)
+        return true if command.match?(/\Am\z/)
+        return true if command.match?(/\A['`]\z/)
 
         false
       end
@@ -505,6 +507,12 @@ module Kward
           @editor_state.move_file_start
         when "gv"
           vibe_restore_visual_selection
+        when /\Am(.+)\z/
+          vibe_set_mark(Regexp.last_match(1))
+        when /\A'(.+)\z/
+          vibe_jump_to_mark(Regexp.last_match(1), linewise: true)
+        when /\A`(.+)\z/
+          vibe_jump_to_mark(Regexp.last_match(1), linewise: false)
         when "G"
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
@@ -733,6 +741,24 @@ module Kward
 
       def vibe_switch_visual_selection_end
         @editor_state.selection_anchor, @editor_state.cursor = @editor_state.cursor, @editor_state.selection_anchor
+        true
+      end
+
+      def vibe_set_mark(name)
+        @editor_state.vibe_marks[name] = { cursor: @editor_state.cursor }
+        @editor_state.status = "Set mark #{name}"
+        true
+      end
+
+      def vibe_jump_to_mark(name, linewise:)
+        mark = @editor_state.vibe_marks[name]
+        unless mark
+          @editor_state.status = "Mark not set: #{name}"
+          return false
+        end
+
+        @editor_state.cursor = [[mark[:cursor], 0].max, @editor_state.buffer.length].min
+        @editor_state.move_line_first_non_blank if linewise
         true
       end
 
