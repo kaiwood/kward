@@ -464,7 +464,7 @@ module Kward
         count = 1 if count.zero?
         case body
         when *VIBE_SIMPLE_MOTION_KEYS
-          vibe_apply_motion(body, count)
+          vibe_apply_cursor_motion(body, count)
         when "gg"
           @editor_state.move_file_start
         when "G"
@@ -635,7 +635,7 @@ module Kward
       def vibe_move_visual_selection(key)
         count, body = vibe_count_and_body(key)
         count = 1 if count.zero?
-        vibe_apply_motion(body, count)
+        vibe_apply_cursor_motion(body, count)
       end
 
       def vibe_visual_range
@@ -680,6 +680,8 @@ module Kward
       end
 
       def vibe_count_and_body(command)
+        return [0, "0"] if command == "0"
+
         match = command.match(/\A(\d*)(.*)\z/)
         [match[1].to_i, match[2]]
       end
@@ -970,6 +972,15 @@ module Kward
         end
       end
 
+      def vibe_apply_cursor_motion(motion, count)
+        if motion == "w"
+          count.times { vibe_move_to_next_word_start }
+          return true
+        end
+
+        vibe_apply_motion(motion, count)
+      end
+
       def vibe_apply_motion(motion, count)
         case motion
         when "w"
@@ -1003,6 +1014,20 @@ module Kward
           return false
         end
         true
+      end
+
+      def vibe_move_to_next_word_start
+        cursor = @editor_state.cursor
+        buffer = @editor_state.buffer
+        return if cursor >= buffer.length
+
+        cursor += 1 while cursor < buffer.length && !vibe_word_separator?(buffer[cursor])
+        cursor += 1 while cursor < buffer.length && vibe_word_separator?(buffer[cursor])
+        @editor_state.cursor = cursor
+      end
+
+      def vibe_word_separator?(char)
+        char.to_s.match?(/\s/)
       end
 
       def vibe_copy_range(start_index, end_index, status)

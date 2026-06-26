@@ -768,6 +768,32 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_word_motions_land_like_vim
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "w")
+        assert_equal [0, 6], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "w")
+        assert_equal [0, 11], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "b")
+        assert_equal [0, 6], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "e")
+        assert_equal [0, 9], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "0")
+        assert_equal [0, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_operator_motion_and_undo
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta")
