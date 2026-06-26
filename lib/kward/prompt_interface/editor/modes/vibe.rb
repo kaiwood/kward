@@ -628,6 +628,8 @@ module Kward
           vibe_change_visual_selection
         when "p"
           vibe_paste_visual_selection
+        when "o"
+          vibe_switch_visual_selection_end
         else
           vibe_move_visual_selection(key)
         end
@@ -649,6 +651,11 @@ module Kward
         else
           false
         end
+      end
+
+      def vibe_switch_visual_selection_end
+        @editor_state.selection_anchor, @editor_state.cursor = @editor_state.cursor, @editor_state.selection_anchor
+        true
       end
 
       def vibe_begin_visual_mode(mode)

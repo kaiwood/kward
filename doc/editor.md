@@ -276,6 +276,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `.`                     | Repeat last change                              |
 | `v`                     | Visual character mode                           |
 | `V`                     | Visual line mode                                |
+| `o`                     | Switch active end of visual selection           |
 | `/`                     | Search forward                                  |
 | `?`                     | Search backward                                 |
 | `n`                     | Repeat search                                   |
