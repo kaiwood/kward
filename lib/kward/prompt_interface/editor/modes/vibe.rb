@@ -524,6 +524,7 @@ module Kward
         return true if command.match?(/\A"[a-z][cdy][ai]\z/)
         return true if command.match?(/\Aq\z/)
         return true if command.match?(/\A@\z/)
+        return true if command.match?(/\A[\[\]]\z/)
         return true if command.match?(/\A['`]\z/)
 
         false
@@ -546,6 +547,10 @@ module Kward
           @editor_state.move_file_start
         when "gv"
           vibe_restore_visual_selection
+        when "]m"
+          vibe_jump_ruby_method(:forward)
+        when "[m"
+          vibe_jump_ruby_method(:backward)
         when /\Aq(.+)\z/
           vibe_start_macro_recording(Regexp.last_match(1))
         when "@@"
@@ -791,6 +796,28 @@ module Kward
 
       def vibe_switch_visual_selection_end
         @editor_state.selection_anchor, @editor_state.cursor = @editor_state.cursor, @editor_state.selection_anchor
+        true
+      end
+
+      def vibe_jump_ruby_method(direction)
+        unless vibe_ruby_file?
+          @editor_state.status = "Ruby navigation requires Ruby file"
+          return false
+        end
+
+        line, = @editor_state.cursor_line_and_column
+        candidates = @editor_state.lines.each_with_index.select { |source, _index| source.match?(/\A\s*def\b/) }.map(&:last)
+        target = if direction == :forward
+                   candidates.find { |index| index > line }
+                 else
+                   candidates.reverse.find { |index| index < line }
+                 end
+        unless target
+          @editor_state.status = "Ruby method not found"
+          return false
+        end
+
+        @editor_state.move_to_line_first_non_blank(target)
         true
       end
 

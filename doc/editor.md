@@ -272,6 +272,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `%`                     | Jump to matching pair                           |
 | `f`/`F`/`t`/`T`         | Find character on current line                  |
 | `{` / `}`               | Move by paragraph                               |
+| `]m` / `[m`             | Jump to next / previous Ruby method             |
 | `df)` / `ct,` / `d%`    | Use character and pair motions with operators   |
 | `;` / `,`               | Repeat character find forward/backward          |
 | `U`                     | Restore current line                            |

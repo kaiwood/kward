@@ -589,6 +589,25 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_ruby_method_navigation
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "def one\nend\n\ndef two\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "]")
+        prompt.send(:handle_editor_key, "m")
+        assert_equal [3, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "[")
+        prompt.send(:handle_editor_key, "m")
+        assert_equal [0, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_substitute_commands
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta\nalpha alpha\nbeta")
