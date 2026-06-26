@@ -370,6 +370,29 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_load_restores_compacted_tool_output_artifacts
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        output = (["start"] + Array.new(2_000) { |index| "line #{index}" } + ["ERROR: important failure", "end"]).join("\n")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil, workspace_root: workspace_dir)
+        session.attach(conversation)
+        registry = Kward::ToolRegistry.new(code_search: FakeCodeSearch.new(output), web_search_enabled: false)
+
+        compacted = registry.dispatch(tool_call("code_search", action: "list_cache"), conversation)
+        artifact_id = compacted[/toolout_[a-f0-9]{16}/]
+
+        _loaded_session, loaded_conversation = store.load(session.path, workspace: Kward::Workspace.new(root: workspace_dir))
+        result = Kward::ToolRegistry.new(web_search_enabled: false).dispatch(tool_call("retrieve_tool_output", id: artifact_id, query: "important", limit: 1), loaded_conversation)
+
+        assert artifact_id, "expected compacted output to include an artifact id"
+        assert_includes result, "[Retrieved tool output #{artifact_id} matching \"important\""
+        assert_includes result, "ERROR: important failure"
+      end
+    end
+  end
+
   def test_session_loads_older_files_without_tool_execution_records
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

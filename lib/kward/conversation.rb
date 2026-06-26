@@ -146,6 +146,10 @@ module Kward
     end
 
     def store_tool_output_artifact(tool_name:, content:)
+      restore_tool_output_artifact(tool_name: tool_name, content: content, created_at: Time.now.utc)
+    end
+
+    def restore_tool_output_artifact(tool_name:, content:, created_at: nil)
       text = self.class.normalize_tool_content(content)
       id = tool_output_artifact_id_for(tool_name: tool_name, content: text)
       @tool_output_artifacts[id] = {
@@ -153,7 +157,7 @@ module Kward
         tool_name: tool_name,
         content: text,
         bytes: text.bytesize,
-        created_at: Time.now.utc
+        created_at: created_at || Time.now.utc
       }
       id
     end

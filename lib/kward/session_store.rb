@@ -288,6 +288,7 @@ module Kward
         session_memories: memory_state["sessionMemories"],
         last_memory_retrieval: memory_state["lastRetrieval"]
       )
+      restore_tool_output_artifacts(records, conversation)
       conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"
       session = Session.new(
         store: self,
@@ -562,6 +563,46 @@ module Kward
 
     def restored_memory_state(records)
       records.reverse.find { |record| record["type"] == "memory_state" } || { "sessionMemories" => [], "lastRetrieval" => nil }
+    end
+
+    def restore_tool_output_artifacts(records, conversation)
+      tool_names = tool_message_names_by_id(records)
+      records.each do |record|
+        next unless record["type"] == "tool_execution_end"
+
+        content = record.dig("result", "content")
+        next if content.nil?
+
+        tool_name = tool_names[record["toolCallId"].to_s] || raw_tool_name(record["toolName"])
+        next if tool_name.to_s.empty?
+
+        conversation.restore_tool_output_artifact(
+          tool_name: tool_name,
+          content: content,
+          created_at: parse_time(record["timestamp"])
+        )
+      end
+    end
+
+    def tool_message_names_by_id(records)
+      records.each_with_object({}) do |record, names|
+        next unless record["type"] == "message"
+
+        message = record["message"]
+        next unless message.is_a?(Hash) && message_role(message) == "tool"
+
+        tool_call_id = message_tool_call_id(message).to_s
+        names[tool_call_id] = message_name(message) unless tool_call_id.empty? || message_name(message).to_s.empty?
+      end
+    end
+
+    def raw_tool_name(name)
+      {
+        "bash" => "run_shell_command",
+        "edit" => "edit_file",
+        "read" => "read_file",
+        "write" => "write_file"
+      }.fetch(name.to_s, name.to_s)
     end
 
     def session_runtime(records, header)
