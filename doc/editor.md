@@ -357,20 +357,6 @@ Replace mode overwrites characters at the cursor instead of inserting. Each type
 | `Backspace`      | Delete before cursor        |
 | `Esc` / `Ctrl+C` | Return to normal mode       |
 
-### Visual mode
-
-Enter visual mode with `v` for character selection or `V` for line selection. Move the cursor to extend the selection, then choose an action.
-
-| Key                      | Action                              |
-| ------------------------ | ----------------------------------- |
-| `Arrow keys` / `h j k l` | Extend selection                    |
-| `y`                      | Yank selection                       |
-| `d` / `x`                | Delete selection                     |
-| `c`                      | Change selection (delete and insert) |
-| `p`                      | Paste over selection                 |
-| auto-close opener        | Wrap selection in matching pair       |
-| `Esc` / `Ctrl+C`         | Cancel visual mode                   |
-
 Typing an opening bracket (`(`, `[`, `{`) or quote (`"`, `'`, `` ` ``) in visual mode wraps the selection in the matching pair, then returns to normal mode.
 
 ### Command mode
@@ -395,6 +381,6 @@ Vibe mode is not trying to be Vim. It is a focused subset designed for quick edi
 - **`/` and `?` search forward and backward**: `n` and `N` repeat the last search. `*` and `#` search for the word under the cursor.
 - **Operators with motions**: `d`, `y`, and `c` work with `w` (word), `e` (end of word), `b` (back word), `$` (end of line), `0` (start of line), and `^` (first non-blank).
 - **Yanks copy to the terminal clipboard**: when OSC 52 is supported, yanked text is also sent to the system clipboard, so you can paste into other applications.
-- **No registers, macros, or ex-mode**: these are intentionally omitted to keep the editor compact. If you need them, use your full terminal editor and reload the file in Kward.
+- **Registers and macros are supported**: named registers work with yank/delete/paste flows, and `q`/`@` record and replay simple macros for repeated edits.
 - **Viewport commands**: `zz`, `zt`, and `zb` reposition the cursor line to the center, top, or bottom of the viewport without moving the cursor itself — the same as Vim.
 - **Indentation navigation**: `Ctrl+J` and `Ctrl+K` jump to the next or previous indentation level, which is useful for navigating nested code blocks in Ruby and other indented languages.
