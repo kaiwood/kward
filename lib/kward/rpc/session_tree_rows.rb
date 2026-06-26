@@ -1,7 +1,7 @@
 require_relative "../message_access"
 require_relative "../message_text"
+require_relative "../session_tree_nodes"
 require_relative "../session_tree_tool_display"
-require_relative "../tools/tool_call"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -28,13 +28,14 @@ module Kward
       #
       # @return [Array<Hash>] rows for the `session/tree` RPC method
       def rows
-        active_path = tree_active_path(@roots, @current_leaf)
-        tool_calls_by_id = tree_tool_calls(@roots)
-        visible_roots = @roots.flat_map { |root| visible_tree_nodes(root) }
+        tree_nodes = SessionTreeNodes.new(roots: @roots, current_leaf: @current_leaf)
+        active_path = tree_nodes.active_path
+        tool_calls_by_id = tree_nodes.tool_calls
+        visible_roots = tree_nodes.visible_roots
         multiple_roots = visible_roots.length > 1
         result = []
 
-        stack = visible_roots.sort_by { |root| tree_contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index.map do |root, index|
+        stack = visible_roots.sort_by { |root| tree_nodes.contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index.map do |root, index|
           [root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == visible_roots.length - 1, [], multiple_roots]
         end.reverse
 
@@ -60,7 +61,7 @@ module Kward
             prefix: tree_prefix(display_indent, gutters, show_connector && !virtual_root_child, is_last, !node[:children].empty?)
           }.compact
 
-          children = node[:children].sort_by { |child| tree_contains_active_path?(child, active_path) ? 0 : 1 }
+          children = node[:children].sort_by { |child| tree_nodes.contains_active_path?(child, active_path) ? 0 : 1 }
           multiple_children = children.length > 1
           child_indent = if multiple_children
                            indent + 1
@@ -79,112 +80,6 @@ module Kward
       end
 
       private
-
-      def tree_active_path(roots, leaf_id)
-        by_id = tree_entries_by_id(roots)
-        ids = []
-        current = by_id[leaf_id.to_s]
-        seen = {}
-        while current && !seen[current["id"].to_s]
-          seen[current["id"].to_s] = true
-          ids << current["id"].to_s
-          current = by_id[current["parentId"].to_s]
-        end
-        ids
-      end
-
-      def tree_entries_by_id(roots)
-        roots.each_with_object({}) do |root, map|
-          stack = [root]
-          seen = {}
-          until stack.empty?
-            node = stack.pop
-            next if seen[node.object_id]
-
-            seen[node.object_id] = true
-            entry = node["entry"] || {}
-            map[entry["id"].to_s] = entry unless entry["id"].to_s.empty?
-            stack.concat(Array(node["children"]))
-          end
-        end
-      end
-
-      def visible_tree_nodes(node)
-        results = {}
-        stack = [[node, false, {}]]
-
-        until stack.empty?
-          current, visited, seen = stack.pop
-          node_key = current.object_id
-          next if seen[node_key]
-
-          if visited
-            children = Array(current["children"]).flat_map { |child| results[child.object_id] || [] }
-            results[node_key] = if hidden_tree_entry?(current["entry"] || {})
-                                  children
-                                else
-                                  [{ source: current, children: children }]
-                                end
-          else
-            branch_seen = seen.merge(node_key => true)
-            stack << [current, true, seen]
-            Array(current["children"]).reverse_each { |child| stack << [child, false, branch_seen] unless branch_seen[child.object_id] }
-          end
-        end
-
-        results[node.object_id] || []
-      end
-
-      def hidden_tree_entry?(entry)
-        return false if @current_leaf && entry["id"].to_s == @current_leaf.to_s
-        return false unless entry["type"] == "message"
-
-        message = entry["message"]
-        return false unless message.is_a?(Hash) && MessageAccess.role(message) == "assistant"
-
-        content = MessageAccess.content(message)
-        content_tool_calls = content.is_a?(Array) && content.any? { |part| ToolCall.value(part, :type) == "toolCall" }
-        (content_tool_calls && !tree_text_content?(content)) || (!MessageAccess.tool_calls(message).empty? && MessageText.full_text(message).empty?)
-      end
-
-      def tree_text_content?(content)
-        Array(content).any? { |part| ToolCall.value(part, :type) == "text" && ToolCall.value(part, :text).to_s.strip != "" }
-      end
-
-      def tree_contains_active_path?(node, active_path)
-        stack = [node]
-        seen = {}
-        until stack.empty?
-          current = stack.pop
-          next if seen[current.object_id]
-
-          seen[current.object_id] = true
-          entry_id = (current[:source]["entry"] || {})["id"].to_s
-          return true if active_path.include?(entry_id)
-
-          stack.concat(current[:children])
-        end
-        false
-      end
-
-      def tree_tool_calls(roots)
-        roots.each_with_object({}) do |root, tool_calls_by_id|
-          stack = [root]
-          seen = {}
-          until stack.empty?
-            node = stack.pop
-            next if seen[node.object_id]
-
-            seen[node.object_id] = true
-            entry = node["entry"] || {}
-            message = entry["message"]
-            if entry["type"] == "message" && message.is_a?(Hash) && MessageAccess.role(message) == "assistant"
-              MessageAccess.tool_calls(message).each { |tool_call| tool_calls_by_id[ToolCall.id(tool_call).to_s] = tool_call }
-            end
-            stack.concat(Array(node["children"]))
-          end
-        end
-      end
 
       def tree_entry_display(entry, tool_calls_by_id = {})
         case entry["type"]
@@ -237,12 +132,11 @@ module Kward
       end
 
       def display_message_text(message)
-        truncate_tree_text(MessageText.full_text(message))
+        SessionTreeNodes.truncate_text(MessageText.full_text(message))
       end
 
       def truncate_tree_text(text)
-        normalized = text.to_s.gsub(/\s+/, " ").strip
-        normalized.length > 120 ? "#{normalized.slice(0, 117)}..." : normalized
+        SessionTreeNodes.truncate_text(text)
       end
     end
   end

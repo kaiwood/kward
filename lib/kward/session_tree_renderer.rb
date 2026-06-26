@@ -1,7 +1,7 @@
 require_relative "message_access"
 require_relative "message_text"
+require_relative "session_tree_nodes"
 require_relative "session_tree_tool_display"
-require_relative "tools/tool_call"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -13,13 +13,14 @@ module Kward
     end
 
     def items
-      active_path = session_tree_active_path(@roots, @current_leaf_id)
-      tool_calls_by_id = session_tree_tool_calls(@roots)
-      visible_roots = @roots.flat_map { |root| visible_session_tree_nodes(root) }
+      tree_nodes = SessionTreeNodes.new(roots: @roots, current_leaf: @current_leaf_id)
+      active_path = tree_nodes.active_path
+      tool_calls_by_id = tree_nodes.tool_calls
+      visible_roots = tree_nodes.visible_roots
       multiple_roots = visible_roots.length > 1
       result = []
 
-      stack = visible_roots.sort_by { |root| session_tree_contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index.map do |root, index|
+      stack = visible_roots.sort_by { |root| tree_nodes.contains_active_path?(root, active_path) ? 0 : 1 }.each_with_index.map do |root, index|
         [root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == visible_roots.length - 1, [], multiple_roots]
       end.reverse
 
@@ -33,7 +34,7 @@ module Kward
           label: session_tree_label(entry, node[:source], prefix, active_path.include?(entry["id"].to_s), tool_calls_by_id)
         }
 
-        children = node[:children].sort_by { |child| session_tree_contains_active_path?(child, active_path) ? 0 : 1 }
+        children = node[:children].sort_by { |child| tree_nodes.contains_active_path?(child, active_path) ? 0 : 1 }
         multiple_children = children.length > 1
         child_indent = if multiple_children
                          indent + 1
@@ -54,52 +55,6 @@ module Kward
     end
 
     private
-
-    def visible_session_tree_nodes(node)
-      results = {}
-      stack = [[node, false, {}]]
-
-      until stack.empty?
-        current, visited, seen = stack.pop
-        node_key = current.object_id
-        next if seen[node_key]
-
-        if visited
-          children = Array(current["children"]).flat_map { |child| results[child.object_id] || [] }
-          results[node_key] = if hidden_session_tree_entry?(current["entry"] || {})
-                                children
-                              else
-                                [{ source: current, children: children }]
-                              end
-        else
-          branch_seen = seen.merge(node_key => true)
-          stack << [current, true, seen]
-          Array(current["children"]).reverse_each { |child| stack << [child, false, branch_seen] unless branch_seen[child.object_id] }
-        end
-      end
-
-      results[node.object_id] || []
-    end
-
-    def hidden_session_tree_entry?(entry)
-      return false if @current_leaf_id && entry["id"].to_s == @current_leaf_id.to_s
-      return false unless entry["type"] == "message"
-
-      message = entry["message"]
-      return false unless message.is_a?(Hash) && message_role(message) == "assistant"
-
-      content = message_content(message)
-      content_tool_calls = content.is_a?(Array) && content.any? { |part| session_tree_content_part_value(part, :type) == "toolCall" }
-      (content_tool_calls && !session_tree_text_content?(content)) || (!message_tool_calls(message).empty? && full_message_text(message).empty?)
-    end
-
-    def session_tree_text_content?(content)
-      Array(content).any? { |part| session_tree_content_part_value(part, :type) == "text" && session_tree_content_part_value(part, :text).to_s.strip != "" }
-    end
-
-    def session_tree_content_part_value(part, key)
-      MessageAccess.value(part, key)
-    end
 
     def session_tree_label(entry, node, prefix, active_path, tool_calls_by_id)
       label = node["label"] || entry["resolvedLabel"]
@@ -152,70 +107,6 @@ module Kward
       end.join
     end
 
-    def session_tree_contains_active_path?(node, active_path)
-      stack = [node]
-      seen = {}
-      until stack.empty?
-        current = stack.pop
-        next if seen[current.object_id]
-
-        seen[current.object_id] = true
-        entry_id = (current[:source]["entry"] || {})["id"].to_s
-        return true if active_path.include?(entry_id)
-
-        stack.concat(current[:children])
-      end
-      false
-    end
-
-    def session_tree_active_path(roots, leaf_id)
-      by_id = session_tree_entries_by_id(roots)
-      ids = []
-      entry = by_id[leaf_id.to_s]
-      seen = {}
-      while entry && !seen[entry["id"].to_s]
-        seen[entry["id"].to_s] = true
-        ids << entry["id"].to_s
-        entry = by_id[entry["parentId"].to_s]
-      end
-      ids
-    end
-
-    def session_tree_entries_by_id(roots)
-      roots.each_with_object({}) do |root, map|
-        stack = [root]
-        seen = {}
-        until stack.empty?
-          node = stack.pop
-          next if seen[node.object_id]
-
-          seen[node.object_id] = true
-          entry = node["entry"] || {}
-          map[entry["id"].to_s] = entry unless entry["id"].to_s.empty?
-          stack.concat(Array(node["children"]))
-        end
-      end
-    end
-
-    def session_tree_tool_calls(roots)
-      roots.each_with_object({}) do |root, tool_calls|
-        stack = [root]
-        seen = {}
-        until stack.empty?
-          node = stack.pop
-          next if seen[node.object_id]
-
-          seen[node.object_id] = true
-          entry = node["entry"] || {}
-          message = entry["message"]
-          if entry["type"] == "message" && message.is_a?(Hash) && message_role(message) == "assistant"
-            message_tool_calls(message).each { |tool_call| tool_calls[tool_call_id(tool_call).to_s] = tool_call }
-          end
-          stack.concat(Array(node["children"]))
-        end
-      end
-    end
-
     def session_tree_tool_display(message, tool_calls_by_id)
       tool_call = tool_calls_by_id[session_tree_message_tool_call_id(message).to_s]
       return SessionTreeToolDisplay.label(tool_call) if tool_call
@@ -233,12 +124,11 @@ module Kward
     end
 
     def display_message_text(message)
-      truncate_session_tree_text(full_message_text(message))
+      SessionTreeNodes.truncate_text(full_message_text(message))
     end
 
     def truncate_session_tree_text(text)
-      normalized = text.to_s.gsub(/\s+/, " ").strip
-      normalized.length > 120 ? "#{normalized.slice(0, 117)}..." : normalized
+      SessionTreeNodes.truncate_text(text)
     end
 
     def full_message_text(message)
@@ -249,24 +139,12 @@ module Kward
       MessageAccess.role(message)
     end
 
-    def message_content(message)
-      MessageAccess.content(message)
-    end
-
     def message_name(message)
       MessageAccess.name(message)
     end
 
     def message_tool_call_id(message)
       MessageAccess.tool_call_id(message)
-    end
-
-    def message_tool_calls(message)
-      MessageAccess.tool_calls(message)
-    end
-
-    def tool_call_id(tool_call)
-      ToolCall.id(tool_call)
     end
 
   end
