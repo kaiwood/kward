@@ -401,14 +401,16 @@ module Kward
         return true unless printable_key?(key) || vibe_normal_control_key?(key)
 
         pending = @editor_state.vibe_pending.to_s + key
-        if vibe_waiting_for_more?(pending)
-          @editor_state.vibe_pending = pending
-          @editor_state.status = "NORMAL #{pending}"
-          return true
-        end
+        return vibe_store_pending_command(pending) if vibe_waiting_for_more?(pending)
 
         @editor_state.vibe_pending = ""
         execute_vibe_normal_command(pending)
+        true
+      end
+
+      def vibe_store_pending_command(command)
+        @editor_state.vibe_pending = command
+        @editor_state.status = "#{@editor_state.vibe_mode.upcase.tr("_", " ")} #{command}"
         true
       end
 
@@ -635,11 +637,7 @@ module Kward
         return true unless printable_key?(key)
 
         command = @editor_state.vibe_pending.to_s + key
-        if vibe_visual_waiting_for_more?(command)
-          @editor_state.vibe_pending = command
-          @editor_state.status = "#{@editor_state.vibe_mode.upcase.tr("_", " ")} #{command}"
-          return true
-        end
+        return vibe_store_pending_command(command) if vibe_visual_waiting_for_more?(command)
 
         @editor_state.vibe_pending = ""
         execute_vibe_visual_command(command)
