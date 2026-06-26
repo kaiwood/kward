@@ -54,6 +54,18 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_update_nested_config_merges_one_level_section
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "editor" => { "mode" => "vibe", "soft_wrap" => true } }, path)
+
+      config = Kward::ConfigFiles.update_nested_config("editor", { line_numbers: "relative", "soft_wrap" => false }, path)
+
+      assert_equal({ "mode" => "vibe", "soft_wrap" => false, "line_numbers" => "relative" }, config["editor"])
+      assert_equal config, Kward::ConfigFiles.read_config(path)
+    end
+  end
+
   def test_editor_mode_defaults_to_modern_and_accepts_emacs_and_vibe
     assert_equal "modern", Kward::ConfigFiles.editor_mode({})
     assert_equal "modern", Kward::ConfigFiles.editor_mode("editor" => {})

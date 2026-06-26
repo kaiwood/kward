@@ -554,11 +554,7 @@ module Kward
       end
 
       def update_nested_config(section, values)
-        config = ConfigFiles.read_config
-        current = config[section].is_a?(Hash) ? config[section].dup : {}
-        config[section] = current.merge(values)
-        ConfigFiles.write_config(config)
-        config
+        ConfigFiles.update_nested_config(section, values)
       end
 
       def on_off(value)

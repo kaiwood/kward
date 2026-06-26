@@ -164,6 +164,17 @@ module Kward
       config
     end
 
+    # Merges values into a one-level nested config section and writes privately.
+    def update_nested_config(section, values, path = config_path)
+      raise "Config values must be an object" unless values.is_a?(Hash)
+
+      config = read_config(path)
+      current = config[section.to_s].is_a?(Hash) ? config[section.to_s].dup : {}
+      config[section.to_s] = current.merge(values.transform_keys(&:to_s))
+      write_config(config, path)
+      config
+    end
+
     # Removes a top-level config key when it exists.
     def delete_config_key(key, path = config_path)
       config = read_config(path)
