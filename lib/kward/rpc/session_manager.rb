@@ -295,9 +295,20 @@ module Kward
         rpc_sessions = @mutex.synchronize { @sessions.values.dup }
         rpc_sessions.reverse_each do |rpc_session|
           next unless session_idle?(rpc_session)
+          next unless rpc_session.session.respond_to?(:delete_if_unused)
+          next unless rpc_session.session.delete_if_unused
 
-          close_rpc_session(rpc_session)
+          @mutex.synchronize { @sessions.delete(rpc_session.id) }
+          stop_worker(rpc_session)
+          stop_footer_worker(rpc_session)
         end
+        { closed: true }
+      end
+
+      # Stops all live RPC session workers during server shutdown.
+      def shutdown_sessions
+        rpc_sessions = @mutex.synchronize { @sessions.values.dup }
+        rpc_sessions.reverse_each { |rpc_session| close_rpc_session(rpc_session) if session_idle?(rpc_session) }
         { closed: true }
       end
 

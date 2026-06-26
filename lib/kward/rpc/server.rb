@@ -93,7 +93,7 @@ module Kward
           end
         end
       ensure
-        @session_manager.cleanup_unused_sessions
+        @session_manager.shutdown_sessions
       end
 
       # Sends a redacted JSON-RPC notification to the client.

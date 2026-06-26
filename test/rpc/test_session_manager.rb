@@ -737,7 +737,26 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
-  def test_cleanup_unused_sessions_stops_idle_workers
+  def test_cleanup_unused_sessions_only_closes_empty_unnamed_sessions
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      empty = manager.create_session(workspace_root: Dir.pwd)
+      named = manager.create_session(workspace_root: Dir.pwd, name: "Keep me")
+      used = manager.create_session(workspace_root: Dir.pwd)
+      manager.send(:fetch_session, used[:id]).conversation.append_user("keep me")
+
+      manager.cleanup_unused_sessions
+
+      refute_path_exists empty[:path]
+      assert_path_exists named[:path]
+      assert_path_exists used[:path]
+      assert_raises(RuntimeError) { manager.runtime_state(session_id: empty[:id]) }
+      assert_equal named[:id], manager.runtime_state(session_id: named[:id])[:rpcSessionId]
+      assert_equal used[:id], manager.runtime_state(session_id: used[:id])[:rpcSessionId]
+    end
+  end
+
+  def test_shutdown_sessions_stops_idle_workers
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
       session = manager.create_session(workspace_root: Dir.pwd)
@@ -748,7 +767,7 @@ class TestRPCSessionManager < KwardTestCase
       worker = rpc_session.worker
       assert worker&.alive?
 
-      manager.cleanup_unused_sessions
+      manager.shutdown_sessions
 
       wait_until { !worker.alive? && rpc_session.worker.nil? }
     end
