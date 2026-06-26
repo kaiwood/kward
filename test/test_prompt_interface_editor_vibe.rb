@@ -1080,6 +1080,39 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_finds_characters_on_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "f")
+        prompt.send(:handle_editor_key, "a")
+        assert_equal [0, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, ";")
+        assert_equal [0, 9], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, ",")
+        assert_equal [0, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "t")
+        prompt.send(:handle_editor_key, "g")
+        assert_equal [0, 10], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "F")
+        prompt.send(:handle_editor_key, "b")
+        assert_equal [0, 6], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "T")
+        prompt.send(:handle_editor_key, "a")
+        assert_equal [0, 5], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_percent_jumps_to_matching_pair
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.rb"), "call(alpha, nested(beta))")

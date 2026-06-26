@@ -471,6 +471,7 @@ module Kward
         return true if command.match?(/\A\d*z\z/)
         return true if command.match?(/\A\d*[cdy]\d*\z/)
         return true if command.match?(/\A\d*[cdy]\d*[ai]\z/)
+        return true if command.match?(/\A\d*[fFtT]\z/)
         return true if command.match?(/\A\d*r\z/)
 
         false
@@ -550,6 +551,12 @@ module Kward
           vibe_restore_current_line
         when "%"
           vibe_jump_to_matching_pair
+        when /^([fFtT])(.?)$/
+          vibe_find_character(Regexp.last_match(1), Regexp.last_match(2), count)
+        when ";"
+          vibe_repeat_find_character
+        when ","
+          vibe_repeat_find_character(reverse: true)
         when /^r(.?)$/
           vibe_replace_single_character(Regexp.last_match(1), count, command)
         when "v"
@@ -1149,6 +1156,52 @@ module Kward
           start_index: start_index,
           end_index: include_pair ? end_index + 1 : end_index
         )
+      end
+
+      def vibe_find_character(command, char, count)
+        reverse = %w[F T].include?(command)
+        before = %w[t T].include?(command)
+        index = vibe_find_character_index(char, count, reverse: reverse)
+        unless index
+          @editor_state.status = "Character not found: #{char}"
+          return false
+        end
+
+        index += reverse ? 1 : -1 if before
+        @editor_state.cursor = [[index, 0].max, @editor_state.buffer.length].min
+        @editor_state.vibe_last_find = { command: command, char: char }
+        true
+      end
+
+      def vibe_repeat_find_character(reverse: false)
+        last_find = @editor_state.vibe_last_find
+        return @editor_state.status = "No character find to repeat" unless last_find
+
+        command = last_find[:command]
+        command = vibe_reverse_find_command(command) if reverse
+        vibe_find_character(command, last_find[:char], 1)
+      end
+
+      def vibe_reverse_find_command(command)
+        { "f" => "F", "F" => "f", "t" => "T", "T" => "t" }.fetch(command)
+      end
+
+      def vibe_find_character_index(char, count, reverse: false)
+        line, = @editor_state.cursor_line_and_column
+        line_range = @editor_state.line_range(line)
+        line_start = line_range[0]
+        line_end = line_range[1]
+        line_end -= 1 if line_end > line_start && @editor_state.buffer[line_end - 1] == "\n"
+        cursor = @editor_state.cursor
+        count.times do
+          cursor = if reverse
+                     @editor_state.buffer.rindex(char, cursor - 1)
+                   else
+                     @editor_state.buffer.index(char, cursor + 1)
+                   end
+          return nil unless cursor && cursor >= line_start && cursor < line_end
+        end
+        cursor
       end
 
       def vibe_jump_to_matching_pair

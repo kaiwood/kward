@@ -269,6 +269,8 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `u`                     | Undo                                            |
 | `Ctrl+R`                | Redo                                            |
 | `%`                     | Jump to matching pair                           |
+| `f`/`F`/`t`/`T`         | Find character on current line                  |
+| `;` / `,`               | Repeat character find forward/backward          |
 | `U`                     | Restore current line                            |
 | `.`                     | Repeat last change                              |
 | `v`                     | Visual character mode                           |
