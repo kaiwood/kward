@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe substitute commands such as `:%s/a/b/g` and `:1,3s/a/b/`.
 - Added Vibe macro recording and replay with `q`, `@`, and `@@`.
 - Added Vibe named registers for yanking, deleting, changing, and pasting.
 - Added Vibe marks with `m`, `'`, and backtick jumps.

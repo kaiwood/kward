@@ -373,12 +373,37 @@ module Kward
         when "x"
           save_editor if @editor_state&.dirty?
           close_editor if @editor_state
+        when /\A(?:(%|\d+,\d+))?s\/([^\/]*)\/([^\/]*)\/(g?)\z/
+          vibe_substitute_command(Regexp.last_match(1), Regexp.last_match(2), Regexp.last_match(3), global: Regexp.last_match(4) == "g")
         when /\A\d+\z/
           @editor_state.set_cursor_line_and_column(command.to_i - 1, 0)
           @editor_state.status = "Line #{command}"
         else
           @editor_state.status = "Unknown command: #{command}"
         end
+        true
+      end
+
+      def vibe_substitute_command(range, pattern, replacement, global: false)
+        if pattern.empty?
+          @editor_state.status = "Substitute pattern required"
+          return false
+        end
+
+        start_line = 0
+        end_line = @editor_state.lines.length - 1
+        if range&.include?(",")
+          start_line, end_line = range.split(",", 2).map { |value| value.to_i - 1 }
+        end
+        start_line = [[start_line, 0].max, @editor_state.lines.length - 1].min
+        end_line = [[end_line, 0].max, @editor_state.lines.length - 1].min
+        start_line, end_line = [start_line, end_line].minmax
+        start_index = @editor_state.line_range(start_line)[0]
+        end_index = @editor_state.line_range(end_line)[1]
+        text = @editor_state.buffer[start_index...end_index].to_s
+        changed = global ? text.gsub(pattern, replacement) : text.lines.map { |line| line.sub(pattern, replacement) }.join
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, changed) }
+        @editor_state.status = "Substituted"
         true
       end
 

@@ -298,6 +298,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `*`                     | Search word under cursor forward                |
 | `#`                     | Search word under cursor backward               |
 | `:`                     | Enter command mode                              |
+| `:%s/a/b/g`             | Substitute text across command ranges           |
 | `Esc` / `Ctrl+C`        | Cancel pending command                          |
 | `N`command              | Repeat command `N` times, such as `3dd` or `2w` |
 

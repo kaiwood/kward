@@ -589,6 +589,28 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_substitute_commands
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta\nalpha alpha\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, ":")
+        "%s/alpha/omega/g".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\r")
+        assert_equal "omega beta\nomega omega\nbeta", editor.buffer
+
+        prompt.send(:handle_editor_key, "u")
+        prompt.send(:handle_editor_key, ":")
+        "2,3s/beta/delta/".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\r")
+        assert_equal "alpha beta\nalpha alpha\ndelta", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_records_and_replays_macros
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "abc")
