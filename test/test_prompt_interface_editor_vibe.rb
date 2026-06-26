@@ -664,11 +664,13 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         prompt.send(:handle_editor_key, "x")
         prompt.send(:handle_editor_key, "q")
         assert_equal "bc", editor.buffer
+        assert_equal "", editor.vibe_pending
         assert_equal "Recorded macro a", editor.status
 
         prompt.send(:handle_editor_key, "@")
         prompt.send(:handle_editor_key, "a")
         assert_equal "c", editor.buffer
+        assert_equal "Played macro a", editor.status
 
         editor.buffer = "abc"
         editor.cursor = 0

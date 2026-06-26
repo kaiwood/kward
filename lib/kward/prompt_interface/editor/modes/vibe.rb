@@ -830,6 +830,7 @@ module Kward
 
       def vibe_stop_macro_recording
         name = @editor_state.vibe_recording_macro
+        @editor_state.vibe_pending = ""
         @editor_state.vibe_recording_macro = nil
         @editor_state.vibe_last_macro = name
         @editor_state.status = "Recorded macro #{name}"
@@ -853,6 +854,7 @@ module Kward
         @editor_state.vibe_last_macro = name
         @vibe_replaying_macro = true
         macro.each { |key| handle_vibe_key(key) }
+        @editor_state.status = "Played macro #{name}"
         true
       ensure
         @vibe_replaying_macro = false
