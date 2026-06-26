@@ -67,7 +67,7 @@ module Kward
       end
 
       def mutation_tool?
-        ["edit", "write"].include?(@fields[:toolName])
+        ToolCall.file_change_tool?(@fields[:toolName])
       end
     end
   end

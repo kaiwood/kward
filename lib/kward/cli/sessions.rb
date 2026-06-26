@@ -69,7 +69,7 @@ module Kward
       end
 
       def mutation_tool_call?(tool_call)
-        ["edit_file", "write_file", "edit", "write"].include?(ToolCall.name(tool_call).to_s)
+        ToolCall.file_change_tool?(ToolCall.name(tool_call))
       end
 
       def cleanup_unused_sessions

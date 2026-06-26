@@ -35,4 +35,17 @@ class TestToolCall < KwardTestCase
     assert_equal "code_search", Kward::ToolCall.normalized_name("code_search")
     assert_equal({ timeoutSeconds: 7, nestedValue: [{ oldText: "old" }] }, Kward::ToolCall.camelize_args({ "timeout_seconds" => 7, "nested_value" => [{ "old_text" => "old" }] }))
   end
+
+  def test_classifies_write_lock_and_file_change_tools
+    assert Kward::ToolCall.write_lock_required?("edit_file")
+    assert Kward::ToolCall.write_lock_required?("write_file")
+    assert Kward::ToolCall.write_lock_required?("run_shell_command")
+    assert Kward::ToolCall.write_lock_required?("bash")
+    refute Kward::ToolCall.write_lock_required?("read_file")
+
+    assert Kward::ToolCall.file_change_tool?("edit_file")
+    assert Kward::ToolCall.file_change_tool?("write")
+    refute Kward::ToolCall.file_change_tool?("run_shell_command")
+    refute Kward::ToolCall.file_change_tool?("bash")
+  end
 end

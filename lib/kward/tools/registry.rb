@@ -158,7 +158,7 @@ module Kward
     end
 
     def mutation_tool?(name)
-      %w[edit_file write_file run_shell_command].include?(name.to_s)
+      ToolCall.write_lock_required?(name)
     end
 
     def write_lock_owned?
