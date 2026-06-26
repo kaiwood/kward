@@ -86,15 +86,19 @@ module Kward
 
       def editor_render_line(line, line_index, text_width, column_offset: 0)
         visible = line.to_s[column_offset.to_i, text_width].to_s
-        range = @editor_state.selection_range
-        return editor_render_visible_line(visible, line_index) unless range
+        ranges = @editor_state.selection_ranges
+        return editor_render_visible_line(visible, line_index) if ranges.empty?
 
         line_start = @editor_state.line_start_offset(line_index)
-        selection_start = [range[0] - line_start - column_offset.to_i, 0].max
-        selection_end = [range[1] - line_start - column_offset.to_i, visible.length].min
-        return editor_render_visible_line(visible, line_index) unless selection_start < selection_end
+        rendered = visible.dup
+        ranges.reverse_each do |range|
+          selection_start = [range[0] - line_start - column_offset.to_i, 0].max
+          selection_end = [range[1] - line_start - column_offset.to_i, visible.length].min
+          next unless selection_start < selection_end
 
-        visible[0...selection_start].to_s + colored(visible[selection_start...selection_end].to_s, 7) + visible[selection_end..].to_s
+          rendered = rendered[0...selection_start].to_s + colored(rendered[selection_start...selection_end].to_s, 7) + rendered[selection_end..].to_s
+        end
+        rendered
       end
 
       def editor_render_visible_line(line, line_index)

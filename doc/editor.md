@@ -276,6 +276,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `.`                     | Repeat last change                              |
 | `v`                     | Visual character mode                           |
 | `V`                     | Visual line mode                                |
+| `Ctrl+V`                | Visual block mode                               |
 | `o`                     | Switch active end of visual selection           |
 | `G` / `gg` / `N`motion  | Extend visual selection with counts/motions     |
 | `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |

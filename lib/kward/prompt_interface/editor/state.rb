@@ -345,7 +345,7 @@ module Kward
 
       def selection_active?
         return false if @selection_anchor.nil?
-        return true if vibe? && %w[visual visual_line].include?(@vibe_mode)
+        return true if vibe? && %w[visual visual_line visual_block].include?(@vibe_mode)
 
         @selection_anchor != @cursor
       end
@@ -354,8 +354,16 @@ module Kward
         return nil unless selection_active?
         return visual_line_selection_range if vibe? && @vibe_mode == "visual_line"
         return visual_character_selection_range if vibe? && @vibe_mode == "visual"
+        return visual_block_selection_ranges.first if vibe? && @vibe_mode == "visual_block"
 
         [@selection_anchor, @cursor].minmax
+      end
+
+      def selection_ranges
+        return [] unless selection_active?
+        return visual_block_selection_ranges if vibe? && @vibe_mode == "visual_block"
+
+        [selection_range]
       end
 
       def visual_character_selection_range
@@ -372,7 +380,25 @@ module Kward
         [start_index, end_index]
       end
 
+      def visual_block_selection_ranges
+        anchor_line, anchor_column = cursor_line_and_column_for(@selection_anchor)
+        cursor_line, cursor_column = cursor_line_and_column
+        start_line, end_line = [anchor_line, cursor_line].minmax
+        start_column, end_column = [anchor_column, cursor_column].minmax
+        (start_line..end_line).map do |line_index|
+          line_start = line_start_offset(line_index)
+          line_length = lines[line_index].to_s.length
+          range_start = line_start + [start_column, line_length].min
+          range_end = line_start + [end_column + 1, line_length].min
+          [range_start, range_end]
+        end
+      end
+
       def selected_text
+        if vibe? && @vibe_mode == "visual_block"
+          return selection_ranges.map { |range| @buffer[range[0]...range[1]].to_s }.join("\n")
+        end
+
         range = selection_range
         return "" unless range
 

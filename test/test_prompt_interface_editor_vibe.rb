@@ -589,6 +589,36 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_visual_block_yanks_and_deletes_rectangle
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcd\nefgh\nijkl")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 1)
+
+        prompt.send(:handle_editor_key, "\x16")
+        prompt.send(:handle_editor_key, "j")
+        prompt.send(:handle_editor_key, "l")
+        assert_equal "visual_block", editor.vibe_mode
+        assert_equal "bc\nfg", editor.selected_text
+
+        prompt.send(:handle_editor_key, "y")
+        assert_equal "normal", editor.vibe_mode
+        assert_equal "bc\nfg", editor.kill_buffer
+
+        editor.set_cursor_line_and_column(0, 1)
+        prompt.send(:handle_editor_key, "\x16")
+        prompt.send(:handle_editor_key, "j")
+        prompt.send(:handle_editor_key, "l")
+        prompt.send(:handle_editor_key, "d")
+        assert_equal "ad\neh\nijkl", editor.buffer
+        assert_equal "bc\nfg", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_visual_search_extends_selection
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha gamma beta gamma")

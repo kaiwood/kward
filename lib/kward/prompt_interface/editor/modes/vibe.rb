@@ -41,6 +41,7 @@ module Kward
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
+        return vibe_begin_visual_mode("visual_block") if key == "\x16" && @editor_state.vibe_mode == "normal"
         return handle_vibe_repeat_change if key == "." && @editor_state.vibe_mode == "normal"
         return handle_vibe_search_key(key) if editor_search_active?
         return handle_vibe_command_key(key) if @editor_state.vibe_mode == "command"
@@ -97,6 +98,8 @@ module Kward
           @editor_state.move_indentation_up
         when 108
           @editor_state.move_line_end
+        when 118
+          vibe_begin_visual_mode("visual_block")
         else
           false
         end
@@ -450,7 +453,7 @@ module Kward
       end
 
       def vibe_visual_mode?
-        %w[visual visual_line].include?(@editor_state.vibe_mode)
+        %w[visual visual_line visual_block].include?(@editor_state.vibe_mode)
       end
 
       def vibe_return_to_normal
@@ -740,7 +743,11 @@ module Kward
         @editor_state.vibe_mode = selection[:mode]
         @editor_state.selection_anchor = [[selection[:anchor], 0].max, @editor_state.buffer.length].min
         @editor_state.cursor = [[selection[:cursor], 0].max, @editor_state.buffer.length].min
-        @editor_state.status = @editor_state.vibe_mode == "visual_line" ? "VISUAL LINE" : "VISUAL"
+        @editor_state.status = case @editor_state.vibe_mode
+                               when "visual_line" then "VISUAL LINE"
+                               when "visual_block" then "VISUAL BLOCK"
+                               else "VISUAL"
+                               end
         true
       end
 
@@ -748,7 +755,11 @@ module Kward
         @editor_state.clear_selection
         @editor_state.selection_anchor = @editor_state.cursor
         @editor_state.vibe_mode = mode
-        @editor_state.status = mode == "visual_line" ? "VISUAL LINE" : "VISUAL"
+        @editor_state.status = case mode
+                               when "visual_line" then "VISUAL LINE"
+                               when "visual_block" then "VISUAL BLOCK"
+                               else "VISUAL"
+                               end
         true
       end
 
@@ -776,6 +787,13 @@ module Kward
       end
 
       def vibe_yank_visual_selection
+        if @editor_state.vibe_mode == "visual_block"
+          @editor_state.kill_buffer = @editor_state.selected_text
+          @editor_state.status = "Yanked selection"
+          vibe_cancel_visual_mode
+          return true
+        end
+
         range = vibe_visual_range
         return false unless range
 
@@ -784,6 +802,13 @@ module Kward
       end
 
       def vibe_delete_visual_selection
+        if @editor_state.vibe_mode == "visual_block"
+          @editor_state.kill_buffer = @editor_state.selected_text
+          vibe_record_undo { @editor_state.selection_ranges.reverse_each { |range| @editor_state.replace_range(range[0], range[1], "") } }
+          vibe_cancel_visual_mode
+          return true
+        end
+
         range = vibe_visual_range
         return false unless range
 
