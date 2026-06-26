@@ -164,6 +164,23 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_explicit_steer_fails_instead_of_falling_back_to_follow_up_when_turn_finishes
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: SteeringClient.new, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "first")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      error = assert_raises(ArgumentError) do
+        manager.start_turn(session_id: session[:id], input: "too late", streaming_behavior: "steer")
+      end
+      assert_equal "Unsupported streamingBehavior: steer", error.message
+      events = manager.turn_events(turn_id: turn[:id])[:events]
+      refute events.any? { |event| event[:type] == "turnSteered" && event[:payload][:input] == "too late" }
+    end
+  end
+
   def test_cancel_queued_turn_is_best_effort
     Dir.mktmpdir do |config_dir|
       server = RecordingServer.new

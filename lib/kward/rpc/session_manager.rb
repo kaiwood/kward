@@ -332,10 +332,7 @@ module Kward
         content = plugin_command ? input.to_s : user_turn_content(expand_prompt_input(input), normalized_attachments)
         streaming_behavior = validate_streaming_behavior(default_streaming_behavior(rpc_session, streaming_behavior), rpc_session: rpc_session)
         if streaming_behavior == "steer"
-          steered_turn = steer_running_turn(rpc_session, content)
-          return steered_turn if steered_turn
-
-          streaming_behavior = "followUp"
+          return steer_running_turn(rpc_session, content)
         end
         turn = Turn.new(
           id: SecureRandom.uuid,
@@ -1079,8 +1076,6 @@ module Kward
 
         turn.steering.submit(input)
         turn_payload(turn)
-      rescue StandardError
-        nil
       end
 
       def run_plugin_turn(rpc_session, turn)
