@@ -198,11 +198,13 @@ Emacs mode is for users who prefer classic Emacs-style non-modal editing. Save a
 
 Vibe mode is a modal editor built for Kward, inspired by classic Vi and Vim. If you already know Vim, you will feel at home here. Files open in normal mode, where keys run commands. Press `i`, `a`, `o`, or another insert command to type text, then press `Esc` to return to normal mode.
 
-It supports a compact but practical modal-editing set: counts, operators with motions, visual selection, search, repeat (`.`), and `:` commands. It is not a full Vim clone — there are no macros, registers, splits, or ex-mode scripting. What it does cover is the everyday editing flow: move, change, delete, yank, paste, search, and save, all without leaving the keyboard or the conversation.
+It supports a compact but practical modal-editing set: counts, operators with motions, visual selections, visual block edits, marks, registers, macros, search, repeat (`.`), Ruby-aware navigation, and `:` commands. It is not a full Vim clone — there are no splits or ex-mode scripting — but it covers everyday keyboard editing inside the conversation.
 
 The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `REPLACE`, or `:`) so you never lose track of where you are.
 
 ### Normal mode
+
+Use normal mode for movement, operators, marks, registers, macros, search, and command mode. Visual-mode-specific commands are listed in their own section below.
 
 | Key                     | Action                                          |
 | ----------------------- | ----------------------------------------------- |
@@ -280,18 +282,9 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `v`                     | Visual character mode                           |
 | `V`                     | Visual line mode                                |
 | `Ctrl+V`                | Visual block mode                               |
-| `I` / `A`               | Insert / append text across visual block lines  |
-| `o`                     | Switch active end of visual selection           |
-| `G` / `gg` / `N`motion  | Extend visual selection with counts/motions     |
-| `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |
-| `iw` / `a(` / `ip`      | Select visual text objects                      |
-| `>` / `<`               | Indent / outdent selected lines                 |
 | `gv`                    | Restore previous visual selection               |
 | `ma` / `` `a `` / `'a`  | Set and jump to marks                           |
 | `qa` / `@a` / `@@`      | Record and replay macros                        |
-| `J`                     | Join selected lines                             |
-| `~` / `u` / `U`         | Swapcase / lowercase / uppercase selection      |
-| `/` / `?` / `n` / `N`   | Extend visual selection with search             |
 | `/`                     | Search forward                                  |
 | `?`                     | Search backward                                 |
 | `n`                     | Repeat search                                   |
@@ -302,6 +295,23 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `:%s/a/b/g`             | Substitute text across command ranges           |
 | `Esc` / `Ctrl+C`        | Cancel pending command                          |
 | `N`command              | Repeat command `N` times, such as `3dd` or `2w` |
+
+### Visual mode
+
+Visual mode uses the same motion language as normal mode where practical. Start characterwise visual mode with `v`, linewise mode with `V`, or visual block mode with `Ctrl+V`.
+
+| Key                     | Action                                          |
+| ----------------------- | ----------------------------------------------- |
+| `o`                     | Switch active end of visual selection           |
+| `G` / `gg` / `N`motion  | Extend visual selection with counts/motions     |
+| `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |
+| `iw` / `a(` / `ip`      | Select visual text objects                      |
+| `>` / `<`               | Indent / outdent selected lines                 |
+| `I` / `A`               | Insert / append text across visual block lines  |
+| `J`                     | Join selected lines                             |
+| `~` / `u` / `U`         | Swapcase / lowercase / uppercase selection      |
+| `/` / `?` / `n` / `N`   | Extend visual selection with search             |
+| `y` / `d` / `c` / `p`   | Yank / delete / change / paste selection        |
 
 ### Insert mode
 

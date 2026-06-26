@@ -54,6 +54,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Reorganized Vibe editor documentation to separate normal and visual mode commands.
 - Changed Vibe `o` and `O` to preserve the current line indentation.
 - Changed modern-mode editor modified-arrow navigation to move by indentation level, with platform-specific Alt/Ctrl bindings and shift-selection variants.
 - Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
