@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe visual-mode counts for motions such as `2j` and `3G`.
 - Added Vibe visual-mode `G` to extend selections to the last line.
 - Added Vibe visual-mode `o` to switch the active end of the selection.
 - Added Vibe operator composition for character find motions and `%` matching-pair motion.

@@ -589,6 +589,31 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_visual_counts_extend_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree\nfour")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "v")
+        prompt.send(:handle_editor_key, "2")
+        assert_equal "2", editor.vibe_pending
+        prompt.send(:handle_editor_key, "j")
+        assert_equal [2, 0], editor.cursor_line_and_column
+        assert_equal "", editor.vibe_pending
+
+        prompt.send(:handle_editor_key, "\e")
+        editor.set_cursor_line_and_column(0, 0)
+        prompt.send(:handle_editor_key, "v")
+        prompt.send(:handle_editor_key, "3")
+        prompt.send(:handle_editor_key, "G")
+        assert_equal [2, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_visual_g_extends_to_last_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")

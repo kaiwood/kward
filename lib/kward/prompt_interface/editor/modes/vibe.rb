@@ -611,14 +611,31 @@ module Kward
         key_name = key_name_for(key)
         return handle_vibe_visual_named_key(key_name) if key_name
         if key == "\e" || key == "\x03"
+          @editor_state.vibe_pending = ""
           vibe_cancel_visual_mode
           return true
         end
         return true unless printable_key?(key)
 
-        case key
+        command = @editor_state.vibe_pending.to_s + key
+        if vibe_visual_waiting_for_more?(command)
+          @editor_state.vibe_pending = command
+          @editor_state.status = "#{@editor_state.vibe_mode.upcase.tr("_", " ")} #{command}"
+          return true
+        end
+
+        @editor_state.vibe_pending = ""
+        execute_vibe_visual_command(command)
+        true
+      end
+
+      def execute_vibe_visual_command(command)
+        count, body = vibe_count_and_body(command)
+        count = 1 if count.zero?
+
+        case body
         when *EditorAutoClosePairs::AUTO_CLOSE_OPENERS
-          vibe_record_undo { editor_insert_printable(key) }
+          vibe_record_undo { editor_insert_printable(body) }
           vibe_return_to_normal
         when "y"
           vibe_yank_visual_selection
@@ -631,11 +648,14 @@ module Kward
         when "o"
           vibe_switch_visual_selection_end
         when "G"
-          vibe_visual_goto_line
+          vibe_visual_goto_line(command.match?(/\A\d+G\z/) ? count : nil)
         else
-          vibe_move_visual_selection(key)
+          vibe_move_visual_selection(body, count)
         end
-        true
+      end
+
+      def vibe_visual_waiting_for_more?(command)
+        command.match?(/\A[1-9]\d*\z/)
       end
 
       def handle_vibe_visual_named_key(key_name)
@@ -674,10 +694,8 @@ module Kward
         true
       end
 
-      def vibe_move_visual_selection(key)
-        count, body = vibe_count_and_body(key)
-        count = 1 if count.zero?
-        vibe_apply_cursor_motion(body, count)
+      def vibe_move_visual_selection(motion, count = 1)
+        vibe_apply_cursor_motion(motion, count)
       end
 
       def vibe_visual_range
