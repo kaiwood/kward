@@ -121,7 +121,7 @@ module Kward
 
       # Writes the status output for the terminal CLI flow.
       def print_status
-        lines = [STATUS_MESSAGE]
+        lines = ["Kward status"]
         lines << ""
         lines << auto_compaction_status_line
         if @active_session

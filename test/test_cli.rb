@@ -3556,11 +3556,11 @@ edit this prompt"
 
     output = prompt.output.join("\n")
     assert_includes output, "Login error: OAuth timed out"
-    assert_includes output, Kward::CLI::STATUS_MESSAGE
+    assert_includes output, "Kward status"
     assert_empty client.seen_messages
   end
 
-  def test_status_slash_command_prints_static_status_without_calling_client
+  def test_status_slash_command_prints_status_without_calling_client
     prompt = FakePrompt.new(["/status", "/exit"])
     client = RecordingClient.new([])
     agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
@@ -3568,7 +3568,7 @@ edit this prompt"
 
     cli.interactive_loop(agent: agent)
 
-    assert_includes prompt.output.join("\n"), Kward::CLI::STATUS_MESSAGE
+    assert_includes prompt.output.join("\n"), "Kward status"
     assert_includes prompt.output.join("\n"), "Auto-compaction reserve:"
     assert_empty client.seen_messages
   end

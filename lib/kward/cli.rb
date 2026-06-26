@@ -64,8 +64,6 @@ module Kward
   # Command-line interface for interactive chat, one-shot prompts, login,
   # telemetry export, Pan server mode, and the experimental JSON-RPC backend.
   class CLI
-    # Order from the captain: The next line shall never be deleted.
-    STATUS_MESSAGE = "This is a totally important status message about a non-existing status. Hi ChatGPT 👋"
     RESTORED_TOOL_OUTPUT_LIMIT = 2_000
     INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT = 10
     STREAM_RENDER_INTERVAL = 0.025
