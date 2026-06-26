@@ -492,12 +492,21 @@ module Kward
         return true if command.match?(/\A\d*[fFtT]\z/)
         return true if command.match?(/\A\d*r\z/)
         return true if command.match?(/\Am\z/)
+        return true if command.match?(/\A"[a-z]?\z/)
+        return true if command.match?(/\A"[a-z][cdy]\z/)
+        return true if command.match?(/\A"[a-z][cdy][ai]\z/)
         return true if command.match?(/\A['`]\z/)
 
         false
       end
 
       def execute_vibe_normal_command(command)
+        register = nil
+        if (register_match = command.match(/\A"([a-z])(.*)\z/))
+          register = register_match[1]
+          command = register_match[2]
+        end
+        @vibe_active_register = register
         count, body = vibe_count_and_body(command)
         count = 1 if count.zero?
         case body
@@ -603,13 +612,16 @@ module Kward
           vibe_remember_change(command)
         when "dd"
           vibe_delete_lines(count)
+          vibe_store_active_register
           vibe_remember_change(command)
         when "cc"
           vibe_change_lines(count, command)
+          vibe_store_active_register
         when "yy"
           vibe_yank_lines(count)
+          vibe_store_active_register
         when "p"
-          vibe_record_undo { @editor_state.insert(@editor_state.kill_buffer) }
+          vibe_record_undo { @editor_state.insert(vibe_active_register_text) }
           vibe_remember_change(command)
         when "P"
           vibe_paste_before(command)
@@ -632,6 +644,8 @@ module Kward
             @editor_state.status = "Unknown command: #{command}"
           end
         end
+      ensure
+        @vibe_active_register = nil
       end
 
       def handle_vibe_visual_key(key)
@@ -1032,7 +1046,7 @@ module Kward
       end
 
       def vibe_paste_before(command = nil)
-        text = @editor_state.kill_buffer.to_s
+        text = vibe_active_register_text
         return false if text.empty?
 
         vibe_record_undo do
@@ -1166,12 +1180,25 @@ module Kward
         vibe_apply_operator_to_target(operator, target, command, motion, count, motion_count)
       end
 
+      def vibe_active_register_text
+        return @editor_state.vibe_registers[@vibe_active_register].to_s if @vibe_active_register
+
+        @editor_state.kill_buffer.to_s
+      end
+
+      def vibe_store_active_register
+        return unless @vibe_active_register
+
+        @editor_state.vibe_registers[@vibe_active_register] = @editor_state.kill_buffer.to_s
+      end
+
       def vibe_apply_operator_to_target(operator, target, command, motion, count, motion_count)
         case operator
         when "d"
           @editor_state.copy_range(target.start_index, target.end_index)
           vibe_record_undo { @editor_state.replace_range(target.start_index, target.end_index, "") }
           @editor_state.status = "Deleted"
+          vibe_store_active_register
           vibe_remember_change(command)
         when "c"
           @editor_state.copy_range(target.start_index, target.end_index)
@@ -1179,9 +1206,11 @@ module Kward
             @editor_state.replace_range(target.start_index, target.end_index, target.change_replacement_text)
             @editor_state.cursor = target.change_cursor_index
           end
+          vibe_store_active_register
           vibe_enter_insert_mode(vibe_build_change_command(operator, motion, count, motion_count))
         else
           vibe_copy_range(target.start_index, target.end_index, "Yanked")
+          vibe_store_active_register
           @editor_state.cursor = target.start_index
         end
       end

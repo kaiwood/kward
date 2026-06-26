@@ -264,6 +264,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `dir` / `cir` / `yir`   | Delete / change / yank inside a Ruby block      |
 | `dar` / `car` / `yar`   | Delete / change / yank around a Ruby block      |
 | `yy`                    | Yank line                                       |
+| `"ayy` / `"ap`         | Yank / paste with named registers               |
 | `p`                     | Paste after cursor                              |
 | `P`                     | Paste before cursor                             |
 | `u`                     | Undo                                            |

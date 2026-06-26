@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe named registers for yanking, deleting, changing, and pasting.
 - Added Vibe marks with `m`, `'`, and backtick jumps.
 - Added Vibe paragraph motions `{` and `}` for normal, visual, and operator use.
 - Added Vibe visual block `I` and `A` to insert or append text across selected lines.
