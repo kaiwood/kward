@@ -589,6 +589,34 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_visual_block_inserts_and_appends_text
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x16")
+        2.times { prompt.send(:handle_editor_key, "j") }
+        prompt.send(:handle_editor_key, "I")
+        "# ".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "# one\n# two\n# three", editor.buffer
+
+        editor.buffer = "one\ntwo\nthree"
+        editor.cursor = 0
+        editor.set_cursor_line_and_column(0, 2)
+        prompt.send(:handle_editor_key, "\x16")
+        prompt.send(:handle_editor_key, "j")
+        prompt.send(:handle_editor_key, "A")
+        "!".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "one!\ntwo!\nthree", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_visual_block_yanks_and_deletes_rectangle
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "abcd\nefgh\nijkl")

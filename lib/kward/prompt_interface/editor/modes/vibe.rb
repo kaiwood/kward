@@ -457,6 +457,7 @@ module Kward
       end
 
       def vibe_return_to_normal
+        vibe_apply_visual_block_insert if @editor_state.vibe_visual_block_insert
         @editor_state.vibe_mode = "normal"
         @editor_state.status = "NORMAL · i insert · :w save · :q quit"
         true
@@ -661,6 +662,10 @@ module Kward
           vibe_change_visual_selection
         when "p"
           vibe_paste_visual_selection
+        when "I"
+          vibe_begin_visual_block_insert(:before)
+        when "A"
+          vibe_begin_visual_block_insert(:after)
         when ">"
           vibe_indent_visual_selection(:right)
         when "<"
@@ -835,6 +840,39 @@ module Kward
         text = @editor_state.kill_buffer.to_s
         vibe_record_undo { @editor_state.replace_range(range[0], range[1], text) }
         vibe_cancel_visual_mode
+      end
+
+      def vibe_begin_visual_block_insert(position)
+        return vibe_move_visual_selection(position == :before ? "I" : "A") unless @editor_state.vibe_mode == "visual_block"
+
+        anchor_line, anchor_column = @editor_state.cursor_line_and_column_for(@editor_state.selection_anchor)
+        cursor_line, cursor_column = @editor_state.cursor_line_and_column
+        start_line, end_line = [anchor_line, cursor_line].minmax
+        start_column, end_column = [anchor_column, cursor_column].minmax
+        column = position == :before ? start_column : end_column + 1
+        @editor_state.vibe_visual_block_insert = { start_line: start_line, end_line: end_line, column: column }
+        @editor_state.clear_selection
+        @editor_state.set_cursor_line_and_column(start_line, column)
+        @editor_state.vibe_visual_block_insert[:start_index] = @editor_state.cursor
+        @editor_state.vibe_mode = "insert"
+        @editor_state.status = "INSERT · Esc normal"
+        true
+      end
+
+      def vibe_apply_visual_block_insert
+        block = @editor_state.vibe_visual_block_insert
+        @editor_state.vibe_visual_block_insert = nil
+        return unless block
+
+        inserted_text = @editor_state.buffer[block[:start_index]...@editor_state.cursor].to_s
+        return if inserted_text.empty?
+
+        block[:end_line].downto(block[:start_line] + 1) do |line_index|
+          line_start = @editor_state.line_start_offset(line_index)
+          line_length = @editor_state.lines[line_index].to_s.length
+          @editor_state.cursor = line_start + [block[:column], line_length].min
+          @editor_state.insert(inserted_text)
+        end
       end
 
       def vibe_transform_visual_selection(transform)
