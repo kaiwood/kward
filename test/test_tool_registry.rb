@@ -187,7 +187,7 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_context_budget_stats_reports_tool_savings
+  def test_context_budget_stats_reports_conversation_tool_savings
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "demo.txt"), "hello world\n")
       compactor = Object.new
@@ -197,8 +197,7 @@ class TestToolRegistry < KwardTestCase
       registry = Kward::ToolRegistry.new(
         workspace: Kward::Workspace.new(root: dir),
         web_search_enabled: false,
-        tool_output_compactor: compactor,
-        context_budget_meter: Kward::ContextBudgetMeter.new
+        tool_output_compactor: compactor
       )
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
 
@@ -209,6 +208,42 @@ class TestToolRegistry < KwardTestCase
       assert_includes result, "- Calls: 1"
       assert_includes result, "- Saved bytes: 7"
       assert_includes result, "- read_file: 1 call(s), 7 bytes saved"
+    end
+  end
+
+  def test_context_budget_stats_survive_tool_registry_rebuild_for_same_conversation
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "demo.txt"), "hello world\n")
+      compactor = Object.new
+      def compactor.compact(name, content)
+        name == "read_file" ? "short" : content
+      end
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false, tool_output_compactor: compactor).dispatch(tool_call("read_file", path: "demo.txt"), conversation)
+      result = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false).dispatch(tool_call("context_budget_stats", {}), conversation)
+
+      assert_includes result, "- Calls: 1"
+      assert_includes result, "- Saved bytes: 7"
+    end
+  end
+
+  def test_context_budget_stats_are_isolated_by_conversation
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "demo.txt"), "hello world\n")
+      compactor = Object.new
+      def compactor.compact(name, content)
+        name == "read_file" ? "short" : content
+      end
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false, tool_output_compactor: compactor)
+      first = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      second = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      registry.dispatch(tool_call("read_file", path: "demo.txt"), first)
+      result = registry.dispatch(tool_call("context_budget_stats", {}), second)
+
+      assert_includes result, "- Calls: 0"
+      assert_includes result, "- Saved bytes: 0"
     end
   end
 
@@ -342,6 +377,7 @@ class TestToolRegistry < KwardTestCase
     assert_includes second, "Same as previous tool output #{artifact_id}"
     assert_operator second.bytesize, :<, first.bytesize
     assert_equal 1, conversation.tool_output_artifacts.length
+    assert_operator conversation.context_budget_meter.snapshot.saved_bytes, :>=, output.bytesize - second.bytesize
   end
 
   def test_tool_registry_does_not_store_artifacts_for_uncompacted_output

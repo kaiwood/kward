@@ -1,5 +1,6 @@
 require "digest"
 require "set"
+require_relative "context_budget_meter"
 require_relative "image_attachments"
 require_relative "message_access"
 require_relative "plugin_registry"
@@ -60,6 +61,8 @@ module Kward
     attr_reader :last_plugin_prompt_context
     # @return [Hash] original large tool outputs retained outside model context
     attr_reader :tool_output_artifacts
+    # @return [ContextBudgetMeter] runtime context savings for this conversation
+    attr_reader :context_budget_meter
 
     def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
@@ -89,6 +92,7 @@ module Kward
       @session_memories = Array(session_memories)
       @last_memory_retrieval = last_memory_retrieval
       @tool_output_artifacts = {}
+      @context_budget_meter = ContextBudgetMeter.new
       @messages.concat(transcript_messages)
       @read_paths = Set.new(read_paths)
       @on_append = on_append

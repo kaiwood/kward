@@ -1,5 +1,4 @@
 require_relative "../config_files"
-require_relative "../context_budget_meter"
 require_relative "../conversation"
 require_relative "ask_user_question"
 require_relative "code_search"
@@ -61,7 +60,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: ContextBudgetMeter.new)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -96,44 +95,46 @@ module Kward
       args = ToolCall.arguments(tool_call)
       tool = @tools[name]
 
-      content = if tool
-                  if mutation_tool?(name) && !write_lock_owned?
-                    "Workspace write denied: another worker owns the write lock."
-                  else
-                    tool.call(args, conversation, cancellation: cancellation)
-                  end
-                else
-                  "Unknown tool: #{name}"
-                end
-      content = Conversation.normalize_tool_content(content)
-      duplicate_id = conversation.tool_output_artifact_id_for(tool_name: name, content: content)
+      original_content = if tool
+                           if mutation_tool?(name) && !write_lock_owned?
+                             "Workspace write denied: another worker owns the write lock."
+                           else
+                             tool.call(args, conversation, cancellation: cancellation)
+                           end
+                         else
+                           "Unknown tool: #{name}"
+                         end
+      original_content = Conversation.normalize_tool_content(original_content)
+      duplicate_id = conversation.tool_output_artifact_id_for(tool_name: name, content: original_content)
+      content = original_content
       if conversation.tool_output_artifacts.key?(duplicate_id)
         content = "[Same as previous tool output #{duplicate_id}; not repeated. Use retrieve_tool_output to inspect it.]"
       end
 
       artifact_id = nil
       model_content = @tool_output_compactor.compact(name, content) do
-        artifact_id ||= conversation.store_tool_output_artifact(tool_name: name, content: content)
+        artifact_id ||= conversation.store_tool_output_artifact(tool_name: name, content: original_content)
       end
-      record_context_budget(name, before: content, after: model_content)
-      log_tool_output_compaction(name, artifact_id: artifact_id, before: content, after: model_content) if model_content != content
+      record_context_budget(conversation, name, before: original_content, after: model_content)
+      log_tool_output_compaction(name, artifact_id: artifact_id, before: original_content, after: model_content) if model_content != original_content
       conversation.append_tool(
         tool_call_id: tool_call["id"] || tool_call[:id],
         name: name,
         content: model_content
       )
-      conversation.append_tool_execution(tool_call: tool_call, content: content)
+      conversation.append_tool_execution(tool_call: tool_call, content: original_content)
 
       model_content
     end
 
     private
 
-    def record_context_budget(name, before:, after:)
-      return unless @context_budget_meter
+    def record_context_budget(conversation, name, before:, after:)
+      meter = conversation.respond_to?(:context_budget_meter) ? conversation.context_budget_meter : @context_budget_meter
+      return unless meter
       return if name.to_s == "context_budget_stats"
 
-      saved = @context_budget_meter.record(tool_name: name, original_bytes: before.bytesize, returned_bytes: after.bytesize)
+      saved = meter.record(tool_name: name, original_bytes: before.bytesize, returned_bytes: after.bytesize)
       @telemetry_logger.log(
         "compaction",
         "context_budget",

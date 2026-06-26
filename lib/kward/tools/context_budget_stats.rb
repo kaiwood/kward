@@ -6,7 +6,7 @@ module Kward
   module Tools
     # Reports approximate context budget savings for the current process.
     class ContextBudgetStats < Base
-      def initialize(context_budget_meter:)
+      def initialize(context_budget_meter: nil)
         @context_budget_meter = context_budget_meter
         super(
           "context_budget_stats",
@@ -16,9 +16,12 @@ module Kward
         )
       end
 
-      def call(_args, _conversation, cancellation: nil)
+      def call(_args, conversation, cancellation: nil)
         cancellation&.raise_if_cancelled!
-        snapshot = @context_budget_meter.snapshot
+        meter = conversation.respond_to?(:context_budget_meter) ? conversation.context_budget_meter : @context_budget_meter
+        return "Error: context budget stats are unavailable" unless meter
+
+        snapshot = meter.snapshot
         lines = [
           "# Context budget stats",
           "- Calls: #{snapshot.calls}",
