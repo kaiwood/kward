@@ -1331,13 +1331,31 @@ module Kward
       end
 
       def vibe_quote_pair_range(quote)
-        buffer = @editor_state.buffer
+        quote_indexes = vibe_unescaped_quote_indexes(quote)
         cursor = @editor_state.cursor
-        open_index = buffer.rindex(quote, cursor)
+        open_index = quote_indexes.select { |index| index <= cursor }.last
         return nil unless open_index
 
-        close_index = buffer.index(quote, open_index + 1)
+        close_index = quote_indexes.find { |index| index > open_index }
         close_index ? [open_index, close_index] : nil
+      end
+
+      def vibe_unescaped_quote_indexes(quote)
+        indexes = []
+        @editor_state.buffer.each_char.with_index do |char, index|
+          indexes << index if char == quote && !vibe_escaped_character?(index)
+        end
+        indexes
+      end
+
+      def vibe_escaped_character?(index)
+        backslashes = 0
+        cursor = index - 1
+        while cursor >= 0 && @editor_state.buffer[cursor] == "\\"
+          backslashes += 1
+          cursor -= 1
+        end
+        backslashes.odd?
       end
 
       def vibe_inner_word_target
