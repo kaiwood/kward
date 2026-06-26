@@ -988,6 +988,98 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_smart_tab_jumps_to_expected_indent_then_next_stop
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n  def call\nputs :ok")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(2, 0)
+
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "class Example\n  def call\n    puts :ok", editor.buffer
+        assert_equal [2, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "class Example\n  def call\n      puts :ok", editor.buffer
+        assert_equal [2, 6], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_smart_tab_moves_forward_on_empty_indented_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n  def call\n    ")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(2, 0)
+
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal [2, 4], editor.cursor_line_and_column
+        assert_equal "class Example\n  def call\n    ", editor.buffer
+
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "class Example\n  def call\n      ", editor.buffer
+        assert_equal [2, 6], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_smart_tab_uses_detected_width_after_line_content
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n    attr_reader :name\n  def call")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\t")
+
+        assert_equal "class Example\n    attr_reader :name\n  def call  ", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_shift_tab_moves_back_by_indent_stop
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.rb"), "class Example\n  def call\n    other\n      puts :ok")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(3, 6)
+
+        prompt.send(:handle_editor_key, "\e[Z")
+        assert_equal "class Example\n  def call\n    other\n    puts :ok", editor.buffer
+        assert_equal [3, 4], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[9;2u")
+        assert_equal "class Example\n  def call\n    other\n  puts :ok", editor.buffer
+        assert_equal [3, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_smart_tab_uses_tabs_when_detected
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.js"), "function test() {\n\treturn true;\nif (ready) {\nreturn ready;")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.js")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(3, 0)
+
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "function test() {\n\treturn true;\nif (ready) {\n\treturn ready;", editor.buffer
+        assert_equal [3, 1], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_editor_smart_backspace_deletes_detected_indent_unit
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "example.rb"), "class Example\n  def call\n    attr_reader :name\n  ")

@@ -55,6 +55,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed the integrated editor Tab key to smart-indent using the detected indentation unit, with Shift+Tab moving indentation back by one stop.
 - Reorganized Vibe editor documentation to separate normal and visual mode commands.
 - Changed Vibe `o` and `O` to preserve the current line indentation.
 - Changed modern-mode editor modified-arrow navigation to move by indentation level, with platform-specific Alt/Ctrl bindings and shift-selection variants.

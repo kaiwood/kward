@@ -143,6 +143,9 @@ module Kward
         binding_result = handle_editor_key_binding(key)
         return binding_result unless binding_result == false
 
+        editor_tab_result = handle_editor_tab_key(key)
+        return editor_tab_result unless editor_tab_result == false
+
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -160,8 +163,7 @@ module Kward
           clear_editor_selection_before_edit
           editor_insert_newline
         when "\t"
-          clear_editor_selection_before_edit
-          @editor_state.insert("  ") unless editor_search_active?
+          editor_insert_tab unless editor_search_active?
         when "\b", "\x7F"
           editor_search_active? ? editor_search_delete_character : delete_editor_selection || editor_delete_before_cursor
         when "\x03"
@@ -208,6 +210,11 @@ module Kward
         return true if csi_u_text_field?(sequence)
 
         case code
+        when 9
+          return false if editor_search_active?
+          return false if ctrl_modifier?(modifier) || alt_modifier?(modifier) || super_modifier?(modifier)
+
+          shift_modifier?(modifier) ? editor_outdent_tab : editor_insert_tab
         when 13
           clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_confirm : editor_insert_newline

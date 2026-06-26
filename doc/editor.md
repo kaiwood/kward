@@ -52,7 +52,7 @@ $doc/editor.md
 The editor is intentionally compact, but it covers the basics you need for quick changes:
 
 - Syntax highlighting for common languages, including Ruby, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL. Unknown file types render as plain text.
-- Auto-indent, enabled by default. New lines inherit indentation, obvious closing tokens are re-indented, and Backspace in leading whitespace removes one indentation unit when possible. For Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, Enter after a block opener inserts the matching closing keyword; Ctrl+Enter also works from the middle of the line in terminals that report modified Enter keys.
+- Auto-indent, enabled by default. New lines inherit indentation, Tab jumps to the expected indentation or the next indentation stop, Shift+Tab moves indentation back, obvious closing tokens are re-indented, and Backspace in leading whitespace removes one indentation unit when possible. For Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, Enter after a block opener inserts the matching closing keyword; Ctrl+Enter also works from the middle of the line in terminals that report modified Enter keys.
 - Undo and redo, with up to 100 history entries per buffer.
 - Incremental search forward and backward.
 - Selection, copy, cut, and paste. Copy and cut also write to the terminal clipboard through OSC 52 when the terminal supports it.
@@ -150,7 +150,8 @@ Modern mode is the default and is the easiest place to start. It uses common ter
 | `Home` / `End`        | Move to start / end of line                       |
 | `PageUp` / `PageDown` | Scroll                                            |
 | `Enter`               | Insert newline, or confirm search                 |
-| `Tab`                 | Insert two spaces                                 |
+| `Tab`                 | Smart-indent to the expected indentation or next stop |
+| `Shift+Tab`           | Move indentation back by one stop                 |
 | `Backspace`           | Delete before cursor                              |
 | `Delete`              | Delete character at cursor                        |
 | `Esc`                 | Cancel search or clear selection                  |
@@ -190,7 +191,8 @@ Emacs mode is for users who prefer classic Emacs-style non-modal editing. Save a
 | `Home` / `End`        | Move to start / end of line                  |
 | `PageUp` / `PageDown` | Scroll                                       |
 | `Enter`               | Insert newline, or confirm search            |
-| `Tab`                 | Insert two spaces                            |
+| `Tab`                 | Smart-indent to the expected indentation or next stop |
+| `Shift+Tab`           | Move indentation back by one stop            |
 | `Backspace`           | Delete before cursor                         |
 | `Delete` / `C-d`      | Delete character at cursor                   |
 
@@ -323,6 +325,8 @@ Vibe insert mode also supports readline-style shortcuts for efficient editing wi
 | ---------------- | ---------------------------------------- |
 | type text        | Insert characters                        |
 | `Enter`          | Insert newline                           |
+| `Tab`            | Smart-indent to the expected indentation or next stop |
+| `Shift+Tab`      | Move indentation back by one stop        |
 | `Backspace`      | Delete before cursor                     |
 | `Delete`         | Delete character at cursor               |
 | `Ctrl+A`         | Move to start of line                    |

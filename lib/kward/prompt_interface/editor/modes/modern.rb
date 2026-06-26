@@ -27,6 +27,9 @@ module Kward
         binding_result = handle_modern_key_binding(key)
         return binding_result unless binding_result == false
 
+        editor_tab_result = handle_editor_tab_key(key) { |direction| modern_record_undo { direction == :forward ? editor_insert_tab : editor_outdent_tab } }
+        return editor_tab_result unless editor_tab_result == false
+
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -43,7 +46,7 @@ module Kward
           return editor_search_confirm if editor_search_active?
           modern_record_undo { modern_insert_text("\n") }
         when "\t"
-          modern_record_undo { modern_insert_text("  ") unless editor_search_active? }
+          modern_record_undo { editor_insert_tab unless editor_search_active? }
         when "\b", "\x7F"
           editor_search_active? ? editor_search_delete_character : modern_record_undo { modern_delete_before_cursor }
         when "\x03"
@@ -280,6 +283,11 @@ module Kward
         end
 
         case code
+        when 9
+          return false if editor_search_active?
+          return false if ctrl_modifier?(modifier) || alt_modifier?(modifier) || super_modifier?(modifier)
+
+          shift_modifier?(modifier) ? modern_record_undo { editor_outdent_tab } : modern_record_undo { editor_insert_tab }
         when 13
           return editor_search_confirm if editor_search_active?
 

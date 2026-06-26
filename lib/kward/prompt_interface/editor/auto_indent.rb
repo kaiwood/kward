@@ -12,6 +12,8 @@ module Kward
       LUA_INDENT_KEYWORDS = %w[do else elseif for function if repeat then while].freeze
       SHELL_DEDENT_KEYWORDS = %w[fi done esac].freeze
       PUNCTUATION_PAIRS = { "}" => "{", "]" => "[", ")" => "(" }.freeze
+      EDITOR_TAB_SEQUENCES = ["\t", "\e[9u", "\e[9;1u", "\e[27;1;9~"].freeze
+      EDITOR_SHIFT_TAB_SEQUENCES = ["\e[Z", "\e[1;2Z", "\e[9;2u", "\e[27;2;9~"].freeze
 
       private
 
@@ -57,6 +59,76 @@ module Kward
         true
       end
 
+      def handle_editor_tab_key(key)
+        tab_sequence = editor_tab_sequence_for(key)
+        if tab_sequence
+          queue_editor_tab_remaining(key, tab_sequence)
+          if !editor_search_active?
+            block_given? ? yield(:forward) : editor_insert_tab
+          end
+          return true
+        end
+
+        shift_tab_sequence = editor_shift_tab_sequence_for(key)
+        if shift_tab_sequence
+          queue_editor_tab_remaining(key, shift_tab_sequence)
+          if !editor_search_active?
+            block_given? ? yield(:backward) : editor_outdent_tab
+          end
+          return true
+        end
+
+        false
+      end
+
+      def editor_insert_tab
+        if @editor_state.multi_cursor? || @editor_state.selection_ranges.any?
+          return @editor_state.replace_selections(editor_indent_unit)
+        end
+
+        if current_editor_auto_indent? && editor_cursor_in_leading_indent?
+          return editor_smart_tab_forward
+        end
+
+        @editor_state.insert(editor_tab_padding)
+        true
+      end
+
+      def editor_outdent_tab
+        return true if @editor_state.multi_cursor? || @editor_state.selection_ranges.any?
+
+        line_index, column = @editor_state.cursor_line_and_column
+        line = @editor_state.lines[line_index].to_s
+        old_indent = line[/\A[ \t]*/].to_s
+
+        return true if old_indent.empty?
+
+        reference_column = column <= old_indent.length ? column : old_indent.length
+        reference_column = old_indent.length if reference_column.zero?
+        target_width = previous_indent_stop(reference_column)
+        editor_update_current_line_indent(editor_indent_for_width(target_width), preserve_content_column: column > old_indent.length)
+        true
+      end
+
+      def editor_tab_sequence_for(key)
+        return nil unless key.is_a?(String)
+
+        EDITOR_TAB_SEQUENCES.find { |sequence| key.start_with?(sequence) }
+      end
+
+      def editor_shift_tab_sequence_for(key)
+        return nil unless key.is_a?(String)
+
+        EDITOR_SHIFT_TAB_SEQUENCES.find { |sequence| key.start_with?(sequence) }
+      end
+
+      def queue_editor_tab_remaining(key, sequence)
+        return unless key.length > sequence.length
+        return if sequence.end_with?("u")
+
+        queue_pending_keys(key[sequence.length..])
+      end
+
       def current_editor_auto_indent?
         return @editor_auto_indent_source.call != false if @editor_auto_indent_source.respond_to?(:call)
 
@@ -74,6 +146,98 @@ module Kward
         indent = base_indent.dup
         indent += editor_indent_unit if editor_line_opens_indent?(before_cursor, language)
         indent
+      end
+
+      def editor_smart_tab_forward
+        line_index, column = @editor_state.cursor_line_and_column
+        line = @editor_state.lines[line_index].to_s
+        old_indent = line[/\A[ \t]*/].to_s
+        target_indent = editor_expected_indent_for_line(line_index)
+        expected_width = indent_width(target_indent)
+        target_width = column < expected_width ? expected_width : next_indent_stop(column)
+
+        if indent_width(old_indent) >= target_width
+          @editor_state.cursor = @editor_state.line_start_offset(line_index) + target_width
+        else
+          editor_update_current_line_indent(editor_indent_for_width(target_width), preserve_content_column: column > old_indent.length)
+        end
+        true
+      end
+
+      def editor_tab_padding
+        unit = editor_indent_unit
+        return unit if unit == "\t"
+
+        width = indent_width(unit)
+        width = 2 unless width.positive?
+        column = @editor_state.cursor_line_and_column[1]
+        " " * (width - (column % width))
+      end
+
+      def editor_expected_indent_for_line(line_index)
+        line = @editor_state.lines[line_index].to_s
+        code = editor_indent_code(line, editor_syntax_language).strip
+        matching_indent = editor_matching_indent_for_line(code)
+        return matching_indent if matching_indent
+
+        previous_line = previous_non_blank_editor_line(line_index)
+        return "" unless previous_line
+
+        indent = previous_line[:indent].dup
+        indent += editor_indent_unit if editor_line_opens_indent?(previous_line[:code], editor_syntax_language)
+        indent
+      end
+
+      def editor_matching_indent_for_line(code)
+        return nil if code.empty?
+        return editor_matching_punctuation_indent(code[0]) if editor_closing_punctuation?(code[0])
+
+        editor_matching_word_indent if editor_completed_word_closer?(code, editor_syntax_language)
+      end
+
+      def previous_non_blank_editor_line(line_index)
+        (line_index.to_i - 1).downto(0) do |index|
+          line = @editor_state.lines[index].to_s
+          code = editor_indent_code(line, editor_syntax_language).rstrip
+          next if code.strip.empty?
+
+          return { indent: line[/\A[ \t]*/].to_s, code: code }
+        end
+        nil
+      end
+
+      def editor_update_current_line_indent(indent, preserve_content_column: false)
+        line_index, column = @editor_state.cursor_line_and_column
+        line_start = @editor_state.line_start_offset(line_index)
+        line = @editor_state.lines[line_index].to_s
+        old_indent = line[/\A[ \t]*/].to_s
+        content_column = preserve_content_column ? [column - old_indent.length, 0].max : 0
+        @editor_state.replace_range(line_start, line_start + old_indent.length, indent.to_s)
+        @editor_state.cursor = line_start + indent.to_s.length + content_column
+        true
+      end
+
+      def next_indent_stop(column)
+        width = indent_width(editor_indent_unit)
+        width = 2 unless width.positive?
+        column + width - (column % width)
+      end
+
+      def previous_indent_stop(column)
+        width = indent_width(editor_indent_unit)
+        width = 2 unless width.positive?
+        [column - 1, 0].max / width * width
+      end
+
+      def editor_indent_for_width(width)
+        unit = editor_indent_unit
+        return "\t" * width.to_i if unit == "\t"
+
+        " " * [width.to_i, 0].max
+      end
+
+      def indent_width(text)
+        text.to_s.each_char.sum { |char| char == "\t" ? 1 : 1 }
       end
 
       def editor_multiline_block_indent

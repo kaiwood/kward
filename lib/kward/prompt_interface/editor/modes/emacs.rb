@@ -19,6 +19,9 @@ module Kward
         shift_result = handle_editor_shift_navigation_key(key)
         return shift_result unless shift_result == false
 
+        editor_tab_result = handle_editor_tab_key(key)
+        return editor_tab_result unless editor_tab_result == false
+
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -36,8 +39,7 @@ module Kward
           clear_editor_selection_before_edit
           editor_insert_newline
         when "\t"
-          clear_editor_selection_before_edit
-          @editor_state.insert("  ") unless editor_search_active?
+          editor_insert_tab unless editor_search_active?
         when "\b", "\x7F"
           clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_delete_character : editor_delete_before_cursor
@@ -183,6 +185,10 @@ module Kward
           else
             return false
           end
+        elsif code == 9 && !ctrl_modifier?(modifier) && !alt_modifier?(modifier) && !super_modifier?(modifier)
+          return false if editor_search_active?
+
+          shift_modifier?(modifier) ? editor_outdent_tab : editor_insert_tab
         else
           handle_parsed_editor_csi_u_key(sequence)
         end

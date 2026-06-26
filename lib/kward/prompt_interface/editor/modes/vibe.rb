@@ -131,6 +131,9 @@ module Kward
         return if handle_editor_bracketed_paste_key(key)
 
         vibe_record_insert_change_key(key)
+        tab_result = handle_editor_tab_key(key) { |direction| vibe_record_undo { direction == :forward ? editor_insert_tab : editor_outdent_tab } }
+        return tab_result unless tab_result == false
+
         case key
         when "\e", "\x03", :escape
           vibe_return_to_normal
@@ -310,6 +313,9 @@ module Kward
         return if handle_editor_bracketed_paste_key(key)
 
         vibe_record_insert_change_key(key)
+        tab_result = handle_editor_tab_key(key) { |direction| vibe_record_undo { direction == :forward ? editor_insert_tab : editor_outdent_tab } }
+        return tab_result unless tab_result == false
+
         case key
         when "\e", "\x03", :escape
           vibe_return_to_normal
