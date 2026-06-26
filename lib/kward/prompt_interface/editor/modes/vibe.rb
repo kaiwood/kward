@@ -9,9 +9,9 @@ module Kward
         "h", "\b", "\x7F", "j", "k", "l", " "
       ].freeze
       VIBE_PAIR_TEXT_OBJECTS = {
-        "(" => ["(", ")"], ")" => ["(", ")"],
+        "(" => ["(", ")"], ")" => ["(", ")"], "b" => ["(", ")"],
         "[" => ["[", "]"], "]" => ["[", "]"],
-        "{" => ["{", "}"], "}" => ["{", "}"],
+        "{" => ["{", "}"], "}" => ["{", "}"], "B" => ["{", "}"],
         "\"" => ["\"", "\""], "'" => ["'", "'"]
       }.freeze
       VIBE_RUBY_BLOCK_OPENERS = %w[if unless case while until for def module class do begin].freeze

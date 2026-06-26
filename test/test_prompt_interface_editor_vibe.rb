@@ -1057,6 +1057,29 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_pair_text_object_aliases
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "call(alpha) { beta }")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.index("alpha")
+
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "b")
+        assert_equal "alpha", editor.kill_buffer
+
+        editor.cursor = editor.buffer.index("beta")
+        prompt.send(:handle_editor_key, "y")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "B")
+        assert_equal "{ beta }", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_around_pair_text_objects
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.rb"), "call(alpha, \"beta\")")

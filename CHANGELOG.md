@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe editor pair text object aliases `b` for parentheses and `B` for braces.
 - Added Vibe editor Ruby block text objects (`ir` and `ar`) inspired by `rhysd/vim-textobj-ruby`.
 - Added Vibe editor pair text objects for inner/around parentheses, brackets, braces, and quotes.
 - Added Vibe editor word text objects (`iw` and `aw`) for composable delete, yank, and change commands.
