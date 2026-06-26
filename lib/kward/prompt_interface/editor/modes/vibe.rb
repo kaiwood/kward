@@ -41,7 +41,7 @@ module Kward
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
-        return vibe_stop_macro_recording if key == "q" && @editor_state.vibe_recording_macro && @editor_state.vibe_mode == "normal"
+        return vibe_stop_macro_recording if key == "q" && @editor_state.vibe_recording_macro && !%w[insert replace command].include?(@editor_state.vibe_mode)
         vibe_record_macro_key(key)
         return vibe_begin_visual_mode("visual_block") if key == "\x16" && @editor_state.vibe_mode == "normal"
         return handle_vibe_repeat_change if key == "." && @editor_state.vibe_mode == "normal"

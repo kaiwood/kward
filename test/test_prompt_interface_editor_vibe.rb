@@ -630,6 +630,27 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_stops_macro_recording_from_visual_mode
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abc")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "q")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "v")
+        prompt.send(:handle_editor_key, "l")
+        prompt.send(:handle_editor_key, "q")
+
+        assert_nil editor.vibe_recording_macro
+        assert_equal "Recorded macro a", editor.status
+        assert_equal ["v", "l"], editor.vibe_macros["a"]
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_records_and_replays_macros
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "abc")
