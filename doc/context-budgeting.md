@@ -83,7 +83,7 @@ The outline recognizer is deliberately simple. It uses lightweight patterns for 
 
 Kward also saves tokens after tools run.
 
-When a tool output is large enough, Kward compacts it before sending it back into model context. The original output is kept in the session record and can be reopened with `retrieve_tool_output`.
+When a tool output is large enough, Kward compacts it before sending it back into model context. The original output is kept in the session record and can be reopened with `retrieve_tool_output`, including after resuming a saved session that contains the original tool execution record.
 
 The compactor preserves:
 
@@ -108,7 +108,7 @@ Session compaction keeps the working conversation manageable while preserving th
 
 ## Measuring savings
 
-Use `context_budget_stats` to see approximate savings for the current process.
+Use `context_budget_stats` to see approximate savings for the current active conversation since it was opened in this process. These runtime stats are not reconstructed when a saved session is resumed.
 
 It reports:
 

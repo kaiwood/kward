@@ -34,7 +34,7 @@ Arguments:
 - `limit`: optional maximum lines to return, default 120.
 - `query`: optional case-insensitive text search within the original output.
 
-Kward may compact large shell, search, fetch, or file outputs before sending them back to the model. The compacted result includes enough summary to continue, plus an artifact id when the original output is worth preserving. If later work needs details, Kward can retrieve a focused slice of the original output instead of asking the tool to repeat the whole operation.
+Kward may compact large shell, search, fetch, or file outputs before sending them back to the model. The compacted result includes enough summary to continue, plus an artifact id when the original output is worth preserving. If later work needs details, Kward can retrieve a focused slice of the original output instead of asking the tool to repeat the whole operation, including after resuming a saved session that contains the original tool execution record.
 
 This saves tokens in two ways:
 

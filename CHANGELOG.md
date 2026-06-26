@@ -9,7 +9,7 @@ All notable changes to Kward will be documented in this file.
 - Added explicit `read_file` context modes (`preview`, `outline`, `range`, `full`) and optional per-call byte budgets so agents can escalate file context gradually.
 - Added richer source outlines with declaration kinds, approximate line ranges, and lightweight recognition for common Ruby, JavaScript/TypeScript, Go, Rust, Java, and C# declarations.
 - Added a lightweight `context_for_task` workspace tool that builds budgeted task context from ranked files, source outlines, and matching excerpts.
-- Added `context_budget_stats` for approximate per-process context bytes and estimated tokens saved by tool output budgeting.
+- Added `context_budget_stats` for approximate active-conversation context bytes and estimated tokens saved by tool output budgeting.
 - Added built-in prompt guidance to start with focused context tools and escalate gradually before full-file reads.
 - Added a Context budgeting guide under Agent tools covering focused context gathering, budgeted reads, output compaction, duplicate reuse, session compaction, and savings stats.
 - Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
@@ -51,6 +51,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed compacted tool-output retrieval so `retrieve_tool_output` can reopen original outputs after resuming saved sessions.
+- Fixed context budget stats so they are scoped to the active conversation and include savings from duplicate-output reuse.
 - Fixed time-of-day persona modifiers so conversations use the current local time instead of a fixed epoch timestamp.
 - Added vibe-mode normal commands for CSI-u `Ctrl+J`/`Ctrl+K` indentation movement, while keeping `Ctrl+H` first-non-blank and `Ctrl+L` end-of-line movement.
 - Added composer-style readline shortcuts in vibe-mode editor insert mode.
@@ -59,6 +61,10 @@ All notable changes to Kward will be documented in this file.
 - Fixed TUI tab restoration so empty tabs whose unused session files were cleaned up are restored as new sessions instead of being dropped and shifting later sessions into the wrong tab.
 - Fixed generated documentation pages with a table of contents so code blocks no longer leave a large vertical gap beside the TOC.
 - Fixed the editor vibe-mode `H`, `L`, and `M` screen-position keys (and page up/down, half-page, and scroll) so they use the actual rendered viewport height instead of a stale capped heuristic, making them respect the current window height. Also fixed `H`/`L`/`M` in soft-wrap mode so they translate visual-row offsets to logical lines instead of scrolling the viewport.
+
+### Removed
+
+- Removed the placeholder message from `/status` output.
 
 ## [0.71.0] - 2026-06-21
 

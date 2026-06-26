@@ -27,11 +27,11 @@ Kward tries to keep tool context useful without flooding the model. The built-in
 
 - `read_file` reads bounded line ranges, supports continuation with `offset` and `limit`, and accepts explicit `preview`, `outline`, `range`, and `full` modes with optional per-call byte budgets.
 - `context_for_task` builds a task-shaped bundle from ranked files, outlines, and matching excerpts within a caller-supplied byte budget.
-- `context_budget_stats` reports approximate per-process bytes and estimated tokens saved by compaction and duplicate output replacement.
+- `context_budget_stats` reports approximate active-conversation bytes and estimated tokens saved by compaction and duplicate output replacement.
 - `summarize_file_structure` returns a compact outline for large source files before reading all code.
 - Search, fetch, and shell outputs are capped or compacted before model ingestion.
 - Repeated identical tool output is replaced with a short reference instead of being sent again.
-- Compacted outputs are stored as artifacts that can be reopened with `retrieve_tool_output`.
+- Compacted outputs are stored as artifacts that can be reopened with `retrieve_tool_output`, including after resuming a saved session that contains the original tool execution record.
 
 When a tool output exceeds 12 KB, Kward compacts it before sending it to the model. The compactor preserves the first 40 and last 40 lines, keeps lines matching error, test, or search-result patterns with 2 lines of surrounding context, and replaces omitted sections with `[... omitted lines ...]` markers. Shell command output is section-aware: STDOUT and STDERR sections are compacted separately. Compacted outputs include a header with the original and compacted byte counts and the artifact ID for retrieval. Error outputs under 8 KB are left intact so failure details stay visible.
 
