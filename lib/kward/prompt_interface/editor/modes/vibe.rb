@@ -904,7 +904,8 @@ module Kward
         return vibe_operator_linewise(operator, count, command) if motion == operator
 
         start_index = @editor_state.cursor
-        vibe_apply_motion(motion, count)
+        return false unless vibe_apply_motion(motion, count)
+
         end_index = @editor_state.cursor
         end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
         return @editor_state.status = "Empty range" if start_index == end_index
@@ -967,7 +968,9 @@ module Kward
           count.times { @editor_state.move_right }
         else
           @editor_state.status = "Unsupported motion: #{motion}"
+          return false
         end
+        true
       end
 
       def vibe_copy_range(start_index, end_index, status)

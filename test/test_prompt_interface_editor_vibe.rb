@@ -786,6 +786,23 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_reports_unsupported_operator_motion
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "z")
+
+        assert_equal "alpha beta", editor.buffer
+        assert_equal "Unsupported motion: z", editor.status
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_big_d_deletes_to_end_of_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta\ngamma")
