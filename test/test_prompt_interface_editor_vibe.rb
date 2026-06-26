@@ -589,6 +589,34 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_records_and_replays_macros
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abc")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "q")
+        prompt.send(:handle_editor_key, "a")
+        prompt.send(:handle_editor_key, "x")
+        prompt.send(:handle_editor_key, "q")
+        assert_equal "bc", editor.buffer
+        assert_equal "Recorded macro a", editor.status
+
+        prompt.send(:handle_editor_key, "@")
+        prompt.send(:handle_editor_key, "a")
+        assert_equal "c", editor.buffer
+
+        editor.buffer = "abc"
+        editor.cursor = 0
+        prompt.send(:handle_editor_key, "@")
+        prompt.send(:handle_editor_key, "@")
+        assert_equal "bc", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_repeats_registered_paste
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")

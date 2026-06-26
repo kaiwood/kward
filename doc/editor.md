@@ -287,6 +287,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `>` / `<`               | Indent / outdent selected lines                 |
 | `gv`                    | Restore previous visual selection               |
 | `ma` / `` `a `` / `'a`  | Set and jump to marks                           |
+| `qa` / `@a` / `@@`      | Record and replay macros                        |
 | `J`                     | Join selected lines                             |
 | `~` / `u` / `U`         | Swapcase / lowercase / uppercase selection      |
 | `/` / `?` / `n` / `N`   | Extend visual selection with search             |

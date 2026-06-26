@@ -9,7 +9,7 @@ module Kward
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer
-      attr_accessor :cursor, :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :readonly, :diff_view
+      attr_accessor :cursor, :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -47,6 +47,9 @@ module Kward
         @vibe_visual_block_insert = nil
         @vibe_marks = {}
         @vibe_registers = {}
+        @vibe_macros = {}
+        @vibe_recording_macro = nil
+        @vibe_last_macro = nil
         @status = default_status
       end
 
@@ -79,6 +82,9 @@ module Kward
         @vibe_visual_block_insert = other.vibe_visual_block_insert&.dup
         @vibe_marks = other.vibe_marks.transform_values(&:dup)
         @vibe_registers = other.vibe_registers.transform_values(&:dup)
+        @vibe_macros = other.vibe_macros.transform_values(&:dup)
+        @vibe_recording_macro = other.vibe_recording_macro
+        @vibe_last_macro = other.vibe_last_macro
         @readonly = other.readonly
         @diff_view = other.diff_view
         invalidate_lines_cache

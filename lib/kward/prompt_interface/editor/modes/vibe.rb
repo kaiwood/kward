@@ -41,6 +41,8 @@ module Kward
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
+        return vibe_stop_macro_recording if key == "q" && @editor_state.vibe_recording_macro && @editor_state.vibe_mode == "normal"
+        vibe_record_macro_key(key)
         return vibe_begin_visual_mode("visual_block") if key == "\x16" && @editor_state.vibe_mode == "normal"
         return handle_vibe_repeat_change if key == "." && @editor_state.vibe_mode == "normal"
         return handle_vibe_search_key(key) if editor_search_active?
@@ -495,6 +497,8 @@ module Kward
         return true if command.match?(/\A"[a-z]?\z/)
         return true if command.match?(/\A"[a-z][cdy]\z/)
         return true if command.match?(/\A"[a-z][cdy][ai]\z/)
+        return true if command.match?(/\Aq\z/)
+        return true if command.match?(/\A@\z/)
         return true if command.match?(/\A['`]\z/)
 
         false
@@ -517,6 +521,12 @@ module Kward
           @editor_state.move_file_start
         when "gv"
           vibe_restore_visual_selection
+        when /\Aq(.+)\z/
+          vibe_start_macro_recording(Regexp.last_match(1))
+        when "@@"
+          vibe_play_macro(@editor_state.vibe_last_macro)
+        when /\A@(.+)\z/
+          vibe_play_macro(Regexp.last_match(1))
         when /\Am(.+)\z/
           vibe_set_mark(Regexp.last_match(1))
         when /\A'(.+)\z/
@@ -757,6 +767,43 @@ module Kward
       def vibe_switch_visual_selection_end
         @editor_state.selection_anchor, @editor_state.cursor = @editor_state.cursor, @editor_state.selection_anchor
         true
+      end
+
+      def vibe_start_macro_recording(name)
+        @editor_state.vibe_recording_macro = name
+        @editor_state.vibe_macros[name] = []
+        @editor_state.status = "Recording macro #{name}"
+        true
+      end
+
+      def vibe_stop_macro_recording
+        name = @editor_state.vibe_recording_macro
+        @editor_state.vibe_recording_macro = nil
+        @editor_state.vibe_last_macro = name
+        @editor_state.status = "Recorded macro #{name}"
+        true
+      end
+
+      def vibe_record_macro_key(key)
+        name = @editor_state.vibe_recording_macro
+        return if !name || @vibe_replaying_macro
+
+        @editor_state.vibe_macros[name] << key
+      end
+
+      def vibe_play_macro(name)
+        macro = @editor_state.vibe_macros[name]
+        unless macro
+          @editor_state.status = "Macro not set: #{name}"
+          return false
+        end
+
+        @editor_state.vibe_last_macro = name
+        @vibe_replaying_macro = true
+        macro.each { |key| handle_vibe_key(key) }
+        true
+      ensure
+        @vibe_replaying_macro = false
       end
 
       def vibe_set_mark(name)
