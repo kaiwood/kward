@@ -1050,23 +1050,38 @@ module Kward
       end
 
       def vibe_inner_word_target
-        range = @editor_state.word_range_at(@editor_state.cursor)
+        range = vibe_word_range_at(@editor_state.cursor)
         return @editor_state.status = "No word under cursor" unless range
 
         VibeOperatorTarget.new(type: :characterwise, start_index: range[0], end_index: range[1])
       end
 
       def vibe_a_word_target
-        range = @editor_state.word_range_at(@editor_state.cursor)
+        range = vibe_word_range_at(@editor_state.cursor)
         return @editor_state.status = "No word under cursor" unless range
 
         start_index, end_index = range
-        if end_index < @editor_state.buffer.length && @editor_state.buffer[end_index].to_s.match?(/\s/)
-          end_index += 1 while end_index < @editor_state.buffer.length && @editor_state.buffer[end_index].to_s.match?(/\s/)
+        if end_index < @editor_state.buffer.length && vibe_word_kind(@editor_state.buffer[end_index]) == :space
+          end_index += 1 while end_index < @editor_state.buffer.length && vibe_word_kind(@editor_state.buffer[end_index]) == :space
         else
-          start_index -= 1 while start_index.positive? && @editor_state.buffer[start_index - 1].to_s.match?(/\s/)
+          start_index -= 1 while start_index.positive? && vibe_word_kind(@editor_state.buffer[start_index - 1]) == :space
         end
         VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
+      end
+
+      def vibe_word_range_at(offset)
+        buffer = @editor_state.buffer
+        return nil if buffer.empty?
+
+        index = [[offset.to_i, 0].max, buffer.length - 1].min
+        kind = vibe_word_kind(buffer[index])
+        return nil if kind == :space
+
+        start_index = index
+        start_index -= 1 while start_index.positive? && vibe_word_kind(buffer[start_index - 1]) == kind
+        end_index = index + 1
+        end_index += 1 while end_index < buffer.length && vibe_word_kind(buffer[end_index]) == kind
+        [start_index, end_index]
       end
 
       def vibe_operator_linewise(operator, count, command = nil)
