@@ -120,6 +120,7 @@ module Kward
         code = sequence[:code]
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        sequence = sequence.merge(remaining: "")
         normalized_code = ctrl_code(code)
 
         if ctrl_modifier?(modifier)
@@ -183,7 +184,7 @@ module Kward
             return false
           end
         else
-          handle_editor_csi_u_key(key)
+          handle_parsed_editor_csi_u_key(sequence)
         end
       end
 

@@ -290,6 +290,42 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_handles_bundled_csi_u_printable_keys_once
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[97;1u\e[98;1u")
+        until prompt.instance_variable_get(:@pending_keys).empty?
+          prompt.send(:handle_editor_key, prompt.instance_variable_get(:@pending_keys).shift)
+        end
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "ab", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_emacs_handles_bundled_csi_u_printable_keys_once
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "\e[97;1u\e[98;1u")
+        until prompt.instance_variable_get(:@pending_keys).empty?
+          prompt.send(:handle_editor_key, prompt.instance_variable_get(:@pending_keys).shift)
+        end
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "ab", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_modern_undoes_csi_u_shifted_text
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")

@@ -193,6 +193,10 @@ module Kward
         sequence = parse_csi_u_key(key)
         return false unless sequence
 
+        handle_parsed_editor_csi_u_key(sequence)
+      end
+
+      def handle_parsed_editor_csi_u_key(sequence)
         code = sequence[:code]
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?

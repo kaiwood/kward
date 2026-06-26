@@ -86,11 +86,12 @@ module Kward
         code = sequence[:code]
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        sequence = sequence.merge(remaining: "")
 
         if ctrl_modifier?(modifier) || super_modifier?(modifier)
-          handle_modern_modified_key(code, modifier, key)
+          handle_modern_modified_key(code, modifier, sequence)
         else
-          handle_modern_editor_csi_u_key(key)
+          handle_modern_editor_csi_u_key(sequence)
         end
       end
 
@@ -194,11 +195,11 @@ module Kward
         end
       end
 
-      def handle_modern_modified_key(code, modifier, key)
+      def handle_modern_modified_key(code, modifier, sequence)
         normalized_code = ctrl_code(code)
         if super_modifier?(modifier)
           return editor_search_active? ? editor_search_cancel : copy_editor_selection if normalized_code == 99
-          return handle_modern_editor_csi_u_key(key) unless ctrl_modifier?(modifier)
+          return handle_modern_editor_csi_u_key(sequence) unless ctrl_modifier?(modifier)
         end
 
         case normalized_code
@@ -224,7 +225,7 @@ module Kward
         else
           return false if normalized_code == 32
 
-          handle_modern_editor_csi_u_key(key)
+          handle_modern_editor_csi_u_key(sequence)
         end
       end
 
@@ -237,9 +238,9 @@ module Kward
         end
       end
 
-      def handle_modern_editor_csi_u_key(key)
-        sequence = parse_csi_u_key(key)
-        return handle_editor_csi_u_key(key) unless sequence
+      def handle_modern_editor_csi_u_key(key_or_sequence)
+        sequence = key_or_sequence.is_a?(Hash) ? key_or_sequence : parse_csi_u_key(key_or_sequence)
+        return handle_editor_csi_u_key(key_or_sequence) unless sequence
 
         code = sequence[:code]
         modifier = sequence[:modifier]
@@ -247,18 +248,18 @@ module Kward
           normalized_code = ctrl_code(code)
           case normalized_code
           when 100, 107, 117, 119, 121
-            return modern_record_undo { handle_editor_csi_u_key(key) }
+            return modern_record_undo { handle_parsed_editor_csi_u_key(sequence) }
           end
         end
 
         case code
         when 13, 8, 127, 4
-          modern_record_undo { handle_editor_csi_u_key(key) }
+          modern_record_undo { handle_parsed_editor_csi_u_key(sequence) }
         else
           if !sequence[:text].to_s.empty? || ((sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1") && code.between?(32, 126))
-            modern_record_undo { handle_editor_csi_u_key(key) }
+            modern_record_undo { handle_parsed_editor_csi_u_key(sequence) }
           else
-            handle_editor_csi_u_key(key)
+            handle_parsed_editor_csi_u_key(sequence)
           end
         end
       end
