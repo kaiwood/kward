@@ -393,6 +393,33 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_session_loaded_read_skill_artifact_does_not_suppress_skill_content
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+        skill_dir = File.join(config_dir, "skills", "planner")
+        FileUtils.mkdir_p(skill_dir)
+        skill_content = "---\nname: planner\ndescription: Helps plan work.\n---\n\nFull skill body.\n"
+        File.write(File.join(skill_dir, "SKILL.md"), skill_content)
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_dir)
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil, workspace_root: workspace_dir)
+        session.attach(conversation)
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          registry = Kward::ToolRegistry.new(web_search_enabled: false)
+          registry.dispatch(tool_call("read_skill", name: "planner"), conversation)
+
+          _loaded_session, loaded_conversation = store.load(session.path, workspace: Kward::Workspace.new(root: workspace_dir))
+          result = Kward::ToolRegistry.new(web_search_enabled: false).dispatch(tool_call("read_skill", name: "planner"), loaded_conversation)
+
+          assert_includes result, "Full skill body."
+          refute_includes result, "Same as previous tool output"
+        end
+      end
+    end
+  end
+
   def test_session_loads_older_files_without_tool_execution_records
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

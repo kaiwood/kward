@@ -107,7 +107,7 @@ module Kward
       original_content = Conversation.normalize_tool_content(original_content)
       duplicate_id = conversation.tool_output_artifact_id_for(tool_name: name, content: original_content)
       content = original_content
-      if conversation.tool_output_artifacts.key?(duplicate_id)
+      if reusable_duplicate_output?(name) && conversation.tool_output_artifacts.key?(duplicate_id)
         content = "[Same as previous tool output #{duplicate_id}; not repeated. Use retrieve_tool_output to inspect it.]"
       end
 
@@ -143,6 +143,10 @@ module Kward
         "bytes_after" => after.bytesize,
         "bytes_saved" => saved
       )
+    end
+
+    def reusable_duplicate_output?(name)
+      name.to_s != "read_skill"
     end
 
     def log_tool_output_compaction(name, artifact_id:, before:, after:)

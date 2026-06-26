@@ -81,6 +81,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `read_skill` so restored or compacted duplicate artifacts no longer suppress skill instructions from the active model context.
 - Fixed editor selections so visual mode no longer disables syntax highlighting.
 - Fixed Vibe macro recording so CSI-u encoded `q` stops recording instead of starting a pending macro command.
 - Fixed Vibe macro recording so stopping a macro clears pending command state and replay reports the macro that ran.

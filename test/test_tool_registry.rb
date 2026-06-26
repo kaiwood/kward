@@ -19,6 +19,27 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_read_skill_repeats_content_even_when_artifact_exists
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      skill_content = "---\nname: planner\ndescription: Helps plan work.\n---\n\nFull skill body.\n"
+      File.write(File.join(skill_dir, "SKILL.md"), skill_content)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        registry = Kward::ToolRegistry.new
+        conversation = Kward::Conversation.new(system_message: nil)
+        artifact_id = conversation.restore_tool_output_artifact(tool_name: "read_skill", content: skill_content)
+
+        result = registry.dispatch(tool_call("read_skill", name: "planner"), conversation)
+
+        assert_includes result, "Full skill body."
+        refute_includes result, "Same as previous tool output #{artifact_id}"
+      end
+    end
+  end
+
   def test_read_skill_rejects_path_traversal
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
