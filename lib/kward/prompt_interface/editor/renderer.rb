@@ -87,18 +87,46 @@ module Kward
       def editor_render_line(line, line_index, text_width, column_offset: 0)
         visible = line.to_s[column_offset.to_i, text_width].to_s
         ranges = @editor_state.selection_ranges
-        return editor_render_visible_line(visible, line_index) if ranges.empty?
+        rendered = editor_render_visible_line(visible, line_index)
+        return rendered if ranges.empty?
 
         line_start = @editor_state.line_start_offset(line_index)
-        rendered = visible.dup
-        ranges.reverse_each do |range|
+        selection_ranges = ranges.filter_map do |range|
           selection_start = [range[0] - line_start - column_offset.to_i, 0].max
           selection_end = [range[1] - line_start - column_offset.to_i, visible.length].min
-          next unless selection_start < selection_end
-
-          rendered = rendered[0...selection_start].to_s + colored(rendered[selection_start...selection_end].to_s, 7) + rendered[selection_end..].to_s
+          [selection_start, selection_end] if selection_start < selection_end
         end
-        rendered
+        return rendered if selection_ranges.empty?
+
+        editor_overlay_selection(rendered, selection_ranges)
+      end
+
+      def editor_overlay_selection(rendered, selection_ranges)
+        return rendered unless @color_enabled
+
+        output = +""
+        selected = false
+        visible_index = 0
+        index = 0
+        while index < rendered.length
+          if rendered[index] == "\e" && (match = rendered[index..].match(/\A\e\[[0-9;:]*m/))
+            output << match[0]
+            output << "\e[7m" if selected && match[0] == "\e[0m"
+            index += match[0].length
+            next
+          end
+
+          should_select = selection_ranges.any? { |range| visible_index >= range[0] && visible_index < range[1] }
+          if should_select != selected
+            output << (should_select ? "\e[7m" : "\e[27m")
+            selected = should_select
+          end
+          output << rendered[index]
+          visible_index += 1
+          index += 1
+        end
+        output << "\e[27m" if selected
+        output
       end
 
       def editor_render_visible_line(line, line_index)

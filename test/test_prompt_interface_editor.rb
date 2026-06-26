@@ -1890,7 +1890,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         text = rows.join("\n")
 
         assert_includes strip_ansi(text), "   1 │ alpha"
-        assert_includes text, "\e[38;2;78;88;53m   1 │ \e[0m\e[7mal\e[0mpha"
+        assert_includes text, "\e[38;2;78;88;53m   1 │ \e[0m\e[7mal\e[27mpha"
         refute_includes text, "\e[7m   1"
       end
     end

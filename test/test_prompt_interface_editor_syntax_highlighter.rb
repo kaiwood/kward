@@ -152,7 +152,34 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     end
   end
 
-  def test_selection_overrides_syntax_highlighting
+  def test_selection_overlays_syntax_highlighting
+    prompt = syntax_prompt(path: "example.rb", content: "x def call")
+    state = prompt.instance_variable_get(:@editor_state)
+    state.selection_anchor = 0
+    state.cursor = 1
+
+    rendered = prompt.send(:editor_render_line, "x def call", 0, 80)
+
+    assert_includes rendered, "\e[7mx\e[27m"
+    assert_includes rendered, "\e[34mdef\e[0m"
+    assert_equal "x def call", strip_ansi(rendered)
+  end
+
+  def test_vibe_visual_mode_keeps_syntax_highlighting
+    prompt = syntax_prompt(path: "example.rb", content: "x def call", editor_mode: "vibe")
+    state = prompt.instance_variable_get(:@editor_state)
+    state.vibe_mode = "visual"
+    state.selection_anchor = 0
+    state.cursor = 0
+
+    rendered = prompt.send(:editor_render_line, "x def call", 0, 80)
+
+    assert_includes rendered, "\e[7mx\e[27m"
+    assert_includes rendered, "\e[34mdef\e[0m"
+    assert_equal "x def call", strip_ansi(rendered)
+  end
+
+  def test_selection_preserves_syntax_highlighting_inside_selected_text
     prompt = syntax_prompt(path: "example.rb", content: "def call")
     state = prompt.instance_variable_get(:@editor_state)
     state.selection_anchor = 0
@@ -160,8 +187,7 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
 
     rendered = prompt.send(:editor_render_line, "def call", 0, 80)
 
-    assert_includes rendered, "\e[7mdef\e[0m"
-    refute_includes rendered, "\e[34mdef\e[0m"
+    assert_includes rendered, "\e[34m\e[7mdef\e[0m"
     assert_equal "def call", strip_ansi(rendered)
   end
 
@@ -175,10 +201,10 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
 
   private
 
-  def syntax_prompt(path: "notes.txt", content: "", color_enabled: true)
+  def syntax_prompt(path: "notes.txt", content: "", color_enabled: true, editor_mode: "modern")
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.instance_variable_set(:@color_enabled, color_enabled)
-    prompt.instance_variable_set(:@editor_state, Kward::PromptInterface::EditorState.new(path: path, content: content))
+    prompt.instance_variable_set(:@editor_state, Kward::PromptInterface::EditorState.new(path: path, content: content, editor_mode: editor_mode))
     prompt
   end
 end
