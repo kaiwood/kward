@@ -284,6 +284,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `gv`                    | Restore previous visual selection               |
 | `J`                     | Join selected lines                             |
 | `~` / `u` / `U`         | Swapcase / lowercase / uppercase selection      |
+| `/` / `?` / `n` / `N`   | Extend visual selection with search             |
 | `/`                     | Search forward                                  |
 | `?`                     | Search backward                                 |
 | `n`                     | Repeat search                                   |

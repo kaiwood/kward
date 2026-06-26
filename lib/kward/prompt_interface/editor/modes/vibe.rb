@@ -670,6 +670,14 @@ module Kward
           vibe_transform_visual_selection(:downcase)
         when "U"
           vibe_transform_visual_selection(:upcase)
+        when "/"
+          editor_search_begin
+        when "?"
+          editor_search_begin(:backward)
+        when "n"
+          editor_search_repeat
+        when "N"
+          editor_search_repeat(vibe_opposite_search_direction)
         when "o"
           vibe_switch_visual_selection_end
         when "G"
