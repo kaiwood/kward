@@ -1,3 +1,5 @@
+require_relative "../text_boundary"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Interactive terminal UI used by the CLI frontend.
@@ -104,22 +106,22 @@ module Kward
 
       # Moves the cursor to the previous word boundary.
       def move_to_previous_word
-        @cursor = previous_word_boundary(@cursor)
+        @cursor = TextBoundary.previous_word_boundary(@input, @cursor)
       end
 
       # Moves the cursor to the next word boundary.
       def move_to_next_word
-        @cursor = next_word_boundary(@cursor)
+        @cursor = TextBoundary.next_word_boundary(@input, @cursor)
       end
 
       # Kills the word before the cursor into `kill_buffer`.
       def delete_word_before_cursor
-        kill_range(previous_word_boundary(@cursor), @cursor)
+        kill_range(TextBoundary.previous_word_boundary(@input, @cursor), @cursor)
       end
 
       # Kills the word after the cursor into `kill_buffer`.
       def delete_word_after_cursor
-        kill_range(@cursor, next_word_boundary(@cursor))
+        kill_range(@cursor, TextBoundary.next_word_boundary(@input, @cursor))
       end
 
       # Kills all text before the cursor into `kill_buffer`.
@@ -145,27 +147,6 @@ module Kward
       # Inserts the last killed text at the cursor.
       def yank_kill_buffer
         insert_string(@kill_buffer.to_s) unless @kill_buffer.to_s.empty?
-      end
-
-      # Finds the start offset of the word before `index`.
-      def previous_word_boundary(index)
-        cursor = index
-        cursor -= 1 while cursor.positive? && word_separator?(@input[cursor - 1])
-        cursor -= 1 while cursor.positive? && !word_separator?(@input[cursor - 1])
-        cursor
-      end
-
-      # Finds the end offset of the word after `index`.
-      def next_word_boundary(index)
-        cursor = index
-        cursor += 1 while cursor < @input.length && word_separator?(@input[cursor])
-        cursor += 1 while cursor < @input.length && !word_separator?(@input[cursor])
-        cursor
-      end
-
-      # Treats whitespace as the only word separator for composer navigation.
-      def word_separator?(char)
-        char.to_s.match?(/\s/)
       end
 
       # Replaces the full input buffer and places the cursor at the end.

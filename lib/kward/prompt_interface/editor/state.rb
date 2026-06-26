@@ -1,5 +1,6 @@
 require "digest"
 require_relative "../../editor_mode"
+require_relative "../../text_boundary"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -1056,17 +1057,11 @@ module Kward
       end
 
       def previous_word_boundary(index)
-        cursor = index
-        cursor -= 1 while cursor.positive? && word_separator?(@buffer[cursor - 1])
-        cursor -= 1 while cursor.positive? && !word_separator?(@buffer[cursor - 1])
-        cursor
+        TextBoundary.previous_word_boundary(@buffer, index)
       end
 
       def next_word_boundary(index)
-        cursor = index
-        cursor += 1 while cursor < @buffer.length && word_separator?(@buffer[cursor])
-        cursor += 1 while cursor < @buffer.length && !word_separator?(@buffer[cursor])
-        cursor
+        TextBoundary.next_word_boundary(@buffer, index)
       end
 
       def next_word_end(index)
@@ -1135,7 +1130,7 @@ module Kward
       end
 
       def word_separator?(char)
-        char.to_s.match?(/\s/)
+        TextBoundary.word_separator?(char)
       end
 
       def search_status_prefix
