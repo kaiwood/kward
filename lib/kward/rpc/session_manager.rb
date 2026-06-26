@@ -298,9 +298,7 @@ module Kward
           next unless rpc_session.session.respond_to?(:delete_if_unused)
           next unless rpc_session.session.delete_if_unused
 
-          @mutex.synchronize { @sessions.delete(rpc_session.id) }
-          stop_worker(rpc_session)
-          stop_footer_worker(rpc_session)
+          remove_live_session(rpc_session)
         end
         { closed: true }
       end
@@ -907,9 +905,7 @@ module Kward
       end
 
       def close_rpc_session(rpc_session, delete_unused: true)
-        @mutex.synchronize { @sessions.delete(rpc_session.id) }
-        stop_worker(rpc_session)
-        stop_footer_worker(rpc_session)
+        remove_live_session(rpc_session)
         rpc_session.session.delete_if_unused if delete_unused && rpc_session.session.respond_to?(:delete_if_unused)
       end
 
@@ -922,10 +918,14 @@ module Kward
           next unless rpc_session.session.respond_to?(:delete_if_unused)
           next unless rpc_session.session.delete_if_unused
 
-          @mutex.synchronize { @sessions.delete(rpc_session.id) }
-          stop_worker(rpc_session)
-          stop_footer_worker(rpc_session)
+          remove_live_session(rpc_session)
         end
+      end
+
+      def remove_live_session(rpc_session)
+        @mutex.synchronize { @sessions.delete(rpc_session.id) }
+        stop_worker(rpc_session)
+        stop_footer_worker(rpc_session)
       end
 
       def stop_worker(rpc_session)
