@@ -1,6 +1,6 @@
-require "digest"
 require_relative "../../editor_mode"
 require_relative "../../text_boundary"
+require_relative "file_marker"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -17,9 +17,11 @@ module Kward
         @new_file = new_file
         @readonly = readonly
         @diff_view = diff_view
-        @original_content = content.to_s
-        @original_digest = Digest::SHA256.hexdigest(@original_content)
-        refresh_file_marker unless new_file
+        @file_marker = EditorFileMarker.new(path: @path, content: content, new_file: new_file)
+        @original_content = @file_marker.content
+        @original_digest = @file_marker.digest
+        @original_mtime = @file_marker.mtime
+        @original_size = @file_marker.size
         @buffer = @original_content.dup
         @cursor = 0
         @viewport_row = 0
@@ -59,7 +61,10 @@ module Kward
         super
         @path = other.path.dup
         @original_content = other.original_content.dup
+        @file_marker = EditorFileMarker.new(path: @path, content: @original_content, new_file: other.new_file)
         @original_digest = other.original_digest.dup
+        @original_mtime = other.original_mtime
+        @original_size = other.original_size
         @buffer = other.buffer.dup
         @status = other.status.dup
         @search_query = other.search_query.dup
@@ -832,22 +837,18 @@ module Kward
 
       def refresh_after_save(content)
         @new_file = false
-        @original_content = content.to_s
-        @original_digest = Digest::SHA256.hexdigest(@original_content)
-        refresh_file_marker
+        @file_marker.refresh(content)
+        @original_content = @file_marker.content
+        @original_digest = @file_marker.digest
+        @original_mtime = @file_marker.mtime
+        @original_size = @file_marker.size
         @overwrite_confirmed = false
         @quit_confirmed = false
         @status = "Saved #{@path}"
       end
 
       def file_changed_on_disk?
-        return false if new_file && !File.exist?(@path)
-        return true if new_file && File.exist?(@path)
-        return true unless File.exist?(@path)
-
-        File.read(@path) != @original_content
-      rescue StandardError
-        true
+        @file_marker.changed_on_disk?(new_file: new_file)
       end
 
       private
@@ -951,15 +952,6 @@ module Kward
           index = @buffer.index(query, index + query.length)
         end
         ranges
-      end
-
-      def refresh_file_marker
-        stat = File.stat(@path)
-        @original_mtime = stat.mtime
-        @original_size = stat.size
-      rescue StandardError
-        @original_mtime = nil
-        @original_size = nil
       end
 
       def kill_range(start_index, end_index)
