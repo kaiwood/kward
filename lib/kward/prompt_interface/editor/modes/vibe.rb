@@ -18,7 +18,7 @@ module Kward
       VIBE_RUBY_PATHS = %w[Gemfile Rakefile Guardfile Capfile Vagrantfile].freeze
       VIBE_RUBY_EXTENSIONS = %w[.rb .rake .gemspec].freeze
 
-      VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, keyword_init: true) do
+      VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, :replacement_text, :replacement_cursor_offset, keyword_init: true) do
         def characterwise?
           type == :characterwise
         end
@@ -918,7 +918,11 @@ module Kward
           vibe_remember_change(command)
         when "c"
           @editor_state.copy_range(target.start_index, target.end_index)
-          vibe_record_undo { @editor_state.replace_range(target.start_index, target.end_index, "") }
+          replacement_text = target.replacement_text.to_s
+          vibe_record_undo do
+            @editor_state.replace_range(target.start_index, target.end_index, replacement_text)
+            @editor_state.cursor = target.start_index + target.replacement_cursor_offset.to_i
+          end
           vibe_enter_insert_mode(vibe_build_change_command(operator, motion, count, motion_count))
         else
           vibe_copy_range(target.start_index, target.end_index, "Yanked")
@@ -1018,10 +1022,20 @@ module Kward
           return false
         end
 
+        replacement_text = nil
+        replacement_cursor_offset = nil
+        if text_object == "ir"
+          indentation = @editor_state.lines[start_line].to_s[/\A\s*/].to_s
+          replacement_text = "#{indentation}\n"
+          replacement_cursor_offset = indentation.length
+        end
+
         VibeOperatorTarget.new(
           type: :characterwise,
           start_index: @editor_state.line_range(start_line)[0],
-          end_index: @editor_state.line_range(end_line)[1]
+          end_index: @editor_state.line_range(end_line)[1],
+          replacement_text: replacement_text,
+          replacement_cursor_offset: replacement_cursor_offset
         )
       end
 

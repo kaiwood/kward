@@ -54,6 +54,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Vibe `cir` so changing a Ruby block body leaves an indented blank line ready for insertion.
 - Fixed Vibe editor word motions and word text objects so normal/visual and operator `w`, `e`, `b`, `iw`, and `aw` respect code punctuation boundaries, while bare `0` moves to line start.
 - Fixed RPC session cleanup so empty placeholder cleanup no longer closes named or used idle sessions.
 - Fixed explicit RPC steering requests so unavailable steering fails instead of silently queueing a follow-up turn, and documented the `steeringApplied` turn event.

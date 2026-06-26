@@ -924,8 +924,9 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         prompt.send(:handle_editor_key, "i")
         prompt.send(:handle_editor_key, "r")
 
-        assert_equal "def hoge\nend\n", editor.buffer
+        assert_equal "def hoge\n  \nend\n", editor.buffer
         assert_equal "  puts :old\n", editor.kill_buffer
+        assert_equal [1, 2], editor.cursor_line_and_column
         assert_equal "insert", editor.vibe_mode
       end
     end
