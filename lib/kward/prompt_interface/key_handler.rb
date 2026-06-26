@@ -34,13 +34,7 @@ module Kward
         csi_result = handle_csi_u_key(key)
         return csi_result unless csi_result == false
         return if handle_shift_enter_key(key)
-        if key.is_a?(String) && key.length > 1
-          token = next_key_token(key)
-          if token.length < key.length
-            queue_pending_keys(key[token.length..])
-            return handle_key(token)
-          end
-        end
+        return true if handle_bundled_key(key) { |token| handle_key(token) }
 
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
@@ -410,6 +404,17 @@ module Kward
           @pending_keys << token
           remaining = remaining[token.length..] || ""
         end
+      end
+
+      def handle_bundled_key(key)
+        return false unless key.is_a?(String) && key.length > 1
+
+        token = next_key_token(key)
+        return false unless token.length < key.length
+
+        queue_pending_keys(key[token.length..])
+        yield token
+        true
       end
 
       def next_key_token(keys)

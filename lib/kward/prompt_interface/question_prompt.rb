@@ -87,13 +87,7 @@ module Kward
         csi_result = handle_question_csi_u_key(key)
         return csi_result unless csi_result == false
 
-        if key.is_a?(String) && key.length > 1
-          token = next_key_token(key)
-          if token.length < key.length
-            queue_pending_keys(key[token.length..])
-            return handle_question_key(token)
-          end
-        end
+        return true if handle_bundled_key(key) { |token| handle_question_key(token) }
 
         binding_result = handle_question_composer_key_binding(key)
         return binding_result unless binding_result == false

@@ -10,13 +10,7 @@ module Kward
         return select_current_choice if key.nil?
         return if handle_select_bracketed_paste_key(key)
 
-        if key.is_a?(String) && key.length > 1
-          token = next_key_token(key)
-          if token.length < key.length
-            queue_pending_keys(key[token.length..])
-            return handle_select_key(token)
-          end
-        end
+        return true if handle_bundled_key(key) { |token| handle_select_key(token) }
 
         return handle_select_confirmation_key(key) if select_confirmation_active?
 

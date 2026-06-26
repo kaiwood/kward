@@ -33,13 +33,7 @@ module Kward
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
-        if key.is_a?(String) && key.length > 1
-          token = next_key_token(key)
-          if token.length < key.length
-            queue_pending_keys(key[token.length..])
-            return handle_modern_key(token)
-          end
-        end
+        return true if handle_bundled_key(key) { |token| handle_modern_key(token) }
 
         case key
         when "\n", "\r"
