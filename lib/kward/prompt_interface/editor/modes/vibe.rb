@@ -664,6 +664,12 @@ module Kward
           vibe_indent_visual_selection(:left)
         when "J"
           vibe_join_visual_selection
+        when "~"
+          vibe_transform_visual_selection(:swapcase)
+        when "u"
+          vibe_transform_visual_selection(:downcase)
+        when "U"
+          vibe_transform_visual_selection(:upcase)
         when "o"
           vibe_switch_visual_selection_end
         when "G"
@@ -795,6 +801,20 @@ module Kward
 
         text = @editor_state.kill_buffer.to_s
         vibe_record_undo { @editor_state.replace_range(range[0], range[1], text) }
+        vibe_cancel_visual_mode
+      end
+
+      def vibe_transform_visual_selection(transform)
+        range = vibe_visual_range
+        return false unless range
+
+        text = @editor_state.buffer[range[0]...range[1]].to_s
+        replacement = case transform
+                      when :swapcase then text.swapcase
+                      when :downcase then text.downcase
+                      else text.upcase
+                      end
+        vibe_record_undo { @editor_state.replace_range(range[0], range[1], replacement) }
         vibe_cancel_visual_mode
       end
 
