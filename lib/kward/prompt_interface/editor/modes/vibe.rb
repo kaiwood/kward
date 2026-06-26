@@ -461,8 +461,19 @@ module Kward
 
       def vibe_cancel_visual_mode
         @editor_state.vibe_pending = ""
+        vibe_remember_visual_selection
         @editor_state.clear_selection
         vibe_return_to_normal
+      end
+
+      def vibe_remember_visual_selection
+        return unless @editor_state.selection_active?
+
+        @editor_state.vibe_last_visual_selection = {
+          mode: @editor_state.vibe_mode,
+          anchor: @editor_state.selection_anchor,
+          cursor: @editor_state.cursor
+        }
       end
 
       def vibe_waiting_for_more?(command)
@@ -486,6 +497,8 @@ module Kward
           vibe_apply_cursor_motion(body, count)
         when "gg"
           @editor_state.move_file_start
+        when "gv"
+          vibe_restore_visual_selection
         when "G"
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
@@ -698,6 +711,20 @@ module Kward
 
       def vibe_switch_visual_selection_end
         @editor_state.selection_anchor, @editor_state.cursor = @editor_state.cursor, @editor_state.selection_anchor
+        true
+      end
+
+      def vibe_restore_visual_selection
+        selection = @editor_state.vibe_last_visual_selection
+        unless selection
+          @editor_state.status = "No visual selection to restore"
+          return false
+        end
+
+        @editor_state.vibe_mode = selection[:mode]
+        @editor_state.selection_anchor = [[selection[:anchor], 0].max, @editor_state.buffer.length].min
+        @editor_state.cursor = [[selection[:cursor], 0].max, @editor_state.buffer.length].min
+        @editor_state.status = @editor_state.vibe_mode == "visual_line" ? "VISUAL LINE" : "VISUAL"
         true
       end
 

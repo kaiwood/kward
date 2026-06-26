@@ -589,6 +589,29 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_gv_restores_last_visual_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "v")
+        4.times { prompt.send(:handle_editor_key, "l") }
+        prompt.send(:handle_editor_key, "y")
+        assert_equal "normal", editor.vibe_mode
+
+        editor.cursor = editor.buffer.length
+        prompt.send(:handle_editor_key, "g")
+        prompt.send(:handle_editor_key, "v")
+
+        assert_equal "visual", editor.vibe_mode
+        assert_equal "alpha", editor.selected_text
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_visual_indents_selected_lines
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.rb"), "one\ntwo\nthree")

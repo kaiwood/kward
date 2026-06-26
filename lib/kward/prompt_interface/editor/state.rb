@@ -9,7 +9,7 @@ module Kward
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer
-      attr_accessor :cursor, :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :readonly, :diff_view
+      attr_accessor :cursor, :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :selection_anchor, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -43,6 +43,7 @@ module Kward
         @redo_stack = []
         @vibe_last_change = nil
         @vibe_last_find = nil
+        @vibe_last_visual_selection = nil
         @status = default_status
       end
 
@@ -71,6 +72,7 @@ module Kward
         @redo_stack = other.redo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
         @vibe_last_change = other.vibe_last_change&.dup
         @vibe_last_find = other.vibe_last_find&.dup
+        @vibe_last_visual_selection = other.vibe_last_visual_selection&.dup
         @readonly = other.readonly
         @diff_view = other.diff_view
         invalidate_lines_cache

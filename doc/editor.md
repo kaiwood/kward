@@ -281,6 +281,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |
 | `iw` / `a(` / `ip`      | Select visual text objects                      |
 | `>` / `<`               | Indent / outdent selected lines                 |
+| `gv`                    | Restore previous visual selection               |
 | `/`                     | Search forward                                  |
 | `?`                     | Search backward                                 |
 | `n`                     | Repeat search                                   |
