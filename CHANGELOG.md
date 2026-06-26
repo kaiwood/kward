@@ -79,6 +79,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Vibe macro recording so CSI-u encoded `q` stops recording instead of starting a pending macro command.
 - Fixed Vibe macro recording so stopping a macro clears pending command state and replay reports the macro that ran.
 - Fixed Vibe macro recording so `q` stops recording from visual modes.
 - Fixed Vibe dot-repeat for registered paste commands.

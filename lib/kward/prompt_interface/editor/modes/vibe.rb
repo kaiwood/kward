@@ -72,14 +72,7 @@ module Kward
         end
 
         logical_key = vibe_csi_u_logical_key(sequence)
-        if logical_key
-          return handle_vibe_search_key(logical_key) if editor_search_active?
-          return handle_vibe_command_key(logical_key) if @editor_state.vibe_mode == "command"
-          return handle_vibe_insert_key(logical_key) if @editor_state.vibe_mode == "insert"
-          return handle_vibe_replace_key(logical_key) if @editor_state.vibe_mode == "replace"
-          return handle_vibe_visual_key(logical_key) if vibe_visual_mode?
-          return handle_vibe_normal_key(logical_key) if @editor_state.vibe_mode == "normal"
-        end
+        return handle_vibe_key(logical_key) if logical_key
         return false unless code == 27 || (ctrl_modifier?(modifier) && normalized_code == 99)
 
         return editor_search_cancel if editor_search_active?
