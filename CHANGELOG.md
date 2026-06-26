@@ -52,7 +52,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
-- Fixed Vibe editor word motions so normal/visual `w` lands on the next word start and bare `0` moves to line start.
+- Fixed Vibe editor word motions so normal/visual `w`, `e`, and `b` respect code punctuation boundaries and bare `0` moves to line start.
 - Fixed RPC session cleanup so empty placeholder cleanup no longer closes named or used idle sessions.
 - Fixed explicit RPC steering requests so unavailable steering fails instead of silently queueing a follow-up turn, and documented the `steeringApplied` turn event.
 - Fixed compacted tool-output retrieval so `retrieve_tool_output` can reopen original outputs after resuming saved sessions.
