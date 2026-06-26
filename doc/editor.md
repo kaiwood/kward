@@ -270,6 +270,7 @@ The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `RE
 | `Ctrl+R`                | Redo                                            |
 | `%`                     | Jump to matching pair                           |
 | `f`/`F`/`t`/`T`         | Find character on current line                  |
+| `{` / `}`               | Move by paragraph                               |
 | `df)` / `ct,` / `d%`    | Use character and pair motions with operators   |
 | `;` / `,`               | Repeat character find forward/backward          |
 | `U`                     | Restore current line                            |

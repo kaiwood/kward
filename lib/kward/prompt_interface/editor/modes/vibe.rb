@@ -6,7 +6,7 @@ module Kward
     module VibeEditorMode
       VIBE_SIMPLE_MOTION_KEYS = [
         "w", "e", "b", "$", "0", "^", "+", "\n", "\r", "-", "_",
-        "h", "\b", "\x7F", "j", "k", "l", " "
+        "h", "\b", "\x7F", "j", "k", "l", " ", "{", "}"
       ].freeze
       VIBE_PAIR_TEXT_OBJECTS = {
         "(" => ["(", ")"], ")" => ["(", ")"], "b" => ["(", ")"],
@@ -1660,11 +1660,32 @@ module Kward
           count.times { editor_move_up }
         when "l", " "
           count.times { @editor_state.move_right }
+        when "}"
+          count.times { vibe_move_paragraph_forward }
+        when "{"
+          count.times { vibe_move_paragraph_backward }
         else
           @editor_state.status = "Unsupported motion: #{motion}"
           return false
         end
         true
+      end
+
+      def vibe_move_paragraph_forward
+        line, = @editor_state.cursor_line_and_column
+        lines = @editor_state.lines
+        line += 1 while line < lines.length - 1 && !lines[line].to_s.strip.empty?
+        line += 1 while line < lines.length - 1 && lines[line].to_s.strip.empty?
+        @editor_state.set_cursor_line_and_column(line, 0)
+      end
+
+      def vibe_move_paragraph_backward
+        line, = @editor_state.cursor_line_and_column
+        lines = @editor_state.lines
+        line -= 1 if line.positive?
+        line -= 1 while line.positive? && lines[line].to_s.strip.empty?
+        line -= 1 while line.positive? && !lines[line - 1].to_s.strip.empty?
+        @editor_state.set_cursor_line_and_column(line, 0)
       end
 
       def vibe_move_to_next_word_start

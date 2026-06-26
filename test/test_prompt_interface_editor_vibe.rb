@@ -589,6 +589,32 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_supports_paragraph_motions
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\n\nthree\nfour\n\nfive")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "}")
+        assert_equal [3, 0], editor.cursor_line_and_column
+        prompt.send(:handle_editor_key, "{")
+        assert_equal [0, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "v")
+        prompt.send(:handle_editor_key, "}")
+        assert_equal "one\ntwo\n\nt", editor.selected_text
+
+        prompt.send(:handle_editor_key, "\e")
+        editor.cursor = 0
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "}")
+        assert_equal "three\nfour\n\nfive", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_visual_block_inserts_and_appends_text
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")

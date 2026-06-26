@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe paragraph motions `{` and `}` for normal, visual, and operator use.
 - Added Vibe visual block `I` and `A` to insert or append text across selected lines.
 - Added Vibe visual block mode foundation with rectangular selection, yank, delete, and rendering support.
 - Added Vibe visual-mode search extension with `/`, `?`, `n`, and `N`.
