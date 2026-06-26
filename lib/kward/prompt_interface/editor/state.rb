@@ -1,6 +1,7 @@
 require_relative "../../editor_mode"
 require_relative "../../text_boundary"
 require_relative "file_marker"
+require_relative "undo_history"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -9,8 +10,8 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_reader :buffer
-      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :undo_stack, :redo_stack, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
+      attr_reader :buffer, :undo_stack, :redo_stack
+      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -43,8 +44,9 @@ module Kward
         @vibe_mode = @editor_mode == "vibe" ? "normal" : nil
         @vibe_pending = ""
         @vibe_command = ""
-        @undo_stack = []
-        @redo_stack = []
+        @undo_history = EditorUndoHistory.new
+        @undo_stack = @undo_history.undo_stack
+        @redo_stack = @undo_history.redo_stack
         @vibe_last_change = nil
         @vibe_last_find = nil
         @vibe_last_visual_selection = nil
@@ -82,8 +84,11 @@ module Kward
         @vibe_mode = other.vibe_mode&.dup
         @vibe_pending = other.vibe_pending.dup
         @vibe_command = other.vibe_command.dup
-        @undo_stack = other.undo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
-        @redo_stack = other.redo_stack.map { |entry| { buffer: entry[:buffer].dup, cursor: entry[:cursor] } }
+        @undo_history = EditorUndoHistory.new
+        other.undo_stack.each { |entry| @undo_history.undo_stack << duplicate_editor_snapshot(entry) }
+        other.redo_stack.each { |entry| @undo_history.redo_stack << duplicate_editor_snapshot(entry) }
+        @undo_stack = @undo_history.undo_stack
+        @redo_stack = @undo_history.redo_stack
         @vibe_last_change = other.vibe_last_change&.dup
         @vibe_last_find = other.vibe_last_find&.dup
         @vibe_last_visual_selection = other.vibe_last_visual_selection&.dup
@@ -101,6 +106,16 @@ module Kward
       def buffer=(value)
         @buffer = value.to_s
         invalidate_lines_cache
+      end
+
+      def undo_stack=(value)
+        @undo_stack = value
+        @undo_history = EditorUndoHistory.new(undo_stack: @undo_stack, redo_stack: @redo_stack)
+      end
+
+      def redo_stack=(value)
+        @redo_stack = value
+        @undo_history = EditorUndoHistory.new(undo_stack: @undo_stack, redo_stack: @redo_stack)
       end
 
       def cursor
@@ -207,20 +222,16 @@ module Kward
       end
 
       def push_undo
-        @undo_stack << editor_snapshot
-        @undo_stack.shift while @undo_stack.length > 100
-        @redo_stack.clear
+        @undo_history.push(editor_snapshot)
       end
 
       def undo
-        snapshot = @undo_stack.pop
+        snapshot = @undo_history.undo(editor_snapshot)
         unless snapshot
           @status = "Already at oldest change"
           return false
         end
 
-        @redo_stack << editor_snapshot
-        @redo_stack.shift while @redo_stack.length > 100
         restore_editor_snapshot(snapshot)
         changed!(clear_selections: false)
         @status = "Undo"
@@ -228,14 +239,12 @@ module Kward
       end
 
       def redo
-        snapshot = @redo_stack.pop
+        snapshot = @undo_history.redo(editor_snapshot)
         unless snapshot
           @status = "Already at newest change"
           return false
         end
 
-        @undo_stack << editor_snapshot
-        @undo_stack.shift while @undo_stack.length > 100
         restore_editor_snapshot(snapshot)
         changed!(clear_selections: false)
         @status = "Redo"
@@ -909,6 +918,16 @@ module Kward
           @selection_anchor = nil
           @secondary_selections = []
         end
+      end
+
+      def duplicate_editor_snapshot(snapshot)
+        duplicate = { buffer: snapshot[:buffer].to_s.dup }
+        if snapshot[:selections]
+          duplicate[:selections] = snapshot[:selections].map(&:dup)
+        else
+          duplicate[:cursor] = snapshot[:cursor]
+        end
+        duplicate
       end
 
       def apply_selection_edits
