@@ -822,6 +822,34 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_operator_word_motion_stops_at_code_punctuation
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "initialize(msg=\"Hello, world!\")")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "c")
+        prompt.send(:handle_editor_key, "w")
+
+        assert_equal "(msg=\"Hello, world!\")", editor.buffer
+        assert_equal "initialize", editor.kill_buffer
+        assert_equal "insert", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, "\e")
+        prompt.send(:handle_editor_key, "u")
+        editor.cursor = 0
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "w")
+
+        assert_equal "(msg=\"Hello, world!\")", editor.buffer
+        assert_equal "initialize", editor.kill_buffer
+        assert_equal "normal", editor.vibe_mode
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_supports_operator_motion_and_undo
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta")

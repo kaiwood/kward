@@ -919,13 +919,55 @@ module Kward
 
       def vibe_operator_target(motion, count)
         return vibe_text_object_target(motion) if motion.match?(/\A[ai].\z/)
+        return vibe_word_motion_target(motion, count) if %w[w e b].include?(motion)
 
         start_index = @editor_state.cursor
         return false unless vibe_apply_motion(motion, count)
 
         end_index = @editor_state.cursor
-        end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
         VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
+      end
+
+      def vibe_word_motion_target(motion, count)
+        start_index = @editor_state.cursor
+        end_index = start_index
+        if motion == "w"
+          end_index = vibe_word_operator_forward_index(end_index, count)
+        else
+          count.times { end_index = vibe_word_motion_index(motion, end_index) }
+          end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
+        end
+        @editor_state.cursor = end_index
+        VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
+      end
+
+      def vibe_word_operator_forward_index(index, count)
+        cursor = index
+        buffer = @editor_state.buffer
+        count.times do |step|
+          current_kind = vibe_word_kind(buffer[cursor])
+          cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) == current_kind
+          if step < count - 1
+            cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) == :space
+          end
+        end
+        cursor
+      end
+
+      def vibe_word_motion_index(motion, index)
+        original_cursor = @editor_state.cursor
+        @editor_state.cursor = index
+        case motion
+        when "w"
+          vibe_move_to_next_word_start
+        when "e"
+          vibe_move_to_word_end
+        else
+          vibe_move_to_previous_word_start
+        end
+        @editor_state.cursor
+      ensure
+        @editor_state.cursor = original_cursor
       end
 
       def vibe_text_object_target(text_object)
