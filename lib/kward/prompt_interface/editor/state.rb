@@ -2,6 +2,7 @@ require_relative "../../editor_mode"
 require_relative "../../text_boundary"
 require_relative "buffer"
 require_relative "file_marker"
+require_relative "kill_ring"
 require_relative "undo_history"
 require_relative "search"
 require_relative "status_text"
@@ -13,8 +14,8 @@ module Kward
     # Mutable state for the built-in composer file editor.
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
-      attr_reader :buffer, :undo_stack, :redo_stack
-      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :kill_buffer, :editor_mode, :emacs_pending, :kill_ring, :last_yank_range, :last_yank_index, :vibe_mode, :vibe_pending, :vibe_command, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
+      attr_reader :buffer, :undo_stack, :redo_stack, :kill_buffer, :kill_ring, :last_yank_range, :last_yank_index
+      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :vibe_mode, :vibe_pending, :vibe_command, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -38,14 +39,15 @@ module Kward
         @search_active = @search.active?
         @search_query = @search.query
         @search_direction = @search.direction
-        @kill_buffer = ""
+        @kill_state = EditorKillRing.new
+        @kill_buffer = @kill_state.kill_buffer
         @selection_anchor = nil
         @secondary_selections = []
         @editor_mode = normalize_editor_mode(editor_mode)
         @emacs_pending = nil
-        @kill_ring = []
-        @last_yank_range = nil
-        @last_yank_index = nil
+        @kill_ring = @kill_state.kill_ring
+        @last_yank_range = @kill_state.last_yank_range
+        @last_yank_index = @kill_state.last_yank_index
         @vibe_mode = @editor_mode == "vibe" ? "normal" : nil
         @vibe_pending = ""
         @vibe_command = ""
@@ -79,16 +81,22 @@ module Kward
         @search_active = other.search_active
         @search_query = other.search_query.dup
         @search_direction = other.search_direction
-        @kill_buffer = other.kill_buffer.dup
+        @kill_state = EditorKillRing.new(
+          kill_buffer: other.kill_buffer.dup,
+          kill_ring: other.kill_ring.map(&:dup),
+          last_yank_range: other.last_yank_range&.dup,
+          last_yank_index: other.last_yank_index
+        )
+        @kill_buffer = @kill_state.kill_buffer
         @quit_confirmed = other.quit_confirmed
         @viewport_column = other.viewport_column
         @selection_anchor = other.selection_anchor
         @secondary_selections = other.selections.drop(1).map { |selection| selection.dup }
         @editor_mode = other.editor_mode.dup
         @emacs_pending = other.emacs_pending&.dup
-        @kill_ring = other.kill_ring.map(&:dup)
-        @last_yank_range = other.last_yank_range&.dup
-        @last_yank_index = other.last_yank_index
+        @kill_ring = @kill_state.kill_ring
+        @last_yank_range = @kill_state.last_yank_range
+        @last_yank_index = @kill_state.last_yank_index
         @vibe_mode = other.vibe_mode&.dup
         @vibe_pending = other.vibe_pending.dup
         @vibe_command = other.vibe_command.dup
@@ -123,6 +131,26 @@ module Kward
       def redo_stack=(value)
         @redo_stack = value
         @undo_history = EditorUndoHistory.new(undo_stack: @undo_stack, redo_stack: @redo_stack)
+      end
+
+      def kill_buffer=(value)
+        @kill_state.kill_buffer = value
+        sync_kill_state
+      end
+
+      def kill_ring=(value)
+        @kill_state.kill_ring = value
+        sync_kill_state
+      end
+
+      def last_yank_range=(value)
+        @kill_state.last_yank_range = value
+        sync_kill_state
+      end
+
+      def last_yank_index=(value)
+        @kill_state.last_yank_index = value
+        sync_kill_state
       end
 
       def cursor
@@ -490,39 +518,33 @@ module Kward
       end
 
       def push_kill(text)
-        text = text.to_s
-        return false if text.empty?
+        return false unless @kill_state.push(text)
 
-        @kill_buffer = text
-        @kill_ring.unshift(text)
-        @kill_ring.uniq!
-        @kill_ring = @kill_ring.first(30)
-        @last_yank_range = nil
-        @last_yank_index = nil
+        sync_kill_state
         true
       end
 
       def yank_from_kill_ring
-        text = @kill_ring.first.to_s
-        return false if text.empty?
+        text = @kill_state.first_yank
+        return false unless text
 
         start_index = @cursor
         insert(text)
-        @last_yank_range = [start_index, @cursor]
-        @last_yank_index = 0
+        @kill_state.record_yank(start_index, @cursor)
+        sync_kill_state
         true
       end
 
       def yank_pop
-        return false unless @last_yank_range && @last_yank_index
-        return false if @kill_ring.length < 2
+        yank = @kill_state.next_yank_pop
+        return false unless yank
 
-        @last_yank_index = (@last_yank_index + 1) % @kill_ring.length
-        text = @kill_ring[@last_yank_index]
-        start_index, end_index = @last_yank_range
+        start_index, end_index = yank[:range]
+        text = yank[:text]
         replace_range(start_index, end_index, text)
         @cursor = start_index + text.length
-        @last_yank_range = [start_index, @cursor]
+        @kill_state.record_yank_pop(start_index, @cursor)
+        sync_kill_state
         true
       end
 
@@ -685,7 +707,7 @@ module Kward
 
       def copy_range(start_index, end_index)
         start_index, end_index = [start_index, end_index].minmax
-        @kill_buffer = @buffer[start_index...end_index].to_s
+        self.kill_buffer = @buffer[start_index...end_index].to_s
       end
 
       def copy_for_kill_ring(start_index, end_index)
@@ -1117,6 +1139,13 @@ module Kward
         TextBoundary.word_separator?(char)
       end
 
+      def sync_kill_state
+        @kill_buffer = @kill_state.kill_buffer
+        @kill_ring = @kill_state.kill_ring
+        @last_yank_range = @kill_state.last_yank_range
+        @last_yank_index = @kill_state.last_yank_index
+      end
+
       def sync_search_state
         @search_active = @search.active?
         @search_query = @search.query
@@ -1145,8 +1174,8 @@ module Kward
           @selection_anchor = nil
           @secondary_selections = []
         end
-        @last_yank_range = nil
-        @last_yank_index = nil
+        @kill_state.clear_last_yank
+        sync_kill_state
       end
     end
   end
