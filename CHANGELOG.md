@@ -62,6 +62,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Extended the documentation frontpage hero slider with a “Your workflow. / Your harness.” category.
 - Changed the integrated editor Tab key to smart-indent using the detected indentation unit, with Shift+Tab moving indentation back by one stop.
 - Reorganized Vibe editor documentation to separate normal and visual mode commands.
 - Changed Vibe `o` and `O` to preserve the current line indentation.
