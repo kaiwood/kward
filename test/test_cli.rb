@@ -942,7 +942,8 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[32;1mkward login\e[0m"
     assert_includes output, "\e[32;1mkward init\e[0m"
     assert_includes output, "\e[32;1mkward pan\e[0m"
-    assert_includes output, "\e[36m\"Review this diff\"\e[0m"
+    assert_includes output, "\e[36m\"Explain this project\"\e[0m"
+    assert_includes output, "\e[36m\"Summarize the main changes\"\e[0m"
     refute_includes output, "--install-starter-pack"
     refute_includes output, "--pan-mode"
     assert_includes output, "Command names take precedence. Anything else is sent as a one-shot prompt."
@@ -1123,6 +1124,97 @@ class TestCLI < KwardTestCase
       end
 
       assert_includes stdout, "summary"
+    end
+  end
+
+  def test_stdin_without_prompt_runs_as_one_shot_prompt
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["explained"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("Explain Ruby\n", tty: false), client: client)
+
+      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }.first
+      end
+
+      assert_includes stdout, "explained"
+      assert_equal "Explain Ruby", client.seen_messages.first.last[:content]
+    end
+  end
+
+  def test_stdin_with_prompt_runs_filter_mode
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["Hallo"])
+      cli = Kward::CLI.new(argv: ["Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
+
+      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }.first
+      end
+
+      messages = client.seen_messages.first
+      assert_equal "Hallo\n", stdout
+      assert_includes messages.first[:content], "command-line text filter"
+      assert_includes messages.last[:content], "Instruction:\nTranslate to German"
+      assert_includes messages.last[:content], "Input:\nHello\n"
+    end
+  end
+
+  def test_filter_flag_forces_filter_mode
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["Hallo"])
+      cli = Kward::CLI.new(argv: ["--filter", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
+
+      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }.first
+      end
+
+      assert_equal "Hallo\n", stdout
+      assert_includes client.seen_messages.first.first[:content], "Return only the transformed output"
+    end
+  end
+
+  def test_mode_oneshot_treats_stdin_and_arguments_as_prompt_mode
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["ok"])
+      cli = Kward::CLI.new(argv: ["--mode", "oneshot", "Translate to German"], stdin: FakeInput.new("Hello\n", tty: false), client: client)
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }
+      end
+
+      messages = client.seen_messages.first
+      refute_includes messages.first[:content], "command-line text filter"
+      assert_equal "Translate to German", messages.last[:content]
+    end
+  end
+
+  def test_unknown_mode_exits_with_error
+    Dir.mktmpdir do |config_dir|
+      cli = Kward::CLI.new(argv: ["--mode", "review", "hello"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
+
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          assert_raises(SystemExit) { cli.run }
+        end.last
+      end
+
+      assert_includes stderr, "Unknown mode: review"
+      assert_includes stderr, "Expected one of: auto, chat, oneshot, filter"
+    end
+  end
+
+  def test_filter_mode_without_stdin_exits_with_error
+    Dir.mktmpdir do |config_dir|
+      client = Object.new
+      client.define_singleton_method(:chat) { |_messages, **_opts| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: ["--filter", "Translate to German"], stdin: FakeInput.new("", tty: true), client: client)
+
+      stderr = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io do
+          assert_raises(SystemExit) { cli.run }
+        end.last
+      end
+
+      assert_includes stderr, "Filter mode requires stdin input."
     end
   end
 

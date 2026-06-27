@@ -48,6 +48,7 @@ module Kward
           #{heading.call("Usage")}
             #{command.call("kward")}                              Start an interactive chat
             #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
+            #{command.call("kward --filter")} #{option.call('"Translate"')}          Filter stdin with an instruction
             #{command.call("kward login")}                        Sign in or save provider credentials
             #{command.call("kward auth status")}                  Show saved credential status
             #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
@@ -74,13 +75,16 @@ module Kward
 
           #{heading.call("Options")}
             #{option.call("--working-directory=PATH")}             Run Kward from PATH
+            #{option.call("--mode=MODE")}                          Execution mode: auto, chat, oneshot, filter
+            #{option.call("--filter")}                              Shortcut for --mode filter
             #{option.call("--help")}, #{option.call("-h")}                         Show this help
             #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
 
           #{heading.call("Examples")}
             #{command.call("kward")}
-            #{command.call("kward")} #{option.call('"Review this diff"')}
-            #{command.call("git diff | kward")} #{option.call('"Review this diff"')}
+            #{command.call("kward")} #{option.call('"Explain this project"')}
+            #{command.call("git diff | kward")} #{option.call('"Summarize the main changes"')}
+            #{command.call("echo Hello | kward --filter")} #{option.call('"Translate to German"')}
             #{command.call("kward login openrouter")}
             #{command.call("kward edit lib/main.rb")}
             #{command.call("kward openrouter refresh")}
@@ -210,6 +214,15 @@ module Kward
             break
           when "--experimental-workers"
             @experimental_workers = true
+          when "--filter"
+            @requested_mode = "filter"
+          when "--mode"
+            index += 1
+            raise ArgumentError, "Missing value for --mode" if index >= arguments.length
+
+            @requested_mode = normalized_execution_mode(arguments[index])
+          when /\A--mode=(.*)\z/
+            @requested_mode = normalized_execution_mode(Regexp.last_match(1))
           when "--working-directory"
             index += 1
             raise ArgumentError, "Missing value for --working-directory" if index >= arguments.length
@@ -223,6 +236,14 @@ module Kward
           index += 1
         end
         remaining
+      end
+
+      def normalized_execution_mode(value)
+        mode = value.to_s.strip.downcase
+        modes = ["auto", "chat", "oneshot", "filter"]
+        raise ArgumentError, "Unknown mode: #{value}. Expected one of: #{modes.join(", ")}" unless modes.include?(mode)
+
+        mode
       end
 
       def expanded_working_directory(path)

@@ -188,11 +188,18 @@ One-shot prompts are best for short tasks that do not need session history:
 
 ```bash
 kward "What does this repository do?"
-git diff | kward "Review this diff"
-cat error.log | kward "Explain the likely cause"
+cat error.log | kward
 ```
 
-Use `--` when your prompt starts with something that could be parsed as a command or option:
+When stdin and a prompt are both present, Kward runs in filter mode: stdin is the input, the prompt is the instruction, and stdout contains only the transformed result. You can also force this with `--filter` or `--mode filter`.
+
+```bash
+git diff | kward "Review this diff"
+echo "Hello" | kward --filter "Translate to German"
+kward --mode filter "Indent this JSON" < unindented.json
+```
+
+Use `--mode chat`, `--mode oneshot`, or `--mode filter` to override automatic mode detection. Use `--` when your prompt starts with something that could be parsed as a command or option:
 
 ```bash
 kward -- explain --working-directory

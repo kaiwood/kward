@@ -105,6 +105,7 @@ module Kward
       @plugin_registry = nil
       @working_directory = nil
       @prompt_delimited = false
+      @requested_mode = "auto"
       @experimental_workers = false
       @foreground_turn_active = false
       @pending_reasoning_config = nil
@@ -274,46 +275,87 @@ module Kward
     end
 
     def run_prompt_or_interactive
+      stdin_input = read_stdin_input
       first_prompt = one_shot_prompt_argument
-      if first_prompt
-        answer = one_shot(first_prompt)
-        puts answer unless answer.empty?
-        return
-      end
 
-      stdin_prompt = piped_prompt
-      unless stdin_prompt.empty?
-        answer = one_shot(stdin_prompt)
-        puts answer unless answer.empty?
-        return
-      end
+      case resolved_execution_mode(first_prompt: first_prompt, stdin_input: stdin_input)
+      when "chat"
+        interactive_loop
+      when "filter"
+        raise ArgumentError, "Filter mode requires stdin input." if stdin_input.nil?
 
-      interactive_loop
+        answer = one_shot(filter_prompt(instruction: first_prompt, input: stdin_input), filter: true)
+        puts answer unless answer.empty?
+      when "oneshot"
+        input = first_prompt || stdin_input.to_s.strip
+        answer = one_shot(input)
+        puts answer unless answer.empty?
+      end
     end
 
-    def one_shot(input)
+    def one_shot(input, filter: false)
       streamed = false
       assistant_streamed = false
       markdown_chunks = []
       conversation = new_conversation
+      apply_filter_system_prompt(conversation) if filter
       agent = Agent.new(
         client: @client,
         tool_registry: ToolRegistry.new(workspace: configured_workspace, prompt: @prompt),
         conversation: conversation
       )
-      answer = agent.ask(input) do |event|
-        result = render_blocking_turn_event(event, markdown_chunks)
-        streamed = true if result
-        assistant_streamed = true if result == :assistant_streamed
+      answer = if filter
+        agent.ask(input)
+      else
+        agent.ask(input) do |event|
+          result = render_blocking_turn_event(event, markdown_chunks)
+          streamed = true if result
+          assistant_streamed = true if result == :assistant_streamed
+        end
       end
       flush_markdown_deltas(markdown_chunks) if streamed
+      return answer if filter
+
       assistant_streamed ? "" : render_markdown_transcript(answer)
     end
 
+    def resolved_execution_mode(first_prompt:, stdin_input:)
+      return @requested_mode unless @requested_mode == "auto"
+      return "chat" if stdin_input.nil? && first_prompt.nil?
+      return "filter" if !stdin_input.nil? && first_prompt
 
+      "oneshot"
+    end
 
+    def filter_prompt(instruction:, input:)
+      <<~PROMPT
+        Instruction:
+        #{instruction}
 
+        Input:
+        #{input}
+      PROMPT
+    end
 
+    def apply_filter_system_prompt(conversation)
+      return unless conversation.system_message
+
+      conversation.system_message[:content] = [conversation.system_message[:content], filter_system_prompt].compact.join("\n\n")
+    end
+
+    def filter_system_prompt
+      <<~PROMPT.strip
+        You are being used as a command-line text filter.
+
+        Transform the provided input according to the user's instruction.
+        Return only the transformed output.
+
+        Do not include explanations, introductions, summaries, Markdown fences, or commentary.
+        Do not say what you changed.
+        Preserve the input format unless the instruction requires changing it.
+        If the input is code, data, markup, or configuration, output only the resulting code/data/markup/configuration.
+      PROMPT
+    end
 
     def interactive_loop(agent: nil)
       setup_interactive_prompt
@@ -433,9 +475,13 @@ module Kward
     end
 
     def piped_prompt
-      return "" if @stdin.tty?
+      read_stdin_input.to_s.strip
+    end
 
-      @stdin.read.strip
+    def read_stdin_input
+      return nil if @stdin.tty?
+
+      @stdin.read
     end
 
   end
