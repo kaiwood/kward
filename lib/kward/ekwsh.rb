@@ -17,6 +17,7 @@ module Kward
       @env = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @env.merge!(configured_env.to_h.transform_keys(&:to_s).transform_values(&:to_s))
       @env["PWD"] = @cwd
+      configure_rbenv_environment
       configure_color_environment
       @aliases = aliases.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @shell = shell.to_s.empty? ? "/bin/sh" : shell.to_s
@@ -46,6 +47,24 @@ module Kward
     end
 
     private
+
+    def configure_rbenv_environment
+      root = @env["RBENV_ROOT"].to_s
+      root = File.expand_path("~/.rbenv") if root.empty?
+      root = File.expand_path(root)
+      paths = [File.join(root, "shims"), File.join(root, "bin")].select { |path| Dir.exist?(path) }
+      return if paths.empty?
+
+      @env["RBENV_ROOT"] = root
+      @env["PATH"] = prepend_path_entries(@env["PATH"], paths)
+    rescue ArgumentError
+      nil
+    end
+
+    def prepend_path_entries(path, entries)
+      current = path.to_s.split(File::PATH_SEPARATOR)
+      (entries + current).uniq.join(File::PATH_SEPARATOR)
+    end
 
     def configure_color_environment
       @env["CLICOLOR"] ||= "1"
@@ -239,7 +258,7 @@ module Kward
 
     def kward_command_result(command, display_command: command)
       words = shell_words(command)
-      return nil unless words[0] == "kward" && words[1] == "edit"
+      return nil unless kward_edit_command?(words)
 
       unless words.length == 3
         return Result.new(output: "#{command_echo(display_command)}Usage: kward edit <filename>\n", exit_status: 2)
@@ -249,6 +268,12 @@ module Kward
       Result.new(output: command_echo(display_command), exit_status: 0, open_editor_path: path)
     rescue ArgumentError => e
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
+    end
+
+    def kward_edit_command?(words)
+      return false unless words[1] == "edit"
+
+      File.basename(words[0].to_s) == "kward"
     end
 
     def change_directory(command, words)
@@ -308,7 +333,7 @@ module Kward
     end
 
     def execute(command, display_command: command)
-      stdout, stderr, status = Open3.capture3(@env, @shell, "-lc", command, chdir: @cwd)
+      stdout, stderr, status = Open3.capture3(@env, @shell, "-c", command, chdir: @cwd)
       exit_status = status.exitstatus || 1
       output = command_echo(display_command)
       output << clean_output(stdout)

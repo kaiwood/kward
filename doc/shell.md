@@ -47,7 +47,7 @@ or press Ctrl+D on an empty shell prompt.
 
 ## How commands run
 
-`ekwsh` runs each command through your configured shell using the shell's `-lc` mode. It uses `$SHELL` when set, otherwise `/bin/sh`.
+`ekwsh` runs each command through your configured shell using the shell's `-c` mode. It uses `$SHELL` when set, otherwise `/bin/sh`. The shell is intentionally not started as a login shell so Kward-managed environment values, such as configured PATH entries, are not overwritten by login startup files.
 
 The current directory and exported environment are tracked by Kward between commands, so this works as expected:
 
@@ -137,6 +137,8 @@ If there are multiple candidates, Kward applies any common prefix. When there is
 - 256-color and truecolor SGR sequences.
 
 It strips terminal-control sequences that could corrupt Kward's TUI, such as cursor movement, clear-screen controls, OSC title changes, and alternate-screen controls.
+
+When rbenv is available, `ekwsh` also prepends the rbenv shims and bin directories to PATH and sets `RBENV_ROOT` when it was missing. This lets commands such as `ruby`, `bundle`, and `./exe/kward` use the same Ruby selected by rbenv without requiring `rbenv init` support in `ekwsh`.
 
 By default, `ekwsh` sets conservative color-friendly environment values:
 

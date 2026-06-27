@@ -73,6 +73,43 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "1"
   end
 
+  def test_auto_configures_rbenv_environment_when_available
+    Dir.mktmpdir("rbenv") do |dir|
+      FileUtils.mkdir_p(File.join(dir, "shims"))
+      FileUtils.mkdir_p(File.join(dir, "bin"))
+      shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "/usr/bin", "RBENV_ROOT" => dir })
+
+      result = shell.run("printf '%s\n%s' \"$RBENV_ROOT\" \"$PATH\"")
+
+      assert_includes result.output, dir
+      assert_includes result.output, "#{File.join(dir, "shims")}:#{File.join(dir, "bin")}:/usr/bin"
+    end
+  end
+
+  def test_auto_configured_rbenv_path_does_not_duplicate_entries
+    Dir.mktmpdir("rbenv") do |dir|
+      shims = File.join(dir, "shims")
+      bin = File.join(dir, "bin")
+      FileUtils.mkdir_p(shims)
+      FileUtils.mkdir_p(bin)
+      shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "#{shims}:/usr/bin", "RBENV_ROOT" => dir })
+
+      result = shell.run("printf %s \"$PATH\"")
+
+      assert_includes result.output, "#{shims}:#{bin}:/usr/bin"
+    end
+  end
+
+  def test_intercepts_relative_kward_executable_edit_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = shell.run("./exe/kward edit Gemfile")
+
+    assert_equal 0, result.exit_status
+    assert_equal File.expand_path("Gemfile", Dir.pwd), result.open_editor_path
+    assert_includes result.output, "$ ./exe/kward edit Gemfile"
+  end
+
   def test_expands_configured_alias_once
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "hi" => "printf hello" })
 

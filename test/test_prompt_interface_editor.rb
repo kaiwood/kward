@@ -2656,6 +2656,21 @@ class TestPromptInterfaceEditor < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_prompt_interface_editor_tab_keybindings_return_tab_actions
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "notes.txt")
+      File.write(path, "hello")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", tab_keybindings: "alt")
+        prompt.update_tabs(labels: ["1", "2"], active_index: 0)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        assert_equal({ tab_action: :next }, prompt.send(:handle_key, "\e[1;3C"))
+        assert_equal "hello", prompt.instance_variable_get(:@editor_state).buffer
+      end
+    end
+  end
+
   def test_prompt_interface_tab_view_snapshot_restores_editor_state
     Dir.mktmpdir do |dir|
       dir = File.realpath(dir)

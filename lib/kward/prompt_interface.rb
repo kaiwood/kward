@@ -304,6 +304,10 @@ module Kward
       @completion_provider = previous
     end
 
+    def editing_file?
+      @mutex.synchronize { editor_active? }
+    end
+
     def edit_file(path, base_dir: Dir.pwd, allow_new: true)
       start(render: false)
       opened = @mutex.synchronize do
@@ -313,8 +317,13 @@ module Kward
       end
       return false unless opened
 
+      run_editor
+    end
+
+    def run_editor
       loop do
         key = read_key(nonblock: true)
+        action = nil
         editor_open = @mutex.synchronize do
           if key.nil?
             resized = handle_resize_locked
@@ -322,10 +331,12 @@ module Kward
             render_prompt_locked if resized || footer_refreshed
           else
             result = handle_key(key)
+            action = result if prompt_action_result?(result)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
           end
           editor_active?
         end
+        return action if action
         break unless editor_open
 
         sleep 0.02 if key.nil?

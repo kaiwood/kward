@@ -135,6 +135,14 @@ module Kward
 
       def run_ekwsh_loop(shell, tab: nil)
         loop do
+          if @prompt.respond_to?(:editing_file?) && @prompt.editing_file?
+            editor_result = @prompt.run_editor
+            if editor_result.is_a?(Hash) && editor_result[:tab_action]
+              (@pending_inputs ||= []).unshift(editor_result)
+              return :tab_action
+            end
+          end
+
           input = ask_ekwsh(shell)
           if input.is_a?(Hash) && input[:tab_action]
             (@pending_inputs ||= []).unshift(input)
@@ -146,7 +154,9 @@ module Kward
           @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
           @prompt.say(result.output) unless result.output.to_s.empty?
           if result.open_editor_path
-            open_ekwsh_editor(result.open_editor_path, shell)
+            editor_result = open_ekwsh_editor(result.open_editor_path, shell)
+            return :tab_action if editor_result == :tab_action
+
             next
           end
           if result.exit_shell
@@ -166,7 +176,13 @@ module Kward
           return false
         end
 
-        @prompt.edit_file(path, base_dir: shell.cwd, allow_new: true)
+        result = @prompt.edit_file(path, base_dir: shell.cwd, allow_new: true)
+        if result.is_a?(Hash) && result[:tab_action]
+          (@pending_inputs ||= []).unshift(result)
+          return :tab_action
+        end
+
+        result
       end
 
       def ask_ekwsh(shell)
