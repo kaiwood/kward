@@ -29,6 +29,7 @@ module Kward
         return handle_interactive_key(key) if interactive_active_locked?
         return handle_editor_input_key(key) if editor_active?
         return handle_project_browser_key(key) if project_browser_visible?
+        return handle_history_search_key(key) if history_search_active?
         return true if handle_mouse_reporting_key(key)
         return if handle_bracketed_paste_key(key)
 
@@ -72,6 +73,8 @@ module Kward
           yank_kill_buffer
         when :ctrl_l
           redraw_screen_locked
+        when :ctrl_r
+          start_history_search
         when :left
           move_cursor_left
         when :right
@@ -108,12 +111,74 @@ module Kward
             delete_at_cursor_or_exit
           when "\x03"
             cancel_input_or_interrupt
+          when "\x12"
+            start_history_search
           when "\e"
             handle_escape_sequence
           else
             insert_key(key)
           end
         end
+      end
+
+      def handle_history_search_key(key)
+        csi_result = handle_history_search_csi_u_key(key)
+        return csi_result unless csi_result == false
+        return true if handle_bundled_key(key) { |token| handle_history_search_key(token) }
+
+        case key_name_for(key)
+        when :return, :enter
+          accept_history_search
+        when :up
+          select_previous_history_search_match
+        when :down
+          select_next_history_search_match
+        when :backspace
+          update_history_search_query(composer_input[0...-1].to_s)
+        when :ctrl_c
+          cancel_history_search
+        else
+          case key
+          when "\n", "\r"
+            accept_history_search
+          when "\b", "\x7F"
+            update_history_search_query(composer_input[0...-1].to_s)
+          when "\x03", "\e"
+            cancel_history_search
+          else
+            append_history_search_key(key)
+          end
+        end
+        true
+      end
+
+      def handle_history_search_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+
+        if ctrl_modifier?(modifier) && ctrl_code_for(code) == 99
+          cancel_history_search
+        elsif code == 13
+          accept_history_search
+        elsif code == 27
+          cancel_history_search
+        elsif code == 8 || code == 127
+          update_history_search_query(composer_input[0...-1].to_s)
+        else
+          text = csi_u_printable_text(sequence)
+          update_history_search_query(composer_input + text) if text
+        end
+        true
+      end
+
+      def append_history_search_key(key)
+        return unless key.is_a?(String) && key.length == 1 && key.match?(/[[:print:]]/)
+
+        update_history_search_query(composer_input + key)
       end
 
       def cancel_input_or_interrupt
@@ -305,7 +370,7 @@ module Kward
       def handle_modified_csi_u_key(code, modifier)
         return false unless ctrl_modifier?(modifier) || alt_modifier?(modifier)
 
-        normalized_code = code.to_i.chr.downcase.ord rescue code
+        normalized_code = ctrl_code_for(code)
         if ctrl_modifier?(modifier)
           case normalized_code
           when 97
@@ -326,6 +391,8 @@ module Kward
             kill_line_after_cursor
           when 108
             redraw_screen_locked
+          when 114
+            start_history_search
           when 117
             kill_line_before_cursor
           when 119
@@ -349,6 +416,10 @@ module Kward
         else
           false
         end
+      end
+
+      def ctrl_code_for(code)
+        code.to_i.chr.downcase.ord rescue code
       end
 
       def key_name_for(key)

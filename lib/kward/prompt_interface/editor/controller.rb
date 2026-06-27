@@ -12,7 +12,11 @@ module Kward
 
       def open_selected_file_in_editor(fallback_to_typed_path: false)
         path = selected_file_open_path
-        return open_editor(path) if path
+        if path
+          opened = open_editor(path)
+          add_history(history_file_open_command(path)) if opened
+          return opened
+        end
         return false unless fallback_to_typed_path
 
         open_typed_file_path_in_editor
@@ -26,7 +30,17 @@ module Kward
           return false
         end
 
-        open_editor(file_open[:query], allow_new: true)
+        opened = open_editor(file_open[:query], allow_new: true)
+        add_history(history_file_open_command(file_open[:query])) if opened
+        opened
+      end
+
+      def history_file_open_command(path)
+        full_path = File.expand_path(path.to_s, Dir.pwd)
+        relative_path = Pathname.new(full_path).relative_path_from(Pathname.new(File.expand_path(Dir.pwd))).to_s
+        "$#{relative_path}"
+      rescue ArgumentError
+        "$#{path}"
       end
 
       def open_editor(path, allow_new: false)

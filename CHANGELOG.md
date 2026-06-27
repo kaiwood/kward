@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added workspace-scoped persistent prompt history with Ctrl+R fuzzy search in the terminal composer.
 - Added `/files`, a nested project file browser overlay with search, editor opening, and browser restoration after closing files opened from the browser.
 - Added persisted `/files` cursor and folder expansion state per workspace.
 - Added Modern editor multi-cursor support with `Ctrl+D` occurrence selection, `Alt+Shift+Up/Down` vertical cursors, and `Ctrl+Shift+L` selected-line cursor creation.

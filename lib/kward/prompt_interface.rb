@@ -5,6 +5,7 @@ require "pathname"
 require "rbconfig"
 require "thread"
 require_relative "project_files"
+require_relative "prompt_history"
 require "tty-cursor"
 require "tty-reader"
 require "tty-screen"
@@ -121,12 +122,14 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
+      @prompt_history = prompt_history
       @composer = ComposerState.new
+      load_history(@prompt_history.values) if @prompt_history
       self.composer_input = @composer.input
       self.composer_cursor = @composer.cursor
       @started = false
@@ -515,11 +518,17 @@ module Kward
     end
 
     def restore_composer_snapshot_locked(snapshot)
-      @composer = snapshot[:composer] || ComposerState.new
+      @composer = snapshot[:composer] || new_composer_state_with_history
       @prompt_label = snapshot[:prompt_label].to_s.empty? ? "You>" : snapshot[:prompt_label].to_s
       self.composer_input = @composer.input
       self.composer_cursor = @composer.cursor
       @last_composer_rows = []
+    end
+
+    def new_composer_state_with_history
+      composer = ComposerState.new
+      composer.load_history(@prompt_history.values) if @prompt_history
+      composer
     end
 
     def restore_editor_snapshot_locked(snapshot)

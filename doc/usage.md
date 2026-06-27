@@ -136,6 +136,14 @@ Slash commands run local actions in the current session. Most do not send a prom
 
 Prompt templates and plugins can add more slash commands.
 
+## Prompt history
+
+In interactive mode, Kward keeps prompt history per workspace under `~/.kward/history/`. Press Up/Down to recall previous prompts across restarts.
+
+Press `Ctrl-R` to search history. Type a fuzzy query in the composer, use Up/Down to choose a result from the overlay, then press Enter to place it back in the composer for editing or resubmission. Press Esc or Ctrl-C to cancel the search and restore the draft.
+
+`$path` editor-open commands are also saved after a file opens successfully, using the resolved workspace-relative path.
+
 ## Sessions
 
 Interactive chats are saved as workspace-scoped sessions under:

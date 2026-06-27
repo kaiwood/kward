@@ -25,6 +25,7 @@ module Kward
           attachment_parser: method(:composer_attachment_parser),
           banner_message: Kward::PromptInterface::BANNER_MESSAGE,
           tab_keybindings: ConfigFiles.composer_tab_keybindings,
+          prompt_history: PromptHistory.new(cwd: current_workspace_root),
           editor_mode: ConfigFiles.editor_mode,
           editor_mode_source: -> { ConfigFiles.editor_mode },
           editor_auto_indent: ConfigFiles.editor_auto_indent?,

@@ -18,6 +18,12 @@ module Kward
       attr_accessor :history_draft
       # @return [String, nil] text queued for the next composer prompt
       attr_accessor :prefill_input
+      # @return [String, nil] query typed while searching history
+      attr_accessor :history_search_query
+      # @return [String, nil] draft restored after canceling history search
+      attr_accessor :history_search_draft
+      # @return [Integer] active selection index while searching history
+      attr_accessor :history_search_index
       # @return [Array<Hash>] pending image/file attachments submitted with the next turn
       attr_reader :attachments
       # @return [Array<String>] submitted input history
@@ -32,6 +38,9 @@ module Kward
         @history_index = nil
         @history_draft = nil
         @prefill_input = nil
+        @history_search_query = nil
+        @history_search_draft = nil
+        @history_search_index = 0
       end
 
       # Removes all pending attachments without changing text input.
@@ -161,13 +170,21 @@ module Kward
         [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
       end
 
+      # Replaces the in-memory history list with persisted entries.
+      def load_history(values)
+        @history = Array(values).map(&:to_s).reject { |value| value.strip.empty? }
+        reset_history_navigation
+        reset_history_search
+      end
+
       # Stores a submitted input unless it is blank or duplicates the previous entry.
       def add_history(value)
         stripped = value.to_s.strip
-        return if stripped.empty?
-        return if @history.last == value
+        return false if stripped.empty?
+        return false if @history.last == value
 
         @history << value
+        true
       end
 
       # Replaces input with the previous history entry, preserving the draft first.
@@ -196,6 +213,77 @@ module Kward
       def reset_history_navigation
         @history_index = nil
         @history_draft = nil
+      end
+
+      def start_history_search
+        @history_search_draft = @input if @history_search_query.nil?
+        @history_search_query = @input.to_s
+        @history_search_index = 0
+        replace_input(@history_search_query)
+      end
+
+      def history_search_active?
+        !@history_search_query.nil?
+      end
+
+      def update_history_search_query(value)
+        @history_search_query = value.to_s
+        @history_search_index = 0
+        replace_input(@history_search_query)
+      end
+
+      def history_search_matches
+        query = @history_search_query.to_s.downcase
+        return @history.reverse if query.empty?
+
+        @history.reverse.select { |value| fuzzy_history_match?(value.downcase, query) }
+      end
+
+      def selected_history_search_match
+        matches = history_search_matches
+        return nil if matches.empty?
+
+        matches[[@history_search_index, matches.length - 1].min]
+      end
+
+      def select_previous_history_search_match
+        @history_search_index = [@history_search_index - 1, 0].max
+      end
+
+      def select_next_history_search_match
+        matches = history_search_matches
+        return if matches.empty?
+
+        @history_search_index = [@history_search_index + 1, matches.length - 1].min
+      end
+
+      def accept_history_search
+        match = selected_history_search_match
+        replace_input(match) if match
+        reset_history_search
+      end
+
+      def cancel_history_search
+        replace_input(@history_search_draft.to_s)
+        reset_history_search
+      end
+
+      def reset_history_search
+        @history_search_query = nil
+        @history_search_draft = nil
+        @history_search_index = 0
+      end
+
+      def fuzzy_history_match?(value, query)
+        query.chars.all? do |char|
+          index = value.index(char)
+          if index
+            value = value[(index + 1)..].to_s
+            true
+          else
+            false
+          end
+        end
       end
     end
   end

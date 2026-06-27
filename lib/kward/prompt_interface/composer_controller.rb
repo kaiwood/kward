@@ -173,8 +173,14 @@ module Kward
         @composer.yank_kill_buffer
       end
 
+      def load_history(values)
+        @composer.load_history(values)
+      end
+
       def add_history(value)
-        @composer.add_history(value)
+        added = @composer.add_history(value)
+        @prompt_history&.append(value) if added
+        added
       end
 
       def recall_previous_history
@@ -183,6 +189,38 @@ module Kward
 
       def recall_next_history
         @composer.recall_next_history
+      end
+
+      def start_history_search
+        @composer.start_history_search
+      end
+
+      def history_search_active?
+        @composer.history_search_active?
+      end
+
+      def update_history_search_query(value)
+        @composer.update_history_search_query(value)
+      end
+
+      def history_search_matches
+        @composer.history_search_matches
+      end
+
+      def accept_history_search
+        @composer.accept_history_search
+      end
+
+      def cancel_history_search
+        @composer.cancel_history_search
+      end
+
+      def select_previous_history_search_match
+        @composer.select_previous_history_search_match
+      end
+
+      def select_next_history_search_match
+        @composer.select_next_history_search_match
       end
 
       def replace_input(value)
@@ -197,6 +235,10 @@ module Kward
 
       def reset_history_navigation
         @composer.reset_history_navigation
+      end
+
+      def reset_history_search
+        @composer.reset_history_search
       end
 
       def prepare_modal_input_locked(label, clear_attachments: false)
@@ -226,6 +268,7 @@ module Kward
           self.composer_cursor = 0
           @composer.clear_attachments
           reset_history_navigation if reset_history
+          reset_history_search if reset_history
           @asking = true
           render_prompt_after_output_locked
         else
@@ -233,6 +276,7 @@ module Kward
           self.composer_input = ""
           self.composer_cursor = 0
           @composer.clear_attachments
+          reset_history_search if reset_history
           @asking = false
           @rendered_rows = 0
           @cursor_rendered_row = 0

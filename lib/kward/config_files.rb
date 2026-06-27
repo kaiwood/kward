@@ -1,3 +1,4 @@
+require "digest"
 require "fileutils"
 require "json"
 require "yaml"
@@ -113,6 +114,11 @@ module Kward
 
     def project_browser_state_path
       File.join(cache_dir, "project_browser_state.json")
+    end
+
+    def prompt_history_path(cwd, config_dir: self.config_dir)
+      key = Digest::SHA256.hexdigest(canonical_workspace_root(cwd))[0, 24]
+      File.join(config_dir, "history", "#{key}.jsonl")
     end
 
     # @return [String] directory containing structured memory files

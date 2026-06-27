@@ -6,6 +6,8 @@ Kward RPC is an experimental backend protocol for UI clients. It is versioned as
 
 This page is for people building UI clients or integrations. If you use Kward from the terminal, you can skip it.
 
+Prompt history search is a CLI terminal feature only. RPC clients own their composer/input UX and Kward does not currently expose prompt-history read, append, or search methods over RPC.
+
 ## Launch
 
 ```bash

@@ -1913,6 +1913,42 @@ class TestPromptInterface < KwardTestCase
     refute prompt.send(:file_overlay_visible?)
   end
 
+  def test_prompt_interface_persists_resolved_dollar_file_open_history
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "lib"))
+        File.write(File.join(dir, "lib", "main.rb"), "puts :hi\n")
+        Dir.chdir(dir) do
+          history = Kward::PromptHistory.new(config_dir: config_dir, cwd: dir)
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, prompt_history: history, editor_mode: "emacs")
+          prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+          prompt.send(:composer_input=, "$li")
+          prompt.send(:composer_cursor=, 3)
+
+          assert prompt.send(:open_selected_file_in_editor)
+          assert_equal ["$lib/main.rb"], Kward::PromptHistory.new(config_dir: config_dir, cwd: dir).values
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_does_not_persist_failed_dollar_file_open_history
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          history = Kward::PromptHistory.new(config_dir: config_dir, cwd: dir)
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, prompt_history: history, editor_mode: "emacs")
+          prompt.instance_variable_set(:@file_mention_paths, [])
+          prompt.send(:composer_input=, "$missing/new.txt")
+          prompt.send(:composer_cursor=, "$missing/new.txt".length)
+
+          refute prompt.send(:open_selected_file_in_editor, fallback_to_typed_path: true)
+          assert_empty Kward::PromptHistory.new(config_dir: config_dir, cwd: dir).values
+        end
+      end
+    end
+  end
+
   def test_prompt_interface_enter_opens_typed_existing_file_outside_narrowdown
     Dir.mktmpdir do |dir|
       dir = File.realpath(dir)
@@ -2240,6 +2276,88 @@ class TestPromptInterface < KwardTestCase
     assert_equal "first", prompt.ask("You>")
   ensure
     input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_loads_persistent_history_for_up_arrow
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace)
+        history.append("persisted prompt")
+        input, writer = IO.pipe
+        output = StringIO.new
+        writer.write("\e[A\r")
+        writer.close
+        prompt = Kward::PromptInterface.new(input: input, output: output, prompt_history: history)
+
+        assert_equal "persisted prompt", prompt.ask("You>")
+      ensure
+        input&.close unless input&.closed?
+      end
+    end
+  end
+
+  def test_prompt_interface_persists_submitted_history
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace)
+        input, writer = IO.pipe
+        output = StringIO.new
+        writer.write("save me\r")
+        writer.close
+        prompt = Kward::PromptInterface.new(input: input, output: output, prompt_history: history)
+
+        assert_equal "save me", prompt.ask("You>")
+        assert_equal ["save me"], Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace).values
+      ensure
+        input&.close unless input&.closed?
+      end
+    end
+  end
+
+  def test_prompt_interface_preserves_persistent_history_after_empty_snapshot_restore
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace)
+        history.append("persisted prompt")
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, prompt_history: history)
+
+        prompt.restore_composer_snapshot({})
+        prompt.send(:recall_previous_history)
+
+        assert_equal "persisted prompt", prompt.send(:composer_input)
+      end
+    end
+  end
+
+  def test_prompt_interface_ctrl_r_search_accepts_selected_history_into_composer
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.send(:load_history, ["explain project", "run tests", "review diff"])
+    prompt.send(:composer_input=, "e")
+    prompt.send(:composer_cursor=, 1)
+
+    prompt.send(:handle_key, "\x12")
+    assert prompt.send(:history_search_active?)
+    assert_equal ["review diff", "run tests", "explain project"], prompt.send(:history_search_matches)
+
+    prompt.send(:handle_key, "\e[B")
+    prompt.send(:handle_key, "\r")
+
+    refute prompt.send(:history_search_active?)
+    assert_equal "run tests", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_ctrl_r_search_cancels_to_original_draft
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.send(:load_history, ["explain project"])
+    prompt.send(:composer_input=, "draft")
+    prompt.send(:composer_cursor=, 5)
+
+    prompt.send(:handle_key, "\x12")
+    prompt.send(:handle_key, "x")
+    prompt.send(:handle_key, "\e")
+
+    refute prompt.send(:history_search_active?)
+    assert_equal "draft", prompt.send(:composer_input)
   end
 
   def test_prompt_interface_renders_braille_spinner_while_busy

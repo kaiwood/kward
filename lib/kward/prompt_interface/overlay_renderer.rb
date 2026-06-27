@@ -11,9 +11,25 @@ module Kward
         return selection_overlay_rows(width, height: height) if @select_state
         return git_overlay_rows(width, height: height) if @git_state
         return project_browser_rows(width, height: height) if project_browser_visible?
+        return history_search_overlay_rows(width, height: height) if history_search_active?
         return file_overlay_rows(width, height: height) if file_overlay_visible?
 
         slash_overlay_rows(width, height: height)
+      end
+
+      def history_search_overlay_rows(width, height: screen_height)
+        matches = history_search_matches
+        if matches.empty?
+          return overlay_card_rows("History", [overlay_text_line("No matching history", :muted)], width)
+        end
+
+        max_rows = max_overlay_list_rows(height)
+        selected = @composer.history_search_index
+        start = centered_list_window_start(selected, matches.length, max_rows)
+        rows = (matches[start, max_rows] || []).each_with_index.map do |value, offset|
+          overlay_choice_line(value, selected: start + offset == selected)
+        end
+        overlay_card_rows("History", rows, width)
       end
 
       def overlay_card_rows(title, content_rows, width)
