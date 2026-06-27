@@ -3,6 +3,7 @@ require_relative "../../text_boundary"
 require_relative "buffer"
 require_relative "file_marker"
 require_relative "undo_history"
+require_relative "search"
 require_relative "status_text"
 
 # Namespace for the Kward CLI agent runtime.
@@ -33,9 +34,10 @@ module Kward
         @status = nil
         @overwrite_confirmed = false
         @quit_confirmed = false
-        @search_active = false
-        @search_query = ""
-        @search_direction = :forward
+        @search = EditorSearch.new
+        @search_active = @search.active?
+        @search_query = @search.query
+        @search_direction = @search.direction
         @kill_buffer = ""
         @selection_anchor = nil
         @secondary_selections = []
@@ -73,6 +75,8 @@ module Kward
         @text_buffer = EditorBuffer.new(other.buffer)
         @buffer = @text_buffer.text
         @status = other.status.dup
+        @search = EditorSearch.new(direction: other.search_direction)
+        @search_active = other.search_active
         @search_query = other.search_query.dup
         @search_direction = other.search_direction
         @kill_buffer = other.kill_buffer.dup
@@ -770,61 +774,35 @@ module Kward
       end
 
       def begin_search(direction = :forward)
-        @search_active = true
-        @search_direction = direction
-        @search_query = +""
-        @status = search_status_prefix
+        @status = @search.begin(direction)
+        sync_search_state
+        true
       end
 
       def cancel_search
-        @search_active = false
-        @status = "Search cancelled"
+        @status = @search.cancel
+        sync_search_state
+        true
       end
 
       def append_search(text)
-        @search_query << text.to_s
-        @status = "#{search_status_prefix} #{@search_query}"
+        @status = @search.append(text)
+        sync_search_state
+        true
       end
 
       def delete_search_character
-        @search_query = @search_query[0...-1].to_s
-        @status = "#{search_status_prefix} #{@search_query}"
+        @status = @search.delete_character
+        sync_search_state
+        true
       end
 
       def confirm_search
-        query = @search_query.to_s
-        @search_active = false
-        if query.empty?
-          @status = "Search cancelled"
-          return false
-        end
-
-        repeat_search(@search_direction, query)
+        apply_search_result(@search.confirm(buffer: @buffer, cursor: @cursor))
       end
 
       def repeat_search(direction = @search_direction, query = @search_query)
-        query = query.to_s
-        if query.empty?
-          @status = "No previous search"
-          return false
-        end
-
-        @search_query = query
-        @search_direction = direction
-        index = if direction == :backward
-          search_from = @cursor.positive? ? @cursor - 1 : @buffer.length
-          @buffer.rindex(query, search_from) || @buffer.rindex(query)
-        else
-          @buffer.index(query, @cursor + 1) || @buffer.index(query)
-        end
-        if index
-          @cursor = index
-          @status = "Found: #{query}"
-          true
-        else
-          @status = "No match: #{query}"
-          false
-        end
+        apply_search_result(@search.repeat(buffer: @buffer, cursor: @cursor, direction: direction, query: query))
       end
 
       def word_under_cursor
@@ -1139,8 +1117,17 @@ module Kward
         TextBoundary.word_separator?(char)
       end
 
-      def search_status_prefix
-        @search_direction == :backward ? "Search backward:" : "Search:"
+      def sync_search_state
+        @search_active = @search.active?
+        @search_query = @search.query
+        @search_direction = @search.direction
+      end
+
+      def apply_search_result(result)
+        @cursor = result[:cursor] if result[:cursor]
+        @status = result[:status]
+        sync_search_state
+        result[:found]
       end
 
       def normalize_editor_mode(value)
