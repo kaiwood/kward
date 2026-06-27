@@ -80,6 +80,7 @@ Feature guides:
 - [Sessions](doc/session-management.md): resume, clone, fork, rewind, compact, and navigate saved work.
 - [Integrated Editor](doc/editor.md): open files from the composer, edit in-place, and choose editor keybindings.
 - [Git](doc/git.md): review changes, use the diff viewer, stage files, and commit from the interactive TUI.
+- [Shell](doc/shell.md): use `/shell`, the embedded Kward shell with aliases, completion, and per-tab state.
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
 

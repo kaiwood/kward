@@ -16,10 +16,18 @@ module KwardDocsNavigationData
       "Feature guides",
       [
         ["Sessions", "file.session-management.html"],
-        ["Integrated Editor", "file.editor.html"],
-        ["Git", "file.git.html"],
+        ["Tabs", "file.tabs.html"],
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"]
+      ]
+    ],
+    [
+      "User Tools",
+      [
+        ["Project files", "file.files.html"],
+        ["Integrated Editor", "file.editor.html"],
+        ["Git", "file.git.html"],
+        ["Shell", "file.shell.html"]
       ]
     ]
   ].freeze

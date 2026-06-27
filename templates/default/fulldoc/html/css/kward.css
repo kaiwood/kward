@@ -1227,7 +1227,7 @@ body.kward-docs .kward-home #footer {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
   display: none;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(160px, 220px));
+  grid-template-columns: repeat(3, minmax(160px, 220px));
   left: 50%;
   max-width: calc(100vw - 48px);
   opacity: 0;

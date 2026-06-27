@@ -43,6 +43,8 @@ All notable changes to Kward will be documented in this file.
 - Added a lightweight `context_for_task` workspace tool that builds budgeted task context from ranked files, source outlines, and matching excerpts.
 - Added `context_budget_stats` for approximate active-conversation context bytes and estimated tokens saved by tool output budgeting.
 - Added built-in prompt guidance to start with focused context tools and escalate gradually before full-file reads.
+- Added a Tabs guide under Feature guides covering `/tab` commands, shortcuts, background runs, status colors, and persistence.
+- Added a Project files guide under User Tools covering `/files` browsing, search, file mentions, editor opening, and remembered browser state.
 - Added a Context budgeting guide under Agent tools covering focused context gathering, budgeted reads, output compaction, duplicate reuse, session compaction, and savings stats.
 - Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
 - Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
