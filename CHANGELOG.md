@@ -91,6 +91,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `ekwsh` Tab completion for path-like command-position tokens such as `./ex`.
 - Fixed `read_skill` so restored or compacted duplicate artifacts no longer suppress skill instructions from the active model context.
 - Fixed editor selections so visual mode no longer disables syntax highlighting.
 - Fixed Vibe macro recording so CSI-u encoded `q` stops recording instead of starting a pending macro command.

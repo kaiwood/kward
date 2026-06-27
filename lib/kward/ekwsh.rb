@@ -39,7 +39,11 @@ module Kward
       token = completion_token(input.to_s, cursor.to_i)
       return nil if token[:command] && token[:text].empty?
 
-      candidates = token[:command] ? command_candidates(token[:text]) : path_candidates(token[:text], directories_only: cd_completion?(input, token))
+      candidates = if token[:command] && !path_like_token?(token[:text])
+                     command_candidates(token[:text])
+                   else
+                     path_candidates(token[:text], directories_only: cd_completion?(input, token))
+                   end
       return nil if candidates.empty?
 
       replacement = completion_replacement(token[:text], candidates)
@@ -99,6 +103,10 @@ module Kward
 
     def cd_completion?(input, token)
       input[0...token[:range].begin].to_s.strip == "cd"
+    end
+
+    def path_like_token?(text)
+      text.to_s.include?("/")
     end
 
     def command_candidates(prefix)

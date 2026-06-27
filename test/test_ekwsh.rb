@@ -166,6 +166,20 @@ class TestEkwsh < KwardTestCase
     end
   end
 
+  def test_completes_path_like_command_position_tokens
+    Dir.mktmpdir("ekwsh") do |dir|
+      Dir.mkdir(File.join(dir, "exe"))
+      Dir.mkdir(File.join(dir, "examples"))
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete("./ex", 4)
+
+      assert_equal 0...4, completion.range
+      assert_equal "./ex", completion.replacement
+      assert_equal ["./examples/", "./exe/"], completion.candidates
+    end
+  end
+
   def test_completes_cd_with_directories_only
     Dir.mktmpdir("ekwsh") do |dir|
       Dir.mkdir(File.join(dir, "alpha"))
