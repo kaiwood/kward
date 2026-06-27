@@ -1,5 +1,6 @@
 require_relative "../../editor_mode"
 require_relative "../../text_boundary"
+require_relative "buffer"
 require_relative "file_marker"
 require_relative "undo_history"
 require_relative "status_text"
@@ -24,7 +25,8 @@ module Kward
         @original_digest = @file_marker.digest
         @original_mtime = @file_marker.mtime
         @original_size = @file_marker.size
-        @buffer = @original_content.dup
+        @text_buffer = EditorBuffer.new(@original_content)
+        @buffer = @text_buffer.text
         @cursor = 0
         @viewport_row = 0
         @viewport_column = 0
@@ -68,7 +70,8 @@ module Kward
         @original_digest = other.original_digest.dup
         @original_mtime = other.original_mtime
         @original_size = other.original_size
-        @buffer = other.buffer.dup
+        @text_buffer = EditorBuffer.new(other.buffer)
+        @buffer = @text_buffer.text
         @status = other.status.dup
         @search_query = other.search_query.dup
         @search_direction = other.search_direction
@@ -101,12 +104,11 @@ module Kward
         @vibe_last_macro = other.vibe_last_macro
         @readonly = other.readonly
         @diff_view = other.diff_view
-        invalidate_lines_cache
       end
 
       def buffer=(value)
-        @buffer = value.to_s
-        invalidate_lines_cache
+        @text_buffer.text = value
+        @buffer = @text_buffer.text
       end
 
       def undo_stack=(value)
@@ -200,15 +202,11 @@ module Kward
       end
 
       def lines
-        @lines_cache ||= begin
-          values = @buffer.split("\n", -1)
-          values.empty? ? [""] : values
-        end
+        @text_buffer.lines
       end
 
       def cursor_line_and_column
-        before_cursor = @buffer[0...@cursor].to_s
-        [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
+        cursor_line_and_column_for(@cursor)
       end
 
       def set_cursor_line_and_column(line_index, column)
@@ -216,10 +214,7 @@ module Kward
       end
 
       def offset_for_line_and_column(line_index, column)
-        values = lines
-        line_index = [[line_index.to_i, 0].max, values.length - 1].min
-        column = [[column.to_i, 0].max, values[line_index].length].min
-        values.first(line_index).sum { |line| line.length + 1 } + column
+        @text_buffer.offset_for_line_and_column(line_index, column)
       end
 
       def push_undo
@@ -257,8 +252,9 @@ module Kward
         return if text.empty?
         return replace_selections(text) if multi_cursor?
 
-        @buffer = @buffer[0...@cursor].to_s + text + @buffer[@cursor..].to_s
+        @text_buffer.insert(@cursor, text)
         @cursor += text.length
+        @buffer = @text_buffer.text
         changed!
       end
 
@@ -266,8 +262,9 @@ module Kward
         return delete_before_selections if multi_cursor?
         return false if @cursor.zero?
 
-        @buffer = @buffer[0...(@cursor - 1)].to_s + @buffer[@cursor..].to_s
+        @text_buffer.delete_range(@cursor - 1, @cursor)
         @cursor -= 1
+        @buffer = @text_buffer.text
         changed!
         true
       end
@@ -276,7 +273,8 @@ module Kward
         return delete_at_selections if multi_cursor?
         return false unless @cursor < @buffer.length
 
-        @buffer = @buffer[0...@cursor].to_s + @buffer[(@cursor + 1)..].to_s
+        @text_buffer.delete_range(@cursor, @cursor + 1)
+        @buffer = @text_buffer.text
         changed!
         true
       end
@@ -647,10 +645,8 @@ module Kward
       end
 
       def replace_range(start_index, end_index, text)
-        start_index, end_index = [start_index, end_index].minmax
-        start_index = [[start_index, 0].max, @buffer.length].min
-        end_index = [[end_index, 0].max, @buffer.length].min
-        @buffer = @buffer[0...start_index].to_s + text.to_s + @buffer[end_index..].to_s
+        start_index, = @text_buffer.replace_range(start_index, end_index, text)
+        @buffer = @text_buffer.text
         @cursor = [start_index, @buffer.length].min
         changed!
       end
@@ -863,10 +859,6 @@ module Kward
 
       private
 
-      def invalidate_lines_cache
-        @lines_cache = nil
-      end
-
       def clamp_offset(value)
         [[value.to_i, 0].max, @buffer.length].min
       end
@@ -911,7 +903,7 @@ module Kward
       end
 
       def restore_editor_snapshot(snapshot)
-        @buffer = snapshot[:buffer].to_s
+        self.buffer = snapshot[:buffer].to_s
         if snapshot[:selections]
           set_selections(snapshot[:selections])
         else
@@ -949,7 +941,8 @@ module Kward
             selection[:anchor] += delta if selection[:anchor] >= edit[:end]
             selection[:cursor] += delta if selection[:cursor] >= edit[:end]
           end
-          @buffer = @buffer[0...edit[:start]].to_s + edit[:text] + @buffer[edit[:end]..].to_s
+          @text_buffer.replace_range(edit[:start], edit[:end], edit[:text])
+          @buffer = @text_buffer.text
           cursor = edit[:start] + edit[:text].length
           new_selections << { anchor: cursor, cursor: cursor }
         end
@@ -978,7 +971,8 @@ module Kward
         return false if start_index == end_index
 
         push_kill(@buffer[start_index...end_index].to_s)
-        @buffer = @buffer[0...start_index].to_s + @buffer[end_index..].to_s
+        @text_buffer.delete_range(start_index, end_index)
+        @buffer = @text_buffer.text
         @cursor = start_index
         changed!
         true
@@ -1158,7 +1152,6 @@ module Kward
       end
 
       def changed!(clear_selections: true)
-        invalidate_lines_cache
         @overwrite_confirmed = false
         @quit_confirmed = false
         if clear_selections
