@@ -6,6 +6,7 @@ require_relative "kill_ring"
 require_relative "undo_history"
 require_relative "search"
 require_relative "status_text"
+require_relative "vibe_state"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -15,7 +16,7 @@ module Kward
     class EditorState
       attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer, :undo_stack, :redo_stack, :kill_buffer, :kill_ring, :last_yank_range, :last_yank_index
-      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :vibe_mode, :vibe_pending, :vibe_command, :vibe_last_change, :vibe_last_find, :vibe_last_visual_selection, :vibe_visual_block_insert, :vibe_marks, :vibe_registers, :vibe_macros, :vibe_recording_macro, :vibe_last_macro, :readonly, :diff_view
+      attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :readonly, :diff_view
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
         @path = path.to_s
@@ -48,21 +49,11 @@ module Kward
         @kill_ring = @kill_state.kill_ring
         @last_yank_range = @kill_state.last_yank_range
         @last_yank_index = @kill_state.last_yank_index
-        @vibe_mode = @editor_mode == "vibe" ? "normal" : nil
-        @vibe_pending = ""
-        @vibe_command = ""
+        @vibe_state = VibeEditorState.new(editor_mode: @editor_mode)
+        sync_vibe_state
         @undo_history = EditorUndoHistory.new
         @undo_stack = @undo_history.undo_stack
         @redo_stack = @undo_history.redo_stack
-        @vibe_last_change = nil
-        @vibe_last_find = nil
-        @vibe_last_visual_selection = nil
-        @vibe_visual_block_insert = nil
-        @vibe_marks = {}
-        @vibe_registers = {}
-        @vibe_macros = {}
-        @vibe_recording_macro = nil
-        @vibe_last_macro = nil
         @status = default_status
       end
 
@@ -97,26 +88,18 @@ module Kward
         @kill_ring = @kill_state.kill_ring
         @last_yank_range = @kill_state.last_yank_range
         @last_yank_index = @kill_state.last_yank_index
-        @vibe_mode = other.vibe_mode&.dup
-        @vibe_pending = other.vibe_pending.dup
-        @vibe_command = other.vibe_command.dup
+        @vibe_state = VibeEditorState.copy(other.vibe_state)
+        sync_vibe_state
         @undo_history = EditorUndoHistory.new
         other.undo_stack.each { |entry| @undo_history.undo_stack << duplicate_editor_snapshot(entry) }
         other.redo_stack.each { |entry| @undo_history.redo_stack << duplicate_editor_snapshot(entry) }
         @undo_stack = @undo_history.undo_stack
         @redo_stack = @undo_history.redo_stack
-        @vibe_last_change = other.vibe_last_change&.dup
-        @vibe_last_find = other.vibe_last_find&.dup
-        @vibe_last_visual_selection = other.vibe_last_visual_selection&.dup
-        @vibe_visual_block_insert = other.vibe_visual_block_insert&.dup
-        @vibe_marks = other.vibe_marks.transform_values(&:dup)
-        @vibe_registers = other.vibe_registers.transform_values(&:dup)
-        @vibe_macros = other.vibe_macros.transform_values(&:dup)
-        @vibe_recording_macro = other.vibe_recording_macro
-        @vibe_last_macro = other.vibe_last_macro
         @readonly = other.readonly
         @diff_view = other.diff_view
       end
+
+      attr_reader :vibe_state
 
       def buffer=(value)
         @text_buffer.text = value
@@ -151,6 +134,114 @@ module Kward
       def last_yank_index=(value)
         @kill_state.last_yank_index = value
         sync_kill_state
+      end
+
+      def vibe_mode
+        @vibe_state.mode
+      end
+
+      def vibe_mode=(value)
+        @vibe_state.mode = value
+        sync_vibe_state
+      end
+
+      def vibe_pending
+        @vibe_state.pending
+      end
+
+      def vibe_pending=(value)
+        @vibe_state.pending = value
+        sync_vibe_state
+      end
+
+      def vibe_command
+        @vibe_state.command
+      end
+
+      def vibe_command=(value)
+        @vibe_state.command = value
+        sync_vibe_state
+      end
+
+      def vibe_last_change
+        @vibe_state.last_change
+      end
+
+      def vibe_last_change=(value)
+        @vibe_state.last_change = value
+        sync_vibe_state
+      end
+
+      def vibe_last_find
+        @vibe_state.last_find
+      end
+
+      def vibe_last_find=(value)
+        @vibe_state.last_find = value
+        sync_vibe_state
+      end
+
+      def vibe_last_visual_selection
+        @vibe_state.last_visual_selection
+      end
+
+      def vibe_last_visual_selection=(value)
+        @vibe_state.last_visual_selection = value
+        sync_vibe_state
+      end
+
+      def vibe_visual_block_insert
+        @vibe_state.visual_block_insert
+      end
+
+      def vibe_visual_block_insert=(value)
+        @vibe_state.visual_block_insert = value
+        sync_vibe_state
+      end
+
+      def vibe_marks
+        @vibe_state.marks
+      end
+
+      def vibe_marks=(value)
+        @vibe_state.marks = value
+        sync_vibe_state
+      end
+
+      def vibe_registers
+        @vibe_state.registers
+      end
+
+      def vibe_registers=(value)
+        @vibe_state.registers = value
+        sync_vibe_state
+      end
+
+      def vibe_macros
+        @vibe_state.macros
+      end
+
+      def vibe_macros=(value)
+        @vibe_state.macros = value
+        sync_vibe_state
+      end
+
+      def vibe_recording_macro
+        @vibe_state.recording_macro
+      end
+
+      def vibe_recording_macro=(value)
+        @vibe_state.recording_macro = value
+        sync_vibe_state
+      end
+
+      def vibe_last_macro
+        @vibe_state.last_macro
+      end
+
+      def vibe_last_macro=(value)
+        @vibe_state.last_macro = value
+        sync_vibe_state
       end
 
       def cursor
@@ -1150,6 +1241,21 @@ module Kward
         @search_active = @search.active?
         @search_query = @search.query
         @search_direction = @search.direction
+      end
+
+      def sync_vibe_state
+        @vibe_mode = @vibe_state.mode
+        @vibe_pending = @vibe_state.pending
+        @vibe_command = @vibe_state.command
+        @vibe_last_change = @vibe_state.last_change
+        @vibe_last_find = @vibe_state.last_find
+        @vibe_last_visual_selection = @vibe_state.last_visual_selection
+        @vibe_visual_block_insert = @vibe_state.visual_block_insert
+        @vibe_marks = @vibe_state.marks
+        @vibe_registers = @vibe_state.registers
+        @vibe_macros = @vibe_state.macros
+        @vibe_recording_macro = @vibe_state.recording_macro
+        @vibe_last_macro = @vibe_state.last_macro
       end
 
       def apply_search_result(result)
