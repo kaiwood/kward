@@ -6,6 +6,7 @@ require_relative "indent_navigation"
 require_relative "kill_ring"
 require_relative "undo_history"
 require_relative "search"
+require_relative "selections"
 require_relative "status_text"
 require_relative "vibe_state"
 
@@ -43,8 +44,8 @@ module Kward
         @search_direction = @search.direction
         @kill_state = EditorKillRing.new
         @kill_buffer = @kill_state.kill_buffer
-        @selection_anchor = nil
-        @secondary_selections = []
+        @selections = EditorSelections.new(cursor: @cursor, buffer_length: @buffer.length)
+        sync_selection_state
         @editor_mode = normalize_editor_mode(editor_mode)
         @emacs_pending = nil
         @kill_ring = @kill_state.kill_ring
@@ -82,8 +83,13 @@ module Kward
         @kill_buffer = @kill_state.kill_buffer
         @quit_confirmed = other.quit_confirmed
         @viewport_column = other.viewport_column
-        @selection_anchor = other.selection_anchor
-        @secondary_selections = other.selections.drop(1).map { |selection| selection.dup }
+        @selections = EditorSelections.new(
+          cursor: @cursor,
+          buffer_length: @buffer.length,
+          anchor: other.selection_anchor,
+          secondary: other.selections.drop(1).map(&:dup)
+        )
+        sync_selection_state
         @editor_mode = other.editor_mode.dup
         @emacs_pending = other.emacs_pending&.dup
         @kill_ring = @kill_state.kill_ring
@@ -105,6 +111,7 @@ module Kward
       def buffer=(value)
         @text_buffer.text = value
         @buffer = @text_buffer.text
+        sync_selection_state if @selections
       end
 
       def undo_stack=(value)
@@ -251,6 +258,8 @@ module Kward
 
       def cursor=(value)
         @cursor = clamp_offset(value)
+        @selections.cursor = @cursor
+        sync_selection_state
       end
 
       def selection_anchor
@@ -258,47 +267,39 @@ module Kward
       end
 
       def selection_anchor=(value)
-        @selection_anchor = value.nil? ? nil : clamp_offset(value)
+        @selections.anchor = value
+        sync_selection_state
       end
 
       def selections
-        normalize_secondary_selections
-        [primary_selection] + @secondary_selections.map(&:dup)
+        sync_selection_state
+        @selections.all
       end
 
       def multi_cursor?
-        normalize_secondary_selections
-        @secondary_selections.any?
+        sync_selection_state
+        @selections.multi_cursor?
       end
 
       def set_selections(values)
-        first, *rest = values.to_a
-        if first
-          @selection_anchor = first[:anchor]
-          @cursor = first[:cursor]
-        else
-          @selection_anchor = nil
-          @cursor = 0
-        end
-        @secondary_selections = rest.map { |selection| normalized_selection(selection) }
-        normalize_secondary_selections
+        @selections.set(values)
+        @cursor = @selections.primary[:cursor]
+        sync_selection_state
       end
 
       def add_selection(anchor, cursor = anchor)
-        @secondary_selections << normalized_selection(anchor: anchor, cursor: cursor)
-        normalize_secondary_selections
+        @selections.add(anchor, cursor)
+        sync_selection_state
       end
 
       def collapse_to_primary_selection
-        @secondary_selections = []
-        clear_selection
+        @selections.collapse_to_primary
+        sync_selection_state
       end
 
       def secondary_cursor_offsets
-        normalize_secondary_selections
-        @secondary_selections.filter_map do |selection|
-          selection[:cursor] if selection[:anchor] == selection[:cursor]
-        end
+        sync_selection_state
+        @selections.secondary_cursor_offsets
       end
 
       def readonly?
@@ -379,6 +380,7 @@ module Kward
         @text_buffer.insert(@cursor, text)
         @cursor += text.length
         @buffer = @text_buffer.text
+        sync_selection_state
         changed!
       end
 
@@ -389,6 +391,7 @@ module Kward
         @text_buffer.delete_range(@cursor - 1, @cursor)
         @cursor -= 1
         @buffer = @text_buffer.text
+        sync_selection_state
         changed!
         true
       end
@@ -399,6 +402,7 @@ module Kward
 
         @text_buffer.delete_range(@cursor, @cursor + 1)
         @buffer = @text_buffer.text
+        sync_selection_state
         changed!
         true
       end
@@ -641,13 +645,13 @@ module Kward
       end
 
       def begin_selection
-        @selection_anchor = @cursor
+        self.selection_anchor = @cursor
         @status = "Selection started"
       end
 
       def clear_selection
-        @selection_anchor = nil
-        @secondary_selections = []
+        @selections.clear
+        sync_selection_state
       end
 
       def selection_active?
@@ -828,8 +832,7 @@ module Kward
         existing_ranges = [range] if existing_ranges.empty?
         start_after = existing_ranges.map(&:last).max || range[1]
         if selection_range.nil?
-          @selection_anchor = range[0]
-          @cursor = range[1]
+          set_selections([{ anchor: range[0], cursor: range[1] }])
           @status = "Selected: #{query}"
           return true
         end
@@ -956,38 +959,17 @@ module Kward
       end
 
       def primary_selection
-        { anchor: @selection_anchor || @cursor, cursor: @cursor }
+        sync_selection_state
+        @selections.primary
       end
 
       def primary_selection_active?
-        return false if @selection_anchor.nil?
-        return true if vibe? && %w[visual visual_line visual_block].include?(@vibe_mode)
-
-        @selection_anchor != @cursor
-      end
-
-      def normalized_selection(selection)
-        {
-          anchor: clamp_offset(selection[:anchor]),
-          cursor: clamp_offset(selection[:cursor])
-        }
-      end
-
-      def normalize_secondary_selections
-        @secondary_selections ||= []
-        seen = { [primary_selection[:anchor], primary_selection[:cursor]] => true }
-        @secondary_selections = @secondary_selections.filter_map do |selection|
-          normalized = normalized_selection(selection)
-          key = [normalized[:anchor], normalized[:cursor]]
-          next if seen[key]
-
-          seen[key] = true
-          normalized
-        end
+        sync_selection_state
+        @selections.primary_active?(vibe_visual: vibe? && %w[visual visual_line visual_block].include?(@vibe_mode))
       end
 
       def selection_range_for(selection)
-        [selection[:anchor], selection[:cursor]].minmax
+        @selections.range_for(selection)
       end
 
       def editor_snapshot
@@ -999,9 +981,8 @@ module Kward
         if snapshot[:selections]
           set_selections(snapshot[:selections])
         else
-          @cursor = [snapshot[:cursor].to_i, @buffer.length].min
-          @selection_anchor = nil
-          @secondary_selections = []
+          set_selections([{ anchor: nil, cursor: [snapshot[:cursor].to_i, @buffer.length].min }])
+          clear_selection
         end
       end
 
@@ -1035,6 +1016,7 @@ module Kward
           end
           @text_buffer.replace_range(edit[:start], edit[:end], edit[:text])
           @buffer = @text_buffer.text
+          sync_selection_state
           cursor = edit[:start] + edit[:text].length
           new_selections << { anchor: cursor, cursor: cursor }
         end
@@ -1066,6 +1048,7 @@ module Kward
         @text_buffer.delete_range(start_index, end_index)
         @buffer = @text_buffer.text
         @cursor = start_index
+        sync_selection_state
         changed!
         true
       end
@@ -1209,6 +1192,12 @@ module Kward
         @last_yank_index = @kill_state.last_yank_index
       end
 
+      def sync_selection_state
+        @selections.buffer_length = @buffer.length
+        @selections.cursor = @cursor
+        @selection_anchor = @selections.anchor
+      end
+
       def sync_search_state
         @search_active = @search.active?
         @search_query = @search.query
@@ -1249,8 +1238,8 @@ module Kward
         @overwrite_confirmed = false
         @quit_confirmed = false
         if clear_selections
-          @selection_anchor = nil
-          @secondary_selections = []
+          @selections.clear
+          sync_selection_state
         end
         @kill_state.clear_last_yank
         sync_kill_state
