@@ -1,4 +1,7 @@
+require "json"
 require "set"
+require_relative "../config_files"
+require_relative "../private_file"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -8,6 +11,7 @@ module Kward
     module ProjectBrowser
       PROJECT_BROWSER_ROOT = "".freeze
       PROJECT_BROWSER_RESULT_LIMIT = 200
+      PROJECT_BROWSER_STATE_VERSION = 1
 
       def open_project_browser
         @mutex.synchronize do
@@ -19,13 +23,15 @@ module Kward
 
       def open_project_browser_locked
         paths = project_file_paths
+        saved_state = saved_project_browser_state
         @project_browser_state = {
           paths: paths,
-          expanded: default_project_browser_expanded_paths(paths),
+          expanded: restored_project_browser_expanded_paths(paths, saved_state),
           selection_index: 0,
           search_active: false,
           query: ""
         }
+        restore_project_browser_selection(saved_state["selected_path"])
         self.composer_input = ""
         self.composer_cursor = 0
         @pending_keys.clear
@@ -41,6 +47,7 @@ module Kward
       def dismiss_project_browser
         return false unless project_browser_visible?
 
+        persist_project_browser_state unless project_browser_search_active?
         @project_browser_state = nil
         true
       end
@@ -148,6 +155,7 @@ module Kward
         @project_browser_state[:query] = ""
         sync_project_browser_query_input
         clamp_project_browser_selection
+        persist_project_browser_state
       end
 
       def project_browser_append_search(key)
@@ -179,6 +187,7 @@ module Kward
         return if rows.empty?
 
         @project_browser_state[:selection_index] = previous_list_selection_index(@project_browser_state[:selection_index], rows.length)
+        persist_project_browser_state unless project_browser_search_active?
       end
 
       def select_next_project_browser_row
@@ -186,6 +195,7 @@ module Kward
         return if rows.empty?
 
         @project_browser_state[:selection_index] = next_list_selection_index(@project_browser_state[:selection_index], rows.length)
+        persist_project_browser_state unless project_browser_search_active?
       end
 
       def open_or_toggle_selected_project_browser_row
@@ -196,6 +206,7 @@ module Kward
           toggle_project_browser_directory(row[:path])
           true
         else
+          persist_project_browser_state unless project_browser_search_active?
           @project_browser_restore_after_editor = true if open_editor(row[:path])
           true
         end
@@ -206,6 +217,7 @@ module Kward
         return false unless row&.fetch(:directory, false)
 
         @project_browser_state[:expanded].add(row[:path])
+        persist_project_browser_state
         true
       end
 
@@ -216,6 +228,7 @@ module Kward
         if row[:directory] && @project_browser_state[:expanded].include?(row[:path])
           @project_browser_state[:expanded].delete(row[:path]) unless row[:path] == PROJECT_BROWSER_ROOT
           clamp_project_browser_selection
+          persist_project_browser_state
           true
         else
           select_project_browser_parent(row[:path])
@@ -230,6 +243,7 @@ module Kward
           expanded.add(path)
         end
         clamp_project_browser_selection
+        persist_project_browser_state
       end
 
       def select_project_browser_parent(path)
@@ -237,13 +251,17 @@ module Kward
         parent = PROJECT_BROWSER_ROOT if parent == "."
         rows = project_browser_visible_rows
         index = rows.index { |row| row[:directory] && row[:path] == parent }
-        @project_browser_state[:selection_index] = index if index
+        return unless index
+
+        @project_browser_state[:selection_index] = index
+        persist_project_browser_state unless project_browser_search_active?
       end
 
       def insert_selected_project_browser_mention
         row = selected_project_browser_row
         return false unless row && !row[:directory]
 
+        persist_project_browser_state unless project_browser_search_active?
         self.composer_input = "@#{row[:path]}"
         self.composer_cursor = composer_input.length
         dismiss_project_browser
@@ -254,13 +272,18 @@ module Kward
         return unless @project_browser_restore_after_editor
 
         @project_browser_restore_after_editor = false
-        @project_browser_state ||= {
-          paths: project_file_paths,
-          expanded: default_project_browser_expanded_paths(project_file_paths),
-          selection_index: 0,
-          search_active: false,
-          query: ""
-        }
+        unless @project_browser_state
+          paths = project_file_paths
+          saved_state = saved_project_browser_state
+          @project_browser_state = {
+            paths: paths,
+            expanded: restored_project_browser_expanded_paths(paths, saved_state),
+            selection_index: 0,
+            search_active: false,
+            query: ""
+          }
+          restore_project_browser_selection(saved_state["selected_path"])
+        end
         sync_project_browser_query_input
         clamp_project_browser_selection
       end
@@ -378,6 +401,87 @@ module Kward
                  end
         suffix = row[:directory] ? "/" : ""
         "#{indent}#{marker}#{row[:name]}#{suffix}"
+      end
+
+      def saved_project_browser_state
+        workspaces = read_project_browser_state_file["workspaces"]
+        state = workspaces[project_browser_workspace_root] if workspaces.is_a?(Hash)
+        state.is_a?(Hash) ? state : {}
+      end
+
+      def persist_project_browser_state
+        return unless @project_browser_state
+
+        data = read_project_browser_state_file
+        workspaces = data["workspaces"].is_a?(Hash) ? data["workspaces"] : {}
+        row = selected_project_browser_row
+        workspaces[project_browser_workspace_root] = {
+          "expanded" => @project_browser_state[:expanded].to_a.sort,
+          "selected_path" => row && row[:path]
+        }
+        data["version"] = PROJECT_BROWSER_STATE_VERSION
+        data["workspaces"] = workspaces
+        PrivateFile.write_json(ConfigFiles.project_browser_state_path, data)
+      rescue StandardError
+        nil
+      end
+
+      def read_project_browser_state_file
+        path = ConfigFiles.project_browser_state_path
+        return { "version" => PROJECT_BROWSER_STATE_VERSION, "workspaces" => {} } unless File.exist?(path)
+
+        data = JSON.parse(File.read(path))
+        data.is_a?(Hash) ? data : { "version" => PROJECT_BROWSER_STATE_VERSION, "workspaces" => {} }
+      rescue JSON::ParserError
+        { "version" => PROJECT_BROWSER_STATE_VERSION, "workspaces" => {} }
+      end
+
+      def project_browser_workspace_root
+        ConfigFiles.canonical_workspace_root(Dir.pwd)
+      end
+
+      def restored_project_browser_expanded_paths(paths, saved_state)
+        directories = project_browser_directory_paths(paths)
+        saved_expanded = saved_state["expanded"]
+        expanded = if saved_expanded.is_a?(Array)
+                     Set.new(saved_expanded.select { |path| directories.include?(path.to_s) })
+                   else
+                     default_project_browser_expanded_paths(paths)
+                   end
+        expanded.add(PROJECT_BROWSER_ROOT)
+        expanded
+      end
+
+      def project_browser_directory_paths(paths)
+        directories = Set.new([PROJECT_BROWSER_ROOT])
+        paths.each do |path|
+          parent = PROJECT_BROWSER_ROOT
+          path.split("/")[0...-1].each do |part|
+            parent = parent.empty? ? part : "#{parent}/#{part}"
+            directories.add(parent)
+          end
+        end
+        directories
+      end
+
+      def restore_project_browser_selection(path)
+        rows = project_browser_visible_rows
+        return @project_browser_state[:selection_index] = 0 if rows.empty?
+
+        index = project_browser_selection_fallback_paths(path).filter_map do |candidate|
+          rows.index { |row| row[:path] == candidate }
+        end.first
+        @project_browser_state[:selection_index] = index || 0
+      end
+
+      def project_browser_selection_fallback_paths(path)
+        current = path.to_s
+        candidates = []
+        until current.empty? || current == "."
+          candidates << current
+          current = File.dirname(current)
+        end
+        candidates
       end
 
       def selected_project_browser_row

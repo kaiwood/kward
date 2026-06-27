@@ -1619,6 +1619,86 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_restores_tree_state_across_instances
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "app", "models"))
+        FileUtils.mkdir_p(File.join(dir, "app", "controllers"))
+        File.write(File.join(dir, "app", "models", "user.rb"), "user\n")
+        File.write(File.join(dir, "app", "controllers", "home.rb"), "home\n")
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          Dir.chdir(dir) do
+            prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+            prompt.instance_variable_set(:@file_mention_paths, ["app/controllers/home.rb", "app/models/user.rb"])
+            prompt.open_project_browser
+            rows = prompt.send(:project_browser_visible_rows)
+            prompt.instance_variable_get(:@project_browser_state)[:selection_index] = rows.index { |row| row[:path] == "app/models" }
+
+            prompt.send(:collapse_selected_project_browser_row)
+            prompt.send(:dismiss_project_browser)
+
+            restored = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+            restored.instance_variable_set(:@file_mention_paths, ["app/controllers/home.rb", "app/models/user.rb"])
+            restored.open_project_browser
+
+            assert_equal "app/models", restored.send(:selected_project_browser_row)[:path]
+            refute restored.instance_variable_get(:@project_browser_state)[:expanded].include?("app/models")
+            refute_includes restored.send(:project_browser_visible_rows).map { |row| row[:path] }, "app/models/user.rb"
+          end
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_restores_missing_selection_to_visible_parent
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "app", "models"))
+        File.write(File.join(dir, "app", "models", "user.rb"), "user\n")
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          Dir.chdir(dir) do
+            prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+            prompt.instance_variable_set(:@file_mention_paths, ["app/models/user.rb"])
+            prompt.open_project_browser
+            rows = prompt.send(:project_browser_visible_rows)
+            prompt.instance_variable_get(:@project_browser_state)[:selection_index] = rows.index { |row| row[:path] == "app/models/user.rb" }
+            prompt.send(:dismiss_project_browser)
+
+            File.delete(File.join(dir, "app", "models", "user.rb"))
+            File.write(File.join(dir, "app", "models", "order.rb"), "order\n")
+            restored = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+            restored.instance_variable_set(:@file_mention_paths, ["app/models/order.rb"])
+            restored.open_project_browser
+
+            assert_equal "app/models", restored.send(:selected_project_browser_row)[:path]
+          end
+        end
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_does_not_restore_search_state
+    Dir.mktmpdir do |config_dir|
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+        prompt.open_project_browser
+        prompt.send(:handle_project_browser_key, "/")
+        prompt.send(:handle_project_browser_key, "m")
+        prompt.send(:handle_project_browser_key, "a")
+        prompt.send(:dismiss_project_browser)
+
+        restored = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        restored.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+        restored.open_project_browser
+
+        refute restored.send(:project_browser_search_active?)
+        assert_equal "", restored.instance_variable_get(:@project_browser_state)[:query]
+        assert_equal "", restored.send(:composer_input)
+      end
+    end
+  end
+
   def test_prompt_interface_project_browser_csi_u_escape_closes_browser
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, ["README.md"])

@@ -111,6 +111,10 @@ module Kward
       File.join(cache_dir, "openrouter_models.json")
     end
 
+    def project_browser_state_path
+      File.join(cache_dir, "project_browser_state.json")
+    end
+
     # @return [String] directory containing structured memory files
     def memory_dir
       File.join(config_dir, "memory")

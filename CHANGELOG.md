@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added `/files`, a nested project file browser overlay with search, editor opening, and browser restoration after closing files opened from the browser.
+- Added persisted `/files` cursor and folder expansion state per workspace.
 - Added Modern editor multi-cursor support with `Ctrl+D` occurrence selection, `Alt+Shift+Up/Down` vertical cursors, and `Ctrl+Shift+L` selected-line cursor creation.
 - Added Vibe Ruby method navigation with `]m` and `[m`.
 - Added Vibe substitute commands such as `:%s/a/b/g` and `:1,3s/a/b/`.
