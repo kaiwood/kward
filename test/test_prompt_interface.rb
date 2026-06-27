@@ -267,6 +267,49 @@ class TestPromptInterface < KwardTestCase
     assert_match(/1 Main.*2 Ops.*3 Done/, strip_ansi(tab_row))
   end
 
+  def test_prompt_interface_tab_cycles_reasoning_in_normal_prompt
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_equal({ reasoning_action: :next }, prompt.send(:handle_key, "\t"))
+  end
+
+  def test_prompt_interface_shift_tab_cycles_reasoning_backwards_in_normal_prompt
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_equal({ reasoning_action: :previous }, prompt.send(:handle_key, "\e[Z"))
+    assert_equal({ reasoning_action: :previous }, prompt.send(:handle_key, "\e[9;2u"))
+  end
+
+  def test_prompt_interface_tab_keeps_slash_completion_when_overlay_visible
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      slash_commands: [{ name: "help", description: "Show help" }]
+    )
+    prompt.send(:composer_input=, "/he")
+    prompt.send(:composer_cursor=, 3)
+
+    assert_equal true, prompt.send(:handle_key, "\t")
+    assert_equal "/help ", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_tab_keeps_file_completion_when_overlay_visible
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.send(:composer_input=, "read @CHANGELOG.m")
+    prompt.send(:composer_cursor=, "read @CHANGELOG.m".length)
+
+    assert_equal true, prompt.send(:handle_key, "\t")
+    assert_equal "read @CHANGELOG.md", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_tab_does_not_cycle_reasoning_when_busy
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.instance_variable_set(:@busy, true)
+
+    assert_nil prompt.send(:handle_key, "\t")
+    assert_equal "", prompt.send(:composer_input)
+  end
+
   def test_prompt_interface_alt_tab_keybindings_return_tab_actions
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "alt")
     prompt.update_tabs(labels: ["1"], active_index: 0)

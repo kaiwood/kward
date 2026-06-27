@@ -194,11 +194,11 @@ module Kward
       replacement
     end
 
-    def update_runtime_context!(provider: nil, model:, reasoning_effort:)
+    def update_runtime_context!(provider: nil, model:, reasoning_effort:, refresh: true)
       @provider = provider unless provider.to_s.empty?
       @model = model
       @reasoning_effort = reasoning_effort
-      refresh_system_message!
+      refresh_system_message! if refresh
     end
 
     def persist_runtime_context!

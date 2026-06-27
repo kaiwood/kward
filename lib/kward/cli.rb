@@ -106,6 +106,8 @@ module Kward
       @prompt_delimited = false
       @experimental_workers = false
       @foreground_turn_active = false
+      @pending_reasoning_config = nil
+      @pending_reasoning_config_mutex = Mutex.new
       @color_enabled = ANSI.enabled?($stdout)
     end
 
@@ -322,6 +324,12 @@ module Kward
           agent = active_tab.agent if active_tab
           next
         end
+        if input.is_a?(Hash) && input[:reasoning_action]
+          conversation = active_tab ? active_tab.agent.conversation : agent.conversation
+          cycle_reasoning(conversation, direction: input[:reasoning_action], persist: :debounced)
+          agent = active_tab.agent if active_tab
+          next
+        end
         next if input == :tab_idle
         break if input.nil?
 
@@ -354,6 +362,7 @@ module Kward
         end
         next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
 
+        flush_pending_reasoning_config(conversation: agent.conversation)
         expanded_input = expand_prompt_template(input)
         display_input = display_input || input if expanded_input
         input = expanded_input || input
@@ -380,8 +389,10 @@ module Kward
         end
       end
 
+      flush_pending_reasoning_config(conversation: agent.conversation)
       agent.conversation
     rescue Interrupt
+      flush_pending_reasoning_config(conversation: agent&.conversation)
       runtime_output("Goodbye.")
       agent&.conversation
     ensure

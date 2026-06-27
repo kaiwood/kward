@@ -36,6 +36,15 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class CountingConversation < Kward::Conversation
+    attr_reader :refresh_count
+
+    def refresh_system_message!
+      @refresh_count = @refresh_count.to_i + 1
+      super
+    end
+  end
+
   class BannerPrompt < FakePrompt
     attr_reader :banner_count
 
@@ -2279,6 +2288,104 @@ class TestCLI < KwardTestCase
       assert_equal ["edit this prompt"], prompt.prefilled_inputs
       assert_equal "first reply", loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["content"]
       assert_equal loaded_session.leaf_id, loaded_conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }.last["id"]
+    end
+  end
+
+  def test_prompt_reasoning_action_cycles_reasoning_forward
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "openai_reasoning_effort" => "medium" }, config_path)
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "gpt-5.5"
+      client.reasoning_effort = "medium"
+      prompt = FakePrompt.new([{ reasoning_action: :next }, "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "high", JSON.parse(File.read(config_path))["openai_reasoning_effort"]
+      assert_equal "high", cli.send(:current_footer_conversation).reasoning_effort
+      assert_equal 1, client.reload_count
+      assert_equal 1, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
+    end
+  end
+
+  def test_prompt_reasoning_action_debounces_config_persistence
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "openai_reasoning_effort" => "medium" }, config_path)
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "gpt-5.5"
+      client.reasoning_effort = "medium"
+      prompt = FakePrompt.new([{ reasoning_action: :next }, { reasoning_action: :next }, { reasoning_action: :previous }])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      cli.define_singleton_method(:schedule_reasoning_config_flush) {}
+      conversation = CountingConversation.new(system_message: nil, provider: "Codex", model: "gpt-5.5", reasoning_effort: "medium")
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:cycle_reasoning, conversation, direction: :next, persist: :debounced)
+        cli.send(:cycle_reasoning, conversation, direction: :next, persist: :debounced)
+
+        assert_equal "xhigh", conversation.reasoning_effort
+        assert_equal "medium", JSON.parse(File.read(config_path))["openai_reasoning_effort"]
+        assert_equal 0, client.reload_count
+        assert_equal 0, conversation.refresh_count.to_i
+        assert_equal 2, prompt.refresh_composer_status_count
+        assert_equal 0, prompt.redraw_count
+
+        cli.send(:flush_pending_reasoning_config, conversation: conversation)
+      end
+
+      assert_equal "xhigh", JSON.parse(File.read(config_path))["openai_reasoning_effort"]
+      assert_equal 1, client.reload_count
+      assert_equal 1, conversation.refresh_count
+    end
+  end
+
+  def test_prompt_reasoning_action_cycles_reasoning_backward_with_wraparound
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "openai_reasoning_effort" => "none" }, config_path)
+      client = FakeClient.new([])
+      client.provider = "Codex"
+      client.model = "gpt-5.5"
+      client.reasoning_effort = "none"
+      prompt = FakePrompt.new([{ reasoning_action: :previous }, "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "xhigh", JSON.parse(File.read(config_path))["openai_reasoning_effort"]
+      assert_equal "xhigh", cli.send(:current_footer_conversation).reasoning_effort
+    end
+  end
+
+  def test_prompt_reasoning_action_noops_for_unsupported_models
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "openai_reasoning_effort" => "medium" }, config_path)
+      client = FakeClient.new([])
+      client.provider = "OpenAI"
+      client.model = "gpt-4.1"
+      client.reasoning_effort = "medium"
+      prompt = FakePrompt.new([{ reasoning_action: :next }, "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "medium", JSON.parse(File.read(config_path))["openai_reasoning_effort"]
+      assert_empty prompt.output
+      assert_equal 0, client.reload_count
+      assert_equal 0, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
     end
   end
 

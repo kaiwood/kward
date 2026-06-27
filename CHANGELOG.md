@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added normal-prompt Tab/Shift+Tab shortcuts to cycle model reasoning effort with wrap-around.
 - Added workspace-scoped persistent prompt history with Ctrl+R fuzzy search in the terminal composer.
 - Added `/files`, a nested project file browser overlay with search, editor opening, and browser restoration after closing files opened from the browser.
 - Added persisted `/files` cursor and folder expansion state per workspace.

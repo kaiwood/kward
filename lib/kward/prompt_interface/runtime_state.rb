@@ -94,6 +94,14 @@ module Kward
         result.is_a?(Hash) && result[:tab_action]
       end
 
+      def reasoning_action_result?(result)
+        result.is_a?(Hash) && result[:reasoning_action]
+      end
+
+      def prompt_action_result?(result)
+        tab_action_result?(result) || reasoning_action_result?(result)
+      end
+
     end
   end
 end

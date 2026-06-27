@@ -348,13 +348,14 @@ class KwardTestCase < Minitest::Test
   end
 
   class FakePrompt
-    attr_reader :output, :redraw_count, :prefilled_inputs
+    attr_reader :output, :redraw_count, :refresh_composer_status_count, :prefilled_inputs
 
     def initialize(inputs, confirmations: [])
       @inputs = inputs
       @confirmations = confirmations
       @output = []
       @redraw_count = 0
+      @refresh_composer_status_count = 0
       @prefilled_inputs = []
     end
 
@@ -372,6 +373,10 @@ class KwardTestCase < Minitest::Test
 
     def redraw
       @redraw_count += 1
+    end
+
+    def refresh_composer_status
+      @refresh_composer_status_count += 1
     end
 
     def prefill_input(value)

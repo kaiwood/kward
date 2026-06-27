@@ -621,10 +621,7 @@ module Kward
         effort, = choices.find { |_value, label| selected.to_s.downcase.start_with?(label.downcase) }
         raise "Reasoning effort must be one of: #{choices.map(&:first).join(", ")}" unless effort
 
-        ConfigFiles.update_config(ModelInfo.reasoning_config_key_for_provider(current_model_provider) => effort)
-        reload_client_config
-        refresh_conversation_runtime(conversation)
-        @prompt.redraw if @prompt.respond_to?(:redraw)
+        set_reasoning_effort(effort, conversation, provider: provider)
       rescue StandardError => e
         runtime_output("Reasoning error: #{e.message}")
       end
@@ -702,6 +699,123 @@ module Kward
         else
           [current_model_provider, text]
         end
+      end
+
+      REASONING_CONFIG_DEBOUNCE_SECONDS = 0.5
+
+      def cycle_reasoning(conversation = current_footer_conversation, direction: :next, persist: :immediate)
+        provider = conversation&.provider || current_model_provider
+        model = conversation&.model || current_model_id
+        choices = ModelInfo.reasoning_effort_choices(provider, model)
+        return false if choices.empty?
+
+        current = (pending_reasoning_effort(provider) || conversation&.reasoning_effort || current_reasoning_effort).to_s
+        current_index = choices.index { |effort, _label| effort == current }
+        current_index ||= direction == :previous ? 0 : -1
+        offset = direction == :previous ? -1 : 1
+        effort = choices[(current_index + offset) % choices.length].first
+        persist == :debounced ? apply_reasoning_effort(effort, conversation, provider: provider) : set_reasoning_effort(effort, conversation, provider: provider)
+        true
+      rescue StandardError => e
+        runtime_output("Reasoning error: #{e.message}")
+        false
+      end
+
+      def set_reasoning_effort(effort, conversation = nil, provider: nil)
+        @pending_reasoning_config_mutex.synchronize { @pending_reasoning_config = nil }
+        persist_reasoning_config(effort, provider: provider)
+        apply_reasoning_effort(effort, conversation, provider: provider, queue_config: false)
+      end
+
+      def apply_reasoning_effort(effort, conversation = nil, provider: nil, queue_config: true)
+        queue_reasoning_config(effort, provider: provider, conversation: conversation) if queue_config
+        if queue_config
+          update_conversation_reasoning_effort(conversation, effort)
+          refresh_reasoning_status
+        else
+          refresh_conversation_runtime(conversation, reasoning_effort: effort)
+          conversation.persist_runtime_context! if conversation&.respond_to?(:persist_runtime_context!)
+          @prompt.redraw if @prompt.respond_to?(:redraw)
+        end
+      end
+
+      def refresh_reasoning_status
+        if @prompt.respond_to?(:refresh_composer_status)
+          @prompt.refresh_composer_status
+        else
+          @prompt.redraw if @prompt.respond_to?(:redraw)
+        end
+      end
+
+      def update_conversation_reasoning_effort(conversation, effort)
+        return unless conversation&.respond_to?(:update_runtime_context!)
+
+        conversation.update_runtime_context!(
+          provider: conversation.provider || current_model_provider,
+          model: conversation.model || current_model_id,
+          reasoning_effort: effort,
+          refresh: false
+        )
+      end
+
+      def pending_reasoning_effort(provider)
+        @pending_reasoning_config_mutex.synchronize do
+          pending = @pending_reasoning_config
+          return nil unless pending
+          return nil unless pending[:provider].to_s.downcase == provider.to_s.downcase
+
+          pending[:effort]
+        end
+      end
+
+      def queue_reasoning_config(effort, provider: nil, conversation: nil)
+        pending = {
+          effort: effort,
+          provider: provider || current_model_provider,
+          conversation: conversation,
+          deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + REASONING_CONFIG_DEBOUNCE_SECONDS
+        }
+        @pending_reasoning_config_mutex.synchronize { @pending_reasoning_config = pending }
+        schedule_reasoning_config_flush
+      end
+
+      def schedule_reasoning_config_flush
+        return if @pending_reasoning_config_thread&.alive?
+
+        @pending_reasoning_config_thread = Thread.new do
+          loop do
+            sleep REASONING_CONFIG_DEBOUNCE_SECONDS
+            break if flush_pending_reasoning_config(force: false)
+            break unless @pending_reasoning_config_mutex.synchronize { @pending_reasoning_config }
+          end
+        rescue StandardError => e
+          runtime_output("Reasoning error: #{e.message}")
+        end
+      end
+
+      def flush_pending_reasoning_config(force: true, conversation: nil)
+        pending = nil
+        @pending_reasoning_config_mutex.synchronize do
+          pending = @pending_reasoning_config
+          return false unless pending
+
+          now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          return false if !force && now < pending[:deadline].to_f
+
+          @pending_reasoning_config = nil
+        end
+        persist_reasoning_config(pending[:effort], provider: pending[:provider])
+        conversation ||= pending[:conversation]
+        if conversation&.reasoning_effort.to_s == pending[:effort].to_s
+          refresh_conversation_runtime(conversation, reasoning_effort: pending[:effort])
+          conversation.persist_runtime_context! if conversation.respond_to?(:persist_runtime_context!)
+        end
+        true
+      end
+
+      def persist_reasoning_config(effort, provider: nil)
+        ConfigFiles.update_config(ModelInfo.reasoning_config_key_for_provider(provider || current_model_provider) => effort)
+        reload_client_config
       end
 
       def reasoning_choices(choices, conversation = current_footer_conversation)

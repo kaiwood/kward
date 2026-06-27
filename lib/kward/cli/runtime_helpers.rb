@@ -187,10 +187,10 @@ module Kward
         @client.reload_config if @client.respond_to?(:reload_config)
       end
 
-      def refresh_conversation_runtime(conversation)
+      def refresh_conversation_runtime(conversation, reasoning_effort: current_reasoning_effort, refresh_system_message: true)
         return unless conversation&.respond_to?(:update_runtime_context!)
 
-        conversation.update_runtime_context!(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        conversation.update_runtime_context!(provider: current_model_provider, model: current_model_id, reasoning_effort: reasoning_effort, refresh: refresh_system_message)
         update_assistant_prompt(conversation)
       end
 

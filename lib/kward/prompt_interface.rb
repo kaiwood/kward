@@ -325,10 +325,10 @@ module Kward
             render_prompt_locked if resized || footer_refreshed
           else
             result = handle_key(key)
-            render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT
+            render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
           end
         end
-        return result if result.is_a?(String) || tab_action_result?(result)
+        return result if result.is_a?(String) || prompt_action_result?(result)
         return nil if result == EXIT_INPUT
 
         sleep 0.02 if key.nil?
@@ -637,7 +637,7 @@ module Kward
         end
 
         result = handle_key(key)
-        render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || tab_action_result?(result)
+        render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || prompt_action_result?(result)
         [EXIT_INPUT, CANCEL_INPUT].include?(result) ? result : result
       end
     end
@@ -695,6 +695,14 @@ module Kward
         width, height = screen_size
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         @output_io.flush
+      end
+    end
+
+    def refresh_composer_status
+      @mutex.synchronize do
+        @cached_composer_status_text = nil
+        @last_composer_status_refresh = 0.0
+        render_prompt_locked if @started && @asking
       end
     end
 

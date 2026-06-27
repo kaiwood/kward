@@ -38,6 +38,9 @@ module Kward
         return if handle_shift_enter_key(key)
         return true if handle_bundled_key(key) { |token| handle_key(token) }
 
+        reasoning_result = handle_reasoning_key_binding(key)
+        return reasoning_result unless reasoning_result == false
+
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -203,6 +206,9 @@ module Kward
         return true if sequence == "\e" && (dismiss_file_overlay || dismiss_slash_overlay)
         return true if handle_shift_enter_key(sequence)
 
+        reasoning_result = handle_reasoning_key_binding(sequence)
+        return reasoning_result unless reasoning_result == false
+
         tab_result = handle_tab_key_binding(sequence)
         return tab_result unless tab_result == false
 
@@ -290,8 +296,10 @@ module Kward
         when 9
           if ctrl_modifier?(modifier)
             shift_modifier?(modifier) ? { tab_action: :previous } : { tab_action: :next }
+          elsif shift_modifier?(modifier)
+            handle_reasoning_key_binding(key) || handle_tab_completion_key
           else
-            handle_tab_completion_key
+            handle_reasoning_key_binding("\t") || handle_tab_completion_key
           end
         when 13
           if modifier == 2
@@ -523,6 +531,26 @@ module Kward
 
       CTRL_TAB_SEQUENCES = ["\e[9;5u", "\e[27;5;9~", "\e[1;5I"].freeze
       CTRL_SHIFT_TAB_SEQUENCES = ["\e[9;6u", "\e[27;6;9~", "\e[1;6I", "\e[1;6Z"].freeze
+      SHIFT_TAB_SEQUENCES = ["\e[Z", "\e[1;2Z", "\e[9;2u", "\e[27;2;9~", "\e[1;2I"].freeze
+
+      def handle_reasoning_key_binding(key)
+        return false if @busy || @select_state || @question_state
+        return false if file_overlay_visible? || slash_overlay_visible?
+        return false if @slash_overlay_dismissed_input && @slash_overlay_dismissed_input == composer_input
+        mention_token = active_file_mention_token
+        open_token = active_file_open_token
+        return false if mention_token && @file_overlay_dismissed_token == mention_token
+        return false if open_token && @file_open_dismissed_token == open_token
+
+        case key
+        when "\t"
+          { reasoning_action: :next }
+        when *SHIFT_TAB_SEQUENCES
+          { reasoning_action: :previous }
+        else
+          false
+        end
+      end
 
       def handle_tab_key_binding(key)
         return false if @select_state || @question_state || @tabs.empty?
