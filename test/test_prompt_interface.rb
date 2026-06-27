@@ -1549,6 +1549,261 @@ class TestPromptInterface < KwardTestCase
     assert_equal "lib/file199.rb", matches.last
   end
 
+  def test_prompt_interface_project_browser_renders_nested_tree_and_opens_file
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib", "kward"))
+      File.write(File.join(dir, "lib", "kward", "agent.rb"), "agent\n")
+      File.write(File.join(dir, "README.md"), "readme\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/kward/agent.rb"])
+
+        assert prompt.open_project_browser
+        rows = strip_ansi(prompt.send(:project_browser_rows, 80).join("\n"))
+
+        assert_includes rows, "▾ lib/"
+        assert_includes rows, "▾ kward/"
+        assert_includes rows, "agent.rb"
+
+        prompt.send(:select_next_project_browser_row)
+        prompt.send(:select_next_project_browser_row)
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal File.realpath(File.join(dir, "lib", "kward", "agent.rb")), editor.path
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_restores_after_editor_closes
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib", "kward"))
+      File.write(File.join(dir, "lib", "kward", "agent.rb"), "agent\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["lib/kward/agent.rb"])
+        prompt.open_project_browser
+        prompt.send(:select_next_project_browser_row)
+        prompt.send(:select_next_project_browser_row)
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        refute prompt.send(:project_browser_visible?)
+        prompt.send(:close_editor)
+
+        assert prompt.send(:project_browser_visible?)
+        assert_equal "lib/kward/agent.rb", prompt.send(:selected_project_browser_row)[:path]
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_restores_search_input_after_editor_closes
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "main.rb"), "main\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+        prompt.open_project_browser
+        prompt.send(:handle_project_browser_key, "/")
+        prompt.send(:handle_project_browser_key, "m")
+        prompt.send(:handle_project_browser_key, "a")
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        prompt.send(:close_editor)
+
+        assert prompt.send(:project_browser_visible?)
+        assert prompt.send(:project_browser_search_active?)
+        assert_equal "ma", prompt.instance_variable_get(:@project_browser_state)[:query]
+        assert_equal "ma", prompt.send(:composer_input)
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_csi_u_escape_closes_browser
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+    prompt.open_project_browser
+
+    prompt.send(:handle_key, "\e[27;1u")
+
+    refute prompt.send(:project_browser_visible?)
+  end
+
+  def test_prompt_interface_project_browser_csi_u_enter_opens_file
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "README.md"), "readme\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+        prompt.open_project_browser
+
+        prompt.send(:handle_key, "\e[13;1u")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal File.realpath(File.join(dir, "README.md")), editor.path
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_bundled_search_filters_and_inserts_mention
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/ma@\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+
+    assert_equal "@lib/main.rb", prompt.ask("You>")
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_project_browser_open_renders_hidden_cursor
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+    prompt.start
+    output.truncate(0)
+    output.rewind
+    prompt.instance_variable_set(:@cursor_visible, true)
+
+    prompt.open_project_browser
+
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+  end
+
+  def test_prompt_interface_project_browser_tab_starts_search
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+
+    prompt.send(:handle_key, "\t")
+    prompt.send(:handle_key, "m")
+    prompt.send(:handle_key, "a")
+
+    assert prompt.send(:project_browser_search_active?)
+    assert_equal "ma", prompt.instance_variable_get(:@project_browser_state)[:query]
+    assert_equal "ma", prompt.send(:composer_input)
+    assert_equal "lib/main.rb", prompt.send(:selected_project_browser_row)[:path]
+  end
+
+  def test_prompt_interface_project_browser_tab_exits_search_like_escape
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+    prompt.send(:handle_key, "\t")
+    prompt.send(:handle_key, "m")
+    prompt.send(:handle_key, "a")
+    prompt.instance_variable_set(:@cursor_visible, true)
+
+    prompt.send(:handle_key, "\t")
+    prompt.send(:render_cursor_visibility_locked)
+
+    refute prompt.send(:project_browser_search_active?)
+    assert_equal "", prompt.instance_variable_get(:@project_browser_state)[:query]
+    assert_equal "", prompt.send(:composer_input)
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+  end
+
+  def test_prompt_interface_project_browser_csi_u_tab_exits_search_like_escape
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+    prompt.send(:handle_key, "\e[9u")
+    prompt.send(:handle_key, "m")
+    prompt.send(:handle_key, "a")
+
+    prompt.send(:handle_key, "\e[9u")
+
+    refute prompt.send(:project_browser_search_active?)
+    assert_equal "", prompt.instance_variable_get(:@project_browser_state)[:query]
+    assert_equal "", prompt.send(:composer_input)
+  end
+
+  def test_prompt_interface_project_browser_csi_u_tab_starts_search
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+
+    prompt.send(:handle_key, "\e[9u")
+    prompt.send(:handle_key, "\e[109u")
+    prompt.send(:handle_key, "\e[97u")
+
+    assert prompt.send(:project_browser_search_active?)
+    assert_equal "ma", prompt.instance_variable_get(:@project_browser_state)[:query]
+    assert_equal "ma", prompt.send(:composer_input)
+    assert_equal "lib/main.rb", prompt.send(:selected_project_browser_row)[:path]
+  end
+
+  def test_prompt_interface_project_browser_csi_u_slash_starts_search
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+
+    prompt.send(:handle_key, "\e[47u")
+    prompt.send(:handle_key, "\e[109u")
+    prompt.send(:handle_key, "\e[97u")
+
+    assert prompt.send(:project_browser_search_active?)
+    assert_equal "ma", prompt.instance_variable_get(:@project_browser_state)[:query]
+    assert_equal "lib/main.rb", prompt.send(:selected_project_browser_row)[:path]
+  end
+
+  def test_prompt_interface_project_browser_cursor_is_visible_only_while_searching
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+    prompt.open_project_browser
+    prompt.instance_variable_set(:@cursor_visible, true)
+
+    prompt.send(:render_cursor_visibility_locked)
+
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+
+    output.truncate(0)
+    output.rewind
+    prompt.send(:handle_key, "\e[47u")
+    prompt.send(:render_cursor_visibility_locked)
+
+    assert_includes output.string, Kward::PromptInterface::CURSOR_SHOW
+  end
+
+  def test_prompt_interface_project_browser_search_and_at_insert_mention
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+
+    prompt.send(:handle_project_browser_key, "/")
+    prompt.send(:handle_project_browser_key, "m")
+    prompt.send(:handle_project_browser_key, "a")
+
+    assert_equal "ma", prompt.send(:composer_input)
+    rows = strip_ansi(prompt.send(:composer_layout, 80, 20).first.join("\n"))
+    assert_includes rows, "│ ma"
+    refute_includes rows, "│ /ma"
+    assert_equal "lib/main.rb", prompt.send(:selected_project_browser_row)[:path]
+    prompt.send(:handle_project_browser_key, "@")
+
+    assert_equal "@lib/main.rb", prompt.send(:composer_input)
+    refute prompt.send(:project_browser_visible?)
+  end
+
+  def test_prompt_interface_project_browser_escape_from_search_clears_filter_input
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.open_project_browser
+
+    prompt.send(:handle_project_browser_key, "/")
+    prompt.send(:handle_project_browser_key, "m")
+    prompt.send(:handle_project_browser_key, "\e")
+
+    refute prompt.send(:project_browser_search_active?)
+    assert_equal "", prompt.send(:composer_input)
+    assert prompt.send(:project_browser_visible?)
+  end
+
   def test_prompt_interface_dollar_file_overlay_opens_editor
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib"))

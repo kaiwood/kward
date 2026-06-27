@@ -121,6 +121,7 @@ module Kward
         @prompt_label = "You>"
         self.composer_input = ""
         self.composer_cursor = 0
+        restore_project_browser_after_editor_close
         @asking = true
       end
 

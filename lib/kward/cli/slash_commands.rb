@@ -25,6 +25,9 @@ module Kward
         when "git"
           handle_git_command(agent)
           [true, nil]
+        when "files"
+          open_project_files_browser
+          [true, nil]
         when "workers"
           unless experimental_workers_enabled?
             runtime_output("Workers are experimental. Start Kward with --experimental-workers to enable /workers.")
@@ -117,6 +120,14 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def open_project_files_browser
+        if @prompt.respond_to?(:open_project_browser)
+          @prompt.open_project_browser
+        else
+          runtime_output("The project file browser is only available in the interactive prompt.")
+        end
       end
 
       # Writes the status output for the terminal CLI flow.

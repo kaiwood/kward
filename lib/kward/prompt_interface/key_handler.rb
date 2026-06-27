@@ -28,6 +28,7 @@ module Kward
         return submit_input if key.nil?
         return handle_interactive_key(key) if interactive_active_locked?
         return handle_editor_input_key(key) if editor_active?
+        return handle_project_browser_key(key) if project_browser_visible?
         return true if handle_mouse_reporting_key(key)
         return if handle_bracketed_paste_key(key)
 

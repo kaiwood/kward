@@ -106,6 +106,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/model` | choose the active model. |
 | `/reasoning` | choose reasoning effort. |
 | `/git` | review uncommitted changes, stage files, and commit. |
+| `/files` | browse project files in a nested tree and open them in the editor. |
 | `/settings` | configure prompt overlays. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session in the current tab. |

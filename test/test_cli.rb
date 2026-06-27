@@ -449,6 +449,22 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
 
+  def test_interactive_loop_opens_files_browser_without_model_turn
+    prompt = FakePrompt.new(["/files", "/exit"])
+    opened = false
+    prompt.define_singleton_method(:open_project_browser) { opened = true }
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.interactive_loop(agent: agent)
+
+    assert opened
+    assert_empty conversation.messages
+  end
+
   def test_interactive_loop_runs_bang_shell_command_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!echo hello", "/exit"])

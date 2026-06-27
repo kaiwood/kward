@@ -24,6 +24,14 @@ $lib/kward/agent.rb
 
 As you type, Kward shows matching files. Use the arrow keys to choose one and press `Enter` to open it.
 
+For a nested project tree, run:
+
+```text
+/files
+```
+
+In the tree browser, use `↑`/`↓` to move, `←`/`→` to collapse or expand directories, `Enter` to toggle a directory or open a file, `Tab` or `/` to search, `@` to insert the selected file as an `@path` mention, and `Esc` to close. When you open a file from `/files`, quitting the editor returns to the browser at the same position.
+
 You can also type a relative path yourself and press `Enter`. If the file does not exist, Kward asks whether to create it.
 
 A few things to know:

@@ -4,6 +4,7 @@ require "io/console"
 require "pathname"
 require "rbconfig"
 require "thread"
+require_relative "project_files"
 require "tty-cursor"
 require "tty-reader"
 require "tty-screen"
@@ -18,6 +19,7 @@ require_relative "prompt_interface/prompt_renderer"
 require_relative "prompt_interface/stream_state"
 require_relative "prompt_interface/slash_overlay"
 require_relative "prompt_interface/file_overlay"
+require_relative "prompt_interface/project_browser"
 require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
 require_relative "prompt_interface/git_prompt"
@@ -66,6 +68,7 @@ module Kward
 
     include SlashOverlay
     include FileOverlay
+    include ProjectBrowser
     include SelectionPrompt
     include QuestionPrompt
     include GitPrompt
@@ -157,6 +160,8 @@ module Kward
       @file_open_dismissed_token = nil
       @file_editor_open_status = nil
       @file_mention_paths = nil
+      @project_browser_state = nil
+      @project_browser_restore_after_editor = false
       @editor_state = nil
       @interactive_state = nil
       @last_interactive_tick = monotonic_now

@@ -1,5 +1,3 @@
-require "open3"
-
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # File-mention completion overlay behavior.
@@ -135,38 +133,11 @@ module Kward
       end
 
       def git_project_file_paths
-        output, status = Open3.capture2("git", "ls-files", "--cached", "--others", "--exclude-standard", chdir: Dir.pwd)
-        return [] unless status.success?
-
-        output.lines.map(&:chomp).reject(&:empty?)
-      rescue StandardError
-        []
+        ProjectFiles.git_paths(Dir.pwd)
       end
 
       def scanned_project_file_paths
-        root = Pathname.new(Dir.pwd)
-        paths = []
-        Find.find(root.to_s) do |path|
-          relative = Pathname.new(path).relative_path_from(root).to_s
-          if File.directory?(path)
-            Find.prune if ignored_project_directory?(relative)
-            next
-          end
-
-          paths << relative unless ignored_project_file?(relative)
-        end
-        paths
-      rescue StandardError
-        []
-      end
-
-      def ignored_project_directory?(relative)
-        ignored_directories = %w[.git .yardoc _yardoc node_modules rdoc tmp vendor/bundle]
-        ignored_directories.include?(relative) || relative.start_with?(".git/")
-      end
-
-      def ignored_project_file?(relative)
-        relative.start_with?(".git/")
+        ProjectFiles.scanned_paths(Dir.pwd)
       end
 
       def selected_file_mention_path
