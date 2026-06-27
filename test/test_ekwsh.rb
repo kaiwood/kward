@@ -41,6 +41,30 @@ class TestEkwsh < KwardTestCase
     end
   end
 
+  def test_sets_safe_color_environment_without_forcing_color
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "TERM" => "dumb" })
+
+    result = shell.run("printf '%s %s %s %s %s' \"$CLICOLOR\" \"$CLICOLOR_FORCE\" \"$FORCE_COLOR\" \"$COLORTERM\" \"$TERM\"")
+
+    assert_includes result.output, "1   truecolor xterm-256color"
+  end
+
+  def test_preserves_user_forced_color_environment
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "FORCE_COLOR" => "3", "CLICOLOR_FORCE" => "1" })
+
+    result = shell.run("printf '%s %s' \"$FORCE_COLOR\" \"$CLICOLOR_FORCE\"")
+
+    assert_includes result.output, "3 1"
+  end
+
+  def test_preserves_sgr_color_output_from_commands
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = shell.run("printf '\\033[31mred\\033[0m'")
+
+    assert_includes result.output, "\e[31mred\e[0m"
+  end
+
   def test_completes_builtin_command
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 

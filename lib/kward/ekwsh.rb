@@ -16,6 +16,7 @@ module Kward
       @previous_cwd = nil
       @env = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @env["PWD"] = @cwd
+      configure_color_environment
       @shell = shell.to_s.empty? ? "/bin/sh" : shell.to_s
     end
 
@@ -43,6 +44,12 @@ module Kward
     end
 
     private
+
+    def configure_color_environment
+      @env["CLICOLOR"] ||= "1"
+      @env["COLORTERM"] ||= "truecolor"
+      @env["TERM"] = "xterm-256color" if @env["TERM"].to_s.empty? || @env["TERM"] == "dumb"
+    end
 
     def completion_token(input, cursor)
       cursor = [[cursor, 0].max, input.length].min
