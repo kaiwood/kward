@@ -65,6 +65,48 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "\e[31mred\e[0m"
   end
 
+  def test_applies_configured_environment
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, configured_env: { "FORCE_COLOR" => "1" })
+
+    result = shell.run("printf %s \"$FORCE_COLOR\"")
+
+    assert_includes result.output, "1"
+  end
+
+  def test_expands_configured_alias_once
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "hi" => "printf hello" })
+
+    result = shell.run("hi")
+
+    assert_includes result.output, "$ hi"
+    assert_includes result.output, "hello"
+  end
+
+  def test_builtin_wins_over_alias
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "pwd" => "printf wrong" })
+
+    result = shell.run("pwd")
+
+    refute_includes result.output, "wrong"
+    assert_includes result.output, Dir.pwd
+  end
+
+  def test_alias_builtin_lists_configured_aliases
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "ll" => "ls -la" })
+
+    result = shell.run("alias")
+
+    assert_includes result.output, "ll=ls\\ -la"
+  end
+
+  def test_completes_alias_commands
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "ll" => "ls -la" })
+
+    completion = shell.complete("l", 1)
+
+    assert_includes completion.candidates, "ll"
+  end
+
   def test_completes_builtin_command
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 

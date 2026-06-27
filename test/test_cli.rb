@@ -495,6 +495,33 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_loop_runs_ekwsh_with_global_config
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+        env:
+          KWARD_EKWSH_CONFIG_TEST: configured
+        aliases:
+          hi: printf alias-ok
+      YAML
+      prompt = FakePrompt.new(["/shell", "printf %s $KWARD_EKWSH_CONFIG_TEST", "hi", "exit", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "configured"
+      assert_includes output, "alias-ok"
+      assert_empty conversation.messages
+    end
+  end
+
   def test_interactive_loop_requeues_ekwsh_tab_action
     prompt = FakePrompt.new(["/shell", { tab_action: :next }, "/exit"])
     conversation = Kward::Conversation.new(system_message: nil)

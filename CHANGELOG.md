@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added `/shell`, the embedded Kward shell (`ekwsh`) for running workspace commands without leaving the TUI, including v1 command/path Tab completion and safe SGR color output.
+- Added `/shell`, the embedded Kward shell (`ekwsh`) for running workspace commands without leaving the TUI, including v1 command/path Tab completion, safe SGR color output, and optional global `ekwsh.yml` env/alias config.
 - Added normal-prompt Tab/Shift+Tab shortcuts to cycle model reasoning effort with wrap-around.
 - Added workspace-scoped persistent prompt history with Ctrl+R fuzzy search in the terminal composer.
 - Added `/files`, a nested project file browser overlay with search, editor opening, and browser restoration after closing files opened from the browser.

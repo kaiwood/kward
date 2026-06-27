@@ -54,6 +54,36 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_read_ekwsh_config_returns_empty_settings_when_missing
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "ekwsh.yml")
+
+      assert_equal({ env: {}, aliases: {} }, Kward::ConfigFiles.read_ekwsh_config(path))
+    end
+  end
+
+  def test_read_ekwsh_config_reads_env_and_aliases
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "ekwsh.yml")
+      File.write(path, <<~YAML)
+        env:
+          FORCE_COLOR: 1
+          BAD-NAME: ignored
+          EMPTY:
+        aliases:
+          ll: ls -la
+          gs: git status --short
+          bad name: ignored
+          empty:
+      YAML
+
+      config = Kward::ConfigFiles.read_ekwsh_config(path)
+
+      assert_equal({ "FORCE_COLOR" => "1" }, config[:env])
+      assert_equal({ "ll" => "ls -la", "gs" => "git status --short" }, config[:aliases])
+    end
+  end
+
   def test_update_nested_config_merges_one_level_section
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")

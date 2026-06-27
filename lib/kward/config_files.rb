@@ -66,6 +66,10 @@ module Kward
       File.join(config_dir, "cache")
     end
 
+    def ekwsh_config_path
+      File.join(config_dir, "ekwsh.yml")
+    end
+
     def default_config
       {
         "personas" => JSON.parse(JSON.generate(DEFAULT_PERSONAS)),
@@ -162,6 +166,50 @@ module Kward
     # @param path [String] config file path
     def write_config(config, path = config_path)
       PrivateFile.write_json(path, config)
+    end
+
+    def read_ekwsh_config(path = ekwsh_config_path)
+      path = File.expand_path(path)
+      return { env: {}, aliases: {} } unless File.exist?(path)
+
+      data = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
+      normalize_ekwsh_config(data)
+    rescue Psych::SyntaxError => e
+      raise "Invalid ekwsh YAML config: #{path}: #{e.message}"
+    end
+
+    def normalize_ekwsh_config(data)
+      data = data.transform_keys(&:to_s) if data.is_a?(Hash)
+      settings = data.is_a?(Hash) ? data : {}
+      {
+        env: normalize_ekwsh_env(settings["env"]),
+        aliases: normalize_ekwsh_aliases(settings["aliases"])
+      }
+    end
+
+    def normalize_ekwsh_env(values)
+      return {} unless values.is_a?(Hash)
+
+      values.each_with_object({}) do |(key, value), result|
+        key = key.to_s
+        next unless key.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+        next if value.nil?
+
+        result[key] = value.to_s
+      end
+    end
+
+    def normalize_ekwsh_aliases(values)
+      return {} unless values.is_a?(Hash)
+
+      values.each_with_object({}) do |(name, command), result|
+        name = name.to_s
+        command = command.to_s.strip
+        next unless name.match?(/\A[A-Za-z0-9_.:-]+\z/)
+        next if command.empty?
+
+        result[name] = command
+      end
     end
 
     # Merges top-level config values and writes the updated config privately.

@@ -39,6 +39,27 @@ By default, Kward stores user data under `~/.kward`:
 
 When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files live beside that file instead. User plugins are the exception: they are loaded only from `~/.kward/plugins`. See [Plugins](plugins.md) for writing and loading user plugins.
 
+## Embedded shell config
+
+The embedded Kward shell (`/shell`, internally `ekwsh`) reads optional global settings from `~/.kward/ekwsh.yml` or, when `KWARD_CONFIG_PATH` is set, from `ekwsh.yml` beside that config file.
+
+Example:
+
+```yaml
+env:
+  FORCE_COLOR: "1"
+  CLICOLOR_FORCE: "1"
+
+aliases:
+  ll: "ls -la"
+  gs: "git status --short"
+  gd: "git diff --color=always"
+```
+
+`env` values are applied when shell mode starts, after Kward's conservative color defaults. Keys must look like environment variable names (`A_Z`, digits after the first character, and underscores); invalid keys are ignored. Values are converted to strings.
+
+`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Built-in `ekwsh` commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, and `exit` take precedence over aliases. Run `alias` inside `ekwsh` to list configured aliases. Aliases are also included in command-name Tab completion.
+
 ## Provider and model settings
 
 Set `provider` to choose the active backend:

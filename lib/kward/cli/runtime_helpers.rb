@@ -122,10 +122,15 @@ module Kward
 
         tab = active_tab if respond_to?(:active_tab, true)
         entering = tab.nil? || tab.shell.nil?
-        shell = tab&.shell || Ekwsh.new(cwd: interactive_workspace_root(agent))
+        shell = tab&.shell || build_ekwsh(agent)
         tab.shell = shell if tab
         runtime_output("Entering ekwsh. Type exit or press Ctrl+D on an empty prompt to return.") if entering
         run_ekwsh_loop(shell, tab: tab)
+      end
+
+      def build_ekwsh(agent)
+        config = ConfigFiles.read_ekwsh_config
+        Ekwsh.new(cwd: interactive_workspace_root(agent), configured_env: config[:env], aliases: config[:aliases])
       end
 
       def run_ekwsh_loop(shell, tab: nil)

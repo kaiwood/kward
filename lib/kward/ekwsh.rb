@@ -7,16 +7,18 @@ module Kward
   class Ekwsh
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
-    BUILTINS = %w[cd pwd export unset clear exit logout].freeze
+    BUILTINS = %w[alias cd pwd export unset clear exit logout].freeze
 
     attr_reader :cwd
 
-    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: ENV["SHELL"])
+    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: ENV["SHELL"], configured_env: {}, aliases: {})
       @cwd = File.expand_path(cwd.to_s.empty? ? Dir.pwd : cwd.to_s)
       @previous_cwd = nil
       @env = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
+      @env.merge!(configured_env.to_h.transform_keys(&:to_s).transform_values(&:to_s))
       @env["PWD"] = @cwd
       configure_color_environment
+      @aliases = aliases.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @shell = shell.to_s.empty? ? "/bin/sh" : shell.to_s
     end
 
@@ -29,7 +31,7 @@ module Kward
       return Result.new(output: "", exit_status: 0) if command.empty?
       return Result.new(output: command_echo(command), exit_status: 0, exit_shell: true) if exit_command?(command)
 
-      builtin_result(command) || execute(command)
+      builtin_result(command) || execute(expand_alias(command), display_command: command)
     end
 
     def complete(input, cursor)
@@ -81,7 +83,7 @@ module Kward
     end
 
     def command_candidates(prefix)
-      (BUILTINS + path_executables).uniq.grep(/\A#{Regexp.escape(prefix)}/).sort
+      (BUILTINS + @aliases.keys + path_executables).uniq.grep(/\A#{Regexp.escape(prefix)}/).sort
     end
 
     def path_executables
@@ -170,6 +172,8 @@ module Kward
       return nil if words.empty?
 
       case words.first
+      when "alias"
+        list_aliases(command, words)
       when "cd"
         change_directory(command, words)
       when "pwd"
@@ -189,6 +193,24 @@ module Kward
 
     def shell_words(command)
       Shellwords.shellsplit(command)
+    end
+
+    def list_aliases(command, words)
+      names = words.length > 1 ? words.drop(1) : @aliases.keys.sort
+      lines = names.filter_map { |name| @aliases[name] ? "#{name}=#{Shellwords.escape(@aliases.fetch(name))}" : nil }
+      suffix = lines.empty? ? "" : "#{lines.join("\n")}\n"
+      Result.new(output: "#{command_echo(command)}#{suffix}", exit_status: 0)
+    end
+
+    def expand_alias(command)
+      words = shell_words(command)
+      return command if words.empty? || BUILTINS.include?(words.first)
+      return command unless @aliases[words.first]
+
+      rest = command.sub(/\A\s*#{Regexp.escape(words.first)}\b\s*/, "")
+      [@aliases.fetch(words.first), rest].reject(&:empty?).join(" ")
+    rescue ArgumentError
+      command
     end
 
     def change_directory(command, words)
@@ -247,16 +269,16 @@ module Kward
       key.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
     end
 
-    def execute(command)
+    def execute(command, display_command: command)
       stdout, stderr, status = Open3.capture3(@env, @shell, "-lc", command, chdir: @cwd)
       exit_status = status.exitstatus || 1
-      output = command_echo(command)
+      output = command_echo(display_command)
       output << clean_output(stdout)
       output << clean_output(stderr)
       output << "Exit status: #{exit_status}\n" unless exit_status.zero?
       Result.new(output: output, exit_status: exit_status)
     rescue Errno::ENOENT => e
-      Result.new(output: "#{command_echo(command)}ekwsh: #{e.message}\n", exit_status: 127)
+      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 127)
     end
 
     def clean_output(value)
