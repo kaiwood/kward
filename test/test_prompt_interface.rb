@@ -2,6 +2,23 @@ require_relative "test_helper"
 require "pty"
 
 class TestPromptInterface < KwardTestCase
+  def test_prompt_interface_completion_provider_handles_plain_tab
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("pw\t\n")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = prompt.with_completion_provider(->(value, cursor) { shell.complete(value, cursor) }) do
+      prompt.ask("Shell $")
+    end
+
+    assert_equal "pwd ", result
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_busy_ctrl_c_returns_cancel_input
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@busy, true)

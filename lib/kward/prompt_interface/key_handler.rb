@@ -38,6 +38,9 @@ module Kward
         return if handle_shift_enter_key(key)
         return true if handle_bundled_key(key) { |token| handle_key(token) }
 
+        completion_result = handle_completion_provider_key(key)
+        return completion_result unless completion_result == false
+
         reasoning_result = handle_reasoning_key_binding(key)
         return reasoning_result unless reasoning_result == false
 
@@ -299,7 +302,8 @@ module Kward
           elsif shift_modifier?(modifier)
             handle_reasoning_key_binding(key) || handle_tab_completion_key
           else
-            handle_reasoning_key_binding("\t") || handle_tab_completion_key
+            completion_result = handle_completion_provider_key("\t")
+            completion_result == false ? handle_reasoning_key_binding("\t") || handle_tab_completion_key : completion_result
           end
         when 13
           if modifier == 2
@@ -532,6 +536,42 @@ module Kward
       CTRL_TAB_SEQUENCES = ["\e[9;5u", "\e[27;5;9~", "\e[1;5I"].freeze
       CTRL_SHIFT_TAB_SEQUENCES = ["\e[9;6u", "\e[27;6;9~", "\e[1;6I", "\e[1;6Z"].freeze
       SHIFT_TAB_SEQUENCES = ["\e[Z", "\e[1;2Z", "\e[9;2u", "\e[27;2;9~", "\e[1;2I"].freeze
+
+      def handle_completion_provider_key(key)
+        return false unless key == "\t" && @completion_provider
+
+        result = @completion_provider.call(composer_input, composer_cursor)
+        return true unless result
+
+        apply_completion_result(result)
+        true
+      end
+
+      def apply_completion_result(result)
+        range = result[:range] || result["range"] || result.range
+        replacement = result[:replacement] || result["replacement"] || result.replacement
+        candidates = result[:candidates] || result["candidates"] || result.candidates
+        original = composer_input
+        before = original[0...range.begin].to_s
+        after = original[range.end..].to_s
+        self.composer_input = "#{before}#{replacement}#{after}"
+        self.composer_cursor = before.length + replacement.to_s.length
+        show_completion_candidates(candidates, replacement) if candidates.to_a.length > 1 && replacement.to_s == original[range]
+      end
+
+      def show_completion_candidates(candidates, replacement)
+        lines = candidates.to_a.first(40)
+        text = ["completions:", *lines.map { |candidate| "  #{candidate}" }].join("\n")
+        write_completion_transcript_locked(text)
+      end
+
+      def write_completion_transcript_locked(text)
+        with_synchronized_output_locked do
+          clear_prompt_for_output_locked
+          write_transcript_text_locked("\n#{text}\n")
+          render_prompt_after_output_locked
+        end
+      end
 
       def handle_reasoning_key_binding(key)
         return false if @busy || @select_state || @question_state

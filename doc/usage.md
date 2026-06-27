@@ -78,7 +78,7 @@ For several commands, enter the embedded Kward shell:
 /shell
 ```
 
-`/shell` opens `ekwsh`, a Kward-native command mode. Kward keeps the tab bar, composer editing, and transcript rendering while each command runs through your configured shell. Built-ins such as `cd`, `pwd`, `export`, `unset`, `clear`, and `exit` maintain shell-mode state between commands. It is intended for command output, not full-screen interactive programs such as editors or pagers.
+`/shell` opens `ekwsh`, a Kward-native command mode. Kward keeps the tab bar, composer editing, and transcript rendering while each command runs through your configured shell. Built-ins such as `cd`, `pwd`, `export`, `unset`, `clear`, and `exit` maintain shell-mode state between commands. Plain Tab completes built-in command names, executables from `$PATH`, and file paths from the shell's current directory; `cd` completion suggests directories only. It is intended for command output, not full-screen interactive programs such as editors or pagers.
 
 ## Shell commands
 

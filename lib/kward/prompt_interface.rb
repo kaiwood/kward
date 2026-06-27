@@ -153,6 +153,7 @@ module Kward
       @transcript_viewport_rows = 0
       @restoring_transcript = false
       @pending_keys = []
+      @completion_provider = nil
       @original_console_mode = nil
       @raw_mode_active = false
       @slash_commands = normalize_slash_commands(slash_commands)
@@ -293,6 +294,14 @@ module Kward
         @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE)
         @output_io.flush
       end
+    end
+
+    def with_completion_provider(provider)
+      previous = @completion_provider
+      @completion_provider = provider
+      yield
+    ensure
+      @completion_provider = previous
     end
 
     def ask(message = "You>")

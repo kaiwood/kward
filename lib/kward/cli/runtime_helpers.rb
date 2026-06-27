@@ -130,7 +130,7 @@ module Kward
 
       def run_ekwsh_loop(shell, tab: nil)
         loop do
-          input = @prompt.ask(shell.prompt_label)
+          input = ask_ekwsh(shell)
           if input.is_a?(Hash) && input[:tab_action]
             (@pending_inputs ||= []).unshift(input)
             return :tab_action
@@ -149,6 +149,15 @@ module Kward
         tab.shell = nil if tab
         runtime_output("Shell exited.")
         :exited
+      end
+
+      def ask_ekwsh(shell)
+        provider = ->(input, cursor) { shell.complete(input, cursor) }
+        if @prompt.respond_to?(:with_completion_provider)
+          @prompt.with_completion_provider(provider) { @prompt.ask(shell.prompt_label) }
+        else
+          @prompt.ask(shell.prompt_label)
+        end
       end
 
       def run_ekwsh_command(shell, input)

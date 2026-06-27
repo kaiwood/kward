@@ -41,6 +41,70 @@ class TestEkwsh < KwardTestCase
     end
   end
 
+  def test_completes_builtin_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    completion = shell.complete("pw", 2)
+
+    assert_equal 0...2, completion.range
+    assert_equal "pwd ", completion.replacement
+    assert_includes completion.candidates, "pwd"
+  end
+
+  def test_completes_path_arguments
+    Dir.mktmpdir("ekwsh") do |dir|
+      File.write(File.join(dir, "alpha.txt"), "")
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete("cat al", 6)
+
+      assert_equal 4...6, completion.range
+      assert_equal "alpha.txt ", completion.replacement
+    end
+  end
+
+  def test_completes_cd_with_directories_only
+    Dir.mktmpdir("ekwsh") do |dir|
+      Dir.mkdir(File.join(dir, "alpha"))
+      File.write(File.join(dir, "alpine.txt"), "")
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete("cd al", 5)
+
+      assert_equal "alpha/", completion.replacement
+      assert_equal ["alpha/"], completion.candidates
+    end
+  end
+
+  def test_does_not_complete_empty_command_prompt
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => ENV.fetch("PATH", "") })
+
+    assert_nil shell.complete("", 0)
+  end
+
+  def test_completes_paths_with_shell_escaping
+    Dir.mktmpdir("ekwsh") do |dir|
+      File.write(File.join(dir, "my file.txt"), "")
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete("cat my", 6)
+
+      assert_equal "my\\ file.txt ", completion.replacement
+    end
+  end
+
+  def test_completes_escaped_space_path_token
+    Dir.mktmpdir("ekwsh") do |dir|
+      FileUtils.mkdir_p(File.join(dir, "my folder"))
+      File.write(File.join(dir, "my folder", "alpha.txt"), "")
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete("cat my\\ folder/al", 17)
+
+      assert_equal "my\\ folder/alpha.txt ", completion.replacement
+    end
+  end
+
   def test_nonzero_command_reports_exit_status
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
