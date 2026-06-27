@@ -43,10 +43,10 @@ module Kward
         "$#{path}"
       end
 
-      def open_editor(path, allow_new: false)
-        full_path = File.expand_path(path.to_s, Dir.pwd)
+      def open_editor(path, allow_new: false, base_dir: Dir.pwd, restrict_to_workspace: true)
+        full_path = File.expand_path(path.to_s, base_dir)
         root = File.expand_path(Dir.pwd)
-        unless full_path == root || full_path.start_with?("#{root}/")
+        if restrict_to_workspace && !(full_path == root || full_path.start_with?("#{root}/"))
           @file_editor_open_status = "Cannot edit file outside workspace"
           return false
         end

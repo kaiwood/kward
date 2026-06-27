@@ -173,6 +173,17 @@ module Kward
         return
       end
 
+      if @argv.first == "edit"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("edit")
+          return
+        end
+        raise ArgumentError, command_usage("edit") unless @argv.length == 2
+
+        edit_file_command(@argv[1])
+        return
+      end
+
       if @argv.first == "count-tests"
         if help_option_arguments?(@argv[1..] || [])
           print_command_help("count-tests")
@@ -249,6 +260,17 @@ module Kward
       end
 
       run_prompt_or_interactive
+    end
+
+    def edit_file_command(path)
+      setup_interactive_prompt
+      unless @prompt.respond_to?(:edit_file)
+        raise ArgumentError, "The integrated editor requires an interactive terminal."
+      end
+
+      @prompt.edit_file(path, base_dir: Dir.pwd, allow_new: true)
+    ensure
+      @prompt.close if @prompt.respond_to?(:close) && prompt_interface?
     end
 
     def run_prompt_or_interactive

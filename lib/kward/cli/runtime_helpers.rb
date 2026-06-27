@@ -145,6 +145,10 @@ module Kward
           result = run_ekwsh_command(shell, input)
           @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
           @prompt.say(result.output) unless result.output.to_s.empty?
+          if result.open_editor_path
+            open_ekwsh_editor(result.open_editor_path, shell)
+            next
+          end
           if result.exit_shell
             tab.shell = nil if tab
             runtime_output("Shell exited.")
@@ -154,6 +158,15 @@ module Kward
         tab.shell = nil if tab
         runtime_output("Shell exited.")
         :exited
+      end
+
+      def open_ekwsh_editor(path, shell)
+        unless @prompt.respond_to?(:edit_file)
+          runtime_output("Integrated editor is unavailable in this prompt.")
+          return false
+        end
+
+        @prompt.edit_file(path, base_dir: shell.cwd, allow_new: true)
       end
 
       def ask_ekwsh(shell)

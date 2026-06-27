@@ -5,7 +5,7 @@ require "shellwords"
 module Kward
   # Kward-native embedded shell command runner.
   class Ekwsh
-    Result = Struct.new(:output, :exit_status, :exit_shell, :clear, keyword_init: true)
+    Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
     BUILTINS = %w[alias cd pwd export unset clear exit logout].freeze
 
@@ -31,7 +31,7 @@ module Kward
       return Result.new(output: "", exit_status: 0) if command.empty?
       return Result.new(output: command_echo(command), exit_status: 0, exit_shell: true) if exit_command?(command)
 
-      builtin_result(command) || execute(expand_alias(command), display_command: command)
+      builtin_result(command) || run_expanded_command(command)
     end
 
     def complete(input, cursor)
@@ -196,10 +196,26 @@ module Kward
     end
 
     def list_aliases(command, words)
-      names = words.length > 1 ? words.drop(1) : @aliases.keys.sort
+      assignments, names = words.drop(1).partition { |word| word.include?("=") }
+      invalid = []
+      assignments.each do |assignment|
+        name, value = assignment.split("=", 2)
+        if valid_alias_name?(name)
+          @aliases[name] = value.to_s
+        else
+          invalid << name
+        end
+      end
+      return Result.new(output: "#{command_echo(command)}ekwsh: alias: invalid name: #{invalid.join(" ")}\n", exit_status: 2) unless invalid.empty?
+
+      names = @aliases.keys.sort if names.empty? && assignments.empty?
       lines = names.filter_map { |name| @aliases[name] ? "#{name}=#{Shellwords.escape(@aliases.fetch(name))}" : nil }
       suffix = lines.empty? ? "" : "#{lines.join("\n")}\n"
       Result.new(output: "#{command_echo(command)}#{suffix}", exit_status: 0)
+    end
+
+    def valid_alias_name?(name)
+      name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/) && !BUILTINS.include?(name.to_s)
     end
 
     def expand_alias(command)
@@ -211,6 +227,28 @@ module Kward
       [@aliases.fetch(words.first), rest].reject(&:empty?).join(" ")
     rescue ArgumentError
       command
+    end
+
+    def run_expanded_command(command)
+      expanded_command = expand_alias(command)
+      kward_result = kward_command_result(expanded_command, display_command: command)
+      return kward_result if kward_result
+
+      execute(expanded_command, display_command: command)
+    end
+
+    def kward_command_result(command, display_command: command)
+      words = shell_words(command)
+      return nil unless words[0] == "kward" && words[1] == "edit"
+
+      unless words.length == 3
+        return Result.new(output: "#{command_echo(display_command)}Usage: kward edit <filename>\n", exit_status: 2)
+      end
+
+      path = File.expand_path(words[2], @cwd)
+      Result.new(output: command_echo(display_command), exit_status: 0, open_editor_path: path)
+    rescue ArgumentError => e
+      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
     end
 
     def change_directory(command, words)

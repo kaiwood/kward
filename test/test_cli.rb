@@ -458,6 +458,23 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
 
+  def test_edit_command_opens_file_in_integrated_editor
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "outside.txt")
+      prompt = FakePrompt.new([])
+      opened = []
+      prompt.define_singleton_method(:edit_file) do |file, base_dir:, allow_new:|
+        opened << { file: file, base_dir: base_dir, allow_new: allow_new }
+        true
+      end
+      cli = Kward::CLI.new(argv: ["edit", path], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.run
+
+      assert_equal [{ file: path, base_dir: Dir.pwd, allow_new: true }], opened
+    end
+  end
+
   def test_interactive_loop_opens_files_browser_without_model_turn
     prompt = FakePrompt.new(["/files", "/exit"])
     opened = false
@@ -518,6 +535,31 @@ class TestCLI < KwardTestCase
       output = strip_ansi(prompt.output.join)
       assert_includes output, "configured"
       assert_includes output, "alias-ok"
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_opens_ekwsh_kward_edit_alias_in_current_prompt
+    Dir.mktmpdir do |dir|
+      file_path = File.join(File.realpath(dir), "note one.md")
+      prompt = FakePrompt.new(["/shell", "alias vibe='kward edit'", "vibe 'note one.md'", "exit", "/exit"])
+      opened = []
+      prompt.define_singleton_method(:edit_file) do |path, base_dir:, allow_new:|
+        opened << { path: path, base_dir: base_dir, allow_new: allow_new }
+        true
+      end
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.interactive_loop(agent: agent)
+
+      assert_equal [{ path: file_path, base_dir: File.realpath(dir), allow_new: true }], opened
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "$ vibe 'note one.md'"
+      refute_includes output, "Exit status:"
       assert_empty conversation.messages
     end
   end

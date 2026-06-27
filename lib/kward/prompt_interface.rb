@@ -304,6 +304,35 @@ module Kward
       @completion_provider = previous
     end
 
+    def edit_file(path, base_dir: Dir.pwd, allow_new: true)
+      start(render: false)
+      opened = @mutex.synchronize do
+        open_editor(path, allow_new: allow_new, base_dir: base_dir, restrict_to_workspace: false).tap do
+          render_prompt_locked
+        end
+      end
+      return false unless opened
+
+      loop do
+        key = read_key(nonblock: true)
+        editor_open = @mutex.synchronize do
+          if key.nil?
+            resized = handle_resize_locked
+            footer_refreshed = tick_footer_locked
+            render_prompt_locked if resized || footer_refreshed
+          else
+            result = handle_key(key)
+            render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
+          end
+          editor_active?
+        end
+        break unless editor_open
+
+        sleep 0.02 if key.nil?
+      end
+      true
+    end
+
     def ask(message = "You>")
       was_composing = @started && @asking
       start
