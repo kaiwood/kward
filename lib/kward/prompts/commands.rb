@@ -28,6 +28,7 @@ module Kward
       { name: "workers", description: "Open the worker pipeline.", argument_hint: "[new|do <task>]" },
       { name: "git", description: "Review uncommitted changes and commit them.", argument_hint: "" },
       { name: "files", description: "Browse project files.", argument_hint: "" },
+      { name: "shell", description: "Open the embedded Kward shell.", argument_hint: "" },
       { name: "tab", description: "Manage tabs.", argument_hint: "[1-n|move|close|new|name]" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },

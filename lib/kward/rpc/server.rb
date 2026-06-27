@@ -399,6 +399,7 @@ module Kward
           commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
+          shell: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
             question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
             select: false,

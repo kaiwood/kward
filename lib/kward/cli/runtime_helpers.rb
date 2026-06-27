@@ -114,6 +114,52 @@ module Kward
         input.to_s.start_with?("!")
       end
 
+      def run_ekwsh(agent)
+        unless @prompt.respond_to?(:ask)
+          runtime_output("The embedded shell is only available in interactive mode.")
+          return
+        end
+
+        tab = active_tab if respond_to?(:active_tab, true)
+        entering = tab.nil? || tab.shell.nil?
+        shell = tab&.shell || Ekwsh.new(cwd: interactive_workspace_root(agent))
+        tab.shell = shell if tab
+        runtime_output("Entering ekwsh. Type exit or press Ctrl+D on an empty prompt to return.") if entering
+        run_ekwsh_loop(shell, tab: tab)
+      end
+
+      def run_ekwsh_loop(shell, tab: nil)
+        loop do
+          input = @prompt.ask(shell.prompt_label)
+          if input.is_a?(Hash) && input[:tab_action]
+            (@pending_inputs ||= []).unshift(input)
+            return :tab_action
+          end
+          break if input.nil?
+
+          result = run_ekwsh_command(shell, input)
+          @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
+          @prompt.say(result.output) unless result.output.to_s.empty?
+          if result.exit_shell
+            tab.shell = nil if tab
+            runtime_output("Shell exited.")
+            return :exited
+          end
+        end
+        tab.shell = nil if tab
+        runtime_output("Shell exited.")
+        :exited
+      end
+
+      def run_ekwsh_command(shell, input)
+        if @prompt.respond_to?(:begin_busy_input)
+          @prompt.begin_busy_input(shell.prompt_label, activity: "running")
+        end
+        shell.run(input)
+      ensure
+        @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+      end
+
       def configured_workspace(root: current_workspace_root)
         Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
       end

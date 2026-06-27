@@ -13,6 +13,7 @@ require_relative "cli_transcript_formatter"
 require_relative "model/context_usage"
 require_relative "events"
 require_relative "export_path"
+require_relative "ekwsh"
 require_relative "auth/anthropic_oauth"
 require_relative "auth/github_oauth"
 require_relative "auth/openrouter_api_key"
@@ -317,6 +318,9 @@ module Kward
       @pending_inputs = []
 
       loop do
+        if @pending_inputs.empty? && active_tab&.shell
+          run_ekwsh_loop(active_tab.shell, tab: active_tab)
+        end
         input = @pending_inputs.shift || (active_tab ? poll_active_tab_input : @prompt.ask("You>"))
         if input.is_a?(Hash) && input[:tab_action]
           tab_result = handle_tab_action(input, session_store)

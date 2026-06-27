@@ -28,6 +28,9 @@ module Kward
         when "files"
           open_project_files_browser
           [true, nil]
+        when "shell"
+          run_ekwsh(agent)
+          [true, nil]
         when "workers"
           unless experimental_workers_enabled?
             runtime_output("Workers are experimental. Start Kward with --experimental-workers to enable /workers.")

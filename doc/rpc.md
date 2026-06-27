@@ -67,6 +67,7 @@ Detailed capability fields include:
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
 - `workers`: experimental agent worker pipeline. Reports `supported: false` by default; set to `supported: true` with `methods: ["workers/list", "workers/show"]` when Kward is launched with `--experimental-workers`.
 - `starterPack`: explicitly unsupported (`supported: false`, reason `cliOnlyInstallCommand`). Use `kward init` from the shell.
+- `shell`: explicitly unsupported (`supported: false`, reason `interactiveTuiOnly`) because `/shell` is the local embedded TUI shell.
 - `logging`: local redacted telemetry logging support, the log directory, enabled categories, `methods: ["logging/stats", "logging/tokenCsv"]`, `usageCsv` sub-capability with bucket support, JSONL format, rotation (10 MB, manual retention), config key `logging`, env prefix `KWARD_LOGGING`, and redacted-metadata-only content.
 
 ### `shutdown`

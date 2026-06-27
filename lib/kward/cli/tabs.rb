@@ -26,6 +26,7 @@ module Kward
         :label,
         :unread,
         :pending_question,
+        :shell,
         keyword_init: true
       ) do
         def running?
@@ -146,7 +147,8 @@ module Kward
           markdown_chunks: [],
           label: label,
           unread: false,
-          pending_question: nil
+          pending_question: nil,
+          shell: nil
         ).tap { |tab| assign_tab_question_prompt(agent, tab) }
       end
 
@@ -273,6 +275,7 @@ module Kward
         tab.seen_events = 0
         tab.queued_inputs.clear
         tab.steering = nil
+        tab.shell = nil
         tab.stream_state = new_tab_stream_state(tab.agent)
         tab.markdown_chunks.clear
         update_prompt_tabs
@@ -312,7 +315,7 @@ module Kward
       end
 
       def render_tab(tab)
-        if tab.running? && tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot)
+        if tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot) && (tab.running? || tab.shell)
           @prompt.restore_tab_view_snapshot(tab.snapshot)
           return
         end

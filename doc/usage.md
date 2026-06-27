@@ -72,6 +72,14 @@ Or run a shell command yourself from the composer by prefixing it with `!`:
 !git status --short
 ```
 
+For several commands, enter the embedded Kward shell:
+
+```text
+/shell
+```
+
+`/shell` opens `ekwsh`, a Kward-native command mode. Kward keeps the tab bar, composer editing, and transcript rendering while each command runs through your configured shell. Built-ins such as `cd`, `pwd`, `export`, `unset`, `clear`, and `exit` maintain shell-mode state between commands. It is intended for command output, not full-screen interactive programs such as editors or pagers.
+
 ## Shell commands
 
 Useful shell commands:
@@ -107,6 +115,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/reasoning` | choose reasoning effort. |
 | `/git` | review uncommitted changes, stage files, and commit. |
 | `/files` | browse project files in a nested tree and open them in the editor. |
+| `/shell` | run workspace commands in the embedded Kward shell. |
 | `/settings` | configure prompt overlays. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session in the current tab. |

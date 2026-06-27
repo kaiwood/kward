@@ -254,6 +254,35 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_shell_mode_persists_on_tab_until_exit
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      nested = File.join(workspace, "nested")
+      FileUtils.mkdir_p(nested)
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      prompt = TabPrompt.new(["cd nested", { tab_action: :new }, "pwd", "exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+
+      cli.send(:run_ekwsh, first_tab.agent)
+      assert first_tab.shell
+      cli.send(:handle_tab_action, cli.instance_variable_get(:@pending_inputs).shift, store)
+      assert_equal 1, cli.instance_variable_get(:@active_tab_index)
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+      assert_same first_tab, cli.send(:active_tab)
+      restored_shell_snapshot = prompt.restores.find { |snapshot| Array(snapshot[:transcript]).join.include?("$ cd nested") }
+      assert restored_shell_snapshot, "expected returning to a shell tab to restore its transcript snapshot"
+
+      cli.send(:run_ekwsh_loop, first_tab.shell, tab: first_tab)
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, nested
+      assert_nil first_tab.shell
+    end
+  end
+
   def test_idle_tab_switch_changes_active_tab
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

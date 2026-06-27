@@ -474,6 +474,42 @@ class TestCLI < KwardTestCase
     assert_empty conversation.messages
   end
 
+  def test_interactive_loop_runs_ekwsh_without_model_turn
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["/shell", "pwd", "exit", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.interactive_loop(agent: agent)
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "Entering ekwsh"
+      assert_includes output, "$ pwd"
+      assert_includes output, File.realpath(dir)
+      assert_includes output, "$ exit"
+      assert_includes output, "Shell exited."
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_requeues_ekwsh_tab_action
+    prompt = FakePrompt.new(["/shell", { tab_action: :next }, "/exit"])
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@pending_inputs, [])
+
+    cli.send(:run_ekwsh, agent)
+
+    assert_equal [{ tab_action: :next }], cli.instance_variable_get(:@pending_inputs)
+    assert_empty conversation.messages
+  end
+
   def test_interactive_loop_runs_bang_shell_command_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!echo hello", "/exit"])
