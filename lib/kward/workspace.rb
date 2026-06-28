@@ -1,6 +1,5 @@
-require "open3"
 require "pathname"
-require "timeout"
+require_relative "local_command_runner"
 require_relative "session_diff"
 
 # Namespace for the Kward CLI agent runtime.
@@ -161,24 +160,14 @@ module Kward
       timeout_seconds = DEFAULT_COMMAND_TIMEOUT_SECONDS if timeout_seconds <= 0
       cancellation&.raise_if_cancelled!
 
-      Open3.popen3(command, chdir: @root.to_s) do |stdin, stdout, stderr, wait_thread|
-        stdin.close
-        stdout_reader = Thread.new { stdout.read }
-        stderr_reader = Thread.new { stderr.read }
-        cancellation&.on_cancel { terminate_process(wait_thread.pid) }
-        status = wait_for_process(wait_thread, timeout_seconds, cancellation)
+      result = LocalCommandRunner.new(timeout_seconds: timeout_seconds, max_output_bytes: @max_command_output_bytes).run(command, cwd: @root.to_s, cancellation: cancellation)
+      return "Error: command timed out after #{timeout_seconds} seconds" if result.timed_out
 
-        output = +"Exit status: #{status.exitstatus}\n"
-        output << "\nSTDOUT:\n#{stdout_reader.value}" unless stdout_reader.value.empty?
-        output << "\nSTDERR:\n#{stderr_reader.value}" unless stderr_reader.value.empty?
-        truncate_output(output)
-      rescue Timeout::Error
-        terminate_process(wait_thread.pid)
-        "Error: command timed out after #{timeout_seconds} seconds"
-      ensure
-        stdout_reader&.kill if stdout_reader&.alive?
-        stderr_reader&.kill if stderr_reader&.alive?
-      end
+      output = +"Exit status: #{result.exit_status}\n"
+      output << "\nSTDOUT:\n#{result.stdout}" unless result.stdout.empty?
+      output << "\nSTDERR:\n#{result.stderr}" unless result.stderr.empty?
+      output << "\n... truncated to #{@max_command_output_bytes} bytes" if result.truncated
+      truncate_output(output)
     rescue Errno::ENOENT, ArgumentError => e
       "Error: #{e.message}"
     end
@@ -523,43 +512,5 @@ module Kward
       output.byteslice(0, @max_command_output_bytes) << "\n... truncated to #{@max_command_output_bytes} bytes"
     end
 
-    def wait_for_process(wait_thread, timeout_seconds, cancellation)
-      deadline = Time.now + timeout_seconds
-      loop do
-        cancellation&.raise_if_cancelled!
-        if wait_thread.join(0.05)
-          cancellation&.raise_if_cancelled!
-          return wait_thread.value
-        end
-        raise Timeout::Error if Time.now >= deadline
-      end
-    end
-
-    def terminate_process(pid)
-      return unless signal_process("TERM", pid)
-
-      deadline = Time.now + 0.2
-      while Time.now < deadline
-        return unless process_running?(pid)
-
-        sleep 0.02
-      end
-
-      signal_process("KILL", pid)
-    end
-
-    def process_running?(pid)
-      Process.kill(0, pid)
-      true
-    rescue Errno::ESRCH
-      false
-    end
-
-    def signal_process(signal, pid)
-      Process.kill(signal, pid)
-      true
-    rescue Errno::ESRCH
-      false
-    end
   end
 end
