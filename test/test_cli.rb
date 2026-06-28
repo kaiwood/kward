@@ -1101,6 +1101,20 @@ class TestCLI < KwardTestCase
     assert_empty prompt.output
   end
 
+  def test_removed_count_tests_command_runs_as_prompt_instead_of_crashing
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["treated as prompt"])
+      cli = Kward::CLI.new(argv: ["count-tests"], stdin: FakeInput.new("", tty: true), client: client)
+
+      stdout = with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        capture_io { cli.run }.first
+      end
+
+      assert_includes stdout, "treated as prompt"
+      assert_equal "count-tests", client.seen_messages.first.last[:content]
+    end
+  end
+
   def test_multi_argument_input_runs_as_one_shot_prompt
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new(["summary"])

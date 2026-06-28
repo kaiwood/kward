@@ -186,17 +186,6 @@ module Kward
         return
       end
 
-      if @argv.first == "count-tests"
-        if help_option_arguments?(@argv[1..] || [])
-          print_command_help("count-tests")
-          return
-        end
-        raise ArgumentError, command_usage("count-tests") unless @argv.length == 1
-
-        print_test_count
-        return
-      end
-
       if @argv.first == "sysprompt"
         if help_option_arguments?(@argv[1..] || [])
           print_command_help("sysprompt")
