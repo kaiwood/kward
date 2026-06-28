@@ -27,6 +27,7 @@ module Kward
         :unread,
         :pending_question,
         :shell,
+        :error_reported,
         keyword_init: true
       ) do
         def running?
@@ -148,7 +149,8 @@ module Kward
           label: label,
           unread: false,
           pending_question: nil,
-          shell: nil
+          shell: nil,
+          error_reported: false
         ).tap { |tab| assign_tab_question_prompt(agent, tab) }
       end
 
@@ -271,6 +273,7 @@ module Kward
         tab.error = nil
         tab.answer = nil
         tab.unread = false
+        tab.error_reported = false
         tab.event_history.clear
         tab.seen_events = 0
         tab.queued_inputs.clear
@@ -326,7 +329,7 @@ module Kward
           else
             render_conversation_transcript(tab.agent.conversation)
           end
-          render_tab_error(tab) if tab.status == "failed"
+          report_tab_runtime_error(tab) if %w[failed cancelled].include?(tab.status.to_s)
         end
         restore_tab_composer_snapshot(tab.snapshot)
       end
@@ -344,8 +347,32 @@ module Kward
         end
       end
 
-      def render_tab_error(tab)
-        runtime_output("Tab #{active_tab_number} error: #{tab.error}") unless tab.error.to_s.empty?
+      def report_tab_runtime_error(tab)
+        return if tab.error_reported
+
+        message = tab_runtime_error_message(tab)
+        return if message.empty?
+
+        tab.error_reported = true
+        runtime_output(message)
+      end
+
+      def tab_runtime_error_message(tab)
+        number = tab_number(tab)
+        case tab.status.to_s
+        when "failed"
+          error = tab.error.to_s.strip
+          error.empty? ? "Tab #{number} error." : "Tab #{number} error: #{error}"
+        when "cancelled"
+          "Tab #{number} cancelled."
+        else
+          ""
+        end
+      end
+
+      def tab_number(tab)
+        index = @tabs&.index(tab)
+        index ? index + 1 : active_tab_number
       end
 
       def submit_tab_input(tab, input, display_input: nil)
@@ -366,6 +393,7 @@ module Kward
         tab.steering = steering_supported? ? Steering.new : nil
         tab.error = nil
         tab.answer = nil
+        tab.error_reported = false
         tab.event_history.clear
         tab.seen_events = 0
         tab.markdown_chunks.clear
@@ -390,10 +418,12 @@ module Kward
       rescue Cancellation::CancelledError
         tab.status = "cancelled"
         tab.unread = false
+        report_tab_runtime_error(tab)
       rescue StandardError => e
         tab.error = e.message
         tab.status = "failed"
         tab.unread = false
+        report_tab_runtime_error(tab)
       ensure
         finish_tab_turn(tab)
       end

@@ -513,9 +513,17 @@ class TestTabs < KwardTestCase
       failed_tab.thread.join(1)
       wait_until { prompt.tab_update_colors.first == :red }
 
+      assert_includes prompt.output.join, "Runtime> Tab 1 error: boom"
+      prompt.output.clear
+      cli.send(:render_tab, failed_tab)
+      refute_includes prompt.output.join, "Tab 1 error: boom"
+
       failed_tab.status = "cancelled"
+      failed_tab.error_reported = false
       cli.send(:update_prompt_tabs)
+      cli.send(:report_tab_runtime_error, failed_tab)
       assert_equal :red, prompt.tab_update_colors.first
+      assert_includes prompt.output.join, "Runtime> Tab 1 cancelled."
     end
   end
 
