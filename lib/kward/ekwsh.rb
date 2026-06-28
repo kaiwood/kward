@@ -6,7 +6,7 @@ require_relative "local_command_runner"
 module Kward
   # Kward-native embedded shell command runner.
   class Ekwsh
-    Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, keyword_init: true)
+    Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
     BUILTINS = %w[alias cd pwd export unset clear exit logout].freeze
     DEFAULT_SHELL = "/bin/sh"
@@ -34,12 +34,12 @@ module Kward
       "Shell #{display_cwd} $"
     end
 
-    def run(input)
+    def run(input, &block)
       command = input.to_s.strip
       return Result.new(output: "", exit_status: 0) if command.empty?
       return Result.new(output: command_echo(command), exit_status: 0, exit_shell: true) if exit_command?(command)
 
-      builtin_result(command) || run_expanded_command(command)
+      builtin_result(command) || run_expanded_command(command, &block)
     end
 
     def complete(input, cursor)
@@ -263,12 +263,12 @@ module Kward
       command
     end
 
-    def run_expanded_command(command)
+    def run_expanded_command(command, &block)
       expanded_command = expand_alias(command)
       kward_result = kward_command_result(expanded_command, display_command: command)
       return kward_result if kward_result
 
-      execute(expanded_command, display_command: command)
+      execute(expanded_command, display_command: command, &block)
     end
 
     def kward_command_result(command, display_command: command)
@@ -348,28 +348,49 @@ module Kward
     end
 
     def execute(command, display_command: command)
+      output = command_echo(display_command)
+      streamed = block_given?
+      yield output.dup if streamed
       result = LocalCommandRunner.new(
         timeout_seconds: @timeout_seconds,
         max_output_bytes: @max_output_bytes,
         terminate_on_output_limit: true
-      ).run(@shell, "-c", command, env: @env, cwd: @cwd)
+      ).run(@shell, "-c", command, env: @env, cwd: @cwd) do |_stream, chunk|
+        text = clean_chunk(chunk)
+        output << text
+        yield text if streamed
+      end
+      append_output_newline(output) { |text| yield text if streamed }
       exit_status = result.timed_out || result.truncated ? 1 : (result.exit_status || 1)
-      output = command_echo(display_command)
-      output << clean_output(result.stdout)
-      output << clean_output(result.stderr)
-      output << "ekwsh: command timed out after #{@timeout_seconds} seconds\n" if result.timed_out
-      output << "ekwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n" if result.truncated
-      output << "Exit status: #{exit_status}\n" unless exit_status.zero?
-      Result.new(output: output, exit_status: exit_status)
+      append_streamed(output, "ekwsh: command timed out after #{@timeout_seconds} seconds\n", streamed) { |text| yield text } if result.timed_out
+      append_streamed(output, "ekwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n", streamed) { |text| yield text } if result.truncated
+      append_streamed(output, "Exit status: #{exit_status}\n", streamed) { |text| yield text } unless exit_status.zero?
+      Result.new(output: output, exit_status: exit_status, streamed: streamed)
     rescue Errno::ENOENT => e
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 127)
     end
 
-    def clean_output(value)
+    def append_streamed(output, text, streamed)
+      output << text
+      yield text if streamed && block_given?
+    end
+
+    def append_output_newline(output)
+      return if output.end_with?("\n") || output.empty?
+
+      output << "\n"
+      yield "\n"
+    end
+
+    def clean_chunk(value)
       text = value.to_s.dup
       text.force_encoding(Encoding::UTF_8)
       text = text.valid_encoding? ? text : text.scrub
-      text = ANSI.sanitize_transcript(text)
+      ANSI.sanitize_transcript(text)
+    end
+
+    def clean_output(value)
+      text = clean_chunk(value)
       text.end_with?("\n") || text.empty? ? text : "#{text}\n"
     end
   end

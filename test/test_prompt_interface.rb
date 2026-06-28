@@ -2719,6 +2719,18 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_writes_raw_transcript_delta
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.write_transcript_delta("shell")
+    prompt.write_transcript_delta(" output\n")
+
+    assert_includes strip_ansi(output.string), "shell output"
+  ensure
+    prompt&.close
+  end
+
   def test_prompt_interface_does_not_redraw_composer_between_stream_chunks
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

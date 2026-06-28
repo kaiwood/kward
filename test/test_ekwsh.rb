@@ -250,6 +250,29 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "Exit status: 7"
   end
 
+  def test_streams_external_command_output
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    chunks = []
+
+    result = shell.run("printf one; printf two") { |chunk| chunks << chunk }
+
+    assert result.streamed
+    assert_equal result.output, chunks.join
+    assert_includes chunks.join, "$ printf one; printf two\none"
+    assert_includes chunks.join, "two\n"
+  end
+
+  def test_streaming_preserves_built_in_output_for_later_prompt_write
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    chunks = []
+
+    result = shell.run("pwd") { |chunk| chunks << chunk }
+
+    refute result.streamed
+    assert_empty chunks
+    assert_includes result.output, "$ pwd"
+  end
+
   def test_command_timeout_reports_failure
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 1)
 
@@ -280,6 +303,11 @@ class TestEkwsh < KwardTestCase
     prompt.define_singleton_method(:finish_busy_input) do
       @finished = true
     end
+    prompt.define_singleton_method(:write_transcript_delta) do |chunk|
+      @streamed_chunks ||= []
+      @streamed_chunks << chunk
+    end
+    prompt.define_singleton_method(:streamed_chunks) { @streamed_chunks || [] }
     prompt.define_singleton_method(:busy_calls) { @busy_calls || [] }
     prompt.define_singleton_method(:finished?) { @finished }
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
@@ -287,7 +315,8 @@ class TestEkwsh < KwardTestCase
 
     result = cli.send(:run_ekwsh_command, shell, "printf ok")
 
-    assert_includes result.output, "ok"
+    assert result.streamed
+    assert_includes prompt.streamed_chunks.join, "ok"
     assert_equal [[shell.prompt_label, "running"]], prompt.busy_calls
     assert prompt.finished?
   end

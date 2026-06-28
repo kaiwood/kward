@@ -746,6 +746,17 @@ module Kward
       end
     end
 
+    def write_transcript_delta(delta)
+      @mutex.synchronize do
+        with_synchronized_output_locked do
+          prepare_transcript_output_locked unless @restoring_transcript
+          write_transcript_text_locked(delta.to_s)
+          restore_composer_cursor_locked unless @restoring_transcript
+        end
+        @output_io.flush unless @restoring_transcript
+      end
+    end
+
     def write_stream_block(label, delta, finish: false)
       @mutex.synchronize do
         write_stream_block_locked(label, delta.to_s, finish: finish)

@@ -61,7 +61,7 @@ unset FOO
 
 `cd` changes only the embedded shell's current directory. It does not change Kward's workspace root or the process directory used by the rest of Kward.
 
-Shell output is shown in the transcript area, but it is not added to the AI conversation history.
+Shell output streams into the transcript area as commands run, but it is not added to the AI conversation history.
 
 Shell commands are persisted in a separate workspace-scoped shell history. They do not share the normal Kward prompt history used for chat prompts. The shell history limit is controlled by `history_limit` in `ekwsh.yml`.
 
@@ -296,6 +296,7 @@ Use `!command` for one-offs. Use `/shell` when you expect to run several command
 
 Current limitations:
 
+- stdout and stderr ordering is best-effort because command output is read from separate pipes,
 - no job control,
 - no persistent shell functions,
 - no shell startup file sourcing,

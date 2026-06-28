@@ -174,7 +174,7 @@ module Kward
 
           result = run_ekwsh_command(shell, input)
           @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
-          @prompt.say(result.output) unless result.output.to_s.empty?
+          @prompt.say(result.output) unless result.streamed || result.output.to_s.empty?
           if result.open_editor_path
             editor_result = open_ekwsh_editor(result.open_editor_path, shell)
             return :tab_action if editor_result == :tab_action
@@ -228,7 +228,11 @@ module Kward
         if @prompt.respond_to?(:begin_busy_input)
           @prompt.begin_busy_input(shell.prompt_label, activity: "running")
         end
-        shell.run(input)
+        if @prompt.respond_to?(:write_transcript_delta)
+          shell.run(input) { |chunk| @prompt.write_transcript_delta(chunk) }
+        else
+          shell.run(input)
+        end
       ensure
         @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       end

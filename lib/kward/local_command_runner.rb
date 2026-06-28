@@ -36,7 +36,7 @@ module Kward
         cancellation&.on_cancel { terminate_process_group(wait_thread.pid) }
 
         status = wait_for_process(wait_thread, readers, queue, cancellation: cancellation) do |stream, chunk|
-          captured_bytes, truncated = capture_chunk(
+          captured_bytes, truncated, captured_chunk = capture_chunk(
             stream,
             chunk,
             stdout_buffer,
@@ -44,13 +44,13 @@ module Kward
             captured_bytes,
             truncated
           )
-          block&.call(stream, chunk) unless truncated
+          block&.call(stream, captured_chunk) unless captured_chunk.empty?
           terminate_process_group(wait_thread.pid) if truncated && @terminate_on_output_limit
         end
 
         join_readers(readers)
         drain_queue(queue) do |stream, chunk|
-          captured_bytes, truncated = capture_chunk(
+          captured_bytes, truncated, captured_chunk = capture_chunk(
             stream,
             chunk,
             stdout_buffer,
@@ -58,7 +58,7 @@ module Kward
             captured_bytes,
             truncated
           )
-          block&.call(stream, chunk) unless truncated
+          block&.call(stream, captured_chunk) unless captured_chunk.empty?
         end
 
         Result.new(stdout: stdout_buffer, stderr: stderr_buffer, exit_status: status.exitstatus || 1, timed_out: false, truncated: truncated)
@@ -111,7 +111,7 @@ module Kward
     end
 
     def capture_chunk(stream, chunk, stdout_buffer, stderr_buffer, captured_bytes, truncated)
-      return [captured_bytes, truncated] if truncated
+      return [captured_bytes, truncated, ""] if truncated
 
       remaining = @max_output_bytes - captured_bytes
       if chunk.bytesize > remaining
@@ -120,7 +120,7 @@ module Kward
       end
 
       stream == :stderr ? stderr_buffer << chunk : stdout_buffer << chunk
-      [captured_bytes + chunk.bytesize, truncated]
+      [captured_bytes + chunk.bytesize, truncated, chunk]
     end
 
     def join_readers(readers)
