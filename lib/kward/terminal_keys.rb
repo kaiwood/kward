@@ -47,6 +47,7 @@ module Kward
 
     CTRL_T_CSI_U = "\e[116;5u".freeze
     CTRL_W_CSI_U = "\e[119;5u".freeze
+    CTRL_NUMBER_TAB_PATTERN = /\A\e\[((?:49)|(?:5[0-7]));5u\z/.freeze
 
     CSI_KEY_PATTERN = /\A\e\[[0-9;:]*[A-Za-z~]/.freeze
     SS3_KEY_PATTERN = /\A\eO[A-Za-z]/.freeze

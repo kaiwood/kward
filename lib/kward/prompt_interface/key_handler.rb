@@ -637,9 +637,9 @@ module Kward
 
       def handle_ctrl_tab_key_binding(key)
         case key
-        when "\x14", "\e[116;5u"
+        when "\x14", TerminalKeys::CTRL_T_CSI_U
           { tab_action: :new }
-        when "\e[119;5u"
+        when TerminalKeys::CTRL_W_CSI_U
           { tab_action: :close }
         else
           ctrl_number_tab_action(key)
@@ -647,7 +647,7 @@ module Kward
       end
 
       def ctrl_number_tab_action(key)
-        match = key.to_s.match(/\A\e\[((?:49)|(?:5[0-7]));5u\z/)
+        match = key.to_s.match(TerminalKeys::CTRL_NUMBER_TAB_PATTERN)
         return false unless match
 
         { tab_action: :select, index: match[1].to_i - 49 }
