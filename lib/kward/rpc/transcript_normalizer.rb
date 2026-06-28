@@ -106,7 +106,7 @@ module Kward
           type: "toolCall",
           id: ToolCall.id(tool_call),
           name: normalize_tool_name(raw_name) || raw_name,
-          arguments: normalize_tool_arguments(raw_name, ToolCall.raw_arguments(tool_call))
+          arguments: ToolMetadata.normalize_tool_args(raw_name, ToolCall.parse_arguments(ToolCall.raw_arguments(tool_call)))
         }.compact
       end
 
@@ -235,7 +235,7 @@ module Kward
           type: "toolCall",
           id: ToolCall.value(part, :id),
           name: normalize_tool_name(raw_name) || raw_name,
-          arguments: normalize_tool_arguments(raw_name, arguments)
+          arguments: ToolMetadata.normalize_tool_args(raw_name, ToolCall.parse_arguments(arguments))
         }.compact
       end
 
@@ -244,10 +244,10 @@ module Kward
         details = explicit_details.is_a?(Hash) ? safe_details(explicit_details) : {}
         text = content_text(content)
 
-        diff = details[:diff] || details["diff"] || extract_unified_diff(text)
+        diff = details[:diff] || details["diff"] || ToolMetadata.extract_unified_diff(text)
         details[:diff] = diff if diff
 
-        changed_files = details[:changedFiles] || details["changedFiles"] || changed_files_from_result(text, matching_call)
+        changed_files = details[:changedFiles] || details["changedFiles"] || ToolMetadata.changed_files_from_result(text, matching_call)
         details[:changedFiles] = changed_files if changed_files && !changed_files.empty?
 
         details
@@ -260,21 +260,6 @@ module Kward
         changed_files = ToolCall.value(details, :changedFiles) || ToolCall.value(details, :changed_files)
         allowed[:changedFiles] = changed_files if changed_files.is_a?(Array)
         allowed
-      end
-
-      def extract_unified_diff(text)
-        ToolMetadata.extract_unified_diff(text)
-      end
-
-      def changed_files_from_result(text, matching_call)
-        path = matching_call&.dig(:arguments, :path) || matching_call&.dig(:arguments, "path")
-        return [path] if path
-
-        if (match = text.match(/\A(?:Wrote \d+ bytes to|Edited)\s+([^:\n]+)/))
-          [match[1].strip]
-        else
-          []
-        end
       end
 
       def error_tool_result?(message, content)
@@ -297,26 +282,6 @@ module Kward
 
       def normalize_tool_name(name)
         ToolMetadata.normalize_tool_name(name)
-      end
-
-      def normalize_tool_arguments(name, arguments)
-        args = ToolCall.parse_arguments(arguments)
-        case name.to_s
-        when "edit_file", "edit"
-          ToolMetadata.normalize_tool_args(name, args)
-        when "run_shell_command", "bash"
-          normalize_bash_args(args)
-        else
-          ToolCall.camelize_args(args)
-        end
-      end
-
-      def normalize_bash_args(args)
-        normalized = ToolCall.camelize_args(args)
-        timeout = ToolCall.value(args, :timeoutSeconds) || ToolCall.value(args, :timeout_seconds)
-        normalized[:timeoutSeconds] = timeout if timeout
-        normalized.delete(:timeout_seconds)
-        normalized
       end
 
       def normalize_mime_type(mime_type)

@@ -75,6 +75,17 @@ module Kward
         index ? text.to_s[index..] : nil
       end
 
+      def changed_files_from_result(text, matching_call = nil)
+        path = matching_call&.dig(:arguments, :path) || matching_call&.dig(:arguments, "path")
+        return [path] if path
+
+        if (match = text.to_s.match(/\A(?:Wrote \d+ bytes to|Edited)\s+([^:\n]+)/))
+          [match[1].strip]
+        else
+          []
+        end
+      end
+
       def error_result?(text)
         text.to_s.start_with?("Error:", "Declined:", "Cancelled.")
       end
