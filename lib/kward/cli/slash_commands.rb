@@ -31,6 +31,9 @@ module Kward
         when "shell"
           run_ekwsh(agent)
           [true, nil]
+        when "pty"
+          run_interactive_pty_command(argument, agent)
+          [true, nil]
         when "workers"
           unless experimental_workers_enabled?
             runtime_output("Workers are experimental. Start Kward with --experimental-workers to enable /workers.")

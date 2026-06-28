@@ -29,6 +29,7 @@ module Kward
       { name: "git", description: "Review uncommitted changes and commit them.", argument_hint: "" },
       { name: "files", description: "Browse project files.", argument_hint: "" },
       { name: "shell", description: "Open the embedded Kward shell.", argument_hint: "" },
+      { name: "pty", description: "Run a command in an interactive PTY passthrough session.", argument_hint: "<command>" },
       { name: "tab", description: "Manage tabs.", argument_hint: "[1-n|move|close|new|name]" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },

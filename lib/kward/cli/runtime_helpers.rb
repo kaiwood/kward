@@ -149,6 +149,30 @@ module Kward
         )
       end
 
+      def run_interactive_pty_command(command, agent)
+        command = command.to_s.strip
+        if command.empty?
+          runtime_output("Usage: /pty <command>")
+          return
+        end
+
+        config = ConfigFiles.read_ekwsh_config
+        env = interactive_pty_environment(config[:env])
+        cwd = interactive_workspace_root(agent)
+        @prompt.say("$ #{command}\n[interactive PTY session started]\n") if @prompt.respond_to?(:say)
+        result = InteractivePtyRunner.new.run(config[:shell], "-c", command, env: env, cwd: cwd)
+        @prompt.say("[interactive PTY session exited with status #{result.exit_status}]\n") if @prompt.respond_to?(:say)
+      rescue Errno::ENOENT => e
+        runtime_output("Error: #{e.message}")
+      end
+
+      def interactive_pty_environment(configured_env)
+        ENV.to_h.merge(configured_env.to_h.transform_keys(&:to_s).transform_values(&:to_s)).tap do |env|
+          env.delete("GIT_PAGER") if env["GIT_PAGER"] == "cat"
+          env["TERM"] = "xterm-256color" if env["TERM"].to_s.empty? || env["TERM"] == "dumb"
+        end
+      end
+
       def run_ekwsh_loop(shell, tab: nil, history: nil)
         with_ekwsh_history(history) do
           run_ekwsh_loop_with_history(shell, tab: tab)
