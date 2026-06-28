@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Consolidated compaction message-field reads through the shared message access helper.
 - Consolidated RPC transcript tool metadata normalization with tool event metadata so tool names, args, diffs, and changed files stay aligned.
 - Fixed RPC tool capabilities so `changedFiles` is advertised when emitted in tool results.
 - Removed a stale `count-tests` CLI branch that could crash instead of treating the input as a prompt.

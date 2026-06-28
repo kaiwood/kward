@@ -130,8 +130,7 @@ module Kward
       end
 
       def tool_calls(message)
-        calls = value(message, :tool_calls)
-        calls.is_a?(Array) ? calls : []
+        MessageAccess.tool_calls(message)
       end
 
       def tool_call_name(tool_call)
@@ -441,7 +440,7 @@ module Kward
       end
 
       def message_role(message)
-        message["role"] || message[:role]
+        MessageAccess.role(message)
       end
     end
 
@@ -518,22 +517,20 @@ module Kward
       end
 
       def compaction_summary(message)
-        message["summary"] || message[:summary] || message["content"] || message[:content]
+        MessageAccess.summary(message) || MessageAccess.content(message)
       end
 
       def compaction_details(message)
-        return {} unless message
-
-        details = message["details"] || message[:details]
+        details = MessageAccess.value(message, :details)
         details.is_a?(Hash) ? details : {}
       end
 
       def entry_id(message, index)
-        message["id"] || message[:id] || "message:#{index}"
+        MessageAccess.value(message, :id) || "message:#{index}"
       end
 
       def message_role(message)
-        message["role"] || message[:role]
+        MessageAccess.role(message)
       end
     end
 
