@@ -100,6 +100,19 @@ class TestImageAttachments < KwardTestCase
     end
   end
 
+  def test_extract_references_from_text_removes_shell_escaped_attached_sources_from_display_text
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")
+      File.binwrite(path, "png bytes")
+
+      result = Kward::ImageAttachments.extract_references_from_text("look at this #{Shellwords.escape(path)}")
+
+      assert_equal "look at this", result[:text]
+      assert_equal 1, result[:attachments].length
+      assert_equal path, result[:attachments].first[:source_text]
+    end
+  end
+
   def test_terminal_image_sequence_renders_kitty_inline_image_escape_when_supported
     part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
 

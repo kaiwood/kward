@@ -1526,6 +1526,34 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_converts_shell_escaped_pasted_image_path_to_hidden_attachment
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")
+      escaped_path = Shellwords.escape(path)
+      File.binwrite(path, "png bytes")
+      input, writer = IO.pipe
+      output = StringIO.new
+      writer.write("look \e[200~#{escaped_path}\e[201~\r")
+      writer.close
+      prompt = Kward::PromptInterface.new(
+        input: input,
+        output: output,
+        attachment_parser: ->(text) { Kward::ImageAttachments.extract_references_from_text(text) },
+        attachment_badges: ->(_input, attachments) { attachments.map { |attachment| "[image] #{attachment[:label]}" } }
+      )
+
+      result = prompt.ask("You>")
+
+      assert_kind_of Kward::PromptInterface::SubmittedInput, result
+      assert_equal "look", result.display_input
+      assert_equal "look\n#{path}", result.to_s
+      assert_includes strip_ansi(output.string), "[image] Screenshot 2026-06-07 at 12.34.56.png"
+      refute_includes strip_ansi(output.string), escaped_path
+    ensure
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_prompt_interface_backspace_at_start_removes_hidden_attachment
     Dir.mktmpdir do |dir|
       path = File.join(dir, "Screenshot 2026-06-07 at 12.34.56.png")

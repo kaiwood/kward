@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed pasted or dropped shell-escaped image paths so the composer hides the path text after adding the image badge.
 - Fixed `read_skill` tool transcript rendering so skill frontmatter starts on the line after the tool label.
 - Fixed built-in editor soft-wrap vertical movement so moving up or down preserves the visual column across wrapped visual rows and logical line boundaries.
 

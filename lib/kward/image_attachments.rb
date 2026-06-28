@@ -47,7 +47,9 @@ module Kward
     def display_text_without_references(text, references)
       references.reduce(text.to_s.dup) do |result, reference|
         source = reference[:source_text].to_s
-        source.empty? ? result : result.sub(source, "")
+        next result if source.empty?
+
+        result.sub(source, "").sub(Shellwords.escape(source), "")
       end.gsub(/[ \t]{2,}/, " ").gsub(/[ \t]+\n/, "\n").strip
     end
 
