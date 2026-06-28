@@ -879,6 +879,39 @@ body.kward-docs #footer {
   margin: 0;
 }
 
+.kward-screen-card {
+  align-self: center;
+  background: linear-gradient(180deg, rgba(31, 38, 27, 0.98), rgba(5, 8, 5, 0.98));
+  border: 1px solid rgba(156, 175, 53, 0.42);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  padding-top: 34px;
+  position: relative;
+}
+
+.kward-screen-card::before {
+  background:
+    radial-gradient(circle at 12px 50%, #ff5f57 0 5px, transparent 5.5px),
+    radial-gradient(circle at 32px 50%, #febc2e 0 5px, transparent 5.5px),
+    radial-gradient(circle at 52px 50%, #28c840 0 5px, transparent 5.5px);
+  border-bottom: 1px solid rgba(149, 169, 52, 0.22);
+  content: "";
+  height: 34px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.kward-screen-card img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
 .kward-capabilities {
   padding: 28px;
 }
