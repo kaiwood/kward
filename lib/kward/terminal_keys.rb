@@ -52,6 +52,10 @@ module Kward
     CSI_U_PATTERN = /\A\e\[(\d+)((?:;[\d:]*)*)u/.freeze
     MODIFIED_CURSOR_PATTERN = /\A\e\[(\d+);(\d+)([CDFH])\z/.freeze
     MODIFIED_DELETE_PATTERN = /\A\e\[3;(\d+)~\z/.freeze
+    UP_PATTERN = /\A\e\[[0-9;:]*A\z/.freeze
+    DOWN_PATTERN = /\A\e\[[0-9;:]*B\z/.freeze
+    RIGHT_PATTERN = /\A\e\[[0-9;:]*C\z/.freeze
+    LEFT_PATTERN = /\A\e\[[0-9;:]*D\z/.freeze
     CSI_KEY_PATTERN = /\A\e\[[0-9;:]*[A-Za-z~]/.freeze
     SS3_KEY_PATTERN = /\A\eO[A-Za-z]/.freeze
   end

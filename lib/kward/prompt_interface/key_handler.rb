@@ -464,13 +464,13 @@ module Kward
       def cursor_key_name(key)
         text = key.to_s
         case text
-        when /\A\e\[[0-9;:]*A\z/, "\eOA"
+        when TerminalKeys::UP_PATTERN, *TerminalKeys::UP
           :up
-        when /\A\e\[[0-9;:]*B\z/, "\eOB"
+        when TerminalKeys::DOWN_PATTERN, *TerminalKeys::DOWN
           :down
-        when /\A\e\[[0-9;:]*C\z/, "\eOC"
+        when TerminalKeys::RIGHT_PATTERN, *TerminalKeys::RIGHT
           :right
-        when /\A\e\[[0-9;:]*D\z/, "\eOD"
+        when TerminalKeys::LEFT_PATTERN, *TerminalKeys::LEFT
           :left
         when *TerminalKeys::PAGE_UP
           :pageup

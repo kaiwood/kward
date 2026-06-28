@@ -28,6 +28,10 @@ class TestTerminalKeys < KwardTestCase
     assert_match Kward::TerminalKeys::CSI_U_PATTERN, "\e[97;2;65u"
     assert_match Kward::TerminalKeys::MODIFIED_CURSOR_PATTERN, "\e[1;3C"
     assert_match Kward::TerminalKeys::MODIFIED_DELETE_PATTERN, "\e[3;3~"
+    assert_match Kward::TerminalKeys::UP_PATTERN, "\e[1;2A"
+    assert_match Kward::TerminalKeys::DOWN_PATTERN, "\e[1;2B"
+    assert_match Kward::TerminalKeys::RIGHT_PATTERN, "\e[1;2C"
+    assert_match Kward::TerminalKeys::LEFT_PATTERN, "\e[1;2D"
     assert_match Kward::TerminalKeys::CTRL_NUMBER_TAB_PATTERN, "\e[49;5u"
   end
 end
