@@ -95,7 +95,7 @@ This means each tab can have its own:
 - visible shell transcript,
 - command prompt state.
 
-Kward's normal tab-switching shortcuts continue to work in shell mode.
+Kward's normal tab-switching shortcuts continue to work in shell mode. If you switch tabs while a shell command is running, Kward cancels that foreground command and requeues the tab action so the TUI can switch cleanly.
 
 ## Tab completion
 

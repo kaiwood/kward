@@ -579,6 +579,25 @@ class TestCLI < KwardTestCase
     assert_empty conversation.messages
   end
 
+  def test_ekwsh_running_command_requeues_tab_action
+    started_at = Time.now
+    prompt = FakePrompt.new(["ruby -e 'sleep 5'"])
+    prompt.define_singleton_method(:begin_busy_input) { |_message, activity: "loading"| nil }
+    prompt.define_singleton_method(:finish_busy_input) { nil }
+    prompt.define_singleton_method(:write_transcript_delta) { |_chunk| nil }
+    prompt.define_singleton_method(:poll_input) do
+      Time.now - started_at > 0.1 ? { tab_action: :next } : nil
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@pending_inputs, [])
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 5)
+
+    result = Timeout.timeout(2) { cli.send(:run_ekwsh_loop, shell) }
+
+    assert_equal :tab_action, result
+    assert_equal [{ tab_action: :next }], cli.instance_variable_get(:@pending_inputs)
+  end
+
   def test_interactive_loop_persists_ekwsh_history_separately
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

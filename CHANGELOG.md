@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added Ctrl+C cancellation for running `ekwsh` commands.
+- Added Ctrl+C cancellation for running `ekwsh` commands and preserved tab-switch actions while shell commands are active.
 - Added quoted path completion and cached `$PATH` executable completion for `ekwsh`.
 - Added streaming `ekwsh` command output in the TUI transcript while commands run.
 - Added separate workspace-scoped `ekwsh` command history so embedded shell input no longer shares normal prompt history.

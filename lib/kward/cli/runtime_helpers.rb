@@ -175,6 +175,8 @@ module Kward
           result = run_ekwsh_command(shell, input)
           @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
           @prompt.say(result.output) unless result.streamed || result.output.to_s.empty?
+          return :tab_action if pending_tab_action?
+
           if result.open_editor_path
             editor_result = open_ekwsh_editor(result.open_editor_path, shell)
             return :tab_action if editor_result == :tab_action
@@ -255,7 +257,12 @@ module Kward
         while worker.alive?
           drain_ekwsh_chunks(chunks)
           poll_result = collect_queued_input(queued_inputs)
-          cancellation.cancel! if poll_result == PromptInterface::CANCEL_INPUT
+          if poll_result == PromptInterface::CANCEL_INPUT
+            cancellation.cancel!
+          elsif poll_result.is_a?(Hash) && poll_result[:tab_action]
+            (@pending_inputs ||= []).unshift(poll_result)
+            cancellation.cancel!
+          end
           sleep 0.01
         end
         worker.join
@@ -272,6 +279,10 @@ module Kward
         rescue ThreadError
           break
         end
+      end
+
+      def pending_tab_action?
+        @pending_inputs&.first.is_a?(Hash) && @pending_inputs.first[:tab_action]
       end
 
       def configured_workspace(root: current_workspace_root)
