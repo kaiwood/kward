@@ -303,12 +303,9 @@ module Kward
       end
 
       def handle_modern_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        modern_record_undo { @editor_state.insert(normalize_paste(paste[:content])) } unless editor_search_active?
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        true
+        handle_bracketed_paste(key) do |content|
+          modern_record_undo { @editor_state.insert(content) } unless editor_search_active?
+        end
       end
 
       def modern_insert_printable(text)

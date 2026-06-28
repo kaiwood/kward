@@ -600,12 +600,9 @@ module Kward
       end
 
       def handle_editor_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        @editor_state.insert(normalize_paste(paste[:content])) unless editor_search_active?
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        true
+        handle_bracketed_paste(key) do |content|
+          @editor_state.insert(content) unless editor_search_active?
+        end
       end
 
       def ctrl_code(code)
@@ -730,12 +727,9 @@ module Kward
       end
 
       def handle_readonly_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        @editor_state.status = "Read-only diff" unless editor_search_active?
-        true
+        handle_bracketed_paste(key) do |_content|
+          @editor_state.status = "Read-only diff" unless editor_search_active?
+        end
       end
 
       def handle_readonly_named_key(key_name)

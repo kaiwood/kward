@@ -116,12 +116,9 @@ module Kward
       end
 
       def handle_git_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        insert_string(normalize_paste(paste[:content])) if git_composing?
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        true
+        handle_bracketed_paste(key) do |content|
+          insert_string(content) if git_composing?
+        end
       end
 
       def handle_git_named_key(key_name)

@@ -253,12 +253,7 @@ module Kward
       end
 
       def handle_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        insert_paste(normalize_paste(paste[:content]))
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        true
+        handle_bracketed_paste(key) { |content| insert_paste(content) }
       end
 
       def handle_mouse_reporting_key(key)
@@ -267,6 +262,15 @@ module Kward
         return false unless match
 
         queue_pending_keys(text[match[0].length..]) if match[0].length < text.length
+        true
+      end
+
+      def handle_bracketed_paste(key)
+        paste = read_bracketed_paste(key)
+        return false unless paste
+
+        yield normalize_paste(paste[:content])
+        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
         true
       end
 

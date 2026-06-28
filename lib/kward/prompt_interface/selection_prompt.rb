@@ -147,12 +147,9 @@ module Kward
       end
 
       def handle_select_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        select_insert_string(normalize_paste(paste[:content])) if select_editing_active?
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        true
+        handle_bracketed_paste(key) do |content|
+          select_insert_string(content) if select_editing_active?
+        end
       end
 
       def select_current_choice

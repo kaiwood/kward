@@ -195,12 +195,7 @@ module Kward
       end
 
       def handle_question_bracketed_paste_key(key)
-        paste = read_bracketed_paste(key)
-        return false unless paste
-
-        question_insert_string(normalize_paste(paste[:content]))
-        queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
-        true
+        handle_bracketed_paste(key) { |content| question_insert_string(content) }
       end
 
       def current_question_answer
