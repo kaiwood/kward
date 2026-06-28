@@ -35,6 +35,7 @@ require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
 require_relative "prompt_interface/editor/modes/modern"
 require_relative "prompt_interface/editor/modes/emacs"
+require_relative "prompt_interface/editor/modes/vibe_insert_readline"
 require_relative "prompt_interface/editor/modes/vibe"
 require_relative "prompt_interface/editor/controller"
 require_relative "prompt_interface/interactive/controller"
@@ -84,6 +85,7 @@ module Kward
     include ComposerController
     include ModernEditorMode
     include EmacsEditorMode
+    include VibeInsertReadline
     include VibeEditorMode
     include EditorController
     include InteractiveRenderer

@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Split Vibe editor insert/readline key handling into a focused mixin without changing editor behavior.
 - Consolidated compaction message-field reads through the shared message access helper.
 - Consolidated RPC transcript tool metadata normalization with tool event metadata so tool names, args, diffs, and changed files stay aligned.
 - Fixed RPC tool capabilities so `changedFiles` is advertised when emitted in tool results.
