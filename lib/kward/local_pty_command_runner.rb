@@ -52,6 +52,7 @@ module Kward
             chunk = read_chunk(reader)
             break if chunk.nil?
 
+            chunk = normalize_line_endings(chunk)
             captured_bytes, truncated, captured_chunk = capture_chunk(chunk, output, captured_bytes, truncated)
             block&.call(:stdout, captured_chunk) unless captured_chunk.empty?
             terminate_process_group(pid) if truncated && @terminate_on_output_limit
@@ -99,6 +100,10 @@ module Kward
         return nil if chunk.nil?
         return nil if chunk == :wait_readable
       end
+    end
+
+    def normalize_line_endings(chunk)
+      chunk.gsub("\r\r\n", "\n").gsub("\r\n", "\n")
     end
 
     def capture_chunk(chunk, output, captured_bytes, truncated)

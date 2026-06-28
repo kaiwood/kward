@@ -313,6 +313,17 @@ class TestEkwsh < KwardTestCase
     assert_match(/\b\d+\b/, result.output)
   end
 
+  def test_external_commands_normalize_pty_line_endings
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    ruby = Shellwords.escape(RbConfig.ruby)
+
+    result = shell.run(%(#{ruby} -e 'STDOUT.write "one\\ntwo\\n"'))
+
+    assert_equal 0, result.exit_status
+    assert_includes result.output, "one\ntwo\n"
+    refute_includes result.output, "\r"
+  end
+
   def test_streams_external_command_output
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     chunks = []
