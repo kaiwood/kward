@@ -279,7 +279,9 @@ module Kward
       def refresh_conversation_runtime(conversation, reasoning_effort: current_reasoning_effort, refresh_system_message: true)
         return unless conversation&.respond_to?(:update_runtime_context!)
 
+        runtime_changed = [conversation.provider, conversation.model, conversation.reasoning_effort] != [current_model_provider, current_model_id, reasoning_effort]
         conversation.update_runtime_context!(provider: current_model_provider, model: current_model_id, reasoning_effort: reasoning_effort, refresh: refresh_system_message)
+        conversation.persist_runtime_context! if runtime_changed && conversation.respond_to?(:persist_runtime_context!)
         update_assistant_prompt(conversation)
       end
 

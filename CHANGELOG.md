@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed model and reasoning changes from CLI/RPC settings so active session runtime metadata is persisted before the next turn.
 - Fixed `context_for_task` so candidate files with no task matches return a clear no-match message instead of only a header.
 - Fixed workspace file tools so expected filesystem permission and path-type errors are returned as tool errors instead of aborting a turn.
 - Fixed composer `Ctrl+C` so it no longer exits the app when no process is running.

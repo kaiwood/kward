@@ -613,11 +613,15 @@ module Kward
       end
 
       def refresh_session_runtime_contexts
+        provider = current_model[:provider]
         model = current_model_id
         reasoning_effort = current_reasoning_effort
         sessions = @mutex.synchronize { @sessions.values }
         sessions.each do |rpc_session|
-          rpc_session.conversation.update_runtime_context!(provider: current_model[:provider], model: model, reasoning_effort: reasoning_effort)
+          conversation = rpc_session.conversation
+          runtime_changed = [conversation.provider, conversation.model, conversation.reasoning_effort] != [provider, model, reasoning_effort]
+          conversation.update_runtime_context!(provider: provider, model: model, reasoning_effort: reasoning_effort)
+          conversation.persist_runtime_context! if runtime_changed
         end
       end
 
