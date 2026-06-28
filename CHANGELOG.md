@@ -6,118 +6,43 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added CLI execution modes via `--mode auto|chat|oneshot|filter` and `--filter`, with stdin filter mode that transforms piped input and prints only the result.
-- Added `kward edit <filename>` to open files directly in the integrated editor, with `ekwsh` interception so aliases such as `alias vibe='kward edit'` open in the current TUI.
-- Added `/shell`, the embedded Kward shell (`ekwsh`) for running workspace commands without leaving the TUI, including v1 command/path Tab completion, safe SGR color output, and optional global `ekwsh.yml` env/alias config.
-- Added normal-prompt Tab/Shift+Tab shortcuts to cycle model reasoning effort with wrap-around.
-- Added workspace-scoped persistent prompt history with Ctrl+R fuzzy search in the terminal composer.
-- Added `/files`, a nested project file browser overlay with search, editor opening, and browser restoration after closing files opened from the browser.
-- Added persisted `/files` cursor and folder expansion state per workspace.
-- Added Modern editor multi-cursor support with `Ctrl+D` occurrence selection, `Alt+Shift+Up/Down` vertical cursors, and `Ctrl+Shift+L` selected-line cursor creation.
-- Added Vibe Ruby method navigation with `]m` and `[m`.
-- Added Vibe substitute commands such as `:%s/a/b/g` and `:1,3s/a/b/`.
-- Added Vibe macro recording and replay with `q`, `@`, and `@@`.
-- Added Vibe named registers for yanking, deleting, changing, and pasting.
-- Added Vibe marks with `m`, `'`, and backtick jumps.
-- Added Vibe paragraph motions `{` and `}` for normal, visual, and operator use.
-- Added Vibe visual block `I` and `A` to insert or append text across selected lines.
-- Added Vibe visual block mode foundation with rectangular selection, yank, delete, and rendering support.
-- Added Vibe visual-mode search extension with `/`, `?`, `n`, and `N`.
-- Added Vibe visual-mode case transforms with `~`, `u`, and `U`.
-- Added Vibe visual-mode `J` to join selected lines.
-- Added Vibe `gv` to restore the previous visual selection.
-- Added Vibe visual-mode `>` and `<` to indent and outdent selected lines.
-- Added Vibe visual-mode text objects such as `iw`, `a(`, `ip`, and `ir`.
-- Added Vibe visual-mode advanced motions including `gg`, `%`, `f`/`F`/`t`/`T`, `;`, and `,`.
-- Added Vibe visual-mode counts for motions such as `2j` and `3G`.
-- Added Vibe visual-mode `G` to extend selections to the last line.
-- Added Vibe visual-mode `o` to switch the active end of the selection.
-- Added Vibe operator composition for character find motions and `%` matching-pair motion.
-- Added Vibe `f`/`F`/`t`/`T` character find motions with `;` and `,` repeat.
-- Added Vibe paragraph text objects (`ip` and `ap`).
-- Added Vibe `%` matching-pair jump for parentheses, brackets, and braces.
-- Added Vibe editor pair text object aliases `b` for parentheses and `B` for braces.
-- Added Vibe editor Ruby block text objects (`ir` and `ar`) inspired by `rhysd/vim-textobj-ruby`.
-- Added Vibe editor pair text objects for inner/around parentheses, brackets, braces, and quotes.
-- Added Vibe editor word text objects (`iw` and `aw`) for composable delete, yank, and change commands.
-- Added explicit `read_file` context modes (`preview`, `outline`, `range`, `full`) and optional per-call byte budgets so agents can escalate file context gradually.
-- Added richer source outlines with declaration kinds, approximate line ranges, and lightweight recognition for common Ruby, JavaScript/TypeScript, Go, Rust, Java, and C# declarations.
-- Added a lightweight `context_for_task` workspace tool that builds budgeted task context from ranked files, source outlines, and matching excerpts.
-- Added `context_budget_stats` for approximate active-conversation context bytes and estimated tokens saved by tool output budgeting.
-- Added built-in prompt guidance to start with focused context tools and escalate gradually before full-file reads.
-- Added a Tabs guide under Feature guides covering `/tab` commands, shortcuts, background runs, status colors, and persistence.
-- Added a Project files guide under User Tools covering `/files` browsing, search, file mentions, editor opening, and remembered browser state.
-- Added a Context budgeting guide under Agent tools covering focused context gathering, budgeted reads, output compaction, duplicate reuse, session compaction, and savings stats.
-- Added configurable relative line numbers for editable built-in editor buffers via `editor.line_numbers`.
-- Added Endwise-style closing keyword insertion to the built-in editor auto-indent flow for Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, including Ctrl+Enter modifier support where terminals report it.
-- Added a read-only TUI diff viewer from `/git`
-- Added interactive plugin commands via `plugin.interactive_command` that take over the composer region with a Kward-driven canvas render loop
-- Added `$` to the TUI, to open files with the new editor
-- Added a builtin editor with 3 modes: moder, emacs and vibe.
-- Added TUI composer `@` file mentions with a filterable project-file overlay and Tab completion.
-- Added `/git` in the interactive TUI to review uncommitted changes and commit all workspace changes from an overlay.
-- Added file-level stage/unstage toggling to the interactive `/git` overlay with `s` and Up/Down selection.
-- Added a Git branch indicator to the TUI composer status, coloring it yellow when the working tree has uncommitted changes.
-- Added persistent numbered TUI tabs for session-backed conversations
-- Added experimental support for agent workers
-
+- Added a built-in editor that can be opened from the TUI with `$` or directly from the CLI with `kward edit <filename>`, with modern, Emacs-style, and Vibe editing modes.
+- Added richer editor workflows including syntax highlighting, undo/redo, auto-indent, soft wrap, mouse support, multi-cursor editing, relative line numbers, and an expanded Vim-like Vibe mode with visual selections, text objects, registers, marks, macros, substitution, and Ruby navigation.
+- Added `/shell`, an embedded Kward shell (`ekwsh`) for running workspace commands without leaving the TUI, including command/path completion, safe color output, optional global `ekwsh.yml` configuration, and rbenv shim autodetection.
+- Added `/files`, a searchable project file browser that can open files in the editor and remembers cursor and folder expansion state per workspace.
+- Added persistent TUI tabs for session-backed conversations, plus tab commands, shortcuts, status colors, and restoration across restarts.
+- Added `/git` workflows for reviewing changes, viewing diffs, staging or unstaging files, and writing commit messages from inside the TUI.
+- Added TUI composer improvements including `@` file mentions, persistent workspace prompt history with Ctrl+R search, and Tab/Shift+Tab reasoning-effort cycling.
+- Added CLI execution modes via `--mode auto|chat|oneshot|filter` and `--filter` for transforming piped input.
+- Added context-budgeting tools and workflows, including `read_file` modes, richer source outlines, `context_for_task`, `context_budget_stats`, and restored compacted tool-output inspection.
+- Added interactive plugin commands backed by a Kward-driven canvas render loop.
+- Added experimental agent-worker support behind the existing experimental workflow.
+- Added new and expanded guides for editor usage, tabs, project files, Git workflows, agent tools, context budgeting, workspace tools, web search, code search, plugins, RPC, authentication, memory, sessions, troubleshooting, and releasing.
 
 ### Changed
 
-- Changed `ekwsh` command execution to preserve Kward-managed environment values and automatically use rbenv shims when available.
-- Extended the documentation frontpage hero slider with a “Your workflow. / Your harness.” category.
-- Changed the integrated editor Tab key to smart-indent using the detected indentation unit, with Shift+Tab moving indentation back by one stop.
-- Reorganized Vibe editor documentation to separate normal and visual mode commands.
-- Changed Vibe `o` and `O` to preserve the current line indentation.
-- Changed modern-mode editor modified-arrow navigation to move by indentation level, with platform-specific Alt/Ctrl bindings and shift-selection variants.
-- Changed picker titles and selected rows to use the quieter primary-green border color instead of the bright accent green.
-- Documented the `composer.tab_keybindings`, `editor.soft_wrap`, `personas`, and `plugins` configuration options in `doc/configuration.md`, and clarified provider default behavior and `thinking_level` reasoning precedence.
-- Documented `OPENAI_ACCESS_TOKEN`, auth file path environment overrides (`KWARD_AUTH_PATH`, `KWARD_ANTHROPIC_AUTH_PATH`, `KWARD_GITHUB_AUTH_PATH`), `kward auth logout` behavior, and `kward doctor` auth reporting in `doc/authentication.md`.
-- Expanded `doc/troubleshooting.md` with sections for `kward doctor`, auth errors and token expiration, provider usage limits and billing, rate limiting and transient errors, context overflow, and a "Still stuck?" footer.
-- Expanded `doc/session-management.md` with `/copy`, `/name`, `/status`, auto-resume, trash-safe deletion, `/export` default path, picker delete confirmation clarification, and an RPC session API cross-link.
-- Expanded `doc/git.md` with multi-line commit messages via `Shift+Enter`, renamed/copied file handling, clean working tree behavior, RPC exclusion note, and an editor settings cross-link.
-- Expanded `doc/memory.md` with soft memory TTL and expiry, retrieval limits and scoring, file permissions, `/memory learn` alias, `/memory auto-summary disable`, `/memory promote` for workspace core to global, `/memory` usage hint, full RPC method list, corrected global core priority wording, and a configuration cross-link.
-- Expanded `doc/personas.md` with bare-string character definitions, raw instruction string as `default`, `label` fallback behavior, `kward sysprompt --raw`, `/settings` Personalization menu detail, Active instructions summary, time-of-day gap note, and a configuration cross-link.
-- Expanded `doc/extensibility.md` with fixed skill frontmatter typo, `read_skill` tool and additional skill files, memory context in prompt assembly order, legacy config-directory `AGENTS.md` alias, prompt template `description` field purpose, `kward sysprompt --raw`, and configuration cross-links.
-- Expanded `doc/plugins.md` with `/reload` for plugin development, complete interactive key symbol list, prompt context return contract, `interactive_command` options documentation, `ctx.say` availability in all handlers, and an extensibility cross-link.
-- Expanded `doc/rpc.md` with corrected `sessions/tree` capability (supported, not unsupported), documented `sessions/tree`, `sessions/tree/setLabel`, `sessions/tree/navigate`, `logging/tokenCsv`, `workers/list`, and `workers/show` methods, added `workers`/`starterPack`/`logging` capability descriptions, and documented GitHub OAuth CLI-only limitation.
-- Expanded `doc/releasing.md` with Ruby version requirement note, focused test step, gemspec exclusion detail with `tar tf` inspection command, `rake rdoc` clarification, git commit/tag/push step, focused test guidance, and `gem yank` rollback guidance.
-- Expanded `doc/agent-tools.md` with write lock for workers, AGENTS.md auto-refresh on file change, tool output compaction strategy details, configuration cross-link for guardrails, and tool scoping for workers.
-- Expanded `doc/workspace-tools.md` with concrete file/read/command limits, large-file outline behavior, binary file detection, unified diff output for write/edit, shell command output format and timeout behavior, guardrails config cross-link, and agent-tools cross-link.
-- Expanded `doc/web-search.md` with `PERPLEXITY_API_KEY` and `GEMINI_API_KEY` env var names, `web_search.provider` config setting, search output limits, HTTP timeout and redirect behavior, `fetch_content` extraction mode details, and a configuration cross-link.
-- Expanded `doc/code-search.md` with supported ecosystems list, per-action argument table, concrete limits (search results, context lines, line count, file size, scan limit, output truncation, HTTP timeout), file filtering behavior, and a configuration cross-link.
-- Expanded `doc/context-tools.md` with `ask_user_question` constraints (single-select, no preview, custom typed answers), `read_skill` path safety and 100 KB file size limit, `retrieve_tool_output` query output format, and cross-links to agent-tools and RPC question bridge.
-- Expanded `doc/editor.md` with Vibe mode `zz`/`zt`/`zb` viewport commands, insert mode readline shortcuts, visual mode auto-close wrapping, soft-wrap mention, configuration cross-link, and a Vibe design notes section explaining counts, `.`, operators, search, clipboard, and intentional omissions.
-- Expanded `doc/context-budgeting.md` with clarified `context_for_task` input vs output, `context_for_task` limits, corrected `read_file` mode descriptions, `max_bytes` cap explanation, `context_budget_stats` field details, and cross-links to workspace-tools, agent-tools, session-management, and configuration.
+- Changed the built-in editor to use the modern editing mode by default, with smarter indentation and improved keyboard handling across terminal encodings.
+- Improved TUI interaction polish across pickers, tabs, editor rendering, Git workflows, composer refresh behavior, mouse handling, and modal input isolation.
+- Improved embedded shell environment handling so Kward-managed environment values are preserved while workspace shell conveniences still work.
+- Improved RPC and session internals around steering events, session cleanup, worker metadata, session-tree traversal, and config updates.
+- Improved tool-output context budgeting so agents start with focused context, preserve inspectable originals, and report active-conversation savings more accurately.
+- Expanded documentation and generated-doc navigation to better reflect current workflows and configuration options.
 
 ### Fixed
 
-- Fixed `ekwsh` Tab completion for path-like command-position tokens such as `./ex`.
-- Fixed `read_skill` so restored or compacted duplicate artifacts no longer suppress skill instructions from the active model context.
-- Fixed editor selections so visual mode no longer disables syntax highlighting.
-- Fixed Vibe macro recording so CSI-u encoded `q` stops recording instead of starting a pending macro command.
-- Fixed Vibe macro recording so stopping a macro clears pending command state and replay reports the macro that ran.
-- Fixed Vibe macro recording so `q` stops recording from visual modes.
-- Fixed Vibe dot-repeat for registered paste commands.
-- Fixed Vibe quote text objects so escaped quotes do not terminate the selected pair.
-- Fixed Vibe `cir` so changing a Ruby block body leaves an indented blank line ready for insertion.
-- Fixed Vibe editor word motions and word text objects so normal/visual and operator `w`, `e`, `b`, `iw`, and `aw` respect code punctuation boundaries, while bare `0` moves to line start.
-- Fixed RPC session cleanup so empty placeholder cleanup no longer closes named or used idle sessions.
-- Fixed explicit RPC steering requests so unavailable steering fails instead of silently queueing a follow-up turn, and documented the `steeringApplied` turn event.
-- Fixed compacted tool-output retrieval so `retrieve_tool_output` can reopen original outputs after resuming saved sessions.
-- Fixed context budget stats so they are scoped to the active conversation and include savings from duplicate-output reuse.
-- Fixed time-of-day persona modifiers so conversations use the current local time instead of a fixed epoch timestamp.
-- Added vibe-mode normal commands for CSI-u `Ctrl+J`/`Ctrl+K` indentation movement, while keeping `Ctrl+H` first-non-blank and `Ctrl+L` end-of-line movement.
-- Added composer-style readline shortcuts in vibe-mode editor insert mode.
-- Added vibe-mode editor `zz`, `zt`, and `zb` viewport positioning commands.
-- Fixed vibe-mode editor handling for CSI-u encoded Ctrl+f/Ctrl+b/Ctrl+d/Ctrl+u/Ctrl+e/Ctrl+y page and scroll shortcuts.
-- Fixed TUI tab restoration so empty tabs whose unused session files were cleaned up are restored as new sessions instead of being dropped and shifting later sessions into the wrong tab.
-- Fixed generated documentation pages with a table of contents so code blocks no longer leave a large vertical gap beside the TOC.
-- Fixed the editor vibe-mode `H`, `L`, and `M` screen-position keys (and page up/down, half-page, and scroll) so they use the actual rendered viewport height instead of a stale capped heuristic, making them respect the current window height. Also fixed `H`/`L`/`M` in soft-wrap mode so they translate visual-row offsets to logical lines instead of scrolling the viewport.
+- Fixed embedded-shell completion, environment preservation, and rbenv handling issues.
+- Fixed editor and TUI input edge cases involving shifted keys, CSI-u encodings, Command/Ctrl shortcuts, selection preservation, mouse scrolling, tab switching, modal questions, and commit-message editing.
+- Fixed many built-in editor behaviors around selection rendering, cursor movement, soft wrap, indentation, deletion/change operations, undo/search behavior, macro recording, registers, text objects, visual mode, and viewport positioning.
+- Fixed Git overlay staging and commit-message behavior.
+- Fixed session, tab, and worker state issues including tab restoration, session cleanup, worker handoff, foreground write locks, and plugin/test isolation.
+- Fixed RPC steering, tool-output restoration, context-budget statistics, and session-manager lifecycle behavior.
+- Fixed documentation rendering, navigation, tables, quote styling, and generated guide layout issues.
+- Fixed persona time-of-day handling to use the current local time.
 
 ### Removed
 
 - Removed the placeholder message from `/status` output.
+- Removed unused RPC session helpers and temporarily hid worker labels behind the experimental worker flow.
 
 ## [0.71.0] - 2026-06-21
 
