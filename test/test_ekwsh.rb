@@ -300,6 +300,48 @@ class TestEkwsh < KwardTestCase
     end
   end
 
+  def test_pty_builtin_requests_interactive_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("pty git log --oneline")
+
+    assert_equal 0, result.exit_status
+    assert_equal "git log --oneline", result.interactive_command
+    assert_includes result.output, "$ pty git log --oneline"
+    assert_includes result.output, "interactive PTY session started"
+  end
+
+  def test_pty_builtin_requires_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("pty")
+
+    assert_equal 2, result.exit_status
+    assert_includes result.output, "Usage: pty <command>"
+  end
+
+  def test_pty_builtin_child_env_removes_default_git_pager
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    refute_includes shell.child_env(interactive: true), "GIT_PAGER"
+    assert_equal "cat", shell.child_env.fetch("GIT_PAGER")
+  end
+
+  def test_pty_builtin_child_env_preserves_configured_git_pager
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "GIT_PAGER" => "less" })
+
+    assert_equal "less", shell.child_env(interactive: true).fetch("GIT_PAGER")
+  end
+
+  def test_pty_builtin_is_completed
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    completion = shell.complete("pt", 2)
+
+    assert_includes completion.candidates, "pty"
+    assert_equal "pty ", completion.replacement
+  end
+
   def test_nonzero_command_reports_exit_status
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 

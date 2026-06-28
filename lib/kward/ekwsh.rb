@@ -11,15 +11,21 @@ end
 module Kward
   # Kward-native embedded shell command runner.
   class Ekwsh
-    Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :streamed, keyword_init: true)
+    Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :interactive_command, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
-    BUILTINS = %w[alias cd pwd export unset unalias clear exit logout].freeze
+    BUILTINS = %w[alias cd pwd export unset unalias clear exit logout pty].freeze
     DEFAULT_SHELL = "/bin/sh"
     DEFAULT_TIMEOUT_SECONDS = 300
     DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
     DEFAULT_HISTORY_LIMIT = 1_000
 
     attr_reader :cwd
+
+    def child_env(interactive: false)
+      env = @env.dup
+      env.delete("GIT_PAGER") if interactive && @defaulted_git_pager
+      env
+    end
 
     def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: DEFAULT_SHELL, configured_env: {}, aliases: {}, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES)
       @cwd = File.expand_path(cwd.to_s.empty? ? Dir.pwd : cwd.to_s)
@@ -85,6 +91,7 @@ module Kward
     def configure_color_environment
       @env["CLICOLOR"] ||= "1"
       @env["COLORTERM"] ||= "truecolor"
+      @defaulted_git_pager = !@env.key?("GIT_PAGER")
       @env["GIT_PAGER"] ||= "cat"
       @env["TERM"] = "xterm-256color" if @env["TERM"].to_s.empty? || @env["TERM"] == "dumb"
     end
@@ -286,11 +293,22 @@ module Kward
         unset_variables(command, words)
       when "clear"
         Result.new(output: "", exit_status: 0, clear: true)
+      when "pty"
+        interactive_pty_result(command)
       else
         nil
       end
     rescue ArgumentError => e
       Result.new(output: "#{command_echo(command)}ekwsh: #{e.message}\n", exit_status: 2)
+    end
+
+    def interactive_pty_result(command)
+      interactive_command = command.sub(/\A\s*pty(?:\s+|\z)/, "")
+      if interactive_command.empty?
+        return Result.new(output: "#{command_echo(command)}Usage: pty <command>\n", exit_status: 2)
+      end
+
+      Result.new(output: "#{command_echo(command)}[interactive PTY session started]\n", exit_status: 0, interactive_command: interactive_command)
     end
 
     def shell_words(command)
