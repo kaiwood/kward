@@ -25,18 +25,35 @@ module Kward
       new
     end
 
+    def self.content_from_session_file(path)
+      records = File.readlines(path, chomp: true).filter_map { |line| parse_record(line) }
+      content_from_records(records)
+    rescue Errno::ENOENT, Errno::EACCES
+      ""
+    end
+
     def self.from_records(records)
       execution_records = records.select { |record| record["type"] == "tool_execution_end" }
       source_records = execution_records.empty? ? records : execution_records
       source_records.each_with_object(new) do |record, diff|
         if record["type"] == "tool_execution_end"
-          next if record["isError"] || record.dig("result", "isError")
-
-          diff.add_diff(record.dig("result", "diff"))
+          diff.add_diff(record_diff(record))
         elsif record["type"] == "message" && (record.dig("message", "role") == "tool" || record.dig("message", :role) == "tool")
           diff.add_tool_result(record.dig("message", "content") || record.dig("message", :content))
         end
       end
+    end
+
+    def self.content_from_records(records)
+      records.filter_map { |record| record_diff(record) }.join("\n")
+    end
+
+    def self.record_diff(record)
+      return nil unless record["type"] == "tool_execution_end"
+      return nil if record["isError"] || record.dig("result", "isError")
+
+      diff = record.dig("result", "diff").to_s
+      diff.empty? ? nil : diff
     end
 
     def self.count(diff)

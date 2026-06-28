@@ -25,6 +25,9 @@ module Kward
         when "git"
           handle_git_command(agent)
           [true, nil]
+        when "diff"
+          open_session_diff
+          [true, nil]
         when "files"
           open_project_files_browser
           [true, nil]
@@ -129,6 +132,27 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def open_session_diff
+        unless @active_session&.path
+          runtime_output("No active persisted session.")
+          return
+        end
+
+        content = SessionDiff.content_from_session_file(@active_session.path)
+        if content.empty?
+          runtime_output("No file changes recorded in this session.")
+          return
+        end
+
+        if @prompt.respond_to?(:open_modal_diff_viewer)
+          @prompt.open_modal_diff_viewer("Session diff", content)
+        elsif @prompt.respond_to?(:open_diff_viewer)
+          @prompt.open_diff_viewer("Session diff", content)
+        else
+          runtime_output(content)
+        end
       end
 
       def open_scratchpad_command(argument)

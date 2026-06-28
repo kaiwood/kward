@@ -144,6 +144,28 @@ class TestSessionDiff < KwardTestCase
     end
   end
 
+  def test_content_from_session_file_returns_successful_tool_diffs_in_order
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "session.jsonl")
+      records = [
+        { type: "session", id: "s", timestamp: Time.now.utc.iso8601(3), cwd: dir },
+        { type: "tool_execution_end", isError: false, result: { isError: false, diff: "--- one.txt\n+++ one.txt\n-old\n+new\n" } },
+        { type: "tool_execution_end", isError: true, result: { isError: true, diff: "--- failed.txt\n+++ failed.txt\n-nope\n+nope\n" } },
+        { type: "tool_execution_end", isError: false, result: { isError: false, diff: "--- two.txt\n+++ two.txt\n-old two\n+new two\n" } }
+      ]
+      File.write(path, records.map { |record| JSON.generate(record) }.join("\n"))
+
+      content = Kward::SessionDiff.content_from_session_file(path)
+
+      assert_includes content, "--- one.txt"
+      assert_includes content, "+new"
+      assert_includes content, "--- two.txt"
+      assert_includes content, "+new two"
+      refute_includes content, "failed.txt"
+      assert_operator content.index("--- one.txt"), :<, content.index("--- two.txt")
+    end
+  end
+
   def test_normalized_non_mutation_tool_result_does_not_store_diff
     content = "Exit status: 0\n\nSTDOUT:\n--- file.txt\n+++ file.txt\n@@ -1,25 +0,0 @@\n" + (1..25).map { |index| "-line #{index}\n" }.join
     normalizer = Kward::RPC::ToolEventNormalizer.new(tool_call("run_shell_command", command: "git diff"), content: content)

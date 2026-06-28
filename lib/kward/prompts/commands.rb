@@ -27,6 +27,7 @@ module Kward
       { name: "reload", description: "Reload installed plugins.", argument_hint: "" },
       { name: "workers", description: "Open the worker pipeline.", argument_hint: "[new|do <task>]" },
       { name: "git", description: "Review uncommitted changes and commit them.", argument_hint: "" },
+      { name: "diff", description: "Open the file changes recorded in this session.", argument_hint: "" },
       { name: "files", description: "Browse project files.", argument_hint: "" },
       { name: "shell", description: "Open the embedded Kward shell.", argument_hint: "" },
       { name: "scratchpad", description: "Open an unsaved editor buffer.", argument_hint: "[text|markdown|ruby]" },

@@ -45,6 +45,14 @@ module Kward
         end
       end
 
+      def open_modal_diff_viewer(path, content)
+        @mutex.synchronize do
+          open_diff_viewer(path.to_s, content.to_s)
+          render_prompt_locked
+        end
+        read_editor_until_closed
+      end
+
       private
 
       def handle_git_key(key)
@@ -189,11 +197,7 @@ module Kward
       def open_git_diff_viewer(diff)
         return unless diff.respond_to?(:[])
 
-        @mutex.synchronize do
-          open_diff_viewer(diff[:path].to_s, diff[:content].to_s)
-          render_prompt_locked
-        end
-        read_editor_until_closed
+        open_modal_diff_viewer(diff[:path], diff[:content])
       end
 
       def read_editor_until_closed

@@ -114,6 +114,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/model` | choose the active model. |
 | `/reasoning` | choose reasoning effort. |
 | `/git` | review uncommitted changes, stage files, and commit. |
+| `/diff` | open the file changes recorded in the current session. |
 | `/files` | browse project files in a nested tree and open them in the editor. |
 | `/shell` | run workspace commands in the embedded Kward shell. |
 | `/pty <command>` | hand the terminal to an interactive command such as `git log`/`less` or `vim`. |
