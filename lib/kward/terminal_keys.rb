@@ -2,6 +2,28 @@
 module Kward
   # Terminal input key byte sequences grouped by semantic key.
   module TerminalKeys
+    CTRL_SPACE = "\x00".freeze
+    CTRL_A = "\x01".freeze
+    CTRL_B = "\x02".freeze
+    CTRL_C = "\x03".freeze
+    CTRL_D = "\x04".freeze
+    CTRL_E = "\x05".freeze
+    CTRL_F = "\x06".freeze
+    CTRL_K = "\x0B".freeze
+    CTRL_L = "\x0C".freeze
+    CTRL_N = "\x0E".freeze
+    CTRL_P = "\x10".freeze
+    CTRL_Q = "\x11".freeze
+    CTRL_R = "\x12".freeze
+    CTRL_S = "\x13".freeze
+    CTRL_T = "\x14".freeze
+    CTRL_U = "\x15".freeze
+    CTRL_V = "\x16".freeze
+    CTRL_W = "\x17".freeze
+    CTRL_X = "\x18".freeze
+    CTRL_Y = "\x19".freeze
+    CTRL_Z = "\x1A".freeze
+
     RETURN = ["\n", "\r"].freeze
     BACKSPACE = ["\b", "\x7F"].freeze
     TAB = ["\t", "\e[9u", "\e[9;1u", "\e[27;1;9~"].freeze

@@ -37,44 +37,44 @@ module Kward
         when "\b", "\x7F"
           clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_delete_character : editor_delete_before_cursor
-        when "\x00"
+        when TerminalKeys::CTRL_SPACE
           @editor_state.begin_selection unless editor_search_active?
-        when "\x01"
+        when TerminalKeys::CTRL_A
           @editor_state.move_line_start unless editor_search_active?
-        when "\x02"
+        when TerminalKeys::CTRL_B
           @editor_state.move_left unless editor_search_active?
-        when "\x04"
+        when TerminalKeys::CTRL_D
           @editor_state.delete_at_cursor unless editor_search_active?
-        when "\x05"
+        when TerminalKeys::CTRL_E
           @editor_state.move_line_end unless editor_search_active?
-        when "\x06"
+        when TerminalKeys::CTRL_F
           @editor_state.move_right unless editor_search_active?
         when "\x07"
           emacs_cancel
-        when "\x0B"
+        when TerminalKeys::CTRL_K
           if editor_selection_active?
             emacs_kill_selection
           else
             @editor_state.kill_line_after_cursor unless editor_search_active?
           end
-        when "\x0E"
+        when TerminalKeys::CTRL_N
           editor_move_down unless editor_search_active?
-        when "\x10"
+        when TerminalKeys::CTRL_P
           editor_move_up unless editor_search_active?
-        when "\x12"
+        when TerminalKeys::CTRL_R
           editor_search_active? ? editor_search_append(key) : editor_search_begin(:backward)
-        when "\x13"
+        when TerminalKeys::CTRL_S
           editor_search_active? ? editor_search_append(key) : editor_search_begin(:forward)
-        when "\x15"
+        when TerminalKeys::CTRL_U
           @editor_state.kill_line_before_cursor unless editor_search_active?
-        when "\x16"
+        when TerminalKeys::CTRL_V
           @editor_state.page_down(editor_page_rows) unless editor_search_active?
-        when "\x17"
+        when TerminalKeys::CTRL_W
           editor_selection_active? ? emacs_kill_selection : @editor_state.delete_word_before_cursor unless editor_search_active?
-        when "\x18"
+        when TerminalKeys::CTRL_X
           @editor_state.emacs_pending = "C-x"
           @editor_state.status = "C-x"
-        when "\x19"
+        when TerminalKeys::CTRL_Y
           @editor_state.yank_from_kill_ring unless editor_search_active?
         when "\e"
           return editor_search_cancel if editor_search_active?
@@ -192,9 +192,9 @@ module Kward
         @editor_state.emacs_pending = nil
         key = emacs_ctrl_x_csi_u_key(key)
         case key
-        when "\x13"
+        when TerminalKeys::CTRL_S
           save_editor
-        when "\x03"
+        when TerminalKeys::CTRL_C
           quit_editor("Unsaved changes. Press C-x C-c again to discard.")
         else
           @editor_state.status = "Unknown C-x command"
@@ -209,9 +209,9 @@ module Kward
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
         case ctrl_code(sequence[:code])
         when 99
-          "\x03"
+          TerminalKeys::CTRL_C
         when 115
-          "\x13"
+          TerminalKeys::CTRL_S
         else
           key
         end

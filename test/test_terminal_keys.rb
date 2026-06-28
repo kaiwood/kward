@@ -1,6 +1,12 @@
 require_relative "test_helper"
 
 class TestTerminalKeys < KwardTestCase
+  def test_terminal_key_control_constants_name_common_bytes
+    assert_equal "\x01", Kward::TerminalKeys::CTRL_A
+    assert_equal "\x03", Kward::TerminalKeys::CTRL_C
+    assert_equal "\x1A", Kward::TerminalKeys::CTRL_Z
+  end
+
   def test_terminal_key_groups_are_frozen
     groups = [
       Kward::TerminalKeys::TAB,

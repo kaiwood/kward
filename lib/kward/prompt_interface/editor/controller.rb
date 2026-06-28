@@ -175,14 +175,14 @@ module Kward
           editor_insert_tab unless editor_search_active?
         when "\b", "\x7F"
           editor_search_active? ? editor_search_delete_character : delete_editor_selection || editor_delete_before_cursor
-        when "\x03"
+        when TerminalKeys::CTRL_C
           return editor_search_cancel if editor_search_active?
         when "\e"
           return editor_search_cancel if editor_search_active?
           return @editor_state.clear_selection if @editor_state.selection_active?
-        when "\x11"
+        when TerminalKeys::CTRL_Q
           quit_editor
-        when "\x13"
+        when TerminalKeys::CTRL_S
           save_editor
         when "/"
           clear_editor_selection_before_edit unless editor_search_active?
@@ -453,29 +453,29 @@ module Kward
 
       def handle_editor_key_binding(key)
         case key
-        when "\x01"
+        when TerminalKeys::CTRL_A
           @editor_state.move_line_start unless editor_search_active?
-        when "\x02"
+        when TerminalKeys::CTRL_B
           @editor_state.move_left unless editor_search_active?
-        when "\x04"
+        when TerminalKeys::CTRL_D
           @editor_state.delete_at_cursor unless editor_search_active?
-        when "\x05"
+        when TerminalKeys::CTRL_E
           @editor_state.move_line_end unless editor_search_active?
-        when "\x06"
+        when TerminalKeys::CTRL_F
           @editor_state.move_right unless editor_search_active?
-        when "\x00"
+        when TerminalKeys::CTRL_SPACE
           @editor_state.begin_selection unless editor_search_active?
-        when "\x0B"
+        when TerminalKeys::CTRL_K
           @editor_state.kill_line_after_cursor unless editor_search_active?
-        when "\x0E"
+        when TerminalKeys::CTRL_N
           editor_move_down unless editor_search_active?
-        when "\x10"
+        when TerminalKeys::CTRL_P
           editor_move_up unless editor_search_active?
-        when "\x15"
+        when TerminalKeys::CTRL_U
           @editor_state.kill_line_before_cursor unless editor_search_active?
-        when "\x17"
+        when TerminalKeys::CTRL_W
           @editor_state.delete_word_before_cursor unless editor_search_active?
-        when "\x19"
+        when TerminalKeys::CTRL_Y
           editor_selection_active? ? copy_editor_selection : @editor_state.yank_kill_buffer unless editor_search_active?
         when *TerminalKeys::LEFT
           @editor_state.move_left unless editor_search_active?
@@ -653,11 +653,11 @@ module Kward
         return named_result unless named_result == false || named_result.nil?
 
         case key
-        when "\x11"
+        when TerminalKeys::CTRL_Q
           close_editor
-        when "\x06"
+        when TerminalKeys::CTRL_F
           editor_search_active? ? editor_search_append(key) : editor_search_begin
-        when "\x03"
+        when TerminalKeys::CTRL_C
           editor_search_active? ? editor_search_cancel : copy_editor_selection
         when "/"
           editor_search_active? ? editor_search_append(key) : editor_search_begin

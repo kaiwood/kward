@@ -14,7 +14,7 @@ module Kward
 
         @reader.read_keypress(echo: false, raw: true, nonblock: nonblock)
       rescue TTY::Reader::InputInterrupt
-        "\x03"
+        TerminalKeys::CTRL_C
       rescue IO::WaitReadable, Errno::EAGAIN, Errno::EWOULDBLOCK
         nil
       end
@@ -116,11 +116,11 @@ module Kward
             handle_tab_completion_key
           when "\b", "\x7F"
             delete_before_cursor
-          when "\x04"
+          when TerminalKeys::CTRL_D
             delete_at_cursor_or_exit
-          when "\x03"
+          when TerminalKeys::CTRL_C
             cancel_input_or_interrupt
-          when "\x12"
+          when TerminalKeys::CTRL_R
             start_history_search
           when "\e"
             handle_escape_sequence
@@ -152,7 +152,7 @@ module Kward
             accept_history_search
           when "\b", "\x7F"
             update_history_search_query(composer_input[0...-1].to_s)
-          when "\x03", "\e"
+          when TerminalKeys::CTRL_C, "\e"
             cancel_history_search
           else
             append_history_search_key(key)
@@ -637,7 +637,7 @@ module Kward
 
       def handle_ctrl_tab_key_binding(key)
         case key
-        when "\x14", TerminalKeys::CTRL_T_CSI_U
+        when TerminalKeys::CTRL_T, TerminalKeys::CTRL_T_CSI_U
           { tab_action: :new }
         when TerminalKeys::CTRL_W_CSI_U
           { tab_action: :close }
@@ -675,25 +675,25 @@ module Kward
 
       def handle_composer_key_binding(key)
         case key
-        when "\x01"
+        when TerminalKeys::CTRL_A
           move_to_start_of_line
-        when "\x02"
+        when TerminalKeys::CTRL_B
           move_cursor_left
-        when "\x04"
+        when TerminalKeys::CTRL_D
           delete_at_cursor_or_exit
-        when "\x05"
+        when TerminalKeys::CTRL_E
           move_to_end_of_line
-        when "\x06"
+        when TerminalKeys::CTRL_F
           move_cursor_right
-        when "\x0B"
+        when TerminalKeys::CTRL_K
           kill_line_after_cursor
-        when "\x0C"
+        when TerminalKeys::CTRL_L
           redraw_screen_locked
-        when "\x15"
+        when TerminalKeys::CTRL_U
           kill_line_before_cursor
-        when "\x17"
+        when TerminalKeys::CTRL_W
           delete_word_before_cursor
-        when "\x19"
+        when TerminalKeys::CTRL_Y
           yank_kill_buffer
         when *TerminalKeys::LEFT
           move_cursor_left

@@ -43,7 +43,7 @@ module Kward
 
         return vibe_stop_macro_recording if key == "q" && @editor_state.vibe_recording_macro && !%w[insert replace command].include?(@editor_state.vibe_mode)
         vibe_record_macro_key(key)
-        return vibe_begin_visual_mode("visual_block") if key == "\x16" && @editor_state.vibe_mode == "normal"
+        return vibe_begin_visual_mode("visual_block") if key == TerminalKeys::CTRL_V && @editor_state.vibe_mode == "normal"
         return handle_vibe_repeat_change if key == "." && @editor_state.vibe_mode == "normal"
         return handle_vibe_search_key(key) if editor_search_active?
         return handle_vibe_command_key(key) if @editor_state.vibe_mode == "command"
@@ -119,7 +119,7 @@ module Kward
           editor_search_confirm
         when "\b", "\x7F"
           editor_search_delete_character
-        when "\e", "\x03"
+        when "\e", TerminalKeys::CTRL_C
           editor_search_cancel
         else
           editor_search_append(key) if printable_key?(key)
@@ -135,7 +135,7 @@ module Kward
         return tab_result unless tab_result == false
 
         case key
-        when "\e", "\x03", :escape
+        when "\e", TerminalKeys::CTRL_C, :escape
           vibe_return_to_normal
         when "\b", "\x7F"
           vibe_record_undo { editor_delete_before_cursor }
@@ -178,23 +178,23 @@ module Kward
 
       def handle_vibe_insert_readline_ansi_key(key)
         case key
-        when "\x01"
+        when TerminalKeys::CTRL_A
           @editor_state.move_line_start
-        when "\x02"
+        when TerminalKeys::CTRL_B
           @editor_state.move_left
-        when "\x04"
+        when TerminalKeys::CTRL_D
           vibe_record_undo { @editor_state.delete_at_cursor }
-        when "\x05"
+        when TerminalKeys::CTRL_E
           @editor_state.move_line_end
-        when "\x06"
+        when TerminalKeys::CTRL_F
           @editor_state.move_right
-        when "\x0B"
+        when TerminalKeys::CTRL_K
           vibe_record_undo { @editor_state.kill_line_after_cursor }
-        when "\x15"
+        when TerminalKeys::CTRL_U
           vibe_record_undo { @editor_state.kill_line_before_cursor }
-        when "\x17"
+        when TerminalKeys::CTRL_W
           vibe_record_undo { @editor_state.delete_word_before_cursor }
-        when "\x19"
+        when TerminalKeys::CTRL_Y
           vibe_record_undo { @editor_state.yank_kill_buffer }
         when *TerminalKeys::LEFT
           @editor_state.move_left
@@ -317,7 +317,7 @@ module Kward
         return tab_result unless tab_result == false
 
         case key
-        when "\e", "\x03", :escape
+        when "\e", TerminalKeys::CTRL_C, :escape
           vibe_return_to_normal
         when "\b", "\x7F"
           vibe_record_undo { editor_delete_before_cursor }
@@ -339,7 +339,7 @@ module Kward
 
       def handle_vibe_command_key(key)
         case key
-        when "\e", "\x03", :escape
+        when "\e", TerminalKeys::CTRL_C, :escape
           @editor_state.vibe_command = ""
           vibe_return_to_normal
         when "\b", "\x7F"
@@ -414,7 +414,7 @@ module Kward
       end
 
       def handle_vibe_normal_key(key)
-        if key == "\e" || key == "\x03"
+        if key == "\e" || key == TerminalKeys::CTRL_C
           @editor_state.vibe_pending = ""
           vibe_return_to_normal
           return true
@@ -477,7 +477,7 @@ module Kward
       end
 
       def vibe_normal_control_key?(key)
-        ["\n", "\r", "\b", "\x7F", "\x02", "\x04", "\x05", "\x06", "\x12", "\x15", "\x19"].include?(key)
+        ["\n", "\r", "\b", "\x7F", TerminalKeys::CTRL_B, TerminalKeys::CTRL_D, TerminalKeys::CTRL_E, TerminalKeys::CTRL_F, TerminalKeys::CTRL_R, TerminalKeys::CTRL_U, TerminalKeys::CTRL_Y].include?(key)
       end
 
       def vibe_visual_mode?
@@ -577,19 +577,19 @@ module Kward
           vibe_move_to_screen_line(editor_page_rows / 2)
         when "L"
           vibe_move_to_screen_line(editor_page_rows - count)
-        when "\x06"
+        when TerminalKeys::CTRL_F
           @editor_state.page_down(editor_page_rows)
-        when "\x02"
+        when TerminalKeys::CTRL_B
           @editor_state.page_up(editor_page_rows)
-        when "\x04"
+        when TerminalKeys::CTRL_D
           @editor_state.page_down(vibe_half_page_rows)
-        when "\x15"
+        when TerminalKeys::CTRL_U
           @editor_state.page_up(vibe_half_page_rows)
-        when "\x05"
+        when TerminalKeys::CTRL_E
           vibe_scroll_down
-        when "\x19"
+        when TerminalKeys::CTRL_Y
           vibe_scroll_up
-        when "\x12"
+        when TerminalKeys::CTRL_R
           @editor_state.redo
         when "i"
           vibe_enter_insert_mode(command)
@@ -691,7 +691,7 @@ module Kward
       def handle_vibe_visual_key(key)
         key_name = key_name_for(key)
         return handle_vibe_visual_named_key(key_name) if key_name
-        if key == "\e" || key == "\x03"
+        if key == "\e" || key == TerminalKeys::CTRL_C
           @editor_state.vibe_pending = ""
           vibe_cancel_visual_mode
           return true
@@ -1928,7 +1928,7 @@ module Kward
 
       def vibe_record_insert_change_key(key)
         return unless @editor_state.vibe_last_change
-        return if ["\x03"].include?(key)
+        return if [TerminalKeys::CTRL_C].include?(key)
 
         @editor_state.vibe_last_change << key
       end

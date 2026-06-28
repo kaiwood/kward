@@ -43,7 +43,7 @@ module Kward
           modern_record_undo { editor_insert_tab unless editor_search_active? }
         when "\b", "\x7F"
           editor_search_active? ? editor_search_delete_character : modern_record_undo { modern_delete_before_cursor }
-        when "\x03"
+        when TerminalKeys::CTRL_C
           return editor_search_cancel if editor_search_active?
         when "\e"
           return editor_search_cancel if editor_search_active?
@@ -55,11 +55,11 @@ module Kward
         when "?"
           clear_editor_selection_before_edit unless editor_search_active?
           editor_search_active? ? editor_search_append(key) : editor_search_begin(:backward)
-        when "\x11"
+        when TerminalKeys::CTRL_Q
           quit_editor
-        when "\x13"
+        when TerminalKeys::CTRL_S
           save_editor
-        when "\x1A"
+        when TerminalKeys::CTRL_Z
           @editor_state.undo unless editor_search_active?
         else
           key_name = key_name_for(key)
@@ -94,7 +94,7 @@ module Kward
         return false if editor_search_active?
 
         case key
-        when "\x04"
+        when TerminalKeys::CTRL_D
           @editor_state.add_next_occurrence_selection
         when *TerminalKeys::ALT_SHIFT_UP
           @editor_state.add_vertical_cursor(:up)
@@ -190,15 +190,15 @@ module Kward
 
       def handle_modern_key_binding(key)
         case key
-        when "\x00"
+        when TerminalKeys::CTRL_SPACE
           true
-        when "\x03"
+        when TerminalKeys::CTRL_C
           editor_search_active? ? editor_search_cancel : copy_editor_selection
-        when "\x06"
+        when TerminalKeys::CTRL_F
           @editor_state.move_right unless editor_search_active?
-        when "\x16"
+        when TerminalKeys::CTRL_V
           modern_record_undo { @editor_state.yank_kill_buffer } unless editor_search_active?
-        when "\x18"
+        when TerminalKeys::CTRL_X
           modern_record_undo { cut_editor_selection } unless editor_search_active?
         else
           handle_modern_shared_key_binding(key)
@@ -250,7 +250,7 @@ module Kward
 
       def handle_modern_shared_key_binding(key)
         case key
-        when "\x04", "\x0B", "\x15", "\x17", "\x19", *TerminalKeys::DELETE, "\ed", "\eD", "\e\b", "\e\x7F"
+        when TerminalKeys::CTRL_D, TerminalKeys::CTRL_K, TerminalKeys::CTRL_U, TerminalKeys::CTRL_W, TerminalKeys::CTRL_Y, *TerminalKeys::DELETE, "\ed", "\eD", "\e\b", "\e\x7F"
           modern_record_undo { handle_editor_key_binding(key) }
         else
           handle_editor_key_binding(key)
