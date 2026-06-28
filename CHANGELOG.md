@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed workspace file tools so expected filesystem permission and path-type errors are returned as tool errors instead of aborting a turn.
 - Fixed composer `Ctrl+C` so it no longer exits the app when no process is running.
 - Fixed the Git diff viewer so `Ctrl+C` and terminal-forwarded `Cmd+C` copy selected text.
 - Fixed pasted or dropped shell-escaped image paths so the composer hides the path text after adding the image badge.

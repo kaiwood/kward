@@ -185,6 +185,32 @@ class TestWorkspace < KwardTestCase
     end
   end
 
+  def test_read_file_returns_error_for_unreadable_file
+    with_temp_workspace do |workspace, dir|
+      path = File.join(dir, "unreadable.tmp")
+      File.write(path, "secret\n")
+      File.chmod(0o000, path)
+      skip "filesystem still reports unreadable file as readable" if File.readable?(path)
+
+      result = workspace.read_file("unreadable.tmp")
+
+      assert_match(/\AError: /, result)
+    ensure
+      File.chmod(0o644, path) if path && File.exist?(path)
+    end
+  end
+
+  def test_write_file_returns_error_for_directory_write
+    with_temp_workspace do |workspace, dir|
+      path = "existing-directory"
+      FileUtils.mkdir_p(File.join(dir, path))
+
+      result = workspace.write_file(path, "content\n", read_paths: [workspace.resolved_path(path)])
+
+      assert_match(/\AError: /, result)
+    end
+  end
+
   def test_existing_file_write_requires_prior_successful_read
     with_temp_workspace do |workspace, dir|
       path = "kward_existing_requires_read.txt"

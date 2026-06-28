@@ -23,6 +23,7 @@ module Kward
     MAX_COMMAND_OUTPUT_BYTES = 128 * 1024
     MAX_EDIT_DIFF_BYTES = 8 * 1024
     DEFAULT_COMMAND_TIMEOUT_SECONDS = 30
+    EXPECTED_FILE_ERRORS = [SecurityError, Errno::ENOENT, Errno::EACCES, Errno::EPERM, Errno::EISDIR, Errno::ENOTDIR].freeze
 
     # Creates an object for workspace filesystem and shell operations.
     def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES, guardrails: true)
@@ -45,7 +46,7 @@ module Kward
       Dir.children(resolved).sort.map do |entry|
         File.directory?(File.join(resolved, entry)) ? "#{entry}/" : entry
       end.join("\n")
-    rescue SecurityError, Errno::ENOENT => e
+    rescue *EXPECTED_FILE_ERRORS => e
       "Error: #{e.message}"
     end
 
@@ -82,7 +83,7 @@ module Kward
       else
         large_file_outline_response(path, content, offset: offset, limit: limit) || read_file_slice(content, offset: offset, limit: limit, max_bytes: output_budget)
       end
-    rescue SecurityError, Errno::ENOENT => e
+    rescue *EXPECTED_FILE_ERRORS => e
       "Error: #{e.message}"
     end
 
@@ -98,7 +99,7 @@ module Kward
       return "Error: not a text file: #{path}" if binary_content?(content)
 
       file_structure_summary(path, content)
-    rescue SecurityError, Errno::ENOENT => e
+    rescue *EXPECTED_FILE_ERRORS => e
       "Error: #{e.message}"
     end
 
@@ -120,7 +121,7 @@ module Kward
       output = "Wrote #{content.bytesize} bytes to #{path}"
       output << "\n#{truncated_diff(path, old_content, content)}" if old_content && old_content != content
       output
-    rescue SecurityError, Errno::ENOENT => e
+    rescue *EXPECTED_FILE_ERRORS => e
       "Error: #{e.message}"
     end
 
@@ -143,7 +144,7 @@ module Kward
 
       File.write(resolved, result[:content])
       "Edited #{path}: replaced #{result[:count]} block(s)\n#{truncated_diff(path, content, result[:content])}"
-    rescue SecurityError, Errno::ENOENT => e
+    rescue *EXPECTED_FILE_ERRORS => e
       "Error: #{e.message}"
     end
 
