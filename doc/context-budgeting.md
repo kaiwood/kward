@@ -71,13 +71,13 @@ This is useful when Kward needs orientation before choosing exact files or line 
 
 `read_file` also accepts `max_bytes`, which lets Kward request a smaller per-call byte budget. This can only reduce the output below the workspace default (50 KB); it cannot increase it.
 
-Large source files still get special handling when read without a mode: Kward returns an outline plus the first 120 lines instead of blindly flooding context. See [Workspace tools](workspace-tools.md#read_file) for the full `read_file` argument reference and read limits.
+Large source files still get special handling when read without a mode: Kward returns an outline plus the first 120 lines instead of blindly flooding context. See [Workspace tools](workspace-tools.md) for the full `read_file` argument reference and read limits.
 
 ## Source outlines
 
 `summarize_file_structure` and `read_file` with `mode: "outline"` return compact source outlines. These include recognizable declarations, declaration kind, indentation, and approximate line ranges.
 
-The outline recognizer is deliberately simple. It uses lightweight patterns for common Ruby, JavaScript/TypeScript, Go, Rust, Java, and C#-style declarations. It is not a compiler or LSP replacement, but it is fast and dependency-free. See [Workspace tools](workspace-tools.md#summarize_file_structure) for argument details.
+The outline recognizer is deliberately simple. It uses lightweight patterns for common Ruby, JavaScript/TypeScript, Go, Rust, Java, and C#-style declarations. It is not a compiler or LSP replacement, but it is fast and dependency-free. See [Workspace tools](workspace-tools.md) for argument details.
 
 ## Output compaction
 
@@ -104,7 +104,7 @@ That helps when commands or searches are retried and return the same large resul
 
 Kward also supports conversation/session compaction. This is separate from tool-output compaction: instead of trimming one tool result, it summarizes older conversation state so a long session can continue with less context pressure.
 
-Session compaction keeps the working conversation manageable while preserving the session history on disk. Run `/compact` manually, or enable auto-compaction in config — see [Session management](session-management.md#compact-long-sessions) and [Configuration](configuration.md#compaction).
+Session compaction keeps the working conversation manageable while preserving the session history on disk. Run `/compact` manually, or enable auto-compaction in config — see [Session management](session-management.md) and [Configuration](configuration.md).
 
 ## Measuring savings
 
@@ -119,7 +119,7 @@ It reports:
 - estimated tokens saved,
 - per-tool breakdown with `calls`, `savedBytes`, `returnedBytes`, and `originalBytes` for each tool.
 
-The token estimate is intentionally rough, using about four bytes per token. It is meant to show whether context budgeting is helping, not to match provider billing exactly. See [Workspace tools](workspace-tools.md#context_budget_stats) for the tool reference.
+The token estimate is intentionally rough, using about four bytes per token. It is meant to show whether context budgeting is helping, not to match provider billing exactly. See [Workspace tools](workspace-tools.md) for the tool reference.
 
 ## Practical example
 

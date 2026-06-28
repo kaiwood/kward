@@ -40,7 +40,7 @@ Default location:
 
 If `KWARD_CONFIG_PATH` is set, `PRINCIPLES.md` lives beside that config file.
 
-If `PRINCIPLES.md` is absent, Kward also reads `~/.kward/AGENTS.md` (or the equivalent beside a custom config path) as a legacy alias. New setups should use `PRINCIPLES.md`. See [Configuration](configuration.md#global-principles) for details.
+If `PRINCIPLES.md` is absent, Kward also reads `~/.kward/AGENTS.md` (or the equivalent beside a custom config path) as a legacy alias. New setups should use `PRINCIPLES.md`. See [Configuration](configuration.md) for details.
 
 ## Project instructions: `AGENTS.md`
 
@@ -61,7 +61,7 @@ Update CHANGELOG.md for user-visible changes.
 
 Use `AGENTS.md` for project facts and engineering rules. Do not put personality or roleplay instructions there; use [personas](personas.md) for tone.
 
-By default, Kward adds a compact instruction telling the model that `AGENTS.md` exists and should be read when relevant. Set `enforce_workspace_agents_file: true` only if you want the full file injected every time. See [Configuration](configuration.md#workspace-agentsmd) for details.
+By default, Kward adds a compact instruction telling the model that `AGENTS.md` exists and should be read when relevant. Set `enforce_workspace_agents_file: true` only if you want the full file injected every time. See [Configuration](configuration.md) for details.
 
 ## Prompt templates
 

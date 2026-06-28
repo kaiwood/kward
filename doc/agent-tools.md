@@ -6,7 +6,7 @@ Tools are part of Kward's safety and context-management boundary:
 
 - schemas describe what the model is allowed to call,
 - Ruby tool objects validate and execute those calls,
-- workspace tools stay inside the active workspace by default (see [Configuration](configuration.md#tool-workspace-guardrails) for the guardrail setting),
+- workspace tools stay inside the active workspace by default (see [Configuration](configuration.md) for the guardrail setting),
 - file-changing tools require the file to be read first,
 - mutation tools (`edit_file`, `write_file`, `run_shell_command`) are gated by a write lock when agent workers are active, so only one worker can change the workspace at a time,
 - large outputs are bounded or compacted before they enter model context,

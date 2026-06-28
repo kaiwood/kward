@@ -67,7 +67,7 @@ To resolve context overflow:
 
 - Run `/compact` to summarize and reduce the conversation context.
 - Start a new session with `/new` if the current one is no longer needed.
-- Enable auto-compaction if it is off — see [Configuration](configuration.md#compaction).
+- Enable auto-compaction if it is off — see [Configuration](configuration.md).
 - Switch to a model with a larger context window via `/model`.
 
 ## `gem install kward` succeeds, but `kward` is not found with rbenv

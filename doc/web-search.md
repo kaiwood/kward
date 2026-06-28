@@ -36,7 +36,7 @@ Kward should search first, then fetch important pages before relying on them.
 
 ## Network behavior
 
-Web tools are advertised to the model by default. Queries and fetched URLs are sent over the network to the selected provider or target host. See [Configuration](configuration.md#web-search) for the full `web_search` config reference including API key storage and the `provider` config setting.
+Web tools are advertised to the model by default. Queries and fetched URLs are sent over the network to the selected provider or target host. See [Configuration](configuration.md) for the full `web_search` config reference including API key storage and the `provider` config setting.
 
 In automatic mode, provider fallback is:
 

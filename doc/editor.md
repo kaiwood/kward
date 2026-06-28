@@ -112,7 +112,7 @@ Line numbers are absolute by default. Set `editor.line_numbers` to `relative` to
 
 Editable editor buffers request a vertical bar cursor by default. Set `editor.bar_cursor` to `false` if you want Kward to leave the terminal cursor shape alone.
 
-See [Configuration](configuration.md#editor-settings) for the full editor settings reference.
+See [Configuration](configuration.md) for the full editor settings reference.
 
 ## Modern mode
 

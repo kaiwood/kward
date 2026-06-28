@@ -160,8 +160,8 @@ When a soft memory is forgotten, its text is replaced with `[forgotten]` while i
 
 Soft memories have a time-to-live of 60 days by default. Each time a soft memory is retrieved, its `last_seen_at` timestamp is updated and its hit count is incremented. If a soft memory is not retrieved within its TTL window, it expires and is no longer injected into prompts. Forgotten and expired memories remain in the file for audit but are not shown in `/memory list`.
 
-If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead of under `~/.kward`. See [Configuration](configuration.md#memory) for the config-file representation.
+If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead of under `~/.kward`. See [Configuration](configuration.md) for the config-file representation.
 
 ## RPC support
 
-The experimental RPC backend exposes memory methods including `memory/status`, `memory/enable`, `memory/disable`, `memory/autoSummary/enable`, `memory/autoSummary/disable`, `memory/list`, `memory/add`, `memory/addCore`, `memory/forget`, `memory/promote`, `memory/relax`, `memory/inspect`, `memory/why`, and `memory/summarize`. See the [RPC documentation](rpc.md#memory-methods) for the full protocol.
+The experimental RPC backend exposes memory methods including `memory/status`, `memory/enable`, `memory/disable`, `memory/autoSummary/enable`, `memory/autoSummary/disable`, `memory/list`, `memory/add`, `memory/addCore`, `memory/forget`, `memory/promote`, `memory/relax`, `memory/inspect`, `memory/why`, and `memory/summarize`. See the [RPC documentation](rpc.md) for the full protocol.

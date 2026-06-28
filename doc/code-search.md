@@ -75,7 +75,7 @@ or:
 GH_TOKEN=...
 ```
 
-Tokens are used for GitHub API requests and are not included in tool output. See [Configuration](configuration.md#environment-overrides) for the full environment variable reference.
+Tokens are used for GitHub API requests and are not included in tool output. See [Configuration](configuration.md) for the full environment variable reference.
 
 ## Tool actions
 

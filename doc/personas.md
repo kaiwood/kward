@@ -293,7 +293,7 @@ anthropic_reasoning_effort
 copilot_reasoning_effort
 ```
 
-Personas do not choose the model and do not set reasoning effort by themselves. What personas can do is add extra character direction based on the active reasoning effort. See [Configuration](configuration.md#provider-and-model-settings) for the full provider, model, and reasoning config reference.
+Personas do not choose the model and do not set reasoning effort by themselves. What personas can do is add extra character direction based on the active reasoning effort. See [Configuration](configuration.md) for the full provider, model, and reasoning config reference.
 
 In plain English:
 

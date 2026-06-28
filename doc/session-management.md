@@ -23,7 +23,7 @@ cd ~/code/project
 kward
 ```
 
-To automatically resume the last active session for the current workspace on startup, enable `sessions.auto_resume` in your config — see [Configuration](configuration.md#session-settings). When auto-resume is off (the default), Kward starts fresh each time and you can resume earlier work with `/sessions`.
+To automatically resume the last active session for the current workspace on startup, enable `sessions.auto_resume` in your config — see [Configuration](configuration.md). When auto-resume is off (the default), Kward starts fresh each time and you can resume earlier work with `/sessions`.
 
 ## A normal session workflow
 
@@ -251,4 +251,4 @@ This is useful when you want to confirm which session you are in or check whethe
 
 Sessions make Kward less like a single chat box and more like a workspace timeline. You can preserve context, branch it, compress it, and return to it when the work needs another pass.
 
-RPC clients have their own session API with equivalent create, resume, list, clone, fork, rename, and compaction methods. See the [RPC documentation](rpc.md#session-methods) for details.
+RPC clients have their own session API with equivalent create, resume, list, clone, fork, rename, and compaction methods. See the [RPC documentation](rpc.md) for details.

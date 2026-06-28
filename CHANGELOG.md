@@ -2,7 +2,7 @@
 
 All notable changes to Kward will be documented in this file.
 
-## [Unreleased]
+## [0.72.0] - 2026-06-28
 
 ### Added
 
