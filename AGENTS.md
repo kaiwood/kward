@@ -73,6 +73,7 @@ ruby lib/main.rb "Explain this project"
 - When adding configuration, document default behavior and environment variable interactions.
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
 - When changing prompt/skill behavior, update `doc/extensibility.md` and prompt-related tests as needed.
+- Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
 
 ## Feature exposure rule
 
