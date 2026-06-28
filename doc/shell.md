@@ -12,7 +12,7 @@ This makes it good for:
 - using project aliases,
 - keeping command output visible beside the current Kward session.
 
-It is not intended for full-screen interactive programs such as `vim`, `less`, `top`, `ssh`, or REPLs.
+Use `/pty <command>` when you intentionally want to hand the terminal to a full-screen interactive command such as `less`.
 
 ## Start shell mode
 
@@ -280,6 +280,18 @@ alias ll gs
 
 Aliases also appear in command-name Tab completion.
 
+## Interactive PTY passthrough
+
+Use `/pty <command>` for commands that need to own the terminal temporarily, such as pagers:
+
+```text
+/pty git log
+```
+
+Kward runs the command in a PTY, forwards your keyboard input to the process, and streams the process output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt and records only a short session summary in the transcript instead of raw full-screen terminal control output.
+
+`/pty` is explicit on purpose. Normal `/shell` commands remain captured and transcript-friendly; `/pty` is for commands where the child process should temporarily own the terminal.
+
 ## `/shell` versus `!command`
 
 Kward has two ways to run local commands yourself:
@@ -304,12 +316,10 @@ Use `!command` for one-offs. Use `/shell` when you expect to run several command
 
 Current limitations:
 
-- stdout and stderr ordering is best-effort because command output is read from separate pipes,
 - no job control,
 - no persistent shell functions,
 - no shell startup file sourcing,
-- no full-screen terminal applications,
 - no native readline from your login shell,
-- command output is captured through pipes, not a PTY.
+- normal `/shell` command output is transcript-sanitized rather than treated as a full terminal UI.
 
-Some tools only emit color or progress UI when stdout is a real terminal. Prefer explicit command flags such as `--color=always` when needed.
+External `/shell` commands run under a minimal PTY so terminal-aware tools can detect TTY output and terminal width. Full-screen interactive programs should still use explicit `/pty <command>` passthrough.
