@@ -657,9 +657,9 @@ module Kward
         case key
         when "\et", "\eT"
           { tab_action: :new }
-        when "\e[1;3C", "\e[3C"
+        when *TerminalKeys::ALT_RIGHT
           { tab_action: :next }
-        when "\e[1;3D", "\e[3D"
+        when *TerminalKeys::ALT_LEFT
           { tab_action: :previous }
         else
           alt_number_tab_action(key)

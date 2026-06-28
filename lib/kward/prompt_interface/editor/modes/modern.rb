@@ -96,9 +96,9 @@ module Kward
         case key
         when "\x04"
           @editor_state.add_next_occurrence_selection
-        when "\e[1;4A", "\e[4A"
+        when *TerminalKeys::ALT_SHIFT_UP
           @editor_state.add_vertical_cursor(:up)
-        when "\e[1;4B", "\e[4B"
+        when *TerminalKeys::ALT_SHIFT_DOWN
           @editor_state.add_vertical_cursor(:down)
         else
           false
@@ -135,29 +135,29 @@ module Kward
       def modern_indentation_key_sequences(action)
         case [modern_indentation_modifier, action]
         when [:alt, :up]
-          ["\e[1;3A", "\e[3A"]
+          TerminalKeys::ALT_UP
         when [:alt, :down]
-          ["\e[1;3B", "\e[3B"]
+          TerminalKeys::ALT_DOWN
         when [:alt, :right]
-          ["\e[1;3C", "\e[3C"]
+          TerminalKeys::ALT_RIGHT
         when [:alt, :select_up]
-          ["\e[1;4A", "\e[4A"]
+          TerminalKeys::ALT_SHIFT_UP
         when [:alt, :select_down]
-          ["\e[1;4B", "\e[4B"]
+          TerminalKeys::ALT_SHIFT_DOWN
         when [:alt, :select_right]
-          ["\e[1;4C", "\e[4C"]
+          TerminalKeys::ALT_SHIFT_RIGHT
         when [:ctrl, :up]
-          ["\e[1;5A", "\e[5A"]
+          TerminalKeys::CTRL_UP
         when [:ctrl, :down]
-          ["\e[1;5B", "\e[5B"]
+          TerminalKeys::CTRL_DOWN
         when [:ctrl, :right]
-          ["\e[1;5C", "\e[5C"]
+          TerminalKeys::CTRL_RIGHT
         when [:ctrl, :select_up]
-          ["\e[1;6A", "\e[6A"]
+          TerminalKeys::CTRL_SHIFT_UP
         when [:ctrl, :select_down]
-          ["\e[1;6B", "\e[6B"]
+          TerminalKeys::CTRL_SHIFT_DOWN
         when [:ctrl, :select_right]
-          ["\e[1;6C", "\e[6C"]
+          TerminalKeys::CTRL_SHIFT_RIGHT
         else
           []
         end
@@ -171,17 +171,17 @@ module Kward
         return false if editor_search_active?
 
         case key
-        when "\e[1;5C", "\e[5C"
+        when *TerminalKeys::CTRL_RIGHT
           @editor_state.move_line_end
-        when "\e[1;5D", "\e[5D"
+        when *TerminalKeys::CTRL_LEFT
           @editor_state.move_line_start
-        when "\e[1;5A", "\e[5A"
+        when *TerminalKeys::CTRL_UP
           @editor_state.move_file_start
-        when "\e[1;5B", "\e[5B"
+        when *TerminalKeys::CTRL_DOWN
           @editor_state.move_file_end
-        when "\e[1;4C", "\e[4C"
+        when *TerminalKeys::ALT_SHIFT_RIGHT
           editor_extending_selection { @editor_state.move_to_next_word }
-        when "\e[1;4D", "\e[4D"
+        when *TerminalKeys::ALT_SHIFT_LEFT
           editor_extending_selection { @editor_state.move_to_previous_word }
         else
           false
