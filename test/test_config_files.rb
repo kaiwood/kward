@@ -58,7 +58,14 @@ class TestConfigFiles < KwardTestCase
     Dir.mktmpdir do |dir|
       path = File.join(dir, "ekwsh.yml")
 
-      assert_equal({ env: {}, aliases: {} }, Kward::ConfigFiles.read_ekwsh_config(path))
+      assert_equal({
+        shell: Kward::Ekwsh::DEFAULT_SHELL,
+        timeout_seconds: Kward::Ekwsh::DEFAULT_TIMEOUT_SECONDS,
+        max_output_bytes: Kward::Ekwsh::DEFAULT_MAX_OUTPUT_BYTES,
+        history_limit: Kward::Ekwsh::DEFAULT_HISTORY_LIMIT,
+        env: {},
+        aliases: {}
+      }, Kward::ConfigFiles.read_ekwsh_config(path))
     end
   end
 
@@ -66,6 +73,10 @@ class TestConfigFiles < KwardTestCase
     Dir.mktmpdir do |dir|
       path = File.join(dir, "ekwsh.yml")
       File.write(path, <<~YAML)
+        shell: /bin/sh
+        timeout_seconds: 600
+        max_output_bytes: 2097152
+        history_limit: 2000
         env:
           FORCE_COLOR: 1
           BAD-NAME: ignored
@@ -79,8 +90,31 @@ class TestConfigFiles < KwardTestCase
 
       config = Kward::ConfigFiles.read_ekwsh_config(path)
 
+      assert_equal "/bin/sh", config[:shell]
+      assert_equal 600, config[:timeout_seconds]
+      assert_equal 2_097_152, config[:max_output_bytes]
+      assert_equal 2_000, config[:history_limit]
       assert_equal({ "FORCE_COLOR" => "1" }, config[:env])
       assert_equal({ "ll" => "ls -la", "gs" => "git status --short" }, config[:aliases])
+    end
+  end
+
+  def test_read_ekwsh_config_defaults_invalid_runtime_settings
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "ekwsh.yml")
+      File.write(path, <<~YAML)
+        shell: relative-shell
+        timeout_seconds: 0
+        max_output_bytes: nope
+        history_limit: -5
+      YAML
+
+      config = Kward::ConfigFiles.read_ekwsh_config(path)
+
+      assert_equal Kward::Ekwsh::DEFAULT_SHELL, config[:shell]
+      assert_equal Kward::Ekwsh::DEFAULT_TIMEOUT_SECONDS, config[:timeout_seconds]
+      assert_equal Kward::Ekwsh::DEFAULT_MAX_OUTPUT_BYTES, config[:max_output_bytes]
+      assert_equal Kward::Ekwsh::DEFAULT_HISTORY_LIMIT, config[:history_limit]
     end
   end
 

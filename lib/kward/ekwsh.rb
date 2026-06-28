@@ -8,10 +8,14 @@ module Kward
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
     BUILTINS = %w[alias cd pwd export unset clear exit logout].freeze
+    DEFAULT_SHELL = "/bin/sh"
+    DEFAULT_TIMEOUT_SECONDS = 300
+    DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
+    DEFAULT_HISTORY_LIMIT = 1_000
 
     attr_reader :cwd
 
-    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: ENV["SHELL"], configured_env: {}, aliases: {})
+    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: DEFAULT_SHELL, configured_env: {}, aliases: {})
       @cwd = File.expand_path(cwd.to_s.empty? ? Dir.pwd : cwd.to_s)
       @previous_cwd = nil
       @env = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
@@ -20,7 +24,7 @@ module Kward
       configure_rbenv_environment
       configure_color_environment
       @aliases = aliases.to_h.transform_keys(&:to_s).transform_values(&:to_s)
-      @shell = shell.to_s.empty? ? "/bin/sh" : shell.to_s
+      @shell = shell.to_s.empty? ? DEFAULT_SHELL : shell.to_s
     end
 
     def prompt_label

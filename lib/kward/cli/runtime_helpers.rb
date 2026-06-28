@@ -130,7 +130,12 @@ module Kward
 
       def build_ekwsh(agent)
         config = ConfigFiles.read_ekwsh_config
-        Ekwsh.new(cwd: interactive_workspace_root(agent), configured_env: config[:env], aliases: config[:aliases])
+        Ekwsh.new(
+          cwd: interactive_workspace_root(agent),
+          configured_env: config[:env],
+          aliases: config[:aliases],
+          shell: config[:shell]
+        )
       end
 
       def run_ekwsh_loop(shell, tab: nil)

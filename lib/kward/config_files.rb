@@ -3,6 +3,7 @@ require "fileutils"
 require "json"
 require "yaml"
 require_relative "private_file"
+require_relative "ekwsh"
 require_relative "editor_mode"
 require_relative "prompts/templates"
 require_relative "skills/registry"
@@ -170,7 +171,7 @@ module Kward
 
     def read_ekwsh_config(path = ekwsh_config_path)
       path = File.expand_path(path)
-      return { env: {}, aliases: {} } unless File.exist?(path)
+      return normalize_ekwsh_config(nil) unless File.exist?(path)
 
       data = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
       normalize_ekwsh_config(data)
@@ -182,9 +183,28 @@ module Kward
       data = data.transform_keys(&:to_s) if data.is_a?(Hash)
       settings = data.is_a?(Hash) ? data : {}
       {
+        shell: normalize_ekwsh_shell(settings["shell"]),
+        timeout_seconds: normalize_positive_integer(settings["timeout_seconds"], Ekwsh::DEFAULT_TIMEOUT_SECONDS),
+        max_output_bytes: normalize_positive_integer(settings["max_output_bytes"], Ekwsh::DEFAULT_MAX_OUTPUT_BYTES),
+        history_limit: normalize_positive_integer(settings["history_limit"], Ekwsh::DEFAULT_HISTORY_LIMIT),
         env: normalize_ekwsh_env(settings["env"]),
         aliases: normalize_ekwsh_aliases(settings["aliases"])
       }
+    end
+
+    def normalize_ekwsh_shell(value)
+      shell = value.to_s.strip
+      return Ekwsh::DEFAULT_SHELL if shell.empty?
+      return shell if shell.start_with?("/") && File.executable?(shell)
+
+      Ekwsh::DEFAULT_SHELL
+    end
+
+    def normalize_positive_integer(value, default)
+      integer = Integer(value)
+      integer.positive? ? integer : default
+    rescue ArgumentError, TypeError
+      default
     end
 
     def normalize_ekwsh_env(values)

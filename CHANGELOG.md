@@ -8,6 +8,10 @@ All notable changes to Kward will be documented in this file.
 
 - Added structured RPC `runtime/updateSetting` `defaultModel` values so clients can send provider and model separately while keeping the existing string format.
 
+### Changed
+
+- Changed `ekwsh` configuration to prefer a POSIX `/bin/sh` default shell and validate runtime settings for command timeout, output cap, and shell history size.
+
 ### Fixed
 
 - Split Vibe editor insert/readline key handling into a focused mixin without changing editor behavior.

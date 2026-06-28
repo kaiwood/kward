@@ -47,7 +47,7 @@ or press Ctrl+D on an empty shell prompt.
 
 ## How commands run
 
-`ekwsh` runs each command through your configured shell using the shell's `-c` mode. It uses `$SHELL` when set, otherwise `/bin/sh`. The shell is intentionally not started as a login shell so Kward-managed environment values, such as configured PATH entries, are not overwritten by login startup files.
+`ekwsh` is POSIX-oriented and runs each command through `/bin/sh` using the shell's `-c` mode by default. You can configure another POSIX-compatible shell in `ekwsh.yml`. The shell is intentionally not started as a login shell so Kward-managed environment values, such as configured PATH entries, are not overwritten by login startup files.
 
 The current directory and exported environment are tracked by Kward between commands, so this works as expected:
 
@@ -168,6 +168,11 @@ If `KWARD_CONFIG_PATH` points to another config file, `ekwsh.yml` is read from t
 Example:
 
 ```yaml
+shell: /bin/sh
+# timeout_seconds: 300
+# max_output_bytes: 1048576
+# history_limit: 1000
+
 env:
   FORCE_COLOR: "1"
   CLICOLOR_FORCE: "1"
@@ -180,6 +185,19 @@ aliases:
   be: "bundle exec"
   t: "bundle exec ruby -Itest"
 ```
+
+### Runtime settings
+
+`ekwsh` accepts these top-level runtime settings:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `shell` | `/bin/sh` | Absolute path to the POSIX-compatible shell used with `-c`. Invalid or relative paths fall back to `/bin/sh`. |
+| `timeout_seconds` | `300` | Maximum runtime for one command. |
+| `max_output_bytes` | `1048576` | Maximum captured output for one command. |
+| `history_limit` | `1000` | Maximum persisted shell history entries per workspace. |
+
+The timeout, output cap, and history limit are validated now and used by the shell runtime as those features are expanded.
 
 ### Environment variables
 
