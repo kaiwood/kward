@@ -349,7 +349,7 @@ module Kward
       end
 
       def parse_csi_u_key(key)
-        match = key.to_s.match(/\A\e\[(\d+)((?:;[\d:]*)*)u/)
+        match = key.to_s.match(TerminalKeys::CSI_U_PATTERN)
         return nil unless match
 
         fields = match[2].to_s.split(";", -1)[1..] || []
@@ -526,8 +526,8 @@ module Kward
 
       def next_key_token(keys)
         text = keys.to_s
-        text.match(/\A\e\[[0-9;:]*[A-Za-z~]/)&.[](0) ||
-          text.match(/\A\eO[A-Za-z]/)&.[](0) ||
+        text.match(TerminalKeys::CSI_KEY_PATTERN)&.[](0) ||
+          text.match(TerminalKeys::SS3_KEY_PATTERN)&.[](0) ||
           shift_enter_sequence_for(text) ||
           (text.start_with?("\e") && text.length > 1 && alt_key_sequence?(text[1]) ? text[0, 2] : text[0, 1])
       end
@@ -719,9 +719,9 @@ module Kward
       end
 
       def parse_modified_ansi_key(key)
-        if (match = key.to_s.match(/\A\e\[(\d+);(\d+)([CDFH])\z/))
+        if (match = key.to_s.match(TerminalKeys::MODIFIED_CURSOR_PATTERN))
           { type: :cursor, modifier: match[2].to_i, final: match[3] }
-        elsif (match = key.to_s.match(/\A\e\[3;(\d+)~\z/))
+        elsif (match = key.to_s.match(TerminalKeys::MODIFIED_DELETE_PATTERN))
           { type: :delete, modifier: match[1].to_i }
         end
       end
