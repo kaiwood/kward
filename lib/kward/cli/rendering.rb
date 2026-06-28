@@ -318,7 +318,10 @@ module Kward
       end
 
       def tool_summary_display_text(summary)
-        summary.to_s.sub("\n", "\n\n")
+        text = summary.to_s
+        return text if text.start_with?("read_skill:\n")
+
+        text.sub("\n", "\n\n")
       end
 
       def start_stream_block(label)
