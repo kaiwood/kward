@@ -250,7 +250,7 @@ module Kward
 
       def handle_modern_shared_key_binding(key)
         case key
-        when "\x04", "\x0B", "\x15", "\x17", "\x19", "\e[3~", "\ed", "\eD", "\e\b", "\e\x7F"
+        when "\x04", "\x0B", "\x15", "\x17", "\x19", *TerminalKeys::DELETE, "\ed", "\eD", "\e\b", "\e\x7F"
           modern_record_undo { handle_editor_key_binding(key) }
         else
           handle_editor_key_binding(key)

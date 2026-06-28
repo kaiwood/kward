@@ -196,15 +196,15 @@ module Kward
           vibe_record_undo { @editor_state.delete_word_before_cursor }
         when "\x19"
           vibe_record_undo { @editor_state.yank_kill_buffer }
-        when "\e[D", "\eOD"
+        when *TerminalKeys::LEFT
           @editor_state.move_left
-        when "\e[C", "\eOC"
+        when *TerminalKeys::RIGHT
           @editor_state.move_right
-        when "\e[H", "\eOH", "\e[1~", "\e[7~"
+        when *TerminalKeys::HOME
           @editor_state.move_line_start
-        when "\e[F", "\eOF", "\e[4~", "\e[8~"
+        when *TerminalKeys::END_KEY
           @editor_state.move_line_end
-        when "\e[3~"
+        when *TerminalKeys::DELETE
           vibe_record_undo { @editor_state.delete_at_cursor }
         when "\eb", "\eB"
           @editor_state.move_to_previous_word

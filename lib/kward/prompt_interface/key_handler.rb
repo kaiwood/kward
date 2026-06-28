@@ -472,9 +472,9 @@ module Kward
           :right
         when /\A\e\[[0-9;:]*D\z/, "\eOD"
           :left
-        when "\e[5~"
+        when *TerminalKeys::PAGE_UP
           :pageup
-        when "\e[6~"
+        when *TerminalKeys::PAGE_DOWN
           :pagedown
         end
       end
@@ -695,15 +695,15 @@ module Kward
           delete_word_before_cursor
         when "\x19"
           yank_kill_buffer
-        when "\e[D", "\eOD"
+        when *TerminalKeys::LEFT
           move_cursor_left
-        when "\e[C", "\eOC"
+        when *TerminalKeys::RIGHT
           move_cursor_right
-        when "\e[H", "\eOH", "\e[1~", "\e[7~"
+        when *TerminalKeys::HOME
           move_to_start_of_line
-        when "\e[F", "\eOF", "\e[4~", "\e[8~"
+        when *TerminalKeys::END_KEY
           move_to_end_of_line
-        when "\e[3~"
+        when *TerminalKeys::DELETE
           delete_at_cursor
         when "\eb", "\eB"
           move_to_previous_word

@@ -438,13 +438,13 @@ module Kward
         return false if editor_search_active?
 
         case key
-        when "\e[1;2D", "\e[2D"
+        when *TerminalKeys::SHIFT_LEFT
           editor_extending_selection { @editor_state.move_left }
-        when "\e[1;2C", "\e[2C"
+        when *TerminalKeys::SHIFT_RIGHT
           editor_extending_selection { @editor_state.move_right }
-        when "\e[1;2A", "\e[2A"
+        when *TerminalKeys::SHIFT_UP
           editor_extending_selection { editor_move_up }
-        when "\e[1;2B", "\e[2B"
+        when *TerminalKeys::SHIFT_DOWN
           editor_extending_selection { editor_move_down }
         else
           false
@@ -477,15 +477,15 @@ module Kward
           @editor_state.delete_word_before_cursor unless editor_search_active?
         when "\x19"
           editor_selection_active? ? copy_editor_selection : @editor_state.yank_kill_buffer unless editor_search_active?
-        when "\e[D", "\eOD"
+        when *TerminalKeys::LEFT
           @editor_state.move_left unless editor_search_active?
-        when "\e[C", "\eOC"
+        when *TerminalKeys::RIGHT
           @editor_state.move_right unless editor_search_active?
-        when "\e[H", "\eOH", "\e[1~", "\e[7~"
+        when *TerminalKeys::HOME
           @editor_state.move_line_start unless editor_search_active?
-        when "\e[F", "\eOF", "\e[4~", "\e[8~"
+        when *TerminalKeys::END_KEY
           @editor_state.move_line_end unless editor_search_active?
-        when "\e[3~"
+        when *TerminalKeys::DELETE
           delete_editor_selection || @editor_state.delete_at_cursor unless editor_search_active?
         when "\eb", "\eB"
           @editor_state.move_to_previous_word unless editor_search_active?
