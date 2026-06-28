@@ -149,18 +149,6 @@ module Kward
         end
       end
 
-      def handle_git_escape_sequence
-        pending_sequence = read_pending_escape_sequence
-        return SELECT_CANCEL if pending_sequence.empty?
-
-        full_sequence = "\e#{pending_sequence}"
-        sequence = next_key_token(full_sequence)
-        queue_pending_keys(full_sequence[sequence.length..]) if full_sequence.length > sequence.length
-        return SELECT_CANCEL if sequence == "\e"
-
-        handle_git_named_key(key_name_for(sequence))
-      end
-
       def git_state_for(status_lines, selected_index: 0)
         lines = Array(status_lines).map(&:to_s)
         selected_index = [[selected_index.to_i, 0].max, [lines.length - 1, 0].max].min
