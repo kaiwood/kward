@@ -2,6 +2,12 @@
 
 All notable changes to Kward will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed built-in editor soft-wrap vertical movement so moving up or down preserves the visual column across wrapped visual rows and logical line boundaries.
+
 ## [0.72.0] - 2026-06-28
 
 ### Added

@@ -786,12 +786,18 @@ module Kward
         line, column = @editor_state.cursor_line_and_column
         text_width = current_editor_text_width
         row_start = editor_visual_row_start_column(line, column, text_width)
+        visual_column = column - row_start
         if row_start.positive?
-          target_column = row_start - text_width + column - row_start
+          target_column = row_start - text_width + visual_column
           return @editor_state.set_cursor_line_and_column(line, target_column)
         end
 
-        @editor_state.move_up
+        return @editor_state.move_up if line.zero?
+
+        previous_line = @editor_state.lines[line - 1].to_s
+        previous_row_start = editor_last_visual_row_start_column(previous_line, text_width)
+        target_column = [previous_row_start + visual_column, previous_line.length].min
+        @editor_state.set_cursor_line_and_column(line - 1, target_column)
       end
 
       def editor_move_down
@@ -800,14 +806,26 @@ module Kward
         line, column = @editor_state.cursor_line_and_column
         text_width = current_editor_text_width
         row_start = editor_visual_row_start_column(line, column, text_width)
+        visual_column = column - row_start
         next_start = row_start + text_width
         current_line = @editor_state.lines[line].to_s
         if next_start < current_line.length
-          target_column = [next_start + column - row_start, current_line.length].min
+          target_column = [next_start + visual_column, current_line.length].min
           return @editor_state.set_cursor_line_and_column(line, target_column)
         end
 
-        @editor_state.move_down
+        return @editor_state.move_down if line >= @editor_state.lines.length - 1
+
+        next_line = @editor_state.lines[line + 1].to_s
+        target_column = [visual_column, next_line.length].min
+        @editor_state.set_cursor_line_and_column(line + 1, target_column)
+      end
+
+      def editor_last_visual_row_start_column(line, text_width)
+        length = line.to_s.length
+        return 0 if length.zero?
+
+        ((length - 1) / text_width) * text_width
       end
 
       def current_editor_text_width

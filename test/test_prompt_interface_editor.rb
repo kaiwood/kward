@@ -2282,7 +2282,40 @@ class TestPromptInterfaceEditor < KwardTestCase
         editor = prompt.instance_variable_get(:@editor_state)
 
         assert_equal [0, 9], editor.cursor_line_and_column
+      end
+    end
+  end
 
+  def test_prompt_interface_editor_soft_wrap_moves_down_to_next_logical_line_by_visual_column
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijkl\nnext")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:composer_layout, 20, 8)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(0, 9)
+
+        prompt.send(:handle_editor_named_key, :down)
+
+        assert_equal [1, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_soft_wrap_moves_up_to_previous_visual_row_across_logical_lines
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdefghijkl\nnext")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.send(:composer_layout, 20, 8)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 0)
+
+        prompt.send(:handle_editor_named_key, :up)
+
+        assert_equal [0, 9], editor.cursor_line_and_column
       end
     end
   end
