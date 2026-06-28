@@ -209,13 +209,17 @@ module Kward
 
           result = run_ekwsh_command(shell, input)
           @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
-          @prompt.say(result.output) unless result.streamed || result.output.to_s.empty?
+          @prompt.say(result.output) unless result.streamed || result.interactive_command || result.output.to_s.empty?
           return :tab_action if pending_tab_action?
 
           if result.open_editor_path
             editor_result = open_ekwsh_editor(result.open_editor_path, shell)
             return :tab_action if editor_result == :tab_action
 
+            next
+          end
+          if result.interactive_command
+            run_ekwsh_interactive_pty_command(shell, result)
             next
           end
           if result.exit_shell
@@ -259,6 +263,17 @@ module Kward
         else
           @prompt.ask(shell.prompt_label)
         end
+      end
+
+      def run_ekwsh_interactive_pty_command(shell, result)
+        @prompt.say(result.output) unless result.output.to_s.empty?
+        pty_result = run_interactive_pty_with_terminal_handoff(
+          shell.command_shell,
+          result.interactive_command,
+          env: shell.child_env(interactive: true),
+          cwd: shell.cwd
+        )
+        @prompt.say("[interactive PTY session exited with status #{pty_result.exit_status}]\n") if @prompt.respond_to?(:say)
       end
 
       def run_ekwsh_command(shell, input)

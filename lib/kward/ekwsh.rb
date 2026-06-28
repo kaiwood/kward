@@ -21,6 +21,10 @@ module Kward
 
     attr_reader :cwd
 
+    def command_shell
+      @shell
+    end
+
     def child_env(interactive: false)
       env = @env.dup
       env.delete("GIT_PAGER") if interactive && @defaulted_git_pager
