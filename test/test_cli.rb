@@ -512,6 +512,42 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_loop_runs_explicit_pty_command_without_model_turn
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["/pty printf pty-ok", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      hide_composer_git_branch(cli)
+
+      cli.interactive_loop(agent: agent)
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "$ printf pty-ok"
+      assert_includes output, "pty-ok"
+      assert_includes output, "interactive PTY session exited with status 0"
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_reports_pty_usage_without_command
+    prompt = FakePrompt.new(["/pty", "/exit"])
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    hide_composer_git_branch(cli)
+
+    cli.interactive_loop(agent: agent)
+
+    output = strip_ansi(prompt.output.join)
+    assert_includes output, "Usage: /pty <command>"
+    assert_empty conversation.messages
+  end
+
   def test_interactive_loop_runs_ekwsh_with_global_config
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
