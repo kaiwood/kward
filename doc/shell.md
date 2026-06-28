@@ -61,7 +61,7 @@ unset FOO
 
 `cd` changes only the embedded shell's current directory. It does not change Kward's workspace root or the process directory used by the rest of Kward.
 
-Shell output streams into the transcript area as commands run, but it is not added to the AI conversation history.
+Shell output streams into the transcript area as commands run, but it is not added to the AI conversation history. Simple assignment-only commands such as `FOO=bar` persist into the embedded shell environment for later commands.
 
 Shell commands are persisted in a separate workspace-scoped shell history. They do not share the normal Kward prompt history used for chat prompts. The shell history limit is controlled by `history_limit` in `ekwsh.yml`.
 
@@ -73,9 +73,10 @@ Shell commands are persisted in a separate workspace-scoped shell history. They 
 | --- | --- |
 | `cd [dir]` | Change the embedded shell directory. Supports `cd`, `cd -`, and normal relative paths. |
 | `pwd` | Print the embedded shell directory. |
-| `export KEY=value` | Set an environment variable for later commands. |
+| `export KEY[=value]` | Set or mark an environment variable for later commands. `export` and `export -p` list variables. |
 | `unset KEY` | Remove an environment variable from later commands. |
-| `alias [name]` | List configured aliases, or show specific configured aliases. |
+| `alias [name]` | List configured aliases, show specific configured aliases, or set `alias name=value`. |
+| `unalias name` / `unalias -a` | Remove configured aliases. |
 | `clear` | Clear Kward's visible transcript. |
 | `exit` / `logout` | Leave shell mode. |
 

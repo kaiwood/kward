@@ -152,7 +152,7 @@ class TestEkwsh < KwardTestCase
 
     result = shell.run("alias")
 
-    assert_includes result.output, "ll=ls\\ -la"
+    assert_includes result.output, "alias ll=ls\\ -la"
   end
 
   def test_completes_alias_commands
@@ -244,7 +244,7 @@ class TestEkwsh < KwardTestCase
   def test_nonzero_command_reports_exit_status
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
-    result = shell.run("exit 7")
+    result = shell.run("ruby -e 'exit 7'")
 
     assert_equal 7, result.exit_status
     assert_includes result.output, "Exit status: 7"
@@ -328,5 +328,61 @@ class TestEkwsh < KwardTestCase
 
     assert result.exit_shell
     assert_includes result.output, "$ exit"
+  end
+
+  def test_exit_accepts_numeric_status
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("exit 7")
+
+    assert result.exit_shell
+    assert_equal 7, result.exit_status
+    assert_includes result.output, "$ exit 7"
+  end
+
+  def test_cd_rejects_too_many_arguments
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("cd one two")
+
+    assert_equal 2, result.exit_status
+    assert_includes result.output, "ekwsh: cd: too many arguments"
+  end
+
+  def test_pwd_rejects_unexpected_arguments
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("pwd nope")
+
+    assert_equal 2, result.exit_status
+    assert_includes result.output, "Usage: pwd [-L|-P]"
+  end
+
+  def test_export_name_sets_empty_environment_value
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    shell.run("export KWARD_EMPTY_TEST")
+    result = shell.run("printf '<%s>' \"$KWARD_EMPTY_TEST\"")
+
+    assert_includes result.output, "<>"
+  end
+
+  def test_plain_assignment_persists_environment_value
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    shell.run("KWARD_ASSIGN_TEST=ready")
+    result = shell.run("printf %s \"$KWARD_ASSIGN_TEST\"")
+
+    assert_includes result.output, "ready"
+  end
+
+  def test_unalias_removes_aliases
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "hi" => "printf hi" })
+
+    removed = shell.run("unalias hi")
+    result = shell.run("alias hi")
+
+    assert_equal 0, removed.exit_status
+    refute_includes result.output, "alias hi="
   end
 end

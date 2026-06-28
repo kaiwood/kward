@@ -227,7 +227,7 @@ module Kward
       values.each_with_object({}) do |(name, command), result|
         name = name.to_s
         command = command.to_s.strip
-        next unless name.match?(/\A[A-Za-z0-9_.:-]+\z/)
+        next unless Ekwsh.valid_alias_name?(name)
         next if command.empty?
 
         result[name] = command

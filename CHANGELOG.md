@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Improved `ekwsh` POSIX-oriented built-ins, including `exit [status]`, stricter `cd`/`pwd`, `export NAME`, assignment persistence, `unalias`, and shared alias-name validation.
 - Changed `ekwsh` configuration to prefer a POSIX `/bin/sh` default shell and validate runtime settings for command timeout, output cap, and shell history size.
 
 ### Fixed

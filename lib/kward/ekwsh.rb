@@ -8,7 +8,7 @@ module Kward
   class Ekwsh
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
-    BUILTINS = %w[alias cd pwd export unset clear exit logout].freeze
+    BUILTINS = %w[alias cd pwd export unset unalias clear exit logout].freeze
     DEFAULT_SHELL = "/bin/sh"
     DEFAULT_TIMEOUT_SECONDS = 300
     DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
@@ -37,9 +37,8 @@ module Kward
     def run(input, &block)
       command = input.to_s.strip
       return Result.new(output: "", exit_status: 0) if command.empty?
-      return Result.new(output: command_echo(command), exit_status: 0, exit_shell: true) if exit_command?(command)
 
-      builtin_result(command) || run_expanded_command(command, &block)
+      exit_result(command) || builtin_result(command) || run_expanded_command(command, &block)
     end
 
     def complete(input, cursor)
@@ -197,21 +196,34 @@ module Kward
       ANSI.sanitize_transcript("$ #{command}\n")
     end
 
-    def exit_command?(command)
-      ["exit", "logout"].include?(command)
+    def exit_result(command)
+      words = shell_words(command)
+      return nil unless %w[exit logout].include?(words.first)
+
+      if words.length > 2 || (words[1] && !words[1].match?(/\A\d+\z/))
+        return Result.new(output: "#{command_echo(command)}ekwsh: #{words.first}: numeric status expected\n", exit_status: 2)
+      end
+
+      Result.new(output: command_echo(command), exit_status: words[1].to_i, exit_shell: true)
+    rescue ArgumentError => e
+      Result.new(output: "#{command_echo(command)}ekwsh: #{e.message}\n", exit_status: 2)
     end
 
     def builtin_result(command)
       words = shell_words(command)
       return nil if words.empty?
+      assignment_result = persist_assignments(command, words)
+      return assignment_result if assignment_result
 
       case words.first
       when "alias"
         list_aliases(command, words)
+      when "unalias"
+        remove_aliases(command, words)
       when "cd"
         change_directory(command, words)
       when "pwd"
-        Result.new(output: "#{command_echo(command)}#{@cwd}\n", exit_status: 0)
+        print_working_directory(command, words)
       when "export"
         export_variables(command, words)
       when "unset"
@@ -243,12 +255,31 @@ module Kward
       return Result.new(output: "#{command_echo(command)}ekwsh: alias: invalid name: #{invalid.join(" ")}\n", exit_status: 2) unless invalid.empty?
 
       names = @aliases.keys.sort if names.empty? && assignments.empty?
-      lines = names.filter_map { |name| @aliases[name] ? "#{name}=#{Shellwords.escape(@aliases.fetch(name))}" : nil }
+      lines = names.filter_map { |name| @aliases[name] ? "alias #{name}=#{Shellwords.escape(@aliases.fetch(name))}" : nil }
       suffix = lines.empty? ? "" : "#{lines.join("\n")}\n"
       Result.new(output: "#{command_echo(command)}#{suffix}", exit_status: 0)
     end
 
+    def remove_aliases(command, words)
+      if words[1] == "-a" && words.length == 2
+        @aliases.clear
+        return Result.new(output: command_echo(command), exit_status: 0)
+      end
+      if words.length < 2 || words.drop(1).any? { |word| word.start_with?("-") }
+        return Result.new(output: "#{command_echo(command)}Usage: unalias name ... | unalias -a\n", exit_status: 2)
+      end
+
+      missing = words.drop(1).reject { |name| @aliases.delete(name) }
+      return Result.new(output: "#{command_echo(command)}ekwsh: unalias: not found: #{missing.join(" ")}\n", exit_status: 1) unless missing.empty?
+
+      Result.new(output: command_echo(command), exit_status: 0)
+    end
+
     def valid_alias_name?(name)
+      self.class.valid_alias_name?(name)
+    end
+
+    def self.valid_alias_name?(name)
       name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/) && !BUILTINS.include?(name.to_s)
     end
 
@@ -291,7 +322,34 @@ module Kward
       File.basename(words[0].to_s) == "kward"
     end
 
+    def persist_assignments(command, words)
+      return nil unless words.all? { |word| assignment_word?(word) }
+
+      words.each do |assignment|
+        key, value = assignment.split("=", 2)
+        @env[key] = value.to_s
+      end
+      Result.new(output: command_echo(command), exit_status: 0)
+    end
+
+    def assignment_word?(word)
+      key, value = word.to_s.split("=", 2)
+      !value.nil? && valid_env_key?(key)
+    end
+
+    def print_working_directory(command, words)
+      if words.length > 2 || (words[1] && !%w[-L -P].include?(words[1]))
+        return Result.new(output: "#{command_echo(command)}Usage: pwd [-L|-P]\n", exit_status: 2)
+      end
+
+      Result.new(output: "#{command_echo(command)}#{@cwd}\n", exit_status: 0)
+    end
+
     def change_directory(command, words)
+      if words.length > 2
+        return Result.new(output: "#{command_echo(command)}ekwsh: cd: too many arguments\n", exit_status: 2)
+      end
+
       target = words[1]
       target = Dir.home if target.nil? || target.empty?
       target = @previous_cwd || @cwd if target == "-"
@@ -310,7 +368,7 @@ module Kward
     end
 
     def export_variables(command, words)
-      if words.length == 1
+      if words.length == 1 || words == ["export", "-p"]
         lines = @env.keys.sort.map { |key| "export #{key}=#{Shellwords.escape(@env.fetch(key))}" }
         return Result.new(output: "#{command_echo(command)}#{lines.join("\n")}\n", exit_status: 0)
       end
@@ -318,10 +376,10 @@ module Kward
       invalid = []
       words.drop(1).each do |assignment|
         key, value = assignment.split("=", 2)
-        if value.nil? || !valid_env_key?(key)
+        if !valid_env_key?(key) || assignment.start_with?("-")
           invalid << assignment
         else
-          @env[key] = value
+          @env[key] = value.nil? ? "" : value
         end
       end
 
@@ -333,8 +391,10 @@ module Kward
     end
 
     def unset_variables(command, words)
-      invalid = words.drop(1).reject { |key| valid_env_key?(key) }
-      words.drop(1).each { |key| @env.delete(key) if valid_env_key?(key) }
+      names = words.drop(1)
+      names.shift if names.first == "--"
+      invalid = names.select { |key| key.start_with?("-") || !valid_env_key?(key) }
+      names.each { |key| @env.delete(key) if valid_env_key?(key) }
 
       if invalid.empty?
         Result.new(output: command_echo(command), exit_status: 0)

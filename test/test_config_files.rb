@@ -85,6 +85,8 @@ class TestConfigFiles < KwardTestCase
           ll: ls -la
           gs: git status --short
           bad name: ignored
+          pwd: ignored
+          1bad: ignored
           empty:
       YAML
 
