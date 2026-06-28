@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added quoted path completion and cached `$PATH` executable completion for `ekwsh`.
 - Added streaming `ekwsh` command output in the TUI transcript while commands run.
 - Added separate workspace-scoped `ekwsh` command history so embedded shell input no longer shares normal prompt history.
 - Added structured RPC `runtime/updateSetting` `defaultModel` values so clients can send provider and model separately while keeping the existing string format.

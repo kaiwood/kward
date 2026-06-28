@@ -126,7 +126,14 @@ cat my<Tab>
 # => cat my\ file.txt
 ```
 
-If there are multiple candidates, Kward applies any common prefix. When there is no longer common prefix, it prints a compact candidate list in the transcript.
+Quoted path tokens are completed in the same quoting style:
+
+```sh
+cat "my<Tab>
+# => cat "my file.txt
+```
+
+If there are multiple candidates, Kward applies any common prefix. When there is no longer common prefix, it prints a compact candidate list in the transcript. Command-name completion caches `$PATH` executables and refreshes when `PATH` changes through shell assignment, `export`, or `unset`.
 
 ## Colors and ANSI output
 

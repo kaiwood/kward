@@ -45,10 +45,11 @@ module Kward
       token = completion_token(input.to_s, cursor.to_i)
       return nil if token[:command] && token[:text].empty?
 
-      candidates = if token[:command] && !path_like_token?(token[:text])
-                     command_candidates(token[:text])
+      completion_text = token[:path_text] || token[:text]
+      candidates = if token[:command] && !path_like_token?(completion_text) && !token[:quote]
+                     command_candidates(completion_text)
                    else
-                     path_candidates(token[:text], directories_only: cd_completion?(input, token))
+                     path_candidates(completion_text, directories_only: cd_completion?(input, token), quote: token[:quote])
                    end
       return nil if candidates.empty?
 
@@ -84,11 +85,36 @@ module Kward
 
     def completion_token(input, cursor)
       cursor = [[cursor, 0].max, input.length].min
-      start_index = cursor
+      start_index = unmatched_quote_start(input[0...cursor]) || cursor
       start_index -= 1 while start_index.positive? && token_character?(input, start_index - 1)
       text = input[start_index...cursor].to_s
       before = input[0...start_index].to_s
-      { range: (start_index...cursor), text: text, command: before.strip.empty? }
+      quote = quoted_completion_token(text)
+      path_text = quote ? text[1..].to_s : nil
+      { range: (start_index...cursor), text: text, path_text: path_text, quote: quote, command: before.strip.empty? }
+    end
+
+    def unmatched_quote_start(text)
+      quote = nil
+      quote_index = nil
+      escaped = false
+      text.to_s.each_char.with_index do |char, index|
+        if escaped
+          escaped = false
+          next
+        end
+        if char == "\\" && quote != "'"
+          escaped = true
+          next
+        end
+        if quote
+          quote = nil if char == quote
+        elsif ["'", '"'].include?(char)
+          quote = char
+          quote_index = index
+        end
+      end
+      quote ? quote_index : nil
     end
 
     def token_character?(input, index)
@@ -115,12 +141,24 @@ module Kward
       text.to_s.include?("/")
     end
 
+    def quoted_completion_token(text)
+      quote = text.to_s[0]
+      return nil unless ["'", '"'].include?(quote)
+      return nil if text[1..].to_s.include?(quote)
+
+      quote
+    end
+
     def command_candidates(prefix)
       (BUILTINS + @aliases.keys + path_executables).uniq.grep(/\A#{Regexp.escape(prefix)}/).sort
     end
 
     def path_executables
-      @env.fetch("PATH", "").split(File::PATH_SEPARATOR).flat_map do |path|
+      path = @env.fetch("PATH", "")
+      return @path_executables_cache if @path_executables_cache_path == path && @path_executables_cache
+
+      @path_executables_cache_path = path
+      @path_executables_cache = path.split(File::PATH_SEPARATOR).flat_map do |path|
         next [] unless File.directory?(path)
 
         Dir.children(path).filter_map do |entry|
@@ -132,7 +170,12 @@ module Kward
       end
     end
 
-    def path_candidates(prefix, directories_only: false)
+    def invalidate_path_executables_cache
+      @path_executables_cache_path = nil
+      @path_executables_cache = nil
+    end
+
+    def path_candidates(prefix, directories_only: false, quote: nil)
       raw_dir, raw_base = split_path_prefix(prefix)
       dir = File.expand_path(unescape_path(raw_dir.empty? ? "." : raw_dir), @cwd)
       return [] unless File.directory?(dir)
@@ -144,12 +187,19 @@ module Kward
         directory = File.directory?(path)
         next if directories_only && !directory
 
-        completed = "#{raw_dir}#{Shellwords.escape(entry)}"
+        completed = path_completion_candidate(raw_dir, entry, quote: quote)
         completed = "#{completed}/" if directory
         completed
       end.sort
     rescue SystemCallError
       []
+    end
+
+    def path_completion_candidate(raw_dir, entry, quote: nil)
+      completed = "#{raw_dir}#{entry}"
+      return "#{quote}#{completed.gsub(quote, "\\#{quote}")}" if quote
+
+      "#{raw_dir}#{Shellwords.escape(entry)}"
     end
 
     def split_path_prefix(prefix)
@@ -327,7 +377,7 @@ module Kward
 
       words.each do |assignment|
         key, value = assignment.split("=", 2)
-        @env[key] = value.to_s
+        set_env(key, value.to_s)
       end
       Result.new(output: command_echo(command), exit_status: 0)
     end
@@ -379,7 +429,7 @@ module Kward
         if !valid_env_key?(key) || assignment.start_with?("-")
           invalid << assignment
         else
-          @env[key] = value.nil? ? "" : value
+          set_env(key, value.nil? ? "" : value)
         end
       end
 
@@ -394,13 +444,23 @@ module Kward
       names = words.drop(1)
       names.shift if names.first == "--"
       invalid = names.select { |key| key.start_with?("-") || !valid_env_key?(key) }
-      names.each { |key| @env.delete(key) if valid_env_key?(key) }
+      names.each { |key| delete_env(key) if valid_env_key?(key) }
 
       if invalid.empty?
         Result.new(output: command_echo(command), exit_status: 0)
       else
         Result.new(output: "#{command_echo(command)}ekwsh: unset: invalid name: #{invalid.join(" ")}\n", exit_status: 2)
       end
+    end
+
+    def set_env(key, value)
+      @env[key] = value
+      invalidate_path_executables_cache if key == "PATH"
+    end
+
+    def delete_env(key)
+      @env.delete(key)
+      invalidate_path_executables_cache if key == "PATH"
     end
 
     def valid_env_key?(key)

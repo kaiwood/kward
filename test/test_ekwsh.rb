@@ -229,6 +229,29 @@ class TestEkwsh < KwardTestCase
     end
   end
 
+  def test_completes_single_quoted_path_token
+    Dir.mktmpdir("ekwsh") do |dir|
+      File.write(File.join(dir, "my file.txt"), "")
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete("cat 'my", 7)
+
+      assert_equal 4...7, completion.range
+      assert_equal "'my file.txt ", completion.replacement
+    end
+  end
+
+  def test_completes_double_quoted_path_token
+    Dir.mktmpdir("ekwsh") do |dir|
+      FileUtils.mkdir_p(File.join(dir, "my folder"))
+      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      completion = shell.complete('cd "my', 6)
+
+      assert_equal '"my folder/', completion.replacement
+    end
+  end
+
   def test_completes_escaped_space_path_token
     Dir.mktmpdir("ekwsh") do |dir|
       FileUtils.mkdir_p(File.join(dir, "my folder"))
@@ -238,6 +261,25 @@ class TestEkwsh < KwardTestCase
       completion = shell.complete("cat my\\ folder/al", 17)
 
       assert_equal "my\\ folder/alpha.txt ", completion.replacement
+    end
+  end
+
+  def test_path_executable_cache_invalidates_when_path_changes
+    Dir.mktmpdir("ekwsh-path") do |first|
+      Dir.mktmpdir("ekwsh-path") do |second|
+        File.write(File.join(first, "one"), "")
+        File.chmod(0o755, File.join(first, "one"))
+        File.write(File.join(second, "two"), "")
+        File.chmod(0o755, File.join(second, "two"))
+        shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => first })
+
+        assert_includes shell.complete("o", 1).candidates, "one"
+        shell.run("PATH=#{second}")
+
+        completion = shell.complete("t", 1)
+        assert_includes completion.candidates, "two"
+        refute_includes completion.candidates, "one"
+      end
     end
   end
 
