@@ -109,6 +109,31 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_runtime_model_update_accepts_structured_provider_model_value
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: client)
+        session = server.instance_variable_get(:@session_manager).create_session(workspace_root: Dir.pwd)
+
+        server.send(
+          :runtime_update_setting,
+          "sessionId" => session[:id],
+          "settingId" => "defaultModel",
+          "value" => { "provider" => "OpenRouter", "model" => "anthropic/claude-sonnet-4.5" }
+        )
+
+        state = server.instance_variable_get(:@session_manager).runtime_state(session_id: session[:id])
+        assert_equal "OpenRouter", state[:model][:provider]
+        assert_equal "anthropic/claude-sonnet-4.5", state[:model][:id]
+        config = JSON.parse(File.read(config_path))
+        assert_equal "openrouter", config["provider"]
+        assert_equal "anthropic/claude-sonnet-4.5", config["openrouter_model"]
+      end
+    end
+  end
+
   def test_reasoning_rpc_set_persists_copilot_effort_for_copilot_provider
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

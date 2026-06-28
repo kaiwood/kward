@@ -641,6 +641,15 @@ module Kward
       end
 
       def provider_model_from(value)
+        if value.is_a?(Hash)
+          provider = value["provider"] || value[:provider] || @session_manager.current_model[:provider]
+          model = value["model"] || value[:model] || value["id"] || value[:id]
+          model = model.to_s.strip
+          raise ArgumentError, "Model must be a non-empty string" if model.empty?
+
+          return [provider, model]
+        end
+
         text = value.to_s.strip
         raise ArgumentError, "Model must be a non-empty string" if text.empty?
 

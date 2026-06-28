@@ -405,7 +405,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 - `settingId`: currently `defaultModel` or `defaultThinkingLevel`.
-- `value`: setting value. `defaultModel` accepts `Provider/model-id` and preserves slashes after the provider separator.
+- `value`: setting value. `defaultModel` accepts a structured object such as `{ "provider": "OpenRouter", "model": "anthropic/claude-sonnet-4.5" }`. For compatibility, it also accepts `Provider/model-id` strings and preserves slashes after the provider separator.
 
 Applies the setting live by updating config and refreshing client config. Unsupported setting IDs are rejected.
 

@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added structured RPC `runtime/updateSetting` `defaultModel` values so clients can send provider and model separately while keeping the existing string format.
+
 ### Fixed
 
 - Fixed model and reasoning changes from CLI/RPC settings so active session runtime metadata is persisted before the next turn.
