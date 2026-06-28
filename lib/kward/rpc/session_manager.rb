@@ -18,6 +18,7 @@ require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../session_store"
+require_relative "../session_naming"
 require_relative "../session_trash"
 require_relative "../steering"
 require_relative "../tools/tool_call"
@@ -1040,7 +1041,7 @@ module Kward
       end
 
       def default_session_name(input)
-        input.to_s.gsub(/\s+/, " ").strip.slice(0, 120).to_s
+        SessionNaming.default_name(input)
       end
 
       def turn_display_input(turn)

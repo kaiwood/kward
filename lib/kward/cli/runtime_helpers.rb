@@ -294,7 +294,7 @@ module Kward
       end
 
       def default_session_name(input)
-        input.to_s.gsub(/\s+/, " ").strip.slice(0, 120).to_s
+        SessionNaming.default_name(input)
       end
 
     end
