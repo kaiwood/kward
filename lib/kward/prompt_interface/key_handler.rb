@@ -556,9 +556,9 @@ module Kward
         sequence
       end
 
-      CTRL_TAB_SEQUENCES = ["\e[9;5u", "\e[27;5;9~", "\e[1;5I"].freeze
-      CTRL_SHIFT_TAB_SEQUENCES = ["\e[9;6u", "\e[27;6;9~", "\e[1;6I", "\e[1;6Z"].freeze
-      SHIFT_TAB_SEQUENCES = ["\e[Z", "\e[1;2Z", "\e[9;2u", "\e[27;2;9~", "\e[1;2I"].freeze
+      CTRL_TAB_SEQUENCES = TerminalKeys::CTRL_TAB
+      CTRL_SHIFT_TAB_SEQUENCES = TerminalKeys::CTRL_SHIFT_TAB
+      SHIFT_TAB_SEQUENCES = TerminalKeys::SHIFT_TAB
 
       def handle_completion_provider_key(key)
         return false unless key == "\t" && @completion_provider

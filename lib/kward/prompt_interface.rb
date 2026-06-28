@@ -10,6 +10,7 @@ require "tty-reader"
 require "tty-screen"
 require_relative "ansi"
 require_relative "terminal_sequences"
+require_relative "terminal_keys"
 require_relative "editor_mode"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
@@ -105,7 +106,7 @@ module Kward
     CURSOR_HIDE = TerminalSequences::CURSOR_HIDE
     CURSOR_SHAPE_DEFAULT = TerminalSequences::CURSOR_SHAPE_DEFAULT
     CURSOR_SHAPE_BAR = TerminalSequences::CURSOR_SHAPE_BAR
-    SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
+    SHIFT_ENTER_SEQUENCES = TerminalKeys::SHIFT_ENTER
     EXIT_INPUT = :exit_input
     CANCEL_INPUT = :cancel_input
     SELECT_CANCEL = :select_cancel
