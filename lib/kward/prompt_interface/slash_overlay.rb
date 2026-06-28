@@ -37,6 +37,8 @@ module Kward
       end
 
       def slash_overlay_visible?
+        return false if @slash_overlay_disabled
+
         composer_input.match?(%r{\A/[^\s/]*\z}) && @slash_overlay_dismissed_input != composer_input && !slash_overlay_matches.empty?
       end
 

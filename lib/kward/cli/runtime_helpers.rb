@@ -259,7 +259,7 @@ module Kward
       def ask_ekwsh(shell)
         provider = ->(input, cursor) { shell.complete(input, cursor) }
         if @prompt.respond_to?(:with_completion_provider)
-          @prompt.with_completion_provider(provider) { @prompt.ask(shell.prompt_label) }
+          @prompt.with_completion_provider(provider, slash_overlay: false) { @prompt.ask(shell.prompt_label) }
         else
           @prompt.ask(shell.prompt_label)
         end

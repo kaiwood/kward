@@ -162,6 +162,7 @@ module Kward
       @slash_commands = normalize_slash_commands(slash_commands)
       @slash_selection_index = 0
       @slash_overlay_dismissed_input = nil
+      @slash_overlay_disabled = false
       @file_selection_index = 0
       @file_overlay_dismissed_token = nil
       @file_open_dismissed_token = nil
@@ -299,12 +300,15 @@ module Kward
       end
     end
 
-    def with_completion_provider(provider)
-      previous = @completion_provider
+    def with_completion_provider(provider, slash_overlay: true)
+      previous_provider = @completion_provider
+      previous_slash_overlay_disabled = @slash_overlay_disabled
       @completion_provider = provider
+      @slash_overlay_disabled = !slash_overlay
       yield
     ensure
-      @completion_provider = previous
+      @completion_provider = previous_provider
+      @slash_overlay_disabled = previous_slash_overlay_disabled
     end
 
     def with_prompt_history(history)

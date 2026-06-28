@@ -2236,6 +2236,27 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_can_disable_slash_overlay_for_completion_provider
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("/\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(
+      input: input,
+      output: output,
+      slash_commands: [{ name: "plan", description: "Plan work.", argument_hint: "<task>" }]
+    )
+
+    result = prompt.with_completion_provider(->(_value, _cursor) { nil }, slash_overlay: false) do
+      prompt.ask("Shell $")
+    end
+
+    assert_equal "/", result
+    refute_includes strip_ansi(output.string), "Slash commands"
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_csi_u_tab_completes_slash_selection
     prompt = Kward::PromptInterface.new(
       input: StringIO.new,
