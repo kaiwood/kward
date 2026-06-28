@@ -58,7 +58,7 @@ aliases:
 
 `env` values are applied when shell mode starts, after Kward's conservative color defaults. Keys must look like environment variable names (`A_Z`, digits after the first character, and underscores); invalid keys are ignored. Values are converted to strings.
 
-`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Built-in `ekwsh` commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, and `exit` take precedence over aliases. Run `alias` inside `ekwsh` to list configured aliases. Aliases are also included in command-name Tab completion.
+`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Built-in `ekwsh` commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, `pty`, and `exit` take precedence over aliases. Run `alias` inside `ekwsh` to list configured aliases. Aliases are also included in command-name Tab completion.
 
 ## Provider and model settings
 

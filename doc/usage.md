@@ -78,7 +78,7 @@ For several commands, enter the embedded Kward shell:
 /shell
 ```
 
-`/shell` opens `ekwsh`, a Kward-native command mode. Kward keeps the tab bar, composer editing, and transcript rendering while each command runs through your configured shell. Built-ins such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, and `exit` maintain shell-mode state between commands. Plain Tab completes built-in command names, configured aliases, executables from `$PATH`, and file paths from the shell's current directory; `cd` completion suggests directories only. `ekwsh` preserves safe ANSI SGR color/style output while stripping terminal-control sequences that could corrupt the TUI, and sets conservative color-friendly environment defaults such as `CLICOLOR=1`, `COLORTERM=truecolor`, and `TERM=xterm-256color` when needed. It does not force color by default; set `FORCE_COLOR`, `CLICOLOR_FORCE`, or command-specific flags such as `--color=always` if you want more aggressive color output. You can set global shell env vars and aliases in `~/.kward/ekwsh.yml`; see [Configuration](configuration.md). It is intended for command output, not full-screen interactive programs such as editors or pagers.
+`/shell` opens `ekwsh`, a Kward-native command mode. Kward keeps the tab bar, composer editing, and transcript rendering while each command runs through your configured shell. Built-ins such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, `pty`, and `exit` maintain shell-mode state between commands. Plain Tab completes built-in command names, configured aliases, executables from `$PATH`, and file paths from the shell's current directory; `cd` completion suggests directories only. `ekwsh` preserves safe ANSI SGR color/style output while stripping terminal-control sequences that could corrupt the TUI, and sets conservative color-friendly environment defaults such as `CLICOLOR=1`, `COLORTERM=truecolor`, and `TERM=xterm-256color` when needed. Use `pty git log` or `/pty git log` when you intentionally want to hand the terminal to an interactive tool such as `less` or `vim`. You can set global shell env vars and aliases in `~/.kward/ekwsh.yml`; see [Configuration](configuration.md).
 
 ## Shell commands
 
@@ -116,6 +116,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/git` | review uncommitted changes, stage files, and commit. |
 | `/files` | browse project files in a nested tree and open them in the editor. |
 | `/shell` | run workspace commands in the embedded Kward shell. |
+| `/pty <command>` | hand the terminal to an interactive command such as `git log`/`less` or `vim`. |
 | `/settings` | configure prompt overlays. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session in the current tab. |
