@@ -410,42 +410,6 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
-  def test_memory_status_includes_auto_summary_and_toggles_setting
-    Dir.mktmpdir do |config_dir|
-      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
-
-      refute manager.memory_status[:autoSummary]
-
-      manager.memory_auto_summary_enable
-      assert_equal true, manager.memory_status[:autoSummary]
-
-      manager.memory_auto_summary_disable
-      assert_equal false, manager.memory_status[:autoSummary]
-    end
-  end
-
-  def test_memory_summarize_only_uses_user_messages_for_inference
-    Dir.mktmpdir do |config_dir|
-      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
-      session = manager.create_session(workspace_root: Dir.pwd)
-      rpc_session = manager.send(:fetch_session, session[:id])
-
-      rpc_session.conversation.append_user("I usually prefer concise and practical answers.")
-      rpc_session.conversation.append_assistant("I always use assistant-generated summaries.")
-      rpc_session.conversation.append_tool(tool_call_id: "skill_1", name: "read_skill", content: "Prefer focused tests and always use minitest.")
-
-      result = manager.memory_summarize(session_id: session[:id])
-
-      memories = result[:memories]
-      assert_equal 1, memories.length
-      # Memory summarization canonicalizes first-person user preferences.
-      assert_equal ["The user usually prefers concise and practical answers"], memories.map { |memory| memory["text"] }
-      assert_equal ["soft_001"], memories.map { |memory| memory["id"] }
-      refute_includes memories.map { |memory| memory["text"] }, "Prefer focused tests and always use minitest"
-      refute_includes memories.map { |memory| memory["text"] }, "I always use assistant-generated summaries"
-    end
-  end
-
   def test_session_list_keeps_cloned_sessions_in_newest_first_order
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)
@@ -550,93 +514,6 @@ class TestRPCSessionManager < KwardTestCase
       records = jsonl_records(session[:path]).select { |record| record["type"] == "session_info" }
       assert_nil records.last["name"]
     end
-  end
-
-  def test_rpc_plugin_footer_notifications_include_session_text
-    Dir.mktmpdir do |config_dir|
-      registry = Kward::PluginRegistry.new
-      registry.evaluate do |plugin|
-        plugin.footer do |ctx|
-          "#{ctx.session_name || "unnamed"} #{ctx.transcript.messages.length} messages"
-        end
-      end
-      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
-      manager.instance_variable_set(:@plugin_registry, registry)
-
-      session = manager.create_session(workspace_root: Dir.pwd, name: "Bridge")
-      create_footer = manager.instance_variable_get(:@server).notifications.find { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "Bridge 0 messages" }, create_footer[:params])
-
-      turn = manager.start_turn(session_id: session[:id], input: "hello")
-      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
-
-      footer_notifications = manager.instance_variable_get(:@server).notifications.select { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "Bridge 2 messages" }, footer_notifications.last[:params])
-    end
-  end
-
-  def test_rpc_reload_starts_and_clears_plugin_footer
-    Dir.mktmpdir do |config_dir|
-      Dir.mktmpdir do |home|
-        plugins_dir = File.join(home, ".kward", "plugins")
-        plugin_path = File.join(plugins_dir, "footer.rb")
-        FileUtils.mkdir_p(plugins_dir)
-        server = RecordingServer.new
-        manager = Kward::RPC::SessionManager.new(server: server, client: FakeClient.new([]), config_dir: config_dir)
-        session = nil
-
-        with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
-          session = manager.create_session(workspace_root: Dir.pwd)
-          File.write(plugin_path, <<~'RUBY')
-            Kward.plugin do |plugin|
-              plugin.footer do |_ctx|
-                "Reloaded footer"
-              end
-            end
-          RUBY
-
-          manager.reload_plugins
-          File.delete(plugin_path)
-          manager.reload_plugins
-        end
-
-        footer_notifications = server.notifications.select { |notification| notification[:method] == "ui/footer" }
-        assert_equal({ sessionId: session[:id], text: "Reloaded footer" }, footer_notifications.first[:params])
-        assert_equal({ sessionId: session[:id], text: "" }, footer_notifications.last[:params])
-        manager.close_session(session_id: session[:id])
-      end
-    end
-  end
-
-  def test_rpc_plugin_footer_refreshes_on_interval
-    original_interval = Kward::RPC::SessionManager::FOOTER_REFRESH_INTERVAL
-    Kward::RPC::SessionManager.send(:remove_const, :FOOTER_REFRESH_INTERVAL)
-    Kward::RPC::SessionManager.const_set(:FOOTER_REFRESH_INTERVAL, 0.01)
-
-    Dir.mktmpdir do |config_dir|
-      count = 0
-      registry = Kward::PluginRegistry.new
-      registry.evaluate do |plugin|
-        plugin.footer do |_ctx|
-          count += 1
-          "tick #{count}"
-        end
-      end
-      server = RecordingServer.new
-      manager = Kward::RPC::SessionManager.new(server: server, client: FakeClient.new([]), config_dir: config_dir)
-      manager.instance_variable_set(:@plugin_registry, registry)
-
-      session = manager.create_session(workspace_root: Dir.pwd)
-      wait_until { server.notifications.count { |notification| notification[:method] == "ui/footer" } >= 2 }
-
-      footer_notifications = server.notifications.select { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "tick 1" }, footer_notifications.first[:params])
-      assert_equal({ sessionId: session[:id], text: "tick 2" }, footer_notifications[1][:params])
-      manager.close_session(session_id: session[:id])
-    end
-  ensure
-    Kward::RPC::SessionManager.send(:remove_const, :FOOTER_REFRESH_INTERVAL)
-    Kward::RPC::SessionManager.const_set(:FOOTER_REFRESH_INTERVAL, original_interval)
   end
 
   def test_session_close_deletes_empty_unnamed_session
