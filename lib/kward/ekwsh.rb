@@ -53,7 +53,7 @@ module Kward
       command = input.to_s.strip
       return Result.new(output: "", exit_status: 0) if command.empty?
 
-      exit_result(command) || builtin_result(command) || run_expanded_command(command, cancellation: cancellation, &block)
+      run_expanded_command(command, cancellation: cancellation, &block)
     end
 
     def complete(input, cursor)
@@ -263,56 +263,56 @@ module Kward
       ANSI.sanitize_transcript("$ #{command}\n")
     end
 
-    def exit_result(command)
+    def exit_result(command, display_command: command)
       words = shell_words(command)
       return nil unless %w[exit logout].include?(words.first)
 
       if words.length > 2 || (words[1] && !words[1].match?(/\A\d+\z/))
-        return Result.new(output: "#{command_echo(command)}ekwsh: #{words.first}: numeric status expected\n", exit_status: 2)
+        return Result.new(output: "#{command_echo(display_command)}ekwsh: #{words.first}: numeric status expected\n", exit_status: 2)
       end
 
-      Result.new(output: command_echo(command), exit_status: words[1].to_i, exit_shell: true)
+      Result.new(output: command_echo(display_command), exit_status: words[1].to_i, exit_shell: true)
     rescue ArgumentError => e
-      Result.new(output: "#{command_echo(command)}ekwsh: #{e.message}\n", exit_status: 2)
+      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
     end
 
-    def builtin_result(command)
+    def builtin_result(command, display_command: command)
       words = shell_words(command)
       return nil if words.empty?
-      assignment_result = persist_assignments(command, words)
+      assignment_result = persist_assignments(display_command, words)
       return assignment_result if assignment_result
 
       case words.first
       when "alias"
-        list_aliases(command, words)
+        list_aliases(display_command, words)
       when "unalias"
-        remove_aliases(command, words)
+        remove_aliases(display_command, words)
       when "cd"
-        change_directory(command, words)
+        change_directory(display_command, words)
       when "pwd"
-        print_working_directory(command, words)
+        print_working_directory(display_command, words)
       when "export"
-        export_variables(command, words)
+        export_variables(display_command, words)
       when "unset"
-        unset_variables(command, words)
+        unset_variables(display_command, words)
       when "clear"
         Result.new(output: "", exit_status: 0, clear: true)
       when "pty"
-        interactive_pty_result(command)
+        interactive_pty_result(command, display_command: display_command)
       else
         nil
       end
     rescue ArgumentError => e
-      Result.new(output: "#{command_echo(command)}ekwsh: #{e.message}\n", exit_status: 2)
+      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
     end
 
-    def interactive_pty_result(command)
+    def interactive_pty_result(command, display_command: command)
       interactive_command = command.sub(/\A\s*pty(?:\s+|\z)/, "")
       if interactive_command.empty?
-        return Result.new(output: "#{command_echo(command)}Usage: pty <command>\n", exit_status: 2)
+        return Result.new(output: "#{command_echo(display_command)}Usage: pty <command>\n", exit_status: 2)
       end
 
-      Result.new(output: "#{command_echo(command)}[interactive PTY session started]\n", exit_status: 0, interactive_command: interactive_command)
+      Result.new(output: "#{command_echo(display_command)}[interactive PTY session started]\n", exit_status: 0, interactive_command: interactive_command)
     end
 
     def shell_words(command)
@@ -374,6 +374,12 @@ module Kward
 
     def run_expanded_command(command, cancellation: nil, &block)
       expanded_command = expand_alias(command)
+      exit_result = exit_result(expanded_command, display_command: command)
+      return exit_result if exit_result
+
+      builtin_result = builtin_result(expanded_command, display_command: command)
+      return builtin_result if builtin_result
+
       kward_result = kward_command_result(expanded_command, display_command: command)
       return kward_result if kward_result
 

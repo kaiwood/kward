@@ -311,6 +311,27 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "interactive PTY session started"
   end
 
+  def test_alias_can_expand_to_pty_builtin
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", aliases: { "glog" => "pty git log --oneline" })
+
+    result = shell.run("glog")
+
+    assert_equal 0, result.exit_status
+    assert_equal "git log --oneline", result.interactive_command
+    assert_includes result.output, "$ glog"
+    assert_includes result.output, "interactive PTY session started"
+  end
+
+  def test_alias_can_expand_to_builtin
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", aliases: { "where" => "pwd" })
+
+    result = shell.run("where")
+
+    assert_equal 0, result.exit_status
+    assert_includes result.output, "$ where"
+    assert_includes result.output, Dir.pwd
+  end
+
   def test_pty_builtin_requires_command
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
