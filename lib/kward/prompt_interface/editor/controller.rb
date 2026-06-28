@@ -674,7 +674,7 @@ module Kward
         when "\x06"
           editor_search_active? ? editor_search_append(key) : editor_search_begin
         when "\x03"
-          editor_search_cancel if editor_search_active?
+          editor_search_active? ? editor_search_cancel : copy_editor_selection
         when "/"
           editor_search_active? ? editor_search_append(key) : editor_search_begin
         when "\b", "\x7F"
@@ -705,6 +705,10 @@ module Kward
 
         if ctrl_modifier?(modifier) && ctrl_code(code) == 102
           return editor_search_active? ? editor_search_append(key) : editor_search_begin
+        end
+
+        if (ctrl_modifier?(modifier) || super_modifier?(modifier)) && ctrl_code(code) == 99
+          return editor_search_active? ? editor_search_cancel : copy_editor_selection
         end
 
         case code

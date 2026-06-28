@@ -54,6 +54,7 @@ Useful keys in the diff viewer:
 | `Page Up` / `Page Down` | Scroll by a page. |
 | `Home` / `End` | Move within the current line. |
 | `/` or `Ctrl+F` | Search within the diff. |
+| `Ctrl+C` / `Cmd+C` | Copy the current selection. |
 | `Enter` | Confirm the current search. |
 | `Esc` | Cancel search, or close the diff viewer. |
 | `Ctrl+Q` | Close the diff viewer. |

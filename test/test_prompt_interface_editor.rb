@@ -57,6 +57,38 @@ class TestPromptInterfaceEditor < KwardTestCase
     refute prompt.send(:editor_active?)
   end
 
+  def test_prompt_interface_diff_viewer_ctrl_c_copies_selection
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+    assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.selection_anchor = 0
+    editor.cursor = 4
+
+    prompt.send(:handle_editor_key, "\x03")
+
+    assert_equal "-old", editor.kill_buffer
+    assert_equal "Copied selection", editor.status
+    refute editor.selection_active?
+    assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("-old")}\a"
+  end
+
+  def test_prompt_interface_diff_viewer_csi_u_cmd_c_copies_selection
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+    assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.selection_anchor = 5
+    editor.cursor = 9
+
+    prompt.send(:handle_editor_key, "\e[99;9u")
+
+    assert_equal "+new", editor.kill_buffer
+    assert_equal "Copied selection", editor.status
+    refute editor.selection_active?
+    assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("+new")}\a"
+  end
+
   def test_prompt_interface_diff_viewer_colors_added_and_removed_lines
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     prompt.instance_variable_set(:@color_enabled, true)
