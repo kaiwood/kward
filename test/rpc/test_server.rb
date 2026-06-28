@@ -117,7 +117,7 @@ class TestRPCServer < KwardTestCase
     assert_equal true, capabilities["events"]["tools"]["diffs"]
     assert_equal true, capabilities["events"]["tools"]["focusedContext"]
     assert_equal true, capabilities["events"]["tools"]["contextBudgetStats"]
-    assert_equal false, capabilities["events"]["tools"]["changedFiles"]
+    assert_equal true, capabilities["events"]["tools"]["changedFiles"]
     assert_equal false, capabilities["events"]["sessionUpdates"]
     assert_equal true, capabilities["attachments"]["input"]["supported"]
     assert_equal Kward::RPC::SessionManager::RPC_IMAGE_MIME_TYPES, capabilities["attachments"]["input"]["mimeTypes"]
