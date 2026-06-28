@@ -1,6 +1,6 @@
-require "open3"
 require "shellwords"
 require_relative "ansi"
+require_relative "local_command_runner"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -16,7 +16,7 @@ module Kward
 
     attr_reader :cwd
 
-    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: DEFAULT_SHELL, configured_env: {}, aliases: {})
+    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: DEFAULT_SHELL, configured_env: {}, aliases: {}, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES)
       @cwd = File.expand_path(cwd.to_s.empty? ? Dir.pwd : cwd.to_s)
       @previous_cwd = nil
       @env = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
@@ -26,6 +26,8 @@ module Kward
       configure_color_environment
       @aliases = aliases.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @shell = shell.to_s.empty? ? DEFAULT_SHELL : shell.to_s
+      @timeout_seconds = timeout_seconds.to_i.positive? ? timeout_seconds.to_i : DEFAULT_TIMEOUT_SECONDS
+      @max_output_bytes = max_output_bytes.to_i.positive? ? max_output_bytes.to_i : DEFAULT_MAX_OUTPUT_BYTES
     end
 
     def prompt_label
@@ -346,11 +348,17 @@ module Kward
     end
 
     def execute(command, display_command: command)
-      stdout, stderr, status = Open3.capture3(@env, @shell, "-c", command, chdir: @cwd)
-      exit_status = status.exitstatus || 1
+      result = LocalCommandRunner.new(
+        timeout_seconds: @timeout_seconds,
+        max_output_bytes: @max_output_bytes,
+        terminate_on_output_limit: true
+      ).run(@shell, "-c", command, env: @env, cwd: @cwd)
+      exit_status = result.timed_out || result.truncated ? 1 : (result.exit_status || 1)
       output = command_echo(display_command)
-      output << clean_output(stdout)
-      output << clean_output(stderr)
+      output << clean_output(result.stdout)
+      output << clean_output(result.stderr)
+      output << "ekwsh: command timed out after #{@timeout_seconds} seconds\n" if result.timed_out
+      output << "ekwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n" if result.truncated
       output << "Exit status: #{exit_status}\n" unless exit_status.zero?
       Result.new(output: output, exit_status: exit_status)
     rescue Errno::ENOENT => e

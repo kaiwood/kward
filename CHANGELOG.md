@@ -15,6 +15,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Added `ekwsh` timeout and output-limit enforcement for external commands using the shared local command runner.
 - Consolidated workspace shell command execution on a shared local command runner with timeout, cancellation, bounded capture, and optional streaming support.
 - Fixed `ekwsh` shell output sanitization so unsafe terminal controls are stripped before command output is shown while SGR color is preserved.
 - Split Vibe editor insert/readline key handling into a focused mixin without changing editor behavior.

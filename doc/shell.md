@@ -199,7 +199,7 @@ aliases:
 | `max_output_bytes` | `1048576` | Maximum captured output for one command. |
 | `history_limit` | `1000` | Maximum persisted shell history entries per workspace. |
 
-The timeout and output cap are validated now and used by the shell runtime as command execution is expanded.
+When a command exceeds `timeout_seconds`, `ekwsh` terminates it and reports the timeout. When command output exceeds `max_output_bytes`, `ekwsh` terminates the command, keeps bounded output, and reports the output limit.
 
 ### Environment variables
 

@@ -134,7 +134,9 @@ module Kward
           cwd: interactive_workspace_root(agent),
           configured_env: config[:env],
           aliases: config[:aliases],
-          shell: config[:shell]
+          shell: config[:shell],
+          timeout_seconds: config[:timeout_seconds],
+          max_output_bytes: config[:max_output_bytes]
         )
       end
 

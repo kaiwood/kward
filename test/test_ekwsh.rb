@@ -250,6 +250,27 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "Exit status: 7"
   end
 
+  def test_command_timeout_reports_failure
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 1)
+
+    result = shell.run("ruby -e 'sleep 5'")
+
+    assert_equal 1, result.exit_status
+    assert_includes result.output, "ekwsh: command timed out after 1 seconds"
+    assert_includes result.output, "Exit status: 1"
+  end
+
+  def test_command_output_limit_reports_failure
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", max_output_bytes: 3)
+
+    result = shell.run("printf abcdef")
+
+    assert_equal 1, result.exit_status
+    assert_includes result.output, "abc"
+    assert_includes result.output, "ekwsh: output exceeded 3 bytes; command terminated"
+    assert_includes result.output, "Exit status: 1"
+  end
+
   def test_cli_wraps_command_execution_in_busy_prompt
     prompt = FakePrompt.new([])
     prompt.define_singleton_method(:begin_busy_input) do |message, activity: "loading"|
