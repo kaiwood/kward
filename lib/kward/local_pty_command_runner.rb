@@ -16,10 +16,12 @@ module Kward
     DEFAULT_ROWS = 24
     DEFAULT_COLUMNS = 80
 
-    def initialize(timeout_seconds:, max_output_bytes:, terminate_on_output_limit: false)
+    def initialize(timeout_seconds:, max_output_bytes:, terminate_on_output_limit: false, window_size_provider: nil)
       @timeout_seconds = timeout_seconds.to_i.positive? ? timeout_seconds.to_i : 30
       @max_output_bytes = max_output_bytes.to_i.positive? ? max_output_bytes.to_i : 128 * 1024
       @terminate_on_output_limit = terminate_on_output_limit
+      @window_size_provider = window_size_provider
+      @window_size = nil
     end
 
     def run(*command, env: {}, cwd: Dir.pwd, cancellation: nil, &block)
@@ -34,7 +36,7 @@ module Kward
 
       PTY.spawn(env.to_h, *command, chdir: cwd.to_s) do |reader, _writer, child_pid|
         pid = child_pid
-        configure_window_size(reader)
+        update_window_size(reader, pid)
         cancellation&.on_cancel do
           cancelled = true
           terminate_process_group(pid)
@@ -46,6 +48,7 @@ module Kward
             cancellation&.raise_if_cancelled!
             raise Timeout::Error if Time.now >= deadline
 
+            update_window_size(reader, pid)
             readable, = IO.select([reader], nil, nil, 0.02)
             next unless readable
 
@@ -79,15 +82,19 @@ module Kward
 
     private
 
-    def configure_window_size(reader)
-      rows, columns = terminal_window_size
-      reader.winsize = [rows, columns]
+    def update_window_size(reader, pid)
+      window_size = terminal_window_size
+      return if window_size == @window_size
+
+      @window_size = window_size
+      reader.winsize = window_size
+      signal_process("WINCH", -pid) || signal_process("WINCH", pid)
     rescue StandardError
       nil
     end
 
     def terminal_window_size
-      rows, columns = IO.console&.winsize
+      rows, columns = @window_size_provider ? @window_size_provider.call : IO.console&.winsize
       rows = DEFAULT_ROWS unless rows.to_i.positive?
       columns = DEFAULT_COLUMNS unless columns.to_i.positive?
       [rows, columns]
