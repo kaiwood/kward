@@ -208,6 +208,19 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_context_for_task_reports_when_candidates_do_not_match_task
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "billing.rb"), "class Billing\n  def charge\n  end\nend\n")
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      result = registry.dispatch(tool_call("context_for_task", task: "debug validate token", paths: ["lib"], budget: 2_000), conversation)
+
+      assert_equal "No matching candidate files found for focused context.", result
+    end
+  end
+
   def test_context_budget_stats_reports_conversation_tool_savings
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "demo.txt"), "hello world\n")

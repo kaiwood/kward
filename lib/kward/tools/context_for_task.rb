@@ -45,6 +45,8 @@ module Kward
 
         terms = search_terms(task)
         ranked = rank_files(files, terms)
+        return "No matching candidate files found for focused context." if ranked.empty?
+
         render_context(task: task, budget: budget, terms: terms, ranked: ranked, cancellation: cancellation)
       rescue SecurityError, Errno::ENOENT => e
         "Error: #{e.message}"
