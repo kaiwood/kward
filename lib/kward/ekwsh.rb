@@ -1,6 +1,11 @@
 require "shellwords"
 require_relative "ansi"
 require_relative "local_command_runner"
+begin
+  require_relative "local_pty_command_runner"
+rescue LoadError
+  nil
+end
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -471,7 +476,7 @@ module Kward
       output = command_echo(display_command)
       streamed = block_given?
       yield output.dup if streamed
-      result = LocalCommandRunner.new(
+      result = external_command_runner.new(
         timeout_seconds: @timeout_seconds,
         max_output_bytes: @max_output_bytes,
         terminate_on_output_limit: true
@@ -492,6 +497,10 @@ module Kward
       Result.new(output: output, exit_status: 130, streamed: streamed)
     rescue Errno::ENOENT => e
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 127)
+    end
+
+    def external_command_runner
+      defined?(LocalPtyCommandRunner) ? LocalPtyCommandRunner : LocalCommandRunner
     end
 
     def append_streamed(output, text, streamed)

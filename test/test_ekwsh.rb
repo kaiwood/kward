@@ -293,6 +293,26 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "Exit status: 7"
   end
 
+  def test_external_commands_run_with_tty_stdout
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    ruby = Shellwords.escape(RbConfig.ruby)
+
+    result = shell.run(%(#{ruby} -e 'print STDOUT.tty? ? "tty" : "pipe"'))
+
+    assert_equal 0, result.exit_status
+    assert_match(/\btty\b/, result.output)
+  end
+
+  def test_external_commands_receive_terminal_columns
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    ruby = Shellwords.escape(RbConfig.ruby)
+
+    result = shell.run(%(#{ruby} -rio/console -e 'print IO.console.winsize[1]'))
+
+    assert_equal 0, result.exit_status
+    assert_match(/\b\d+\b/, result.output)
+  end
+
   def test_streams_external_command_output
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     chunks = []
