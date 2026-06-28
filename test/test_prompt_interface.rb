@@ -33,20 +33,16 @@ class TestPromptInterface < KwardTestCase
     assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\e[99;5u")
   end
 
-  def test_non_busy_ctrl_c_raises_interrupt
+  def test_non_busy_ctrl_c_does_not_interrupt
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
 
-    assert_raises(Interrupt) do
-      prompt.send(:handle_key, "\x03")
-    end
+    assert_equal true, prompt.send(:handle_key, "\x03")
   end
 
-  def test_non_busy_csi_u_ctrl_c_raises_interrupt
+  def test_non_busy_csi_u_ctrl_c_does_not_interrupt
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
 
-    assert_raises(Interrupt) do
-      prompt.send(:handle_key, "\e[99;5u")
-    end
+    assert_equal true, prompt.send(:handle_key, "\e[99;5u")
   end
 
   def test_prompt_interface_ignores_mouse_reporting_sequences_in_composer

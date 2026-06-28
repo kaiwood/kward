@@ -193,7 +193,7 @@ module Kward
       def cancel_input_or_interrupt
         return CANCEL_INPUT if @busy
 
-        raise Interrupt
+        true
       end
 
       def handle_tab_completion_key
