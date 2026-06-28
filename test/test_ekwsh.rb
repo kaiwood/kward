@@ -1,3 +1,4 @@
+require "timeout"
 require_relative "test_helper"
 
 class TestEkwsh < KwardTestCase
@@ -323,6 +324,49 @@ class TestEkwsh < KwardTestCase
     assert_equal 1, result.exit_status
     assert_includes result.output, "ekwsh: command timed out after 1 seconds"
     assert_includes result.output, "Exit status: 1"
+  end
+
+  def test_command_cancellation_reports_ctrl_c_status
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 5)
+    cancellation = Kward::Cancellation.new
+    chunks = []
+    result = nil
+
+    worker = Thread.new do
+      result = shell.run("ruby -e 'sleep 5'", cancellation: cancellation) { |chunk| chunks << chunk }
+    end
+    sleep 0.1
+    cancellation.cancel!
+    worker.join(2)
+
+    refute worker.alive?, "expected cancelled command to finish"
+    assert_equal 130, result.exit_status
+    assert_includes result.output, "^C\nExit status: 130"
+    assert_includes chunks.join, "^C\nExit status: 130"
+  ensure
+    worker&.kill if worker&.alive?
+  end
+
+  def test_cli_ctrl_c_cancels_running_ekwsh_command
+    prompt = FakePrompt.new([])
+    started_at = Time.now
+    prompt.define_singleton_method(:begin_busy_input) { |_message, activity: "loading"| nil }
+    prompt.define_singleton_method(:finish_busy_input) { nil }
+    prompt.define_singleton_method(:write_transcript_delta) do |chunk|
+      @streamed_chunks ||= []
+      @streamed_chunks << chunk
+    end
+    prompt.define_singleton_method(:streamed_chunks) { @streamed_chunks || [] }
+    prompt.define_singleton_method(:poll_input) do
+      Time.now - started_at > 0.1 ? Kward::PromptInterface::CANCEL_INPUT : nil
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 5)
+
+    result = Timeout.timeout(2) { cli.send(:run_ekwsh_command, shell, "ruby -e 'sleep 5'") }
+
+    assert_equal 130, result.exit_status
+    assert_includes prompt.streamed_chunks.join, "^C\nExit status: 130"
   end
 
   def test_command_output_limit_reports_failure

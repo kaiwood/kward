@@ -34,11 +34,11 @@ module Kward
       "Shell #{display_cwd} $"
     end
 
-    def run(input, &block)
+    def run(input, cancellation: nil, &block)
       command = input.to_s.strip
       return Result.new(output: "", exit_status: 0) if command.empty?
 
-      exit_result(command) || builtin_result(command) || run_expanded_command(command, &block)
+      exit_result(command) || builtin_result(command) || run_expanded_command(command, cancellation: cancellation, &block)
     end
 
     def complete(input, cursor)
@@ -344,12 +344,12 @@ module Kward
       command
     end
 
-    def run_expanded_command(command, &block)
+    def run_expanded_command(command, cancellation: nil, &block)
       expanded_command = expand_alias(command)
       kward_result = kward_command_result(expanded_command, display_command: command)
       return kward_result if kward_result
 
-      execute(expanded_command, display_command: command, &block)
+      execute(expanded_command, display_command: command, cancellation: cancellation, &block)
     end
 
     def kward_command_result(command, display_command: command)
@@ -467,7 +467,7 @@ module Kward
       key.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
     end
 
-    def execute(command, display_command: command)
+    def execute(command, display_command: command, cancellation: nil)
       output = command_echo(display_command)
       streamed = block_given?
       yield output.dup if streamed
@@ -475,7 +475,7 @@ module Kward
         timeout_seconds: @timeout_seconds,
         max_output_bytes: @max_output_bytes,
         terminate_on_output_limit: true
-      ).run(@shell, "-c", command, env: @env, cwd: @cwd) do |_stream, chunk|
+      ).run(@shell, "-c", command, env: @env, cwd: @cwd, cancellation: cancellation) do |_stream, chunk|
         text = clean_chunk(chunk)
         output << text
         yield text if streamed
@@ -486,6 +486,10 @@ module Kward
       append_streamed(output, "ekwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n", streamed) { |text| yield text } if result.truncated
       append_streamed(output, "Exit status: #{exit_status}\n", streamed) { |text| yield text } unless exit_status.zero?
       Result.new(output: output, exit_status: exit_status, streamed: streamed)
+    rescue Cancellation::CancelledError
+      append_output_newline(output) { |text| yield text if streamed }
+      append_streamed(output, "^C\nExit status: 130\n", streamed) { |text| yield text }
+      Result.new(output: output, exit_status: 130, streamed: streamed)
     rescue Errno::ENOENT => e
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 127)
     end

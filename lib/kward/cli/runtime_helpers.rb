@@ -228,13 +228,50 @@ module Kward
         if @prompt.respond_to?(:begin_busy_input)
           @prompt.begin_busy_input(shell.prompt_label, activity: "running")
         end
-        if @prompt.respond_to?(:write_transcript_delta)
+        if @prompt.respond_to?(:write_transcript_delta) && @prompt.respond_to?(:poll_input)
+          run_streaming_ekwsh_command(shell, input)
+        elsif @prompt.respond_to?(:write_transcript_delta)
           shell.run(input) { |chunk| @prompt.write_transcript_delta(chunk) }
         else
           shell.run(input)
         end
       ensure
         @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+      end
+
+      def run_streaming_ekwsh_command(shell, input)
+        cancellation = Cancellation.new
+        chunks = Queue.new
+        queued_inputs = []
+        result = nil
+        error = nil
+        worker = Thread.new do
+          result = shell.run(input, cancellation: cancellation) { |chunk| chunks << chunk }
+        rescue StandardError => e
+          error = e
+        end
+        worker.report_on_exception = false
+
+        while worker.alive?
+          drain_ekwsh_chunks(chunks)
+          poll_result = collect_queued_input(queued_inputs)
+          cancellation.cancel! if poll_result == PromptInterface::CANCEL_INPUT
+          sleep 0.01
+        end
+        worker.join
+        drain_ekwsh_chunks(chunks)
+        raise error if error
+
+        queued_inputs.reverse_each { |pending_input| (@pending_inputs ||= []).unshift(pending_input) }
+        result
+      end
+
+      def drain_ekwsh_chunks(chunks)
+        loop do
+          @prompt.write_transcript_delta(chunks.pop(true))
+        rescue ThreadError
+          break
+        end
       end
 
       def configured_workspace(root: current_workspace_root)

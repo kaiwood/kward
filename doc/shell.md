@@ -207,7 +207,7 @@ aliases:
 | `max_output_bytes` | `1048576` | Maximum captured output for one command. |
 | `history_limit` | `1000` | Maximum persisted shell history entries per workspace. |
 
-When a command exceeds `timeout_seconds`, `ekwsh` terminates it and reports the timeout. When command output exceeds `max_output_bytes`, `ekwsh` terminates the command, keeps bounded output, and reports the output limit.
+When a command exceeds `timeout_seconds`, `ekwsh` terminates it and reports the timeout. When command output exceeds `max_output_bytes`, `ekwsh` terminates the command, keeps bounded output, and reports the output limit. Press Ctrl+C while a command is running to terminate that command and return to the shell prompt without exiting Kward.
 
 ### Environment variables
 
