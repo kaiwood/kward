@@ -365,12 +365,34 @@ module Kward
         }
       end
 
-      def insert_csi_u_text(sequence)
-        text = csi_u_printable_text(sequence)
-        return true if text.nil? && csi_u_text_field?(sequence)
-        return false unless text
+      def csi_u_key_event(sequence)
+        code = sequence[:code]
+        case code
+        when 9
+          { type: :tab, modifier: sequence[:modifier] }
+        when 13
+          { type: :enter, modifier: sequence[:modifier] }
+        when 27
+          { type: :escape, modifier: sequence[:modifier] }
+        when 8, 127
+          { type: :backspace, modifier: sequence[:modifier] }
+        when 4
+          { type: :delete, modifier: sequence[:modifier] }
+        else
+          text = csi_u_printable_text(sequence)
+          return { type: :printable, text: text, modifier: sequence[:modifier] } if text
+          return { type: :text_field, modifier: sequence[:modifier] } if csi_u_text_field?(sequence)
 
-        insert_string(text)
+          { type: :modified, code: code, modifier: sequence[:modifier] }
+        end
+      end
+
+      def insert_csi_u_text(sequence)
+        event = csi_u_key_event(sequence)
+        return true if event[:type] == :text_field
+        return false unless event[:type] == :printable
+
+        insert_string(event[:text])
       end
 
       def csi_u_text_field?(sequence)

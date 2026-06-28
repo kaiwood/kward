@@ -19,6 +19,18 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_normalizes_csi_u_key_events
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    enter = prompt.send(:csi_u_key_event, prompt.send(:parse_csi_u_key, "\e[13u"))
+    printable = prompt.send(:csi_u_key_event, prompt.send(:parse_csi_u_key, "\e[97;2;65u"))
+    modified = prompt.send(:csi_u_key_event, prompt.send(:parse_csi_u_key, "\e[102;5u"))
+
+    assert_equal({ type: :enter, modifier: 1 }, enter)
+    assert_equal({ type: :printable, text: "A", modifier: 2 }, printable)
+    assert_equal({ type: :modified, code: 102, modifier: 5 }, modified)
+  end
+
   def test_busy_ctrl_c_returns_cancel_input
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@busy, true)
