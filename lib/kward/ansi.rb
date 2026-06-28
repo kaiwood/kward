@@ -2,10 +2,7 @@
 module Kward
   # ANSI color and terminal capability helpers.
   module ANSI
-    ESCAPE_PATTERN = /\e\[[0-9;?]*[ -\/]*[@-~]/.freeze
     SGR_PATTERN = /\e\[[0-9;:]*m/.freeze
-    OSC_PATTERN = /\e\][^\a]*(?:\a|\e\\)/m.freeze
-    STRING_ESCAPE_PATTERN = /\e[P_X^][\s\S]*?\e\\/m.freeze
     STYLES = {
       reset: 0,
       bold: 1,
@@ -52,13 +49,22 @@ module Kward
     end
 
     def strip(text)
-      text.to_s.gsub(ESCAPE_PATTERN, "")
+      strip_control_sequences(text)
+    end
+
+    def strip_control_sequences(text)
+      scan_escape_tokens(text).each_with_object(+"") do |token, stripped|
+        stripped << token[:text] unless token[:escape]
+      end
     end
 
     def sanitize_transcript(text)
-      string = text.to_s.gsub(OSC_PATTERN, "").gsub(STRING_ESCAPE_PATTERN, "")
-      string.gsub(/\e(?:\[[0-9;:?]*[ -\/]*[@-~]|.)/m) do |sequence|
-        sequence.match?(SGR_PATTERN) ? sequence : ""
+      scan_escape_tokens(text).each_with_object(+"") do |token, sanitized|
+        if token[:escape]
+          sanitized << token[:text] if token[:text].match?(SGR_PATTERN)
+        else
+          sanitized << token[:text]
+        end
       end
     end
 
@@ -67,33 +73,58 @@ module Kward
       rows = []
       current = +""
       visible_width = 0
-      string = text.to_s
-      index = 0
 
-      while index < string.length
-        if string[index] == "\e" && (match = string[index..].match(/\A\e\[[0-9;:]*m/))
+      scan_escape_tokens(text).each do |token|
+        if token[:escape]
+          next unless token[:text].match?(SGR_PATTERN)
+
           if current.empty? && rows.any?
-            rows[-1] << match[0]
+            rows[-1] << token[:text]
           else
-            current << match[0]
+            current << token[:text]
           end
-          index += match[0].length
           next
         end
 
-        char = string[index]
-        current << char
-        visible_width += 1
-        index += 1
-        if visible_width >= line_width
-          rows << current
-          current = +""
-          visible_width = 0
+        token[:text].each_char do |char|
+          current << char
+          visible_width += 1
+          if visible_width >= line_width
+            rows << current
+            current = +""
+            visible_width = 0
+          end
         end
       end
 
       rows << current unless current.empty?
       rows
+    end
+
+    def scan_escape_tokens(text)
+      string = text.to_s
+      tokens = []
+      index = 0
+      while index < string.length
+        if string[index] == "\e" && (escape = escape_sequence_at(string, index))
+          tokens << { text: escape, escape: true }
+          index += escape.length
+          next
+        end
+
+        next_escape = string.index("\e", index) || string.length
+        tokens << { text: string[index...next_escape], escape: false } if next_escape > index
+        index = next_escape
+      end
+      tokens
+    end
+
+    def escape_sequence_at(string, index)
+      chunk = string[index..]
+      chunk.match(/\A\e\][^\a]*(?:\a|\e\\)/m)&.[](0) ||
+        chunk.match(/\A\e[P_X^][\s\S]*?\e\\/m)&.[](0) ||
+        chunk.match(/\A\e\[[0-9;:?]*[ -\/]*[@-~]/)&.[](0) ||
+        chunk[0, 2]
     end
 
     def markdown(text, enabled: enabled?)

@@ -62,11 +62,23 @@ class TestANSI < KwardTestCase
     assert_equal "\e[31mred\e[0m", Kward::ANSI.sanitize_transcript(text)
   end
 
+  def test_ansi_strips_terminal_control_sequences
+    text = "a\e[31mb\e[0mc\e]52;c;payload\a\e_Ginline=1:payload\e\\\e[2Jd"
+
+    assert_equal "abcd", Kward::ANSI.strip(text)
+  end
+
   def test_ansi_wraps_visible_width_without_counting_sgr_color
     rows = Kward::ANSI.wrap_visible("\e[31mabcdef\e[0m", 3)
 
     assert_equal ["\e[31mabc", "def\e[0m"], rows
     assert_equal ["abc", "def"], rows.map { |row| Kward::ANSI.strip(row) }
+  end
+
+  def test_ansi_wraps_visible_width_without_counting_non_sgr_sequences
+    rows = Kward::ANSI.wrap_visible("ab\e]0;title\acd\e[2Jef", 2)
+
+    assert_equal ["ab", "cd", "ef"], rows
   end
 
   def test_ansi_enablement_respects_environment_overrides
