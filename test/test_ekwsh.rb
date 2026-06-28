@@ -65,6 +65,25 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "\e[31mred\e[0m"
   end
 
+  def test_strips_unsafe_terminal_control_output_from_commands
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = shell.run("printf '\\033[2Jbefore\\033]0;title\\007\\033[31mred\\033[0m\\033[?1049hafter'")
+
+    assert_includes result.output, "before\e[31mred\e[0mafter"
+    refute_includes result.output, "\e[2J"
+    refute_includes result.output, "\e]0;title\a"
+    refute_includes result.output, "\e[?1049h"
+  end
+
+  def test_strips_unsafe_terminal_control_output_from_command_echo
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = shell.run("printf ok # \e[2J")
+
+    refute_includes result.output, "\e[2J"
+  end
+
   def test_applies_configured_environment
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, configured_env: { "FORCE_COLOR" => "1" })
 

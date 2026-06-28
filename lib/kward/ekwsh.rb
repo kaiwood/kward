@@ -1,5 +1,6 @@
 require "open3"
 require "shellwords"
+require_relative "ansi"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -191,7 +192,7 @@ module Kward
     end
 
     def command_echo(command)
-      "$ #{command}\n"
+      ANSI.sanitize_transcript("$ #{command}\n")
     end
 
     def exit_command?(command)
@@ -360,6 +361,7 @@ module Kward
       text = value.to_s.dup
       text.force_encoding(Encoding::UTF_8)
       text = text.valid_encoding? ? text : text.scrub
+      text = ANSI.sanitize_transcript(text)
       text.end_with?("\n") || text.empty? ? text : "#{text}\n"
     end
   end
