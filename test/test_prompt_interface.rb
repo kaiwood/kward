@@ -660,6 +660,31 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[<u"
   end
 
+  def test_prompt_interface_terminal_handoff_restores_terminal_protocols_and_prompt
+    output = StringIO.new
+    yielded_input = nil
+    yielded_output = nil
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.with_terminal_handoff do |input, handoff_output|
+      yielded_input = input
+      yielded_output = handoff_output
+      handoff_output.print("child")
+    end
+
+    assert_same prompt.instance_variable_get(:@input_io), yielded_input
+    assert_same output, yielded_output
+    assert_includes output.string, "child"
+    assert_includes output.string, "\e[r"
+    assert_includes output.string, "\e[<u"
+    assert_includes output.string, "\e[?2004l"
+    assert_includes output.string, "\e[>25u"
+    assert_includes output.string, "\e[?2004h"
+  end
+
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

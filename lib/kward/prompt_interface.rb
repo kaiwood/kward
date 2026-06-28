@@ -509,6 +509,36 @@ module Kward
       end
     end
 
+    def with_terminal_handoff
+      start
+      input = nil
+      output = nil
+      @mutex.synchronize do
+        clear_prompt_for_output_locked
+        restore_scroll_region_locked
+        disable_editor_mouse_reporting(force: true)
+        @output_io.print(BRACKETED_PASTE_RESTORE)
+        @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
+        restore_editor_cursor_shape_locked
+        set_cursor_visible_locked(true, force: true)
+        @output_io.flush
+        restore_console_mode_locked
+        input = @input_io
+        output = @output_io
+      end
+
+      yield(input, output)
+    ensure
+      @mutex.synchronize do
+        enter_raw_mode_locked
+        @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
+        @output_io.print(BRACKETED_PASTE_ENABLE)
+        @last_composer_rows = []
+        render_prompt_locked if @started && @asking
+        @output_io.flush
+      end
+    end
+
     def start_interactive(title:, rows:, fps:)
       snapshot = composer_snapshot
       controller = InteractiveController.new(width: interactive_canvas_width, height: rows, fps: fps)

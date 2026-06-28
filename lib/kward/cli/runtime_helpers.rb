@@ -160,10 +160,21 @@ module Kward
         env = interactive_pty_environment(config[:env])
         cwd = interactive_workspace_root(agent)
         @prompt.say("$ #{command}\n[interactive PTY session started]\n") if @prompt.respond_to?(:say)
-        result = InteractivePtyRunner.new.run(config[:shell], "-c", command, env: env, cwd: cwd)
+        result = run_interactive_pty_with_terminal_handoff(config[:shell], command, env: env, cwd: cwd)
         @prompt.say("[interactive PTY session exited with status #{result.exit_status}]\n") if @prompt.respond_to?(:say)
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
+      end
+
+      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:)
+        runner = InteractivePtyRunner.new
+        if @prompt.respond_to?(:with_terminal_handoff)
+          @prompt.with_terminal_handoff do |input, output|
+            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output)
+          end
+        else
+          runner.run(shell, "-c", command, env: env, cwd: cwd)
+        end
       end
 
       def interactive_pty_environment(configured_env)
