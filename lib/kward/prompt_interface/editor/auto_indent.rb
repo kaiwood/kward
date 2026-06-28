@@ -12,8 +12,8 @@ module Kward
       LUA_INDENT_KEYWORDS = %w[do else elseif for function if repeat then while].freeze
       SHELL_DEDENT_KEYWORDS = %w[fi done esac].freeze
       PUNCTUATION_PAIRS = { "}" => "{", "]" => "[", ")" => "(" }.freeze
-      EDITOR_TAB_SEQUENCES = ["\t", "\e[9u", "\e[9;1u", "\e[27;1;9~"].freeze
-      EDITOR_SHIFT_TAB_SEQUENCES = ["\e[Z", "\e[1;2Z", "\e[9;2u", "\e[27;2;9~"].freeze
+      EDITOR_TAB_SEQUENCES = TerminalKeys::TAB
+      EDITOR_SHIFT_TAB_SEQUENCES = TerminalKeys::SHIFT_TAB
 
       private
 
