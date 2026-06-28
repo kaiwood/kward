@@ -132,21 +132,21 @@ module Kward
         while index < rendered.length
           if rendered[index] == "\e" && (match = rendered[index..].match(/\A\e\[[0-9;:]*m/))
             output << match[0]
-            output << "\e[7m" if selected && match[0] == "\e[0m"
+            output << TerminalSequences::SGR_INVERSE if selected && match[0] == "\e[0m"
             index += match[0].length
             next
           end
 
           should_select = selection_ranges.any? { |range| visible_index >= range[0] && visible_index < range[1] }
           if should_select != selected
-            output << (should_select ? "\e[7m" : "\e[27m")
+            output << (should_select ? TerminalSequences::SGR_INVERSE : TerminalSequences::SGR_INVERSE_OFF)
             selected = should_select
           end
           output << rendered[index]
           visible_index += 1
           index += 1
         end
-        output << "\e[27m" if selected
+        output << TerminalSequences::SGR_INVERSE_OFF if selected
         output
       end
 

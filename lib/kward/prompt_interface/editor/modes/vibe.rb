@@ -1896,7 +1896,7 @@ module Kward
 
       def vibe_copy_range(start_index, end_index, status)
         @editor_state.copy_range(start_index, end_index)
-        @output_io.print("\e]52;c;#{Base64.strict_encode64(@editor_state.kill_buffer)}\a")
+        @output_io.print(TerminalSequences.osc52(@editor_state.kill_buffer))
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.status = status
       end

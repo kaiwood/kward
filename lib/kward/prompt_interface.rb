@@ -1,4 +1,3 @@
-require "base64"
 require "find"
 require "io/console"
 require "pathname"
@@ -10,6 +9,7 @@ require "tty-cursor"
 require "tty-reader"
 require "tty-screen"
 require_relative "ansi"
+require_relative "terminal_sequences"
 require_relative "editor_mode"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
@@ -93,18 +93,18 @@ module Kward
     include RuntimeState
     include TranscriptRenderer
     include PromptRenderer
-    KEYBOARD_PROTOCOL_ENABLE = "\e[>25u".freeze
-    KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
-    BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
-    BRACKETED_PASTE_RESTORE = "\e[?2004l".freeze
-    BRACKETED_PASTE_START = "\e[200~".freeze
-    BRACKETED_PASTE_END = "\e[201~".freeze
-    SYNCHRONIZED_OUTPUT_ENABLE = "\e[?2026h".freeze
-    SYNCHRONIZED_OUTPUT_DISABLE = "\e[?2026l".freeze
-    CURSOR_SHOW = "\e[?25h".freeze
-    CURSOR_HIDE = "\e[?25l".freeze
-    CURSOR_SHAPE_DEFAULT = "\e[0 q".freeze
-    CURSOR_SHAPE_BAR = "\e[6 q".freeze
+    KEYBOARD_PROTOCOL_ENABLE = TerminalSequences::KEYBOARD_PROTOCOL_ENABLE
+    KEYBOARD_PROTOCOL_RESTORE = TerminalSequences::KEYBOARD_PROTOCOL_RESTORE
+    BRACKETED_PASTE_ENABLE = TerminalSequences::BRACKETED_PASTE_ENABLE
+    BRACKETED_PASTE_RESTORE = TerminalSequences::BRACKETED_PASTE_RESTORE
+    BRACKETED_PASTE_START = TerminalSequences::BRACKETED_PASTE_START
+    BRACKETED_PASTE_END = TerminalSequences::BRACKETED_PASTE_END
+    SYNCHRONIZED_OUTPUT_ENABLE = TerminalSequences::SYNCHRONIZED_OUTPUT_ENABLE
+    SYNCHRONIZED_OUTPUT_DISABLE = TerminalSequences::SYNCHRONIZED_OUTPUT_DISABLE
+    CURSOR_SHOW = TerminalSequences::CURSOR_SHOW
+    CURSOR_HIDE = TerminalSequences::CURSOR_HIDE
+    CURSOR_SHAPE_DEFAULT = TerminalSequences::CURSOR_SHAPE_DEFAULT
+    CURSOR_SHAPE_BAR = TerminalSequences::CURSOR_SHAPE_BAR
     SHIFT_ENTER_SEQUENCES = ["\e[13;2u", "\e[13;2~", "\e[27;2;13~", "\e\r", "\e\n"].freeze
     EXIT_INPUT = :exit_input
     CANCEL_INPUT = :cancel_input

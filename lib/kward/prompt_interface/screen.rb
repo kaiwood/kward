@@ -95,7 +95,7 @@ module Kward
         old_top = [height - old_reserved_rows + 1, 1].max
         @reserved_rows = new_reserved_rows
         new_top = composer_top_row(height)
-        @output_io.print("\e[1;#{transcript_bottom_row(height)}r")
+        @output_io.print(TerminalSequences.scroll_region(1, transcript_bottom_row(height)))
         clear_screen_rows_locked(old_top, new_top - 1) if new_top > old_top
         @last_composer_rows = []
         redraw_transcript_locked(width: width, height: height) if redraw_transcript && new_reserved_rows < old_reserved_rows
@@ -119,7 +119,7 @@ module Kward
       end
 
       def restore_scroll_region_locked
-        @output_io.print("\e[r")
+        @output_io.print(TerminalSequences.restore_scroll_region)
         @reserved_rows = 0
       end
 
@@ -188,7 +188,7 @@ module Kward
       end
 
       def move_to_screen(row, col)
-        @output_io.print("\e[#{row};#{col}H")
+        @output_io.print(TerminalSequences.move_to(row, col))
       end
 
       def screen_size

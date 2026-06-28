@@ -1,5 +1,5 @@
-require "base64"
 require "open3"
+require_relative "terminal_sequences"
 require "rbconfig"
 
 # Namespace for the Kward CLI agent runtime.
@@ -39,8 +39,7 @@ module Kward
     end
 
     def write_osc52(content)
-      encoded = Base64.strict_encode64(content)
-      @output.print("\e]52;c;#{encoded}\a")
+      @output.print(TerminalSequences.osc52(content))
       @output.flush if @output.respond_to?(:flush)
     end
 

@@ -236,7 +236,7 @@ module Kward
         end
 
         @editor_state.copy_for_kill_ring(range[0], range[1])
-        @output_io.print("\e]52;c;#{Base64.strict_encode64(@editor_state.kill_buffer)}\a")
+        @output_io.print(TerminalSequences.osc52(@editor_state.kill_buffer))
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.clear_selection
         @editor_state.status = "Copied region"
