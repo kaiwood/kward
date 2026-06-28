@@ -270,20 +270,7 @@ module Kward
       end
 
       def parse_editor_mouse_key(key)
-        match = key.to_s.match(/\A\e\[<(\d+);(\d+);(\d+)([Mm])/)
-        return nil unless match
-
-        code = match[1].to_i
-        {
-          code: code,
-          button: code & 3,
-          column: match[2].to_i,
-          row: match[3].to_i,
-          action: match[4],
-          release: match[4] == "m",
-          drag: (code & 32).positive?,
-          remaining: key.to_s[match[0].length..].to_s
-        }
+        parse_sgr_mouse_event(key)
       end
 
       def handle_editor_mouse_press(event)

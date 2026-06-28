@@ -257,11 +257,10 @@ module Kward
       end
 
       def handle_mouse_reporting_key(key)
-        text = key.to_s
-        match = text.match(/\A(?:\e)?\[<\d+;\d+;\d+[Mm]/)
-        return false unless match
+        event = parse_sgr_mouse_event(key)
+        return false unless event
 
-        queue_pending_keys(text[match[0].length..]) if match[0].length < text.length
+        queue_pending_keys(event[:remaining]) unless event[:remaining].empty?
         true
       end
 
@@ -272,6 +271,23 @@ module Kward
         yield normalize_paste(paste[:content])
         queue_pending_keys(paste[:remaining]) if paste[:remaining] && !paste[:remaining].empty?
         true
+      end
+
+      def parse_sgr_mouse_event(key)
+        match = key.to_s.match(/\A(?:\e)?\[<(\d+);(\d+);(\d+)([Mm])/)
+        return nil unless match
+
+        code = match[1].to_i
+        {
+          code: code,
+          button: code & 3,
+          column: match[2].to_i,
+          row: match[3].to_i,
+          action: match[4],
+          release: match[4] == "m",
+          drag: (code & 32).positive?,
+          remaining: key.to_s[match[0].length..].to_s
+        }
       end
 
       def read_bracketed_paste(key)

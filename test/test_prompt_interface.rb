@@ -59,6 +59,15 @@ class TestPromptInterface < KwardTestCase
     assert_equal "", prompt.send(:composer_input)
   end
 
+  def test_prompt_interface_requeues_keys_after_mouse_reporting_sequence
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_equal true, prompt.send(:handle_key, "\e[<34;95;55Mx")
+    prompt.send(:handle_key, prompt.instance_variable_get(:@pending_keys).shift)
+
+    assert_equal "x", prompt.send(:composer_input)
+  end
+
   def test_prompt_interface_start_forces_mouse_reporting_off_outside_editor
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
