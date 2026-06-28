@@ -288,9 +288,16 @@ Use `/pty <command>` for commands that need to own the terminal temporarily, suc
 /pty git log
 ```
 
+Inside `/shell`, use the `pty` built-in so the command inherits the embedded shell's current directory and environment:
+
+```sh
+pty git log
+pty vim README.md
+```
+
 Kward runs the command in a PTY, forwards your keyboard input to the process, and streams the process output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt and records only a short session summary in the transcript instead of raw full-screen terminal control output.
 
-`/pty` is explicit on purpose. Normal `/shell` commands remain captured and transcript-friendly; `/pty` is for commands where the child process should temporarily own the terminal.
+`/pty` and shell `pty` are explicit on purpose. Normal `/shell` commands remain captured and transcript-friendly; `pty` is for commands where the child process should temporarily own the terminal.
 
 ## `/shell` versus `!command`
 
