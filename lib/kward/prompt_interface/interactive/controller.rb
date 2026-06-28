@@ -50,7 +50,7 @@ module Kward
       # @param row [Integer] zero-based row
       # @param col [Integer] zero-based column
       # @param char [String] single character to display
-      # @param color [Symbol, String, nil] ANSI style name or raw SGR code
+      # @param colors [Array<Symbol, String>] ANSI style names or raw SGR codes
       # @return [void]
       def put(row, col, char, *colors)
         row = row.to_i
