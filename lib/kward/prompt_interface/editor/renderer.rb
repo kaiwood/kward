@@ -229,9 +229,10 @@ module Kward
       end
 
       def editor_display_path
-        Pathname.new(@editor_state.path).relative_path_from(Pathname.new(Dir.pwd)).to_s
+        path = @editor_state.path || @editor_state.display_path
+        Pathname.new(path).relative_path_from(Pathname.new(Dir.pwd)).to_s
       rescue StandardError
-        @editor_state.path
+        @editor_state.display_path || @editor_state.path
       end
 
       def editor_status_text

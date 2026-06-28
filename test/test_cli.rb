@@ -475,6 +475,21 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_loop_opens_scratchpad_without_model_turn
+    prompt = FakePrompt.new(["/scratchpad ruby", "/exit"])
+    opened = []
+    prompt.define_singleton_method(:scratchpad) { |language| opened << language }
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.interactive_loop(agent: agent)
+
+    assert_equal [:ruby], opened
+  end
+
   def test_interactive_loop_opens_files_browser_without_model_turn
     prompt = FakePrompt.new(["/files", "/exit"])
     opened = false

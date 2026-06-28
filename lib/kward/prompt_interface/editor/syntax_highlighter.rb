@@ -134,11 +134,13 @@ module Kward
 
       def editor_syntax_language
         return nil unless @editor_state
+        return @editor_state.language if @editor_state.language
 
+        path = @editor_state.path || @editor_state.display_path
         @editor_syntax_language_path ||= nil
-        if @editor_syntax_language_path != @editor_state.path
-          @editor_syntax_language_path = @editor_state.path
-          @editor_syntax_language = editor_detect_syntax_language(@editor_state.path)
+        if @editor_syntax_language_path != path
+          @editor_syntax_language_path = path
+          @editor_syntax_language = editor_detect_syntax_language(path)
         end
         @editor_syntax_language
       end

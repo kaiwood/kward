@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `/scratchpad [text|markdown|ruby]` for opening unsaved editor buffers, including Vibe `:w filename` save-as support and Ruby `:run`/Modern `Ctrl+R` output written after `__END__`.
 - Added `/pty <command>` and the `ekwsh` `pty <command>` built-in for explicit interactive PTY passthrough sessions, enabling terminal-owned tools such as pagers to run from Kward.
 - Added minimal PTY execution for external `ekwsh` commands so terminal-aware tools can detect a TTY and terminal width.
 - Added Ctrl+C cancellation for running `ekwsh` commands and preserved tab-switch actions while shell commands are active.

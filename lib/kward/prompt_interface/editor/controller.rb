@@ -1,3 +1,6 @@
+require "fileutils"
+require_relative "../../scratchpad_runner"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Interactive terminal UI used by the CLI frontend.
@@ -41,6 +44,31 @@ module Kward
         "$#{relative_path}"
       rescue ArgumentError
         "$#{path}"
+      end
+
+      def open_scratchpad(language = :text, content: "")
+        language = normalize_scratchpad_language(language)
+        @editor_state = EditorState.new(
+          path: scratchpad_display_path(language),
+          display_path: scratchpad_display_path(language),
+          content: content.to_s,
+          new_file: true,
+          editor_mode: current_editor_mode,
+          virtual: true,
+          language: language
+        )
+        @editor_state.status = scratchpad_status_text(language)
+        @prompt_label = "Edit>"
+        self.composer_input = ""
+        self.composer_cursor = 0
+        @composer.clear_attachments
+        @pending_keys.clear
+        @file_overlay_dismissed_token = nil
+        @file_open_dismissed_token = nil
+        @asking = true
+        set_editor_bar_cursor_locked if current_editor_bar_cursor?
+        enable_editor_mouse_reporting
+        true
       end
 
       def open_editor(path, allow_new: false, base_dir: Dir.pwd, restrict_to_workspace: true)
@@ -131,6 +159,8 @@ module Kward
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked
         @editor_text_width = nil
+        @editor_save_as_active = false
+        @editor_save_as_buffer = ""
         @editor_state = nil
         @prompt_label = "You>"
         self.composer_input = ""
@@ -143,6 +173,7 @@ module Kward
         return if key.nil?
         mouse_result = handle_editor_mouse_key(key)
         return mouse_result unless mouse_result == false
+        return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
         return handle_vibe_key(key) if @editor_state&.vibe?
         return handle_emacs_key(key) if @editor_state&.emacs?
@@ -992,12 +1023,24 @@ module Kward
         true
       end
 
-      def save_editor
+      def save_editor(path = nil, prompt_for_path: true)
         return false unless @editor_state
         if @editor_state.readonly?
           @editor_state.status = "Read-only diff"
           return true
         end
+
+        if path.to_s.strip.empty? && @editor_state.path.to_s.empty?
+          if prompt_for_path
+            begin_editor_save_as
+            return true
+          end
+
+          @editor_state.status = "Use :w filename"
+          return false
+        end
+
+        return false if !path.to_s.strip.empty? && !bind_editor_save_path(path)
 
         if @editor_state.file_changed_on_disk? && !@editor_state.overwrite_confirmed
           @editor_state.overwrite_confirmed = true
@@ -1005,12 +1048,166 @@ module Kward
           return true
         end
 
+        parent = File.dirname(@editor_state.path)
+        FileUtils.mkdir_p(parent) unless Dir.exist?(parent)
         File.write(@editor_state.path, @editor_state.buffer)
         @editor_state.refresh_after_save(@editor_state.buffer)
         true
       rescue StandardError => e
         @editor_state.status = "Save failed: #{e.message}" if @editor_state
         false
+      end
+
+      def begin_editor_save_as
+        @editor_save_as_active = true
+        @editor_save_as_buffer = ""
+        @editor_state.status = "Save as: "
+        true
+      end
+
+      def handle_editor_save_as_key(key)
+        return true if handle_bundled_key(key) { |token| handle_editor_save_as_key(token) }
+
+        csi_result = handle_editor_save_as_csi_u_key(key)
+        return csi_result unless csi_result == false
+
+        case key
+        when "\n", "\r"
+          finish_editor_save_as
+        when "\e", TerminalKeys::CTRL_C
+          cancel_editor_save_as
+        when "\b", "\x7F"
+          @editor_save_as_buffer = @editor_save_as_buffer.to_s[0...-1]
+          update_editor_save_as_status
+        else
+          key_name = key_name_for(key)
+          case key_name
+          when :return, :enter
+            finish_editor_save_as
+          when :backspace
+            @editor_save_as_buffer = @editor_save_as_buffer.to_s[0...-1]
+            update_editor_save_as_status
+          else
+            if printable_key?(key)
+              @editor_save_as_buffer = @editor_save_as_buffer.to_s + key
+              update_editor_save_as_status
+            end
+          end
+        end
+        true
+      end
+
+      def handle_editor_save_as_csi_u_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        code = sequence[:code]
+        modifier = sequence[:modifier]
+        normalized_code = ctrl_code(code)
+        if code == 13
+          return finish_editor_save_as
+        elsif [8, 127].include?(code)
+          @editor_save_as_buffer = @editor_save_as_buffer.to_s[0...-1]
+          return update_editor_save_as_status
+        elsif code == 27 || (ctrl_modifier?(modifier) && normalized_code == 99)
+          return cancel_editor_save_as
+        end
+
+        text = csi_u_printable_text(sequence)
+        if text
+          @editor_save_as_buffer = @editor_save_as_buffer.to_s + text
+          return update_editor_save_as_status
+        end
+
+        true
+      end
+
+      def finish_editor_save_as
+        path = @editor_save_as_buffer.to_s.strip
+        @editor_save_as_active = false
+        @editor_save_as_buffer = ""
+        if path.empty?
+          @editor_state.status = "Save canceled"
+          return true
+        end
+
+        save_editor(path, prompt_for_path: false)
+      end
+
+      def cancel_editor_save_as
+        @editor_save_as_active = false
+        @editor_save_as_buffer = ""
+        @editor_state.status = "Save canceled"
+        true
+      end
+
+      def update_editor_save_as_status
+        @editor_state.status = "Save as: #{@editor_save_as_buffer}"
+        true
+      end
+
+      def bind_editor_save_path(path)
+        full_path = File.expand_path(path.to_s.strip, Dir.pwd)
+        root = File.expand_path(Dir.pwd)
+        unless full_path == root || full_path.start_with?("#{root}/")
+          @editor_state.status = "Cannot save outside workspace"
+          return false
+        end
+
+        @editor_state.bind_path(full_path)
+        @editor_syntax_language_path = nil
+        @editor_indent_unit_path = nil
+        true
+      end
+
+      def run_editor_buffer
+        return false unless @editor_state
+
+        language = @editor_state.language || editor_syntax_language
+        result = ScratchpadRunner.run(language, @editor_state.buffer)
+        @editor_state.replace_range(0, @editor_state.buffer.length, result.buffer)
+        @editor_state.status = "Ran #{language} (exit #{result.exit_status})"
+        true
+      rescue StandardError => e
+        @editor_state.status = "Run failed: #{e.message}" if @editor_state
+        false
+      end
+
+      def normalize_scratchpad_language(language)
+        case language.to_s.strip.downcase
+        when "", "text", "txt"
+          :text
+        when "markdown", "md"
+          :markdown
+        when "ruby", "rb"
+          :ruby
+        else
+          :text
+        end
+      end
+
+      def scratchpad_display_path(language)
+        case language.to_sym
+        when :markdown
+          "scratchpad.md"
+        when :ruby
+          "scratchpad.rb"
+        else
+          "scratchpad.txt"
+        end
+      end
+
+      def scratchpad_status_text(language)
+        runnable = language.to_sym == :ruby
+        case current_editor_mode
+        when "vibe"
+          runnable ? "NORMAL · i insert · :w filename save · :q quit · :run run" : "NORMAL · i insert · :w filename save · :q quit"
+        when "emacs"
+          runnable ? "C-x C-s save as · C-x C-c quit · C-r run" : "C-x C-s save as · C-x C-c quit"
+        else
+          runnable ? "Ctrl+S save as · Ctrl+Q quit · Ctrl+R run" : "Ctrl+S save as · Ctrl+Q quit"
+        end
       end
 
       def printable_key?(key)

@@ -59,6 +59,8 @@ module Kward
           quit_editor
         when TerminalKeys::CTRL_S
           save_editor
+        when TerminalKeys::CTRL_R
+          modern_record_undo { run_editor_buffer } unless editor_search_active?
         when TerminalKeys::CTRL_Z
           @editor_state.undo unless editor_search_active?
         else
@@ -237,6 +239,8 @@ module Kward
           return false unless modern_ctrl_shift_key?(code, modifier)
 
           @editor_state.selection_to_line_start_cursors
+        when 114
+          modern_record_undo { run_editor_buffer } unless editor_search_active?
         when 122
           return if editor_search_active?
 

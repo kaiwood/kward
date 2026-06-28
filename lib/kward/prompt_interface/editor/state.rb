@@ -16,16 +16,19 @@ module Kward
   class PromptInterface
     # Mutable state for the built-in composer file editor.
     class EditorState
-      attr_reader :path, :original_content, :original_digest, :original_mtime, :original_size
+      attr_reader :path, :display_path, :language, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer, :undo_stack, :redo_stack, :kill_buffer, :kill_ring, :last_yank_range, :last_yank_index
       attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :readonly, :diff_view
 
-      def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false)
-        @path = path.to_s
+      def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false, virtual: false, display_path: nil, language: nil)
+        @path = virtual ? nil : path.to_s
+        @display_path = display_path.to_s.empty? ? path.to_s : display_path.to_s
+        @language = language&.to_sym
         @new_file = new_file
         @readonly = readonly
         @diff_view = diff_view
-        @file_marker = EditorFileMarker.new(path: @path, content: content, new_file: new_file)
+        @virtual = virtual == true
+        @file_marker = EditorFileMarker.new(path: @path || @display_path, content: content, new_file: new_file || virtual?)
         @original_content = @file_marker.content
         @original_digest = @file_marker.digest
         @original_mtime = @file_marker.mtime
@@ -61,9 +64,12 @@ module Kward
 
       def initialize_copy(other)
         super
-        @path = other.path.dup
+        @path = other.path&.dup
+        @display_path = other.display_path.dup
+        @language = other.language
+        @virtual = other.virtual?
         @original_content = other.original_content.dup
-        @file_marker = EditorFileMarker.new(path: @path, content: @original_content, new_file: other.new_file)
+        @file_marker = EditorFileMarker.new(path: @path || @display_path, content: @original_content, new_file: other.new_file || @virtual)
         @original_digest = other.original_digest.dup
         @original_mtime = other.original_mtime
         @original_size = other.original_size
@@ -304,6 +310,18 @@ module Kward
 
       def readonly?
         @readonly == true
+      end
+
+      def virtual?
+        @virtual == true
+      end
+
+      def bind_path(path)
+        @path = path.to_s
+        @display_path = @path
+        @virtual = false
+        @new_file = !File.exist?(@path)
+        @file_marker = EditorFileMarker.new(path: @path, content: @original_content, new_file: true)
       end
 
       def diff_view?
@@ -938,6 +956,8 @@ module Kward
 
       def refresh_after_save(content)
         @new_file = false
+        @virtual = false
+        @display_path = @path.to_s
         @file_marker.refresh(content)
         @original_content = @file_marker.content
         @original_digest = @file_marker.digest
@@ -949,6 +969,8 @@ module Kward
       end
 
       def file_changed_on_disk?
+        return false if virtual?
+
         @file_marker.changed_on_disk?(new_file: new_file)
       end
 

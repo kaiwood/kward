@@ -268,9 +268,10 @@ module Kward
       end
 
       def editor_indent_unit
+        path = @editor_state.path || @editor_state.display_path
         @editor_indent_unit_path ||= nil
-        if @editor_indent_unit_path != @editor_state.path
-          @editor_indent_unit_path = @editor_state.path
+        if @editor_indent_unit_path != path
+          @editor_indent_unit_path = path
           @editor_indent_unit = detect_editor_indent_unit
         end
         @editor_indent_unit

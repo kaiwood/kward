@@ -400,6 +400,7 @@ module Kward
           startupResources: { supported: true, method: "resources/startup" },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
           shell: { supported: false, reason: "interactiveTuiOnly" },
+          scratchpad: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
             question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
             select: false,

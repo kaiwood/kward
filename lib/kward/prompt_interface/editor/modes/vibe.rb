@@ -207,12 +207,18 @@ module Kward
         case command
         when "w"
           save_editor
+        when /\Aw\s+(.+)\z/
+          save_editor(Regexp.last_match(1))
+        when "run"
+          vibe_record_undo { run_editor_buffer }
         when "q"
           vibe_quit_editor
         when "q!"
           close_editor
         when "wq"
           save_editor && close_editor
+        when /\Awq\s+(.+)\z/
+          save_editor(Regexp.last_match(1)) && close_editor
         when "x"
           save_editor if @editor_state&.dirty?
           close_editor if @editor_state

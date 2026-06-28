@@ -31,6 +31,9 @@ module Kward
         when "shell"
           run_ekwsh(agent)
           [true, nil]
+        when "scratchpad"
+          open_scratchpad_command(argument)
+          [true, nil]
         when "pty"
           run_interactive_pty_command(argument, agent)
           [true, nil]
@@ -126,6 +129,23 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def open_scratchpad_command(argument)
+        if @prompt.respond_to?(:scratchpad)
+          @prompt.scratchpad(scratchpad_language_argument(argument))
+        else
+          runtime_output("The scratchpad is only available in the interactive prompt.")
+        end
+      end
+
+      def scratchpad_language_argument(argument)
+        value = argument.to_s.strip.downcase
+        return :text if value.empty? || value == "text"
+        return :markdown if ["markdown", "md"].include?(value)
+        return :ruby if ["ruby", "rb"].include?(value)
+
+        :text
       end
 
       def open_project_files_browser

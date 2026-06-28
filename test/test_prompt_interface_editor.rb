@@ -98,6 +98,105 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_includes prompt.send(:editor_render_diff_line, "-old"), "\e[31m-old\e[0m"
   end
 
+  def test_prompt_interface_opens_text_scratchpad
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+
+    assert prompt.send(:open_scratchpad, :text)
+
+    editor = prompt.instance_variable_get(:@editor_state)
+    assert editor.virtual?
+    assert_nil editor.path
+    assert_equal "scratchpad.txt", editor.display_path
+    assert_equal :text, editor.language
+  end
+
+  def test_prompt_interface_modern_ctrl_s_prompts_for_scratchpad_filename
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_scratchpad, :text)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.insert("hello")
+
+        prompt.send(:handle_editor_key, "\x13")
+        "notes.txt".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\r")
+
+        assert_equal "hello", File.read(File.join(dir, "notes.txt"))
+        assert_equal "Saved #{File.realpath(File.join(dir, "notes.txt"))}", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_s_save_as_accepts_csi_u_text
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_scratchpad, :text)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.insert("hello")
+
+        prompt.send(:handle_editor_key, "\x13")
+        "notes.txt".each_char { |char| prompt.send(:handle_editor_key, "\e[#{char.ord};1u") }
+        prompt.send(:handle_editor_key, "\e[13;1u")
+
+        assert_equal "hello", File.read(File.join(dir, "notes.txt"))
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_w_filename_saves_scratchpad
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_scratchpad, :ruby)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.insert("puts 'hi'\n")
+
+        prompt.send(:execute_vibe_command, "w saved.rb")
+
+        assert_equal "puts 'hi'\n", File.read(File.join(dir, "saved.rb"))
+        refute editor.virtual?
+        assert_equal File.realpath(File.join(dir, "saved.rb")), File.realpath(editor.path)
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_ctrl_r_runs_ruby_scratchpad
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    assert_equal "Ctrl+S save as · Ctrl+Q quit · Ctrl+R run", editor.status
+    editor.insert("puts 'ok'\n")
+
+    prompt.send(:handle_editor_key, "\x12")
+
+    assert_equal "puts 'ok'\n\n__END__\nok\n", editor.buffer
+  end
+
+  def test_prompt_interface_modern_csi_u_ctrl_r_runs_ruby_scratchpad
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.insert("puts 'ok'\n")
+
+    prompt.send(:handle_editor_key, "\e[114;5u")
+
+    assert_equal "puts 'ok'\n\n__END__\nok\n", editor.buffer
+  end
+
+  def test_prompt_interface_vibe_run_writes_ruby_output_after_end_marker
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.insert("puts DATA.read.upcase\n\n__END__\nfoo\n")
+
+    prompt.send(:execute_vibe_command, "run")
+
+    assert_equal "puts DATA.read.upcase\n\n__END__\nFOO\n", editor.buffer
+    assert_equal "Ran ruby (exit 0)", editor.status
+  end
+
   def test_prompt_interface_modern_ctrl_s_saves_file
     Dir.mktmpdir do |dir|
       path = File.join(dir, "notes.txt")

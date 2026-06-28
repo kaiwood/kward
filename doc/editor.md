@@ -32,12 +32,33 @@ For a nested project tree, run:
 
 In the tree browser, use `↑`/`↓` to move, `←`/`→` to collapse or expand directories, `Enter` to toggle a directory or open a file, `Tab` or `/` to search, `@` to insert the selected file as an `@path` mention, and `Esc` to close. When you open a file from `/files`, quitting the editor returns to the browser at the same position.
 
+For an unsaved buffer, open a scratchpad:
+
+```text
+/scratchpad
+/scratchpad markdown
+/scratchpad ruby
+```
+
+Scratchpads start as virtual editor buffers named `scratchpad.txt`, `scratchpad.md`, or `scratchpad.rb`. In Vibe mode, save one to a real file with `:w filename`.
+Ruby scratchpads can run with `:run` in Vibe mode or `Ctrl+R` in Modern mode; Kward executes the buffer and writes combined output after `__END__`, replacing any previous output there.
+
+```ruby
+puts "foo"
+
+__END__
+foo
+```
+
+The next run receives the current `__END__` section as Ruby `DATA`, then replaces it with the new output.
+
 You can also type a relative path yourself and press `Enter`. If the file does not exist, Kward asks whether to create it.
 
 A few things to know:
 
 - `$` only opens the editor when it is the first character in the composer.
-- Once a file opens, the composer becomes the editor.
+- `/scratchpad` opens a plain-text scratchpad; pass `markdown` or `ruby` to pick another mode.
+- Once a file or scratchpad opens, the composer becomes the editor.
 - Save or quit to return to normal chat.
 - If the file changed on disk while you were editing, Kward asks before overwriting it.
 - If you quit with unsaved changes, Kward asks before discarding them.
@@ -51,7 +72,7 @@ $doc/editor.md
 1. Type `$doc/editor.md` in the composer.
 2. Pick the file from the matching results, or press `Enter` if the path is already complete.
 3. Edit the file.
-4. Save with `Ctrl+S` in Modern mode, `C-x C-s` in Emacs mode, or `:w` in Vibe mode.
+4. Save with `Ctrl+S` in Modern mode, `C-x C-s` in Emacs mode, or `:w` in Vibe mode. For an unsaved scratchpad in Vibe mode, use `:w filename`.
 5. Quit with `Ctrl+Q`, `C-x C-c`, or `:q`.
 6. Continue chatting with Kward.
 

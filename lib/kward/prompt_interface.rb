@@ -333,6 +333,18 @@ module Kward
       run_editor
     end
 
+    def scratchpad(language = :text)
+      start(render: false)
+      opened = @mutex.synchronize do
+        open_scratchpad(language).tap do
+          render_prompt_locked
+        end
+      end
+      return false unless opened
+
+      run_editor
+    end
+
     def run_editor
       loop do
         key = read_key(nonblock: true)
