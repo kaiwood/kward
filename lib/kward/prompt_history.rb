@@ -11,13 +11,14 @@ module Kward
 
     Entry = Struct.new(:value, :timestamp, keyword_init: true)
 
-    def initialize(config_dir: ConfigFiles.config_dir, cwd: Dir.pwd, limit: DEFAULT_LIMIT)
+    def initialize(config_dir: ConfigFiles.config_dir, cwd: Dir.pwd, limit: DEFAULT_LIMIT, kind: "prompt")
       @config_dir = config_dir
       @cwd = ConfigFiles.canonical_workspace_root(cwd)
       @limit = limit.to_i.positive? ? limit.to_i : DEFAULT_LIMIT
+      @kind = kind.to_s.empty? ? "prompt" : kind.to_s
     end
 
-    attr_reader :cwd, :limit
+    attr_reader :cwd, :limit, :kind
 
     def values
       entries.map(&:value)
@@ -35,7 +36,7 @@ module Kward
     end
 
     def path
-      ConfigFiles.prompt_history_path(@cwd, config_dir: @config_dir)
+      ConfigFiles.prompt_history_path(@cwd, config_dir: @config_dir, kind: @kind)
     end
 
     private
@@ -73,6 +74,7 @@ module Kward
       {
         type: "prompt_history_header",
         version: 1,
+        kind: @kind,
         workspace: @cwd,
         workspaceHash: File.basename(path, ".jsonl"),
         limit: limit

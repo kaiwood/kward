@@ -63,6 +63,8 @@ unset FOO
 
 Shell output is shown in the transcript area, but it is not added to the AI conversation history.
 
+Shell commands are persisted in a separate workspace-scoped shell history. They do not share the normal Kward prompt history used for chat prompts. The shell history limit is controlled by `history_limit` in `ekwsh.yml`.
+
 ## Built-ins
 
 `ekwsh` handles a small set of built-ins itself:
@@ -197,7 +199,7 @@ aliases:
 | `max_output_bytes` | `1048576` | Maximum captured output for one command. |
 | `history_limit` | `1000` | Maximum persisted shell history entries per workspace. |
 
-The timeout, output cap, and history limit are validated now and used by the shell runtime as those features are expanded.
+The timeout and output cap are validated now and used by the shell runtime as command execution is expanded.
 
 ### Environment variables
 

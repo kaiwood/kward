@@ -2419,6 +2419,28 @@ class TestPromptInterface < KwardTestCase
     end
   end
 
+  def test_prompt_interface_switches_prompt_history_temporarily
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        prompt_history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace)
+        shell_history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace, kind: "shell")
+        input, writer = IO.pipe
+        output = StringIO.new
+        writer.write("shell command\rnormal prompt\r")
+        writer.close
+        prompt = Kward::PromptInterface.new(input: input, output: output, prompt_history: prompt_history)
+
+        assert_equal "shell command", prompt.with_prompt_history(shell_history) { prompt.ask("Shell $") }
+        assert_equal "normal prompt", prompt.ask("You>")
+
+        assert_equal ["shell command"], Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace, kind: "shell").values
+        assert_equal ["normal prompt"], Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace).values
+      ensure
+        input&.close unless input&.closed?
+      end
+    end
+  end
+
   def test_prompt_interface_preserves_persistent_history_after_empty_snapshot_restore
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|

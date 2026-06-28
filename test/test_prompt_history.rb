@@ -54,7 +54,25 @@ class TestPromptHistory < KwardTestCase
         assert_equal "prompt_history_header", header["type"]
         assert_equal File.realpath(workspace), header["workspace"]
         assert_equal File.basename(history.path, ".jsonl"), header["workspaceHash"]
+        assert_equal "prompt", header["kind"]
         assert_equal Kward::PromptHistory::DEFAULT_LIMIT, header["limit"]
+      end
+    end
+  end
+
+  def test_prompt_history_separates_shell_history
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        prompt_history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace)
+        shell_history = Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace, kind: "shell")
+
+        prompt_history.append("explain this project")
+        shell_history.append("git status --short")
+
+        assert_equal ["explain this project"], Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace).values
+        assert_equal ["git status --short"], Kward::PromptHistory.new(config_dir: config_dir, cwd: workspace, kind: "shell").values
+        refute_equal prompt_history.path, shell_history.path
+        assert_equal "shell", JSON.parse(File.readlines(shell_history.path, chomp: true).first)["kind"]
       end
     end
   end

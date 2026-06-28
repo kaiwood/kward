@@ -307,6 +307,16 @@ module Kward
       @completion_provider = previous
     end
 
+    def with_prompt_history(history)
+      previous_history = @prompt_history
+      @prompt_history = history
+      load_history(@prompt_history.values) if @prompt_history
+      yield
+    ensure
+      @prompt_history = previous_history
+      load_history(@prompt_history.values) if @prompt_history
+    end
+
     def editing_file?
       @mutex.synchronize { editor_active? }
     end

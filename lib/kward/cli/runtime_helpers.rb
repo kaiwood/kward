@@ -125,7 +125,7 @@ module Kward
         shell = tab&.shell || build_ekwsh(agent)
         tab.shell = shell if tab
         runtime_output("Entering ekwsh. Type exit or press Ctrl+D on an empty prompt to return.") if entering
-        run_ekwsh_loop(shell, tab: tab)
+        run_ekwsh_loop(shell, tab: tab, history: build_ekwsh_history(agent))
       end
 
       def build_ekwsh(agent)
@@ -138,7 +138,22 @@ module Kward
         )
       end
 
-      def run_ekwsh_loop(shell, tab: nil)
+      def build_ekwsh_history(agent)
+        config = ConfigFiles.read_ekwsh_config
+        PromptHistory.new(
+          cwd: interactive_workspace_root(agent),
+          limit: config[:history_limit],
+          kind: "shell"
+        )
+      end
+
+      def run_ekwsh_loop(shell, tab: nil, history: nil)
+        with_ekwsh_history(history) do
+          run_ekwsh_loop_with_history(shell, tab: tab)
+        end
+      end
+
+      def run_ekwsh_loop_with_history(shell, tab: nil)
         loop do
           if @prompt.respond_to?(:editing_file?) && @prompt.editing_file?
             editor_result = @prompt.run_editor
@@ -173,6 +188,14 @@ module Kward
         tab.shell = nil if tab
         runtime_output("Shell exited.")
         :exited
+      end
+
+      def with_ekwsh_history(history)
+        if history && @prompt.respond_to?(:with_prompt_history)
+          @prompt.with_prompt_history(history) { yield }
+        else
+          yield
+        end
       end
 
       def open_ekwsh_editor(path, shell)

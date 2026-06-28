@@ -373,7 +373,7 @@ module Kward
 
       loop do
         if @pending_inputs.empty? && active_tab&.shell
-          run_ekwsh_loop(active_tab.shell, tab: active_tab)
+          run_ekwsh_loop(active_tab.shell, tab: active_tab, history: build_ekwsh_history(active_tab.agent))
         end
         input = @pending_inputs.shift || (active_tab ? poll_active_tab_input : @prompt.ask("You>"))
         if input.is_a?(Hash) && input[:tab_action]

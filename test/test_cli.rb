@@ -579,6 +579,34 @@ class TestCLI < KwardTestCase
     assert_empty conversation.messages
   end
 
+  def test_interactive_loop_persists_ekwsh_history_separately
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      input, writer = IO.pipe
+      writer.write("/shell\npwd\nexit\nnormal prompt\n/exit\n")
+      writer.close
+      prompt_history = Kward::PromptHistory.new(config_dir: dir, cwd: workspace)
+      prompt = Kward::PromptInterface.new(input: input, output: StringIO.new, prompt_history: prompt_history)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: workspace)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| "done" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal ["pwd", "exit"], Kward::PromptHistory.new(config_dir: dir, cwd: workspace, kind: "shell").values
+      assert_equal ["/shell", "normal prompt", "/exit"], Kward::PromptHistory.new(config_dir: dir, cwd: workspace).values
+    ensure
+      prompt&.close
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_interactive_loop_runs_bang_shell_command_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!echo hello", "/exit"])
