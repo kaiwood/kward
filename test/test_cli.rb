@@ -2022,6 +2022,18 @@ class TestCLI < KwardTestCase
     assert_includes research_output, "ruby: 1 result(s)"
   end
 
+  def test_read_skill_tool_output_starts_content_on_next_line
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+    content = "---\nname: beautiful-ruby\ndescription: Use when writing Ruby.\n---\n"
+
+    output = capture_io do
+      cli.send(:print_tool_result, tool_call("read_skill", name: "beautiful-ruby"), content)
+    end.first
+
+    assert_includes strip_ansi(output), "Tool> read_skill:\n\n---\nname: beautiful-ruby"
+    refute_includes strip_ansi(output), "Tool> read_skill: ---"
+  end
+
   def test_interactive_tool_output_limit_keeps_10_line_summary_unchanged
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
     content = (1..10).map { |index| "line#{index}" }.join("\n")

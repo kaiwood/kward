@@ -21,6 +21,8 @@ module Kward
           shell_command_summary(args, text)
         when "web_search"
           web_search_summary(args, text)
+        when "read_skill"
+          read_skill_summary(text)
         else
           generic_tool_summary(name, text)
         end
@@ -74,6 +76,10 @@ module Kward
         end
         lines << "#{web_search_total_count(content)} result(s)" if queries.empty?
         lines.join("\n")
+      end
+
+      def read_skill_summary(content)
+        "read_skill:\n#{content}"
       end
 
       def error_tool_summary(name, args, content)
