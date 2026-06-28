@@ -15,6 +15,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed `ekwsh` to default `GIT_PAGER` to `cat`, while preserving user-provided values, so Git commands do not unexpectedly enter an interactive pager under PTY execution.
 - Improved `ekwsh` POSIX-oriented built-ins, including `exit [status]`, stricter `cd`/`pwd`, `export NAME`, assignment persistence, `unalias`, and shared alias-name validation.
 - Changed `ekwsh` configuration to prefer a POSIX `/bin/sh` default shell and validate runtime settings for command timeout, output cap, and shell history size.
 

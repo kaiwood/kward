@@ -50,6 +50,22 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "1   truecolor xterm-256color"
   end
 
+  def test_defaults_git_pager_to_cat
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = shell.run("printf %s \"$GIT_PAGER\"")
+
+    assert_includes result.output, "cat"
+  end
+
+  def test_preserves_configured_git_pager
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "GIT_PAGER" => "less" })
+
+    result = shell.run("printf %s \"$GIT_PAGER\"")
+
+    assert_includes result.output, "less"
+  end
+
   def test_preserves_user_forced_color_environment
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "FORCE_COLOR" => "3", "CLICOLOR_FORCE" => "1" })
 

@@ -85,6 +85,7 @@ module Kward
     def configure_color_environment
       @env["CLICOLOR"] ||= "1"
       @env["COLORTERM"] ||= "truecolor"
+      @env["GIT_PAGER"] ||= "cat"
       @env["TERM"] = "xterm-256color" if @env["TERM"].to_s.empty? || @env["TERM"] == "dumb"
     end
 
