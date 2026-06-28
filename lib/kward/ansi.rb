@@ -1,6 +1,11 @@
 # Namespace for the Kward CLI agent runtime.
 module Kward
-  # ANSI color and terminal capability helpers.
+  # ANSI SGR styling and terminal-text helpers.
+  #
+  # Terminal control output sequences live in `TerminalSequences`, and input key
+  # sequences live in `TerminalKeys`. This module owns text-level concerns:
+  # colorizing strings, stripping/sanitizing escape sequences, visible wrapping,
+  # and lightweight Markdown rendering for terminal output.
   module ANSI
     SGR_PATTERN = /\e\[[0-9;:]*m/.freeze
     STYLES = {
@@ -52,12 +57,14 @@ module Kward
       strip_control_sequences(text)
     end
 
+    # Removes terminal escape/control sequences while preserving visible text.
     def strip_control_sequences(text)
       scan_escape_tokens(text).each_with_object(+"") do |token, stripped|
         stripped << token[:text] unless token[:escape]
       end
     end
 
+    # Drops unsafe terminal controls from transcript text while preserving SGR color.
     def sanitize_transcript(text)
       scan_escape_tokens(text).each_with_object(+"") do |token, sanitized|
         if token[:escape]
@@ -101,6 +108,7 @@ module Kward
       rows
     end
 
+    # Splits text into visible chunks and terminal escape sequence chunks.
     def scan_escape_tokens(text)
       string = text.to_s
       tokens = []
