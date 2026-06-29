@@ -92,6 +92,29 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_git_guard_stashes_and_restores_worker_changes
+    Dir.mktmpdir do |dir|
+      system("git", "-C", dir, "init", out: File::NULL, err: File::NULL)
+      File.write(File.join(dir, "tracked.txt"), "before\n")
+      system("git", "-C", dir, "add", "tracked.txt", out: File::NULL, err: File::NULL)
+      system("git", "-C", dir, "-c", "user.name=Kward Test", "-c", "user.email=kward@example.test", "commit", "-m", "initial", out: File::NULL, err: File::NULL)
+      File.write(File.join(dir, "tracked.txt"), "after\n")
+      File.write(File.join(dir, "new.txt"), "new\n")
+      guard = Kward::Workers::GitGuard.new(root: dir)
+
+      stash = guard.stash("kward-worker:test")
+      assert stash.success?
+      assert_equal "before\n", File.read(File.join(dir, "tracked.txt"))
+      refute File.exist?(File.join(dir, "new.txt"))
+
+      apply = guard.apply_stash(stash.commit)
+      assert apply.success?
+      assert_equal "after\n", File.read(File.join(dir, "tracked.txt"))
+      assert_equal "new\n", File.read(File.join(dir, "new.txt"))
+      assert guard.drop_stash(stash.commit).success?
+    end
+  end
+
   def test_worker_queue_runner_runs_next_session_job_and_commits_changes
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

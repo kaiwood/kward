@@ -41,6 +41,24 @@ module Kward
         Result.new(success: true, stdout: commit.stdout, stderr: commit.stderr, commit: head)
       end
 
+      def stash(message)
+        before = stash_refs
+        result = run("stash", "push", "--include-untracked", "-m", message)
+        return Result.new(success: false, stdout: result.stdout, stderr: result.stderr) unless result.success?
+        return Result.new(success: true, stdout: result.stdout, stderr: result.stderr) if result.stdout.include?("No local changes")
+
+        ref = (stash_refs - before).first || stash_refs.first
+        Result.new(success: true, stdout: result.stdout, stderr: result.stderr, commit: ref)
+      end
+
+      def apply_stash(ref)
+        run("stash", "apply", ref.to_s)
+      end
+
+      def drop_stash(ref)
+        run("stash", "drop", ref.to_s)
+      end
+
       private
 
       Result = Struct.new(:success, :stdout, :stderr, :commit, keyword_init: true) do
@@ -55,6 +73,13 @@ module Kward
 
       def success?(*args)
         run(*args).success?
+      end
+
+      def stash_refs
+        result = run("stash", "list", "--format=%gd")
+        return [] unless result.success?
+
+        result.stdout.lines.map(&:strip).reject(&:empty?)
       end
 
       def run(*args)
