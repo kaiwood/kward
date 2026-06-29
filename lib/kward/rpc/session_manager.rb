@@ -27,6 +27,7 @@ require_relative "../transcript_export"
 require_relative "../workspace"
 require_relative "attachment_normalizer"
 require_relative "config_manager"
+require_relative "memory_methods"
 require_relative "prompt_bridge"
 require_relative "runtime_payloads"
 require_relative "session_metrics"
@@ -52,6 +53,8 @@ module Kward
     # `ToolRegistry`. This class should coordinate those pieces rather than own
     # their low-level mechanics.
     class SessionManager
+      include MemoryMethods
+
       RECENT_EVENT_LIMIT = 1_000
       RPC_ATTACHMENT_MAX_BYTES = AttachmentNormalizer::MAX_BYTES
       RPC_IMAGE_MIME_TYPES = AttachmentNormalizer::IMAGE_MIME_TYPES
@@ -390,78 +393,6 @@ module Kward
         return { ok: false, error: "unsupported", reason: "clientClipboardOwnedByUi" } if name == "copy"
 
         run_plugin_command(session_id: session_id, command: name, arguments: arguments)
-      end
-
-      def memory_manager
-        Memory::Manager.for_config_dir(@config_dir)
-      end
-
-      def memory_status
-        manager = memory_manager
-        { enabled: manager.enabled?, autoSummary: manager.auto_summary_enabled?, paths: manager.paths }
-      end
-
-      def memory_enable
-        memory_manager.enable
-        { enabled: true }
-      end
-
-      def memory_disable
-        memory_manager.disable
-        { enabled: false }
-      end
-
-      def memory_auto_summary_enable
-        memory_manager.auto_summary_enable
-        { autoSummary: true }
-      end
-
-      def memory_auto_summary_disable
-        memory_manager.auto_summary_disable
-        { autoSummary: false }
-      end
-
-      def memory_list(include_inactive: false, workspace_root: Dir.pwd)
-        memory_manager.hierarchy(include_inactive: include_inactive, workspace_root: workspace_root)
-      end
-
-      def memory_add(text:, scope: nil, tags: [])
-        { memory: memory_manager.add_soft(text, scope: scope || "global", tags: tags) }
-      end
-
-      def memory_add_core(text:, scope: nil, tags: [])
-        { memory: memory_manager.add_core(text, scope: scope || "global", tags: tags) }
-      end
-
-      def memory_forget(id:)
-        { forgotten: memory_manager.forget_memory(id) }
-      end
-
-      def memory_promote(id:)
-        { memory: memory_manager.promote_memory(id) }
-      end
-
-      def memory_relax(id:, workspace_root: Dir.pwd)
-        { memory: memory_manager.relax_core(id, workspace_root: workspace_root) }
-      end
-
-      def memory_inspect
-        memory_manager.inspect_memory
-      end
-
-      def memory_why(session_id: nil)
-        if session_id
-          rpc_session = fetch_session(session_id)
-          return rpc_session.conversation.last_memory_retrieval || memory_manager.explain_retrieval
-        end
-        memory_manager.explain_retrieval
-      end
-
-      def memory_summarize(session_id:)
-        rpc_session = fetch_session(session_id)
-        records = memory_manager.summarize_conversation(rpc_session.conversation, client: @client)
-        persist_memory_state(rpc_session)
-        { memories: records }
       end
 
       def run_plugin_command(session_id:, command:, arguments: "")
