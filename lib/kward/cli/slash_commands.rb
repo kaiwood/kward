@@ -53,7 +53,7 @@ module Kward
             return [true, nil]
           end
 
-          handle_worker_queue_command(argument, agent)
+          handle_worker_queue_command(argument, agent, session_store)
           [true, nil]
         when "tab"
           [true, handle_tab_command(argument, session_store)]
@@ -219,15 +219,17 @@ module Kward
         nil
       end
 
-      def handle_worker_queue_command(argument, agent)
+      def handle_worker_queue_command(argument, agent, session_store)
         action, value = argument.to_s.strip.split(/\s+/, 2)
         case action
         when nil, "", "status", "list"
           show_worker_queue
         when "add", "enqueue"
           enqueue_active_tab(value, agent)
+        when "run", "next"
+          run_next_worker_queue_job(session_store)
         else
-          runtime_output("Usage: /queue [add|list|status]")
+          runtime_output("Usage: /queue [add|list|status|run]")
         end
       end
 
@@ -262,6 +264,34 @@ module Kward
                     end
         content = MessageAccess.content(last_user).to_s.strip.gsub(/\s+/, " ")
         content.empty? ? "Queued worker" : content[0, 80]
+      end
+
+      def run_next_worker_queue_job(session_store)
+        unless session_store
+          runtime_output("Worker queue requires persisted sessions.")
+          return
+        end
+
+        record = worker_queue_runner(session_store).run_next
+        if record
+          runtime_output("Worker #{record.fetch('id')} finished with status #{record.fetch('status')}.")
+        else
+          runtime_output("Worker queue has no queued jobs.")
+        end
+      end
+
+      def worker_queue_runner(session_store)
+        Workers::QueueRunner.new(
+          queue_store: worker_queue_store,
+          session_store: session_store,
+          client_factory: -> { Client.new },
+          prompt: @prompt,
+          workspace_root: current_workspace_root,
+          provider: current_model_provider,
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort,
+          write_lock: (@worker_write_lock ||= Workers::WriteLock.new)
+        )
       end
 
       def show_worker_queue

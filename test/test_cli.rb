@@ -456,7 +456,7 @@ class TestCLI < KwardTestCase
 
       cli.instance_variable_set(:@worker_queue_store, store)
       cli.instance_variable_set(:@active_session, session)
-      cli.send(:handle_worker_queue_command, "add", agent)
+      cli.send(:handle_worker_queue_command, "add", agent, session_store)
 
       jobs = store.list
       assert_equal 1, jobs.length
@@ -474,10 +474,31 @@ class TestCLI < KwardTestCase
       store.enqueue(id: "job1", title: "Queued tab", session_path: File.join(dir, "session.jsonl"), workspace_root: dir)
 
       cli.instance_variable_set(:@worker_queue_store, store)
-      cli.send(:handle_worker_queue_command, "list", nil)
+      cli.send(:handle_worker_queue_command, "list", nil, nil)
 
       assert_includes prompt.output.join, "Worker queue:"
       assert_includes prompt.output.join, "job1 [queued] #1 Queued tab"
+    end
+  end
+
+  def test_queue_run_executes_next_job
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      session_store = Kward::SessionStore.new(config_dir: File.join(dir, "config"), cwd: dir)
+      session = session_store.create(provider: "openai", model: "gpt-test")
+      session.attach(Kward::Conversation.new(workspace_root: dir))
+      store.enqueue(id: "job1", title: "Queued tab", session_path: session.path, workspace_root: dir)
+      runner = Object.new
+      runner.define_singleton_method(:run_next) { store.update_status("job1", "ready_for_review") }
+
+      cli.instance_variable_set(:@worker_queue_store, store)
+      cli.define_singleton_method(:worker_queue_runner) { |_session_store| runner }
+      cli.send(:handle_worker_queue_command, "run", nil, session_store)
+
+      assert_equal "ready_for_review", store.find("job1").fetch("status")
+      assert_includes prompt.output.join, "Worker job1 finished with status ready_for_review."
     end
   end
 

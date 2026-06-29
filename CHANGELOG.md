@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 - Added experimental `/queue add` and `/queue list` commands for enqueueing the current tab session into the worker queue.
 - Added a first session-backed worker queue runner that executes one queued job and marks it ready for review after committing changes.
 - Added clean-workspace blocking for queued workers so jobs do not start on top of existing local changes.
+- Added `/queue run` to manually execute the next queued tab worker job.
 - Added `/diff` to open the chronological file changes recorded in the current session in the integrated diff viewer.
 - Added `/scratchpad [text|markdown|ruby]` for opening unsaved editor buffers, including Vibe `:w filename` save-as support and Ruby `:run`/Modern `Ctrl+R` output written after `__END__`.
 - Added `/pty <command>` and the `ekwsh` `pty <command>` built-in for explicit interactive PTY passthrough sessions, enabling terminal-owned tools such as pagers to run from Kward.
