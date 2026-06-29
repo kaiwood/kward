@@ -166,6 +166,37 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_worker_queue_store_enqueues_session_backed_jobs
+    Dir.mktmpdir do |dir|
+      store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+
+      first = store.enqueue(id: "job1", title: "Implement one", session_path: File.join(dir, "one.jsonl"), workspace_root: dir)
+      second = store.enqueue(id: "job2", title: "Implement two", session_path: File.join(dir, "two.jsonl"), workspace_root: dir)
+
+      assert_equal "queued", first.status
+      assert_equal ["job1", "job2"], store.list.map { |job| job.fetch("id") }
+      assert_equal [1, 2], store.list.map { |job| job.fetch("position") }
+      assert_equal "job1", store.next_queued.fetch("id")
+      assert_equal "Implement two", store.find(second.id).fetch("title")
+    end
+  end
+
+  def test_worker_queue_store_updates_status_and_hides_archived_jobs
+    Dir.mktmpdir do |dir|
+      store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      store.enqueue(id: "job1", title: "Implement one", session_path: File.join(dir, "one.jsonl"), workspace_root: dir)
+
+      ready = store.update_status("job1", "ready_for_review", commit_sha: "abc123")
+      assert_equal "ready_for_review", ready.fetch("status")
+      assert_equal "abc123", ready.fetch("commit_sha")
+      refute_nil ready.fetch("finished_at")
+
+      store.archive("job1")
+      assert_empty store.list
+      assert_equal ["job1"], store.list(include_archived: true).map { |job| job.fetch("id") }
+    end
+  end
+
   def test_write_capable_worker_waits_for_write_lock
     Dir.mktmpdir do |dir|
       write_lock = Kward::Workers::WriteLock.new
