@@ -74,6 +74,11 @@ module Kward
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
       UI_METHODS = ["ui/answerQuestion"].freeze
+      SESSION_EVENT_NOTIFICATION = "session/event"
+      SESSION_UPDATED_NOTIFICATION = "session/updated"
+      TURN_EVENT_NOTIFICATION = "turn/event"
+      UI_QUESTION_NOTIFICATION = "ui/question"
+      UI_FOOTER_NOTIFICATION = "ui/footer"
       METHOD_GROUPS = {
         protocol: PROTOCOL_METHODS,
         workspace: WORKSPACE_METHODS,
@@ -356,13 +361,13 @@ module Kward
             mode: "explicit",
             persistence: "jsonl",
             methods: SESSION_METHODS,
-            startupResume: { supported: true, method: "sessions/create", parameter: "resumeLast", default: session_auto_resume_enabled?, immediateTranscript: true, sessionActivePersonaLabel: true },
+            startupResume: { supported: true, method: SESSION_METHODS[0], parameter: "resumeLast", default: session_auto_resume_enabled?, immediateTranscript: true, sessionActivePersonaLabel: true },
             list: { supported: true, source: "rpc", ancestry: true, treeFields: true },
-            fork: { supported: true, methods: ["sessions/forkMessages", "sessions/fork"], entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
-            compact: { supported: true, method: "sessions/compact", notification: "session/event", events: ["compactionStart", "compactionEnd"] },
+            fork: { supported: true, methods: SESSION_METHODS.values_at(6, 7), entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
+            compact: { supported: true, method: SESSION_METHODS[5], notification: SESSION_EVENT_NOTIFICATION, events: ["compactionStart", "compactionEnd"] },
             import: { supported: false },
-            tree: { supported: true, method: "sessions/tree", labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "tauren-tree-items-v1" },
-            updates: { supported: false, notification: "session/updated" }
+            tree: { supported: true, method: SESSION_METHODS[8], labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "tauren-tree-items-v1" },
+            updates: { supported: false, notification: SESSION_UPDATED_NOTIFICATION }
           },
           turns: {
             mode: "async",
@@ -381,7 +386,7 @@ module Kward
             eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT }
           },
           events: {
-            notification: "turn/event",
+            notification: TURN_EVENT_NOTIFICATION,
             assistantText: "assistantDelta",
             reasoning: { start: false, delta: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
@@ -434,13 +439,13 @@ module Kward
           shell: { supported: false, reason: "interactiveTuiOnly" },
           scratchpad: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
-            question: { supported: true, notification: "ui/question", method: UI_METHODS.first, maxQuestions: 4, multiSelect: false, preview: false },
+            question: { supported: true, notification: UI_QUESTION_NOTIFICATION, method: UI_METHODS.first, maxQuestions: 4, multiSelect: false, preview: false },
             select: false,
             confirm: false,
             input: false,
             editor: false,
             widgets: false,
-            footer: { supported: true, notification: "ui/footer" },
+            footer: { supported: true, notification: UI_FOOTER_NOTIFICATION },
             custom: false,
             terminalInput: false
           },

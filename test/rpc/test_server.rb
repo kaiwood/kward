@@ -252,6 +252,10 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::COMMAND_METHODS[1], capabilities["commands"]["runMethod"]
     assert_equal Kward::RPC::Server::STARTUP_RESOURCE_METHODS.first, capabilities["startupResources"]["method"]
     assert_equal Kward::RPC::Server::SESSION_METHODS, capabilities["sessions"]["methods"]
+    assert_equal Kward::RPC::Server::SESSION_EVENT_NOTIFICATION, capabilities["sessions"]["compact"]["notification"]
+    assert_equal Kward::RPC::Server::TURN_EVENT_NOTIFICATION, capabilities["events"]["notification"]
+    assert_equal Kward::RPC::Server::UI_QUESTION_NOTIFICATION, capabilities["extensionUi"]["question"]["notification"]
+    assert_equal Kward::RPC::Server::UI_FOOTER_NOTIFICATION, capabilities["extensionUi"]["footer"]["notification"]
   end
 
   def test_unknown_rpc_method_returns_method_not_found
