@@ -220,6 +220,20 @@ class TestRPCServer < KwardTestCase
     assert_equal registry_tool_names, rpc_tool_names
   end
 
+  def test_rpc_method_inventory_is_grouped_and_unique
+    expected_groups = %i[
+      protocol workspace tools prompts sessions turns models runtime runtime_settings
+      auth memory workers commands startup_resources config logging ui
+    ]
+
+    assert_equal expected_groups, Kward::RPC::Server::METHOD_GROUPS.keys
+    assert_equal Kward::RPC::Server::METHOD_GROUPS.values.flatten, Kward::RPC::Server::RPC_METHODS
+    assert_equal Kward::RPC::Server::RPC_METHODS.uniq, Kward::RPC::Server::RPC_METHODS
+    assert_includes Kward::RPC::Server::RPC_METHODS, "sessions/create"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "turns/start"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
+  end
+
   def test_initialize_capability_method_lists_match_rpc_methods
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },

@@ -74,6 +74,26 @@ module Kward
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
       UI_METHODS = ["ui/answerQuestion"].freeze
+      METHOD_GROUPS = {
+        protocol: PROTOCOL_METHODS,
+        workspace: WORKSPACE_METHODS,
+        tools: TOOL_METHODS,
+        prompts: PROMPT_METHODS,
+        sessions: SESSION_METHODS,
+        turns: TURN_METHODS,
+        models: MODEL_METHODS,
+        runtime: RUNTIME_METHODS,
+        runtime_settings: RUNTIME_SETTING_METHODS,
+        auth: AUTH_METHODS,
+        memory: MEMORY_METHODS,
+        workers: WORKER_METHODS,
+        commands: COMMAND_METHODS,
+        startup_resources: STARTUP_RESOURCE_METHODS,
+        config: CONFIG_METHODS,
+        logging: LOGGING_METHODS,
+        ui: UI_METHODS
+      }.freeze
+      RPC_METHODS = METHOD_GROUPS.values.flatten.freeze
 
       # Creates the RPC server and its stateful managers.
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new, experimental_workers: false)
