@@ -234,6 +234,18 @@ class TestRPCServer < KwardTestCase
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
   end
 
+  def test_rpc_documentation_mentions_public_methods_and_notifications
+    docs = File.read(File.expand_path("../../doc/rpc.md", __dir__))
+    documented_methods = Kward::RPC::Server::RPC_METHODS - Kward::RPC::Server::PROTOCOL_METHODS
+    documented_methods.each { |method| assert_includes docs, method }
+
+    assert_includes docs, Kward::RPC::Server::SESSION_EVENT_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::SESSION_UPDATED_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::TURN_EVENT_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_QUESTION_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_FOOTER_NOTIFICATION
+  end
+
   def test_initialize_capability_method_lists_match_rpc_methods
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },
