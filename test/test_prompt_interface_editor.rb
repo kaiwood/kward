@@ -1330,7 +1330,7 @@ class TestPromptInterfaceEditor < KwardTestCase
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha beta gamma")
       Dir.chdir(dir) do
-        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", tab_keybindings: "ctrl")
         prompt.update_tabs(labels: ["One", "Two"], active_index: 0)
         assert prompt.send(:open_editor, "notes.txt")
         editor = prompt.instance_variable_get(:@editor_state)
