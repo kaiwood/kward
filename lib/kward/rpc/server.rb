@@ -44,6 +44,10 @@ module Kward
         invalid_params: -32_602,
         internal_error: -32_603
       }.freeze
+      PROTOCOL_METHODS = ["initialize", "shutdown"].freeze
+      WORKSPACE_METHODS = ["workspace/validate", "workspace/info"].freeze
+      TOOL_METHODS = ["tools/list"].freeze
+      PROMPT_METHODS = ["prompts/list", "prompts/expand"].freeze
       SESSION_METHODS = [
         "sessions/create", "sessions/resume", "sessions/list", "sessions/rename",
         "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork",
@@ -67,6 +71,7 @@ module Kward
       WORKER_METHODS = ["workers/list", "workers/show"].freeze
       COMMAND_METHODS = ["commands/list", "commands/run"].freeze
       STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
+      CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
       UI_METHODS = ["ui/answerQuestion"].freeze
 
@@ -161,145 +166,145 @@ module Kward
       def dispatch(method, params)
         params = stringify_keys(params || {})
         case method
-        when "initialize"
+        when PROTOCOL_METHODS[0]
           initialize_result
-        when "shutdown"
+        when PROTOCOL_METHODS[1]
           @shutdown = true
           { ok: true }
-        when "workspace/validate"
+        when WORKSPACE_METHODS[0]
           { root: @session_manager.validate_workspace_root(params["workspaceRoot"] || Dir.pwd) }
-        when "workspace/info"
+        when WORKSPACE_METHODS[1]
           workspace_info(params["workspaceRoot"] || Dir.pwd)
-        when "tools/list"
+        when TOOL_METHODS[0]
           { tools: ToolRegistry.new(workspace: configured_workspace).schemas }
-        when "prompts/list"
+        when PROMPT_METHODS[0]
           prompts_list
-        when "prompts/expand"
+        when PROMPT_METHODS[1]
           prompts_expand(params)
-        when "models/list"
+        when MODEL_METHODS[0]
           models_list
-        when "models/current"
+        when MODEL_METHODS[1]
           models_current
-        when "models/set"
+        when MODEL_METHODS[2]
           models_set(params)
-        when "reasoning/set"
+        when MODEL_METHODS[3]
           reasoning_set(params)
-        when "runtime/state"
+        when RUNTIME_METHODS[0]
           @session_manager.runtime_state(session_id: params.fetch("sessionId"))
-        when "runtime/stats"
+        when RUNTIME_METHODS[1]
           @session_manager.runtime_stats(session_id: params.fetch("sessionId"))
-        when "runtime/updateSetting"
+        when RUNTIME_SETTING_METHODS[0]
           runtime_update_setting(params)
-        when "runtime/reload"
+        when RUNTIME_SETTING_METHODS[1]
           runtime_reload(params)
-        when "commands/list"
+        when COMMAND_METHODS[0]
           commands_list(params)
-        when "commands/run"
+        when COMMAND_METHODS[1]
           commands_run(params)
-        when "resources/startup"
+        when STARTUP_RESOURCE_METHODS[0]
           startup_resources(params)
-        when "config/read"
+        when CONFIG_METHODS[0]
           { path: @config_manager.config_path, config: @config_manager.read(redacted: params.fetch("redacted", true)) }
-        when "config/update"
+        when CONFIG_METHODS[1]
           config_update(params)
-        when "logging/stats"
+        when LOGGING_METHODS[0]
           logging_stats(params)
-        when "logging/tokenCsv"
+        when LOGGING_METHODS[1]
           logging_token_csv(params)
-        when "memory/status"
+        when MEMORY_METHODS[0]
           @session_manager.memory_status
-        when "memory/enable"
+        when MEMORY_METHODS[1]
           @session_manager.memory_enable
-        when "memory/disable"
+        when MEMORY_METHODS[2]
           @session_manager.memory_disable
-        when "memory/autoSummary/enable"
+        when MEMORY_METHODS[3]
           @session_manager.memory_auto_summary_enable
-        when "memory/autoSummary/disable"
+        when MEMORY_METHODS[4]
           @session_manager.memory_auto_summary_disable
-        when "memory/list"
+        when MEMORY_METHODS[5]
           @session_manager.memory_list(include_inactive: params["includeInactive"] || false, workspace_root: params["workspaceRoot"] || Dir.pwd)
-        when "memory/add"
+        when MEMORY_METHODS[6]
           @session_manager.memory_add(text: params.fetch("text"), scope: params["scope"], tags: params["tags"] || [])
-        when "memory/addCore"
+        when MEMORY_METHODS[7]
           @session_manager.memory_add_core(text: params.fetch("text"), scope: params["scope"], tags: params["tags"] || [])
-        when "memory/forget"
+        when MEMORY_METHODS[8]
           @session_manager.memory_forget(id: params.fetch("id"))
-        when "memory/promote"
+        when MEMORY_METHODS[9]
           @session_manager.memory_promote(id: params.fetch("id"))
-        when "memory/relax"
+        when MEMORY_METHODS[10]
           @session_manager.memory_relax(id: params.fetch("id"), workspace_root: params["workspaceRoot"] || Dir.pwd)
-        when "memory/inspect"
+        when MEMORY_METHODS[11]
           @session_manager.memory_inspect
-        when "memory/why"
+        when MEMORY_METHODS[12]
           @session_manager.memory_why(session_id: params["sessionId"])
-        when "memory/summarize"
+        when MEMORY_METHODS[13]
           @session_manager.memory_summarize(session_id: params.fetch("sessionId"))
-        when "workers/list"
+        when WORKER_METHODS[0]
           require_experimental_workers!
           workers_list(params)
-        when "workers/show"
+        when WORKER_METHODS[1]
           require_experimental_workers!
           workers_show(params)
-        when "auth/status"
+        when AUTH_METHODS[0]
           @auth_manager.status
-        when "auth/providers"
+        when AUTH_METHODS[1]
           @auth_manager.providers
-        when "auth/loginWithApiKey"
+        when AUTH_METHODS[2]
           auth_login_with_api_key(params)
-        when "auth/logoutProvider"
+        when AUTH_METHODS[3]
           auth_logout_provider(params)
-        when "auth/loginWithOAuth"
+        when AUTH_METHODS[4]
           @auth_manager.login_with_oauth(provider_id: params.fetch("providerId"), timeout_seconds: params["timeoutSeconds"] || 120)
-        when "auth/startOpenAILogin"
+        when AUTH_METHODS[5]
           @auth_manager.start_openai_login(timeout_seconds: params["timeoutSeconds"] || 120)
-        when "auth/submitOpenAICode"
+        when AUTH_METHODS[6]
           @auth_manager.submit_openai_code(login_id: params.fetch("loginId"), code: params.fetch("code"))
-        when "auth/loginStatus"
+        when AUTH_METHODS[7]
           @auth_manager.login_status(login_id: params.fetch("loginId"))
-        when "sessions/create"
+        when SESSION_METHODS[0]
           @session_manager.create_session(workspace_root: params["workspaceRoot"] || Dir.pwd, name: params["name"], resume_last: params["resumeLast"] != false)
-        when "sessions/resume"
+        when SESSION_METHODS[1]
           @session_manager.resume_session(path: params.fetch("path"), workspace_root: params["workspaceRoot"])
-        when "sessions/list"
+        when SESSION_METHODS[2]
           { sessions: @session_manager.list_sessions(workspace_root: params["workspaceRoot"] || Dir.pwd, limit: params["limit"], current_session_path: params["currentSessionPath"]) }
-        when "sessions/rename"
+        when SESSION_METHODS[3]
           @session_manager.rename_session(session_id: params.fetch("sessionId"), name: params["name"])
-        when "sessions/clone"
+        when SESSION_METHODS[4]
           @session_manager.clone_session(session_id: params.fetch("sessionId"))
-        when "sessions/compact"
+        when SESSION_METHODS[5]
           @session_manager.compact_session(session_id: params.fetch("sessionId"), custom_instructions: params["customInstructions"] || "")
-        when "sessions/forkMessages"
+        when SESSION_METHODS[6]
           @session_manager.fork_messages(session_id: params.fetch("sessionId"))
-        when "sessions/fork"
+        when SESSION_METHODS[7]
           @session_manager.fork_session(session_id: params.fetch("sessionId"), entry_id: params.fetch("entryId"))
-        when "sessions/tree"
+        when SESSION_METHODS[8]
           @session_manager.session_tree(session_id: params.fetch("sessionId"))
-        when "sessions/tree/setLabel"
+        when SESSION_METHODS[9]
           @session_manager.set_tree_label(session_id: params.fetch("sessionId"), entry_id: params.fetch("entryId"), label: params["label"])
-        when "sessions/tree/navigate"
+        when SESSION_METHODS[10]
           @session_manager.navigate_tree(session_id: params.fetch("sessionId"), entry_id: params.fetch("entryId"), summarize: params["summarize"], custom_instructions: params["customInstructions"])
-        when "sessions/export"
+        when SESSION_METHODS[11]
           @session_manager.export_session(session_id: params.fetch("sessionId"), path: params["path"], format: params["format"])
-        when "sessions/delete"
+        when SESSION_METHODS[12]
           @session_manager.delete_session(session_id: params.fetch("sessionId"))
-        when "sessions/close"
+        when SESSION_METHODS[13]
           @session_manager.close_session(session_id: params.fetch("sessionId"))
-        when "sessions/transcript"
+        when SESSION_METHODS[14]
           @session_manager.transcript(session_id: params.fetch("sessionId"))
-        when "turns/start"
+        when TURN_METHODS[0]
           @session_manager.start_turn(
             session_id: params.fetch("sessionId"),
             input: params.fetch("input"),
             streaming_behavior: params["streamingBehavior"],
             attachments: params["attachments"] || []
           )
-        when "turns/cancel"
+        when TURN_METHODS[1]
           @session_manager.cancel_turn(turn_id: params.fetch("turnId"))
-        when "turns/status"
+        when TURN_METHODS[2]
           @session_manager.turn_status(turn_id: params.fetch("turnId"))
-        when "turns/events"
+        when TURN_METHODS[3]
           @session_manager.turn_events(turn_id: params.fetch("turnId"), after_sequence: params["afterSequence"] || 0)
-        when "ui/answerQuestion"
+        when UI_METHODS[0]
           @session_manager.answer_question(session_id: params.fetch("sessionId"), question_request_id: params.fetch("questionRequestId"), answers: params.fetch("answers"))
         else
           raise NoMethodError, method
