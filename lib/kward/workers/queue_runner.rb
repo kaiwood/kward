@@ -40,6 +40,7 @@ module Kward
 
       def run_job(record)
         id = record.fetch("id")
+        ensure_clean_workspace!(record)
         @queue_store.update_status(id, "running", error: "")
         session, conversation = load_job_session(record)
         agent = Agent.new(client: @client_factory.call, tool_registry: tool_registry(record, id), conversation: conversation)
@@ -47,8 +48,17 @@ module Kward
         commit = commit_if_needed(record)
         session.append_message({ role: "assistant", content: completion_report(report, commit) }) if commit
         @queue_store.update_status(id, "ready_for_review", commit_sha: commit, error: "")
+      rescue DirtyWorkspaceError => e
+        @queue_store.update_status(id, "blocked", error: e.message)
       rescue StandardError => e
         @queue_store.update_status(id, "failed", error: e.message)
+      end
+
+      def ensure_clean_workspace!(record)
+        return unless @git_guard.repository?
+        return if @git_guard.clean?
+
+        raise DirtyWorkspaceError, "Workspace is dirty; clean or stash changes before running worker #{record.fetch('id')}"
       end
 
       def load_job_session(record)
@@ -88,6 +98,8 @@ module Kward
       def completion_report(report, commit)
         [report, "", "Committed workspace changes: #{commit}"].join("\n")
       end
+
+      class DirtyWorkspaceError < StandardError; end
     end
   end
 end

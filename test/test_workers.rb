@@ -103,7 +103,7 @@ class TestWorkers < KwardTestCase
       session.attach(conversation)
       queue_store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
       job = queue_store.enqueue(id: "job1", title: "Implement tab", session_path: session.path, workspace_root: workspace)
-      git_guard = FakeGitGuard.new(clean_values: [false])
+      git_guard = FakeGitGuard.new(clean_values: [true, false])
       client = FakeClient.new([{ "role" => "assistant", "content" => "implemented" }])
       runner = Kward::Workers::QueueRunner.new(
         queue_store: queue_store,
@@ -121,6 +121,32 @@ class TestWorkers < KwardTestCase
       assert_equal "ready_for_review", record.fetch("status")
       assert_equal "abc1234", record.fetch("commit_sha")
       assert_equal ["Kward worker job1: Implement tab"], git_guard.commits
+    end
+  end
+
+  def test_worker_queue_runner_blocks_when_workspace_is_dirty
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      session = session_store.create(provider: "openai", model: "gpt-test")
+      session.attach(Kward::Conversation.new(workspace_root: workspace))
+      queue_store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      job = queue_store.enqueue(id: "job1", title: "Implement tab", session_path: session.path, workspace_root: workspace)
+      runner = Kward::Workers::QueueRunner.new(
+        queue_store: queue_store,
+        session_store: session_store,
+        client_factory: -> { FakeClient.new([{ "role" => "assistant", "content" => "implemented" }]) },
+        workspace_root: workspace,
+        git_guard: FakeGitGuard.new(clean_values: [false])
+      )
+
+      runner.run_next
+
+      record = queue_store.find(job.id)
+      assert_equal "blocked", record.fetch("status")
+      assert_includes record.fetch("error"), "Workspace is dirty"
     end
   end
 
