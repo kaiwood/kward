@@ -36,6 +36,18 @@ module Kward
         run_job(record)
       end
 
+      def run_all
+        results = []
+        loop do
+          record = run_next
+          break unless record
+
+          results << record
+          break unless record["status"] == "ready_for_review"
+        end
+        results
+      end
+
       private
 
       def run_job(record)

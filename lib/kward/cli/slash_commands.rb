@@ -226,7 +226,9 @@ module Kward
           show_worker_queue
         when "add", "enqueue"
           enqueue_active_tab(value, agent)
-        when "run", "next"
+        when "run", "start", "resume"
+          run_worker_queue(session_store)
+        when "next"
           run_next_worker_queue_job(session_store)
         else
           runtime_output("Usage: /queue [add|list|status|run]")
@@ -264,6 +266,22 @@ module Kward
                     end
         content = MessageAccess.content(last_user).to_s.strip.gsub(/\s+/, " ")
         content.empty? ? "Queued worker" : content[0, 80]
+      end
+
+      def run_worker_queue(session_store)
+        unless session_store
+          runtime_output("Worker queue requires persisted sessions.")
+          return
+        end
+
+        results = worker_queue_runner(session_store).run_all
+        if results.empty?
+          runtime_output("Worker queue has no queued jobs.")
+          return
+        end
+
+        summary = results.map { |record| "#{record.fetch('id')} #{record.fetch('status')}" }.join(", ")
+        runtime_output("Worker queue run finished: #{summary}")
       end
 
       def run_next_worker_queue_job(session_store)

@@ -124,6 +124,34 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_worker_queue_runner_run_all_stops_after_blocked_job
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      queue_store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      2.times do |index|
+        session = session_store.create(provider: "openai", model: "gpt-test")
+        session.attach(Kward::Conversation.new(workspace_root: workspace))
+        queue_store.enqueue(id: "job#{index + 1}", title: "Implement tab #{index + 1}", session_path: session.path, workspace_root: workspace)
+      end
+      runner = Kward::Workers::QueueRunner.new(
+        queue_store: queue_store,
+        session_store: session_store,
+        client_factory: -> { FakeClient.new([{ "role" => "assistant", "content" => "implemented" }]) },
+        workspace_root: workspace,
+        git_guard: FakeGitGuard.new(clean_values: [true, false, false])
+      )
+
+      results = runner.run_all
+
+      assert_equal ["job1", "job2"], results.map { |record| record.fetch("id") }
+      assert_equal "ready_for_review", queue_store.find("job1").fetch("status")
+      assert_equal "blocked", queue_store.find("job2").fetch("status")
+    end
+  end
+
   def test_worker_queue_runner_blocks_when_workspace_is_dirty
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

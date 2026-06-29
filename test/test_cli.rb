@@ -491,14 +491,14 @@ class TestCLI < KwardTestCase
       session.attach(Kward::Conversation.new(workspace_root: dir))
       store.enqueue(id: "job1", title: "Queued tab", session_path: session.path, workspace_root: dir)
       runner = Object.new
-      runner.define_singleton_method(:run_next) { store.update_status("job1", "ready_for_review") }
+      runner.define_singleton_method(:run_all) { [store.update_status("job1", "ready_for_review")] }
 
       cli.instance_variable_set(:@worker_queue_store, store)
       cli.define_singleton_method(:worker_queue_runner) { |_session_store| runner }
       cli.send(:handle_worker_queue_command, "run", nil, session_store)
 
       assert_equal "ready_for_review", store.find("job1").fetch("status")
-      assert_includes prompt.output.join, "Worker job1 finished with status ready_for_review."
+      assert_includes prompt.output.join, "Worker queue run finished: job1 ready_for_review"
     end
   end
 
