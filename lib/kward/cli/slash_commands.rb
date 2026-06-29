@@ -226,12 +226,16 @@ module Kward
           show_worker_queue
         when "add", "enqueue"
           enqueue_active_tab(value, agent)
-        when "run", "start", "resume"
+        when "run", "start"
           run_worker_queue(session_store)
+        when "resume"
+          value.to_s.strip.empty? ? run_worker_queue(session_store) : resume_worker_queue_job(session_store, value)
+        when "suspend", "pause"
+          suspend_worker_queue_job(session_store, value)
         when "next"
           run_next_worker_queue_job(session_store)
         else
-          runtime_output("Usage: /queue [add|list|status|run]")
+          runtime_output("Usage: /queue [add|list|status|run|suspend <id>|resume <id>]")
         end
       end
 
@@ -296,6 +300,32 @@ module Kward
         else
           runtime_output("Worker queue has no queued jobs.")
         end
+      end
+
+      def suspend_worker_queue_job(session_store, id)
+        unless session_store
+          runtime_output("Worker queue requires persisted sessions.")
+          return
+        end
+
+        id = id.to_s.strip
+        return runtime_output("Usage: /queue suspend <id>") if id.empty?
+
+        record = worker_queue_runner(session_store).suspend(id)
+        runtime_output("Worker #{record.fetch('id')} suspended.")
+      end
+
+      def resume_worker_queue_job(session_store, id)
+        unless session_store
+          runtime_output("Worker queue requires persisted sessions.")
+          return
+        end
+
+        id = id.to_s.strip
+        return runtime_output("Usage: /queue resume <id>") if id.empty?
+
+        record = worker_queue_runner(session_store).resume(id)
+        runtime_output("Worker #{record.fetch('id')} finished with status #{record.fetch('status')}.")
       end
 
       def worker_queue_runner(session_store)

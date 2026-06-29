@@ -502,6 +502,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_queue_suspend_and_resume_commands_target_job
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      session_store = Kward::SessionStore.new(config_dir: File.join(dir, "config"), cwd: dir)
+      calls = []
+      runner = Object.new
+      runner.define_singleton_method(:suspend) { |id| calls << [:suspend, id]; { "id" => id, "status" => "suspended" } }
+      runner.define_singleton_method(:resume) { |id| calls << [:resume, id]; { "id" => id, "status" => "ready_for_review" } }
+
+      cli.define_singleton_method(:worker_queue_runner) { |_session_store| runner }
+      cli.send(:handle_worker_queue_command, "suspend job1", nil, session_store)
+      cli.send(:handle_worker_queue_command, "resume job1", nil, session_store)
+
+      assert_equal [[:suspend, "job1"], [:resume, "job1"]], calls
+      assert_includes prompt.output.join, "Worker job1 suspended."
+      assert_includes prompt.output.join, "Worker job1 finished with status ready_for_review."
+    end
+  end
+
   def test_streamed_interactive_turn_renders_markdown_after_buffering
     prompt = FakePrompt.new([])
     client = MarkdownStreamingClient.new(["# Pla", "n\n```ruby\n", "puts :ok\n```\n"])

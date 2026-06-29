@@ -13,6 +13,7 @@ All notable changes to Kward will be documented in this file.
 - Added `/queue run` to manually drain queued tab worker jobs sequentially until the queue is empty or a job needs attention.
 - Added worker git stash helpers as groundwork for cooperative queue suspension.
 - Added explicit queue runner suspend/resume primitives that stash and restore a running job's workspace changes.
+- Added `/queue suspend <id>` and `/queue resume <id>` commands for manually parking and resuming queued worker jobs.
 - Added `/diff` to open the chronological file changes recorded in the current session in the integrated diff viewer.
 - Added `/scratchpad [text|markdown|ruby]` for opening unsaved editor buffers, including Vibe `:w filename` save-as support and Ruby `:run`/Modern `Ctrl+R` output written after `__END__`.
 - Added `/pty <command>` and the `ekwsh` `pty <command>` built-in for explicit interactive PTY passthrough sessions, enabling terminal-owned tools such as pagers to run from Kward.
