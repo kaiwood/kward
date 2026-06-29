@@ -1,6 +1,7 @@
 require "json"
 require_relative "../image_attachments"
 require_relative "../message_access"
+require_relative "../tools/tool_call"
 require_relative "model_info"
 
 # Namespace for the Kward CLI agent runtime.
@@ -255,11 +256,7 @@ module Kward
     end
 
     def parse_tool_arguments(arguments)
-      return arguments if arguments.is_a?(Hash)
-
-      JSON.parse(arguments.to_s.empty? ? "{}" : arguments.to_s)
-    rescue JSON::ParserError
-      {}
+      ToolCall.parse_arguments(arguments)
     end
 
     def anthropic_tool_schema(tool)

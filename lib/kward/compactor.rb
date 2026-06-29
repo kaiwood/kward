@@ -334,7 +334,7 @@ module Kward
 
       def tool_call_args(tool_call)
         function = tool_call["function"] || tool_call[:function] || {}
-        parse_tool_arguments(function["arguments"] || function[:arguments])
+        ToolCall.parse_arguments(function["arguments"] || function[:arguments])
       end
 
       def tool_command(tool_call)
@@ -349,15 +349,6 @@ module Kward
           rendered = args.map { |key, value| "#{key}=#{JSON.dump(value)}" }.join(", ")
           "#{name}(#{rendered})"
         end
-      end
-
-      def parse_tool_arguments(arguments)
-        return {} if arguments.nil? || arguments.empty?
-        return arguments if arguments.is_a?(Hash)
-
-        JSON.parse(arguments)
-      rescue JSON::ParserError
-        {}
       end
     end
 
