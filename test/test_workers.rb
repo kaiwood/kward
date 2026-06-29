@@ -92,6 +92,38 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_worker_queue_runner_runs_next_session_job_and_commits_changes
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      session = session_store.create(provider: "openai", model: "gpt-test")
+      conversation = Kward::Conversation.new(workspace_root: workspace)
+      session.attach(conversation)
+      queue_store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      job = queue_store.enqueue(id: "job1", title: "Implement tab", session_path: session.path, workspace_root: workspace)
+      git_guard = FakeGitGuard.new(clean_values: [false])
+      client = FakeClient.new([{ "role" => "assistant", "content" => "implemented" }])
+      runner = Kward::Workers::QueueRunner.new(
+        queue_store: queue_store,
+        session_store: session_store,
+        client_factory: -> { client },
+        workspace_root: workspace,
+        provider: "openai",
+        model: "gpt-test",
+        git_guard: git_guard
+      )
+
+      runner.run_next
+
+      record = queue_store.find(job.id)
+      assert_equal "ready_for_review", record.fetch("status")
+      assert_equal "abc1234", record.fetch("commit_sha")
+      assert_equal ["Kward worker job1: Implement tab"], git_guard.commits
+    end
+  end
+
   def test_worker_manager_archives_runtime_worker
     Dir.mktmpdir do |dir|
       client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
