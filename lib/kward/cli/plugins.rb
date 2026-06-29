@@ -88,7 +88,7 @@ module Kward
       def builtin_slash_commands
         return BUILTIN_SLASH_COMMANDS if experimental_workers_enabled?
 
-        BUILTIN_SLASH_COMMANDS.reject { |command| command[:name] == "workers" }
+        BUILTIN_SLASH_COMMANDS.reject { |command| %w[workers queue].include?(command[:name]) }
       end
 
       def builtin_slash_command_names

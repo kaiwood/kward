@@ -442,6 +442,45 @@ class TestCLI < KwardTestCase
     assert_equal "openrouter", cli.send(:selected_login_provider, "OpenRouter")
   end
 
+  def test_queue_add_enqueues_active_session
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      session_store = Kward::SessionStore.new(config_dir: File.join(dir, "config"), cwd: dir)
+      session = session_store.create
+      conversation = Kward::Conversation.new(workspace_root: dir)
+      conversation.append_user("Implement queued tabs")
+      session.attach(conversation)
+      agent = Struct.new(:conversation, :ask).new(conversation, nil)
+
+      cli.instance_variable_set(:@worker_queue_store, store)
+      cli.instance_variable_set(:@active_session, session)
+      cli.send(:handle_worker_queue_command, "add", agent)
+
+      jobs = store.list
+      assert_equal 1, jobs.length
+      assert_equal session.path, jobs.first.fetch("session_path")
+      assert_equal "Implement queued tabs", jobs.first.fetch("title")
+      assert_includes prompt.output.join, "Queued worker"
+    end
+  end
+
+  def test_queue_list_prints_jobs
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      store.enqueue(id: "job1", title: "Queued tab", session_path: File.join(dir, "session.jsonl"), workspace_root: dir)
+
+      cli.instance_variable_set(:@worker_queue_store, store)
+      cli.send(:handle_worker_queue_command, "list", nil)
+
+      assert_includes prompt.output.join, "Worker queue:"
+      assert_includes prompt.output.join, "job1 [queued] #1 Queued tab"
+    end
+  end
+
   def test_streamed_interactive_turn_renders_markdown_after_buffering
     prompt = FakePrompt.new([])
     client = MarkdownStreamingClient.new(["# Pla", "n\n```ruby\n", "puts :ok\n```\n"])

@@ -47,6 +47,14 @@ module Kward
           end
 
           [true, handle_workers_command(argument, agent, session_store)]
+        when "queue"
+          unless experimental_workers_enabled?
+            runtime_output("Worker queues are experimental. Start Kward with --experimental-workers to enable /queue.")
+            return [true, nil]
+          end
+
+          handle_worker_queue_command(argument, agent)
+          [true, nil]
         when "tab"
           [true, handle_tab_command(argument, session_store)]
         when "settings"
@@ -209,6 +217,70 @@ module Kward
       rescue StandardError => e
         warn "Auto-compaction status unavailable: #{e.message}"
         nil
+      end
+
+      def handle_worker_queue_command(argument, agent)
+        action, value = argument.to_s.strip.split(/\s+/, 2)
+        case action
+        when nil, "", "status", "list"
+          show_worker_queue
+        when "add", "enqueue"
+          enqueue_active_tab(value, agent)
+        else
+          runtime_output("Usage: /queue [add|list|status]")
+        end
+      end
+
+      def worker_queue_store
+        @worker_queue_store ||= Workers::QueueStore.new
+      end
+
+      def enqueue_active_tab(title, agent)
+        session = @active_session
+        unless session&.path
+          runtime_output("No active persisted session to queue.")
+          return
+        end
+
+        job = worker_queue_store.enqueue(
+          title: worker_queue_title(title, session, agent),
+          session_path: session.path,
+          workspace_root: session.cwd || current_workspace_root
+        )
+        runtime_output("Queued worker #{job.id}: #{job.title}")
+      end
+
+      def worker_queue_title(title, session, agent)
+        explicit = title.to_s.strip
+        return explicit unless explicit.empty?
+
+        session_name = session&.name.to_s.strip
+        return session_name unless session_name.empty?
+
+        last_user = if agent&.respond_to?(:conversation)
+                      agent.conversation.messages.reverse.find { |message| MessageAccess.role(message) == "user" }
+                    end
+        content = MessageAccess.content(last_user).to_s.strip.gsub(/\s+/, " ")
+        content.empty? ? "Queued worker" : content[0, 80]
+      end
+
+      def show_worker_queue
+        jobs = worker_queue_store.list
+        if jobs.empty?
+          runtime_output("Worker queue is empty.")
+          return
+        end
+
+        lines = ["Worker queue:"]
+        jobs.each do |job|
+          details = [job.fetch("id"), "[#{job.fetch('status')}]"]
+          details << "##{job['position']}" if job["position"]
+          details << job.fetch("title")
+          details << "commit #{job['commit_sha']}" unless job["commit_sha"].to_s.empty?
+          details << "error: #{job['error']}" unless job["error"].to_s.empty?
+          lines << "- #{details.join(' ')}"
+        end
+        runtime_output(lines.join("\n"))
       end
 
       def handle_workers_command(argument, agent, session_store)
