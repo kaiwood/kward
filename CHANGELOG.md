@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.73.0] - 2026-06-29
+
 ### Added
 
 - Added persistent session-backed worker queue job metadata as the first step toward tab-based worker queues.
