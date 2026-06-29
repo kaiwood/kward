@@ -502,6 +502,30 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_queue_open_loads_job_session
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      session_store = Kward::SessionStore.new(config_dir: File.join(dir, "config"), cwd: dir)
+      session = session_store.create(provider: "openai", model: "gpt-test")
+      session.attach(Kward::Conversation.new(workspace_root: dir))
+      store.enqueue(id: "job1", title: "Queued tab", session_path: session.path, workspace_root: dir)
+      replacement = Struct.new(:conversation, :ask).new(Kward::Conversation.new(workspace_root: dir), nil)
+      loaded = nil
+
+      cli.instance_variable_set(:@worker_queue_store, store)
+      cli.define_singleton_method(:load_session) do |_session_store, path, message: nil|
+        loaded = [path, message]
+        replacement
+      end
+      result = cli.send(:handle_worker_queue_command, "open job1", nil, session_store)
+
+      assert_same replacement, result
+      assert_equal [session.path, "Showing queued worker job1"], loaded
+    end
+  end
+
   def test_queue_suspend_and_resume_commands_target_job
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new([])

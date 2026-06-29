@@ -53,8 +53,7 @@ module Kward
             return [true, nil]
           end
 
-          handle_worker_queue_command(argument, agent, session_store)
-          [true, nil]
+          [true, handle_worker_queue_command(argument, agent, session_store)]
         when "tab"
           [true, handle_tab_command(argument, session_store)]
         when "settings"
@@ -226,6 +225,8 @@ module Kward
           show_worker_queue
         when "add", "enqueue"
           enqueue_active_tab(value, agent)
+        when "open", "show"
+          open_worker_queue_job(session_store, value)
         when "run", "start"
           run_worker_queue(session_store)
         when "resume"
@@ -270,6 +271,21 @@ module Kward
                     end
         content = MessageAccess.content(last_user).to_s.strip.gsub(/\s+/, " ")
         content.empty? ? "Queued worker" : content[0, 80]
+      end
+
+      def open_worker_queue_job(session_store, id)
+        unless session_store
+          runtime_output("Worker queue requires persisted sessions.")
+          return nil
+        end
+
+        id = id.to_s.strip
+        return runtime_output("Usage: /queue open <id>") if id.empty?
+
+        record = worker_queue_store.find(id)
+        return runtime_output("Unknown worker job: #{id}") unless record
+
+        load_session(session_store, record.fetch("session_path"), message: "Showing queued worker #{record.fetch('id')}")
       end
 
       def run_worker_queue(session_store)

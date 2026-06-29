@@ -143,7 +143,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/redraw` | fix terminal drawing after resize or glitches. |
 | `/reload` | reload installed plugins. |
 | `/workers` | open the experimental worker pipeline (`new`, `do <task>`, or `list`). |
-| `/queue` | manage the experimental tab-backed worker queue (`add`, `list`, `run`, `suspend <id>`, or `resume <id>`). |
+| `/queue` | manage the experimental tab-backed worker queue (`add`, `list`, `open <id>`, `run`, `suspend <id>`, or `resume <id>`). |
 | `/exit` | leave Kward. |
 
 Prompt templates and plugins can add more slash commands.
