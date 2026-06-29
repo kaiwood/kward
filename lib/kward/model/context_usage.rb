@@ -12,7 +12,7 @@ module Kward
     def call(provider:, model:, context_window:, context_parts:)
       return nil unless context_window
 
-      parts = redact_image_data(stringify_keys(context_parts || {}))
+      parts = redact_image_data(stringify_top_level_keys(context_parts || {}))
       return nil unless contains_session_content?(parts)
 
       payload = prompt_payload(parts)
@@ -71,7 +71,7 @@ module Kward
       ["data", "image_url"].include?(key.to_s)
     end
 
-    def stringify_keys(value)
+    def stringify_top_level_keys(value)
       return value unless value.is_a?(Hash)
 
       value.each_with_object({}) { |(key, item), result| result[key.to_s] = item }
