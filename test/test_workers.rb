@@ -70,12 +70,15 @@ class TestWorkers < KwardTestCase
       end
     end
 
-    attr_reader :commits
+    attr_reader :commits, :stashes, :applied_stashes, :dropped_stashes
 
     def initialize(repository: true, clean_values: [true])
       @repository = repository
       @clean_values = clean_values
       @commits = []
+      @stashes = []
+      @applied_stashes = []
+      @dropped_stashes = []
     end
 
     def repository?
@@ -89,6 +92,21 @@ class TestWorkers < KwardTestCase
     def commit_all(message)
       @commits << message
       Result.new(success: true, stdout: "", stderr: "", commit: "abc1234")
+    end
+
+    def stash(message)
+      @stashes << message
+      Result.new(success: true, stdout: "", stderr: "", commit: "stash@{0}")
+    end
+
+    def apply_stash(ref)
+      @applied_stashes << ref
+      Result.new(success: true, stdout: "", stderr: "")
+    end
+
+    def drop_stash(ref)
+      @dropped_stashes << ref
+      Result.new(success: true, stdout: "", stderr: "")
     end
   end
 
@@ -144,6 +162,56 @@ class TestWorkers < KwardTestCase
       assert_equal "ready_for_review", record.fetch("status")
       assert_equal "abc1234", record.fetch("commit_sha")
       assert_equal ["Kward worker job1: Implement tab"], git_guard.commits
+    end
+  end
+
+  def test_worker_queue_runner_suspends_running_job_with_stash
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      session = session_store.create(provider: "openai", model: "gpt-test")
+      session.attach(Kward::Conversation.new(workspace_root: workspace))
+      queue_store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      job = queue_store.enqueue(id: "job1", title: "Implement tab", session_path: session.path, workspace_root: workspace)
+      queue_store.update_status(job.id, "running")
+      git_guard = FakeGitGuard.new(clean_values: [false])
+      runner = Kward::Workers::QueueRunner.new(queue_store: queue_store, session_store: session_store, workspace_root: workspace, git_guard: git_guard)
+
+      record = runner.suspend(job.id)
+
+      assert_equal "suspended", record.fetch("status")
+      assert_equal "stash@{0}", record.fetch("stash_ref")
+      assert_equal ["Kward worker job1: Implement tab"], git_guard.stashes
+    end
+  end
+
+  def test_worker_queue_runner_resumes_suspended_job
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      session_store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+      session = session_store.create(provider: "openai", model: "gpt-test")
+      session.attach(Kward::Conversation.new(workspace_root: workspace))
+      queue_store = Kward::Workers::QueueStore.new(path: File.join(dir, "worker_queue.json"))
+      job = queue_store.enqueue(id: "job1", title: "Implement tab", session_path: session.path, workspace_root: workspace)
+      queue_store.update_status(job.id, "suspended", stash_ref: "stash@{0}")
+      git_guard = FakeGitGuard.new(clean_values: [true, false])
+      runner = Kward::Workers::QueueRunner.new(
+        queue_store: queue_store,
+        session_store: session_store,
+        client_factory: -> { FakeClient.new([{ "role" => "assistant", "content" => "implemented" }]) },
+        workspace_root: workspace,
+        git_guard: git_guard
+      )
+
+      record = runner.resume(job.id)
+
+      assert_equal "ready_for_review", record.fetch("status")
+      assert_equal ["stash@{0}"], git_guard.applied_stashes
+      assert_equal ["stash@{0}"], git_guard.dropped_stashes
     end
   end
 

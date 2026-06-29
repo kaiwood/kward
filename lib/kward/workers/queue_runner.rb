@@ -48,11 +48,34 @@ module Kward
         results
       end
 
+      def suspend(id)
+        record = find_job(id)
+        raise ArgumentError, "Worker job #{id} is not running" unless record["status"] == "running"
+
+        stash_ref = stash_worker_changes(record)
+        @queue_store.update_status(record.fetch("id"), "suspended", stash_ref: stash_ref, error: "")
+      rescue StandardError => e
+        @queue_store.update_status(id, "blocked", error: e.message)
+      end
+
+      def resume(id)
+        record = find_job(id)
+        raise ArgumentError, "Worker job #{id} is not suspended" unless record["status"] == "suspended"
+
+        restore_worker_changes(record)
+        queued = @queue_store.update_status(record.fetch("id"), "queued", stash_ref: "", error: "")
+        run_job(queued, require_clean: false)
+      rescue DirtyWorkspaceError => e
+        @queue_store.update_status(id, "blocked", error: e.message)
+      rescue StandardError => e
+        @queue_store.update_status(id, "blocked", error: e.message)
+      end
+
       private
 
-      def run_job(record)
+      def run_job(record, require_clean: true)
         id = record.fetch("id")
-        ensure_clean_workspace!(record)
+        ensure_clean_workspace!(record) if require_clean
         @queue_store.update_status(id, "running", error: "")
         session, conversation = load_job_session(record)
         agent = Agent.new(client: @client_factory.call, tool_registry: tool_registry(record, id), conversation: conversation)
@@ -71,6 +94,32 @@ module Kward
         return if @git_guard.clean?
 
         raise DirtyWorkspaceError, "Workspace is dirty; clean or stash changes before running worker #{record.fetch('id')}"
+      end
+
+      def find_job(id)
+        @queue_store.find(id) || raise(ArgumentError, "Unknown worker job: #{id}")
+      end
+
+      def stash_worker_changes(record)
+        return "" unless @git_guard.repository?
+        return "" if @git_guard.clean?
+
+        result = @git_guard.stash("Kward worker #{record.fetch('id')}: #{record.fetch('title')}")
+        raise "Worker changes could not be stashed: #{result.output}" unless result.success?
+
+        result.commit.to_s
+      end
+
+      def restore_worker_changes(record)
+        ensure_clean_workspace!(record)
+        ref = record["stash_ref"].to_s
+        return if ref.empty?
+
+        apply = @git_guard.apply_stash(ref)
+        raise "Worker stash could not be restored: #{apply.output}" unless apply.success?
+
+        drop = @git_guard.drop_stash(ref)
+        raise "Worker stash could not be dropped: #{drop.output}" unless drop.success?
       end
 
       def load_job_session(record)
