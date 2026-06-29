@@ -50,7 +50,10 @@ module Kward
         "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate",
         "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"
       ].freeze
+      TURN_METHODS = ["turns/start", "turns/cancel", "turns/status", "turns/events"].freeze
       MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set"].freeze
+      RUNTIME_METHODS = ["runtime/state", "runtime/stats"].freeze
+      RUNTIME_SETTING_METHODS = ["runtime/updateSetting", "runtime/reload"].freeze
       AUTH_METHODS = [
         "auth/status", "auth/providers", "auth/loginWithApiKey", "auth/logoutProvider",
         "auth/loginWithOAuth", "auth/startOpenAILogin", "auth/submitOpenAICode", "auth/loginStatus"
@@ -62,6 +65,10 @@ module Kward
         "memory/why", "memory/summarize"
       ].freeze
       WORKER_METHODS = ["workers/list", "workers/show"].freeze
+      COMMAND_METHODS = ["commands/list", "commands/run"].freeze
+      STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
+      LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
+      UI_METHODS = ["ui/answerQuestion"].freeze
 
       # Creates the RPC server and its stateful managers.
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new, experimental_workers: false)
@@ -361,7 +368,7 @@ module Kward
           attachments: {
             input: {
               supported: true,
-              method: "turns/start",
+              method: TURN_METHODS[0],
               encoding: "base64",
               mimeTypes: SessionManager::RPC_IMAGE_MIME_TYPES,
               maxBytes: SessionManager::RPC_ATTACHMENT_MAX_BYTES
@@ -376,13 +383,13 @@ module Kward
           },
           runtime: {
             supported: true,
-            methods: ["runtime/state", "runtime/stats"],
+            methods: RUNTIME_METHODS,
             state: { supported: true },
             stats: { messageCounts: true, tokens: false, cost: false, contextUsage: true, contextUsageEstimated: true }
           },
           runtimeSettings: {
             supported: true,
-            methods: ["runtime/updateSetting", "runtime/reload"],
+            methods: RUNTIME_SETTING_METHODS,
             settings: ["defaultModel", "defaultThinkingLevel"]
           },
           auth: {
@@ -396,13 +403,13 @@ module Kward
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           workers: workers_capability,
-          commands: { supported: true, methods: ["commands/list", "commands/run"], method: "commands/list", runMethod: "commands/run", sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
-          startupResources: { supported: true, method: "resources/startup" },
+          commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
+          startupResources: { supported: true, method: STARTUP_RESOURCE_METHODS.first },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
           shell: { supported: false, reason: "interactiveTuiOnly" },
           scratchpad: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
-            question: { supported: true, notification: "ui/question", method: "ui/answerQuestion", maxQuestions: 4, multiSelect: false, preview: false },
+            question: { supported: true, notification: "ui/question", method: UI_METHODS.first, maxQuestions: 4, multiSelect: false, preview: false },
             select: false,
             confirm: false,
             input: false,
@@ -426,9 +433,9 @@ module Kward
           logging: {
             supported: true,
             defaultEnabled: false,
-            methods: ["logging/stats", "logging/tokenCsv"],
-            stats: { supported: true, method: "logging/stats", defaultRange: TelemetryStats::DEFAULT_RANGE, units: %w[minutes hours days weeks months years] },
-            usageCsv: { supported: true, method: "logging/tokenCsv", defaultRange: TelemetryStats::DEFAULT_RANGE, buckets: %w[second minute hour day week month year] },
+            methods: LOGGING_METHODS,
+            stats: { supported: true, method: LOGGING_METHODS[0], defaultRange: TelemetryStats::DEFAULT_RANGE, units: %w[minutes hours days weeks months years] },
+            usageCsv: { supported: true, method: LOGGING_METHODS[1], defaultRange: TelemetryStats::DEFAULT_RANGE, buckets: %w[second minute hour day week month year] },
             config: "logging",
             envPrefix: "KWARD_LOGGING",
             directory: File.join(ConfigFiles.config_dir, "logs"),

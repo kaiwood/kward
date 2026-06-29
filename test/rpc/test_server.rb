@@ -228,14 +228,15 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
 
     assert_equal Kward::RPC::Server::MODEL_METHODS, capabilities["models"]["methods"]
-    assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
-    assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
+    assert_equal Kward::RPC::Server::RUNTIME_METHODS, capabilities["runtime"]["methods"]
+    assert_equal Kward::RPC::Server::RUNTIME_SETTING_METHODS, capabilities["runtimeSettings"]["methods"]
     assert_equal Kward::RPC::Server::AUTH_METHODS, capabilities["auth"]["methods"]
-    assert_equal ["logging/stats", "logging/tokenCsv"], capabilities["logging"]["methods"]
+    assert_equal Kward::RPC::Server::LOGGING_METHODS, capabilities["logging"]["methods"]
     assert_equal Kward::RPC::Server::MEMORY_METHODS, capabilities["memory"]["methods"]
-    assert_equal "commands/list", capabilities["commands"]["method"]
-    assert_includes capabilities["commands"]["methods"], "commands/run"
-    assert_equal "resources/startup", capabilities["startupResources"]["method"]
+    assert_equal Kward::RPC::Server::COMMAND_METHODS, capabilities["commands"]["methods"]
+    assert_equal Kward::RPC::Server::COMMAND_METHODS[0], capabilities["commands"]["method"]
+    assert_equal Kward::RPC::Server::COMMAND_METHODS[1], capabilities["commands"]["runMethod"]
+    assert_equal Kward::RPC::Server::STARTUP_RESOURCE_METHODS.first, capabilities["startupResources"]["method"]
     assert_equal Kward::RPC::Server::SESSION_METHODS, capabilities["sessions"]["methods"]
   end
 
