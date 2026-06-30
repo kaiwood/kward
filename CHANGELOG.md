@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added Vibe editor `:e <filename>` and `:e! <filename>` commands with path tab completion.
+
 ## [0.73.1] - 2026-06-30
 
 ### Fixed

@@ -38,6 +38,8 @@ module Kward
         csi_result = handle_vibe_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        return handle_vibe_command_key(key) if @editor_state.vibe_mode == "command"
+
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -46,7 +48,6 @@ module Kward
         return vibe_begin_visual_mode("visual_block") if key == TerminalKeys::CTRL_V && @editor_state.vibe_mode == "normal"
         return handle_vibe_repeat_change if key == "." && @editor_state.vibe_mode == "normal"
         return handle_vibe_search_key(key) if editor_search_active?
-        return handle_vibe_command_key(key) if @editor_state.vibe_mode == "command"
         return handle_vibe_insert_key(key) if @editor_state.vibe_mode == "insert"
         return handle_vibe_replace_key(key) if @editor_state.vibe_mode == "replace"
         return handle_vibe_visual_key(key) if vibe_visual_mode?
@@ -104,6 +105,7 @@ module Kward
         code = sequence[:code]
         text = csi_u_text(sequence)
         normalized_code = code.to_i.chr.downcase.ord rescue code
+        return "\t" if code == 9
         return "\n" if code == 13
         return "\x7F" if [8, 127].include?(code)
         return (normalized_code - 96).chr if ctrl_modifier?(sequence[:modifier]) && normalized_code.between?(97, 122)
@@ -189,6 +191,8 @@ module Kward
         when "\b", "\x7F"
           @editor_state.vibe_command = @editor_state.vibe_command[0...-1].to_s
           @editor_state.status = ":#{@editor_state.vibe_command}"
+        when "\t"
+          vibe_complete_command_path
         when "\n", "\r"
           execute_vibe_command(@editor_state.vibe_command)
         else
@@ -209,6 +213,8 @@ module Kward
           save_editor
         when /\Aw\s+(.+)\z/
           save_editor(Regexp.last_match(1))
+        when /\Ae(!?)\s+(.+)\z/
+          vibe_edit_file(Regexp.last_match(2), force: Regexp.last_match(1) == "!")
         when "run"
           vibe_record_undo { run_editor_buffer }
         when "q"
@@ -231,6 +237,81 @@ module Kward
           @editor_state.status = "Unknown command: #{command}"
         end
         true
+      end
+
+      def vibe_edit_file(path, force: false)
+        if @editor_state.dirty? && !force
+          @editor_state.status = "No write since last change (:e! overrides)"
+          return true
+        end
+
+        open_editor(path, allow_new: true)
+      end
+
+      def vibe_complete_command_path
+        command = @editor_state.vibe_command.to_s
+        match = command.match(/\A(e!?)\s+(.*)\z/)
+        return false unless match
+
+        prefix = match[2]
+        candidates = vibe_path_completion_candidates(prefix)
+        if candidates.empty?
+          @editor_state.status = "No matches"
+          return true
+        end
+
+        replacement = candidates.length == 1 ? candidates.first : vibe_common_prefix(candidates)
+        if replacement.length > prefix.length
+          @editor_state.vibe_command = "#{match[1]} #{replacement}"
+          @editor_state.status = ":#{@editor_state.vibe_command}"
+        elsif candidates.length > 1
+          @editor_state.status = vibe_path_completion_status(candidates)
+        end
+        true
+      end
+
+      def vibe_path_completion_candidates(prefix)
+        directory_prefix, basename_prefix = vibe_split_path_completion_prefix(prefix)
+        search_directory = File.expand_path(directory_prefix.empty? ? "." : directory_prefix, Dir.pwd)
+        root = File.expand_path(Dir.pwd)
+        return [] unless search_directory == root || search_directory.start_with?("#{root}/")
+        return [] unless File.directory?(search_directory)
+
+        Dir.children(search_directory).sort.filter_map do |entry|
+          next if entry.start_with?(".") && !basename_prefix.start_with?(".")
+          next unless entry.start_with?(basename_prefix)
+
+          path = File.join(search_directory, entry)
+          candidate = "#{directory_prefix}#{entry}"
+          File.directory?(path) ? "#{candidate}/" : candidate
+        end
+      rescue StandardError
+        []
+      end
+
+      def vibe_split_path_completion_prefix(prefix)
+        if prefix.include?(File::SEPARATOR)
+          directory = prefix[0..prefix.rindex(File::SEPARATOR)].to_s
+          basename = prefix[(prefix.rindex(File::SEPARATOR) + 1)..].to_s
+          [directory, basename]
+        else
+          ["", prefix]
+        end
+      end
+
+      def vibe_common_prefix(values)
+        return "" if values.empty?
+
+        values.reduce(values.first.dup) do |prefix, value|
+          prefix = prefix[0...-1] until value.start_with?(prefix) || prefix.empty?
+          prefix
+        end
+      end
+
+      def vibe_path_completion_status(candidates)
+        visible = candidates.first(6)
+        suffix = candidates.length > visible.length ? " …" : ""
+        "#{candidates.length} matches: #{visible.join("  ")}#{suffix}"
       end
 
       def vibe_substitute_command(range, pattern, replacement, global: false)

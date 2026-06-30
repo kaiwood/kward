@@ -1642,6 +1642,111 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_edit_command_opens_existing_and_new_files
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      File.write(File.join(dir, "other.txt"), "beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, ":")
+        "e other.txt".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\r")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal File.expand_path("other.txt"), editor.path
+        assert_equal "beta", editor.buffer
+
+        prompt.send(:handle_editor_key, ":")
+        "e new.txt".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\r")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal File.expand_path("new.txt"), editor.path
+        assert_equal "", editor.buffer
+        assert editor.new_file
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_edit_command_requires_bang_for_dirty_buffer
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      File.write(File.join(dir, "other.txt"), "beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        prompt.send(:handle_editor_key, "i")
+        prompt.send(:handle_editor_key, "!")
+        prompt.send(:handle_editor_key, "\e")
+
+        prompt.send(:handle_editor_key, ":")
+        "e other.txt".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\r")
+        assert_same editor, prompt.instance_variable_get(:@editor_state)
+        assert_equal "No write since last change (:e! overrides)", editor.status
+
+        prompt.send(:handle_editor_key, ":")
+        "e! other.txt".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\r")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal File.expand_path("other.txt"), editor.path
+        assert_equal "beta", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_edit_command_tab_completes_paths
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib", "kward"))
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      File.write(File.join(dir, "lib", "kward", "prompt.rb"), "")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, ":")
+        "e li".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "e lib/", editor.vibe_command
+        assert_equal ":e lib/", editor.status
+
+        "kw".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "e lib/kward/", editor.vibe_command
+
+        "pr".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "e lib/kward/prompt.rb", editor.vibe_command
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_edit_command_tab_completion_reports_multiple_matches
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      File.write(File.join(dir, "apple.txt"), "")
+      File.write(File.join(dir, "apricot.txt"), "")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, ":")
+        "e a".each_char { |key| prompt.send(:handle_editor_key, key) }
+        prompt.send(:handle_editor_key, "\t")
+
+        assert_equal "e ap", editor.vibe_command
+        prompt.send(:handle_editor_key, "\t")
+        assert_equal "2 matches: apple.txt  apricot.txt", editor.status
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_refuses_dirty_q_and_allows_q_bang
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha")
