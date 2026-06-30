@@ -157,6 +157,15 @@ module Kward
       end
 
       def handle_select_confirmation_key(key)
+        sequence = parse_csi_u_key(key)
+        if sequence
+          queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+          text = csi_u_printable_text(sequence)
+          return true if text.nil? && csi_u_text_field?(sequence)
+
+          key = text if text
+        end
+
         if key.to_s.start_with?("\e")
           clear_select_confirmation
           return true

@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed session picker delete confirmation in terminals that send printable keys as CSI-u escape sequences.
+
 ## [0.73.0] - 2026-06-29
 
 ### Added

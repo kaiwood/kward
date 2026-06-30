@@ -308,6 +308,21 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_select_confirmed_action_accepts_csi_u_printable_key
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[100u\e[100u")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    assert_equal(
+      { action: :delete, choice: "first" },
+      prompt.select("Session>", ["first"], action_keys: { "d" => { action: :delete, confirm: "Press d again to delete, Esc to cancel.", confirm_title: "Delete session?" } })
+    )
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_select_confirmed_action_escape_returns_to_picker
     input, writer = IO.pipe
     output = StringIO.new
