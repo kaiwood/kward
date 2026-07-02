@@ -1202,6 +1202,8 @@ module Kward
 
       def vibe_operator_motion(operator, motion, count, command = nil)
         motion_count, motion = vibe_count_and_body(motion)
+        return vibe_operator_linewise_motion(operator, motion_count, command) if motion == "G"
+
         count *= motion_count if motion_count.positive?
         return vibe_operator_linewise(operator, count, command) if motion == operator
 
@@ -1210,6 +1212,18 @@ module Kward
         return @editor_state.status = "Empty range" if target.start_index == target.end_index
 
         vibe_apply_operator_to_target(operator, target, command, motion, count, motion_count)
+      end
+
+      def vibe_operator_linewise_motion(operator, line_count, command = nil)
+        line, = @editor_state.cursor_line_and_column
+        target_line = line_count.positive? ? line_count - 1 : @editor_state.lines.length - 1
+        start_line, end_line = [line, target_line].minmax
+        start_index, = @editor_state.line_range(start_line)
+        _, end_index = @editor_state.line_range(end_line)
+        start_index -= 1 if end_index == @editor_state.buffer.length && start_index.positive?
+
+        target = VibeOperatorTarget.new(type: :linewise, start_index: start_index, end_index: end_index)
+        vibe_apply_operator_to_target(operator, target, command, "G", 1, line_count)
       end
 
       def vibe_active_register_text

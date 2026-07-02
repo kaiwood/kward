@@ -327,6 +327,27 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_dg_deletes_from_current_line_to_end_of_file
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 1)
+
+        prompt.send(:handle_editor_key, "d")
+        prompt.send(:handle_editor_key, "G")
+
+        assert_equal "one", editor.buffer
+        assert_equal "\ntwo\nthree", editor.kill_buffer
+
+        prompt.send(:handle_editor_key, "u")
+        assert_equal "one\ntwo\nthree", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_big_i_inserts_at_first_non_blank_and_big_a_inserts_at_line_end
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha\n  beta")

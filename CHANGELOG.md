@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Vibe editor `dG` so it deletes from the current line through the end of the file.
 - Fixed session picker delete confirmation in terminals that send printable keys as CSI-u escape sequences.
 
 ## [0.73.0] - 2026-06-29
