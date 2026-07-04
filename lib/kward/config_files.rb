@@ -94,6 +94,7 @@ module Kward
           "auto_resume" => false
         },
         "enforce_workspace_agents_file" => false,
+        "mcpServers" => {},
         "tools" => {
           "workspace_guardrails" => true
         }
@@ -358,6 +359,12 @@ module Kward
     # Returns the nested web-search config object, or an empty config when absent.
     def web_search_config(config = read_config)
       value = config["web_search"]
+      value.is_a?(Hash) ? value : {}
+    end
+
+    # Returns configured MCP stdio servers, or an empty config when absent.
+    def mcp_servers(config = read_config)
+      value = config["mcpServers"] || config.dig("mcp", "servers")
       value.is_a?(Hash) ? value : {}
     end
 

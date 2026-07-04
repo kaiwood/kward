@@ -8,6 +8,7 @@ require_relative "edit_file"
 require_relative "fetch_content"
 require_relative "fetch_raw"
 require_relative "list_directory"
+require_relative "mcp_tool"
 require_relative "read_file"
 require_relative "read_skill"
 require_relative "run_shell_command"
@@ -19,6 +20,7 @@ require_relative "search/code"
 require_relative "search/web"
 require_relative "search/web_fetch"
 require_relative "tool_call"
+require_relative "../mcp/server_config"
 require_relative "../telemetry/logger"
 require_relative "../tool_output_compactor"
 require_relative "../workspace"
@@ -60,7 +62,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -75,6 +77,13 @@ module Kward
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
+      @mcp_clients = if mcp_clients
+                       mcp_clients
+                     elsif @allowed_tool_names
+                       []
+                     else
+                       MCP::ServerConfig.clients_from_config(ConfigFiles.read_config)
+                     end
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map(&:schema).freeze
     end
@@ -182,6 +191,7 @@ module Kward
         "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "context_for_task", "context_budget_stats", "retrieve_tool_output"
       )
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
+      tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
       tools.compact
@@ -194,7 +204,7 @@ module Kward
         Tools::FetchRaw.new(web_fetch: @web_fetch),
         Tools::ReadSkill.new,
         Tools::AskUserQuestion.new(prompt: @prompt)
-      ]
+      ] + mcp_tool_values
     end
 
     def core_tools
@@ -222,6 +232,26 @@ module Kward
     def skills_available?
       skills = @skills.nil? ? ConfigFiles.skills : @skills
       skills.any?
+    end
+
+    def mcp_tool_values
+      @mcp_tool_values ||= build_mcp_tools
+    end
+
+    def build_mcp_tools
+      Array(@mcp_clients).flat_map do |client|
+        client.list_tools.map do |tool|
+          Tools::MCPTool.new(server_name: client.name, client: client, tool: tool)
+        end
+      rescue StandardError => e
+        @telemetry_logger.log(
+          "mcp",
+          "server_unavailable",
+          "server" => client.respond_to?(:name) ? client.name : "unknown",
+          "error" => e.message
+        )
+        []
+      end
     end
 
     def ask_user_question_available?

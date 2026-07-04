@@ -74,7 +74,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands startupResources extensionUi composer security export logging workers shell scratchpad]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands mcp startupResources extensionUi composer security export logging workers shell scratchpad]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -156,6 +156,11 @@ class TestRPCServer < KwardTestCase
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
     assert_equal "commands/run", capabilities["commands"]["runMethod"]
+    assert_equal true, capabilities["mcp"]["supported"]
+    assert_equal "stdio", capabilities["mcp"]["transport"]
+    assert_equal "mcpServers", capabilities["mcp"]["config"]
+    assert_equal ["tools"], capabilities["mcp"]["exposes"]
+    assert_includes capabilities["mcp"]["unsupported"], "streamableHttp"
     assert_equal true, capabilities["startupResources"]["supported"]
     assert_equal false, capabilities.dig("starterPack", "supported")
     assert_equal "cliOnlyInstallCommand", capabilities.dig("starterPack", "reason")

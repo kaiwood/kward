@@ -15,6 +15,19 @@ Small examples:
 
 ```json
 {
+  "mcpServers": {
+    "safari": {
+      "command": "/Applications/Safari Technology Preview.app/Contents/MacOS/safaridriver",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+See [MCP servers](mcp.md) for connecting local Model Context Protocol servers such as Safari's browser automation server.
+
+```json
+{
   "memory": {
     "enabled": true
   }

@@ -434,6 +434,7 @@ module Kward
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           workers: workers_capability,
           commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
+          mcp: { supported: true, transport: "stdio", config: "mcpServers", exposes: ["tools"], unsupported: ["resources", "prompts", "sampling", "streamableHttp"] },
           startupResources: { supported: true, method: STARTUP_RESOURCE_METHODS.first },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
           shell: { supported: false, reason: "interactiveTuiOnly" },
