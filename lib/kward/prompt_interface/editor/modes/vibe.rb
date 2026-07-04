@@ -58,6 +58,10 @@ module Kward
       def handle_vibe_csi_u_key(key)
         sequence = parse_csi_u_key(key)
         return false unless sequence
+        if editor_search_active?
+          search_result = handle_editor_search_csi_u_key(sequence)
+          return search_result unless search_result == false
+        end
 
         code = sequence[:code]
         modifier = sequence[:modifier]

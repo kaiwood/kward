@@ -494,7 +494,9 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
 
         prompt.send(:handle_editor_key, "/")
         "alpha".each_char { |char| prompt.send(:handle_editor_key, char) }
+        refute_empty editor.search_match_ranges
         prompt.send(:handle_editor_key, "\r")
+        assert_empty editor.search_match_ranges
         assert_equal [2, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "n")

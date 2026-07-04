@@ -279,6 +279,34 @@ module Kward
         end
       end
 
+      def handle_editor_search_csi_u_key(sequence, enter: :confirm, restore_cursor_on_cancel: true)
+        result = case sequence[:code]
+                 when 13
+                   if enter == :repeat
+                     shift_modifier?(sequence[:modifier]) ? editor_search_repeat(:backward) : editor_search_repeat(:forward)
+                   else
+                     editor_search_confirm
+                   end
+                 when 27
+                   editor_search_cancel(restore_cursor: restore_cursor_on_cancel)
+                 when 8, 127
+                   editor_search_delete_character
+                 else
+                   normalized_code = ctrl_code(sequence[:code])
+                   if ctrl_modifier?(sequence[:modifier]) && normalized_code == 103
+                     shift_modifier?(sequence[:modifier]) ? editor_search_repeat(:backward) : editor_search_repeat(:forward)
+                   elsif (text = csi_u_printable_text(sequence))
+                     editor_search_append(text)
+                   elsif csi_u_text_field?(sequence)
+                     true
+                   else
+                     false
+                   end
+                 end
+        queue_pending_keys(sequence[:remaining]) if result != false && sequence[:remaining] && !sequence[:remaining].empty?
+        result
+      end
+
       def handle_editor_mouse_key(key)
         event = parse_editor_mouse_key(key)
         return false unless event
@@ -902,32 +930,40 @@ module Kward
 
       def editor_search_begin(direction = :forward)
         @editor_state.begin_search(direction)
+        ensure_editor_cursor_visible
         true
       end
 
       def editor_search_append(text)
         @editor_state.append_search(text)
+        ensure_editor_cursor_visible
         true
       end
 
       def editor_search_delete_character
         @editor_state.delete_search_character
+        ensure_editor_cursor_visible
         true
       end
 
-      def editor_search_confirm
+      def editor_search_confirm(clear_highlights: true)
         @editor_state.confirm_search
+        @editor_state.clear_search_highlights if clear_highlights
+        ensure_editor_cursor_visible
         true
       end
 
-      def editor_search_cancel
-        @editor_state.cancel_search
+      def editor_search_cancel(restore_cursor: true)
+        @editor_state.cancel_search(restore_cursor: restore_cursor)
+        ensure_editor_cursor_visible
         true
       end
 
       def editor_search_repeat(direction = nil)
         direction ||= @editor_state.search_direction
         @editor_state.repeat_search(direction)
+        @editor_state.clear_search_highlights unless @editor_state.search_active
+        ensure_editor_cursor_visible
         true
       end
 
@@ -939,6 +975,31 @@ module Kward
         end
 
         @editor_state.repeat_search(direction, query)
+        @editor_state.clear_search_highlights
+        ensure_editor_cursor_visible
+        true
+      end
+
+      def ensure_editor_cursor_visible
+        return false unless @editor_state
+
+        content_width = [screen_width - 4, 1].max
+        visible_count = editor_visible_line_count
+        line_index, column = @editor_state.cursor_line_and_column
+        gutter_width = editor_line_number_gutter_width
+        text_width = editor_text_width(content_width, gutter_width)
+        sync_editor_wrap_state(text_width)
+
+        if current_editor_soft_wrap?
+          cursor_visual_row = editor_visual_row_for(line_index, column, text_width)
+          @editor_state.viewport_row = [[@editor_state.viewport_row, cursor_visual_row - visible_count + 1].max, cursor_visual_row].min
+          @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
+        else
+          @editor_state.viewport_row = [[@editor_state.viewport_row, line_index - visible_count + 1].max, line_index].min
+          @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
+          @editor_state.viewport_column = [[@editor_state.viewport_column.to_i, column - text_width + 1].max, column].min
+          @editor_state.viewport_column = [@editor_state.viewport_column, 0].max
+        end
         true
       end
 

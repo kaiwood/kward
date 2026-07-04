@@ -19,6 +19,7 @@ module Kward
       attr_reader :path, :display_path, :language, :original_content, :original_digest, :original_mtime, :original_size
       attr_reader :buffer, :undo_stack, :redo_stack, :kill_buffer, :kill_ring, :last_yank_range, :last_yank_index
       attr_accessor :viewport_row, :viewport_column, :status, :overwrite_confirmed, :quit_confirmed, :search_active, :search_query, :search_direction, :new_file, :editor_mode, :emacs_pending, :readonly, :diff_view
+      attr_reader :search_match_ranges
 
       def initialize(path:, content:, new_file: false, editor_mode: "modern", readonly: false, diff_view: false, virtual: false, display_path: nil, language: nil)
         @path = virtual ? nil : path.to_s
@@ -45,6 +46,7 @@ module Kward
         @search_active = @search.active?
         @search_query = @search.query
         @search_direction = @search.direction
+        @search_match_ranges = []
         @kill_state = EditorKillRing.new
         @kill_buffer = @kill_state.kill_buffer
         @selections = EditorSelections.new(cursor: @cursor, buffer_length: @buffer.length)
@@ -80,6 +82,7 @@ module Kward
         @search_active = other.search_active
         @search_query = other.search_query.dup
         @search_direction = other.search_direction
+        @search_match_ranges = other.search_match_ranges.map(&:dup)
         @kill_state = EditorKillRing.new(
           kill_buffer: other.kill_buffer.dup,
           kill_ring: other.kill_ring.map(&:dup),
@@ -909,27 +912,28 @@ module Kward
       end
 
       def begin_search(direction = :forward)
-        @status = @search.begin(direction)
+        @status = @search.begin(direction, cursor: @cursor)
         sync_search_state
         true
       end
 
-      def cancel_search
-        @status = @search.cancel
-        sync_search_state
+      def cancel_search(restore_cursor: true)
+        apply_search_result(@search.cancel(restore_cursor: restore_cursor))
+        @search_match_ranges = []
+        true
+      end
+
+      def clear_search_highlights
+        @search_match_ranges = []
         true
       end
 
       def append_search(text)
-        @status = @search.append(text)
-        sync_search_state
-        true
+        apply_search_result(@search.append(text, buffer: @buffer, cursor: @cursor))
       end
 
       def delete_search_character
-        @status = @search.delete_character
-        sync_search_state
-        true
+        apply_search_result(@search.delete_character(buffer: @buffer, cursor: @cursor))
       end
 
       def confirm_search
@@ -1224,6 +1228,7 @@ module Kward
         @search_active = @search.active?
         @search_query = @search.query
         @search_direction = @search.direction
+        @search_match_ranges = EditorSearch.match_ranges(@buffer, @search_query)
       end
 
       def sync_vibe_state

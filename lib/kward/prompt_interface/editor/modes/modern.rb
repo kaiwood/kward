@@ -37,16 +37,18 @@ module Kward
 
         case key
         when "\n", "\r"
-          return editor_search_confirm if editor_search_active?
+          return editor_search_repeat(:forward) if editor_search_active?
           modern_record_undo { modern_insert_text("\n") }
         when "\t"
           modern_record_undo { editor_insert_tab unless editor_search_active? }
         when "\b", "\x7F"
           editor_search_active? ? editor_search_delete_character : modern_record_undo { modern_delete_before_cursor }
+        when "\a"
+          return editor_search_repeat(:forward) if editor_search_active?
         when TerminalKeys::CTRL_C
           return editor_search_cancel if editor_search_active?
         when "\e"
-          return editor_search_cancel if editor_search_active?
+          return editor_search_cancel(restore_cursor: false) if editor_search_active?
           return @editor_state.collapse_to_primary_selection if @editor_state.multi_cursor?
           return @editor_state.clear_selection if @editor_state.selection_active?
         when "/"
@@ -79,6 +81,10 @@ module Kward
       def handle_modern_csi_u_key(key)
         sequence = parse_csi_u_key(key)
         return false unless sequence
+        if editor_search_active?
+          search_result = handle_editor_search_csi_u_key(sequence, enter: :repeat, restore_cursor_on_cancel: false)
+          return search_result unless search_result == false
+        end
 
         code = sequence[:code]
         modifier = sequence[:modifier]
@@ -197,7 +203,7 @@ module Kward
         when TerminalKeys::CTRL_C
           editor_search_active? ? editor_search_cancel : copy_editor_selection
         when TerminalKeys::CTRL_F
-          @editor_state.move_right unless editor_search_active?
+          editor_search_begin(:forward) unless editor_search_active?
         when TerminalKeys::CTRL_V
           modern_record_undo { @editor_state.yank_kill_buffer } unless editor_search_active?
         when TerminalKeys::CTRL_X
@@ -229,7 +235,7 @@ module Kward
 
           @editor_state.add_next_occurrence_selection
         when 102
-          @editor_state.move_right unless editor_search_active?
+          editor_search_begin(:forward) unless editor_search_active?
         when 118
           modern_record_undo { @editor_state.yank_kill_buffer } unless editor_search_active?
         when 120

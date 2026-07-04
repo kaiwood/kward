@@ -88,8 +88,24 @@ module Kward
         visible = line.to_s[column_offset.to_i, text_width].to_s
         rendered = editor_render_visible_line(visible, line_index)
         line_start = @editor_state.line_start_offset(line_index)
+        rendered = editor_overlay_search_matches(rendered, line_start, column_offset, visible.length)
         rendered = editor_overlay_line_selections(rendered, line_start, column_offset, visible.length)
         editor_overlay_secondary_cursors(rendered, line_start, column_offset, visible.length, text_width)
+      end
+
+      def editor_overlay_search_matches(rendered, line_start, column_offset, visible_length)
+        ranges = @editor_state.search_match_ranges
+        return rendered if ranges.empty?
+
+        visible_offset = line_start + column_offset.to_i
+        match_ranges = ranges.filter_map do |range|
+          match_start = [range[0] - visible_offset, 0].max
+          match_end = [range[1] - visible_offset, visible_length].min
+          [match_start, match_end] if match_start < match_end
+        end
+        return rendered if match_ranges.empty?
+
+        editor_overlay_selection(rendered, match_ranges)
       end
 
       def editor_overlay_line_selections(rendered, line_start, column_offset, visible_length)

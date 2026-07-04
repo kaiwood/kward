@@ -261,7 +261,7 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
-  def test_prompt_interface_modern_ctrl_f_moves_right
+  def test_prompt_interface_modern_ctrl_f_starts_search
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
@@ -271,13 +271,14 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt.send(:handle_editor_key, "\x06")
 
         editor = prompt.instance_variable_get(:@editor_state)
-        refute editor.search_active
-        assert_equal 1, editor.cursor
+        assert editor.search_active
+        assert_equal :forward, editor.search_direction
+        assert_equal "Search:", editor.status
       end
     end
   end
 
-  def test_prompt_interface_modern_csi_u_ctrl_f_moves_right
+  def test_prompt_interface_modern_csi_u_ctrl_f_starts_search
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
       Dir.chdir(dir) do
@@ -287,8 +288,9 @@ class TestPromptInterfaceEditor < KwardTestCase
         prompt.send(:handle_editor_key, "\e[102;5u")
 
         editor = prompt.instance_variable_get(:@editor_state)
-        refute editor.search_active
-        assert_equal 1, editor.cursor
+        assert editor.search_active
+        assert_equal :forward, editor.search_direction
+        assert_equal "Search:", editor.status
       end
     end
   end
@@ -1887,6 +1889,166 @@ class TestPromptInterfaceEditor < KwardTestCase
         refute_kind_of String, prompt.send(:handle_editor_key, "\r")
 
         assert_equal [1, 0], prompt.instance_variable_get(:@editor_state).cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_moves_live_and_modern_cancel_keeps_match_cursor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "/")
+        prompt.send(:handle_editor_key, "b")
+        assert_equal [1, 0], editor.cursor_line_and_column
+        assert_equal "Search: b", editor.status
+
+        prompt.send(:handle_editor_key, "\e")
+        refute editor.search_active
+        assert_equal [1, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_uses_smartcase
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nBeta\ngamma")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x13")
+        "beta".each_char { |char| prompt.send(:handle_editor_key, char) }
+        assert_equal [1, 0], editor.cursor_line_and_column
+        prompt.send(:handle_editor_key, "\r")
+
+        editor.cursor = 0
+        prompt.send(:handle_editor_key, "\x13")
+        "BETA".each_char { |char| prompt.send(:handle_editor_key, char) }
+        assert_equal [0, 0], editor.cursor_line_and_column
+        assert_equal "No match: BETA", editor.status
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_highlights_visible_matches
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        prompt.instance_variable_set(:@color_enabled, true)
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "/")
+        "beta".each_char { |char| prompt.send(:handle_editor_key, char) }
+
+        rows, = prompt.send(:composer_layout, 40, 10)
+        assert_includes rows.join("\n"), "alpha \e[7mbeta\e[27m \e[7mbeta\e[27m"
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_autoscrolls_to_live_match
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree\nfour\nfive")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        prompt.define_singleton_method(:screen_width) { 40 }
+        prompt.define_singleton_method(:screen_height) { 6 }
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "/")
+        "five".each_char { |char| prompt.send(:handle_editor_key, char) }
+
+        assert_equal [4, 0], editor.cursor_line_and_column
+        assert_operator editor.viewport_row, :>=, 3
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_csi_u_escape_cancels_search
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "/")
+        prompt.send(:handle_editor_key, "b")
+        assert editor.search_active
+        assert_equal [1, 0], editor.cursor_line_and_column
+        refute_empty editor.search_match_ranges
+
+        prompt.send(:handle_editor_key, "\e[27;1u")
+        refute editor.search_active
+        assert_equal [1, 0], editor.cursor_line_and_column
+        assert_empty editor.search_match_ranges
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_search_enter_and_ctrl_g_repeat_matches
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "/")
+        "beta".each_char { |char| prompt.send(:handle_editor_key, char) }
+        assert_equal [1, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\r")
+        assert editor.search_active
+        assert_equal [2, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\a")
+        assert_equal [1, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_modern_search_ctrl_shift_g_repeats_backward
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha\nbeta\nbeta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "/")
+        "beta".each_char { |char| prompt.send(:handle_editor_key, char) }
+        prompt.send(:handle_editor_key, "\r")
+        assert_equal [2, 0], editor.cursor_line_and_column
+
+        prompt.send(:handle_editor_key, "\e[71;6u")
+        assert_equal [1, 0], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_search_confirm_clears_highlights
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha beta beta")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "\x13")
+        "beta".each_char { |char| prompt.send(:handle_editor_key, char) }
+        refute_empty editor.search_match_ranges
+
+        prompt.send(:handle_editor_key, "\r")
+        refute editor.search_active
+        assert_empty editor.search_match_ranges
       end
     end
   end
