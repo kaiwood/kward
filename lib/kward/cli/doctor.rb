@@ -16,24 +16,27 @@ module Kward
       end
 
       def doctor_checks
-        config = safely_read_config
+        config_result = safely_read_config
+        config = config_result.is_a?(Hash) ? config_result : {}
         [
           doctor_config_check,
-          doctor_config_json_check(config),
+          doctor_config_json_check(config_result),
           doctor_directory_check("Config directory", ConfigFiles.config_dir),
           doctor_directory_check("Session directory", SessionStore.new(cwd: current_workspace_root).session_dir, create: true),
           doctor_workspace_check,
           doctor_model_check,
           doctor_auth_check(config),
-          doctor_pan_check(config),
+          doctor_pan_check(config_result),
           { status: :ok, label: "Color", message: @color_enabled ? "enabled" : "disabled" }
         ]
       end
 
       def safely_read_config
         ConfigFiles.read_config
-      rescue StandardError
-        nil
+      rescue ConfigFiles::ConfigError => e
+        e
+      rescue StandardError => e
+        e
       end
 
       def doctor_config_check
@@ -46,10 +49,13 @@ module Kward
         { status: :warning, label: "Config", message: "not found: #{path}" }
       end
 
-      def doctor_config_json_check(config)
-        return { status: :error, label: "Config JSON", message: "invalid or unreadable" } unless config.is_a?(Hash)
+      def doctor_config_json_check(config_result)
+        return { status: :ok, label: "Config JSON", message: "valid" } if config_result.is_a?(Hash)
+        if config_result.is_a?(ConfigFiles::ConfigError)
+          return { status: :error, label: "Config JSON", message: "invalid: #{config_result.detail}" }
+        end
 
-        { status: :ok, label: "Config JSON", message: "valid" }
+        { status: :error, label: "Config JSON", message: "unreadable: #{config_result.message}" }
       end
 
       def doctor_directory_check(label, path, create: false)
@@ -96,8 +102,10 @@ module Kward
         { status: :warning, label: "Auth", message: "no saved credentials found; run `kward login`" }
       end
 
-      def doctor_pan_check(config)
-        pan = config.to_h["pan_mode"] || {}
+      def doctor_pan_check(config_result)
+        return { status: :warning, label: "Pan mode", message: "skipped because config is invalid" } if config_result.is_a?(ConfigFiles::ConfigError)
+
+        pan = config_result.to_h["pan_mode"] || {}
         if !pan["username"].to_s.empty? && !pan["password"].to_s.empty?
           { status: :ok, label: "Pan mode", message: "credentials configured" }
         else

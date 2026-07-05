@@ -587,6 +587,25 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_doctor_reports_config_json_syntax_errors
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, "{\n  \"model\": \"gpt-5\"\n  \"provider\": \"openai\"\n}")
+      prompt = FakePrompt.new([])
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: ["doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      end
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Kward Doctor"
+      assert_includes output, "Config: #{config_path}"
+      assert_includes output, "Config JSON: invalid:"
+      assert_includes output, "line"
+      assert_includes output, "Pan mode: skipped because config is invalid"
+    end
+  end
+
   def test_edit_command_opens_file_in_integrated_editor
     Dir.mktmpdir do |dir|
       path = File.join(dir, "outside.txt")
