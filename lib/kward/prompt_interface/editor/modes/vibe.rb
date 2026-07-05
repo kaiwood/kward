@@ -480,6 +480,8 @@ module Kward
           vibe_apply_cursor_motion(body, count)
         when "gg"
           @editor_state.move_file_start
+        when "g_"
+          vibe_move_line_last_non_blank
         when "gv"
           vibe_restore_visual_selection
         when "]m"
@@ -1015,6 +1017,14 @@ module Kward
       def vibe_move_to_relative_line_first_non_blank(offset)
         line, = @editor_state.cursor_line_and_column
         @editor_state.move_to_line_first_non_blank(line + offset)
+      end
+
+      def vibe_move_line_last_non_blank
+        line, = @editor_state.cursor_line_and_column
+        text = @editor_state.lines[line].to_s
+        column = text.rindex(/\S/) || 0
+        @editor_state.set_cursor_line_and_column(line, column)
+        true
       end
 
       def vibe_move_to_screen_line(offset)
