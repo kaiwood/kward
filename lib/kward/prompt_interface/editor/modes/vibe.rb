@@ -497,6 +497,10 @@ module Kward
           vibe_transform_operator(Regexp.last_match(1), Regexp.last_match(2), count, command)
         when "gv"
           vibe_restore_visual_selection
+        when "`."
+          vibe_jump_to_previous_change(linewise: false)
+        when "'."
+          vibe_jump_to_previous_change(linewise: true)
         when "]m"
           vibe_jump_ruby_method(:forward)
         when "[m"
@@ -821,6 +825,18 @@ module Kward
       def vibe_set_mark(name)
         @editor_state.vibe_marks[name] = { cursor: @editor_state.cursor }
         @editor_state.status = "Set mark #{name}"
+        true
+      end
+
+      def vibe_jump_to_previous_change(linewise:)
+        cursor = @editor_state.vibe_previous_change_cursor
+        unless cursor
+          @editor_state.status = "Previous change not set"
+          return false
+        end
+
+        @editor_state.cursor = [[cursor, 0].max, @editor_state.buffer.length].min
+        @editor_state.move_line_first_non_blank if linewise
         true
       end
 
@@ -2121,6 +2137,8 @@ module Kward
       end
 
       def handle_vibe_repeat_change
+        return execute_vibe_normal_command(@editor_state.vibe_pending.to_s + ".") unless @editor_state.vibe_pending.to_s.empty?
+
         change = @editor_state.vibe_last_change
         return @editor_state.status = "No change to repeat" unless change
 
@@ -2130,6 +2148,7 @@ module Kward
 
       def vibe_begin_change_recording(command)
         @editor_state.vibe_last_change = vibe_change_keys(command)
+        @editor_state.vibe_previous_change_cursor = @editor_state.cursor
       end
 
       def vibe_record_insert_change_key(key)
@@ -2141,6 +2160,7 @@ module Kward
 
       def vibe_remember_change(command)
         @editor_state.vibe_last_change = vibe_change_keys(command) if command
+        @editor_state.vibe_previous_change_cursor = @editor_state.cursor
       end
 
       def vibe_build_change_command(operator, motion, count, motion_count)

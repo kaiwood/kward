@@ -7,7 +7,7 @@ module Kward
       attr_accessor :mode, :pending, :command, :last_change, :last_find
       attr_accessor :last_visual_selection, :visual_block_insert
       attr_accessor :marks, :registers, :register_types, :macros, :recording_macro, :last_macro
-      attr_accessor :kill_linewise
+      attr_accessor :kill_linewise, :previous_change_cursor
 
       def initialize(editor_mode: "modern")
         @mode = editor_mode == "vibe" ? "normal" : nil
@@ -21,6 +21,7 @@ module Kward
         @registers = {}
         @register_types = {}
         @kill_linewise = false
+        @previous_change_cursor = nil
         @macros = {}
         @recording_macro = nil
         @last_macro = nil
@@ -39,6 +40,7 @@ module Kward
         state.registers = other.registers.transform_values(&:dup)
         state.register_types = other.register_types.transform_values(&:dup)
         state.kill_linewise = other.kill_linewise
+        state.previous_change_cursor = other.previous_change_cursor
         state.macros = other.macros.transform_values(&:dup)
         state.recording_macro = other.recording_macro
         state.last_macro = other.last_macro

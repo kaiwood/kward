@@ -252,6 +252,15 @@ module Kward
         sync_vibe_state
       end
 
+      def vibe_previous_change_cursor
+        @vibe_state.previous_change_cursor
+      end
+
+      def vibe_previous_change_cursor=(value)
+        @vibe_state.previous_change_cursor = value
+        sync_vibe_state
+      end
+
       def vibe_macros
         @vibe_state.macros
       end
@@ -1261,6 +1270,7 @@ module Kward
         @vibe_registers = @vibe_state.registers
         @vibe_register_types = @vibe_state.register_types
         @vibe_kill_linewise = @vibe_state.kill_linewise
+        @vibe_previous_change_cursor = @vibe_state.previous_change_cursor
         @vibe_macros = @vibe_state.macros
         @vibe_recording_macro = @vibe_state.recording_macro
         @vibe_last_macro = @vibe_state.last_macro
