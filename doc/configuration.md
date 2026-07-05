@@ -276,7 +276,7 @@ Modern mode uses composer-style keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` s
 
 Emacs mode uses Emacs-style non-modal keys: `Ctrl+X Ctrl+S` saves, `Ctrl+X Ctrl+C` quits, `Ctrl+S` searches forward, `Ctrl+R` searches backward, `Ctrl+Space` sets the mark, `Ctrl+W` kills the region or previous word, `Alt+W` copies the region, `Ctrl+K` kills to end of line, `Ctrl+Y` yanks, and `Alt+Y` cycles the per-buffer kill ring after a yank.
 
-Vibe mode opens files in normal mode and supports a compact classic-vibe subset: normal/insert/command modes, character and line visual modes with `v`/`V`, `h/j/k/l`, word and line movement, counts, simple `d`/`y` operator motions, `dd`, `yy`, `p`, `/` search, `u` undo, and `:w`, `:q`, `:q!`, `:wq`, `:x`, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
+Vibe mode opens files in normal mode and supports a compact Vim-style subset: normal/insert/command modes, character, line, and block visual modes, `h/j/k/l`, word and WORD movement, counts, `d`/`y`/`c` operators, line yanks and indentation, case operators, marks, macros, jump-list navigation, linewise paste, search, undo/redo, and common `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, substitution, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
 
 ## Session settings
 

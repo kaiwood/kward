@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added more Vim-compatible Vibe editor bindings, including `Y`, `>>`/`<<`, `~`, `g_`, `|`, `W`/`E`/`B`, `ge`/`gE`, case operators, `gJ`, counted `%`, previous-change mark jumps, jump-list navigation, and linewise paste semantics.
 - Added local stdio MCP server support through `mcpServers`, exposing configured MCP server tools to Kward turns.
 - Added smartcase, live cursor movement, cancel restore, and visible match highlighting to editor search.
 - Added Vibe editor `:e <filename>` and `:e! <filename>` commands with path tab completion.
