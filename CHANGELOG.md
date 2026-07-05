@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.74.0] - 2026-06-30
+
 ### Added
 
 - Added more Vim-compatible Vibe editor bindings, including `Y`, `>>`/`<<`, `~`, `g_`, `|`, `W`/`E`/`B`, `ge`/`gE`, case operators, `gJ`, counted `%`, previous-change mark jumps, jump-list navigation, and linewise paste semantics.
