@@ -54,6 +54,22 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_read_config_raises_structured_error_for_invalid_json
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, "{\n  \"model\": \"gpt-5\"\n  \"provider\": \"openai\"\n}")
+
+      error = assert_raises(Kward::ConfigFiles::ConfigError) do
+        Kward::ConfigFiles.read_config(config_path)
+      end
+
+      assert_equal config_path, error.path
+      assert_equal "JSON", error.format
+      assert_includes error.detail, "line"
+      assert_includes error.message, config_path
+    end
+  end
+
   def test_read_ekwsh_config_returns_empty_settings_when_missing
     Dir.mktmpdir do |dir|
       path = File.join(dir, "ekwsh.yml")

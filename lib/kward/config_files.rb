@@ -22,6 +22,17 @@ module Kward
   # config, prompt, skill, plugin, cache, memory, and session locations instead of
   # reconstructing `~/.kward` paths independently.
   module ConfigFiles
+    class ConfigError < StandardError
+      attr_reader :path, :format, :detail
+
+      def initialize(path:, format:, detail:)
+        @path = path
+        @format = format
+        @detail = detail
+        super("Invalid Kward config #{format}: #{path}: #{detail}")
+      end
+    end
+
     MAX_SKILL_FILE_BYTES = 100_000
     MAX_PROMPT_FILE_BYTES = 32 * 1024
     DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "maximum" }.freeze
@@ -160,8 +171,8 @@ module Kward
       return {} unless File.exist?(path)
 
       JSON.parse(File.read(path))
-    rescue JSON::ParserError
-      raise "Invalid Kward config JSON: #{path}"
+    rescue JSON::ParserError => e
+      raise ConfigError.new(path: path, format: "JSON", detail: e.message)
     end
 
     # Writes config JSON using private file permissions.
