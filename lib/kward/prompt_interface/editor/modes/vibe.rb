@@ -595,6 +595,9 @@ module Kward
         when "yy"
           vibe_yank_lines(count)
           vibe_store_active_register
+        when "Y"
+          vibe_yank_lines(count)
+          vibe_store_active_register
         when "p"
           vibe_record_undo { @editor_state.insert(vibe_active_register_text) }
           vibe_remember_change(original_command)

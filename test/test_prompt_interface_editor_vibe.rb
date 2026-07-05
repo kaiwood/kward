@@ -863,6 +863,22 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_big_y_yanks_current_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 0)
+
+        prompt.send(:handle_editor_key, "Y")
+
+        assert_equal "two\n", editor.kill_buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_deletes_yanks_pastes_and_copies_clipboard
     output = StringIO.new
     Dir.mktmpdir do |dir|
