@@ -552,6 +552,8 @@ module Kward
           vibe_change_lines(count, command)
         when "J"
           vibe_join_lines(count, command)
+        when "~"
+          vibe_swapcase_characters(count, command)
         when "n"
           editor_search_repeat
         when "N"
@@ -1189,6 +1191,17 @@ module Kward
         @editor_state.copy_range(start_index, end_index)
         vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         vibe_enter_insert_mode(command)
+      end
+
+      def vibe_swapcase_characters(count, command = nil)
+        start_index = @editor_state.cursor
+        return @editor_state.status = "Empty range" if start_index >= @editor_state.buffer.length
+
+        end_index = [start_index + count, @editor_state.buffer.length].min
+        text = @editor_state.buffer[start_index...end_index].to_s.swapcase
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, text) }
+        @editor_state.cursor = [end_index, @editor_state.buffer.length].min
+        vibe_remember_change(command)
       end
 
       def vibe_replace_single_character(character, count, command = nil)
