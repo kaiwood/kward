@@ -459,6 +459,7 @@ module Kward
         return true if command.match?(/\Aq\z/)
         return true if command.match?(/\A@\z/)
         return true if command.match?(/\A[\[\]]\z/)
+        return true if command.match?(/\A\d*[<>]\z/)
         return true if command.match?(/\A['`]\z/)
 
         false
@@ -598,6 +599,12 @@ module Kward
         when "Y"
           vibe_yank_lines(count)
           vibe_store_active_register
+        when ">>"
+          vibe_indent_lines(count, :right)
+          vibe_remember_change(command)
+        when "<<"
+          vibe_indent_lines(count, :left)
+          vibe_remember_change(command)
         when "p"
           vibe_record_undo { @editor_state.insert(vibe_active_register_text) }
           vibe_remember_change(original_command)
@@ -1119,6 +1126,22 @@ module Kward
         end_line = [line + count - 1, @editor_state.lines.length - 1].min
         _, end_index = @editor_state.line_range(end_line)
         vibe_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}")
+      end
+
+      def vibe_indent_lines(count, direction)
+        line, = @editor_state.cursor_line_and_column
+        end_line = [line + count - 1, @editor_state.lines.length - 1].min
+        start_index = @editor_state.line_range(line)[0]
+        end_index = @editor_state.line_range(end_line)[1]
+        original_text = @editor_state.buffer[start_index...end_index].to_s
+        lines = @editor_state.lines[line..end_line].map do |source|
+          direction == :right ? "  #{source}" : source.sub(/\A(?:  |\t| )/, "")
+        end
+        replacement = lines.join("\n")
+        replacement += "\n" if original_text.end_with?("\n")
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, replacement) }
+        @editor_state.set_cursor_line_and_column(line, 0)
+        true
       end
 
       def vibe_change_lines(count, command = nil)
