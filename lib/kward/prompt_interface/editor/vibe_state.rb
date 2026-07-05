@@ -6,7 +6,8 @@ module Kward
     class VibeEditorState
       attr_accessor :mode, :pending, :command, :last_change, :last_find
       attr_accessor :last_visual_selection, :visual_block_insert
-      attr_accessor :marks, :registers, :macros, :recording_macro, :last_macro
+      attr_accessor :marks, :registers, :register_types, :macros, :recording_macro, :last_macro
+      attr_accessor :kill_linewise
 
       def initialize(editor_mode: "modern")
         @mode = editor_mode == "vibe" ? "normal" : nil
@@ -18,6 +19,8 @@ module Kward
         @visual_block_insert = nil
         @marks = {}
         @registers = {}
+        @register_types = {}
+        @kill_linewise = false
         @macros = {}
         @recording_macro = nil
         @last_macro = nil
@@ -34,6 +37,8 @@ module Kward
         state.visual_block_insert = other.visual_block_insert&.dup
         state.marks = other.marks.transform_values(&:dup)
         state.registers = other.registers.transform_values(&:dup)
+        state.register_types = other.register_types.transform_values(&:dup)
+        state.kill_linewise = other.kill_linewise
         state.macros = other.macros.transform_values(&:dup)
         state.recording_macro = other.recording_macro
         state.last_macro = other.last_macro

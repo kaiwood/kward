@@ -234,6 +234,24 @@ module Kward
         sync_vibe_state
       end
 
+      def vibe_register_types
+        @vibe_state.register_types
+      end
+
+      def vibe_register_types=(value)
+        @vibe_state.register_types = value
+        sync_vibe_state
+      end
+
+      def vibe_kill_linewise
+        @vibe_state.kill_linewise
+      end
+
+      def vibe_kill_linewise=(value)
+        @vibe_state.kill_linewise = value
+        sync_vibe_state
+      end
+
       def vibe_macros
         @vibe_state.macros
       end
@@ -1241,6 +1259,8 @@ module Kward
         @vibe_visual_block_insert = @vibe_state.visual_block_insert
         @vibe_marks = @vibe_state.marks
         @vibe_registers = @vibe_state.registers
+        @vibe_register_types = @vibe_state.register_types
+        @vibe_kill_linewise = @vibe_state.kill_linewise
         @vibe_macros = @vibe_state.macros
         @vibe_recording_macro = @vibe_state.recording_macro
         @vibe_last_macro = @vibe_state.last_macro

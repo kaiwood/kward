@@ -621,7 +621,7 @@ module Kward
           vibe_indent_lines(count, :left)
           vibe_remember_change(command)
         when "p"
-          vibe_paste_after(original_command)
+          vibe_active_register_linewise? ? vibe_paste_line(:below, original_command) : vibe_paste_after(original_command)
         when "P"
           vibe_paste_before(original_command)
         when "u"
@@ -1119,6 +1119,7 @@ module Kward
         return @editor_state.status = "Empty range" if start_index == end_index
 
         @editor_state.copy_range(start_index, end_index)
+        @editor_state.vibe_kill_linewise = false
         vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @vibe_character_delete_for_paste = @vibe_active_register.nil?
         vibe_store_active_register
@@ -1131,12 +1132,15 @@ module Kward
         return @editor_state.status = "Empty range" if start_index == end_index
 
         @editor_state.copy_range(start_index, end_index)
+        @editor_state.vibe_kill_linewise = false
         vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         vibe_store_active_register
         vibe_remember_change(command)
       end
 
       def vibe_paste_after(command = nil)
+        return vibe_paste_line(:below, command) if vibe_active_register_linewise?
+
         text = vibe_active_register_text
         return false if text.empty?
 
@@ -1149,13 +1153,32 @@ module Kward
       end
 
       def vibe_paste_before(command = nil)
+        return vibe_paste_line(:above, command) if vibe_active_register_linewise?
+
         text = vibe_active_register_text
         return false if text.empty?
 
+        vibe_record_undo { @editor_state.insert(text) }
+        vibe_remember_change(command)
+      end
+
+      def vibe_paste_line(position, command = nil)
+        text = vibe_active_register_text
+        return false if text.empty?
+
+        text += "\n" unless text.end_with?("\n")
+        line, = @editor_state.cursor_line_and_column
+        target_line = position == :below ? line + 1 : line
+        insert_index = if target_line >= @editor_state.lines.length
+                         @editor_state.buffer.end_with?("\n") ? @editor_state.buffer.length : @editor_state.line_range(line)[0]
+                       else
+                         @editor_state.line_range(target_line)[0]
+                       end
         vibe_record_undo do
-          @editor_state.cursor = @editor_state.current_line_range.first if text.end_with?("\n")
+          @editor_state.cursor = insert_index
           @editor_state.insert(text)
         end
+        @editor_state.set_cursor_line_and_column(target_line, 0)
         vibe_remember_change(command)
       end
 
@@ -1182,7 +1205,7 @@ module Kward
         start_index, = @editor_state.line_range(line)
         end_line = [line + count - 1, @editor_state.lines.length - 1].min
         _, end_index = @editor_state.line_range(end_line)
-        vibe_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}")
+        vibe_copy_range(start_index, end_index, "Yanked #{count} line#{count == 1 ? "" : "s"}", linewise: true)
       end
 
       def vibe_indent_lines(count, direction)
@@ -1204,6 +1227,7 @@ module Kward
       def vibe_change_lines(count, command = nil)
         start_index, end_index = vibe_linewise_change_range(count)
         @editor_state.copy_range(start_index, end_index)
+        @editor_state.vibe_kill_linewise = true
         vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
         @editor_state.cursor = start_index
         vibe_enter_insert_mode(command)
@@ -1362,22 +1386,31 @@ module Kward
         @editor_state.kill_buffer.to_s
       end
 
-      def vibe_store_active_register
+      def vibe_active_register_linewise?
+        return @editor_state.vibe_register_types[@vibe_active_register] == :linewise if @vibe_active_register
+
+        @editor_state.vibe_kill_linewise || @editor_state.kill_buffer.to_s.end_with?("\n")
+      end
+
+      def vibe_store_active_register(linewise: @editor_state.vibe_kill_linewise)
         return unless @vibe_active_register
 
         @editor_state.vibe_registers[@vibe_active_register] = @editor_state.kill_buffer.to_s
+        @editor_state.vibe_register_types[@vibe_active_register] = linewise ? :linewise : :characterwise
       end
 
       def vibe_apply_operator_to_target(operator, target, command, motion, count, motion_count)
         case operator
         when "d"
           @editor_state.copy_range(target.start_index, target.end_index)
+          @editor_state.vibe_kill_linewise = target.type == :linewise
           vibe_record_undo { @editor_state.replace_range(target.start_index, target.end_index, "") }
           @editor_state.status = "Deleted"
           vibe_store_active_register
           vibe_remember_change(command)
         when "c"
           @editor_state.copy_range(target.start_index, target.end_index)
+          @editor_state.vibe_kill_linewise = target.type == :linewise
           vibe_record_undo do
             @editor_state.replace_range(target.start_index, target.end_index, target.change_replacement_text)
             @editor_state.cursor = target.change_cursor_index
@@ -2066,8 +2099,9 @@ module Kward
         end
       end
 
-      def vibe_copy_range(start_index, end_index, status)
+      def vibe_copy_range(start_index, end_index, status, linewise: false)
         @editor_state.copy_range(start_index, end_index)
+        @editor_state.vibe_kill_linewise = linewise
         @output_io.print(TerminalSequences.osc52(@editor_state.kill_buffer))
         @output_io.flush if @output_io.respond_to?(:flush)
         @editor_state.status = status
