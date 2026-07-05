@@ -104,6 +104,13 @@ kward --working-directory ~/code/project
 kward --working-directory ~/code/project "Summarize this repository"
 ```
 
+If your main config file is broken and prevents startup, use `--skip-config` to ignore it for one run:
+
+```bash
+kward --skip-config doctor
+kward --skip-config edit ~/.kward/config.json
+```
+
 ## Interactive slash commands
 
 Slash commands run local actions in the current session. Most do not send a prompt to the model; exceptions like `/git` and `/workers` orchestrate local flows that may then trigger model work.

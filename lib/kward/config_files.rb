@@ -56,7 +56,17 @@ module Kward
       end
     end
 
+    @skip_config = false
+
     module_function
+
+    def skip_config=(value)
+      @skip_config = value
+    end
+
+    def skip_config?
+      @skip_config == true
+    end
 
     # Directory that contains Kward's user config and adjacent prompt/skill
     # data. Defaults to `~/.kward`, or the directory of `KWARD_CONFIG_PATH`.
@@ -115,6 +125,7 @@ module Kward
     # Performs ensure default config for configuration file and path handling.
     def ensure_default_config!(path = config_path)
       path = File.expand_path(path)
+      return false if skip_config? && path == config_path
       return false if File.exist?(path)
 
       write_config(default_config, path)
@@ -168,6 +179,7 @@ module Kward
     # @return [Hash] parsed config object
     def read_config(path = config_path)
       path = File.expand_path(path)
+      return {} if skip_config? && path == config_path
       return {} unless File.exist?(path)
 
       JSON.parse(File.read(path))
@@ -180,6 +192,9 @@ module Kward
     # @param config [Hash] config object to persist
     # @param path [String] config file path
     def write_config(config, path = config_path)
+      path = File.expand_path(path)
+      raise "Cannot write Kward config while --skip-config is active: #{path}" if skip_config? && path == config_path
+
       PrivateFile.write_json(path, config)
     end
 

@@ -95,7 +95,7 @@ module Kward
     include CLI::InteractiveTurn
     include CLI::ToolSummaries
 
-    def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: Client.new, session_store: nil, context_usage: ContextUsage.new)
+    def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: nil, session_store: nil, context_usage: ContextUsage.new)
       @argv = argv
       @stdin = stdin
       @prompt = prompt
@@ -109,6 +109,7 @@ module Kward
       @working_directory = nil
       @prompt_delimited = false
       @requested_mode = "auto"
+      @skip_config = false
       @experimental_workers = false
       @foreground_turn_active = false
       @pending_reasoning_config = nil
@@ -122,6 +123,7 @@ module Kward
     # @return [void]
     def run
       @argv = extract_global_options(@argv)
+      ConfigFiles.skip_config = @skip_config
       with_working_directory { dispatch }
     rescue ConfigFiles::ConfigError => e
       warn config_error_message(e)
@@ -130,6 +132,12 @@ module Kward
       warn e.message
       warn "Run `kward help` for available commands."
       exit 1
+    ensure
+      ConfigFiles.skip_config = false
+    end
+
+    def ensure_client!
+      @client ||= Client.new
     end
 
     def config_error_message(error)
@@ -196,6 +204,7 @@ module Kward
         end
         raise ArgumentError, command_usage("doctor") unless @argv.length == 1
 
+        ensure_client!
         print_doctor
         return
       end
@@ -217,6 +226,7 @@ module Kward
           return
         end
 
+        ensure_client!
         print_sysprompt(@argv[1..] || [])
         return
       end
@@ -228,6 +238,7 @@ module Kward
         end
         raise ArgumentError, command_usage("rpc") unless @argv.length == 1
 
+        ensure_client!
         Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client, experimental_workers: @experimental_workers).run
         return
       end
@@ -249,6 +260,7 @@ module Kward
           return
         end
 
+        ensure_client!
         handle_openrouter_command(@argv[1..] || [])
         return
       end
@@ -260,6 +272,7 @@ module Kward
         end
         raise ArgumentError, command_usage("pan") unless @argv.length == 1
 
+        ensure_client!
         PanServer.new(client: @client, working_directory: current_workspace_root).run
         return
       end
@@ -290,6 +303,7 @@ module Kward
     end
 
     def run_prompt_or_interactive
+      ensure_client!
       stdin_input = read_stdin_input
       first_prompt = one_shot_prompt_argument
 

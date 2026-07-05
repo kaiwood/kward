@@ -70,6 +70,27 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_skip_config_ignores_main_config_reads_and_writes
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, "{\n  \"model\": \"gpt-5\"\n  \"provider\": \"openai\"\n}")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::ConfigFiles.skip_config = true
+
+        assert_equal({}, Kward::ConfigFiles.read_config)
+        assert_equal false, Kward::ConfigFiles.ensure_default_config!
+        error = assert_raises(RuntimeError) do
+          Kward::ConfigFiles.write_config({ "model" => "changed" })
+        end
+        assert_includes error.message, "--skip-config"
+        assert_includes File.read(config_path), "gpt-5"
+      ensure
+        Kward::ConfigFiles.skip_config = false
+      end
+    end
+  end
+
   def test_read_ekwsh_config_returns_empty_settings_when_missing
     Dir.mktmpdir do |dir|
       path = File.join(dir, "ekwsh.yml")

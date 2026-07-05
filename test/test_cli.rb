@@ -587,6 +587,22 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_skip_config_doctor_ignores_broken_main_config
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, "{\n  \"model\": \"gpt-5\"\n  \"provider\": \"openai\"\n}")
+      prompt = FakePrompt.new([])
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: ["--skip-config", "doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      end
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Config JSON: valid"
+      refute_includes output, "invalid:"
+    end
+  end
+
   def test_doctor_reports_config_json_syntax_errors
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

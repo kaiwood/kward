@@ -77,6 +77,7 @@ module Kward
             #{option.call("--working-directory=PATH")}             Run Kward from PATH
             #{option.call("--mode=MODE")}                          Execution mode: auto, chat, oneshot, filter
             #{option.call("--filter")}                              Shortcut for --mode filter
+            #{option.call("--skip-config")}                         Ignore the main config file for this run
             #{option.call("--help")}, #{option.call("-h")}                         Show this help
             #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
 
@@ -214,6 +215,8 @@ module Kward
             break
           when "--experimental-workers"
             @experimental_workers = true
+          when "--skip-config"
+            @skip_config = true
           when "--filter"
             @requested_mode = "filter"
           when "--mode"

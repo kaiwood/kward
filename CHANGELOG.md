@@ -9,6 +9,7 @@ All notable changes to Kward will be documented in this file.
 - Added local stdio MCP server support through `mcpServers`, exposing configured MCP server tools to Kward turns.
 - Added smartcase, live cursor movement, cancel restore, and visible match highlighting to editor search.
 - Added Vibe editor `:e <filename>` and `:e! <filename>` commands with path tab completion.
+- Added `--skip-config` as an emergency fallback that ignores the main config file for one run.
 
 ### Fixed
 
