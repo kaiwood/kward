@@ -446,6 +446,7 @@ module Kward
       def vibe_waiting_for_more?(command)
         return true if command.match?(/\A\d+\z/) && command != "0"
         return true if command.match?(/\A\d*g\z/)
+        return true if command.match?(/\A\d*g[uU~]\z/)
         return true if command.match?(/\A\d*z\z/)
         return true if command.match?(/\A\d*[cdy]\d*\z/)
         return true if command.match?(/\A\d*[cdy]\d*[ai]\z/)
@@ -486,6 +487,14 @@ module Kward
           count.times { vibe_move_to_previous_word_end }
         when "gE"
           count.times { vibe_move_to_previous_big_word_end }
+        when "guu"
+          vibe_transform_lines(count, :downcase, command)
+        when "gUU"
+          vibe_transform_lines(count, :upcase, command)
+        when "g~~"
+          vibe_transform_lines(count, :swapcase, command)
+        when /\Ag([uU~])(.+)\z/
+          vibe_transform_operator(Regexp.last_match(1), Regexp.last_match(2), count, command)
         when "gv"
           vibe_restore_visual_selection
         when "]m"
@@ -1255,6 +1264,38 @@ module Kward
         @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
         vibe_begin_change_recording(command) if command
+      end
+
+      def vibe_transform_operator(transform_key, motion, count, command = nil)
+        motion_count, motion = vibe_count_and_body(motion)
+        count *= motion_count if motion_count.positive?
+        target = vibe_operator_target(motion, count)
+        return false unless target
+        return @editor_state.status = "Empty range" if target.start_index == target.end_index
+
+        transform = { "u" => :downcase, "U" => :upcase, "~" => :swapcase }.fetch(transform_key)
+        vibe_transform_range(target.start_index, target.end_index, transform)
+        vibe_remember_change(command)
+      end
+
+      def vibe_transform_lines(count, transform, command = nil)
+        line, = @editor_state.cursor_line_and_column
+        end_line = [line + count - 1, @editor_state.lines.length - 1].min
+        start_index = @editor_state.line_range(line)[0]
+        end_index = @editor_state.line_range(end_line)[1]
+        vibe_transform_range(start_index, end_index, transform)
+        @editor_state.set_cursor_line_and_column(line, 0)
+        vibe_remember_change(command)
+      end
+
+      def vibe_transform_range(start_index, end_index, transform)
+        text = @editor_state.buffer[start_index...end_index].to_s
+        replacement = case transform
+                      when :swapcase then text.swapcase
+                      when :downcase then text.downcase
+                      else text.upcase
+                      end
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, replacement) }
       end
 
       def vibe_operator_motion(operator, motion, count, command = nil)
