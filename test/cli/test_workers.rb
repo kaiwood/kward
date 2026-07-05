@@ -161,7 +161,7 @@ class TestCLIWorkers < KwardTestCase
     assert_includes prompt.output.join, "--experimental-workers"
   end
 
-  def test_busy_input_opens_workers_command_without_queuing
+  def test_busy_input_blocks_workers_command_without_queuing
     prompt = PollingPrompt.new(["/workers"])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
     cli.instance_variable_set(:@experimental_workers, true)
@@ -170,10 +170,10 @@ class TestCLIWorkers < KwardTestCase
     cli.send(:collect_busy_input, queued, nil, Object.new)
 
     assert_empty queued
-    assert_includes prompt.output.join, "Usage: /workers"
+    refute_includes prompt.output.join, "Usage: /workers"
   end
 
-  def test_busy_workers_new_read_only_does_not_replace_agent_with_prompt_output
+  def test_busy_workers_new_read_only_is_blocked_like_other_slash_commands
     prompt = BusyWorkersPrompt.new(["/workers"], selections: ["New worker"], tasks: ["map the codebase"])
     cli = BusyWorkersCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
     cli.instance_variable_set(:@experimental_workers, true)
@@ -186,9 +186,9 @@ class TestCLIWorkers < KwardTestCase
 
     assert_empty queued
     assert_nil cli.instance_variable_get(:@busy_replacement_agent)
-    assert_equal [["You>", "streaming"]], prompt.busy_inputs
-    assert_equal ["Workers"], prompt.select_messages
-    assert_includes prompt.output.join, "Worker sent: map the codebase"
+    assert_empty prompt.busy_inputs
+    assert_empty prompt.select_messages
+    refute_includes prompt.output.join, "Worker sent: map the codebase"
   end
 
   def test_interactive_session_store_is_reused_for_background_workers
@@ -210,7 +210,7 @@ class TestCLIWorkers < KwardTestCase
     assert_equal ["fallback"], queued
   end
 
-  def test_busy_input_queues_slash_command_instead_of_steering
+  def test_busy_input_blocks_slash_command_instead_of_queueing_or_steering
     prompt = PollingPrompt.new(["/git"])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
     queued = []
@@ -220,11 +220,11 @@ class TestCLIWorkers < KwardTestCase
 
     cli.send(:collect_busy_input, queued, steering)
 
-    assert_equal ["/git"], queued
+    assert_empty queued
     assert_empty submitted
   end
 
-  def test_tab_busy_input_queues_slash_command_instead_of_steering
+  def test_tab_busy_input_blocks_slash_command_instead_of_queueing_or_steering
     prompt = FakePrompt.new([])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
     submitted = []
@@ -234,7 +234,7 @@ class TestCLIWorkers < KwardTestCase
 
     cli.send(:handle_tab_busy_input, tab, "/git")
 
-    assert_equal ["/git"], tab.queued_inputs
+    assert_empty tab.queued_inputs
     assert_empty submitted
   end
 
@@ -308,7 +308,7 @@ class TestCLIWorkers < KwardTestCase
     end
   end
 
-  def test_busy_workers_show_suppresses_old_turn_rendering_after_switch
+  def test_workers_show_renders_worker_transcript_after_turn_finishes
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")
       workspace = File.join(dir, "workspace")
@@ -324,7 +324,7 @@ class TestCLIWorkers < KwardTestCase
       manager = Object.new
       manager.define_singleton_method(:list) { [worker] }
       manager.define_singleton_method(:find) { |id| id == worker.id ? worker : nil }
-      prompt = BusyPollingSelectPrompt.new(["/workers"], selections: ["List workers", "abc123 [request/running] worker task", "Show"])
+      prompt = BusyPollingSelectPrompt.new([], selections: ["List workers", "abc123 [request/running] worker task", "Show"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: session_store)
       cli.instance_variable_set(:@experimental_workers, true)
       cli.instance_variable_set(:@worker_store, worker_store)
@@ -339,11 +339,12 @@ class TestCLIWorkers < KwardTestCase
       )
 
       cli.send(:run_interactive_turn, agent, "implementation task")
+      cli.send(:handle_local_slash_command, "/workers", agent, session_store)
       cli.send(:stop_live_worker_view)
 
       rendered = prompt.output.join
       assert_includes rendered, "worker transcript"
-      refute_includes rendered, "implementation overwrite"
+      assert_includes rendered, "implementation overwrite"
       refute_includes rendered, "implementation final"
     end
   end

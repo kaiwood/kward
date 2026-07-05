@@ -10,6 +10,10 @@ All notable changes to Kward will be documented in this file.
 - Added smartcase, live cursor movement, cancel restore, and visible match highlighting to editor search.
 - Added Vibe editor `:e <filename>` and `:e! <filename>` commands with path tab completion.
 
+### Fixed
+
+- Fixed busy composer slash commands so they are blocked instead of being queued or sent as in-flight steering.
+
 ## [0.73.1] - 2026-06-30
 
 ### Fixed

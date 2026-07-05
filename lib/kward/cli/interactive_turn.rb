@@ -184,11 +184,10 @@ module Kward
         poll_result = @prompt.poll_input
         case poll_result
         when String
-          return poll_result if handle_busy_worker_input(poll_result, agent, queued_inputs)
-
           if slash_command_input?(poll_result)
-            queued_inputs << poll_result
-            @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+            # Slash commands are local control actions. Running or queuing them
+            # from the busy composer is surprising because the state they act on
+            # may have changed by the time the active turn finishes.
           elsif steering && !poll_result.strip.empty?
             begin
               steering.submit(poll_result)

@@ -488,17 +488,10 @@ module Kward
       end
 
       def handle_tab_busy_input(tab, input)
-        command = input.to_s.strip
-        if command == "/workers" || command.start_with?("/workers ") || command == "/tab" || command.start_with?("/tab ")
-          _handled, replacement_agent = handle_local_slash_command(command, tab.agent, @session_store)
-          tab.agent = replacement_agent if replacement_agent?(replacement_agent)
-          restore_busy_input_prompt
-          return
-        end
-
         if slash_command_input?(input)
-          tab.queued_inputs << input
-          @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+          # Slash commands are local control actions. Running or queuing them
+          # from the busy composer is surprising because the state they act on
+          # may have changed by the time the active turn finishes.
           return
         end
 
