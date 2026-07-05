@@ -420,7 +420,7 @@ module Kward
         end
 
         restore_editor_snapshot(snapshot)
-        changed!(clear_selections: false)
+        changed!
         @status = "Undo"
         true
       end
@@ -433,7 +433,7 @@ module Kward
         end
 
         restore_editor_snapshot(snapshot)
-        changed!(clear_selections: false)
+        changed!
         @status = "Redo"
         true
       end

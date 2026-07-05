@@ -190,6 +190,12 @@ class TestPromptInterfaceEditorVibeVisual < KwardTestCase
 
         assert_equal "one two\nthree", editor.buffer
         assert_equal "normal", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, "u")
+
+        assert_equal "one\n  two\nthree", editor.buffer
+        assert_equal "normal", editor.vibe_mode
+        refute editor.selection_active?
       end
     end
   end

@@ -880,6 +880,26 @@ class TestPromptInterfaceEditor < KwardTestCase
     end
   end
 
+  def test_prompt_interface_modern_undo_does_not_restore_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "alpha")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        3.times { prompt.send(:handle_editor_key, "\e[1;2C") }
+        prompt.send(:handle_editor_key, "\x18")
+        assert_equal "ha", editor.buffer
+
+        prompt.send(:handle_editor_key, "\x1A")
+
+        assert_equal "alpha", editor.buffer
+        refute editor.selection_active?
+      end
+    end
+  end
+
   def test_prompt_interface_modern_csi_u_ctrl_z_undoes_and_ctrl_shift_z_redoes
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
