@@ -863,6 +863,22 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_xp_transposes_characters
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "ab")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        prompt.send(:handle_editor_key, "x")
+        prompt.send(:handle_editor_key, "p")
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "ba", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_g_case_operators_transform_motion_and_lines
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "Alpha Beta\nGamma")

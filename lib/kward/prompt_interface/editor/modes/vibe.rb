@@ -598,11 +598,9 @@ module Kward
         when "O"
           vibe_open_line_above
         when "x"
-          vibe_record_undo { count.times { @editor_state.delete_at_cursor } }
-          vibe_remember_change(command)
+          vibe_delete_characters(count, command)
         when "X"
-          vibe_record_undo { count.times { @editor_state.delete_before_cursor } }
-          vibe_remember_change(command)
+          vibe_delete_characters_before_cursor(count, command)
         when "dd"
           vibe_delete_lines(count)
           vibe_store_active_register
@@ -623,8 +621,7 @@ module Kward
           vibe_indent_lines(count, :left)
           vibe_remember_change(command)
         when "p"
-          vibe_record_undo { @editor_state.insert(vibe_active_register_text) }
-          vibe_remember_change(original_command)
+          vibe_paste_after(original_command)
         when "P"
           vibe_paste_before(original_command)
         when "u"
@@ -1114,6 +1111,41 @@ module Kward
         end
         @editor_state.vibe_mode = "insert"
         @editor_state.status = "INSERT · Esc normal"
+      end
+
+      def vibe_delete_characters(count, command = nil)
+        start_index = @editor_state.cursor
+        end_index = [start_index + count, @editor_state.buffer.length].min
+        return @editor_state.status = "Empty range" if start_index == end_index
+
+        @editor_state.copy_range(start_index, end_index)
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        @vibe_character_delete_for_paste = @vibe_active_register.nil?
+        vibe_store_active_register
+        vibe_remember_change(command)
+      end
+
+      def vibe_delete_characters_before_cursor(count, command = nil)
+        end_index = @editor_state.cursor
+        start_index = [end_index - count, 0].max
+        return @editor_state.status = "Empty range" if start_index == end_index
+
+        @editor_state.copy_range(start_index, end_index)
+        vibe_record_undo { @editor_state.replace_range(start_index, end_index, "") }
+        vibe_store_active_register
+        vibe_remember_change(command)
+      end
+
+      def vibe_paste_after(command = nil)
+        text = vibe_active_register_text
+        return false if text.empty?
+
+        vibe_record_undo do
+          @editor_state.cursor = [@editor_state.cursor + 1, @editor_state.buffer.length].min if @vibe_character_delete_for_paste
+          @editor_state.insert(text)
+        end
+        @vibe_character_delete_for_paste = false
+        vibe_remember_change(command)
       end
 
       def vibe_paste_before(command = nil)
