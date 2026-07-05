@@ -863,6 +863,21 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_pipe_moves_to_counted_column
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "abcdef")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+
+        "4|".each_char { |key| prompt.send(:handle_editor_key, key) }
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal [0, 3], editor.cursor_line_and_column
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_g_moves_to_last_non_blank_character
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "alpha   ")

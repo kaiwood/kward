@@ -5,7 +5,7 @@ module Kward
     # Vibe-style keymap for the built-in composer file editor.
     module VibeEditorMode
       VIBE_SIMPLE_MOTION_KEYS = [
-        "w", "e", "b", "$", "0", "^", "+", "\n", "\r", "-", "_",
+        "w", "e", "b", "$", "0", "^", "|", "+", "\n", "\r", "-", "_",
         "h", "\b", "\x7F", "j", "k", "l", " ", "{", "}"
       ].freeze
       VIBE_PAIR_TEXT_OBJECTS = {
@@ -1800,6 +1800,8 @@ module Kward
           @editor_state.move_line_start
         when "^"
           @editor_state.move_line_first_non_blank
+        when "|"
+          @editor_state.set_cursor_line_and_column(@editor_state.cursor_line_and_column.first, [count - 1, 0].max)
         when "+", "\n", "\r"
           vibe_move_to_relative_line_first_non_blank(count)
         when "-"
