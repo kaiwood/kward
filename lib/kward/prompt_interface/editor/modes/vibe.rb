@@ -586,7 +586,7 @@ module Kward
         when "U"
           vibe_restore_current_line
         when "%"
-          vibe_jump_to_matching_pair
+          command.match?(/\A\d+%\z/) ? vibe_jump_to_file_percentage(count) : vibe_jump_to_matching_pair
         when /^([fFtT])(.?)$/
           vibe_find_character(Regexp.last_match(1), Regexp.last_match(2), count)
         when ";"
@@ -1750,6 +1750,14 @@ module Kward
           return nil unless cursor && cursor >= line_start && cursor < line_end
         end
         cursor
+      end
+
+      def vibe_jump_to_file_percentage(percent)
+        percent = [[percent, 1].max, 100].min
+        line_count = @editor_state.lines.length
+        target_line = ((line_count - 1) * percent / 100.0).floor
+        @editor_state.move_to_line_first_non_blank(target_line)
+        true
       end
 
       def vibe_jump_to_matching_pair
