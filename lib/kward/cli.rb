@@ -123,10 +123,33 @@ module Kward
     def run
       @argv = extract_global_options(@argv)
       with_working_directory { dispatch }
+    rescue ConfigFiles::ConfigError => e
+      warn config_error_message(e)
+      exit 1
     rescue ArgumentError => e
       warn e.message
       warn "Run `kward help` for available commands."
       exit 1
+    end
+
+    def config_error_message(error)
+      <<~MESSAGE.rstrip
+        Invalid Kward config #{error.format}.
+
+        File:
+          #{error.path}
+
+        Parser error:
+          #{error.detail}
+
+        Kward cannot safely continue with this config.
+
+        Repair it with:
+          kward edit #{error.path}
+
+        Emergency fallback:
+          kward --skip-config doctor
+      MESSAGE
     end
 
     def dispatch

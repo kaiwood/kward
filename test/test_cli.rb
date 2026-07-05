@@ -562,6 +562,31 @@ class TestCLI < KwardTestCase
     assert_includes output, "\e[2m│ puts :ok\e[0m"
   end
 
+  def test_run_reports_config_errors_without_backtrace
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, "{\n  \"model\": \"gpt-5\"\n  \"provider\": \"openai\"\n}")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        stdout, stderr = capture_io do
+          error = assert_raises(SystemExit) do
+            Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([])).run
+          end
+          assert_equal 1, error.status
+        end
+
+        assert_empty stdout
+        assert_includes stderr, "Invalid Kward config JSON."
+        assert_includes stderr, config_path
+        assert_includes stderr, "Parser error:"
+        assert_includes stderr, "Repair it with:"
+        assert_includes stderr, "kward edit #{config_path}"
+        assert_includes stderr, "kward --skip-config doctor"
+        refute_includes stderr, "test/test_cli.rb"
+      end
+    end
+  end
+
   def test_edit_command_opens_file_in_integrated_editor
     Dir.mktmpdir do |dir|
       path = File.join(dir, "outside.txt")
