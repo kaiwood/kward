@@ -5,7 +5,7 @@ module Kward
     # Vibe-style keymap for the built-in composer file editor.
     module VibeEditorMode
       VIBE_SIMPLE_MOTION_KEYS = [
-        "w", "e", "b", "$", "0", "^", "|", "+", "\n", "\r", "-", "_",
+        "w", "e", "b", "W", "E", "B", "$", "0", "^", "|", "+", "\n", "\r", "-", "_",
         "h", "\b", "\x7F", "j", "k", "l", " ", "{", "}"
       ].freeze
       VIBE_PAIR_TEXT_OBJECTS = {
@@ -1316,7 +1316,7 @@ module Kward
 
       def vibe_operator_target(motion, count)
         return vibe_text_object_target(motion) if motion.match?(/\A[ai].\z/)
-        return vibe_word_motion_target(motion, count) if %w[w e b].include?(motion)
+        return vibe_word_motion_target(motion, count) if %w[w e b W E B].include?(motion)
         return vibe_find_motion_target(motion, count) if motion.match?(/\A[fFtT].\z/)
         return vibe_percent_motion_target if motion == "%"
 
@@ -1370,9 +1370,11 @@ module Kward
         end_index = start_index
         if motion == "w"
           end_index = vibe_word_operator_forward_index(end_index, count)
+        elsif motion == "W"
+          end_index = vibe_big_word_operator_forward_index(end_index, count)
         else
           count.times { end_index = vibe_word_motion_index(motion, end_index) }
-          end_index = [end_index + 1, @editor_state.buffer.length].min if motion == "e"
+          end_index = [end_index + 1, @editor_state.buffer.length].min if %w[e E].include?(motion)
         end
         @editor_state.cursor = end_index
         VibeOperatorTarget.new(type: :characterwise, start_index: start_index, end_index: end_index)
@@ -1399,8 +1401,14 @@ module Kward
           vibe_move_to_next_word_start
         when "e"
           vibe_move_to_word_end
-        else
+        when "b"
           vibe_move_to_previous_word_start
+        when "W"
+          vibe_move_to_next_big_word_start
+        when "E"
+          vibe_move_to_big_word_end
+        else
+          vibe_move_to_previous_big_word_start
         end
         @editor_state.cursor
       ensure
@@ -1780,6 +1788,12 @@ module Kward
           count.times { vibe_move_to_word_end }
         when "b"
           count.times { vibe_move_to_previous_word_start }
+        when "W"
+          count.times { vibe_move_to_next_big_word_start }
+        when "E"
+          count.times { vibe_move_to_big_word_end }
+        when "B"
+          count.times { vibe_move_to_previous_big_word_start }
         else
           return vibe_apply_motion(motion, count)
         end
@@ -1855,6 +1869,18 @@ module Kward
         @editor_state.cursor = cursor
       end
 
+      def vibe_big_word_operator_forward_index(index, count)
+        cursor = index
+        buffer = @editor_state.buffer
+        count.times do |step|
+          cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) != :space
+          if step < count - 1
+            cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) == :space
+          end
+        end
+        cursor
+      end
+
       def vibe_move_to_word_end
         cursor = @editor_state.cursor
         buffer = @editor_state.buffer
@@ -1880,6 +1906,40 @@ module Kward
         cursor -= 1 while cursor.positive? && vibe_word_kind(buffer[cursor]) == :space
         current_kind = vibe_word_kind(buffer[cursor])
         cursor -= 1 while cursor.positive? && vibe_word_kind(buffer[cursor - 1]) == current_kind
+        @editor_state.cursor = cursor
+      end
+
+      def vibe_move_to_next_big_word_start
+        cursor = @editor_state.cursor
+        buffer = @editor_state.buffer
+        return if cursor >= buffer.length
+
+        cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) != :space
+        cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) == :space
+        @editor_state.cursor = cursor
+      end
+
+      def vibe_move_to_big_word_end
+        cursor = @editor_state.cursor
+        buffer = @editor_state.buffer
+        return if buffer.empty? || cursor >= buffer.length
+
+        cursor += 1 if vibe_word_kind(buffer[cursor]) != :space && cursor < buffer.length - 1 && vibe_word_kind(buffer[cursor + 1]) == :space
+        cursor += 1 while cursor < buffer.length && vibe_word_kind(buffer[cursor]) == :space
+        return @editor_state.cursor = cursor if cursor >= buffer.length
+
+        cursor += 1 while cursor < buffer.length - 1 && vibe_word_kind(buffer[cursor + 1]) != :space
+        @editor_state.cursor = cursor
+      end
+
+      def vibe_move_to_previous_big_word_start
+        cursor = @editor_state.cursor
+        buffer = @editor_state.buffer
+        return if cursor.zero? || buffer.empty?
+
+        cursor -= 1
+        cursor -= 1 while cursor.positive? && vibe_word_kind(buffer[cursor]) == :space
+        cursor -= 1 while cursor.positive? && vibe_word_kind(buffer[cursor - 1]) != :space
         @editor_state.cursor = cursor
       end
 
