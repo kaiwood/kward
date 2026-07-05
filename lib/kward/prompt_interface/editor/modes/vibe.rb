@@ -96,8 +96,12 @@ module Kward
           @editor_state.move_indentation_down
         when 107
           @editor_state.move_indentation_up
+        when 105
+          vibe_jump_forward
         when 108
           @editor_state.move_line_end
+        when 111
+          vibe_jump_backward
         when 118
           vibe_begin_visual_mode("visual_block")
         else
@@ -412,7 +416,7 @@ module Kward
       end
 
       def vibe_normal_control_key?(key)
-        ["\n", "\r", "\b", "\x7F", TerminalKeys::CTRL_B, TerminalKeys::CTRL_D, TerminalKeys::CTRL_E, TerminalKeys::CTRL_F, TerminalKeys::CTRL_R, TerminalKeys::CTRL_U, TerminalKeys::CTRL_Y].include?(key)
+        ["\n", "\r", "\b", "\x7F", TerminalKeys::CTRL_B, TerminalKeys::CTRL_D, TerminalKeys::CTRL_E, TerminalKeys::CTRL_F, "\x0F", TerminalKeys::CTRL_R, TerminalKeys::CTRL_U, TerminalKeys::CTRL_Y].include?(key)
       end
 
       def vibe_visual_mode?
@@ -480,6 +484,7 @@ module Kward
         when *VIBE_SIMPLE_MOTION_KEYS
           vibe_apply_cursor_motion(body, count)
         when "gg"
+          vibe_record_jump
           @editor_state.move_file_start
         when "g_"
           vibe_move_line_last_non_blank
@@ -520,6 +525,7 @@ module Kward
         when /\A`(.+)\z/
           vibe_jump_to_mark(Regexp.last_match(1), linewise: false)
         when "G"
+          vibe_record_jump
           line = command.match?(/\A\d+G\z/) ? count - 1 : @editor_state.lines.length - 1
           @editor_state.set_cursor_line_and_column(line, 0)
         when "zz"
@@ -546,6 +552,8 @@ module Kward
           vibe_scroll_down
         when TerminalKeys::CTRL_Y
           vibe_scroll_up
+        when "\x0F"
+          vibe_jump_backward
         when TerminalKeys::CTRL_R
           @editor_state.redo
         when "i"
@@ -586,6 +594,7 @@ module Kward
         when "U"
           vibe_restore_current_line
         when "%"
+          vibe_record_jump
           command.match?(/\A\d+%\z/) ? vibe_jump_to_file_percentage(count) : vibe_jump_to_matching_pair
         when /^([fFtT])(.?)$/
           vibe_find_character(Regexp.last_match(1), Regexp.last_match(2), count)
@@ -824,6 +833,38 @@ module Kward
         @vibe_replaying_macro = false
       end
 
+      def vibe_record_jump
+        current = @editor_state.cursor
+        return if @editor_state.vibe_jump_back_list.last == current
+
+        @editor_state.vibe_jump_back_list << current
+        @editor_state.vibe_jump_forward_list.clear
+      end
+
+      def vibe_jump_backward
+        target = @editor_state.vibe_jump_back_list.pop
+        unless target
+          @editor_state.status = "Already at oldest jump"
+          return false
+        end
+
+        @editor_state.vibe_jump_forward_list << @editor_state.cursor
+        @editor_state.cursor = [[target, 0].max, @editor_state.buffer.length].min
+        true
+      end
+
+      def vibe_jump_forward
+        target = @editor_state.vibe_jump_forward_list.pop
+        unless target
+          @editor_state.status = "Already at newest jump"
+          return false
+        end
+
+        @editor_state.vibe_jump_back_list << @editor_state.cursor
+        @editor_state.cursor = [[target, 0].max, @editor_state.buffer.length].min
+        true
+      end
+
       def vibe_set_mark(name)
         @editor_state.vibe_marks[name] = { cursor: @editor_state.cursor }
         @editor_state.status = "Set mark #{name}"
@@ -849,6 +890,7 @@ module Kward
           return false
         end
 
+        vibe_record_jump
         @editor_state.cursor = [[mark[:cursor], 0].max, @editor_state.buffer.length].min
         @editor_state.move_line_first_non_blank if linewise
         true
