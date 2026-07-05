@@ -224,6 +224,32 @@ class TestCLIWorkers < KwardTestCase
     assert_empty submitted
   end
 
+  def test_busy_input_queues_deferred_control_commands
+    prompt = PollingPrompt.new(["/exit"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    queued = []
+    submitted = []
+    steering = Object.new
+    steering.define_singleton_method(:submit) { |input| submitted << input }
+
+    cli.send(:collect_busy_input, queued, steering)
+
+    assert_equal ["/exit"], queued
+    assert_empty submitted
+
+    prompt = PollingPrompt.new(["/new"])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    queued = []
+    submitted = []
+    steering = Object.new
+    steering.define_singleton_method(:submit) { |input| submitted << input }
+
+    cli.send(:collect_busy_input, queued, steering)
+
+    assert_equal ["/new"], queued
+    assert_empty submitted
+  end
+
   def test_tab_busy_input_blocks_slash_command_instead_of_queueing_or_steering
     prompt = FakePrompt.new([])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
@@ -235,6 +261,20 @@ class TestCLIWorkers < KwardTestCase
     cli.send(:handle_tab_busy_input, tab, "/git")
 
     assert_empty tab.queued_inputs
+    assert_empty submitted
+  end
+
+  def test_tab_busy_input_queues_deferred_control_command
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    submitted = []
+    steering = Object.new
+    steering.define_singleton_method(:submit) { |input| submitted << input }
+    tab = Kward::CLI::Tabs::TabRuntime.new(queued_inputs: [], steering: steering)
+
+    cli.send(:handle_tab_busy_input, tab, "/exit")
+
+    assert_equal ["/exit"], tab.queued_inputs
     assert_empty submitted
   end
 

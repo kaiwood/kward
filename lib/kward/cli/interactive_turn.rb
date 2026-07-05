@@ -184,7 +184,10 @@ module Kward
         poll_result = @prompt.poll_input
         case poll_result
         when String
-          if slash_command_input?(poll_result)
+          if busy_queued_command?(poll_result)
+            queued_inputs << poll_result
+            @prompt.set_queued_count(queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+          elsif slash_command_input?(poll_result)
             # Slash commands are local control actions. Running or queuing them
             # from the busy composer is surprising because the state they act on
             # may have changed by the time the active turn finishes.
@@ -223,6 +226,10 @@ module Kward
 
       def slash_command_input?(input)
         input.to_s.strip.start_with?("/")
+      end
+
+      def busy_queued_command?(input)
+        ["/exit", "/quit", "/new"].include?(input.to_s.strip)
       end
 
       def handle_busy_worker_input(input, agent, queued_inputs)
