@@ -483,6 +483,8 @@ module Kward
           @editor_state.move_file_start
         when "g_"
           vibe_move_line_last_non_blank
+        when "gJ"
+          vibe_join_lines(count, command, separator: "")
         when "ge"
           count.times { vibe_move_to_previous_word_end }
         when "gE"
@@ -1312,7 +1314,7 @@ module Kward
         vibe_remember_change(command)
       end
 
-      def vibe_join_lines(count, command = nil)
+      def vibe_join_lines(count, command = nil, separator: nil)
         line, = @editor_state.cursor_line_and_column
         join_count = [count, 2].max
         end_line = [line + join_count - 1, @editor_state.lines.length - 1].min
@@ -1324,8 +1326,8 @@ module Kward
             next_line_start = line_end + 1
             next_line_end = next_line_start + @editor_state.lines[line + 1].to_s.length
             next_line = @editor_state.buffer[next_line_start...next_line_end].to_s.sub(/\A\s+/, "")
-            separator = next_line.empty? ? "" : " "
-            @editor_state.replace_range(line_end, next_line_end, separator + next_line)
+            join_separator = separator.nil? ? (next_line.empty? ? "" : " ") : separator
+            @editor_state.replace_range(line_end, next_line_end, join_separator + next_line)
             @editor_state.cursor = line_end
           end
         end
