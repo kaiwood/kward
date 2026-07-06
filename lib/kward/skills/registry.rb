@@ -57,7 +57,8 @@ module Kward
         size = File.size(real_target)
         return "Error: skill file too large: #{path} (#{size} bytes)" if size > @max_file_bytes
 
-        File.read(real_target)
+        content = File.read(real_target)
+        relative_path.to_s.empty? ? skill_content(skill, content) : content
       rescue Errno::ENOENT
         "Error: skill file not found: #{path}"
       rescue StandardError => e
@@ -86,6 +87,40 @@ module Kward
       rescue StandardError => e
         warn "Warning: skipping #{source.label} in #{source.root}: #{e.message}"
         []
+      end
+
+      def skill_content(skill, content)
+        lines = [
+          %(<skill_content name="#{xml_escape(skill.name)}">),
+          content,
+          "",
+          "Skill directory: #{File.realpath(skill.folder)}",
+          "Relative paths in this skill are relative to the skill directory."
+        ]
+        resources = skill_resources(skill.folder)
+        unless resources.empty?
+          lines << ""
+          lines << "<skill_resources>"
+          resources.each { |path| lines << "  <file>#{xml_escape(path)}</file>" }
+          lines << "</skill_resources>"
+        end
+        lines << "</skill_content>"
+        lines.join("\n")
+      end
+
+      def skill_resources(folder)
+        roots = %w[scripts references assets].map { |name| File.join(folder, name) }.select { |path| Dir.exist?(path) }
+        resources = roots.flat_map do |root|
+          Dir.glob(File.join(root, "**", "*"))
+        end.select { |path| File.file?(path) }.sort.first(200)
+        base = Pathname.new(folder)
+        resources.map { |path| Pathname.new(path).relative_path_from(base).to_s }
+      rescue StandardError
+        []
+      end
+
+      def xml_escape(text)
+        text.to_s.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;").gsub('"', "&quot;")
       end
 
       def parse_skill(path)

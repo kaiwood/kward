@@ -19,6 +19,32 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_read_skill_wraps_default_activation_and_lists_resources
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(File.join(skill_dir, "references"))
+      FileUtils.mkdir_p(File.join(skill_dir, "scripts"))
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nFull skill body.\n")
+      File.write(File.join(skill_dir, "references", "details.md"), "Skill details.\n")
+      File.write(File.join(skill_dir, "scripts", "run.sh"), "echo hi\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        registry = Kward::ToolRegistry.new
+        conversation = Kward::Conversation.new(system_message: nil)
+        result = registry.dispatch(tool_call("read_skill", name: "planner"), conversation)
+
+        assert_includes result, '<skill_content name="planner">'
+        assert_includes result, "Full skill body."
+        assert_includes result, "Skill directory: #{File.realpath(skill_dir)}"
+        assert_includes result, "<skill_resources>"
+        assert_includes result, "<file>references/details.md</file>"
+        assert_includes result, "<file>scripts/run.sh</file>"
+        assert_includes result, "</skill_content>"
+      end
+    end
+  end
+
   def test_read_skill_repeats_content_even_when_artifact_exists
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
