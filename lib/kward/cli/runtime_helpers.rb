@@ -360,7 +360,7 @@ module Kward
         queued_inputs = []
         result = nil
         error = nil
-        @prompt.begin_busy_input("You>", activity: activity) if @prompt.respond_to?(:begin_busy_input)
+        begin_local_busy_command(activity)
 
         worker = Thread.new do
           result = yield
@@ -369,7 +369,8 @@ module Kward
         end
 
         while worker.alive?
-          collect_queued_input(queued_inputs)
+          poll_result = collect_queued_input(queued_inputs)
+          handle_busy_local_tab_action(poll_result, activity: activity) if busy_local_tab_action?(poll_result)
           sleep 0.02
         end
         worker.join
@@ -378,7 +379,7 @@ module Kward
 
         [result, queued_inputs]
       ensure
-        @prompt.finish_busy_input if prompt_interface? && @prompt.respond_to?(:finish_busy_input)
+        finish_local_busy_command(activity)
       end
 
       def run_busy_local_command_and_requeue(activity: "loading")
@@ -387,6 +388,38 @@ module Kward
         result, queued_inputs = run_busy_local_command(activity: activity) { yield }
         queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         result
+      end
+
+      def begin_local_busy_command(activity)
+        active_tab.local_busy_activity = activity if active_tab
+        @prompt.begin_busy_input("You>", activity: activity) if @prompt.respond_to?(:begin_busy_input)
+        update_prompt_tabs if respond_to?(:update_prompt_tabs, true)
+      end
+
+      def finish_local_busy_command(activity)
+        tab = local_busy_tab(activity)
+        tab.local_busy_activity = nil if tab
+        update_prompt_tabs if respond_to?(:update_prompt_tabs, true)
+        @prompt.finish_busy_input if prompt_interface? && @prompt.respond_to?(:finish_busy_input) && (!active_tab || active_tab == tab)
+      end
+
+      def local_busy_tab(activity)
+        Array(@tabs).find { |tab| tab.local_busy_activity.to_s == activity.to_s }
+      end
+
+      def busy_local_tab_action?(poll_result)
+        poll_result.is_a?(Hash) && poll_result[:tab_action]
+      end
+
+      def handle_busy_local_tab_action(action, activity:)
+        return unless respond_to?(:handle_tab_action, true)
+
+        @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+        handle_tab_action(action, @session_store)
+        tab = active_tab
+        return unless tab&.local_busy?
+
+        @prompt.begin_busy_input("You>", activity: tab.local_busy_activity) if @prompt.respond_to?(:begin_busy_input)
       end
 
       def current_workspace_root

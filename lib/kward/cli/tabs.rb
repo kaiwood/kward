@@ -28,14 +28,19 @@ module Kward
         :pending_question,
         :shell,
         :error_reported,
+        :local_busy_activity,
         keyword_init: true
       ) do
         def running?
           %w[queued running waiting_for_question].include?(status.to_s)
         end
 
+        def local_busy?
+          !local_busy_activity.to_s.empty?
+        end
+
         def idle?
-          !running?
+          !running? && !local_busy?
         end
 
         def record_event(event)
@@ -161,7 +166,8 @@ module Kward
           unread: false,
           pending_question: nil,
           shell: nil,
-          error_reported: false
+          error_reported: false,
+          local_busy_activity: nil
         ).tap { |tab| assign_tab_question_prompt(agent, tab) }
       end
 
@@ -242,7 +248,7 @@ module Kward
 
       def close_active_tab
         tab = active_tab
-        if tab&.running?
+        if tab&.running? || tab&.local_busy?
           runtime_output("Tab #{active_tab_number} is running and cannot be closed yet.")
           return nil
         end
@@ -323,6 +329,7 @@ module Kward
         update_prompt_tabs
         render_tab(tab) if render
         start_tab_live_view(tab) if tab.running?
+        @prompt.begin_busy_input("You>", activity: tab.local_busy_activity) if tab.local_busy? && @prompt.respond_to?(:begin_busy_input)
         persist_tabs
         service_active_tab_question
         tab.agent
@@ -609,7 +616,7 @@ module Kward
 
       def tab_label_color(tab)
         return :green if tab.status.to_s == "waiting_for_question"
-        return :yellow if tab.running?
+        return :yellow if tab.running? || tab.local_busy?
         return :red if %w[failed cancelled].include?(tab.status.to_s)
         return :green if tab.unread
 

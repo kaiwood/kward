@@ -103,6 +103,30 @@ class TestTabs < KwardTestCase
     end
   end
 
+  class BlockingSummarizer
+    attr_reader :started, :release
+
+    def initialize(summary = "summary")
+      @summary = summary
+      @started = Queue.new
+      @release = Queue.new
+    end
+
+    def summarize(*)
+      @started << true
+      @release.pop
+      @summary
+    end
+  end
+
+  def with_compactor_stub(compactor)
+    original_new = Kward::Compactor.method(:new)
+    Kward::Compactor.define_singleton_method(:new) { |**_kwargs| compactor }
+    yield
+  ensure
+    Kward::Compactor.define_singleton_method(:new, original_new)
+  end
+
   class BlockingQuestionClient
     attr_reader :started, :release
 
@@ -408,6 +432,52 @@ class TestTabs < KwardTestCase
       client.release << true
       first_tab.thread.join(1)
       assert_equal "ready", first_tab.status
+    end
+  end
+
+  def test_busy_local_command_switches_tabs_and_restores_spinner_when_switching_back
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store)
+      agent = cli.send(:setup_interactive_tabs, store, nil)
+      conversation = agent.conversation
+      4.times do |index|
+        conversation.append_user("user #{index} #{"x " * 2_000}")
+        conversation.append_assistant({ "role" => "assistant", "content" => "assistant #{index} #{"y " * 2_000}" })
+      end
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+      first_tab = cli.send(:active_tab)
+      summarizer = BlockingSummarizer.new("## Goal\nsummary")
+      compactor = Kward::Compactor.new(
+        conversation: conversation,
+        client: FakeClient.new([]),
+        settings: Kward::Compaction::Settings.new(keep_recent_tokens: 3_000),
+        summarizer: summarizer
+      )
+
+      with_compactor_stub(compactor) do
+        command = Thread.new { cli.send(:handle_local_slash_command, "/compact", agent, store) }
+        summarizer.started.pop
+        wait_until { first_tab.local_busy? }
+
+        prompt.queue_poll({ tab_action: :next })
+        wait_until { cli.instance_variable_get(:@active_tab_index) == 1 }
+        assert first_tab.local_busy?
+
+        prompt.queue_poll({ tab_action: :previous })
+        wait_until { cli.instance_variable_get(:@active_tab_index).zero? && prompt.busy_started >= 2 }
+        assert first_tab.local_busy?
+        assert_equal "compacting", first_tab.local_busy_activity
+
+        summarizer.release << true
+        command.join(1)
+      end
+
+      refute first_tab.local_busy?
+      assert_equal cli.instance_variable_get(:@active_tab_index), 0
+      assert_operator prompt.busy_finished, :>=, 2
     end
   end
 
