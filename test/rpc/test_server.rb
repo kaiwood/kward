@@ -167,6 +167,7 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["lifecycleHooks"]["decisions"], "deny"
     assert_equal true, capabilities["lifecycleHooks"].dig("approvals", "supported")
     assert_includes capabilities["lifecycleHooks"]["notifications"], "hook/event"
+    assert_equal ["hooks/logs"], capabilities["lifecycleHooks"]["methods"]
     assert_equal true, capabilities["lifecycleHooks"].dig("workspaceHooks", "supported")
     assert_equal true, capabilities["lifecycleHooks"].dig("httpHooks", "supported")
     assert_equal true, capabilities["lifecycleHooks"].dig("asyncHooks", "supported")
@@ -342,7 +343,7 @@ class TestRPCServer < KwardTestCase
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
       protocol workspace tools mcp prompts sessions turns models runtime runtime_settings
-      auth memory workers commands startup_resources config logging ui tool_approval
+      auth memory workers commands startup_resources config logging lifecycle_hooks ui tool_approval
     ]
 
     assert_equal expected_groups, Kward::RPC::Server::METHOD_GROUPS.keys
@@ -351,6 +352,7 @@ class TestRPCServer < KwardTestCase
     assert_includes Kward::RPC::Server::RPC_METHODS, "sessions/create"
     assert_includes Kward::RPC::Server::RPC_METHODS, "turns/start"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "hooks/logs"
   end
 
   def test_rpc_documentation_mentions_public_methods_and_notifications
@@ -466,6 +468,29 @@ class TestRPCServer < KwardTestCase
       result = read_framed_messages(output).find { |message| message["id"] == 1 }["result"]
       assert_equal ["The user prefers concise answers"], result["memories"].map { |memory| memory["text"] }
       assert_equal ["soft_001"], result["memories"].map { |memory| memory["id"] }
+    end
+  end
+
+  def test_hook_logs_rpc_returns_recent_audit_records
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      log_dir = File.join(dir, "logs")
+      FileUtils.mkdir_p(log_dir)
+      File.write(File.join(log_dir, "hooks.jsonl"), [
+        JSON.dump("event" => "turn_start", "decision" => "allow"),
+        "not json",
+        JSON.dump("event" => "turn_end", "decision" => "warn", "message" => "noticed")
+      ].join("\n") + "\n")
+
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "hooks/logs", params: { limit: 5 } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+      result = messages[0]["result"]
+      assert_equal File.join(log_dir, "hooks.jsonl"), result["path"]
+      assert_equal ["turn_start", "turn_end"], result["records"].map { |record| record["event"] }
+      assert_equal "noticed", result["records"].last["message"]
     end
   end
 

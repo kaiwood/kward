@@ -99,6 +99,14 @@ RPC clients can subscribe by listening for JSON-RPC notifications:
 
 Both notifications are redacted by the same RPC redactor used for other outbound messages.
 
+### `hooks/logs`
+
+Params:
+
+- `limit`: optional positive integer, default `20`, capped at `200`.
+
+Returns `{ path, records }` from the local lifecycle hook audit log. Unreadable JSONL lines are skipped and records are redacted before they are sent over RPC.
+
 ## Session methods
 
 RPC sessions are explicit and have an RPC `id`, a persisted session `path`, and a `workspaceRoot`. When a client creates, resumes, clones, or forks into another session, idle empty unnamed sessions are cleaned up automatically.

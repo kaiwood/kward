@@ -75,6 +75,7 @@ module Kward
       STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
+      LIFECYCLE_HOOK_METHODS = ["hooks/logs"].freeze
       UI_METHODS = ["ui/answerQuestion"].freeze
       TOOL_APPROVAL_METHODS = ["tool/answerApproval"].freeze
       SESSION_EVENT_NOTIFICATION = "session/event"
@@ -102,6 +103,7 @@ module Kward
         startup_resources: STARTUP_RESOURCE_METHODS,
         config: CONFIG_METHODS,
         logging: LOGGING_METHODS,
+        lifecycle_hooks: LIFECYCLE_HOOK_METHODS,
         ui: UI_METHODS,
         tool_approval: TOOL_APPROVAL_METHODS
       }.freeze
@@ -245,6 +247,8 @@ module Kward
           logging_stats(params)
         when LOGGING_METHODS[1]
           logging_token_csv(params)
+        when LIFECYCLE_HOOK_METHODS[0]
+          lifecycle_hook_logs(params)
         when MEMORY_METHODS[0]
           @session_manager.memory_status
         when MEMORY_METHODS[1]
@@ -457,6 +461,7 @@ module Kward
             decisions: Hooks::Decision::VALID_DECISIONS,
             approvals: { supported: true, via: "toolApproval", requestNotification: TOOL_APPROVAL_NOTIFICATION, answerMethod: TOOL_APPROVAL_METHODS.first },
             notifications: [HOOK_EVENT_NOTIFICATION, "hook/message"],
+            methods: LIFECYCLE_HOOK_METHODS,
             auditLog: { supported: true, path: File.join(ConfigFiles.config_dir, "logs", "hooks.jsonl") },
             commandHooks: true,
             pluginHooks: true,
@@ -656,6 +661,21 @@ module Kward
         { csv: TelemetryStats.new.token_usage_csv(params["range"].to_s, bucket: params["bucket"]) }
       rescue ArgumentError => e
         raise ArgumentError, e.message == TelemetryStats::USAGE ? e.message : "#{e.message} #{TelemetryStats::USAGE}"
+      end
+
+      def lifecycle_hook_logs(params)
+        limit = params.fetch("limit", 20).to_i
+        limit = 20 unless limit.positive?
+        limit = 200 if limit > 200
+        path = File.join(ConfigFiles.config_dir, "logs", "hooks.jsonl")
+        return { path: path, records: [] } unless File.file?(path)
+
+        records = File.readlines(path, chomp: true).last(limit).filter_map do |line|
+          JSON.parse(line)
+        rescue JSON::ParserError
+          nil
+        end
+        { path: path, records: records }
       end
 
       def commands_list(params)
