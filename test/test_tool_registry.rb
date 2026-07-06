@@ -648,6 +648,77 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_tool_registry_runs_lifecycle_hooks_around_tools
+    manager = Kward::Hooks::Manager.new
+    events = []
+    manager.register("tool_call_before") do |event, _ctx|
+      events << [event.name, event.payload[:tool_name]]
+      Kward::Hooks::Decision.allow
+    end
+    manager.register("tool_call_after") do |event, _ctx|
+      events << [event.name, event.payload[:tool_name], event.payload[:content].include?("test_agent.rb")]
+      Kward::Hooks::Decision.allow
+    end
+    registry = Kward::ToolRegistry.new(hook_manager: manager)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("list_directory", path: "test"), conversation)
+
+    assert_includes result, "test_tool_registry.rb"
+    assert_equal [["tool_call_before", "list_directory"], ["tool_call_after", "list_directory", true]], events
+  end
+
+  def test_tool_registry_hook_can_deny_tool_call
+    manager = Kward::Hooks::Manager.new
+    manager.register("tool_call_before") { Kward::Hooks::Decision.deny("Blocked by policy") }
+    registry = Kward::ToolRegistry.new(hook_manager: manager)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("list_directory", path: "."), conversation)
+
+    assert_equal "Declined: Blocked by policy", result
+  end
+
+  def test_tool_registry_shell_hook_can_modify_command
+    workspace = Object.new
+    commands = []
+    workspace.define_singleton_method(:root) { Dir.pwd }
+    workspace.define_singleton_method(:run_shell_command) do |command, timeout_seconds:, **_kwargs|
+      commands << [command, timeout_seconds]
+      "ran #{command}"
+    end
+    manager = Kward::Hooks::Manager.new
+    manager.register("shell_command_before") do |_event, _ctx|
+      Kward::Hooks::Decision.modify(command: "echo modified", timeout_seconds: 77)
+    end
+    registry = Kward::ToolRegistry.new(workspace: workspace, hook_manager: manager)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "echo original", timeout_seconds: 1), conversation)
+
+    assert_equal "ran echo modified", result
+    assert_equal [["echo modified", 77]], commands
+  end
+
+  def test_tool_registry_runs_file_change_after_hook
+    Dir.mktmpdir do |workspace_dir|
+      manager = Kward::Hooks::Manager.new
+      events = []
+      manager.register("file_change_after") do |event, _ctx|
+        events << event.payload
+        Kward::Hooks::Decision.allow
+      end
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_dir), hook_manager: manager)
+      conversation = Kward::Conversation.new
+
+      result = registry.dispatch(tool_call("write_file", path: "hello.txt", content: "hi\n"), conversation)
+
+      assert_includes result, "Wrote"
+      assert_equal "hello.txt", events.first[:path]
+      assert_equal "write", events.first[:operation]
+    end
+  end
+
   def test_tool_registry_shell_command_runs_without_confirmation
     prompt = FakePrompt.new([], confirmations: [false])
     conversation = Kward::Conversation.new

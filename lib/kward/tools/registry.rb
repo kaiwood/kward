@@ -1,5 +1,6 @@
 require_relative "../config_files"
 require_relative "../conversation"
+require_relative "../hooks"
 require_relative "ask_user_question"
 require_relative "code_search"
 require_relative "context_budget_stats"
@@ -62,7 +63,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, hook_manager: nil, hook_context: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -78,6 +79,8 @@ module Kward
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
       @tool_approval = tool_approval
+      @hook_manager = hook_manager
+      @hook_context = hook_context
       @mcp_clients = if mcp_clients
                        mcp_clients
                      elsif @allowed_tool_names
@@ -106,12 +109,18 @@ module Kward
       tool = @tools[name]
 
       original_content = if tool
-                           if mutation_tool?(name) && !write_lock_owned?
+                           before_tool = run_hook("tool_call_before", conversation, payload: tool_payload(name, args, tool_call))
+                           args = hook_arguments(before_tool, args)
+                           if before_tool.denied?
+                             hook_denied_content(before_tool, "tool call denied: #{name}")
+                           elsif before_tool.approval_required? && hook_approval_denied?(before_tool, tool_call, name, args, cancellation)
+                             hook_denied_content(before_tool, "tool call approval denied: #{name}")
+                           elsif mutation_tool?(name) && !write_lock_owned?
                              "Workspace write denied: another worker owns the write lock."
                            elsif tool_approval_denied?(tool_call, name, args, cancellation)
                              "Declined: tool execution denied by user: #{name}"
                            else
-                             tool.call(args, conversation, cancellation: cancellation)
+                             execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
                            end
                          else
                            "Unknown tool: #{name}"
@@ -218,6 +227,115 @@ module Kward
         "bytes_after" => after.bytesize,
         "bytes_saved" => before.bytesize - after.bytesize
       )
+    end
+
+    def execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+      args = run_shell_before_hooks(name, args, tool_call, conversation, cancellation)
+      content = tool.call(args, conversation, cancellation: cancellation)
+      run_shell_after_hooks(name, args, content, conversation)
+      run_file_change_after_hooks(name, args, content, conversation)
+      run_hook("tool_call_after", conversation, payload: tool_payload(name, args, tool_call).merge(content: content.to_s))
+      content
+    rescue HookDenied => e
+      e.message
+    rescue StandardError => e
+      run_hook("tool_call_error", conversation, payload: tool_payload(name, args, tool_call).merge(error: e.message))
+      raise
+    end
+
+    def run_shell_before_hooks(name, args, tool_call, conversation, cancellation)
+      return args unless name.to_s == "run_shell_command"
+
+      result = run_hook("shell_command_before", conversation, payload: shell_payload(args))
+      if result.denied?
+        raise HookDenied, hook_denied_content(result, "shell command denied")
+      end
+      if result.approval_required? && hook_approval_denied?(result, tool_call, name, args, cancellation)
+        raise HookDenied, hook_denied_content(result, "shell command approval denied")
+      end
+      shell_arguments(result.payload, args)
+    end
+
+    def run_shell_after_hooks(name, args, content, conversation)
+      return unless name.to_s == "run_shell_command"
+
+      run_hook("shell_command_after", conversation, payload: shell_payload(args).merge(content: content.to_s))
+    end
+
+    def run_file_change_after_hooks(name, args, content, conversation)
+      return unless ToolCall.file_change_tool?(name)
+      return unless content.to_s.start_with?("Wrote ", "Edited ")
+
+      path = args[:path] || args["path"]
+      run_hook("file_change_after", conversation, payload: {
+        tool_name: name,
+        operation: name.to_s.start_with?("edit") ? "edit" : "write",
+        path: path,
+        files: [{ path: path, operation: name.to_s.start_with?("edit") ? "edit" : "write" }],
+        content: content.to_s
+      })
+    end
+
+    HookDenied = Class.new(StandardError)
+
+    def run_hook(name, conversation, payload: {})
+      return Hooks::Manager::Result.new(event: nil, decision: Hooks::Decision.allow, decisions: [], warnings: [], messages: [], payload: payload) unless @hook_manager
+
+      @hook_manager.run(Hooks::Event.new(
+        name: name,
+        workspace: { root: @workspace.respond_to?(:root) ? @workspace.root.to_s : nil },
+        payload: payload
+      ), context: @hook_context || default_hook_context(conversation))
+    end
+
+    def default_hook_context(conversation)
+      return nil unless defined?(PluginRegistry::Context)
+
+      PluginRegistry::Context.new(conversation: conversation, workspace_root: @workspace.respond_to?(:root) ? @workspace.root.to_s : Dir.pwd)
+    end
+
+    def tool_payload(name, args, tool_call)
+      metadata = metadata_for(name)
+      {
+        tool_name: name,
+        arguments: args,
+        tool_call_id: tool_call["id"] || tool_call[:id],
+        source: metadata[:source] || metadata["source"],
+        server_name: metadata[:serverName] || metadata["serverName"],
+        remote_name: metadata[:remoteName] || metadata["remoteName"]
+      }.compact
+    end
+
+    def hook_arguments(result, fallback)
+      payload_arguments = result.payload[:arguments] || result.payload["arguments"]
+      payload_arguments.is_a?(Hash) ? payload_arguments : fallback
+    end
+
+    def shell_payload(args)
+      {
+        tool_name: "run_shell_command",
+        command: args[:command] || args["command"],
+        timeout_seconds: args[:timeout_seconds] || args["timeout_seconds"] || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        cwd: @workspace.respond_to?(:root) ? @workspace.root.to_s : nil
+      }.compact
+    end
+
+    def shell_arguments(payload, fallback)
+      fallback.merge(
+        command: payload[:command] || payload["command"] || fallback[:command] || fallback["command"],
+        timeout_seconds: payload[:timeout_seconds] || payload["timeout_seconds"] || fallback[:timeout_seconds] || fallback["timeout_seconds"]
+      )
+    end
+
+    def hook_denied_content(result, fallback)
+      "Declined: #{result.decision.message || fallback}"
+    end
+
+    def hook_approval_denied?(result, tool_call, name, args, cancellation)
+      return true unless @tool_approval
+
+      approval_args = args.merge("hook_message" => result.decision.message)
+      @tool_approval.call(tool_call: tool_call, name: name, args: approval_args, cancellation: cancellation) == false
     end
 
     def mutation_tool?(name)

@@ -28,8 +28,9 @@ module Kward
         new(decision: "ask", message: message, metadata: metadata)
       end
 
-      def self.modify(payload, message: nil, metadata: nil)
-        new(decision: "modify", message: message, payload: payload, metadata: metadata)
+      def self.modify(payload = nil, message: nil, metadata: nil, **payload_keywords)
+        payload = payload_keywords unless payload_keywords.empty?
+        new(decision: "modify", message: message, payload: payload || {}, metadata: metadata)
       end
 
       def self.warn(message = nil, metadata: nil)
