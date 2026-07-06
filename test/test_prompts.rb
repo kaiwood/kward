@@ -551,6 +551,55 @@ class TestPrompts < KwardTestCase
     FileUtils.rm_rf(File.join(KWARD_TEST_HOME, ".agents", "skills", "shared"))
   end
 
+  def test_skill_parser_keeps_optional_metadata_fields
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), <<~SKILL)
+        ---
+        name: planner
+        description: Helps plan work.
+        license: MIT
+        compatibility: Requires git.
+        metadata:
+          author: example
+        allowed-tools: Bash(git:*) Read
+        ---
+      SKILL
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        skill = Kward::ConfigFiles.skills.first
+
+        assert_equal "planner", skill.name
+        assert_equal "MIT", skill.license
+        assert_equal "Requires git.", skill.compatibility
+        assert_equal({ "author" => "example" }, skill.metadata)
+        assert_equal "Bash(git:*) Read", skill.allowed_tools
+      end
+    end
+  end
+
+  def test_skills_skip_missing_required_metadata
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      missing_name = File.join(dir, "skills", "missing-name")
+      missing_description = File.join(dir, "skills", "missing-description")
+      [missing_name, missing_description].each { |path| FileUtils.mkdir_p(path) }
+      File.write(File.join(missing_name, "SKILL.md"), "---\ndescription: Missing name.\n---\n")
+      File.write(File.join(missing_description, "SKILL.md"), "---\nname: missing-description\n---\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        _stdout, stderr = capture_io do
+          assert_empty Kward::ConfigFiles.skills
+        end
+
+        assert_includes stderr, "missing name"
+        assert_includes stderr, "missing description"
+      end
+    end
+  end
+
   def test_invalid_config_prompt_and_skill_warn_and_skip
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))

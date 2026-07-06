@@ -49,7 +49,7 @@ module Kward
     OVERLAY_ALIGNMENTS = %w[left center right].freeze
     OVERLAY_WIDTHS = %w[capped maximum].freeze
 
-    Skill = Struct.new(:name, :description, :folder, :path, keyword_init: true)
+    Skill = Struct.new(:name, :description, :folder, :path, :license, :compatibility, :metadata, :allowed_tools, keyword_init: true)
     PromptTemplate = Struct.new(:command, :description, :argument_hint, :body, :path, keyword_init: true) do
       def expand(arguments)
         body.gsub("$ARGUMENTS", arguments.to_s)

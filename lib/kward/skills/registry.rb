@@ -91,12 +91,44 @@ module Kward
       def parse_skill(path)
         frontmatter, = @markdown_parser.call(path)
         name = frontmatter.fetch("name", "").to_s.strip
-        name = File.basename(File.dirname(path)) if name.empty?
         description = frontmatter.fetch("description", "").to_s.strip
+        return warn_skip(path, "missing name") if name.empty?
+        return warn_skip(path, "missing description") if description.empty?
+        return warn_skip(path, "description exceeds 1024 characters") if description.length > 1024
 
-        @skill_class.new(name: name, description: description, folder: File.dirname(path), path: path)
+        warn "Warning: Kward skill #{path}: name does not match parent directory" if name != File.basename(File.dirname(path))
+        warn "Warning: Kward skill #{path}: name exceeds 64 characters" if name.length > 64
+        warn "Warning: Kward skill #{path}: name contains invalid characters" unless valid_name?(name)
+
+        compatibility = optional_text(frontmatter["compatibility"])
+        warn "Warning: Kward skill #{path}: compatibility exceeds 500 characters" if compatibility && compatibility.length > 500
+
+        @skill_class.new(
+          name: name,
+          description: description,
+          folder: File.dirname(path),
+          path: path,
+          license: optional_text(frontmatter["license"]),
+          compatibility: compatibility,
+          metadata: frontmatter["metadata"].is_a?(Hash) ? frontmatter["metadata"] : {},
+          allowed_tools: optional_text(frontmatter["allowed-tools"])
+        )
       rescue StandardError => e
         warn "Warning: skipping Kward skill #{path}: #{e.message}"
+        nil
+      end
+
+      def valid_name?(name)
+        name.match?(/\A[a-z0-9]+(?:-[a-z0-9]+)*\z/)
+      end
+
+      def optional_text(value)
+        text = value.to_s.strip
+        text.empty? ? nil : text
+      end
+
+      def warn_skip(path, reason)
+        warn "Warning: skipping Kward skill #{path}: #{reason}"
         nil
       end
     end
