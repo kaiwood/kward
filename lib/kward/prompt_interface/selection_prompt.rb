@@ -73,6 +73,8 @@ module Kward
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
         case code
+        when 9
+          modified_tab_sequence?(sequence) ? true : select_toggle_search
         when 13
           select_input_active? ? select_input_action_result : select_current_choice
         when 27
@@ -501,25 +503,43 @@ module Kward
 
       def select_typed_key(key)
         return select_insert_key(key) if select_input_active?
-        return select_begin_search if key == "/" && !select_search_active?
+        return select_toggle_search if select_search_toggle_key?(key)
         return select_action_key(key) unless select_search_active?
 
         select_insert_key(key)
+      end
+
+      def select_search_toggle_key?(key)
+        TerminalKeys::TAB.include?(key)
+      end
+
+      def modified_tab_sequence?(sequence)
+        modifier = sequence[:modifier]
+        modifier && modifier != 1
+      end
+
+      def select_toggle_search
+        select_search_active? ? select_pause_search : select_begin_search
       end
 
       def select_begin_search
         return unless @select_state
 
         @select_state[:search_active] = true
-        self.composer_input = ""
-        self.composer_cursor = 0
+        true
+      end
+
+      def select_pause_search
+        return unless @select_state
+
+        @select_state[:search_active] = false
         true
       end
 
       def select_cancel_search
         return unless @select_state
 
-        @select_state[:search_active] = false
+        select_pause_search
         self.composer_input = ""
         self.composer_cursor = 0
         @select_state[:selection_index] = 0
@@ -607,7 +627,7 @@ module Kward
 
       def selection_matches
         choices = @select_state ? @select_state[:choices] : []
-        filter = select_search_active? ? composer_input.downcase.strip : ""
+        filter = (select_search_active? || !composer_input.strip.empty?) ? composer_input.downcase.strip : ""
         matches = filter.empty? ? choices : choices.select { |choice| choice.downcase.include?(filter) }
         clamp_selection_index(matches.length)
         matches
@@ -666,7 +686,7 @@ module Kward
         return "Renaming · Enter save · Esc cancel" if select_input_active?
 
         text = "↑/↓ select · Enter open"
-        text = "#{text} · / search" unless select_search_active?
+        text = "#{text} · Tab search" unless select_search_active?
         action_keys = @select_state ? @select_state[:action_keys].to_h : {}
         action_keys.each do |key, action|
           text = "#{text} · #{key} #{action[:action]}"

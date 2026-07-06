@@ -116,10 +116,10 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     input&.close unless input&.closed?
   end
 
-  def test_prompt_interface_select_filters_choices_after_slash
+  def test_prompt_interface_select_filters_choices_after_tab
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("/sec\r")
+    writer.write("\tsec\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
@@ -128,10 +128,10 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     input&.close unless input&.closed?
   end
 
-  def test_prompt_interface_select_filters_choices_after_csi_u_slash_text
+  def test_prompt_interface_select_filters_choices_after_csi_u_tab_text
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("\e[0;1;47usec\r")
+    writer.write("\e[9usec\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
@@ -145,7 +145,7 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     action_keys = prompt.send(:normalized_select_action_keys, { "c" => :clone })
     prompt.instance_variable_set(:@select_state, { choices: ["first", "second"], selection_index: 0, title: "Sessions", custom: false, action_keys: action_keys, search_active: false })
 
-    assert prompt.send(:handle_select_key, "/")
+    assert prompt.send(:handle_select_key, "\t")
     assert_equal 0, prompt.send(:handle_select_key, "c")
     assert_equal "c", prompt.send(:composer_input)
     assert prompt.send(:handle_select_key, "\e[27u")
@@ -154,10 +154,28 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     assert_equal({ action: :clone, choice: "first" }, prompt.send(:handle_select_key, "c"))
   end
 
+  def test_prompt_interface_select_tab_returns_to_list_without_clearing_search
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    action_keys = prompt.send(:normalized_select_action_keys, { "c" => :clone })
+    prompt.instance_variable_set(:@select_state, { choices: ["first", "second"], selection_index: 0, title: "Sessions", custom: false, action_keys: action_keys, search_active: false })
+
+    assert prompt.send(:handle_select_key, "\t")
+    prompt.send(:handle_select_key, "s")
+    prompt.send(:handle_select_key, "e")
+    prompt.send(:handle_select_key, "c")
+    assert_equal ["second"], prompt.send(:selection_matches)
+    assert prompt.send(:handle_select_key, "\t")
+
+    refute prompt.send(:select_search_active?)
+    assert_equal "sec", prompt.send(:composer_input)
+    assert_equal ["second"], prompt.send(:selection_matches)
+    assert_equal({ action: :clone, choice: "second" }, prompt.send(:handle_select_key, "c"))
+  end
+
   def test_prompt_interface_select_search_supports_shell_style_editing_keys
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("/ab\x01Z\x05X\r")
+    writer.write("\tab\x01Z\x05X\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
@@ -169,7 +187,7 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
   def test_prompt_interface_select_search_supports_shell_style_kill_and_yank_keys
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("/hello world\x15\x19\r")
+    writer.write("\thello world\x15\x19\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
@@ -181,7 +199,7 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
   def test_prompt_interface_select_title_switches_to_search_while_searching
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("/sec\r")
+    writer.write("\tsec\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
@@ -196,7 +214,7 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
   def test_prompt_interface_select_hides_cursor_until_search_starts
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("/sec\r")
+    writer.write("\tsec\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
@@ -420,7 +438,7 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
   def test_prompt_interface_select_search_accepts_bracketed_paste
     input, writer = IO.pipe
     output = StringIO.new
-    writer.write("/\e[200~sec\e[201~\r")
+    writer.write("\t\e[200~sec\e[201~\r")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
 
