@@ -69,6 +69,23 @@ class TestHooks < KwardTestCase
     assert_equal 120, result.payload[:timeout_seconds]
   end
 
+  def test_manager_filters_modifications_to_catalog_fields
+    manager = Kward::Hooks::Manager.new
+    manager.register("shell_command_before") do
+      Kward::Hooks::Decision.modify(command: "echo ok", unexpected: "ignored")
+    end
+    manager.register("file_change_after") do
+      Kward::Hooks::Decision.modify(path: "ignored.txt")
+    end
+
+    shell = manager.run(Kward::Hooks::Event.new(name: "shell_command_before", payload: { command: "echo no" }))
+    file = manager.run(Kward::Hooks::Event.new(name: "file_change_after", payload: { path: "kept.txt" }))
+
+    assert_equal "echo ok", shell.payload[:command]
+    refute shell.payload.key?(:unexpected)
+    assert_equal "kept.txt", file.payload[:path]
+  end
+
   def test_manager_stops_on_denial
     manager = Kward::Hooks::Manager.new
     calls = []

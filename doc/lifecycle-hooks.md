@@ -30,7 +30,7 @@ A hook may return one of these decisions:
 | `retry` | Reserved for retry-aware lifecycle integrations. |
 | `defer` | Reserved for asynchronous follow-up integrations. |
 
-When multiple hooks match one event, they run by ascending `order`. A `deny` stops later hooks. A `modify` updates the payload seen by later hooks.
+When multiple hooks match one event, they run by ascending `order`. A `deny` stops later hooks. A `modify` updates the payload seen by later hooks, but only for fields listed as supported modifications for that event. Unknown modification fields are ignored for known events.
 
 ## Ruby plugin hooks
 

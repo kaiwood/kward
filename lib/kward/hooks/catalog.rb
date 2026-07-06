@@ -74,6 +74,22 @@ module Kward
         raise ArgumentError, "Unknown hook failure policy: #{policy}"
       end
 
+      def modifiable_fields(event_name)
+        Array(definition(event_name)&.modifiable_fields)
+      end
+
+      def filter_modifications(event_name, payload)
+        definition = definition(event_name)
+        return payload unless definition
+
+        fields = Array(definition.modifiable_fields)
+        return {} if fields.empty?
+
+        payload.each_with_object({}) do |(key, value), result|
+          result[key] = value if fields.include?(key.to_s)
+        end
+      end
+
       def failure_decision(policy, message, metadata: nil)
         case normalize_failure_policy(policy)
         when "allow"

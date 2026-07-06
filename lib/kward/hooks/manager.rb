@@ -66,7 +66,8 @@ module Kward
           messages << decision.message if decision.message && !decision.warning?
 
           if decision.modify?
-            payload = deep_merge(payload, decision.payload)
+            modifications = Catalog.filter_modifications(event.name, decision.payload)
+            payload = deep_merge(payload, modifications)
             event = event_with_payload(event, payload)
           end
 
