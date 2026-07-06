@@ -281,6 +281,7 @@ class TestCLISettings < KwardTestCase
         [
           "Memory", "Enable memory",
           "Tools & Search", "Disable web search",
+          "Tools & Search", "Trust project skills",
           "Context & Compaction", "Disable auto-compaction",
           "Logging", "Enable local logging",
           "Done"
@@ -297,6 +298,7 @@ class TestCLISettings < KwardTestCase
       config = JSON.parse(File.read(config_path))
       assert_equal true, config.dig("memory", "enabled")
       assert_equal false, config.dig("web_search", "enabled")
+      assert_equal true, config.dig("skills", "trust_project")
       assert_equal false, config.dig("compaction", "enabled")
       assert_equal true, config.dig("logging", "enabled")
     end

@@ -365,6 +365,9 @@ module Kward
         when /\Aallow model-provider/, /\Adisallow model-provider/
           set_web_search_allow_model_providers(!web_search_allow_model_providers?)
           runtime_output("Model-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.")
+        when /\Atrust project skills/, /\Auntrust project skills/
+          set_project_skills_trusted(!project_skills_trusted?)
+          runtime_output("Project skills #{project_skills_trusted? ? "trusted" : "untrusted"}.")
         when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
           set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
           runtime_output("Workspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.")
@@ -376,6 +379,7 @@ module Kward
           "#{web_search_enabled? ? "Disable" : "Enable"} web search (currently #{on_off(web_search_enabled?)})",
           "Web search provider (#{web_search_provider})",
           "#{web_search_allow_model_providers? ? "Disallow" : "Allow"} model-provider web search (currently #{on_off(web_search_allow_model_providers?)})",
+          "#{project_skills_trusted? ? "Untrust" : "Trust"} project skills (currently #{on_off(project_skills_trusted?)})",
           "#{workspace_guardrails_enabled? ? "Disable" : "Enable"} workspace guardrails (currently #{on_off(workspace_guardrails_enabled?)})",
           "Back"
         ]
@@ -412,6 +416,14 @@ module Kward
 
       def set_web_search_allow_model_providers(enabled)
         update_nested_config("web_search", "allow_model_providers" => enabled)
+      end
+
+      def project_skills_trusted?
+        ConfigFiles.project_skills_trusted?(safely_read_config.to_h)
+      end
+
+      def set_project_skills_trusted(enabled)
+        update_nested_config("skills", "trust_project" => enabled)
       end
 
       def set_workspace_guardrails_enabled(enabled)
