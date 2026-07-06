@@ -62,6 +62,28 @@ By default, Kward stores user data under `~/.kward`:
 
 When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files live beside that file instead. User plugins are the exception: they are loaded only from `~/.kward/plugins`. See [Plugins](plugins.md) for writing and loading user plugins.
 
+## Lifecycle hooks
+
+Configure command lifecycle hooks with a top-level `hooks` object. Each key is an event name and each value is an array of hook entries. Command hooks receive event JSON on stdin and return a decision JSON object on stdout.
+
+```json
+{
+  "hooks": {
+    "shell_command_before": [
+      {
+        "id": "block-release",
+        "type": "command",
+        "command": "~/.kward/hooks/block-release.rb",
+        "timeout_seconds": 5,
+        "match": { "command_regex": "\\bgem push\\b" }
+      }
+    ]
+  }
+}
+```
+
+See [Lifecycle hooks](lifecycle-hooks.md) for events, decisions, selectors, plugin hooks, command-hook protocol, and security notes.
+
 ## Embedded shell config
 
 The embedded Kward shell (`/shell`, internally `ekwsh`) reads optional global settings from `~/.kward/ekwsh.yml` or, when `KWARD_CONFIG_PATH` is set, from `ekwsh.yml` beside that config file.

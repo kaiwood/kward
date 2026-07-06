@@ -14,6 +14,7 @@ Start simple. Most users only need `PRINCIPLES.md`, workspace `AGENTS.md`, and m
 | Task-specific reusable instructions | skills |
 | Different tone or role | [personas](personas.md) |
 | Local Ruby behavior or integrations | plugins |
+| Deterministic runtime policy or automation | lifecycle hooks |
 
 Install the starter pack for a useful starting point:
 
@@ -100,6 +101,12 @@ Prompt templates are best for reusable text. They do not run local code.
 Use skills for reusable instructions that should only be loaded for certain tasks, such as testing, release checks, or code review workflows.
 
 Kward supports Agent Skills in user and project directories, including the shared `.agents/skills` convention. See [Skills](skills.md) for the full guide, including setup, explicit `/skill` activation, bundled files, project trust, and troubleshooting.
+
+## Lifecycle hooks
+
+Use [lifecycle hooks](lifecycle-hooks.md) when something must happen at a specific runtime point: before a shell command, around model requests, after a file change, or before a tool call. Hooks can allow, deny, ask for approval, modify supported payloads, or warn. They are available from trusted Ruby plugins and from command hooks configured in `config.json`.
+
+Hooks are deterministic automation and policy. They are not model instructions.
 
 ## Plugins
 

@@ -88,6 +88,7 @@ Advanced:
 
 - [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and extension choices.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
+- [Lifecycle hooks](doc/lifecycle-hooks.md): deterministic runtime hooks for policy, approvals, automation, and command-hook integrations.
 - [RPC protocol](doc/rpc.md): JSON-RPC backend mode for trusted local UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
 - [Agent tools](doc/agent-tools.md): overview of model-callable tools, token-saving behavior, and tool categories.
