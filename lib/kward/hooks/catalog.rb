@@ -26,6 +26,8 @@ module Kward
         EventDefinition.new(name: "session_export_after", failure_policy: "warn"),
         EventDefinition.new(name: "session_compact_before", failure_policy: "deny"),
         EventDefinition.new(name: "session_compact_after", failure_policy: "warn"),
+        EventDefinition.new(name: "tool_output_compact_before", failure_policy: "warn"),
+        EventDefinition.new(name: "tool_output_compact_after", failure_policy: "warn"),
         EventDefinition.new(name: "tool_call_before", failure_policy: "deny", modifiable_fields: %w[arguments]),
         EventDefinition.new(name: "tool_call_after", failure_policy: "warn"),
         EventDefinition.new(name: "tool_call_error", failure_policy: "warn"),

@@ -281,6 +281,53 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_tool_output_compaction_hooks_wrap_compactor
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "demo.txt"), "hello world\n")
+      compactor = Object.new
+      def compactor.compact(_name, _content)
+        "short"
+      end
+      manager = Kward::Hooks::Manager.new
+      events = []
+      manager.register("tool_output_compact_before") do |event, _ctx|
+        events << [event.name, event.payload[:tool_name], event.payload[:bytes]]
+        Kward::Hooks::Decision.allow
+      end
+      manager.register("tool_output_compact_after") do |event, _ctx|
+        events << [event.name, event.payload[:tool_name], event.payload[:compacted]]
+        Kward::Hooks::Decision.allow
+      end
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false, tool_output_compactor: compactor, hook_manager: manager)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      result = registry.dispatch(tool_call("read_file", path: "demo.txt"), conversation)
+
+      assert_equal "short", result
+      assert_equal "tool_output_compact_before", events[0][0]
+      assert_equal "read_file", events[0][1]
+      assert_equal ["tool_output_compact_after", "read_file", true], events[1]
+    end
+  end
+
+  def test_tool_output_compaction_before_hook_can_skip_compaction
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "demo.txt"), "hello world\n")
+      compactor = Object.new
+      def compactor.compact(_name, _content)
+        "short"
+      end
+      manager = Kward::Hooks::Manager.new
+      manager.register("tool_output_compact_before") { Kward::Hooks::Decision.deny("No compaction") }
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), web_search_enabled: false, tool_output_compactor: compactor, hook_manager: manager)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      result = registry.dispatch(tool_call("read_file", path: "demo.txt"), conversation)
+
+      assert_includes result, "hello world"
+    end
+  end
+
   def test_context_budget_stats_survive_tool_registry_rebuild_for_same_conversation
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "demo.txt"), "hello world\n")

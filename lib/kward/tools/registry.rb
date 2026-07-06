@@ -133,7 +133,7 @@ module Kward
       end
 
       artifact_id = nil
-      model_content = @tool_output_compactor.compact(name, content) do
+      model_content = compact_tool_output(name, content, original_content, conversation) do
         artifact_id ||= conversation.store_tool_output_artifact(tool_name: name, content: original_content)
       end
       record_context_budget(conversation, name, before: original_content, after: model_content)
@@ -195,6 +195,24 @@ module Kward
         source: "unknown",
         displayName: name.to_s
       }
+    end
+
+    def compact_tool_output(name, content, original_content, conversation, &store_artifact)
+      before = run_hook("tool_output_compact_before", conversation, payload: {
+        tool_name: name,
+        bytes: content.bytesize,
+        duplicate: content != original_content
+      })
+      return content if before.denied? || before.approval_required?
+
+      compacted = @tool_output_compactor.compact(name, content, &store_artifact)
+      run_hook("tool_output_compact_after", conversation, payload: {
+        tool_name: name,
+        bytes_before: content.bytesize,
+        bytes_after: compacted.bytesize,
+        compacted: compacted != content
+      }) if compacted != content
+      compacted
     end
 
     def record_context_budget(conversation, name, before:, after:)

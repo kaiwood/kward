@@ -200,7 +200,17 @@ Payloads are metadata-oriented by default. Full file contents, secrets, and comp
 | `tool_call_before` | `tool_name`, `arguments`, `tool_call_id`, `source`, MCP metadata when applicable | `arguments` |
 | `tool_call_after` | tool metadata plus `content` | none |
 | `tool_call_error` | tool metadata plus `error` | none |
-| `tool_result_compacted` | reserved for compaction integrations | none |
+
+### Compaction events
+
+| Event | Payload highlights | Supported modifications |
+| --- | --- | --- |
+| `tool_output_compact_before` | `tool_name`, `bytes`, `duplicate` | none |
+| `tool_output_compact_after` | `tool_name`, `bytes_before`, `bytes_after`, `compacted` | none |
+| `session_compact_before` | `instructions` | none |
+| `session_compact_after` | `old_message_count`, `new_message_count` | none |
+
+`tool_output_compact_before` can skip tool-output compaction when denied or approval is unavailable. The original tool output is still stored in the transcript metadata/artifact path as usual.
 
 ### Shell events
 
