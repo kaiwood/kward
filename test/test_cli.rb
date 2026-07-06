@@ -2338,6 +2338,32 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_git_diff_before_hook_can_deny_diff_view
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.define_singleton_method(:run_lifecycle_hook) do |_name, **_kwargs|
+      decision = Kward::Hooks::Decision.deny("No diff")
+      Kward::Hooks::Manager::Result.new(event: nil, decision: decision, decisions: [decision], warnings: [], messages: [], payload: {})
+    end
+
+    result = cli.send(:git_diff_view, Dir.pwd, " M README.md")
+
+    assert_equal "README.md", result[:path]
+    assert_equal "Declined: No diff\n", result[:content]
+  end
+
+  def test_git_commit_before_hook_can_deny_commit
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.define_singleton_method(:run_lifecycle_hook) do |_name, **_kwargs|
+      decision = Kward::Hooks::Decision.deny("No commit")
+      Kward::Hooks::Manager::Result.new(event: nil, decision: decision, decisions: [decision], warnings: [], messages: [], payload: {})
+    end
+
+    result = cli.send(:git_commit, Dir.pwd, "test")
+
+    assert_equal false, result[:success]
+    assert_equal "Declined: No commit", result[:output]
+  end
+
   def test_session_export_before_hook_can_deny_export
     export_path = File.join(Dir.pwd, "tmp-cli-export-denied.md")
     prompt = FakePrompt.new([])

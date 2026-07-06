@@ -14,6 +14,8 @@ module Kward
           return
         end
 
+        previous_git_hook_conversation = @git_hook_conversation
+        @git_hook_conversation = agent.conversation
         root = interactive_workspace_root(agent)
         git_root = git_repository_root(root)
         if git_root.empty?
@@ -33,6 +35,8 @@ module Kward
           git_commit(git_root, message)
         end
         print_git_commit_result(result)
+      ensure
+        @git_hook_conversation = previous_git_hook_conversation
       end
 
       def git_repository_root(root)
@@ -48,7 +52,9 @@ module Kward
         output, status = Open3.capture2e("git", "status", "--short", "--untracked-files=normal", chdir: root.to_s)
         return ["Unable to read Git status: #{output.strip}"] unless status.success?
 
-        output.lines.map(&:chomp)
+        lines = output.lines.map(&:chomp)
+        git_lifecycle_hook("git_status_after", root: root, payload: { status_count: lines.length })
+        lines
       rescue StandardError => e
         ["Unable to read Git status: #{e.message}"]
       end
@@ -70,7 +76,13 @@ module Kward
         entry = parse_git_status_line(status_line)
         return { path: "Git diff", content: "Unable to read Git status entry.\n" } if entry.nil?
 
+        before = git_lifecycle_hook("git_diff_before", root: root, payload: { path: entry[:path], untracked: entry[:untracked] })
+        if before.denied? || before.approval_required?
+          return { path: entry[:path], content: "Declined: #{before.decision.message || "git diff denied"}\n" }
+        end
+
         output = entry[:untracked] ? git_untracked_file_diff(root, entry[:path]) : git_tracked_file_diff(root, entry[:path])
+        git_lifecycle_hook("git_diff_after", root: root, payload: { path: entry[:path], untracked: entry[:untracked], bytes: output.bytesize })
         { path: entry[:path], content: output.empty? ? "No diff for #{entry[:path]}\n" : output }
       end
 
@@ -96,8 +108,13 @@ module Kward
         entry = parse_git_status_line(status_line)
         return if entry.nil?
 
+        action = entry[:staged] ? "unstage" : "stage"
+        before = git_lifecycle_hook("git_stage_before", root: root, payload: { path: entry[:path], action: action })
+        return if before.denied? || before.approval_required?
+
         command = entry[:staged] ? ["restore", "--staged", "--", entry[:path]] : ["add", "--", entry[:path]]
-        Open3.capture2e("git", *command, chdir: root.to_s)
+        output, status = Open3.capture2e("git", *command, chdir: root.to_s)
+        git_lifecycle_hook("git_stage_after", root: root, payload: { path: entry[:path], action: action, success: status.success?, output: output })
       rescue StandardError
         nil
       end
@@ -115,6 +132,9 @@ module Kward
       end
 
       def git_commit(root, message)
+        before = git_lifecycle_hook("git_commit_before", root: root, payload: { message: message.to_s })
+        return { success: false, output: "Declined: #{before.decision.message || "git commit denied"}" } if before.denied? || before.approval_required?
+
         return git_commit_staged(root, message) if git_staged_changes?(root)
 
         add_output, add_status = Open3.capture2e("git", "add", "--all", chdir: root.to_s)
@@ -134,9 +154,16 @@ module Kward
 
       def git_commit_staged(root, message)
         commit_output, commit_status = Open3.capture2e("git", "commit", "-m", message.to_s, chdir: root.to_s)
-        { success: commit_status.success?, output: commit_output }
+        result = { success: commit_status.success?, output: commit_output }
+        git_lifecycle_hook("git_commit_after", root: root, payload: { message: message.to_s, success: result[:success], output: result[:output] })
+        result
       rescue StandardError => e
         { success: false, output: e.message }
+      end
+
+      def git_lifecycle_hook(name, root:, payload: {})
+        conversation = @git_hook_conversation || new_conversation(workspace_root: root.to_s)
+        run_lifecycle_hook(name, conversation: conversation, payload: { root: root.to_s }.merge(payload))
       end
 
       def print_git_commit_result(result)

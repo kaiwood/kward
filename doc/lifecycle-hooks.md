@@ -209,6 +209,20 @@ Payloads are metadata-oriented by default. Full file contents, secrets, and comp
 | `shell_command_before` | `command`, `timeout_seconds`, `cwd` | `command`, `timeout_seconds` |
 | `shell_command_after` | shell metadata plus `content` | none |
 
+### Git events
+
+| Event | Payload highlights | Supported modifications |
+| --- | --- | --- |
+| `git_status_after` | `root`, `status_count` | none |
+| `git_diff_before` | `root`, `path`, `untracked` | none |
+| `git_diff_after` | `root`, `path`, `untracked`, `bytes` | none |
+| `git_stage_before` | `root`, `path`, `action` | none |
+| `git_stage_after` | `root`, `path`, `action`, `success`, `output` | none |
+| `git_commit_before` | `root`, `message` | none |
+| `git_commit_after` | `root`, `message`, `success`, `output` | none |
+
+`git_diff_before`, `git_stage_before`, and `git_commit_before` can deny or ask for approval. Git hook payloads include command output for after-events, so avoid forwarding raw payloads to third-party services.
+
 ### File events
 
 | Event | Payload highlights | Supported modifications |
