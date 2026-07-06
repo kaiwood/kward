@@ -9,6 +9,8 @@ require_relative "../agent"
 require_relative "../config_files"
 require_relative "../events"
 require_relative "../model/retry_message"
+require_relative "../plugin_registry"
+require_relative "../prompts/commands"
 require_relative "../rpc/transcript_normalizer"
 require_relative "../session_store"
 require_relative "../tools/tool_call"
@@ -42,10 +44,14 @@ module Kward
         reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
       )
       @session.attach(@conversation)
+      hook_context = lifecycle_hook_context
+      hook_manager = lifecycle_hook_manager
       @agent = Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false),
-        conversation: @conversation
+        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false, hook_manager: hook_manager, hook_context: hook_context),
+        conversation: @conversation,
+        hook_manager: hook_manager,
+        hook_context: hook_context
       )
       @prompt_queue = Queue.new
       @subscribers = []
@@ -96,6 +102,30 @@ module Kward
     end
 
     private
+
+    def lifecycle_hook_manager
+      manager = Hooks::ConfigLoader.new(ConfigFiles.read_config).manager
+      plugin_registry.hook_handlers.each do |hook|
+        manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match, failure_policy: hook.failure_policy) do |event, context|
+          hook.handler.call(event, context)
+        end
+      end
+      manager
+    end
+
+    def lifecycle_hook_context
+      PluginRegistry::Context.new(
+        conversation: @conversation,
+        args: "",
+        session: @session,
+        workspace_root: @workspace.root.to_s,
+        say_callback: lambda { |message| broadcast("hook_message", { message: message.to_s }) }
+      )
+    end
+
+    def plugin_registry
+      @plugin_registry ||= PluginRegistry.load(reserved_commands: PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES)
+    end
 
     def start_worker
       return if @worker_started

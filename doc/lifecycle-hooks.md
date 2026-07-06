@@ -118,6 +118,12 @@ Hook failures are different from hook decisions. A hook fails when Ruby plugin c
 
 Use `deny` for security or release-policy hooks. Use `warn` for logging, formatting, notifications, and other convenience hooks that should not block the agent.
 
+## Frontend support
+
+Lifecycle hooks run in CLI sessions, RPC sessions, and Pan mode. RPC advertises hook support in `initialize.capabilities.lifecycleHooks`, including supported events, decisions, audit-log path, and intentionally unsupported hook types. Hook `ask` decisions for tool/file/shell paths use the existing tool-approval bridge when a frontend provides one; without an approval bridge, Kward fails closed.
+
+Pan runs configured command hooks and trusted plugin hooks for its agent turns, but it does not yet expose a dedicated hook approval UI. Use `deny` or `warn` policies for Pan-facing hooks until that UI exists.
+
 ## Inspect hooks
 
 In interactive Kward sessions, use `/hooks` to inspect loaded hooks and recent hook activity:

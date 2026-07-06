@@ -74,7 +74,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands mcp startupResources extensionUi composer security export logging workers shell scratchpad stability]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime lifecycleHooks runtimeSettings auth commands mcp startupResources extensionUi composer security export logging workers shell scratchpad stability]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -131,6 +131,11 @@ class TestRPCServer < KwardTestCase
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]
     assert_equal true, capabilities["runtime"]["stats"]["contextUsage"]
     assert_equal true, capabilities["runtime"]["stats"]["contextUsageEstimated"]
+    assert_equal true, capabilities["lifecycleHooks"]["supported"]
+    assert_includes capabilities["lifecycleHooks"]["events"], "shell_command_before"
+    assert_includes capabilities["lifecycleHooks"]["decisions"], "deny"
+    assert_equal true, capabilities["lifecycleHooks"].dig("approvals", "supported")
+    assert_equal false, capabilities["lifecycleHooks"].dig("workspaceHooks", "supported")
     assert_equal true, capabilities["runtimeSettings"]["supported"]
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]

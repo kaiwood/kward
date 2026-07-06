@@ -450,6 +450,18 @@ module Kward
             state: { supported: true },
             stats: { messageCounts: true, tokens: false, cost: false, contextUsage: true, contextUsageEstimated: true }
           },
+          lifecycleHooks: {
+            supported: true,
+            events: Hooks::Catalog.event_names,
+            decisions: Hooks::Decision::VALID_DECISIONS,
+            approvals: { supported: true, via: "toolApproval", requestNotification: TOOL_APPROVAL_NOTIFICATION, answerMethod: TOOL_APPROVAL_METHODS.first },
+            auditLog: { supported: true, path: File.join(ConfigFiles.config_dir, "logs", "hooks.jsonl") },
+            commandHooks: true,
+            pluginHooks: true,
+            workspaceHooks: { supported: false, reason: "trustFlowNotImplemented" },
+            httpHooks: { supported: false, reason: "notImplemented" },
+            asyncHooks: { supported: false, reason: "notImplemented" }
+          },
           runtimeSettings: {
             supported: true,
             methods: RUNTIME_SETTING_METHODS,

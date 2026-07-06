@@ -932,7 +932,14 @@ module Kward
         approval = tool_approval_callback(rpc_session, options)
         return nil unless names || approval
 
-        build_tool_registry(rpc_session.workspace_root, rpc_session.prompt, allowed_tool_names: names, tool_approval: approval)
+        build_tool_registry(
+          rpc_session.workspace_root,
+          rpc_session.prompt,
+          allowed_tool_names: names,
+          tool_approval: approval,
+          hook_manager: lifecycle_hook_manager,
+          hook_context: plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
+        )
       end
 
       def tool_approval_callback(rpc_session, options)
@@ -977,11 +984,15 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(server: @server, session_id: id)
-        tool_registry = build_tool_registry(workspace_root, prompt)
+        hook_context = lifecycle_hook_context(conversation: conversation, session: session, workspace_root: workspace_root)
+        hook_manager = lifecycle_hook_manager
+        tool_registry = build_tool_registry(workspace_root, prompt, hook_manager: hook_manager, hook_context: hook_context)
         agent = Agent.new(
           client: @client,
           tool_registry: tool_registry,
-          conversation: conversation
+          conversation: conversation,
+          hook_manager: hook_manager,
+          hook_context: hook_context
         )
         RpcSession.new(
           id: id,
@@ -999,8 +1010,35 @@ module Kward
         )
       end
 
-      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil, tool_approval: nil)
-        ToolRegistry.new(workspace: configured_workspace(workspace_root), prompt: prompt, allowed_tool_names: allowed_tool_names, tool_approval: tool_approval)
+      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil, tool_approval: nil, hook_manager: nil, hook_context: nil)
+        ToolRegistry.new(
+          workspace: configured_workspace(workspace_root),
+          prompt: prompt,
+          allowed_tool_names: allowed_tool_names,
+          tool_approval: tool_approval,
+          hook_manager: hook_manager,
+          hook_context: hook_context
+        )
+      end
+
+      def lifecycle_hook_manager
+        manager = Hooks::ConfigLoader.new(ConfigFiles.read_config).manager
+        plugin_registry.hook_handlers.each do |hook|
+          manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match, failure_policy: hook.failure_policy) do |event, context|
+            hook.handler.call(event, context)
+          end
+        end
+        manager
+      end
+
+      def lifecycle_hook_context(conversation:, session:, workspace_root:)
+        PluginRegistry::Context.new(
+          conversation: conversation,
+          args: "",
+          session: session,
+          workspace_root: workspace_root,
+          say_callback: lambda { |message| @server.notify("hook/message", { message: message.to_s }) }
+        )
       end
 
       def configured_workspace(root)
