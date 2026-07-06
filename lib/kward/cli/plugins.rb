@@ -51,6 +51,25 @@ module Kward
         plugin_context(conversation, "")
       end
 
+      def run_lifecycle_hook(name, conversation:, payload: {}, session: @active_session)
+        lifecycle_hook_manager(conversation).run(Hooks::Event.new(
+          name: name,
+          session: session_payload(session),
+          workspace: { root: conversation.respond_to?(:workspace_root) ? conversation.workspace_root : current_workspace_root },
+          payload: payload
+        ), context: lifecycle_hook_context(conversation))
+      end
+
+      def session_payload(session)
+        return {} unless session
+
+        {
+          id: session.respond_to?(:id) ? session.id : nil,
+          name: session.respond_to?(:name) ? session.name : nil,
+          path: session.respond_to?(:path) ? session.path : nil
+        }.compact
+      end
+
       def reserved_slash_command_names
         builtin_slash_command_names + prompt_templates.map(&:command)
       end

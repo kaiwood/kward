@@ -177,6 +177,22 @@ Payloads are metadata-oriented by default. Full file contents, secrets, and comp
 | `turn_model_response_complete` | parsed assistant `message` | none |
 | `turn_end` | `input`, `answer` | none |
 
+### Session events
+
+| Event | Payload highlights | Supported modifications |
+| --- | --- | --- |
+| `session_create` | `action` | none |
+| `session_resume` | `action`, `path` | none |
+| `session_clone` | `source_path`, `path` | none |
+| `session_fork` | `source_path`, `path`, `entry_id` | none |
+| `session_rename` | `old_name`, `new_name` | none |
+| `session_export_before` | `path` | none |
+| `session_export_after` | `path` | none |
+| `session_compact_before` | `instructions` | none |
+| `session_compact_after` | `old_message_count`, `new_message_count` | none |
+
+`session_export_before` and `session_compact_before` can deny or ask for approval. Other session events are observe-and-warn hooks for automation and audit trails.
+
 ### Tool events
 
 | Event | Payload highlights | Supported modifications |

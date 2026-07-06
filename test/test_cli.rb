@@ -2338,6 +2338,46 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_session_export_before_hook_can_deny_export
+    export_path = File.join(Dir.pwd, "tmp-cli-export-denied.md")
+    prompt = FakePrompt.new([])
+    conversation = Kward::Conversation.new(system_message: nil)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    cli.define_singleton_method(:run_lifecycle_hook) do |name, **_kwargs|
+      decision = name == "session_export_before" ? Kward::Hooks::Decision.deny("No export") : Kward::Hooks::Decision.allow
+      Kward::Hooks::Manager::Result.new(event: nil, decision: decision, decisions: [decision], warnings: [], messages: [], payload: {})
+    end
+
+    cli.send(:export_session, conversation, export_path)
+
+    refute_path_exists export_path
+    assert_includes prompt.output.join, "Declined: No export"
+  ensure
+    File.delete(export_path) if export_path && File.exist?(export_path)
+  end
+
+  def test_session_rename_emits_lifecycle_hook
+    Dir.mktmpdir do |dir|
+      store = Kward::SessionStore.new(config_dir: File.join(dir, "config"), cwd: dir)
+      session = store.create
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.instance_variable_set(:@active_session, session)
+      events = []
+      cli.define_singleton_method(:run_lifecycle_hook) do |name, **kwargs|
+        events << [name, kwargs[:session]&.path, kwargs[:payload]]
+        decision = Kward::Hooks::Decision.allow
+        Kward::Hooks::Manager::Result.new(event: nil, decision: decision, decisions: [decision], warnings: [], messages: [], payload: kwargs[:payload] || {})
+      end
+
+      cli.send(:rename_session, "Captain's log")
+
+      assert_equal "session_rename", events.first[0]
+      assert_equal session.path, events.first[1]
+      assert_equal "Captain's log", events.first[2][:new_name]
+    end
+  end
+
   def test_export_renders_compaction_summary_content
     export_path = File.join(Dir.pwd, "tmp-cli-export.md")
     conversation = Kward::Conversation.new(system_message: nil)

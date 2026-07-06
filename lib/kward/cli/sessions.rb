@@ -49,6 +49,7 @@ module Kward
         reset_session_diff
         conversation = new_conversation(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
+        run_lifecycle_hook("session_create", conversation: conversation, payload: { action: "create" })
         build_interactive_agent(conversation)
       end
 
@@ -95,6 +96,7 @@ module Kward
         cleanup_replaced_session(previous_session)
         conversation = new_conversation(workspace_root: session_store.cwd)
         @active_session.attach(conversation)
+        run_lifecycle_hook("session_create", conversation: conversation, payload: { action: "create" })
         update_assistant_prompt(conversation)
         clear_prompt_transcript
         print_visual_banner
@@ -125,6 +127,7 @@ module Kward
           runtime_output("#{message}: #{@active_session.path}") if message
           render_conversation_transcript(conversation)
         end
+        run_lifecycle_hook("session_resume", conversation: conversation, payload: { action: "resume", path: @active_session.path })
         agent = build_interactive_agent(conversation)
         @prompt.redraw if @prompt.respond_to?(:redraw) && !@prompt.respond_to?(:restore_transcript)
         agent
@@ -413,7 +416,9 @@ module Kward
           return
         end
 
+        old_name = @active_session.name
         @active_session.rename(name)
+        run_lifecycle_hook("session_rename", conversation: new_conversation(workspace_root: current_workspace_root), session: @active_session, payload: { old_name: old_name, new_name: @active_session.name })
         label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
         runtime_output(label)
       end
@@ -425,6 +430,7 @@ module Kward
         @active_session = track_session(session_store.create_from_conversation(agent.conversation, parent_session: previous_session))
         reset_session_diff(@active_session.path)
         cleanup_replaced_session(previous_session)
+        run_lifecycle_hook("session_clone", conversation: agent.conversation, payload: { source_path: previous_session&.path, path: @active_session.path })
         runtime_output("Cloned session: #{@active_session.path}")
         render_conversation_transcript(agent.conversation)
         agent
@@ -497,6 +503,7 @@ module Kward
         reset_session_diff(@active_session.path)
         cleanup_replaced_session(previous_session)
         update_assistant_prompt(conversation)
+        run_lifecycle_hook("session_fork", conversation: conversation, payload: { source_path: previous_session.path, path: @active_session.path, entry_id: point.dig(:entry, "id") })
         restore_prompt_transcript do
           runtime_output("Forked session: #{@active_session.path}")
           render_conversation_transcript(conversation)
@@ -679,7 +686,13 @@ module Kward
 
       def export_session(conversation, argument)
         path = export_path(argument)
+        before = run_lifecycle_hook("session_export_before", conversation: conversation, payload: { path: path })
+        if before.denied? || before.approval_required?
+          runtime_output("Declined: #{before.decision.message || "session export denied"}")
+          return
+        end
         File.write(path, markdown_transcript(conversation))
+        run_lifecycle_hook("session_export_after", conversation: conversation, payload: { path: path })
         runtime_output("Exported session: #{path}")
       rescue StandardError => e
         runtime_output("Error: #{e.message}")
