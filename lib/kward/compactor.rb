@@ -449,7 +449,7 @@ module Kward
       def call
         branch_entries = entry_messages(@conversation.messages)
         raise NothingToCompact, "Nothing to compact" if branch_entries.empty?
-        raise AlreadyCompacted, "Already compacted" if compaction_entry?(branch_entries.last) || already_compacted?
+        raise AlreadyCompacted, "Already compacted" if compaction_entry?(branch_entries.last)
 
         previous_index = latest_previous_compaction_index(branch_entries)
         previous_entry = previous_index ? branch_entries[previous_index] : nil
@@ -484,10 +484,6 @@ module Kward
 
       def entry_messages(messages)
         Array(messages).reject { |message| message_role(message) == "system" }
-      end
-
-      def already_compacted?
-        @conversation.respond_to?(:last_entry_compaction?) && @conversation.last_entry_compaction?
       end
 
       def latest_previous_compaction_index(entries)

@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed repeated compaction for compacted sessions that continue growing after later turns.
 - Fixed editor undo/redo so selections do not become sticky after restoring buffer contents.
 - Fixed busy composer slash commands so they are blocked instead of being queued or sent as in-flight steering.
 

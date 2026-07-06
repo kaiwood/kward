@@ -64,6 +64,21 @@ class TestCompactor < KwardTestCase
     refute_includes content, "Additional focus:"
   end
 
+  def test_compaction_can_run_again_after_later_messages_even_with_stale_compaction_marker
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.messages << { role: "compactionSummary", summary: "old summary", first_kept_entry_id: "message:1" }
+    conversation.append_user("new work after compaction with enough detail to compact again")
+    conversation.append_assistant("new reply")
+    conversation.mark_last_entry_compaction!
+    settings = Kward::Compaction::Settings.new(keep_recent_tokens: 10)
+    client = RecordingClient.new(["updated summary", "split summary"])
+
+    result = Kward::Compactor.new(conversation: conversation, client: client, settings: settings).compact
+
+    assert_includes result.summary, "updated summary"
+    assert_equal "compactionSummary", conversation.messages.first[:role]
+  end
+
   def test_token_budgets_use_reserve_fraction_and_model_clamp
     settings = Kward::Compaction::Settings.new(reserve_tokens: 10_000)
     builder = Kward::Compaction::PromptBuilder.new
