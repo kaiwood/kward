@@ -110,6 +110,46 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_turn_start_per_turn_options_override_model_and_tool_scope
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new([
+        { "role" => "assistant", "content" => "done" }
+      ])
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(
+        session_id: session[:id],
+        input: "hello",
+        options: {
+          provider: "OpenRouter",
+          model: "anthropic/claude-sonnet-4.5",
+          reasoningEffort: "high",
+          allowedTools: ["read_file"]
+        }
+      )
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      request = client.requests.first
+      assert_equal "OpenRouter", request[:provider]
+      assert_equal "anthropic/claude-sonnet-4.5", request[:model]
+      assert_equal "high", request[:reasoning]
+      assert_equal ["read_file"], request[:tools].map { |schema| schema[:function][:name] }
+    end
+  end
+
+  def test_turn_start_rejects_invalid_per_turn_options
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+
+      error = assert_raises(ArgumentError) do
+        manager.start_turn(session_id: session[:id], input: "bad", options: { allowedTools: ["read_file"], disabledTools: ["run_shell_command"] })
+      end
+      assert_equal "allowedTools and disabledTools cannot both be set", error.message
+    end
+  end
+
   def test_turn_start_accepts_image_attachment_and_restores_transcript
     Dir.mktmpdir do |config_dir|
       png_data = "iVBORw0KGgo="

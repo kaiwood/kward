@@ -63,7 +63,7 @@ module Kward
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
       def initialize(
@@ -326,8 +326,9 @@ module Kward
       # queue a follow-up, or steer the running turn when the active provider
       # supports native steering. The returned turn id is used for status,
       # cancellation, and event replay.
-      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [])
+      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [], options: {})
         rpc_session = fetch_session(session_id)
+        normalized_options = normalize_turn_options(options)
         normalized_attachments = normalize_attachments(attachments)
         plugin_command, plugin_arguments = plugin_command_turn(input, normalized_attachments)
         display_input = input.to_s if input.is_a?(String)
@@ -349,7 +350,9 @@ module Kward
           next_sequence: 1,
           streaming_behavior: streaming_behavior,
           plugin_command_name: plugin_command&.name,
-          plugin_arguments: plugin_arguments
+          plugin_arguments: plugin_arguments,
+          options: normalized_options,
+          tool_registry: scoped_tool_registry(rpc_session, normalized_options)
         )
         @mutex.synchronize { @turns[turn.id] = turn }
         rpc_session.queue << turn.id
@@ -761,6 +764,62 @@ module Kward
         AttachmentNormalizer.new(max_bytes: RPC_ATTACHMENT_MAX_BYTES, mime_types: RPC_IMAGE_MIME_TYPES).normalize(attachments)
       end
 
+      def normalize_turn_options(options)
+        options = {} if options.nil?
+        raise ArgumentError, "turn options must be an object" unless options.is_a?(Hash)
+
+        provider = option_value(options, "provider")
+        model = option_value(options, "model")
+        model = option_value(model, "id") || option_value(model, "model") if model.is_a?(Hash)
+        reasoning = option_value(options, "reasoningEffort") || option_value(options, "reasoning")
+        allowed_tools = option_array(options, "allowedTools")
+        disabled_tools = option_array(options, "disabledTools")
+        raise ArgumentError, "allowedTools and disabledTools cannot both be set" if allowed_tools && disabled_tools
+
+        {
+          provider: blank_to_nil(provider),
+          model: blank_to_nil(model),
+          reasoning: blank_to_nil(reasoning),
+          allowed_tools: allowed_tools,
+          disabled_tools: disabled_tools
+        }.compact
+      end
+
+      def option_value(hash, key)
+        hash[key] || hash[key.to_sym]
+      end
+
+      def option_array(hash, key)
+        value = option_value(hash, key)
+        return nil if value.nil?
+        raise ArgumentError, "#{key} must be an array" unless value.is_a?(Array)
+
+        value.map(&:to_s).reject(&:empty?)
+      end
+
+      def blank_to_nil(value)
+        value = value.to_s if value.is_a?(Symbol)
+        value.to_s.empty? ? nil : value
+      end
+
+      def scoped_tool_registry(rpc_session, options)
+        names = scoped_tool_names(rpc_session, options)
+        return nil unless names
+
+        build_tool_registry(rpc_session.workspace_root, rpc_session.prompt, allowed_tool_names: names)
+      end
+
+      def scoped_tool_names(rpc_session, options)
+        return options[:allowed_tools] if options[:allowed_tools]
+        return nil unless options[:disabled_tools]
+
+        disabled = options[:disabled_tools].to_h { |name| [name, true] }
+        rpc_session.tool_registry.schemas.filter_map do |schema|
+          name = schema.dig(:function, :name) || schema.dig("function", "name")
+          name unless disabled[name]
+        end
+      end
+
       def plugin_registry
         @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
       end
@@ -800,8 +859,8 @@ module Kward
         )
       end
 
-      def build_tool_registry(workspace_root, prompt)
-        ToolRegistry.new(workspace: configured_workspace(workspace_root), prompt: prompt)
+      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil)
+        ToolRegistry.new(workspace: configured_workspace(workspace_root), prompt: prompt, allowed_tool_names: allowed_tool_names)
       end
 
       def configured_workspace(root)
@@ -940,7 +999,7 @@ module Kward
         else
           auto_name_session(rpc_session, turn.display_input || turn.input)
           prepare_memory_context(rpc_session.conversation, turn.input)
-          rpc_session.agent.ask(turn.input, display_input: turn_display_input(turn), cancellation: turn.cancellation, steering: turn.steering) do |event|
+          rpc_session.agent.ask(turn.input, display_input: turn_display_input(turn), cancellation: turn.cancellation, steering: turn.steering, options: turn.options || {}, tool_registry: turn.tool_registry) do |event|
             next if turn.cancel_requested
 
             notify_plugin_transcript_event(rpc_session, event)

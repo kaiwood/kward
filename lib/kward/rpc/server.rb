@@ -321,7 +321,8 @@ module Kward
             session_id: params.fetch("sessionId"),
             input: params.fetch("input"),
             streaming_behavior: params["streamingBehavior"],
-            attachments: params["attachments"] || []
+            attachments: params["attachments"] || [],
+            options: params["options"] || {}
           )
         when TURN_METHODS[1]
           @session_manager.cancel_turn(turn_id: params.fetch("turnId"))
@@ -383,7 +384,15 @@ module Kward
               queuedTurns: "cancel-before-run",
               runningTurns: "stop-emitting-events-when-possible"
             },
-            eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT }
+            eventReplay: { behavior: "recent-in-memory", persisted: false, limit: SessionManager::RECENT_EVENT_LIMIT },
+            options: {
+              supported: true,
+              method: TURN_METHODS[0],
+              fields: ["provider", "model", "reasoningEffort", "allowedTools", "disabledTools"],
+              perTurnModel: true,
+              perTurnReasoning: true,
+              perTurnToolScope: true
+            }
           },
           events: {
             notification: TURN_EVENT_NOTIFICATION,

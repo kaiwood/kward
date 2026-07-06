@@ -39,7 +39,7 @@ module Kward
     # @param display_input [String, nil] alternate text kept for transcripts
     # @yieldparam event [Object] streamed turn event for frontends
     # @return [String] final assistant answer
-    def ask(input, display_input: nil, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, &block)
+    def ask(input, display_input: nil, on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil, &block)
       started_at = @telemetry_logger.monotonic_now
       status = "completed"
       error = nil
@@ -47,7 +47,7 @@ module Kward
       @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input, display_content: display_input)
       auto_compact_if_needed
-      run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, &block)
+      run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, &block)
     rescue StandardError => e
       status = "failed"
       error = e
@@ -61,7 +61,7 @@ module Kward
     #
     # @yieldparam event [Object] streamed turn event for frontends
     # @return [String] final assistant answer
-    def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil)
+    def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil)
       overflow_retried = false
       steering_state = build_steering_state(steering) do |event|
         yield event if block_given?
@@ -69,7 +69,7 @@ module Kward
       loop do
         cancellation&.raise_if_cancelled!
         begin
-          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering) do |event|
+          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry) do |event|
             yield event if block_given?
           end
         rescue StandardError => e
@@ -102,7 +102,7 @@ module Kward
           status = "completed"
           error = nil
           begin
-            content = @tool_registry.dispatch(tool_call, @conversation, cancellation: cancellation)
+            content = (tool_registry || @tool_registry).dispatch(tool_call, @conversation, cancellation: cancellation)
           rescue StandardError => e
             status = "failed"
             error = e
@@ -195,7 +195,7 @@ module Kward
       nil
     end
 
-    def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil)
+    def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil)
       reasoning_delta = lambda do |delta|
         cancellation&.raise_if_cancelled!
         on_reasoning_delta&.call(delta)
@@ -215,15 +215,15 @@ module Kward
         @client,
         @conversation.context_messages,
         {
-          tools: @tool_registry.schemas,
+          tools: (tool_registry || @tool_registry).schemas,
           on_reasoning_delta: reasoning_delta,
           on_assistant_delta: assistant_delta,
           on_retry: retry_callback,
           cancellation: cancellation,
           steering: steering,
-          provider: @conversation.provider,
-          model: @conversation.model,
-          reasoning: @conversation.reasoning_effort
+          provider: options[:provider] || @conversation.provider,
+          model: options[:model] || @conversation.model,
+          reasoning: options[:reasoning] || @conversation.reasoning_effort
         }
       )
     end

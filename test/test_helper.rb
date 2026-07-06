@@ -259,11 +259,12 @@ class KwardTestCase < Minitest::Test
   end
 
   class RecordingClient
-    attr_reader :seen_messages
+    attr_reader :seen_messages, :requests
 
     def initialize(responses)
       @responses = responses
       @seen_messages = []
+      @requests = []
       @provider = "Codex"
       @model = "fake-model"
       @reasoning_effort = "medium"
@@ -272,8 +273,9 @@ class KwardTestCase < Minitest::Test
 
     attr_accessor :provider, :model, :reasoning_effort, :context_window
 
-    def chat(messages, tools: [], **_opts)
+    def chat(messages, tools: [], **opts)
       @seen_messages << messages.map(&:dup)
+      @requests << opts.merge(tools: tools)
       response = @responses.shift
       response.is_a?(Hash) ? response : { "role" => "assistant", "content" => response }
     end

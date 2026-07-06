@@ -51,7 +51,7 @@ Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
-- `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, and recent in-memory event replay behavior.
+- `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, and per-turn options for model, reasoning, and tool scope.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
@@ -267,6 +267,7 @@ Params:
 - `input`
 - `streamingBehavior`: optional; `newTurn` by default when idle. `followUp` queues behind the active turn. `steer` routes input to the active turn only when `initialize.capabilities.turns.busyInput.steer` is `native`; unsupported providers return an invalid params error instead of queueing or approximating steering. When native steering is supported and a turn is already running, omitted `streamingBehavior` defaults to `steer`.
 - `attachments`: optional array of image attachments: `{ "type": "image", "data": "base64", "mimeType": "image/png", "name": "optional.png", "sizeBytes": 12345 }`.
+- `options`: optional object with per-turn overrides. Supported fields are `provider`, `model`, `reasoningEffort`, `allowedTools`, and `disabledTools`. `model` may be a string or an object with `id`/`model`. `allowedTools` and `disabledTools` are arrays of model tool names and are mutually exclusive. Tool scoping affects only the current turn; it does not change the session or saved config.
 
 Supported attachment MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`. Image data must be raw base64 without a `data:` prefix, and the RPC boundary limit is 10MB per image.
 
