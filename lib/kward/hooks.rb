@@ -1,3 +1,4 @@
+require_relative "hooks/audit_log"
 require_relative "hooks/catalog"
 require_relative "hooks/decision"
 require_relative "hooks/event"

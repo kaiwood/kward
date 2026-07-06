@@ -118,6 +118,18 @@ Hook failures are different from hook decisions. A hook fails when Ruby plugin c
 
 Use `deny` for security or release-policy hooks. Use `warn` for logging, formatting, notifications, and other convenience hooks that should not block the agent.
 
+## Audit log
+
+Kward writes lifecycle hook audit records to:
+
+```text
+~/.kward/logs/hooks.jsonl
+```
+
+When `KWARD_CONFIG_PATH=/path/to/config.json` is set, the log lives beside that config file under `logs/hooks.jsonl`.
+
+The audit log records hook ids, sources, events, decisions, warnings, durations, payload keys, and modified keys. It intentionally avoids writing full payload values, file contents, complete transcripts, command output, or secrets. Messages are redacted and truncated before being written.
+
 ## Event shape
 
 Every hook receives this shape:
@@ -220,6 +232,7 @@ Unknown selector keys match same-named payload fields.
 - Command hooks run local commands with your user permissions.
 - Workspace hook files are not auto-loaded. This avoids cloned repositories silently executing local code.
 - Hook payloads are intentionally bounded and metadata-oriented; avoid logging raw event JSON if your hook receives prompt or command data.
+- The built-in audit log records payload keys and redacted decision messages, not raw payload values.
 - `ask` decisions fail closed when no approval bridge exists.
 
 ## Recipes

@@ -128,6 +128,29 @@ class TestHooks < KwardTestCase
     assert_match(/Command hook failed/, decision.message)
   end
 
+  def test_audit_log_records_handler_and_result_without_payload_values
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "hooks.jsonl")
+      audit_log = Kward::Hooks::AuditLog.new(path: path)
+      manager = Kward::Hooks::Manager.new(audit_log: audit_log)
+      manager.register("shell_command_before", id: "block-release") do
+        Kward::Hooks::Decision.deny("blocked secret-token")
+      end
+
+      manager.run(Kward::Hooks::Event.new(
+        name: "shell_command_before",
+        payload: { command: "echo secret-token", api_key: "secret-token" }
+      ))
+
+      records = jsonl_records(path)
+      assert_equal ["handler", "result"], records.map { |record| record["kind"] }
+      assert_equal "block-release", records.first["hook_id"]
+      assert_equal "deny", records.last["decision"]
+      assert_includes records.last["payload_keys"], "command"
+      refute_includes File.read(path), "echo secret-token"
+    end
+  end
+
   def test_config_loader_registers_command_hooks
     Dir.mktmpdir do |dir|
       script = File.join(dir, "hook.rb")

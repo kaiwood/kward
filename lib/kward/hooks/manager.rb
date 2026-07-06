@@ -1,3 +1,4 @@
+require_relative "audit_log"
 require_relative "catalog"
 require_relative "decision"
 require_relative "event"
@@ -25,8 +26,9 @@ module Kward
 
       attr_reader :handlers
 
-      def initialize
+      def initialize(audit_log: AuditLog.new)
         @handlers = []
+        @audit_log = audit_log
       end
 
       def register(event, id: nil, source: nil, order: 100, match: nil, failure_policy: nil, &callback)
@@ -72,7 +74,7 @@ module Kward
         end
 
         final_decision = final_decision(decisions)
-        Result.new(
+        result = Result.new(
           event: event,
           decision: final_decision,
           decisions: decisions,
@@ -80,6 +82,8 @@ module Kward
           messages: messages,
           payload: payload
         )
+        @audit_log&.log_result(event: event, result: result)
+        result
       end
 
       private
@@ -97,17 +101,31 @@ module Kward
       end
 
       def call_handler(handler, event, context)
+        started_at = @audit_log&.monotonic_now
         value = if handler.callback.arity == 1
                   handler.callback.call(event)
                 else
                   handler.callback.call(event, context)
                 end
-        Decision.normalize(value)
+        Decision.normalize(value).tap do |decision|
+          log_handler(event, handler, decision, started_at)
+        end
       rescue StandardError => e
         Catalog.failure_decision(
           handler.failure_policy,
           "Hook #{handler.id} failed: #{e.message}",
           metadata: { hook_id: handler.id, source: handler.source }
+        ).tap do |decision|
+          log_handler(event, handler, decision, started_at)
+        end
+      end
+
+      def log_handler(event, handler, decision, started_at)
+        @audit_log&.log_handler(
+          event: event,
+          handler: handler,
+          decision: decision,
+          duration_ms: started_at ? @audit_log.duration_ms(started_at) : nil
         )
       end
 
