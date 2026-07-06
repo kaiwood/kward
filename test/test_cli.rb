@@ -502,6 +502,31 @@ class TestCLI < KwardTestCase
     assert_includes output, "shell_command_before failure_policy=deny"
   end
 
+  def test_hooks_slash_command_trusts_workspace_hooks
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      FileUtils.mkdir_p(File.join(dir, ".kward"))
+      File.write(File.join(dir, ".kward", "hooks.json"), JSON.dump("hooks" => { "turn_end" => [{ "id" => "workspace-hook", "command" => "echo ok" }] }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      cli.instance_variable_set(:@working_directory, dir)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        conversation = Kward::Conversation.new(workspace_root: dir)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, = cli.send(:handle_local_slash_command, "/hooks trust", agent, nil)
+        cli.send(:handle_local_slash_command, "/hooks list", agent, nil)
+
+        assert_equal true, handled
+        output = prompt.output.join
+        assert_includes output, "Trusted workspace hooks"
+        assert_includes output, "workspace-hook turn_end source=workspace"
+      end
+    end
+  end
+
   def test_hooks_slash_command_shows_audit_logs
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

@@ -937,7 +937,7 @@ module Kward
           rpc_session.prompt,
           allowed_tool_names: names,
           tool_approval: approval,
-          hook_manager: lifecycle_hook_manager,
+          hook_manager: lifecycle_hook_manager(rpc_session.workspace_root),
           hook_context: plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
         )
       end
@@ -985,7 +985,7 @@ module Kward
         id = SecureRandom.uuid
         prompt = PromptBridge.new(server: @server, session_id: id)
         hook_context = lifecycle_hook_context(conversation: conversation, session: session, workspace_root: workspace_root)
-        hook_manager = lifecycle_hook_manager
+        hook_manager = lifecycle_hook_manager(workspace_root)
         tool_registry = build_tool_registry(workspace_root, prompt, hook_manager: hook_manager, hook_context: hook_context)
         agent = Agent.new(
           client: @client,
@@ -1021,8 +1021,8 @@ module Kward
         )
       end
 
-      def lifecycle_hook_manager
-        manager = Hooks::ConfigLoader.new(ConfigFiles.read_config).manager
+      def lifecycle_hook_manager(workspace_root)
+        manager = Hooks::ConfigLoader.new(ConfigFiles.lifecycle_hooks_config(workspace_root)).manager
         plugin_registry.hook_handlers.each do |hook|
           manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match, failure_policy: hook.failure_policy) do |event, context|
             hook.handler.call(event, context)

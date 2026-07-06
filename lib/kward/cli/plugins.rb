@@ -38,7 +38,7 @@ module Kward
       end
 
       def lifecycle_hook_manager(conversation)
-        manager = Hooks::ConfigLoader.new(ConfigFiles.read_config).manager
+        manager = Hooks::ConfigLoader.new(ConfigFiles.lifecycle_hooks_config(conversation.workspace_root)).manager
         plugin_registry.hook_handlers.each do |hook|
           manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match, failure_policy: hook.failure_policy) do |event, context|
             hook.handler.call(event, context)

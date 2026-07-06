@@ -83,7 +83,9 @@ Configure command lifecycle hooks with a top-level `hooks` object. Each key is a
 }
 ```
 
-Use `failure_policy` (`allow`, `warn`, `deny`, or `ask`) to decide what happens if the hook command fails, times out, or returns invalid JSON. See [Lifecycle hooks](lifecycle-hooks.md) for events, decisions, selectors, plugin hooks, command-hook protocol, and security notes.
+Use `failure_policy` (`allow`, `warn`, `deny`, or `ask`) to decide what happens if the hook command fails, times out, or returns invalid JSON.
+
+Project-local hooks can also live in `.kward/hooks.json`, but Kward loads them only after you explicitly run `/hooks trust` in that workspace. Trust is tied to the file digest, so changes require re-trusting. See [Lifecycle hooks](lifecycle-hooks.md) for events, decisions, selectors, plugin hooks, command-hook protocol, workspace trust, and security notes.
 
 ## Embedded shell config
 

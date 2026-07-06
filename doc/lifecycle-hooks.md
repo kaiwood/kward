@@ -133,7 +133,32 @@ In interactive Kward sessions, use `/hooks` to inspect loaded hooks and recent h
 /hooks events    # known event names, defaults, and modifiable fields
 /hooks logs      # recent audit records from logs/hooks.jsonl
 /hooks doctor    # basic hook configuration diagnostics
+/hooks trust     # trust this workspace's .kward/hooks.json
+/hooks untrust   # stop trusting this workspace's hook config
 ```
+
+## Workspace hooks
+
+Workspace hook config lives at `.kward/hooks.json` inside a project and uses the same JSON shape as user config command hooks:
+
+```json
+{
+  "hooks": {
+    "shell_command_before": [
+      {
+        "id": "block-release",
+        "command": "./scripts/kward-block-release",
+        "failure_policy": "deny",
+        "match": { "command_regex": "\\bgem push\\b" }
+      }
+    ]
+  }
+}
+```
+
+Workspace hooks are **not loaded automatically**. Run `/hooks trust` inside the workspace to trust the current `.kward/hooks.json`. Kward stores a digest of the trusted file in your user config directory and automatically stops loading it when the file changes. Run `/hooks trust` again after reviewing the new file, or `/hooks untrust` to remove trust.
+
+This protects you from cloned repositories silently executing hook commands.
 
 ## Audit log
 
@@ -288,7 +313,7 @@ Unknown selector keys match same-named payload fields.
 
 - Plugin hooks are trusted Ruby code loaded only from `~/.kward/plugins/*.rb`.
 - Command hooks run local commands with your user permissions.
-- Workspace hook files are not auto-loaded. This avoids cloned repositories silently executing local code.
+- Workspace hook files are loaded only after `/hooks trust`, and trust is invalidated when `.kward/hooks.json` changes.
 - Hook payloads are intentionally bounded and metadata-oriented; avoid logging raw event JSON if your hook receives prompt or command data.
 - The built-in audit log records payload keys and redacted decision messages, not raw payload values.
 - `ask` decisions fail closed when no approval bridge exists.

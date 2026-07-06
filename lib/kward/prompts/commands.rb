@@ -36,7 +36,7 @@ module Kward
       { name: "tab", description: "Manage tabs.", argument_hint: "[1-n|move|close|new|name]" },
       { name: "status", description: "Show the current status message.", argument_hint: "" },
       { name: "stats", description: "Show telemetry logging stats.", argument_hint: "[range]" },
-      { name: "hooks", description: "Inspect lifecycle hooks.", argument_hint: "[list|events|logs|doctor]" },
+      { name: "hooks", description: "Inspect lifecycle hooks.", argument_hint: "[list|events|logs|doctor|trust|untrust]" },
       { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|relax|inspect|why|summarize]" }
     ].freeze
     BUILTIN_RESERVED_COMMAND_NAMES = BUILTIN_COMMANDS.map { |command| command[:name] }.freeze

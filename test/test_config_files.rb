@@ -92,6 +92,29 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_workspace_hooks_are_loaded_only_when_trusted
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(File.join(workspace, ".kward"))
+      File.write(config_path, JSON.dump("hooks" => { "turn_end" => [{ "id" => "user-hook", "command" => "echo user" }] }))
+      File.write(File.join(workspace, ".kward", "hooks.json"), JSON.dump("hooks" => { "turn_end" => [{ "id" => "workspace-hook", "command" => "echo workspace" }] }))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        untrusted = Kward::ConfigFiles.lifecycle_hooks_config(workspace)
+        assert_equal ["user-hook"], untrusted.dig("hooks", "turn_end").map { |entry| entry["id"] }
+
+        Kward::ConfigFiles.trust_workspace_hooks!(workspace)
+        trusted = Kward::ConfigFiles.lifecycle_hooks_config(workspace)
+        assert_equal ["user-hook", "workspace-hook"], trusted.dig("hooks", "turn_end").map { |entry| entry["id"] }
+
+        File.write(File.join(workspace, ".kward", "hooks.json"), JSON.dump("hooks" => { "turn_end" => [{ "id" => "changed", "command" => "echo changed" }] }))
+        invalidated = Kward::ConfigFiles.lifecycle_hooks_config(workspace)
+        assert_equal ["user-hook"], invalidated.dig("hooks", "turn_end").map { |entry| entry["id"] }
+      end
+    end
+  end
+
   def test_read_ekwsh_config_returns_empty_settings_when_missing
     Dir.mktmpdir do |dir|
       path = File.join(dir, "ekwsh.yml")

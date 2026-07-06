@@ -92,6 +92,14 @@ module Kward
       File.join(config_dir, "ekwsh.yml")
     end
 
+    def workspace_hooks_path(root = Dir.pwd)
+      File.join(File.expand_path(root), ".kward", "hooks.json")
+    end
+
+    def trusted_workspace_hooks_path
+      File.join(config_dir, "trusted_workspace_hooks.json")
+    end
+
     def default_config
       {
         "personas" => JSON.parse(JSON.generate(DEFAULT_PERSONAS)),
@@ -199,6 +207,72 @@ module Kward
       raise "Cannot write Kward config while --skip-config is active: #{path}" if skip_config? && path == config_path
 
       PrivateFile.write_json(path, config)
+    end
+
+    def lifecycle_hooks_config(workspace_root = Dir.pwd)
+      config = read_config
+      workspace_config = read_trusted_workspace_hooks_config(workspace_root)
+      return config if workspace_config.empty?
+
+      merge_hooks_config(config, workspace_config)
+    end
+
+    def read_trusted_workspace_hooks_config(workspace_root = Dir.pwd)
+      path = workspace_hooks_path(workspace_root)
+      return {} unless workspace_hooks_trusted?(workspace_root)
+
+      read_config(path)
+    end
+
+    def workspace_hooks_trusted?(workspace_root = Dir.pwd)
+      path = workspace_hooks_path(workspace_root)
+      return false unless File.file?(path)
+
+      trusted = read_trusted_workspace_hooks
+      trusted[File.expand_path(path)] == workspace_hooks_digest(workspace_root)
+    end
+
+    def trust_workspace_hooks!(workspace_root = Dir.pwd)
+      path = workspace_hooks_path(workspace_root)
+      raise "No workspace hook config found: #{path}" unless File.file?(path)
+
+      trusted = read_trusted_workspace_hooks
+      trusted[File.expand_path(path)] = workspace_hooks_digest(workspace_root)
+      PrivateFile.write_json(trusted_workspace_hooks_path, trusted)
+    end
+
+    def untrust_workspace_hooks!(workspace_root = Dir.pwd)
+      path = File.expand_path(workspace_hooks_path(workspace_root))
+      trusted = read_trusted_workspace_hooks
+      trusted.delete(path)
+      PrivateFile.write_json(trusted_workspace_hooks_path, trusted)
+    end
+
+    def workspace_hooks_digest(workspace_root = Dir.pwd)
+      Digest::SHA256.file(workspace_hooks_path(workspace_root)).hexdigest
+    end
+
+    def read_trusted_workspace_hooks
+      config = read_config(trusted_workspace_hooks_path)
+      config.is_a?(Hash) ? config : {}
+    rescue ConfigError
+      {}
+    end
+
+    def merge_hooks_config(config, workspace_config)
+      merged = JSON.parse(JSON.generate(config || {}))
+      merged["hooks"] = merge_hook_maps(merged["hooks"], workspace_config["hooks"] || workspace_config[:hooks])
+      merged
+    end
+
+    def merge_hook_maps(left, right)
+      left = left.is_a?(Hash) ? left : {}
+      right = right.is_a?(Hash) ? right : {}
+      merged = JSON.parse(JSON.generate(left))
+      right.each do |event, entries|
+        merged[event.to_s] = Array(merged[event.to_s]) + Array(entries)
+      end
+      merged
     end
 
     def read_ekwsh_config(path = ekwsh_config_path)
