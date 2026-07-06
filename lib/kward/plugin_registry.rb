@@ -1,4 +1,5 @@
 require_relative "config_files"
+require_relative "hooks"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -38,6 +39,9 @@ module Kward
         { type: type, payload: payload }
       end
     end
+
+    # Registered lifecycle hook handler.
+    HookHandler = Struct.new(:event, :id, :description, :path, :order, :match, :handler, keyword_init: true)
 
     # Read-only transcript view exposed to plugin code.
     class Transcript
@@ -102,6 +106,34 @@ module Kward
         @conversation.refresh_system_message! if @conversation.respond_to?(:refresh_system_message!)
         nil
       end
+
+      def allow(message = nil, metadata: nil)
+        Hooks::Decision.allow(message, metadata: metadata)
+      end
+
+      def deny(message = nil, metadata: nil)
+        Hooks::Decision.deny(message, metadata: metadata)
+      end
+
+      def ask(message = nil, metadata: nil)
+        Hooks::Decision.ask(message, metadata: metadata)
+      end
+
+      def modify(payload, message: nil, metadata: nil)
+        Hooks::Decision.modify(payload, message: message, metadata: metadata)
+      end
+
+      def warn(message = nil, metadata: nil)
+        Hooks::Decision.warn(message, metadata: metadata)
+      end
+
+      def retry(message = nil, payload: nil, metadata: nil)
+        Hooks::Decision.retry(message, payload: payload, metadata: metadata)
+      end
+
+      def defer(message = nil, payload: nil, metadata: nil)
+        Hooks::Decision.defer(message, payload: payload, metadata: metadata)
+      end
     end
 
     # Public DSL object yielded by `Kward.plugin` blocks.
@@ -163,6 +195,25 @@ module Kward
       # @api public
       def on_transcript_event(&block)
         @registry.register_transcript_event(path: @path, &block)
+      end
+
+      # Registers a lifecycle hook handler.
+      #
+      # Hooks are deterministic runtime callbacks around Kward lifecycle events.
+      # They can return a {Hooks::Decision}, a decision hash, a decision string,
+      # or nil to allow the operation.
+      #
+      # @param event [String, #to_s] lifecycle event name
+      # @param id [String, nil] stable hook identifier for logs and diagnostics
+      # @param description [String] short human-readable purpose
+      # @param order [Integer] lower values run first
+      # @param match [Hash, nil] optional event selector
+      # @yieldparam event [Hooks::Event] immutable lifecycle event
+      # @yieldparam ctx [Context] plugin execution context and decision helpers
+      # @return [void]
+      # @api public
+      def hook(event, id: nil, description: "", order: 100, match: nil, &block)
+        @registry.register_hook(event, id: id, description: description, order: order, match: match, path: @path, &block)
       end
 
       # Registers prompt context text injected into future system prompts.
@@ -239,6 +290,7 @@ module Kward
       @footer_path = nil
       @transcript_event_handlers = []
       @prompt_context_renderers = []
+      @hook_handlers = []
       @paths = []
     end
 
@@ -274,6 +326,20 @@ module Kward
 
     def prompt_context_renderers
       @prompt_context_renderers.map { |entry| entry[:renderer] }
+    end
+
+    def hook_handlers
+      @hook_handlers.dup
+    end
+
+    def hook_manager
+      manager = Hooks::Manager.new
+      @hook_handlers.each do |hook|
+        manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match) do |event, context|
+          hook.handler.call(event, context)
+        end
+      end
+      manager
     end
 
     def prompt_context(context)
@@ -385,6 +451,22 @@ module Kward
       raise "Plugin prompt context requires a renderer" unless renderer
 
       @prompt_context_renderers << { path: path, renderer: renderer }
+    end
+
+    def register_hook(event, id: nil, description: "", order: 100, match: nil, path: nil, &handler)
+      event = event.to_s
+      raise "Plugin hook event is required" if event.empty?
+      raise "Plugin hook #{event} requires a handler" unless handler
+
+      @hook_handlers << HookHandler.new(
+        event: event,
+        id: id&.to_s || "#{File.basename(path.to_s.empty? ? "plugin" : path)}:#{event}:#{@hook_handlers.length + 1}",
+        description: description.to_s,
+        path: path,
+        order: order.to_i,
+        match: match,
+        handler: handler
+      )
     end
 
     private

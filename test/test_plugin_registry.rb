@@ -94,6 +94,45 @@ class TestPluginRegistry < KwardTestCase
     assert_includes warnings, "duplicate Kward plugin command /demo"
   end
 
+  def test_plugin_can_register_lifecycle_hook
+    registry = Kward::PluginRegistry.new
+    received = []
+
+    registry.evaluate do |plugin|
+      plugin.hook "shell_command_before", id: "block-release", description: "Block releases", order: 5, match: { command_regex: "gem push" } do |event, ctx|
+        received << [event.name, event.payload[:command], ctx.workspace_root]
+        ctx.deny("No releases today")
+      end
+    end
+
+    hook = registry.hook_handlers.first
+    assert_equal "shell_command_before", hook.event
+    assert_equal "block-release", hook.id
+    assert_equal "Block releases", hook.description
+    assert_equal 5, hook.order
+
+    conversation = Kward::Conversation.new(system_message: nil)
+    context = Kward::PluginRegistry::Context.new(conversation: conversation, workspace_root: "/tmp/project")
+    result = registry.hook_manager.run(Kward::Hooks::Event.new(
+      name: "shell_command_before",
+      payload: { command: "gem push kward.gem" }
+    ), context: context)
+
+    assert result.denied?
+    assert_equal "No releases today", result.decision.message
+    assert_equal [["shell_command_before", "gem push kward.gem", "/tmp/project"]], received
+  end
+
+  def test_plugin_context_decision_helpers
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    assert context.allow.allow?
+    assert context.deny("stop").deny?
+    assert context.ask("confirm").ask?
+    assert context.modify({ timeout_seconds: 10 }).modify?
+    assert context.warn("careful").warning?
+  end
+
   def test_plugin_context_can_refresh_system_message
     conversation = Kward::Conversation.new
     original_content = conversation.system_message[:content]
