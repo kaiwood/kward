@@ -582,6 +582,22 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_skill_parser_accepts_common_unquoted_colon_description
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Use this skill when: planning work.\n---\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        skill = Kward::ConfigFiles.skills.first
+
+        assert_equal "planner", skill.name
+        assert_equal "Use this skill when: planning work.", skill.description
+      end
+    end
+  end
+
   def test_skills_skip_missing_required_metadata
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
