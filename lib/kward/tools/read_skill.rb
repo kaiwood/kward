@@ -8,12 +8,16 @@ module Kward
     # Tool wrapper for reading configured skill instructions.
     class ReadSkill < Base
       # Builds the tool schema and stores the execution dependency.
-      def initialize
+      def initialize(skills: nil)
+        name_property = { type: "string", description: "Skill name." }
+        skill_names = Array(skills).map(&:name).compact.sort
+        name_property[:enum] = skill_names unless skill_names.empty?
+
         super(
           "read_skill",
           "Read configured skill instructions/files.",
           properties: {
-            name: { type: "string", description: "Skill name." },
+            name: name_property,
             path: { type: "string", description: "Path inside skill; default SKILL.md." }
           },
           required: ["name"]

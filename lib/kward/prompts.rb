@@ -102,13 +102,13 @@ module Kward
       return nil if skills.empty?
 
       lines = [
-        "Configured skills are available in the Kward config directory.",
-        "When a task matches a skill, use read_skill to load its instructions before proceeding.",
+        "Agent Skills are available.",
+        "When a task matches a skill's description, use read_skill to load its instructions before proceeding.",
+        "Use read_skill with a relative path to read referenced files inside a skill directory.",
         "Available skills:"
       ]
       skills.each do |skill|
-        description = skill.description.empty? ? "No description provided." : skill.description
-        lines << "- #{skill.name}: #{description}"
+        lines << "- #{skill.name}: #{skill.description}"
       end
       lines.join("\n")
     end

@@ -443,7 +443,9 @@ class TestPrompts < KwardTestCase
 
         assert_includes content, "Available skills:"
         assert_includes content, "- planner: Helps plan work."
+        assert_includes content, "Agent Skills are available."
         assert_includes content, "use read_skill"
+        assert_includes content, "relative path"
         refute_includes content, "Secret full body."
       end
     end

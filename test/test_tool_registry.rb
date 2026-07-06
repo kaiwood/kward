@@ -164,6 +164,16 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_read_skill_schema_constrains_names_to_available_skills
+    skills = [
+      Kward::ConfigFiles::Skill.new(name: "planner", description: "Plans."),
+      Kward::ConfigFiles::Skill.new(name: "reviewer", description: "Reviews.")
+    ]
+    schema = Kward::ToolRegistry.new(skills: skills).schemas.find { |tool| tool[:function][:name] == "read_skill" }
+
+    assert_equal ["planner", "reviewer"], schema[:function][:parameters][:properties][:name][:enum]
+  end
+
   def test_tool_schemas_include_ask_user_question_only_with_prompt_support
     without_prompt = Kward::ToolRegistry.new(skills: []).schemas.map { |schema| schema[:function][:name] }
     with_prompt = Kward::ToolRegistry.new(prompt: FakeQuestionPrompt.new([]), skills: []).schemas.map { |schema| schema[:function][:name] }

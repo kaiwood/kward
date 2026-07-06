@@ -258,7 +258,7 @@ module Kward
         Tools::WebSearch.new(web_search: @web_search),
         Tools::FetchContent.new(web_fetch: @web_fetch),
         Tools::FetchRaw.new(web_fetch: @web_fetch),
-        Tools::ReadSkill.new,
+        Tools::ReadSkill.new(skills: discovered_skills),
         Tools::AskUserQuestion.new(prompt: @prompt)
       ] + mcp_tool_values
     end
@@ -285,9 +285,12 @@ module Kward
       true
     end
 
+    def discovered_skills
+      @discovered_skills ||= @skills.nil? ? ConfigFiles.skills : @skills
+    end
+
     def skills_available?
-      skills = @skills.nil? ? ConfigFiles.skills : @skills
-      skills.any?
+      discovered_skills.any?
     end
 
     def mcp_tool_values
