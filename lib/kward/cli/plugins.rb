@@ -37,6 +37,20 @@ module Kward
         runtime_output("Plugins reloaded.")
       end
 
+      def lifecycle_hook_manager(conversation)
+        manager = Hooks::ConfigLoader.new(ConfigFiles.read_config).manager
+        plugin_registry.hook_handlers.each do |hook|
+          manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match) do |event, context|
+            hook.handler.call(event, context)
+          end
+        end
+        manager
+      end
+
+      def lifecycle_hook_context(conversation)
+        plugin_context(conversation, "")
+      end
+
       def reserved_slash_command_names
         builtin_slash_command_names + prompt_templates.map(&:command)
       end

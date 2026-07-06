@@ -121,7 +121,12 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
         prompt = TabQuestionPrompt.new(self)
-        tool_registry = ToolRegistry.new(workspace: workspace, prompt: prompt)
+        tool_registry = ToolRegistry.new(
+          workspace: workspace,
+          prompt: prompt,
+          hook_manager: lifecycle_hook_manager(conversation),
+          hook_context: lifecycle_hook_context(conversation)
+        )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
         agent = Agent.new(client: @client, tool_registry: tool_registry, conversation: conversation)

@@ -330,7 +330,12 @@ module Kward
       apply_filter_system_prompt(conversation) if filter
       agent = Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(workspace: configured_workspace, prompt: @prompt),
+        tool_registry: ToolRegistry.new(
+          workspace: configured_workspace,
+          prompt: @prompt,
+          hook_manager: lifecycle_hook_manager(conversation),
+          hook_context: lifecycle_hook_context(conversation)
+        ),
         conversation: conversation
       )
       answer = if filter

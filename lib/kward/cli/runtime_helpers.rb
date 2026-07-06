@@ -57,7 +57,9 @@ module Kward
           prompt: @prompt,
           allowed_tool_names: Workers::ToolPolicy.allowed_tool_names(role),
           write_lock: @worker_write_lock,
-          writer_id: writer_id
+          writer_id: writer_id,
+          hook_manager: lifecycle_hook_manager(conversation),
+          hook_context: lifecycle_hook_context(conversation)
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
