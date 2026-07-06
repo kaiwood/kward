@@ -700,6 +700,41 @@ class TestToolRegistry < KwardTestCase
     assert_equal [["echo modified", 77]], commands
   end
 
+  def test_tool_registry_runs_file_change_before_hook
+    Dir.mktmpdir do |workspace_dir|
+      manager = Kward::Hooks::Manager.new
+      events = []
+      manager.register("file_change_before") do |event, _ctx|
+        events << event.payload
+        Kward::Hooks::Decision.allow
+      end
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_dir), hook_manager: manager)
+      conversation = Kward::Conversation.new
+
+      result = registry.dispatch(tool_call("write_file", path: "hello.txt", content: "hi\n"), conversation)
+
+      assert_includes result, "Wrote"
+      assert_equal "hello.txt", events.first[:path]
+      assert_equal "write", events.first[:operation]
+      assert_equal "hi\n", events.first[:content]
+      assert_equal "hi\n", File.read(File.join(workspace_dir, "hello.txt"))
+    end
+  end
+
+  def test_tool_registry_file_change_before_hook_can_deny_write
+    Dir.mktmpdir do |workspace_dir|
+      manager = Kward::Hooks::Manager.new
+      manager.register("file_change_before") { Kward::Hooks::Decision.deny("No writes") }
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_dir), hook_manager: manager)
+      conversation = Kward::Conversation.new
+
+      result = registry.dispatch(tool_call("write_file", path: "hello.txt", content: "hi\n"), conversation)
+
+      assert_equal "Declined: No writes", result
+      refute_path_exists File.join(workspace_dir, "hello.txt")
+    end
+  end
+
   def test_tool_registry_runs_file_change_after_hook
     Dir.mktmpdir do |workspace_dir|
       manager = Kward::Hooks::Manager.new

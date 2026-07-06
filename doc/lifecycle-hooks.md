@@ -197,9 +197,10 @@ Payloads are metadata-oriented by default. Full file contents, secrets, and comp
 
 | Event | Payload highlights | Supported modifications |
 | --- | --- | --- |
+| `file_change_before` | `tool_name`, `operation`, `path`, `files`, plus `content` for writes or `edits` for edits | none |
 | `file_change_after` | `tool_name`, `operation`, `path`, `files`, `content` | none |
 
-`file_change_after` fires only after successful `write_file` or `edit_file` results.
+`file_change_before` fires before `write_file` or `edit_file` mutates the workspace and can deny or ask for approval. `file_change_after` fires only after successful `write_file` or `edit_file` results.
 
 ### MCP events
 

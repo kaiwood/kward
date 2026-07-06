@@ -22,6 +22,7 @@ module Kward
         EventDefinition.new(name: "tool_call_error", failure_policy: "warn"),
         EventDefinition.new(name: "shell_command_before", failure_policy: "deny", modifiable_fields: %w[command timeout_seconds]),
         EventDefinition.new(name: "shell_command_after", failure_policy: "warn"),
+        EventDefinition.new(name: "file_change_before", failure_policy: "deny"),
         EventDefinition.new(name: "file_change_after", failure_policy: "warn")
       ].each_with_object({}) { |definition, result| result[definition.name] = definition }.freeze
 

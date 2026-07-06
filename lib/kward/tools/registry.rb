@@ -231,6 +231,7 @@ module Kward
 
     def execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
       args = run_shell_before_hooks(name, args, tool_call, conversation, cancellation)
+      run_file_change_before_hooks(name, args, tool_call, conversation, cancellation)
       content = tool.call(args, conversation, cancellation: cancellation)
       run_shell_after_hooks(name, args, content, conversation)
       run_file_change_after_hooks(name, args, content, conversation)
@@ -262,18 +263,23 @@ module Kward
       run_hook("shell_command_after", conversation, payload: shell_payload(args).merge(content: content.to_s))
     end
 
+    def run_file_change_before_hooks(name, args, tool_call, conversation, cancellation)
+      return unless ToolCall.file_change_tool?(name)
+
+      result = run_hook("file_change_before", conversation, payload: file_change_payload(name, args))
+      if result.denied?
+        raise HookDenied, hook_denied_content(result, "file change denied")
+      end
+      if result.approval_required? && hook_approval_denied?(result, tool_call, name, args, cancellation)
+        raise HookDenied, hook_denied_content(result, "file change approval denied")
+      end
+    end
+
     def run_file_change_after_hooks(name, args, content, conversation)
       return unless ToolCall.file_change_tool?(name)
       return unless content.to_s.start_with?("Wrote ", "Edited ")
 
-      path = args[:path] || args["path"]
-      run_hook("file_change_after", conversation, payload: {
-        tool_name: name,
-        operation: name.to_s.start_with?("edit") ? "edit" : "write",
-        path: path,
-        files: [{ path: path, operation: name.to_s.start_with?("edit") ? "edit" : "write" }],
-        content: content.to_s
-      })
+      run_hook("file_change_after", conversation, payload: file_change_payload(name, args).merge(content: content.to_s))
     end
 
     HookDenied = Class.new(StandardError)
@@ -318,6 +324,23 @@ module Kward
         timeout_seconds: args[:timeout_seconds] || args["timeout_seconds"] || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS,
         cwd: @workspace.respond_to?(:root) ? @workspace.root.to_s : nil
       }.compact
+    end
+
+    def file_change_payload(name, args)
+      operation = name.to_s.start_with?("edit") ? "edit" : "write"
+      path = args[:path] || args["path"]
+      payload = {
+        tool_name: name,
+        operation: operation,
+        path: path,
+        files: [{ path: path, operation: operation }]
+      }
+      if operation == "edit"
+        payload[:edits] = args[:edits] || args["edits"]
+      else
+        payload[:content] = args[:content] || args["content"]
+      end
+      payload.compact
     end
 
     def shell_arguments(payload, fallback)
