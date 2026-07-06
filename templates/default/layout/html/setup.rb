@@ -41,6 +41,7 @@ module KwardDocsNavigation
     "doc/skills.md" => "file.skills.html",
     "doc/extensibility.md" => "file.extensibility.html",
     "doc/plugins.md" => "file.plugins.html",
+    "doc/lifecycle-hooks.md" => "file.lifecycle-hooks.html",
     "doc/agent-tools.md" => "file.agent-tools.html",
     "doc/workspace-tools.md" => "file.workspace-tools.html",
     "doc/context-budgeting.md" => "file.context-budgeting.html",

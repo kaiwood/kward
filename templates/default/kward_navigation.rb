@@ -38,7 +38,8 @@ module KwardDocsNavigationData
       "Customize",
       [
         ["Extensibility", "file.extensibility.html"],
-        ["Plugins", "file.plugins.html"]
+        ["Plugins", "file.plugins.html"],
+        ["Lifecycle hooks", "file.lifecycle-hooks.html"]
       ]
     ],
     [
