@@ -551,6 +551,11 @@ class TestRPCServer < KwardTestCase
           assert_equal ["Hello Martok; messages=0"], run[:output]
           assert_equal "returned Martok", run[:result]
 
+          skill_run = server.send(:commands_run, "sessionId" => session[:id], "name" => "skill:testing-verification")
+          assert_equal "skill:testing-verification", skill_run[:command]
+          assert_equal ["Activated skill: testing-verification"], skill_run[:output]
+          assert_includes skill_run[:result], '<skill_content name="testing-verification">'
+
           sections = server.send(:startup_resources, "sessionId" => session[:id])[:sections]
           assert_equal ["PRINCIPLES.md"], sections.find { |section| section[:name] == "Context" }[:items]
           assert_equal ["testing-verification"], sections.find { |section| section[:name] == "Skills" }[:items]

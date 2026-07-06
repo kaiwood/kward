@@ -76,9 +76,16 @@ module Kward
             argument_hint: template.argument_hint
           }
         end
+        skill_entries = ConfigFiles.skills.map do |skill|
+          {
+            name: "skill:#{skill.name}",
+            description: skill.description,
+            argument_hint: ""
+          }
+        end
         plugin_entries = plugin_commands.map(&:entry)
         interactive_entries = interactive_commands.map(&:entry)
-        builtin_slash_commands + prompt_entries + plugin_entries + interactive_entries
+        builtin_slash_commands + prompt_entries + skill_entries + plugin_entries + interactive_entries
       end
 
       def prompt_template_for(command)

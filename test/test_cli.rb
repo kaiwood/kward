@@ -442,6 +442,70 @@ class TestCLI < KwardTestCase
     assert_equal "openrouter", cli.send(:selected_login_provider, "OpenRouter")
   end
 
+  def test_slash_command_entries_include_skills
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        command = cli.send(:slash_command_entries).find { |entry| entry[:name] == "skill:planner" }
+
+        assert_equal "Helps plan work.", command[:description]
+        assert_equal "", command[:argument_hint]
+      end
+    end
+  end
+
+  def test_skill_slash_command_activates_skill_without_model_turn
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nPlan carefully.\n")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        conversation = Kward::Conversation.new(system_message: nil)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, replacement = cli.send(:handle_local_slash_command, "/skill planner", agent, nil)
+
+        assert_equal true, handled
+        assert_nil replacement
+        assert_includes prompt.output.join, "Activated skill: planner"
+        assert_equal "assistant", conversation.messages[-2]["role"]
+        assert_equal "tool", conversation.messages[-1][:role]
+        assert_equal "read_skill", conversation.messages[-1][:name]
+        assert_includes conversation.messages[-1][:content], "Plan carefully."
+      end
+    end
+  end
+
+  def test_skill_colon_slash_command_activates_skill
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n\nPlan carefully.\n")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        conversation = Kward::Conversation.new(system_message: nil)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, = cli.send(:handle_local_slash_command, "/skill:planner", agent, nil)
+
+        assert_equal true, handled
+        assert_includes prompt.output.join, "Activated skill: planner"
+      end
+    end
+  end
+
   def test_queue_add_enqueues_active_session
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new([])

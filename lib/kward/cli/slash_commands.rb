@@ -19,6 +19,9 @@ module Kward
           activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
           run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
           [true, nil]
+        when "skill"
+          run_busy_local_command_and_requeue { activate_skill_command(argument, agent) }
+          [true, nil]
         when "redraw"
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
           [true, nil]
@@ -127,7 +130,10 @@ module Kward
           run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
           [true, nil]
         else
-          if interactive_command_for(name) && prompt_interface? && @prompt.respond_to?(:start_interactive)
+          if name.to_s.start_with?("skill:")
+            run_busy_local_command_and_requeue { activate_skill_command(name.to_s.delete_prefix("skill:"), agent) }
+            [true, nil]
+          elsif interactive_command_for(name) && prompt_interface? && @prompt.respond_to?(:start_interactive)
             run_interactive_command(name, argument, agent)
           elsif plugin_command_for(name)
             run_busy_local_command_and_requeue(activity: "running") { run_plugin_command(name, argument, agent) }
@@ -139,6 +145,26 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def activate_skill_command(name, agent)
+        skill_name = name.to_s.strip
+        if skill_name.empty?
+          runtime_output("Usage: /skill <name>")
+          return
+        end
+
+        tool_call = {
+          "id" => "skill_#{skill_name.gsub(/[^a-zA-Z0-9_-]/, "_")}",
+          "type" => "function",
+          "function" => {
+            "name" => "read_skill",
+            "arguments" => JSON.dump({ name: skill_name })
+          }
+        }
+        agent.conversation.append_assistant("role" => "assistant", "content" => nil, "tool_calls" => [tool_call])
+        result = agent.tool_registry.dispatch(tool_call, agent.conversation)
+        runtime_output(result.start_with?("Error:") ? result : "Activated skill: #{skill_name}")
       end
 
       def open_session_diff

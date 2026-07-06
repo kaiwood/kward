@@ -421,8 +421,28 @@ module Kward
       def run_command(session_id:, command:, arguments: "")
         name = command.to_s.delete_prefix("/")
         return { ok: false, error: "unsupported", reason: "clientClipboardOwnedByUi" } if name == "copy"
+        return run_skill_command(session_id: session_id, name: name.delete_prefix("skill:")) if name.start_with?("skill:")
+        return run_skill_command(session_id: session_id, name: arguments) if name == "skill"
 
         run_plugin_command(session_id: session_id, command: name, arguments: arguments)
+      end
+
+      def run_skill_command(session_id:, name:)
+        skill_name = name.to_s.strip
+        raise ArgumentError, "Missing skill name" if skill_name.empty?
+
+        rpc_session = fetch_session(session_id)
+        tool_call = {
+          "id" => "skill_#{skill_name.gsub(/[^a-zA-Z0-9_-]/, "_")}",
+          "type" => "function",
+          "function" => {
+            "name" => "read_skill",
+            "arguments" => JSON.dump({ name: skill_name })
+          }
+        }
+        rpc_session.conversation.append_assistant("role" => "assistant", "content" => nil, "tool_calls" => [tool_call])
+        result = rpc_session.tool_registry.dispatch(tool_call, rpc_session.conversation)
+        { command: "skill:#{skill_name}", output: [result.start_with?("Error:") ? result : "Activated skill: #{skill_name}"], result: result }
       end
 
       def run_plugin_command(session_id:, command:, arguments: "")
