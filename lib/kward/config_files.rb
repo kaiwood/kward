@@ -114,6 +114,9 @@ module Kward
         "sessions" => {
           "auto_resume" => false
         },
+        "skills" => {
+          "trust_project" => false
+        },
         "enforce_workspace_agents_file" => false,
         "mcpServers" => {},
         "tools" => {
@@ -368,6 +371,12 @@ module Kward
     def workspace_guardrails_enabled?(config = read_config)
       tools = config["tools"].is_a?(Hash) ? config["tools"] : {}
       tools["workspace_guardrails"] != false
+    end
+
+    # Returns whether project-level Agent Skills should be loaded from the workspace.
+    def project_skills_trusted?(config = read_config)
+      skills = config["skills"].is_a?(Hash) ? config["skills"] : {}
+      skills["trust_project"] == true
     end
 
     # Returns whether new frontends should resume the last active session automatically.
@@ -720,6 +729,7 @@ module Kward
       Skills::Registry.new(
         config_dir: config_dir,
         workspace_root: Dir.pwd,
+        project_skills_trusted: project_skills_trusted?,
         skill_class: Skill,
         max_file_bytes: MAX_SKILL_FILE_BYTES,
         markdown_parser: method(:markdown_parts),

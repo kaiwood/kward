@@ -455,7 +455,7 @@ class TestPrompts < KwardTestCase
       workspace = File.join(dir, "workspace")
       FileUtils.mkdir_p(config_dir)
       FileUtils.mkdir_p(workspace)
-      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      File.write(File.join(config_dir, "config.json"), JSON.dump({ "skills" => { "trust_project" => true } }))
 
       skill_locations = {
         "project-kward" => File.join(workspace, ".kward", "skills", "project-kward"),
@@ -483,13 +483,43 @@ class TestPrompts < KwardTestCase
     FileUtils.rm_rf(File.join(KWARD_TEST_HOME, ".agents", "skills", "user-agent"))
   end
 
-  def test_skills_prefer_project_kward_then_project_agent_then_user_kward_then_user_agent
+  def test_project_skills_are_skipped_until_trusted
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")
       workspace = File.join(dir, "workspace")
       FileUtils.mkdir_p(config_dir)
       FileUtils.mkdir_p(workspace)
       File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+
+      project_skill = File.join(workspace, ".agents", "skills", "project-agent")
+      user_skill = File.join(config_dir, "skills", "user-kward")
+      { "project-agent" => project_skill, "user-kward" => user_skill }.each do |name, path|
+        FileUtils.mkdir_p(path)
+        File.write(File.join(path, "SKILL.md"), "---\nname: #{name}\ndescription: #{name} description.\n---\n")
+      end
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        Dir.chdir(workspace) do
+          _stdout, stderr = capture_io do
+            content = Kward::Conversation.new.system_message[:content]
+
+            refute_includes content, "project-agent description"
+            assert_includes content, "- user-kward: user-kward description."
+          end
+
+          assert_includes stderr, "project skills are not trusted"
+        end
+      end
+    end
+  end
+
+  def test_skills_prefer_project_kward_then_project_agent_then_user_kward_then_user_agent
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(config_dir)
+      FileUtils.mkdir_p(workspace)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({ "skills" => { "trust_project" => true } }))
 
       roots = [
         File.join(KWARD_TEST_HOME, ".agents", "skills", "shared"),

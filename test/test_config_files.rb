@@ -26,6 +26,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("editor", "bar_cursor")
       assert_equal "absolute", config.dig("editor", "line_numbers")
       assert_equal false, config.dig("sessions", "auto_resume")
+      assert_equal false, config.dig("skills", "trust_project")
       assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
       refute config.key?("provider")
@@ -223,6 +224,13 @@ class TestConfigFiles < KwardTestCase
     assert_equal true, Kward::ConfigFiles.workspace_guardrails_enabled?("tools" => {})
     assert_equal true, Kward::ConfigFiles.workspace_guardrails_enabled?("tools" => { "workspace_guardrails" => true })
     assert_equal false, Kward::ConfigFiles.workspace_guardrails_enabled?("tools" => { "workspace_guardrails" => false })
+  end
+
+  def test_project_skills_trusted_defaults_to_false_and_only_true_enables_it
+    assert_equal false, Kward::ConfigFiles.project_skills_trusted?({})
+    assert_equal false, Kward::ConfigFiles.project_skills_trusted?("skills" => {})
+    assert_equal true, Kward::ConfigFiles.project_skills_trusted?("skills" => { "trust_project" => true })
+    assert_equal false, Kward::ConfigFiles.project_skills_trusted?("skills" => { "trust_project" => false })
   end
 
   def test_session_auto_resume_enabled_defaults_to_false_and_only_true_enables_it

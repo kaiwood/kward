@@ -6,11 +6,12 @@ module Kward
   module Skills
     # Parsed skill metadata and instruction path.
     class Registry
-      SkillSource = Struct.new(:root, :label, :precedence, keyword_init: true)
+      SkillSource = Struct.new(:root, :label, :scope, :precedence, keyword_init: true)
 
-      def initialize(config_dir:, workspace_root:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:)
+      def initialize(config_dir:, workspace_root:, project_skills_trusted:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:)
         @config_dir = config_dir
         @workspace_root = workspace_root
+        @project_skills_trusted = project_skills_trusted
         @skill_class = skill_class
         @max_file_bytes = max_file_bytes
         @markdown_parser = markdown_parser
@@ -67,15 +68,19 @@ module Kward
 
       def skill_sources
         [
-          SkillSource.new(root: File.join(@workspace_root, ".kward", "skills"), label: "project Kward skills", precedence: 0),
-          SkillSource.new(root: File.join(@workspace_root, ".agents", "skills"), label: "project Agent Skills", precedence: 1),
-          SkillSource.new(root: File.join(@config_dir, "skills"), label: "user Kward skills", precedence: 2),
-          SkillSource.new(root: File.expand_path("~/.agents/skills"), label: "user Agent Skills", precedence: 3)
+          SkillSource.new(root: File.join(@workspace_root, ".kward", "skills"), label: "project Kward skills", scope: :project, precedence: 0),
+          SkillSource.new(root: File.join(@workspace_root, ".agents", "skills"), label: "project Agent Skills", scope: :project, precedence: 1),
+          SkillSource.new(root: File.join(@config_dir, "skills"), label: "user Kward skills", scope: :user, precedence: 2),
+          SkillSource.new(root: File.expand_path("~/.agents/skills"), label: "user Agent Skills", scope: :user, precedence: 3)
         ]
       end
 
       def scan_source(source)
         return [] unless Dir.exist?(source.root)
+        if source.scope == :project && !@project_skills_trusted
+          warn "Warning: skipping #{source.label} in #{source.root}: project skills are not trusted"
+          return []
+        end
 
         Dir.glob(File.join(source.root, "*", "SKILL.md")).sort
       rescue StandardError => e
