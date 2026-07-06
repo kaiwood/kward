@@ -1,3 +1,4 @@
+require "shellwords"
 require_relative "test_helper"
 require_relative "../lib/kward/hooks"
 
@@ -78,6 +79,47 @@ class TestHooks < KwardTestCase
 
     assert result.allowed?
     assert_equal ["Hook bad failed: boom"], result.warnings
+  end
+
+  def test_command_handler_uses_json_protocol
+    Dir.mktmpdir do |dir|
+      script = File.join(dir, "hook.rb")
+      File.write(script, <<~'RUBY')
+        require "json"
+        event = JSON.parse($stdin.read)
+        if event.fetch("payload").fetch("command").include?("gem push")
+          puts JSON.dump(decision: "deny", message: "release blocked")
+        else
+          puts JSON.dump(decision: "allow")
+        end
+      RUBY
+
+      handler = Kward::Hooks::CommandHandler.new(command: "ruby #{Shellwords.escape(script)}")
+      event = Kward::Hooks::Event.new(name: "shell_command_before", payload: { command: "gem push kward.gem" })
+      decision = handler.call(event)
+
+      assert decision.deny?
+      assert_equal "release blocked", decision.message
+    end
+  end
+
+  def test_config_loader_registers_command_hooks
+    Dir.mktmpdir do |dir|
+      script = File.join(dir, "hook.rb")
+      File.write(script, "require 'json'; puts JSON.dump(decision: 'deny', message: 'no')\n")
+      manager = Kward::Hooks::ConfigLoader.new({
+        "hooks" => {
+          "tool_call_before" => [
+            { "id" => "deny-all", "type" => "command", "command" => "ruby #{Shellwords.escape(script)}" }
+          ]
+        }
+      }).manager
+
+      result = manager.run(Kward::Hooks::Event.new(name: "tool_call_before"))
+
+      assert result.denied?
+      assert_equal "no", result.decision.message
+    end
   end
 
   def test_matcher_supports_file_globs_and_tool_names
