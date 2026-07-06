@@ -51,7 +51,7 @@ Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
-- `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope, and structured client context for editor integrations.
+- `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope/tool approval, and structured client context for editor integrations.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
@@ -64,7 +64,7 @@ Detailed capability fields include:
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
-- `security`: trusted-local behavior; no workspace mutation guard or tool approval, shell/file mutation can run. File-tool workspace guardrails are reported under `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`.
+- `security`: trusted-local behavior with optional per-turn tool approval. By default there is no workspace mutation guard or tool approval and shell/file mutation can run. File-tool workspace guardrails are reported under `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
 - `workers`: experimental agent worker pipeline. Reports `supported: false` by default; set to `supported: true` with `methods: ["workers/list", "workers/show"]` when Kward is launched with `--experimental-workers`.
 - `starterPack`: explicitly unsupported (`supported: false`, reason `cliOnlyInstallCommand`). Use `kward init` from the shell.
@@ -267,7 +267,7 @@ Params:
 - `input`
 - `streamingBehavior`: optional; `newTurn` by default when idle. `followUp` queues behind the active turn. `steer` routes input to the active turn only when `initialize.capabilities.turns.busyInput.steer` is `native`; unsupported providers return an invalid params error instead of queueing or approximating steering. When native steering is supported and a turn is already running, omitted `streamingBehavior` defaults to `steer`.
 - `attachments`: optional array of image attachments: `{ "type": "image", "data": "base64", "mimeType": "image/png", "name": "optional.png", "sizeBytes": 12345 }`.
-- `options`: optional object with per-turn overrides. Supported fields are `provider`, `model`, `reasoningEffort`, `allowedTools`, and `disabledTools`. `model` may be a string or an object with `id`/`model`. `allowedTools` and `disabledTools` are arrays of model tool names and are mutually exclusive. Tool scoping affects only the current turn; it does not change the session or saved config.
+- `options`: optional object with per-turn overrides. Supported fields are `provider`, `model`, `reasoningEffort`, `allowedTools`, `disabledTools`, and `approvalMode`. `model` may be a string or an object with `id`/`model`. `allowedTools` and `disabledTools` are arrays of model tool names and are mutually exclusive. `approvalMode` is `none` by default; `ask` emits `tool/approvalRequested` before each tool execution and waits for `tool/answerApproval`. Tool scoping and approval affect only the current turn; they do not change the session or saved config.
 - `context`: optional structured client/editor context. Supported fields are `activeFile`, `openFiles`, `selection`, and `diagnostics`. `selection` may include `path`, `startLine`, `endLine`, and `text`; diagnostics may include `path`, `line`, `severity`, and `message`. Kward appends this context to the turn input for model use without persisting it as separate protocol state.
 
 Supported attachment MIME types are `image/png`, `image/jpeg`, `image/gif`, and `image/webp`. Image data must be raw base64 without a `data:` prefix, and the RPC boundary limit is 10MB per image.
@@ -351,6 +351,28 @@ Examples:
 - `edit_file`: `toolName: "edit"`, `args: { "path": "...", "edits": [{ "oldText": "...", "newText": "..." }] }`.
 - `write_file`: `toolName: "write"`, `args: { "path": "...", "content": "..." }`.
 - `run_shell_command`: `toolName: "bash"`, `args: { "command": "...", "timeout": 30 }`.
+
+## Tool approval bridge
+
+When `turns/start` is called with `options.approvalMode: "ask"`, Kward emits `tool/approvalRequested` before executing each tool.
+
+Notification params include:
+
+- `sessionId`
+- `approvalRequestId`
+- `toolCallId`
+- `toolName`
+- `args`
+
+Clients answer with `tool/answerApproval`:
+
+Params:
+
+- `sessionId`
+- `approvalRequestId`
+- `approved`: boolean.
+
+Denied tools are returned to the model as error-like tool results instead of executing the local operation.
 
 ## UI question bridge
 

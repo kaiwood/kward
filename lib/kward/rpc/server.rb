@@ -74,11 +74,13 @@ module Kward
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
       UI_METHODS = ["ui/answerQuestion"].freeze
+      TOOL_APPROVAL_METHODS = ["tool/answerApproval"].freeze
       SESSION_EVENT_NOTIFICATION = "session/event"
       SESSION_UPDATED_NOTIFICATION = "session/updated"
       TURN_EVENT_NOTIFICATION = "turn/event"
       UI_QUESTION_NOTIFICATION = "ui/question"
       UI_FOOTER_NOTIFICATION = "ui/footer"
+      TOOL_APPROVAL_NOTIFICATION = "tool/approvalRequested"
       METHOD_GROUPS = {
         protocol: PROTOCOL_METHODS,
         workspace: WORKSPACE_METHODS,
@@ -96,7 +98,8 @@ module Kward
         startup_resources: STARTUP_RESOURCE_METHODS,
         config: CONFIG_METHODS,
         logging: LOGGING_METHODS,
-        ui: UI_METHODS
+        ui: UI_METHODS,
+        tool_approval: TOOL_APPROVAL_METHODS
       }.freeze
       RPC_METHODS = METHOD_GROUPS.values.flatten.freeze
 
@@ -333,6 +336,8 @@ module Kward
           @session_manager.turn_events(turn_id: params.fetch("turnId"), after_sequence: params["afterSequence"] || 0)
         when UI_METHODS[0]
           @session_manager.answer_question(session_id: params.fetch("sessionId"), question_request_id: params.fetch("questionRequestId"), answers: params.fetch("answers"))
+        when TOOL_APPROVAL_METHODS[0]
+          @session_manager.answer_tool_approval(session_id: params.fetch("sessionId"), approval_request_id: params.fetch("approvalRequestId"), approved: params.fetch("approved"))
         else
           raise NoMethodError, method
         end
@@ -389,7 +394,7 @@ module Kward
             options: {
               supported: true,
               method: TURN_METHODS[0],
-              fields: ["provider", "model", "reasoningEffort", "allowedTools", "disabledTools"],
+              fields: ["provider", "model", "reasoningEffort", "allowedTools", "disabledTools", "approvalMode"],
               perTurnModel: true,
               perTurnReasoning: true,
               perTurnToolScope: true
@@ -471,7 +476,7 @@ module Kward
           },
           security: {
             workspaceMutationGuard: "none",
-            toolApproval: "none",
+            toolApproval: { supported: true, defaultMode: "none", modes: ["none", "ask"], requestNotification: TOOL_APPROVAL_NOTIFICATION, answerMethod: TOOL_APPROVAL_METHODS.first },
             canRunShell: true,
             canWriteFiles: true
           },

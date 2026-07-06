@@ -17,6 +17,32 @@ module Kward
         @pending_requests = {}
       end
 
+      def request_tool_approval(tool_call_id:, tool_name:, args:, cancellation: nil)
+        request_id = SecureRandom.uuid
+        @mutex.synchronize { @pending_requests[request_id] = true }
+        cancellation&.on_cancel { cancel_request(request_id) }
+        unless cancellation&.cancelled?
+          @server.notify("tool/approvalRequested", {
+            sessionId: @session_id,
+            approvalRequestId: request_id,
+            toolCallId: tool_call_id,
+            toolName: tool_name,
+            args: args
+          })
+        end
+
+        @mutex.synchronize do
+          @condition.wait(@mutex) until @answers.key?(request_id)
+          answer = @answers.delete(request_id)
+          @pending_requests.delete(request_id)
+          approved_answer?(answer)
+        end
+      end
+
+      def answer_tool_approval(request_id, approved:)
+        answer_raw(request_id, !!approved)
+      end
+
       def ask_user_question(questions, cancellation: nil)
         questions = validate_questions(questions)
         request_id = SecureRandom.uuid
@@ -41,14 +67,7 @@ module Kward
       end
 
       def answer(request_id, answers)
-        @mutex.synchronize do
-          request_id = request_id.to_s
-          return unless @pending_requests.key?(request_id)
-          return if @answers.key?(request_id)
-
-          @answers[request_id] = normalize_answers(answers)
-          @condition.broadcast
-        end
+        answer_raw(request_id, normalize_answers(answers))
       end
 
       def cancel_request(request_id)
@@ -63,6 +82,21 @@ module Kward
       end
 
       private
+
+      def answer_raw(request_id, value)
+        @mutex.synchronize do
+          request_id = request_id.to_s
+          return unless @pending_requests.key?(request_id)
+          return if @answers.key?(request_id)
+
+          @answers[request_id] = value
+          @condition.broadcast
+        end
+      end
+
+      def approved_answer?(answer)
+        answer == true
+      end
 
       def normalize_answers(answers)
         return nil if answers.nil?

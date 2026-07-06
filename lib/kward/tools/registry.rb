@@ -62,7 +62,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -77,6 +77,7 @@ module Kward
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
+      @tool_approval = tool_approval
       @mcp_clients = if mcp_clients
                        mcp_clients
                      elsif @allowed_tool_names
@@ -107,6 +108,8 @@ module Kward
       original_content = if tool
                            if mutation_tool?(name) && !write_lock_owned?
                              "Workspace write denied: another worker owns the write lock."
+                           elsif tool_approval_denied?(tool_call, name, args, cancellation)
+                             "Declined: tool execution denied by user: #{name}"
                            else
                              tool.call(args, conversation, cancellation: cancellation)
                            end
@@ -172,6 +175,12 @@ module Kward
 
     def mutation_tool?(name)
       ToolCall.write_lock_required?(name)
+    end
+
+    def tool_approval_denied?(tool_call, name, args, cancellation)
+      return false unless @tool_approval
+
+      @tool_approval.call(tool_call: tool_call, name: name, args: args, cancellation: cancellation) == false
     end
 
     def write_lock_owned?

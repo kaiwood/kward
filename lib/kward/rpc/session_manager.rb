@@ -392,6 +392,12 @@ module Kward
         { ok: true }
       end
 
+      def answer_tool_approval(session_id:, approval_request_id:, approved:)
+        rpc_session = fetch_session(session_id)
+        rpc_session.prompt.answer_tool_approval(approval_request_id, approved: approved)
+        { ok: true }
+      end
+
       def run_command(session_id:, command:, arguments: "")
         name = command.to_s.delete_prefix("/")
         return { ok: false, error: "unsupported", reason: "clientClipboardOwnedByUi" } if name == "copy"
@@ -848,6 +854,8 @@ module Kward
         model = option_value(options, "model")
         model = option_value(model, "id") || option_value(model, "model") if model.is_a?(Hash)
         reasoning = option_value(options, "reasoningEffort") || option_value(options, "reasoning")
+        approval_mode = blank_to_nil(option_value(options, "approvalMode"))
+        raise ArgumentError, "Unsupported approvalMode: #{approval_mode}" if approval_mode && !%w[none ask].include?(approval_mode)
         allowed_tools = option_array(options, "allowedTools")
         disabled_tools = option_array(options, "disabledTools")
         raise ArgumentError, "allowedTools and disabledTools cannot both be set" if allowed_tools && disabled_tools
@@ -856,6 +864,7 @@ module Kward
           provider: blank_to_nil(provider),
           model: blank_to_nil(model),
           reasoning: blank_to_nil(reasoning),
+          approval_mode: approval_mode,
           allowed_tools: allowed_tools,
           disabled_tools: disabled_tools
         }.compact
@@ -880,9 +889,24 @@ module Kward
 
       def scoped_tool_registry(rpc_session, options)
         names = scoped_tool_names(rpc_session, options)
-        return nil unless names
+        approval = tool_approval_callback(rpc_session, options)
+        return nil unless names || approval
 
-        build_tool_registry(rpc_session.workspace_root, rpc_session.prompt, allowed_tool_names: names)
+        build_tool_registry(rpc_session.workspace_root, rpc_session.prompt, allowed_tool_names: names, tool_approval: approval)
+      end
+
+      def tool_approval_callback(rpc_session, options)
+        return nil unless options[:approval_mode] == "ask"
+
+        lambda do |tool_call:, name:, args:, cancellation:|
+          fields = ToolMetadata.normalized_tool_fields(tool_call)
+          rpc_session.prompt.request_tool_approval(
+            tool_call_id: fields[:toolCallId] || ToolCall.id(tool_call),
+            tool_name: fields[:toolName] || name,
+            args: fields[:args] || ToolCall.camelize_args(args),
+            cancellation: cancellation
+          )
+        end
       end
 
       def scoped_tool_names(rpc_session, options)
@@ -935,8 +959,8 @@ module Kward
         )
       end
 
-      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil)
-        ToolRegistry.new(workspace: configured_workspace(workspace_root), prompt: prompt, allowed_tool_names: allowed_tool_names)
+      def build_tool_registry(workspace_root, prompt, allowed_tool_names: nil, tool_approval: nil)
+        ToolRegistry.new(workspace: configured_workspace(workspace_root), prompt: prompt, allowed_tool_names: allowed_tool_names, tool_approval: tool_approval)
       end
 
       def configured_workspace(root)

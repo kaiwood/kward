@@ -179,6 +179,32 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_turn_start_approval_mode_denies_tool_until_client_answers
+    Dir.mktmpdir do |config_dir|
+      responses = [
+        assistant_tool_call("write_file", { path: "denied.txt", content: "no" }),
+        { "role" => "assistant", "content" => "ok" }
+      ]
+      server = RecordingServer.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: FakeClient.new(responses), config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "write", options: { approvalMode: "ask" })
+
+      wait_until { server.notifications.any? { |notification| notification[:method] == "tool/approvalRequested" } }
+      request = server.notifications.find { |notification| notification[:method] == "tool/approvalRequested" }[:params]
+      assert_equal "write", request[:toolName]
+      assert_equal({ path: "denied.txt", content: "no" }, request[:args])
+
+      manager.answer_tool_approval(session_id: session[:id], approval_request_id: request[:approvalRequestId], approved: false)
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      result = manager.turn_events(turn_id: turn[:id])[:events].find { |event| event[:type] == "toolResult" }
+      assert_equal true, result[:payload][:result][:isError]
+      assert_includes result[:payload][:content], "Declined: tool execution denied by user"
+      refute File.exist?(File.join(Dir.pwd, "denied.txt"))
+    end
+  end
+
   def test_turn_start_accepts_image_attachment_and_restores_transcript
     Dir.mktmpdir do |config_dir|
       png_data = "iVBORw0KGgo="
