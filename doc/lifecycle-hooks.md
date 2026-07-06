@@ -126,6 +126,25 @@ HTTP hooks send the same event JSON with `POST` and expect the same decision JSO
 
 Empty HTTP response bodies are treated as `allow`. Non-2xx responses, timeouts, network failures, and invalid JSON apply `failure_policy`. Be careful with HTTP hooks: event payloads can include prompts, commands, file paths, or tool arguments. Prefer local or trusted endpoints and avoid forwarding raw payloads to third parties.
 
+Set `"async": true` on command or HTTP hook entries for non-blocking notifications:
+
+```json
+{
+  "hooks": {
+    "file_change_after": [
+      {
+        "id": "notify-indexer",
+        "type": "http",
+        "url": "http://127.0.0.1:9393/kward/file-change",
+        "async": true
+      }
+    ]
+  }
+}
+```
+
+Async hooks are observe-only. Kward schedules them in the background, immediately continues with `allow`, and ignores returned `deny`, `ask`, and `modify` decisions. Use async hooks for logging, indexing, metrics, or notifications — not policy enforcement.
+
 ## Failure policies
 
 Hook failures are different from hook decisions. A hook fails when Ruby plugin code raises, a command hook exits non-zero, times out, or returns invalid JSON. Configure `failure_policy` on plugin hooks or command-hook entries:

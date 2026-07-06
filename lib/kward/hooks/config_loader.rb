@@ -34,6 +34,7 @@ module Kward
         return if truthy?(entry["disabled"])
 
         handler = handler_for(entry)
+        callback = truthy?(entry["async"]) ? async_callback(handler) : handler
         manager.register(
           event,
           id: entry["id"] || "config:#{event}:#{index + 1}",
@@ -41,7 +42,7 @@ module Kward
           order: entry.fetch("order", 100),
           match: entry["match"],
           failure_policy: entry["failure_policy"]
-        ) { |hook_event, context| handler.call(hook_event, context) }
+        ) { |hook_event, context| callback.call(hook_event, context) }
       end
 
       def normalize_entry(entry)
@@ -74,6 +75,17 @@ module Kward
           )
         else
           raise ArgumentError, "Unsupported hook type: #{type}"
+        end
+      end
+
+      def async_callback(handler)
+        lambda do |hook_event, context|
+          Thread.new do
+            handler.call(hook_event, context)
+          rescue StandardError
+            nil
+          end
+          Decision.allow("Async hook scheduled")
         end
       end
 

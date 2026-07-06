@@ -460,7 +460,7 @@ module Kward
             pluginHooks: true,
             workspaceHooks: { supported: true, trustRequired: true, trustCommand: "/hooks trust" },
             httpHooks: { supported: true, protocol: "jsonPost" },
-            asyncHooks: { supported: false, reason: "notImplemented" }
+            asyncHooks: { supported: true, semantics: "observeOnly" }
           },
           runtimeSettings: {
             supported: true,

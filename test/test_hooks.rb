@@ -205,6 +205,32 @@ class TestHooks < KwardTestCase
     Kward::Hooks::HttpHandler.define_singleton_method(:new, original_new) if original_new
   end
 
+  def test_config_loader_async_hooks_schedule_without_blocking_or_denying
+    queue = Queue.new
+    original_new = Kward::Hooks::CommandHandler.method(:new)
+    Kward::Hooks::CommandHandler.define_singleton_method(:new) do |**_kwargs|
+      Object.new.tap do |handler|
+        handler.define_singleton_method(:call) do |event, _context = nil|
+          queue << event.name
+          Kward::Hooks::Decision.deny("ignored")
+        end
+      end
+    end
+
+    manager = Kward::Hooks::ConfigLoader.new({
+      "hooks" => {
+        "turn_end" => [{ "id" => "notify", "command" => "notify", "async" => true }]
+      }
+    }).manager
+    result = manager.run(Kward::Hooks::Event.new(name: "turn_end"))
+
+    assert result.allowed?
+    assert_equal "Async hook scheduled", result.decisions.first.message
+    assert_equal "turn_end", queue.pop
+  ensure
+    Kward::Hooks::CommandHandler.define_singleton_method(:new, original_new) if original_new
+  end
+
   def test_config_loader_registers_command_hooks
     Dir.mktmpdir do |dir|
       script = File.join(dir, "hook.rb")
