@@ -1,4 +1,5 @@
 require "json"
+require "uri"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -88,14 +89,19 @@ module Kward
       def print_hooks_doctor
         lines = ["Lifecycle hook diagnostics"]
         begin
-          manager = Hooks::ConfigLoader.new(ConfigFiles.lifecycle_hooks_config(current_workspace_root)).manager
-          lines << "Config and trusted workspace hooks: #{manager.handlers.length}"
+          diagnostics = hook_config_diagnostics(ConfigFiles.read_config, "config") + hook_config_diagnostics(ConfigFiles.read_trusted_workspace_hooks_config(current_workspace_root), "workspace")
+          manager = diagnostics.empty? ? Hooks::ConfigLoader.new(ConfigFiles.lifecycle_hooks_config(current_workspace_root)).manager : nil
+          lines << "Config and trusted workspace hooks: #{manager ? manager.handlers.length : "not loaded due diagnostics"}"
           lines << "Plugin hooks: #{plugin_registry.hook_handlers.length}"
           lines << "Audit log: #{hooks_log_path}"
           lines << "Workspace hook config: #{ConfigFiles.workspace_hooks_path(current_workspace_root)}"
           lines << "Workspace hooks trusted: #{ConfigFiles.workspace_hooks_trusted?(current_workspace_root)}"
           lines << "Known events: #{Hooks::Catalog.event_names.length}"
-          lines << "OK"
+          if diagnostics.empty?
+            lines << "OK"
+          else
+            lines.concat(diagnostics.map { |diagnostic| "Warning: #{diagnostic}" })
+          end
         rescue StandardError => e
           lines << "Error: #{e.message}"
         end
@@ -139,6 +145,82 @@ module Kward
               disabled: truthy_hook_value?(entry["disabled"])
             }
           end
+        end
+      end
+
+      def hook_config_diagnostics(config, source)
+        hooks = config["hooks"] || config[:hooks]
+        return [] unless hooks.is_a?(Hash)
+
+        hooks.flat_map do |event, entries|
+          Array(entries).each_with_index.flat_map do |entry, index|
+            validate_hook_entry(event.to_s, normalize_hook_entry(entry), source, index + 1)
+          end
+        end
+      end
+
+      def normalize_hook_entry(entry)
+        entry.is_a?(Hash) ? entry.transform_keys(&:to_s) : { "type" => "command", "command" => entry.to_s }
+      end
+
+      def validate_hook_entry(event, entry, source, number)
+        label = entry["id"] || "#{source}:#{event}:#{number}"
+        diagnostics = []
+        diagnostics << "#{label}: unknown event #{event}" unless Hooks::Catalog.known?(event)
+        diagnostics.concat(validate_hook_failure_policy(label, entry))
+        diagnostics.concat(validate_hook_timeout(label, entry))
+        diagnostics.concat(validate_hook_type(label, entry))
+        diagnostics
+      end
+
+      def validate_hook_failure_policy(label, entry)
+        policy = entry["failure_policy"]
+        return [] if policy.to_s.empty? || Hooks::Catalog::VALID_FAILURE_POLICIES.include?(policy.to_s)
+
+        ["#{label}: unknown failure_policy #{policy}"]
+      end
+
+      def validate_hook_timeout(label, entry)
+        value = entry["timeout_seconds"]
+        return [] if value.nil? || value.to_f.positive?
+
+        ["#{label}: timeout_seconds must be positive"]
+      end
+
+      def validate_hook_type(label, entry)
+        type = (entry["type"] || "command").to_s
+        case type
+        when "command"
+          validate_command_hook(label, entry)
+        when "http"
+          validate_http_hook(label, entry)
+        else
+          ["#{label}: unsupported hook type #{type}"]
+        end
+      end
+
+      def validate_command_hook(label, entry)
+        command = entry["command"].to_s.strip
+        return ["#{label}: command is required"] if command.empty?
+
+        executable = command.split(/\s+/, 2).first
+        return [] if executable.include?(File::SEPARATOR) ? File.executable?(File.expand_path(executable)) : system_command_available?(executable)
+
+        ["#{label}: command executable not found: #{executable}"]
+      end
+
+      def validate_http_hook(label, entry)
+        uri = URI.parse(entry["url"].to_s)
+        return [] if %w[http https].include?(uri.scheme) && uri.host
+
+        ["#{label}: url must be http or https"]
+      rescue URI::InvalidURIError
+        ["#{label}: url must be http or https"]
+      end
+
+      def system_command_available?(name)
+        ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).any? do |dir|
+          File.executable?(File.join(dir, name))
         end
       end
 

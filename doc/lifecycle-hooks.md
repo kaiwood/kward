@@ -172,10 +172,12 @@ In interactive Kward sessions, use `/hooks` to inspect loaded hooks and recent h
 /hooks list      # configured command hooks and plugin hooks
 /hooks events    # known event names, defaults, and modifiable fields
 /hooks logs      # recent audit records from logs/hooks.jsonl
-/hooks doctor    # basic hook configuration diagnostics
+/hooks doctor    # configuration diagnostics and common mistake checks
 /hooks trust     # trust this workspace's .kward/hooks.json
 /hooks untrust   # stop trusting this workspace's hook config
 ```
+
+`/hooks doctor` warns about unknown events, unsupported hook types, invalid failure policies, non-positive timeouts, missing command executables, and invalid HTTP hook URLs.
 
 ## Workspace hooks
 

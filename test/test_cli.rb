@@ -502,6 +502,41 @@ class TestCLI < KwardTestCase
     assert_includes output, "shell_command_before failure_policy=deny"
   end
 
+  def test_hooks_doctor_reports_config_diagnostics
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({
+        "hooks" => {
+          "unknown_event" => [
+            { "id" => "bad-command", "type" => "command", "command" => "definitely-missing-kward-hook", "timeout_seconds" => 0, "failure_policy" => "explode" }
+          ],
+          "turn_end" => [
+            { "id" => "bad-http", "type" => "http", "url" => "ftp://example.test/hook" },
+            { "id" => "bad-type", "type" => "socket" }
+          ]
+        }
+      }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        conversation = Kward::Conversation.new(workspace_root: dir)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, = cli.send(:handle_local_slash_command, "/hooks doctor", agent, nil)
+
+        assert_equal true, handled
+        output = prompt.output.join
+        assert_includes output, "unknown event unknown_event"
+        assert_includes output, "unknown failure_policy explode"
+        assert_includes output, "timeout_seconds must be positive"
+        assert_includes output, "command executable not found: definitely-missing-kward-hook"
+        assert_includes output, "bad-http: url must be http or https"
+        assert_includes output, "bad-type: unsupported hook type socket"
+      end
+    end
+  end
+
   def test_hooks_slash_command_trusts_workspace_hooks
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
