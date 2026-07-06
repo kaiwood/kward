@@ -388,6 +388,49 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_tool_registry_runs_mcp_lifecycle_hooks
+    client = Object.new
+    client.define_singleton_method(:name) { "demo-server" }
+    client.define_singleton_method(:list_tools) do
+      [{ "name" => "inspect", "description" => "Inspect", "inputSchema" => { "type" => "object", "properties" => {}, "additionalProperties" => false } }]
+    end
+    client.define_singleton_method(:call_tool) do |_name, _args|
+      { "content" => [{ "type" => "text", "text" => "ok" }] }
+    end
+    events = []
+    manager = Kward::Hooks::Manager.new
+    %w[mcp_tool_before mcp_tool_after].each do |event_name|
+      manager.register(event_name) do |event, _context|
+        events << [event.name, event.payload[:server_name], event.payload[:remote_name]]
+        Kward::Hooks::Decision.allow
+      end
+    end
+    registry = Kward::ToolRegistry.new(mcp_clients: [client], hook_manager: manager)
+    conversation = Kward::Conversation.new
+
+    result = registry.dispatch(tool_call("demo-server__inspect", {}), conversation)
+
+    assert_equal "ok", result
+    assert_equal [
+      ["mcp_tool_before", "demo-server", "inspect"],
+      ["mcp_tool_after", "demo-server", "inspect"]
+    ], events
+  end
+
+  def test_tool_registry_mcp_before_hook_can_deny
+    client = Object.new
+    client.define_singleton_method(:name) { "demo-server" }
+    client.define_singleton_method(:list_tools) { [{ "name" => "inspect", "inputSchema" => {} }] }
+    client.define_singleton_method(:call_tool) { |_name, _args| flunk("MCP client should not be called") }
+    manager = Kward::Hooks::Manager.new
+    manager.register("mcp_tool_before") { Kward::Hooks::Decision.deny("blocked") }
+    registry = Kward::ToolRegistry.new(mcp_clients: [client], hook_manager: manager)
+
+    result = registry.dispatch(tool_call("demo-server__inspect", {}), Kward::Conversation.new)
+
+    assert_equal "Declined: blocked", result
+  end
+
   def test_tool_registry_ignores_extra_incoming_fields
     Dir.mktmpdir do |dir|
       path = "kward_extra_input.txt"

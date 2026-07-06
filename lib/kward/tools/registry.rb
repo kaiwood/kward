@@ -250,7 +250,9 @@ module Kward
     def execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
       args = run_shell_before_hooks(name, args, tool_call, conversation, cancellation)
       run_file_change_before_hooks(name, args, tool_call, conversation, cancellation)
+      run_mcp_before_hooks(name, args, tool_call, conversation, cancellation)
       content = tool.call(args, conversation, cancellation: cancellation)
+      run_mcp_after_hooks(name, args, content, conversation)
       run_shell_after_hooks(name, args, content, conversation)
       run_file_change_after_hooks(name, args, content, conversation)
       run_hook("tool_call_after", conversation, payload: tool_payload(name, args, tool_call).merge(content: content.to_s))
@@ -258,8 +260,33 @@ module Kward
     rescue HookDenied => e
       e.message
     rescue StandardError => e
+      run_mcp_error_hooks(name, args, e, conversation)
       run_hook("tool_call_error", conversation, payload: tool_payload(name, args, tool_call).merge(error: e.message))
       raise
+    end
+
+    def run_mcp_before_hooks(name, args, tool_call, conversation, cancellation)
+      return unless mcp_tool?(name)
+
+      result = run_hook("mcp_tool_before", conversation, payload: mcp_payload(name, args))
+      if result.denied?
+        raise HookDenied, hook_denied_content(result, "MCP tool denied")
+      end
+      if result.approval_required? && hook_approval_denied?(result, tool_call, name, args, cancellation)
+        raise HookDenied, hook_denied_content(result, "MCP tool approval denied")
+      end
+    end
+
+    def run_mcp_after_hooks(name, args, content, conversation)
+      return unless mcp_tool?(name)
+
+      run_hook("mcp_tool_after", conversation, payload: mcp_payload(name, args).merge(content: content.to_s))
+    end
+
+    def run_mcp_error_hooks(name, args, error, conversation)
+      return unless mcp_tool?(name)
+
+      run_hook("mcp_tool_error", conversation, payload: mcp_payload(name, args).merge(error: error.message))
     end
 
     def run_shell_before_hooks(name, args, tool_call, conversation, cancellation)
@@ -335,6 +362,10 @@ module Kward
       payload_arguments.is_a?(Hash) ? payload_arguments : fallback
     end
 
+    def mcp_payload(name, args)
+      tool_payload(name, args, {}).slice(:tool_name, :arguments, :source, :server_name, :remote_name)
+    end
+
     def shell_payload(args)
       {
         tool_name: "run_shell_command",
@@ -377,6 +408,11 @@ module Kward
 
       approval_args = args.merge("hook_message" => result.decision.message)
       @tool_approval.call(tool_call: tool_call, name: name, args: approval_args, cancellation: cancellation) == false
+    end
+
+    def mcp_tool?(name)
+      metadata = metadata_for(name)
+      (metadata[:source] || metadata["source"]).to_s == "mcp"
     end
 
     def mutation_tool?(name)

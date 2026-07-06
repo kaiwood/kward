@@ -274,6 +274,16 @@ Payloads are metadata-oriented by default. Full file contents, secrets, and comp
 | `tool_call_after` | tool metadata plus `content` | none |
 | `tool_call_error` | tool metadata plus `error` | none |
 
+### MCP events
+
+| Event | Payload highlights | Supported modifications |
+| --- | --- | --- |
+| `mcp_tool_before` | `tool_name`, `arguments`, `server_name`, `remote_name` | none |
+| `mcp_tool_after` | MCP metadata plus `content` | none |
+| `mcp_tool_error` | MCP metadata plus `error` | none |
+
+MCP events are emitted in addition to generic `tool_call_*` events for tools provided by configured MCP servers.
+
 ### Compaction events
 
 | Event | Payload highlights | Supported modifications |
