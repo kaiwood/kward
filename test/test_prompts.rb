@@ -449,6 +449,78 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_skills_include_project_and_shared_agent_skill_locations
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(config_dir)
+      FileUtils.mkdir_p(workspace)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+
+      skill_locations = {
+        "project-kward" => File.join(workspace, ".kward", "skills", "project-kward"),
+        "project-agent" => File.join(workspace, ".agents", "skills", "project-agent"),
+        "user-kward" => File.join(config_dir, "skills", "user-kward"),
+        "user-agent" => File.join(KWARD_TEST_HOME, ".agents", "skills", "user-agent")
+      }
+      skill_locations.each do |name, path|
+        FileUtils.mkdir_p(path)
+        File.write(File.join(path, "SKILL.md"), "---\nname: #{name}\ndescription: #{name} description.\n---\n")
+      end
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        Dir.chdir(workspace) do
+          content = Kward::Conversation.new.system_message[:content]
+
+          assert_includes content, "- project-kward: project-kward description."
+          assert_includes content, "- project-agent: project-agent description."
+          assert_includes content, "- user-kward: user-kward description."
+          assert_includes content, "- user-agent: user-agent description."
+        end
+      end
+    end
+  ensure
+    FileUtils.rm_rf(File.join(KWARD_TEST_HOME, ".agents", "skills", "user-agent"))
+  end
+
+  def test_skills_prefer_project_kward_then_project_agent_then_user_kward_then_user_agent
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(config_dir)
+      FileUtils.mkdir_p(workspace)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+
+      roots = [
+        File.join(KWARD_TEST_HOME, ".agents", "skills", "shared"),
+        File.join(config_dir, "skills", "shared"),
+        File.join(workspace, ".agents", "skills", "shared"),
+        File.join(workspace, ".kward", "skills", "shared")
+      ]
+      roots.each_with_index do |root, index|
+        FileUtils.mkdir_p(root)
+        File.write(File.join(root, "SKILL.md"), "---\nname: shared\ndescription: precedence #{index}.\n---\n\nbody #{index}\n")
+      end
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        Dir.chdir(workspace) do
+          _stdout, stderr = capture_io do
+            content = Kward::Conversation.new.system_message[:content]
+
+            assert_includes content, "- shared: precedence 3."
+            refute_includes content, "precedence 2"
+            refute_includes content, "precedence 1"
+            refute_includes content, "precedence 0"
+          end
+
+          assert_includes stderr, "Warning: skipping duplicate Kward skill \"shared\""
+        end
+      end
+    end
+  ensure
+    FileUtils.rm_rf(File.join(KWARD_TEST_HOME, ".agents", "skills", "shared"))
+  end
+
   def test_invalid_config_prompt_and_skill_warn_and_skip
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))

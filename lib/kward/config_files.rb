@@ -719,6 +719,7 @@ module Kward
     def skills_registry
       Skills::Registry.new(
         config_dir: config_dir,
+        workspace_root: Dir.pwd,
         skill_class: Skill,
         max_file_bytes: MAX_SKILL_FILE_BYTES,
         markdown_parser: method(:markdown_parts),

@@ -6,8 +6,11 @@ module Kward
   module Skills
     # Parsed skill metadata and instruction path.
     class Registry
-      def initialize(config_dir:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:)
+      SkillSource = Struct.new(:root, :label, :precedence, keyword_init: true)
+
+      def initialize(config_dir:, workspace_root:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:)
         @config_dir = config_dir
+        @workspace_root = workspace_root
         @skill_class = skill_class
         @max_file_bytes = max_file_bytes
         @markdown_parser = markdown_parser
@@ -15,24 +18,23 @@ module Kward
       end
 
       def skills
-        skills_root = File.join(@config_dir, "skills")
-        return [] unless Dir.exist?(skills_root)
-
         seen = {}
-        Dir.glob(File.join(skills_root, "*", "SKILL.md")).sort.filter_map do |path|
-          skill = parse_skill(path)
-          next unless skill
+        skill_sources.flat_map do |source|
+          scan_source(source).filter_map do |path|
+            skill = parse_skill(path)
+            next unless skill
 
-          if seen[skill.name]
-            warn "Warning: skipping duplicate Kward skill #{skill.name.inspect}: #{path}"
-            next
+            if seen[skill.name]
+              warn "Warning: skipping duplicate Kward skill #{skill.name.inspect}: #{path}"
+              next
+            end
+
+            seen[skill.name] = true
+            skill
           end
-
-          seen[skill.name] = true
-          skill
         end
       rescue StandardError => e
-        warn "Warning: skipping Kward skills in #{skills_root}: #{e.message}"
+        warn "Warning: skipping Kward skills: #{e.message}"
         []
       end
 
@@ -62,6 +64,24 @@ module Kward
       end
 
       private
+
+      def skill_sources
+        [
+          SkillSource.new(root: File.join(@workspace_root, ".kward", "skills"), label: "project Kward skills", precedence: 0),
+          SkillSource.new(root: File.join(@workspace_root, ".agents", "skills"), label: "project Agent Skills", precedence: 1),
+          SkillSource.new(root: File.join(@config_dir, "skills"), label: "user Kward skills", precedence: 2),
+          SkillSource.new(root: File.expand_path("~/.agents/skills"), label: "user Agent Skills", precedence: 3)
+        ]
+      end
+
+      def scan_source(source)
+        return [] unless Dir.exist?(source.root)
+
+        Dir.glob(File.join(source.root, "*", "SKILL.md")).sort
+      rescue StandardError => e
+        warn "Warning: skipping #{source.label} in #{source.root}: #{e.message}"
+        []
+      end
 
       def parse_skill(path)
         frontmatter, = @markdown_parser.call(path)
