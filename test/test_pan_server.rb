@@ -98,6 +98,38 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_server_broadcasts_lifecycle_hook_events
+    Dir.mktmpdir do |dir|
+      script = File.join(dir, "hook.rb")
+      File.write(script, <<~RUBY)
+        require "json"
+        puts({ decision: "warn", message: "pan noticed" }.to_json)
+      RUBY
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "pan_mode" => { "username" => "kward", "password" => "secret", "host" => "127.0.0.1", "port" => 0 },
+        "hooks" => { "turn_end" => [{ "id" => "notice", "command" => "ruby #{script}" }] }
+      ))
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        server = build_server(dir)
+        queue = Queue.new
+        server.send(:subscribe, queue)
+        hooks = server.send(:lifecycle_hook_manager)
+        hooks.run(Kward::Hooks::Event.new(name: "turn_end", payload: { input: "hidden" }))
+
+        message = queue.pop
+        payload = JSON.parse(message[/^data: (.+)$/m, 1], symbolize_names: true)
+        assert_includes message, "event: hook_event"
+        assert_equal "turn_end", payload.dig(:event, :name)
+        assert_equal ["input"], payload.dig(:event, :payloadKeys)
+        assert_equal "warn", payload.dig(:result, :decision)
+        assert_equal ["pan noticed"], payload.dig(:result, :warnings)
+      ensure
+        stop_worker(server)
+      end
+    end
+  end
+
   def test_pan_server_queues_prompt_while_active
     Dir.mktmpdir do |dir|
       client = PanStreamingClient.new(["one", "two"], delay: 0.1)
