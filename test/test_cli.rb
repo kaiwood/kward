@@ -488,6 +488,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_hooks_top_level_command_reuses_hook_commands
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({
+        "hooks" => {
+          "turn_end" => [{ "id" => "notify", "command" => "ruby hook.rb" }]
+        }
+      }))
+      prompt = FakePrompt.new([])
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: ["hooks", "list"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      end
+
+      output = prompt.output.join
+      assert_includes output, "Lifecycle hooks"
+      assert_includes output, "notify turn_end"
+    end
+  end
+
   def test_hooks_slash_command_shows_events
     prompt = FakePrompt.new([])
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))

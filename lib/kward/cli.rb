@@ -211,6 +211,16 @@ module Kward
         return
       end
 
+      if @argv.first == "hooks"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("hooks")
+          return
+        end
+
+        handle_hooks_command((@argv[1..] || []).join(" "))
+        return
+      end
+
       if @argv.first == "edit"
         if help_option_arguments?(@argv[1..] || [])
           print_command_help("edit")

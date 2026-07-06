@@ -48,6 +48,7 @@ kward                          # start an interactive chat
 kward help                     # show available commands and examples
 /login                         # from inside Kward: sign in or save provider credentials
 kward login                    # from your shell: sign in or save provider credentials
+kward hooks doctor             # inspect lifecycle hook setup
 kward "Explain this project"   # run one prompt and exit
 kward --working-directory ~/code/project "Explain this project"
 ```

@@ -166,7 +166,7 @@ Pan runs configured command hooks and trusted plugin hooks for its agent turns, 
 
 ## Inspect hooks
 
-In interactive Kward sessions, use `/hooks` to inspect loaded hooks and recent hook activity:
+Use `kward hooks ...` from your shell or `/hooks ...` inside an interactive Kward session to inspect loaded hooks and recent hook activity:
 
 ```text
 /hooks list      # configured command hooks and plugin hooks
@@ -177,7 +177,7 @@ In interactive Kward sessions, use `/hooks` to inspect loaded hooks and recent h
 /hooks untrust   # stop trusting this workspace's hook config
 ```
 
-`/hooks doctor` warns about unknown events, unsupported hook types, invalid failure policies, non-positive timeouts, missing command executables, and invalid HTTP hook URLs.
+`kward hooks doctor` and `/hooks doctor` warn about unknown events, unsupported hook types, invalid failure policies, non-positive timeouts, missing command executables, and invalid HTTP hook URLs.
 
 ## Workspace hooks
 

@@ -53,6 +53,7 @@ module Kward
             #{command.call("kward auth status")}                  Show saved credential status
             #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
             #{command.call("kward doctor")}                       Check local Kward setup
+            #{command.call("kward hooks doctor")}                 Inspect lifecycle hook setup
             #{command.call("kward edit")} #{option.call("<filename>")}              Open a file in the integrated editor
             #{command.call("kward sysprompt")}                    Inspect the effective system prompt
             #{command.call("kward openrouter refresh")}           Refresh cached OpenRouter models
@@ -66,6 +67,7 @@ module Kward
             #{command.call("auth status|logout")}                 Show or clear saved credentials
             #{command.call("init")}                               Install starter prompts and PRINCIPLES.md
             #{command.call("doctor")}                             Check local Kward setup
+            #{command.call("hooks list|events|logs|doctor|trust|untrust")} Inspect lifecycle hooks
             #{command.call("edit")} #{option.call("<filename>")}                  Open a file in the integrated editor
             #{command.call("sysprompt")} [--raw]                  Inspect the effective system prompt
             #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
@@ -126,6 +128,11 @@ module Kward
             usage: "kward doctor",
             description: "Check local Kward configuration, workspace, auth hints, and writable directories.",
             examples: ["kward doctor", "kward --working-directory ~/code/project doctor"]
+          },
+          "hooks" => {
+            usage: "kward hooks [list|events|logs|doctor|trust|untrust]",
+            description: "Inspect lifecycle hooks, recent audit records, diagnostics, and workspace hook trust.",
+            examples: ["kward hooks list", "kward hooks doctor", "kward hooks logs 50", "kward hooks trust"]
           },
           "edit" => {
             usage: "kward edit <filename>",
