@@ -62,6 +62,37 @@ class TestRPCServer < KwardTestCase
     end
   end
 
+  def test_rpc_lifecycle_hook_manager_emits_hook_event_notifications
+    Dir.mktmpdir do |dir|
+      script = File.join(dir, "hook.rb")
+      File.write(script, <<~RUBY)
+        require "json"
+        puts({ decision: "warn", message: "noticed" }.to_json)
+      RUBY
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.generate({
+        hooks: {
+          turn_end: [{ id: "notice", command: "ruby #{script}" }]
+        }
+      }))
+      server = RecordingServer.new
+      manager = Kward::RPC::SessionManager.new(server: server, client: FakeClient.new([]), config_manager: Kward::RPC::ConfigManager.new)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        hooks = manager.send(:lifecycle_hook_manager, dir)
+        hooks.run(Kward::Hooks::Event.new(name: "turn_end", payload: { secret: "hidden" }))
+      end
+
+      notification = server.notifications.find { |entry| entry[:method] == "hook/event" }
+      refute_nil notification
+      assert_equal "turn_end", notification[:params].dig(:event, :name)
+      assert_equal ["secret"], notification[:params].dig(:event, :payloadKeys)
+      assert_nil notification[:params].dig(:event, :payload)
+      assert_equal "warn", notification[:params].dig(:result, :decision)
+      assert_equal ["noticed"], notification[:params].dig(:result, :warnings)
+    end
+  end
+
   def test_initialize_and_shutdown
     config_dir = Dir.mktmpdir
     config_path = File.join(config_dir, "config.json")
@@ -135,6 +166,7 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["lifecycleHooks"]["events"], "shell_command_before"
     assert_includes capabilities["lifecycleHooks"]["decisions"], "deny"
     assert_equal true, capabilities["lifecycleHooks"].dig("approvals", "supported")
+    assert_includes capabilities["lifecycleHooks"]["notifications"], "hook/event"
     assert_equal true, capabilities["lifecycleHooks"].dig("workspaceHooks", "supported")
     assert_equal true, capabilities["lifecycleHooks"].dig("httpHooks", "supported")
     assert_equal true, capabilities["lifecycleHooks"].dig("asyncHooks", "supported")

@@ -56,7 +56,7 @@ Detailed capability fields include:
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
-- `lifecycleHooks`: supported lifecycle hook events, decisions, command/plugin hook availability, audit log path, hook approval routing through tool approval, and explicit unsupported status for workspace, HTTP, and async hooks.
+- `lifecycleHooks`: supported lifecycle hook events, decisions, command/plugin/workspace/HTTP/async hook availability, audit log path, hook approval routing through tool approval, and hook notifications (`hook/event`, `hook/message`).
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: Tauren auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
@@ -89,6 +89,15 @@ Returns the real workspace root. Any existing local directory accessible to the 
 ### `workspace/info`
 
 Returns root, basename, and writability for a workspace.
+
+## Lifecycle hook notifications
+
+RPC clients can subscribe by listening for JSON-RPC notifications:
+
+- `hook/event`: emitted after a lifecycle hook event runs at least one matching handler. The payload includes event identity, phase, timestamp, session/turn/workspace/frontend/agent metadata, sorted `payloadKeys`, and the final decision summary. Raw event payload values are intentionally omitted.
+- `hook/message`: emitted when trusted hook/plugin code calls `ctx.say`.
+
+Both notifications are redacted by the same RPC redactor used for other outbound messages.
 
 ## Session methods
 

@@ -25,10 +25,12 @@ module Kward
       end
 
       attr_reader :handlers
+      attr_writer :on_result
 
-      def initialize(audit_log: AuditLog.new)
+      def initialize(audit_log: AuditLog.new, on_result: nil)
         @handlers = []
         @audit_log = audit_log
+        @on_result = on_result
       end
 
       def register(event, id: nil, source: nil, order: 100, match: nil, failure_policy: nil, &callback)
@@ -84,6 +86,7 @@ module Kward
           payload: payload
         )
         @audit_log&.log_result(event: event, result: result)
+        @on_result&.call(event, result) unless decisions.empty?
         result
       end
 

@@ -83,6 +83,7 @@ module Kward
       UI_QUESTION_NOTIFICATION = "ui/question"
       UI_FOOTER_NOTIFICATION = "ui/footer"
       TOOL_APPROVAL_NOTIFICATION = "tool/approvalRequested"
+      HOOK_EVENT_NOTIFICATION = "hook/event"
       METHOD_GROUPS = {
         protocol: PROTOCOL_METHODS,
         workspace: WORKSPACE_METHODS,
@@ -455,6 +456,7 @@ module Kward
             events: Hooks::Catalog.event_names,
             decisions: Hooks::Decision::VALID_DECISIONS,
             approvals: { supported: true, via: "toolApproval", requestNotification: TOOL_APPROVAL_NOTIFICATION, answerMethod: TOOL_APPROVAL_METHODS.first },
+            notifications: [HOOK_EVENT_NOTIFICATION, "hook/message"],
             auditLog: { supported: true, path: File.join(ConfigFiles.config_dir, "logs", "hooks.jsonl") },
             commandHooks: true,
             pluginHooks: true,

@@ -1023,12 +1023,36 @@ module Kward
 
       def lifecycle_hook_manager(workspace_root)
         manager = Hooks::ConfigLoader.new(ConfigFiles.lifecycle_hooks_config(workspace_root)).manager
+        manager.on_result = method(:emit_lifecycle_hook_event)
         plugin_registry.hook_handlers.each do |hook|
           manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match, failure_policy: hook.failure_policy) do |event, context|
             hook.handler.call(event, context)
           end
         end
         manager
+      end
+
+      def emit_lifecycle_hook_event(event, result)
+        @server.notify("hook/event", {
+          event: {
+            id: event.id,
+            name: event.name,
+            phase: event.phase,
+            timestamp: event.timestamp.iso8601,
+            session: event.session,
+            turn: event.turn,
+            workspace: event.workspace,
+            frontend: event.frontend,
+            agent: event.agent,
+            payloadKeys: event.payload.keys.map(&:to_s).sort
+          },
+          result: {
+            decision: result.decision.decision,
+            warnings: result.warnings,
+            messages: result.messages,
+            decisionCount: result.decisions.length
+          }
+        })
       end
 
       def lifecycle_hook_context(conversation:, session:, workspace_root:)
