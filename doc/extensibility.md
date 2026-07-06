@@ -99,10 +99,18 @@ Prompt templates are best for reusable text. They do not run local code.
 
 Use skills for reusable instructions that should only be loaded for certain tasks.
 
-Create:
+Create a user-level skill in either Kward's native directory or the shared Agent Skills directory:
 
 ```text
 ~/.kward/skills/testing/SKILL.md
+~/.agents/skills/testing/SKILL.md
+```
+
+Project skills are also supported when you trust the workspace:
+
+```text
+<workspace>/.kward/skills/testing/SKILL.md
+<workspace>/.agents/skills/testing/SKILL.md
 ```
 
 Example:
@@ -117,9 +125,26 @@ Prefer focused tests near the changed behavior.
 Do not weaken assertions to make tests pass.
 ```
 
-Skills are listed to the model by name and description. When a task matches a skill, the model calls the `read_skill` tool to load the full `SKILL.md` instructions before proceeding.
+Skills are listed to the model by name and description. When a task matches a skill, the model calls the `read_skill` tool to load the full `SKILL.md` instructions before proceeding. You can also activate a skill explicitly:
 
-Skills can also contain additional files alongside `SKILL.md`. The model can read them through `read_skill` with a relative `path` argument (for example, `path: examples.md`). Files must stay inside the skill folder; paths outside are rejected.
+```text
+/skill testing
+/skill:testing
+```
+
+Skills can contain additional files alongside `SKILL.md`, commonly under `references/`, `scripts/`, or `assets/`. When `SKILL.md` is loaded, Kward lists those bundled resources without reading them all. The model can read a specific file through `read_skill` with a relative `path` argument, for example `path: references/examples.md`. Files must stay inside the skill folder; paths outside are rejected.
+
+Discovery precedence is deterministic: project `.kward/skills`, project `.agents/skills`, user/config `skills`, then user `.agents/skills`. If two skills have the same `name`, the earlier source wins and the shadowed skill is skipped with a warning.
+
+Project skills are disabled by default because repository-provided instructions can be untrusted. Enable them from `/settings` → `Tools & Search` → `Trust project skills`, or set:
+
+```json
+{
+  "skills": {
+    "trust_project": true
+  }
+}
+```
 
 ## Plugins
 

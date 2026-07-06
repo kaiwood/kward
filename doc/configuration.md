@@ -28,6 +28,16 @@ See [MCP servers](mcp.md) for connecting local Model Context Protocol servers su
 
 ```json
 {
+  "skills": {
+    "trust_project": true
+  }
+}
+```
+
+By default, Kward loads user-level skills but skips project-level skills from the workspace. Set `skills.trust_project` to `true`, or use `/settings` → `Tools & Search` → `Trust project skills`, when you trust the repository's `.kward/skills` or `.agents/skills` directories. See [Extensibility](extensibility.md) for skill locations and examples.
+
+```json
+{
   "memory": {
     "enabled": true
   }

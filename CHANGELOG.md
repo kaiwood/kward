@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Agent Skills interoperability across `~/.agents/skills`, project `.agents/skills`, Kward-native skill directories, explicit `/skill` activation, RPC skill commands, resource listing, and compaction preservation for activated skills.
 - Added RPC MCP/tool discovery metadata, session-aware `tools/list`, `mcp/status`, and initialize capability reporting for MCP discovery.
 
 ### Changed

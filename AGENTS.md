@@ -28,8 +28,9 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/tools/` - individual tool implementations, one file per tool.
 - `lib/kward/mcp/` - local MCP client transports and configured server clients.
 - `lib/kward/rpc/` - experimental JSON-RPC backend.
-- `lib/kward/prompts.rb` - system prompt and prompt/skill discovery.
+- `lib/kward/prompts.rb` - system prompt and skill catalog prompt assembly.
 - `lib/kward/config_files.rb` - config path handling.
+- `lib/kward/skills/` - Agent Skills discovery, parsing, validation, and activation file reads.
 - `test/` - Minitest coverage.
 - `doc/` - user documentation and generated docs source pages.
 - `doc/api.md` - curated API reference overview used as the API docs landing page.
@@ -73,7 +74,7 @@ ruby lib/main.rb "Explain this project"
 - Add user-facing changes to the `CHANGELOG.md` `[Unreleased]` section using grouped `### Added`, `### Changed`, `### Fixed`, or `### Removed` subsections.
 - When adding configuration, document default behavior and environment variable interactions.
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
-- When changing prompt/skill behavior, update `doc/extensibility.md` and prompt-related tests as needed.
+- When changing prompt/skill behavior, update `doc/extensibility.md`, CLI/RPC exposure, compaction behavior when activated instructions are durable, and prompt-related tests as needed.
 - Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
 
 ## Feature exposure rule
