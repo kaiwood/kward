@@ -97,54 +97,9 @@ Prompt templates are best for reusable text. They do not run local code.
 
 ## Skills
 
-Use skills for reusable instructions that should only be loaded for certain tasks.
+Use skills for reusable instructions that should only be loaded for certain tasks, such as testing, release checks, or code review workflows.
 
-Create a user-level skill in either Kward's native directory or the shared Agent Skills directory:
-
-```text
-~/.kward/skills/testing/SKILL.md
-~/.agents/skills/testing/SKILL.md
-```
-
-Project skills are also supported when you trust the workspace:
-
-```text
-<workspace>/.kward/skills/testing/SKILL.md
-<workspace>/.agents/skills/testing/SKILL.md
-```
-
-Example:
-
-```markdown
----
-name: testing
-description: Use when adding or changing tests.
----
-
-Prefer focused tests near the changed behavior.
-Do not weaken assertions to make tests pass.
-```
-
-Skills are listed to the model by name and description. When a task matches a skill, the model calls the `read_skill` tool to load the full `SKILL.md` instructions before proceeding. You can also activate a skill explicitly:
-
-```text
-/skill testing
-/skill:testing
-```
-
-Skills can contain additional files alongside `SKILL.md`, commonly under `references/`, `scripts/`, or `assets/`. When `SKILL.md` is loaded, Kward lists those bundled resources without reading them all. The model can read a specific file through `read_skill` with a relative `path` argument, for example `path: references/examples.md`. Files must stay inside the skill folder; paths outside are rejected.
-
-Discovery precedence is deterministic: project `.kward/skills`, project `.agents/skills`, user/config `skills`, then user `.agents/skills`. If two skills have the same `name`, the earlier source wins and the shadowed skill is skipped with a warning.
-
-Project skills are disabled by default because repository-provided instructions can be untrusted. Enable them from `/settings` → `Tools & Search` → `Trust project skills`, or set:
-
-```json
-{
-  "skills": {
-    "trust_project": true
-  }
-}
-```
+Kward supports Agent Skills in user and project directories, including the shared `.agents/skills` convention. See [Skills](skills.md) for the full guide, including setup, explicit `/skill` activation, bundled files, project trust, and troubleshooting.
 
 ## Plugins
 

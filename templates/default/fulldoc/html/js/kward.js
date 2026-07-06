@@ -8,6 +8,7 @@ const guideLinks = {
   'doc/session-management.md': 'file.session-management.html',
   'doc/memory.md': 'file.memory.html',
   'doc/personas.md': 'file.personas.html',
+  'doc/skills.md': 'file.skills.html',
   'doc/extensibility.md': 'file.extensibility.html',
   'doc/plugins.md': 'file.plugins.html',
   'doc/agent-tools.md': 'file.agent-tools.html',
