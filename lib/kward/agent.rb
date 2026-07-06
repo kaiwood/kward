@@ -111,7 +111,11 @@ module Kward
             log_tool(tool_call, content: content, duration_ms: @telemetry_logger.duration_ms(tool_started_at), status: status, error: error)
           end
           cancellation&.raise_if_cancelled!
-          yield Events::ToolResult.new(tool_call: tool_call, content: content) if block_given?
+          if block_given?
+            elapsed_ms = @telemetry_logger.duration_ms(tool_started_at)
+            yield Events::ToolUpdate.new(tool_call: tool_call, content: content, elapsed_ms: elapsed_ms)
+            yield Events::ToolResult.new(tool_call: tool_call, content: content)
+          end
         end
         steered_after_tools = append_steering_events(steering_state)
         yield Events::SteeringApplied.new(count: steered_after_tools) if block_given? && steered_after_tools.positive?

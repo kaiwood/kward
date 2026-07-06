@@ -9,6 +9,7 @@ module Kward
     Steering = Struct.new(:input, :created_at, keyword_init: true)
     SteeringApplied = Struct.new(:count, keyword_init: true)
     ToolCall = Struct.new(:tool_call, keyword_init: true)
+    ToolUpdate = Struct.new(:tool_call, :content, :elapsed_ms, keyword_init: true)
     ToolResult = Struct.new(:tool_call, :content, keyword_init: true)
     Answer = Struct.new(:content, keyword_init: true)
   end

@@ -52,7 +52,7 @@ Detailed capability fields include:
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
 - `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, and per-turn options for model, reasoning, and tool scope.
-- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
+- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
@@ -322,6 +322,7 @@ Known event types:
 - `assistantMessage`
 - `modelRetry`
 - `toolCall`
+- `toolUpdate`
 - `toolResult`
 - `answer`
 - `turnCancelRequested`
@@ -334,11 +335,13 @@ Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFi
 
 `steeringApplied` is emitted after queued steering input has been appended to conversation context. Its payload includes `count`, the number of steering messages applied.
 
-`toolCall` and `toolResult` payloads include canonical Tauren-normalized fields:
+`toolCall`, `toolUpdate`, and `toolResult` payloads include canonical Tauren-normalized fields:
 
 - `toolCallId`: tool call ID.
 - `toolName`: normalized tool name, such as `read`, `edit`, `write`, or `bash`.
 - `args`: normalized arguments. Edit replacements use `oldText`/`newText`; shell timeout is `timeout`.
+
+`toolUpdate` additionally includes `delta.content` and optional `elapsedMs` for clients that want progress/status updates before the final result. Kward currently emits one update after each built-in tool finishes; clients should treat future additional updates as additive.
 
 `toolResult` additionally includes `result` with `content`, `isError`, optional unified `diff`, optional `changedFiles`, and `images`. Failed or declined tools set `isError: true`.
 

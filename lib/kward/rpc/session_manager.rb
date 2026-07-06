@@ -1114,6 +1114,8 @@ module Kward
           emit_turn_event(turn, "steeringApplied", { count: event.count })
         when Events::ToolCall
           emit_turn_event(turn, "toolCall", normalized_tool_event_payload(event.tool_call))
+        when Events::ToolUpdate
+          emit_turn_event(turn, "toolUpdate", normalized_tool_update_event_payload(event.tool_call, event.content, elapsed_ms: event.elapsed_ms))
         when Events::ToolResult
           emit_turn_event(turn, "toolResult", normalized_tool_result_event_payload(event.tool_call, event.content))
         when Events::Answer
@@ -1244,6 +1246,10 @@ module Kward
 
       def normalized_tool_event_payload(tool_call)
         ToolEventNormalizer.new(tool_call).call_payload
+      end
+
+      def normalized_tool_update_event_payload(tool_call, content, elapsed_ms: nil)
+        ToolEventNormalizer.new(tool_call, content: content).update_payload(elapsed_ms: elapsed_ms)
       end
 
       def normalized_tool_result_event_payload(tool_call, content)

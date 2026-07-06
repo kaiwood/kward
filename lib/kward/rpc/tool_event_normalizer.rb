@@ -21,6 +21,12 @@ module Kward
         }.compact
       end
 
+      def update_payload(elapsed_ms: nil)
+        payload = call_payload.merge(delta: { content: @content.to_s })
+        payload[:elapsedMs] = elapsed_ms if elapsed_ms
+        payload
+      end
+
       def result_payload
         call_payload.merge(
           content: @content,

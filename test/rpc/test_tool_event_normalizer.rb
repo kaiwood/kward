@@ -69,7 +69,10 @@ class TestRPCToolEventNormalizer < KwardTestCase
       shell_call = events.find { |event| event[:type] == "toolCall" && event[:payload][:toolName] == "bash" }
       shell_result = events.find { |event| event[:type] == "toolResult" && event[:payload][:toolName] == "bash" }
 
+      write_update = events.find { |event| event[:type] == "toolUpdate" && event[:payload][:toolName] == "write" }
       assert_equal({ path: "new.txt", content: "hello" }, write_call[:payload][:args])
+      assert_equal write_result[:payload][:content], write_update[:payload][:delta][:content]
+      assert_kind_of Numeric, write_update[:payload][:elapsedMs]
       assert_equal false, write_result[:payload][:result][:isError]
       assert_equal ["new.txt"], write_result[:payload][:result][:changedFiles]
       assert_equal({ command: "echo hi", timeout: 7 }, shell_call[:payload][:args])
