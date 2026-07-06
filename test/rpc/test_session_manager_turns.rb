@@ -150,6 +150,35 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_turn_start_appends_structured_client_context
+    Dir.mktmpdir do |config_dir|
+      client = RecordingClient.new(["ok"])
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(
+        session_id: session[:id],
+        input: "Fix this",
+        context: {
+          activeFile: "lib/example.rb",
+          openFiles: ["lib/example.rb", "test/test_example.rb"],
+          selection: { path: "lib/example.rb", startLine: 2, endLine: 4, text: "bad_call" },
+          diagnostics: [{ path: "lib/example.rb", line: 3, severity: "error", message: "undefined method" }]
+        }
+      )
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      content = client.seen_messages.first[1][:content]
+      assert_includes content, "Fix this"
+      assert_includes content, "Additional client context:"
+      assert_includes content, "Active file: lib/example.rb"
+      assert_includes content, "Open files: lib/example.rb, test/test_example.rb"
+      assert_includes content, "Selection: lib/example.rb:2-4"
+      assert_includes content, "bad_call"
+      assert_includes content, "Diagnostic: error lib/example.rb:3 undefined method"
+    end
+  end
+
   def test_turn_start_accepts_image_attachment_and_restores_transcript
     Dir.mktmpdir do |config_dir|
       png_data = "iVBORw0KGgo="

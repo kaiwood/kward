@@ -322,7 +322,8 @@ module Kward
             input: params.fetch("input"),
             streaming_behavior: params["streamingBehavior"],
             attachments: params["attachments"] || [],
-            options: params["options"] || {}
+            options: params["options"] || {},
+            context: params["context"]
           )
         when TURN_METHODS[1]
           @session_manager.cancel_turn(turn_id: params.fetch("turnId"))
@@ -392,6 +393,11 @@ module Kward
               perTurnModel: true,
               perTurnReasoning: true,
               perTurnToolScope: true
+            },
+            context: {
+              supported: true,
+              method: TURN_METHODS[0],
+              fields: ["activeFile", "openFiles", "selection", "diagnostics"]
             }
           },
           events: {
