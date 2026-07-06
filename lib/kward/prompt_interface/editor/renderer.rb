@@ -174,11 +174,22 @@ module Kward
 
       def editor_render_diff_line(line)
         text = line.to_s
+        return editor_render_side_by_side_diff_line(text) if @editor_state.side_by_side_diff_view?
         return colored(text, :green) if text.start_with?("+") && !text.start_with?("+++")
         return colored(text, :red) if text.start_with?("-") && !text.start_with?("---")
         return colored(text, :cyan) if text.start_with?("@@")
 
         text
+      end
+
+      def editor_render_side_by_side_diff_line(text)
+        return colored(text, :cyan) if text.start_with?("@@")
+        return text unless text.include?(" │ ")
+
+        left, right = text.split(" │ ", 2)
+        rendered_left = left.start_with?("-") ? colored(left, :red) : left
+        rendered_right = right.start_with?("+") ? colored(right, :green) : right
+        "#{rendered_left} │ #{rendered_right}"
       end
 
       def editor_line_number_gutter_width

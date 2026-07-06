@@ -373,7 +373,11 @@ module Kward
       end
 
       def diff_view?
-        @diff_view == true
+        !@diff_view.nil? && @diff_view != false
+      end
+
+      def side_by_side_diff_view?
+        @diff_view == DiffViewMode::SIDE_BY_SIDE
       end
 
       def modern?

@@ -12,6 +12,7 @@ require_relative "ansi"
 require_relative "terminal_sequences"
 require_relative "terminal_keys"
 require_relative "editor_mode"
+require_relative "diff_view_mode"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
 require_relative "prompt_interface/editor/state"
@@ -125,7 +126,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -206,6 +207,8 @@ module Kward
       @editor_bar_cursor_source = editor_bar_cursor_source
       @editor_line_numbers = normalize_editor_line_numbers(editor_line_numbers)
       @editor_line_numbers_source = editor_line_numbers_source
+      @diff_view = DiffViewMode.normalize(diff_view)
+      @diff_view_source = diff_view_source
     end
 
     def start(render: true)

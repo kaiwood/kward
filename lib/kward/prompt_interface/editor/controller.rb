@@ -112,7 +112,9 @@ module Kward
       end
 
       def open_diff_viewer(path, content)
-        @editor_state = EditorState.new(path: path.to_s, content: content.to_s, new_file: true, editor_mode: current_editor_mode, readonly: true, diff_view: true)
+        diff_view_mode = current_diff_view_mode
+        viewer_content = diff_view_mode == DiffViewMode::SIDE_BY_SIDE ? side_by_side_diff_content(content.to_s) : content.to_s
+        @editor_state = EditorState.new(path: path.to_s, content: viewer_content, new_file: true, editor_mode: current_editor_mode, readonly: true, diff_view: diff_view_mode)
         @prompt_label = "Diff>"
         self.composer_input = ""
         self.composer_cursor = 0
@@ -129,6 +131,63 @@ module Kward
         @editor_mode
       rescue StandardError
         @editor_mode
+      end
+
+      def current_diff_view_mode
+        configured = @diff_view_source.respond_to?(:call) ? @diff_view_source.call : @diff_view
+        DiffViewMode.resolve(configured, terminal_width: screen_width)
+      rescue StandardError
+        DiffViewMode.resolve(@diff_view, terminal_width: screen_width)
+      end
+
+      def side_by_side_diff_content(content)
+        width = side_by_side_diff_column_width
+        rows = []
+        pending_deletions = []
+
+        content.to_s.each_line(chomp: true) do |line|
+          if side_by_side_diff_metadata_line?(line)
+            rows.concat(flush_side_by_side_deletions(pending_deletions, width))
+            rows << line
+          elsif line.start_with?("-")
+            pending_deletions << line[1..].to_s
+          elsif line.start_with?("+")
+            deleted = pending_deletions.shift
+            rows << side_by_side_diff_row(deleted && "- #{deleted}", "+ #{line[1..]}", width)
+          else
+            rows.concat(flush_side_by_side_deletions(pending_deletions, width))
+            text = line.start_with?(" ") ? line[1..].to_s : line
+            rows << side_by_side_diff_row("  #{text}", "  #{text}", width)
+          end
+        end
+
+        rows.concat(flush_side_by_side_deletions(pending_deletions, width))
+        rows.join("\n")
+      end
+
+      def side_by_side_diff_metadata_line?(line)
+        line.start_with?("diff --git", "index ", "---", "+++", "@@")
+      end
+
+      def flush_side_by_side_deletions(lines, width)
+        lines.shift(lines.length).map { |line| side_by_side_diff_row("- #{line}", nil, width) }
+      end
+
+      def side_by_side_diff_row(left, right, width)
+        left_text = side_by_side_diff_cell(left, width)
+        right_text = side_by_side_diff_cell(right, width)
+        "#{left_text.ljust(width)} │ #{right_text}"
+      end
+
+      def side_by_side_diff_cell(text, width)
+        value = text.nil? ? "" : text.to_s
+        visible_truncate(value, width)
+      end
+
+      def side_by_side_diff_column_width
+        content_width = [screen_width - 4, 1].max
+        gutter_width = [[999.to_s.length, 4].max + 3, 1].max
+        [[(content_width - gutter_width - 3) / 2, 10].max, 80].min
       end
 
       def current_editor_soft_wrap?

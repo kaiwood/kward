@@ -37,7 +37,9 @@ module Kward
           editor_bar_cursor: ConfigFiles.editor_bar_cursor?,
           editor_bar_cursor_source: -> { ConfigFiles.editor_bar_cursor? },
           editor_line_numbers: ConfigFiles.editor_line_numbers,
-          editor_line_numbers_source: -> { ConfigFiles.editor_line_numbers }
+          editor_line_numbers_source: -> { ConfigFiles.editor_line_numbers },
+          diff_view: ConfigFiles.diff_view,
+          diff_view_source: -> { ConfigFiles.diff_view }
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }
           @prompt.start(render: false)
