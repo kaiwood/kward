@@ -25,6 +25,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("editor", "soft_wrap")
       assert_equal true, config.dig("editor", "bar_cursor")
       assert_equal "absolute", config.dig("editor", "line_numbers")
+      assert_equal "auto", config.dig("editor", "diff_view")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config.dig("skills", "trust_project")
       assert_equal false, config["enforce_workspace_agents_file"]
@@ -240,6 +241,16 @@ class TestConfigFiles < KwardTestCase
     assert_equal "relative", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "relative" })
     assert_equal "relative", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "RELATIVE" })
     assert_equal "absolute", Kward::ConfigFiles.editor_line_numbers("editor" => { "line_numbers" => "hybrid" })
+  end
+
+  def test_diff_view_defaults_to_auto_and_accepts_unified_and_side_by_side
+    assert_equal "auto", Kward::ConfigFiles.diff_view({})
+    assert_equal "auto", Kward::ConfigFiles.diff_view("editor" => {})
+    assert_equal "auto", Kward::ConfigFiles.diff_view("editor" => { "diff_view" => "auto" })
+    assert_equal "unified", Kward::ConfigFiles.diff_view("editor" => { "diff_view" => "unified" })
+    assert_equal "side_by_side", Kward::ConfigFiles.diff_view("editor" => { "diff_view" => "side-by-side" })
+    assert_equal "side_by_side", Kward::ConfigFiles.diff_view("editor" => { "diff_view" => "SIDE_BY_SIDE" })
+    assert_equal "auto", Kward::ConfigFiles.diff_view("editor" => { "diff_view" => "wide" })
   end
 
   def test_workspace_guardrails_enabled_defaults_to_true_and_only_false_disables_it

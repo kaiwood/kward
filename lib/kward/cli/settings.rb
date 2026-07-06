@@ -228,6 +228,8 @@ module Kward
           configure_editor_mode
         when /\Aeditor line numbers/
           configure_editor_line_numbers
+        when /\Adiff view/
+          configure_diff_view
         when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
           set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
           runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
@@ -252,6 +254,7 @@ module Kward
           "Tab keybindings (#{composer_tab_keybindings})",
           "Editor mode (#{editor_mode})",
           "Editor line numbers (#{editor_line_numbers})",
+          "Diff view (#{diff_view_label(diff_view)})",
           "#{editor_auto_close_pairs_enabled? ? "Disable" : "Enable"} auto-close pairs (currently #{on_off(editor_auto_close_pairs_enabled?)})",
           "#{editor_soft_wrap_enabled? ? "Disable" : "Enable"} soft-wrap (currently #{on_off(editor_soft_wrap_enabled?)})",
           "#{editor_bar_cursor_enabled? ? "Disable" : "Enable"} bar cursor (currently #{on_off(editor_bar_cursor_enabled?)})",
@@ -316,6 +319,31 @@ module Kward
       def editor_line_number_choices
         current = editor_line_numbers
         %w[absolute relative].map { |value| value == current ? "#{value} (current)" : value }
+      end
+
+      def diff_view
+        ConfigFiles.diff_view(safely_read_config.to_h)
+      end
+
+      def configure_diff_view
+        selected = @prompt.select("Diff view", diff_view_choices, title: "Settings")
+        value = selected.to_s.split.first.to_s.downcase.tr("-", "_")
+        return unless Kward::DiffViewMode::MODES.include?(value)
+
+        update_nested_config("editor", "diff_view" => value)
+        runtime_output("Diff view set to #{diff_view_label(value)}.")
+      end
+
+      def diff_view_choices
+        current = diff_view
+        Kward::DiffViewMode::MODES.map do |value|
+          label = diff_view_label(value)
+          value == current ? "#{label} (current)" : label
+        end
+      end
+
+      def diff_view_label(value)
+        Kward::DiffViewMode.label(value)
       end
 
       def editor_auto_close_pairs_enabled?

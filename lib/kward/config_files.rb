@@ -5,6 +5,7 @@ require "yaml"
 require_relative "private_file"
 require_relative "ekwsh"
 require_relative "editor_mode"
+require_relative "diff_view_mode"
 require_relative "prompts/templates"
 require_relative "skills/registry"
 
@@ -117,7 +118,8 @@ module Kward
           "auto_close_pairs" => true,
           "soft_wrap" => true,
           "bar_cursor" => true,
-          "line_numbers" => "absolute"
+          "line_numbers" => "absolute",
+          "diff_view" => "auto"
         },
         "sessions" => {
           "auto_resume" => false
@@ -439,6 +441,12 @@ module Kward
     def editor_line_numbers(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       EditorMode.normalize_line_numbers(editor["line_numbers"])
+    end
+
+    # Returns the integrated diff viewer display mode.
+    def diff_view(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      DiffViewMode.normalize(editor["diff_view"])
     end
 
     # Returns whether file tools must stay inside the active workspace root.

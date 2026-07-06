@@ -215,6 +215,27 @@ class TestCLISettingsInteractions < KwardTestCase
     end
   end
 
+  def test_settings_interface_can_set_diff_view
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      Kward::ConfigFiles.write_config({ "editor" => { "diff_view" => "auto" } }, config_path)
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "Diff view (auto)", "side-by-side"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop
+      end
+
+      assert_equal "side_by_side", JSON.parse(File.read(config_path)).dig("editor", "diff_view")
+      assert_includes prompt.output.join("\n"), "Diff view set to side-by-side."
+      diff_view_index = prompt.select_messages.index("Diff view")
+      assert diff_view_index
+      assert_includes prompt.select_choices[diff_view_index], "auto (current)"
+      assert_includes prompt.select_choices[diff_view_index], "unified"
+      assert_includes prompt.select_choices[diff_view_index], "side-by-side"
+    end
+  end
+
   def test_settings_interface_can_toggle_editor_soft_wrap
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
