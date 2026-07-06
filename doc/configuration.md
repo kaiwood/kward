@@ -64,7 +64,7 @@ When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files 
 
 ## Lifecycle hooks
 
-Configure command lifecycle hooks with a top-level `hooks` object. Each key is an event name and each value is an array of hook entries. Command hooks receive event JSON on stdin and return a decision JSON object on stdout.
+Configure command or HTTP lifecycle hooks with a top-level `hooks` object. Each key is an event name and each value is an array of hook entries. Command hooks receive event JSON on stdin and return decision JSON on stdout. HTTP hooks receive event JSON by `POST` and return decision JSON in the response body.
 
 ```json
 {

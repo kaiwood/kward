@@ -458,8 +458,8 @@ module Kward
             auditLog: { supported: true, path: File.join(ConfigFiles.config_dir, "logs", "hooks.jsonl") },
             commandHooks: true,
             pluginHooks: true,
-            workspaceHooks: { supported: false, reason: "trustFlowNotImplemented" },
-            httpHooks: { supported: false, reason: "notImplemented" },
+            workspaceHooks: { supported: true, trustRequired: true, trustCommand: "/hooks trust" },
+            httpHooks: { supported: true, protocol: "jsonPost" },
             asyncHooks: { supported: false, reason: "notImplemented" }
           },
           runtimeSettings: {

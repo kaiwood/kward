@@ -135,7 +135,8 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["lifecycleHooks"]["events"], "shell_command_before"
     assert_includes capabilities["lifecycleHooks"]["decisions"], "deny"
     assert_equal true, capabilities["lifecycleHooks"].dig("approvals", "supported")
-    assert_equal false, capabilities["lifecycleHooks"].dig("workspaceHooks", "supported")
+    assert_equal true, capabilities["lifecycleHooks"].dig("workspaceHooks", "supported")
+    assert_equal true, capabilities["lifecycleHooks"].dig("httpHooks", "supported")
     assert_equal true, capabilities["runtimeSettings"]["supported"]
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]

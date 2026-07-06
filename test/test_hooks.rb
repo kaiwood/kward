@@ -1,3 +1,4 @@
+require "net/http"
 require "shellwords"
 require_relative "test_helper"
 require_relative "../lib/kward/hooks"
@@ -149,6 +150,59 @@ class TestHooks < KwardTestCase
       assert_includes records.last["payload_keys"], "command"
       refute_includes File.read(path), "echo secret-token"
     end
+  end
+
+  def test_http_handler_uses_json_protocol
+    response = Net::HTTPOK.new("1.1", "200", "OK")
+    response.instance_variable_set(:@read, true)
+    response.body = JSON.dump(decision: "deny", message: "remote policy")
+    requests = []
+    client = Class.new do
+      define_method(:initialize) { |requests, response| @requests = requests; @response = response }
+      define_method(:start) do |_host, _port, **_options, &block|
+        requests = @requests
+        response = @response
+        http = Object.new
+        http.define_singleton_method(:request) do |request|
+          requests << request
+          response
+        end
+        block.call(http)
+      end
+    end.new(requests, response)
+
+    handler = Kward::Hooks::HttpHandler.new(url: "http://example.test/hooks", http_client: client)
+    decision = handler.call(Kward::Hooks::Event.new(name: "turn_end", payload: { answer: "ok" }))
+
+    assert decision.deny?
+    assert_equal "remote policy", decision.message
+    assert_equal "application/json", requests.first["Content-Type"]
+    assert_equal "turn_end", JSON.parse(requests.first.body).fetch("name")
+  end
+
+  def test_config_loader_registers_http_hooks
+    response = Net::HTTPOK.new("1.1", "200", "OK")
+    response.instance_variable_set(:@read, true)
+    response.body = JSON.dump(decision: "deny", message: "remote")
+    original_new = Kward::Hooks::HttpHandler.method(:new)
+    Kward::Hooks::HttpHandler.define_singleton_method(:new) do |**_kwargs|
+      Object.new.tap do |handler|
+        handler.define_singleton_method(:call) { |_event, _context = nil| Kward::Hooks::Decision.deny("remote") }
+      end
+    end
+
+    manager = Kward::Hooks::ConfigLoader.new({
+      "hooks" => {
+        "turn_end" => [{ "id" => "remote", "type" => "http", "url" => "http://example.test/hooks" }]
+      }
+    }).manager
+
+    result = manager.run(Kward::Hooks::Event.new(name: "turn_end"))
+
+    assert result.denied?
+    assert_equal "remote", result.decision.message
+  ensure
+    Kward::Hooks::HttpHandler.define_singleton_method(:new, original_new) if original_new
   end
 
   def test_config_loader_registers_command_hooks

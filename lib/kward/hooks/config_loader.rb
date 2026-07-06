@@ -1,5 +1,6 @@
 require_relative "catalog"
 require_relative "command_handler"
+require_relative "http_handler"
 require_relative "manager"
 
 # Namespace for the Kward CLI agent runtime.
@@ -62,6 +63,13 @@ module Kward
             command: required(entry, "command"),
             timeout_seconds: entry["timeout_seconds"],
             env: entry["env"],
+            failure_policy: entry["failure_policy"] || Catalog::DEFAULT_FAILURE_POLICY
+          )
+        when "http"
+          HttpHandler.new(
+            url: required(entry, "url"),
+            timeout_seconds: entry["timeout_seconds"],
+            headers: entry["headers"],
             failure_policy: entry["failure_policy"] || Catalog::DEFAULT_FAILURE_POLICY
           )
         else

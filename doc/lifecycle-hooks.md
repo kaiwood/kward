@@ -66,9 +66,9 @@ ctx.retry("try again later")
 ctx.defer("notify asynchronously")
 ```
 
-## Command hooks
+## Command and HTTP hooks
 
-Command hooks are configured in `~/.kward/config.json` under `hooks`. Kward sends the event as JSON on stdin. The command returns a decision as JSON on stdout.
+Command and HTTP hooks are configured in `~/.kward/config.json` under `hooks`. Command hooks receive event JSON on stdin and return a decision JSON object on stdout.
 
 ```json
 {
@@ -104,6 +104,27 @@ end
 ```
 
 If a command hook prints nothing, Kward treats it as `allow`. If it exits non-zero, times out, or prints invalid JSON, Kward applies the hook's `failure_policy`.
+
+HTTP hooks send the same event JSON with `POST` and expect the same decision JSON in the response body:
+
+```json
+{
+  "hooks": {
+    "tool_call_before": [
+      {
+        "id": "remote-policy",
+        "type": "http",
+        "url": "https://policy.example.com/kward/hooks",
+        "timeout_seconds": 3,
+        "failure_policy": "deny",
+        "headers": { "Authorization": "Bearer ..." }
+      }
+    ]
+  }
+}
+```
+
+Empty HTTP response bodies are treated as `allow`. Non-2xx responses, timeouts, network failures, and invalid JSON apply `failure_policy`. Be careful with HTTP hooks: event payloads can include prompts, commands, file paths, or tool arguments. Prefer local or trusted endpoints and avoid forwarding raw payloads to third parties.
 
 ## Failure policies
 
