@@ -10,6 +10,8 @@ module Kward
     class StdioTransport
       DEFAULT_TIMEOUT_SECONDS = 10
 
+      attr_reader :command
+
       def initialize(command:, args: [], env: {}, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
         @command = command.to_s
         @args = Array(args).map(&:to_s)
@@ -62,7 +64,11 @@ module Kward
         raise ArgumentError, "MCP server command is required" if @command.empty?
 
         @stdin, @stdout, @stderr, @wait_thread = Open3.popen3(@env, @command, *@args)
-        @stderr_thread = Thread.new { @stderr.each_line { |_line| } }
+        @stderr_thread = Thread.new do
+          @stderr.each_line { |_line| }
+        rescue IOError
+          nil
+        end
         @started = true
       rescue SystemCallError => e
         raise "Failed to start MCP server #{@command}: #{e.message}"

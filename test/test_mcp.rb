@@ -107,6 +107,7 @@ class TestMCP < KwardTestCase
     refute_nil schema
     assert_equal "Inspect the active page", schema.dig(:function, :description)
     assert_equal ["selector"], schema.dig(:function, :parameters, "required")
+    assert_equal({ source: "mcp", displayName: "safari-mcp-stp.inspect.page", serverName: "safari-mcp-stp", remoteName: "inspect.page" }, schema[:metadata])
 
     conversation = Kward::Conversation.new
     result = registry.dispatch(

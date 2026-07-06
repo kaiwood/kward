@@ -146,6 +146,15 @@ module Kward
         { sessions: @mutex.synchronize { @sessions.values.map { |rpc_session| session_payload(rpc_session) } } }
       end
 
+      def tool_schemas(session_id: nil)
+        registry = if session_id
+                     fetch_session(session_id).tool_registry
+                   else
+                     build_tool_registry(Dir.pwd, nil)
+                   end
+        { tools: registry.schemas }
+      end
+
       # Renames the persisted session attached to an RPC session id.
       def rename_session(session_id:, name:)
         rpc_session = fetch_session(session_id)
@@ -1094,6 +1103,8 @@ module Kward
       # turns. Keep event translation near this boundary so CLI rendering and RPC
       # protocol details do not leak into `Agent`.
       def run_turn(rpc_session, turn)
+        previous_turn_id = Thread.current[:kward_rpc_turn_id]
+        Thread.current[:kward_rpc_turn_id] = turn.id
         rpc_session.running_turn_id = turn.id
         turn.steering = build_steering(turn) if supports_in_flight_steer? && !turn.plugin_command_name
         turn.status = "running"
@@ -1126,6 +1137,7 @@ module Kward
         emit_turn_event(turn, "error", turn.error)
         finish_turn(turn, "failed")
       ensure
+        Thread.current[:kward_rpc_turn_id] = previous_turn_id
         turn.steering = nil
         rpc_session.running_turn_id = nil
       end
@@ -1356,15 +1368,21 @@ module Kward
       end
 
       def normalized_tool_event_payload(tool_call)
-        ToolEventNormalizer.new(tool_call).call_payload
+        ToolEventNormalizer.new(tool_call, tool_registry: current_turn_tool_registry).call_payload
       end
 
       def normalized_tool_update_event_payload(tool_call, content, elapsed_ms: nil)
-        ToolEventNormalizer.new(tool_call, content: content).update_payload(elapsed_ms: elapsed_ms)
+        ToolEventNormalizer.new(tool_call, content: content, tool_registry: current_turn_tool_registry).update_payload(elapsed_ms: elapsed_ms)
       end
 
       def normalized_tool_result_event_payload(tool_call, content)
-        ToolEventNormalizer.new(tool_call, content: content).result_payload
+        ToolEventNormalizer.new(tool_call, content: content, tool_registry: current_turn_tool_registry).result_payload
+      end
+
+      def current_turn_tool_registry
+        return unless Thread.current[:kward_rpc_turn_id]
+
+        @mutex.synchronize { @turns[Thread.current[:kward_rpc_turn_id]]&.tool_registry }
       end
 
       def turn_error_payload(error)

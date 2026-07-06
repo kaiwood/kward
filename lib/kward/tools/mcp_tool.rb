@@ -8,6 +8,10 @@ module Kward
     class MCPTool < Base
       attr_reader :server_name, :remote_name
 
+      def display_name
+        "#{server_name}.#{remote_name}"
+      end
+
       def initialize(server_name:, client:, tool:)
         @server_name = server_name.to_s
         @client = client

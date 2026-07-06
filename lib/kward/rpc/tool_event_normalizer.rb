@@ -7,9 +7,10 @@ module Kward
   module RPC
     # Converts tool calls and results into RPC event payloads.
     class ToolEventNormalizer
-      def initialize(tool_call, content: nil)
+      def initialize(tool_call, content: nil, tool_registry: nil)
         @tool_call = tool_call
         @content = content
+        @tool_registry = tool_registry
         @fields = ToolMetadata.normalized_tool_fields(@tool_call)
       end
 
@@ -17,7 +18,8 @@ module Kward
         {
           toolCallId: @fields[:toolCallId],
           toolName: @fields[:toolName],
-          args: @fields[:args]
+          args: @fields[:args],
+          metadata: metadata
         }.compact
       end
 
@@ -48,6 +50,12 @@ module Kward
       end
 
       private
+
+      def metadata
+        return unless @tool_registry&.respond_to?(:metadata_for)
+
+        @tool_registry.metadata_for(@fields[:toolName])
+      end
 
       def normalized_result
         text = @content.to_s

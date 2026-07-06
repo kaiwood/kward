@@ -60,7 +60,7 @@ Detailed capability fields include:
 - `auth`: Tauren auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
-- `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns; MCP resources, prompts, sampling, and Streamable HTTP are explicitly unsupported for now.
+- `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. MCP resources, prompts, sampling, and Streamable HTTP are explicitly unsupported for now.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
@@ -627,7 +627,34 @@ Updates the config-backed OpenAI/Codex reasoning effort and returns the current 
 
 ### `tools/list`
 
-Returns current tool schemas.
+Params:
+
+- `sessionId`: optional active RPC session ID. When supplied, returns the exact tool set for that session/workspace. When omitted, returns the default current tool schemas.
+
+Returns current tool schemas. The existing model-facing schema shape is preserved: each entry still has `type: "function"` and `function` with `name`, `description`, and `parameters`. Entries also include additive metadata for UI discovery:
+
+- `metadata.source`: one of practical source labels such as `builtin`, `mcp`, `web`, `skill`, `ui`, or `unknown`.
+- `metadata.displayName`: human-readable tool label.
+- MCP tools also include `metadata.serverName` and `metadata.remoteName`. The callable name remains sanitized with a double underscore, for example `github__search_issues`, while `displayName` is `github.search_issues`.
+
+Clients that only read `tools[].function` remain compatible.
+
+### `mcp/status`
+
+Returns configured MCP stdio server status without exposing environment values or raw sensitive arguments.
+
+Result shape:
+
+```json
+{
+  "servers": [
+    { "name": "github", "transport": "stdio", "status": "available", "toolCount": 8 },
+    { "name": "linear", "transport": "stdio", "status": "unavailable", "toolCount": 0, "error": "Failed to start MCP server linear-mcp: command not found" }
+  ]
+}
+```
+
+Disabled MCP servers are omitted, matching runtime tool exposure. Unsupported MCP capabilities remain unsupported: resources, prompts, sampling, and Streamable HTTP.
 
 ### `commands/list`
 

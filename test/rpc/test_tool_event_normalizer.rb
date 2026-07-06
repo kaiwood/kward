@@ -83,6 +83,30 @@ class TestRPCToolEventNormalizer < KwardTestCase
     end
   end
 
+  def test_mcp_tool_events_include_metadata
+    Dir.mktmpdir do |config_dir|
+      workspace_root = Dir.mktmpdir
+      mcp_client = FakeMCPClient.new
+      registry = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: workspace_root), mcp_clients: [mcp_client], web_search_enabled: false, skills: [])
+      responses = [assistant_tool_call("safari-mcp-stp__inspect_page", { selector: "body" }), { "role" => "assistant", "content" => "done" }]
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new(responses), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      rpc_session.tool_registry = registry
+      turn = manager.start_turn(session_id: session[:id], input: "inspect")
+      manager.send(:fetch_turn, turn[:id]).tool_registry = registry
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      tool_events = manager.turn_events(turn_id: turn[:id])[:events].select { |event| ["toolCall", "toolUpdate", "toolResult"].include?(event[:type]) }
+      tool_events.each do |event|
+        assert_equal({ source: "mcp", displayName: "safari-mcp-stp.inspect.page", serverName: "safari-mcp-stp", remoteName: "inspect.page" }, event[:payload][:metadata])
+      end
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_failed_tool_result_and_failed_turn_events_are_normalized
     Dir.mktmpdir do |config_dir|
       workspace_root = Dir.mktmpdir

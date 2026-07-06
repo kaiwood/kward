@@ -160,6 +160,13 @@ class TestRPCServer < KwardTestCase
     assert_equal "stdio", capabilities["mcp"]["transport"]
     assert_equal "mcpServers", capabilities["mcp"]["config"]
     assert_equal ["tools"], capabilities["mcp"]["exposes"]
+    assert_equal true, capabilities["mcp"].dig("discovery", "supported")
+    assert_equal ["tools/list", "mcp/status"], capabilities["mcp"].dig("discovery", "methods")
+    assert_equal true, capabilities["mcp"].dig("discovery", "toolMetadata")
+    assert_equal true, capabilities["mcp"].dig("discovery", "serverStatus")
+    assert_includes capabilities["mcp"]["unsupported"], "resources"
+    assert_includes capabilities["mcp"]["unsupported"], "prompts"
+    assert_includes capabilities["mcp"]["unsupported"], "sampling"
     assert_includes capabilities["mcp"]["unsupported"], "streamableHttp"
     assert_equal true, capabilities["startupResources"]["supported"]
     assert_equal false, capabilities.dig("starterPack", "supported")
@@ -224,11 +231,78 @@ class TestRPCServer < KwardTestCase
     registry_tool_names = Kward::ToolRegistry.new(workspace: Kward::Workspace.new).schemas.map { |schema| schema[:function][:name] }
 
     assert_equal registry_tool_names, rpc_tool_names
+
+    list_directory = messages[0]["result"]["tools"].find { |schema| schema["function"]["name"] == "list_directory" }
+    assert_equal "builtin", list_directory.dig("metadata", "source")
+    assert_equal "list_directory", list_directory.dig("metadata", "displayName")
+    assert list_directory.key?("function"), "old tools/list function schema remains present"
+  end
+
+  def test_tools_list_includes_mcp_metadata
+    config_dir = Dir.mktmpdir
+    config_path = File.join(config_dir, "config.json")
+    server_path = write_fake_mcp_server(config_dir)
+    File.write(config_path, JSON.pretty_generate("mcpServers" => { "github" => { "command" => RbConfig.ruby, "args" => [server_path] } }))
+
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+    tool = messages[0]["result"]["tools"].find { |schema| schema["function"]["name"] == "github__search_issues" }
+    refute_nil tool
+    assert_equal "github__search_issues", tool.dig("function", "name")
+    assert_equal "mcp", tool.dig("metadata", "source")
+    assert_equal "github", tool.dig("metadata", "serverName")
+    assert_equal "search_issues", tool.dig("metadata", "remoteName")
+    assert_equal "github.search_issues", tool.dig("metadata", "displayName")
+  ensure
+    FileUtils.remove_entry(config_dir) if config_dir && Dir.exist?(config_dir)
+  end
+
+  def test_mcp_status_reports_available_and_unavailable_servers
+    config_dir = Dir.mktmpdir
+    config_path = File.join(config_dir, "config.json")
+    server_path = write_fake_mcp_server(config_dir)
+    missing_path = File.join(config_dir, "missing-mcp")
+    File.write(config_path, JSON.pretty_generate(
+      "mcpServers" => {
+        "github" => { "command" => RbConfig.ruby, "args" => [server_path] },
+        "linear" => { "command" => missing_path, "env" => { "TOKEN" => "secret-token" } }
+      }
+    ))
+
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "mcp/status" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ], env: { "KWARD_CONFIG_PATH" => config_path })
+
+    servers = messages[0]["result"]["servers"]
+    github = servers.find { |server| server["name"] == "github" }
+    linear = servers.find { |server| server["name"] == "linear" }
+    assert_equal "stdio", github["transport"]
+    assert_equal "available", github["status"]
+    assert_equal 1, github["toolCount"]
+    assert_equal "unavailable", linear["status"]
+    assert_equal 0, linear["toolCount"]
+    assert_includes linear["error"], "missing-mcp"
+    refute_includes linear["error"], "secret-token"
+  ensure
+    FileUtils.remove_entry(config_dir) if config_dir && Dir.exist?(config_dir)
+  end
+
+  def test_tools_list_accepts_session_id
+    server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
+    session = server.send(:dispatch, "sessions/create", "resumeLast" => false)
+    result = server.send(:dispatch, "tools/list", "sessionId" => session[:id])
+
+    assert result[:tools].any?
+    assert_equal "builtin", result[:tools].first[:metadata][:source]
   end
 
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
-      protocol workspace tools prompts sessions turns models runtime runtime_settings
+      protocol workspace tools mcp prompts sessions turns models runtime runtime_settings
       auth memory workers commands startup_resources config logging ui tool_approval
     ]
 
@@ -551,6 +625,35 @@ class TestRPCServer < KwardTestCase
         assert_equal "clientClipboardOwnedByUi", result[:reason]
       end
     end
+  end
+
+  def write_fake_mcp_server(dir)
+    path = File.join(dir, "fake_mcp_server.rb")
+    File.write(path, <<~'RUBY')
+      require "json"
+
+      STDIN.each_line do |line|
+        message = JSON.parse(line)
+        response = { jsonrpc: "2.0", id: message["id"], result: {} }
+        case message["method"]
+        when "initialize"
+          response[:result] = { protocolVersion: "2025-11-25" }
+        when "tools/list"
+          response[:result] = {
+            tools: [
+              {
+                name: "search_issues",
+                description: "Search issues",
+                inputSchema: { type: "object", properties: {}, additionalProperties: false }
+              }
+            ]
+          }
+        end
+        puts(JSON.generate(response)) if message["id"]
+        STDOUT.flush
+      end
+    RUBY
+    path
   end
 
   def test_rpc_shutdown_deletes_empty_unnamed_sessions

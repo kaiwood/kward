@@ -86,7 +86,7 @@ module Kward
                        MCP::ServerConfig.clients_from_config(ConfigFiles.read_config)
                      end
       @tools = build_tools.freeze
-      @schemas = build_schema_tools.map(&:schema).freeze
+      @schemas = build_schema_tools.map { |tool| schema_with_metadata(tool) }.freeze
     end
 
     # Executes a model-requested tool call and appends the result to the
@@ -139,7 +139,54 @@ module Kward
       model_content
     end
 
+    def metadata_for(name)
+      tool = @tools[name.to_s]
+      return unknown_tool_metadata(name) unless tool
+
+      tool_metadata(tool)
+    end
+
     private
+
+    def schema_with_metadata(tool)
+      tool.schema.merge(metadata: tool_metadata(tool))
+    end
+
+    def tool_metadata(tool)
+      if tool.is_a?(Tools::MCPTool)
+        {
+          source: "mcp",
+          displayName: tool.display_name,
+          serverName: tool.server_name,
+          remoteName: tool.remote_name
+        }
+      else
+        {
+          source: source_for_tool(tool),
+          displayName: tool.name
+        }
+      end
+    end
+
+    def source_for_tool(tool)
+      case tool
+      when Tools::WebSearch, Tools::FetchContent, Tools::FetchRaw
+        "web"
+      when Tools::ReadSkill
+        "skill"
+      when Tools::AskUserQuestion
+        "ui"
+      else
+        "builtin"
+      end
+    end
+
+    def unknown_tool_metadata(name)
+      {
+        source: "unknown",
+        displayName: name.to_s
+      }
+    end
 
     def record_context_budget(conversation, name, before:, after:)
       meter = conversation.respond_to?(:context_budget_meter) ? conversation.context_budget_meter : @context_budget_meter

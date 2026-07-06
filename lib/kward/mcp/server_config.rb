@@ -11,10 +11,14 @@ module Kward
       module_function
 
       def clients_from_config(config)
-        servers = ConfigFiles.mcp_servers(config)
-
-        servers.filter_map do |name, settings|
+        configured_servers(config).filter_map do |name, settings|
           client_from_settings(name, settings)
+        end
+      end
+
+      def configured_servers(config)
+        ConfigFiles.mcp_servers(config).select do |_name, settings|
+          settings.is_a?(Hash) && settings["enabled"] != false
         end
       end
 

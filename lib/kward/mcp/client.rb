@@ -8,7 +8,7 @@ module Kward
 
     # Minimal MCP client for discovering and invoking server tools.
     class Client
-      attr_reader :name
+      attr_reader :name, :transport
 
       def initialize(name:, transport:)
         @name = name.to_s

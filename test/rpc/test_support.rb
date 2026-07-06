@@ -152,6 +152,36 @@ module KwardRPCTestSupport
     end
   end
 
+  class FakeMCPClient
+    attr_reader :name, :calls
+
+    def initialize(name: "safari-mcp-stp", tools: nil)
+      @name = name
+      @tools = tools || [
+        {
+          "name" => "inspect.page",
+          "description" => "Inspect the active page",
+          "inputSchema" => {
+            "type" => "object",
+            "properties" => { "selector" => { "type" => "string" } },
+            "required" => ["selector"],
+            "additionalProperties" => false
+          }
+        }
+      ]
+      @calls = []
+    end
+
+    def list_tools
+      @tools
+    end
+
+    def call_tool(name, arguments)
+      @calls << [name, arguments]
+      { "content" => [{ "type" => "text", "text" => "DOM looks good" }] }
+    end
+  end
+
   class ReloadableFakeClient < KwardTestCase::FakeClient
     attr_reader :reload_count
 

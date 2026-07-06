@@ -1,5 +1,6 @@
 require "json"
 require_relative "../model/client"
+require_relative "../mcp/server_config"
 require_relative "../config_files"
 require_relative "../memory/manager"
 require_relative "../plugin_registry"
@@ -47,6 +48,7 @@ module Kward
       PROTOCOL_METHODS = ["initialize", "shutdown"].freeze
       WORKSPACE_METHODS = ["workspace/validate", "workspace/info"].freeze
       TOOL_METHODS = ["tools/list"].freeze
+      MCP_METHODS = ["mcp/status"].freeze
       PROMPT_METHODS = ["prompts/list", "prompts/expand"].freeze
       SESSION_METHODS = [
         "sessions/create", "sessions/resume", "sessions/list", "sessions/rename",
@@ -85,6 +87,7 @@ module Kward
         protocol: PROTOCOL_METHODS,
         workspace: WORKSPACE_METHODS,
         tools: TOOL_METHODS,
+        mcp: MCP_METHODS,
         prompts: PROMPT_METHODS,
         sessions: SESSION_METHODS,
         turns: TURN_METHODS,
@@ -204,7 +207,9 @@ module Kward
         when WORKSPACE_METHODS[1]
           workspace_info(params["workspaceRoot"] || Dir.pwd)
         when TOOL_METHODS[0]
-          { tools: ToolRegistry.new(workspace: configured_workspace).schemas }
+          @session_manager.tool_schemas(session_id: params["sessionId"])
+        when MCP_METHODS[0]
+          mcp_status
         when PROMPT_METHODS[0]
           prompts_list
         when PROMPT_METHODS[1]
@@ -463,7 +468,19 @@ module Kward
           workers: workers_capability,
           stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: ["workers"] },
           commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
-          mcp: { supported: true, transport: "stdio", config: "mcpServers", exposes: ["tools"], unsupported: ["resources", "prompts", "sampling", "streamableHttp"] },
+          mcp: {
+            supported: true,
+            transport: "stdio",
+            config: "mcpServers",
+            exposes: ["tools"],
+            discovery: {
+              supported: true,
+              methods: TOOL_METHODS + MCP_METHODS,
+              toolMetadata: true,
+              serverStatus: true
+            },
+            unsupported: ["resources", "prompts", "sampling", "streamableHttp"]
+          },
           startupResources: { supported: true, method: STARTUP_RESOURCE_METHODS.first },
           starterPack: { supported: false, reason: "cliOnlyInstallCommand" },
           shell: { supported: false, reason: "interactiveTuiOnly" },
@@ -548,6 +565,40 @@ module Kward
 
       def models_list
         { models: @session_manager.available_models }
+      end
+
+      def mcp_status
+        config = @config_manager.read(redacted: false)
+        clients = MCP::ServerConfig.clients_from_config(config).to_h { |client| [client.name, client] }
+        servers = MCP::ServerConfig.configured_servers(config).map do |name, settings|
+          client = clients[name.to_s]
+          status_for_mcp_server(name, settings, client)
+        end
+        { servers: servers }
+      end
+
+      def status_for_mcp_server(name, settings, client)
+        base = { name: name.to_s, transport: "stdio", toolCount: 0 }
+        unless client
+          return base.merge(status: "unavailable", error: "command not configured") if settings["command"].to_s.empty?
+
+          return base.merge(status: "unavailable", error: "unsupported MCP server configuration")
+        end
+
+        tools = client.list_tools
+        base.merge(status: "available", toolCount: tools.length)
+      rescue StandardError => e
+        base.merge(status: "unavailable", toolCount: 0, error: redacted_mcp_error(e.message, client))
+      ensure
+        client&.close
+      end
+
+      def redacted_mcp_error(message, client)
+        text = Redactor.redact_string(message.to_s)
+        command = client&.transport&.respond_to?(:command) ? client.transport.command.to_s : ""
+        return text if command.empty?
+
+        text.gsub(command, File.basename(command))
       end
 
       def config_update(params)

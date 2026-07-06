@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added RPC MCP/tool discovery metadata, session-aware `tools/list`, `mcp/status`, and initialize capability reporting for MCP discovery.
+
 ### Changed
 
 - Changed session picker search to use Tab, and Tab again returns to the list without clearing the current search text.
