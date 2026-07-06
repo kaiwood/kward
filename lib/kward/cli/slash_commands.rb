@@ -442,7 +442,9 @@ module Kward
           reasoning_effort: current_reasoning_effort,
           write_lock: (@worker_write_lock ||= Workers::WriteLock.new),
           worker_store: worker_store,
-          write_lane_available: -> { !@foreground_turn_active }
+          write_lane_available: -> { !@foreground_turn_active },
+          hook_manager: lifecycle_hook_manager(agent.conversation),
+          hook_context: lifecycle_hook_context(agent.conversation)
         )
       end
 

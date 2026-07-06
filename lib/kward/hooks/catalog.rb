@@ -41,7 +41,12 @@ module Kward
         EventDefinition.new(name: "git_stage_before", failure_policy: "deny"),
         EventDefinition.new(name: "git_stage_after", failure_policy: "warn"),
         EventDefinition.new(name: "git_commit_before", failure_policy: "deny"),
-        EventDefinition.new(name: "git_commit_after", failure_policy: "warn")
+        EventDefinition.new(name: "git_commit_after", failure_policy: "warn"),
+        EventDefinition.new(name: "worker_job_create", failure_policy: "warn"),
+        EventDefinition.new(name: "worker_job_start_before", failure_policy: "warn"),
+        EventDefinition.new(name: "worker_job_start_after", failure_policy: "warn"),
+        EventDefinition.new(name: "worker_job_ready_for_review", failure_policy: "warn"),
+        EventDefinition.new(name: "worker_job_failed", failure_policy: "warn")
       ].each_with_object({}) { |definition, result| result[definition.name] = definition }.freeze
 
       module_function

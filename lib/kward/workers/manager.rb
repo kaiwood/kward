@@ -2,6 +2,7 @@ require "timeout"
 require_relative "../agent"
 require_relative "../cancellation"
 require_relative "../conversation"
+require_relative "../hooks"
 require_relative "../model/client"
 require_relative "../session_store"
 require_relative "../tools/registry"
@@ -16,7 +17,7 @@ module Kward
     class Manager
       DEFAULT_TIMEOUT_SECONDS = 180
 
-      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil, write_lock: nil, worker_store: nil, git_guard: nil, write_lane_available: -> { true })
+      def initialize(client_factory: -> { Client.new }, prompt: nil, workspace_root: Dir.pwd, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, on_status_change: nil, session_store: nil, provider: nil, model: nil, reasoning_effort: nil, write_lock: nil, worker_store: nil, git_guard: nil, write_lane_available: -> { true }, hook_manager: nil, hook_context: nil)
         @client_factory = client_factory
         @prompt = prompt
         @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
@@ -30,12 +31,15 @@ module Kward
         @worker_store = worker_store
         @git_guard = git_guard || GitGuard.new(root: @workspace_root)
         @write_lane_available = write_lane_available
+        @hook_manager = hook_manager
+        @hook_context = hook_context
         @workers = {}
         @mutex = Mutex.new
       end
 
       def start(role:, prompt:, title: nil, id: nil)
         worker = build_worker(role: role, prompt: prompt, title: title, id: id)
+        run_hook("worker_job_create", worker)
         enqueue(worker)
       end
 
@@ -105,15 +109,19 @@ module Kward
         worker.conversation = conversation
         attach_session(worker, conversation)
         writer_id = wait_for_worker_writer(worker)
+        run_hook("worker_job_start_before", worker)
         update_status(worker, "running")
+        run_hook("worker_job_start_after", worker)
         registry = ToolRegistry.new(
           workspace: Workspace.new(root: worker.workspace_root),
           prompt: @prompt,
           allowed_tool_names: ToolPolicy.allowed_tool_names(worker.role),
           write_lock: @write_lock,
-          writer_id: writer_id
+          writer_id: writer_id,
+          hook_manager: @hook_manager,
+          hook_context: @hook_context
         )
-        agent = Agent.new(client: @client_factory.call, tool_registry: registry, conversation: conversation)
+        agent = Agent.new(client: @client_factory.call, tool_registry: registry, conversation: conversation, hook_manager: @hook_manager, hook_context: @hook_context)
         report = Timeout.timeout(@timeout_seconds, WorkerTimeoutError) do
           agent.ask(worker_prompt(worker), cancellation: worker.cancellation) do |event|
             worker.record_event(event)
@@ -121,14 +129,39 @@ module Kward
         end
         report = finalize_write_worker(worker, report)
         update_status(worker, "ready", report: report, error: "")
+        run_hook("worker_job_ready_for_review", worker)
       rescue WorkerTimeoutError
         update_status(worker, "failed", error: "Worker timed out after #{@timeout_seconds} seconds")
+        run_hook("worker_job_failed", worker, error: "Worker timed out after #{@timeout_seconds} seconds")
       rescue Cancellation::CancelledError
         update_status(worker, "cancelled")
       rescue StandardError => e
         update_status(worker, "failed", error: e.message)
+        run_hook("worker_job_failed", worker, error: e.message)
       ensure
         release_worker_writer(worker)
+      end
+
+      def run_hook(name, worker, payload = {})
+        return unless @hook_manager
+
+        @hook_manager.run(Hooks::Event.new(
+          name: name,
+          workspace: { root: worker.workspace_root },
+          payload: worker_payload(worker).merge(payload)
+        ), context: @hook_context)
+      rescue StandardError
+        nil
+      end
+
+      def worker_payload(worker)
+        {
+          worker_id: worker.id,
+          role: worker.role,
+          title: worker.title,
+          status: worker.status,
+          session_path: worker.session&.path
+        }.compact
       end
 
       def update_status(worker, status, **values)

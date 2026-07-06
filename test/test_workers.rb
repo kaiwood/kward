@@ -269,6 +269,31 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_worker_manager_emits_lifecycle_hooks
+    Dir.mktmpdir do |dir|
+      client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
+      events = Queue.new
+      manager_hook = Kward::Hooks::Manager.new
+      %w[worker_job_create worker_job_start_before worker_job_start_after worker_job_ready_for_review].each do |event_name|
+        manager_hook.register(event_name) do |event, _ctx|
+          events << [event.name, event.payload[:worker_id], event.payload[:role]]
+          Kward::Hooks::Decision.allow
+        end
+      end
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        workspace_root: dir,
+        hook_manager: manager_hook
+      )
+
+      worker = manager.start(role: "request", prompt: "Explore tests")
+      wait_until(timeout: 1) { manager.find(worker.id).status == "ready" }
+      names = 4.times.map { events.pop.first }
+
+      assert_equal %w[worker_job_create worker_job_start_before worker_job_start_after worker_job_ready_for_review], names
+    end
+  end
+
   def test_worker_manager_archives_runtime_worker
     Dir.mktmpdir do |dir|
       client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
