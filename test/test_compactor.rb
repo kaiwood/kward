@@ -143,6 +143,23 @@ class TestCompactor < KwardTestCase
     assert_equal({ read_files: ["app/models/user.rb"], modified_files: [] }, preparation.file_ops)
   end
 
+  def test_preparation_preserves_activated_skill_content
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("activate a skill")
+    conversation.append_assistant(assistant_tool_call("read_skill", name: "planner"))
+    conversation.append_tool(tool_call_id: "call_read_skill", name: "read_skill", content: "<skill_content name=\"planner\">\nPlan carefully.\n</skill_content>")
+    conversation.append_user("recent")
+    conversation.append_assistant("ok")
+    settings = Kward::Compaction::Settings.new(keep_recent_tokens: 10)
+
+    preparation = Kward::Compaction::Preparation.new(conversation: conversation, settings: settings).call
+
+    assert_equal ["assistant", "tool", "user", "assistant"], preparation.kept_messages.map { |message| message[:role] || message["role"] }
+    assert_equal "read_skill", preparation.kept_messages[0]["tool_calls"].first["function"]["name"]
+    assert_equal "read_skill", preparation.kept_messages[1][:name]
+    assert_includes preparation.kept_messages[1][:content], "Plan carefully."
+  end
+
   def test_split_turn_extracts_prefix_without_cutting_at_tool_result
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("one huge turn")

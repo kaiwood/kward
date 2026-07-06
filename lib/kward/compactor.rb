@@ -464,7 +464,8 @@ module Kward
         first_kept_entry_id = entry_id(branch_entries[first_kept_index], first_kept_index)
         summarized_for_file_ops = cut.messages_to_summarize + cut.turn_prefix_messages
         file_ops = @file_operation_tracker.call(summarized_for_file_ops, previous_details: compaction_details(previous_entry))
-        kept_messages = Array(cut.preserved_messages) + (branch_entries[cut.first_kept_index..] || [])
+        preserved_skill_messages = activated_skill_messages(summarized_for_file_ops)
+        kept_messages = preserved_skill_messages + Array(cut.preserved_messages) + (branch_entries[cut.first_kept_index..] || [])
 
         PreparationResult.new(
           first_kept_entry_id: first_kept_entry_id,
@@ -501,6 +502,41 @@ module Kward
         return found.last if found
 
         previous_index + 1
+      end
+
+      def activated_skill_messages(messages)
+        Array(messages).each_with_index.flat_map do |message, index|
+          next [] unless read_skill_tool_message?(message)
+
+          tool_call_id = MessageAccess.tool_call_id(message).to_s
+          tool_call_id = "preserved_read_skill_#{index}" if tool_call_id.empty?
+          skill_name = skill_name_from_content(MessageAccess.content(message)) || "unknown"
+          [
+            {
+              "role" => "assistant",
+              "content" => nil,
+              "tool_calls" => [
+                {
+                  "id" => tool_call_id,
+                  "type" => "function",
+                  "function" => {
+                    "name" => "read_skill",
+                    "arguments" => JSON.generate(name: skill_name)
+                  }
+                }
+              ]
+            },
+            message
+          ]
+        end
+      end
+
+      def read_skill_tool_message?(message)
+        message_role(message) == "tool" && MessageAccess.tool_name(message) == "read_skill" && MessageAccess.content(message).to_s.include?("<skill_content")
+      end
+
+      def skill_name_from_content(content)
+        content.to_s[/<skill_content name="([^"]+)"/, 1]
       end
 
       def compaction_entry?(message)
