@@ -1030,6 +1030,21 @@ body.kward-docs .kward-home #footer p {
 }
 
 @media (max-width: 620px) {
+  .kward-hero > *,
+  .kward-install-card > *,
+  .kward-feature-strip > *,
+  .kward-capabilities li {
+    min-width: 0;
+  }
+
+  .kward-hero h1 {
+    font-size: clamp(32px, 10vw, 38px);
+  }
+
+  .kward-swosh {
+    max-width: 100%;
+  }
+
   .kward-feature-strip,
   .kward-capabilities ul {
     grid-template-columns: 1fr;
@@ -1370,6 +1385,7 @@ body.kward-docs .kward-home #footer {
     flex-direction: column;
     gap: 2px;
     height: auto !important;
+    justify-content: flex-start;
     left: 12px;
     max-height: calc(100vh - 100px);
     overflow-y: auto;
@@ -1808,6 +1824,12 @@ body.kward-docs #toc li > a {
 body.kward-docs #toc li > ol {
   grid-column: 2;
   margin-top: 6px;
+}
+
+body.kward-docs #content code,
+body.kward-docs #filecontents code,
+body.kward-docs #toc code {
+  overflow-wrap: anywhere;
 }
 
 
