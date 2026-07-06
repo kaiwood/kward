@@ -1,3 +1,4 @@
+require_relative "catalog"
 require_relative "command_handler"
 require_relative "manager"
 
@@ -37,7 +38,8 @@ module Kward
           id: entry["id"] || "config:#{event}:#{index + 1}",
           source: "config",
           order: entry.fetch("order", 100),
-          match: entry["match"]
+          match: entry["match"],
+          failure_policy: entry["failure_policy"]
         ) { |hook_event, context| handler.call(hook_event, context) }
       end
 
@@ -56,7 +58,12 @@ module Kward
         type = (entry["type"] || "command").to_s
         case type
         when "command"
-          CommandHandler.new(command: required(entry, "command"), timeout_seconds: entry["timeout_seconds"], env: entry["env"])
+          CommandHandler.new(
+            command: required(entry, "command"),
+            timeout_seconds: entry["timeout_seconds"],
+            env: entry["env"],
+            failure_policy: entry["failure_policy"] || Catalog::DEFAULT_FAILURE_POLICY
+          )
         else
           raise ArgumentError, "Unsupported hook type: #{type}"
         end

@@ -26,7 +26,7 @@ A hook may return one of these decisions:
 | `deny` | Stop the operation and return a declined result. |
 | `ask` | Ask the frontend for approval when an approval bridge is available; otherwise Kward treats it as denied for safety. |
 | `modify` | Continue with an event-specific payload update. Tool, shell, turn, and model-request hooks currently support useful modifications. |
-| `warn` | Continue and record a warning decision. Hook failures are normalized to warnings unless the hook itself returns another decision. |
+| `warn` | Continue and record a warning decision. Hook failures use the event or hook entry's configured failure policy. |
 | `retry` | Reserved for retry-aware lifecycle integrations. |
 | `defer` | Reserved for asynchronous follow-up integrations. |
 
@@ -42,6 +42,7 @@ Kward.plugin do |plugin|
     id: "block-release",
     description: "Prevent accidental gem releases",
     order: 10,
+    failure_policy: "deny",
     match: { command_regex: "\\bgem push\\b" } do |_event, ctx|
       ctx.deny("Gem releases must use the release checklist.")
     end
@@ -78,6 +79,7 @@ Command hooks are configured in `~/.kward/config.json` under `hooks`. Kward send
         "type": "command",
         "command": "~/.kward/hooks/block-release.rb",
         "timeout_seconds": 5,
+        "failure_policy": "deny",
         "match": { "command_regex": "\\bgem push\\b" }
       }
     ]
@@ -101,7 +103,20 @@ else
 end
 ```
 
-If a command hook prints nothing, Kward treats it as `allow`. If it exits non-zero, times out, or prints invalid JSON, Kward records a warning decision and continues.
+If a command hook prints nothing, Kward treats it as `allow`. If it exits non-zero, times out, or prints invalid JSON, Kward applies the hook's `failure_policy`.
+
+## Failure policies
+
+Hook failures are different from hook decisions. A hook fails when Ruby plugin code raises, a command hook exits non-zero, times out, or returns invalid JSON. Configure `failure_policy` on plugin hooks or command-hook entries:
+
+| Policy | Behavior on hook failure |
+| --- | --- |
+| `allow` | Continue without recording a warning. |
+| `warn` | Continue and record a warning. This is the default for most after/notification-style events and for command hooks without explicit policy. |
+| `deny` | Stop the operation. This is the default for built-in before-policy events such as `shell_command_before` and `tool_call_before` when plugin handlers raise. |
+| `ask` | Ask the frontend for approval when supported; otherwise fail closed. |
+
+Use `deny` for security or release-policy hooks. Use `warn` for logging, formatting, notifications, and other convenience hooks that should not block the agent.
 
 ## Event shape
 

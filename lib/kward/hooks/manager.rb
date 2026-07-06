@@ -1,3 +1,4 @@
+require_relative "catalog"
 require_relative "decision"
 require_relative "event"
 require_relative "matcher"
@@ -7,7 +8,7 @@ module Kward
   module Hooks
     # Dispatches lifecycle events to registered hooks and combines decisions.
     class Manager
-      Handler = Struct.new(:id, :event, :source, :order, :match, :callback, keyword_init: true)
+      Handler = Struct.new(:id, :event, :source, :order, :match, :callback, :failure_policy, keyword_init: true)
       Result = Struct.new(:event, :decision, :decisions, :warnings, :messages, :payload, keyword_init: true) do
         def allowed?
           !decision.deny? && !decision.ask?
@@ -28,7 +29,7 @@ module Kward
         @handlers = []
       end
 
-      def register(event, id: nil, source: nil, order: 100, match: nil, &callback)
+      def register(event, id: nil, source: nil, order: 100, match: nil, failure_policy: nil, &callback)
         raise ArgumentError, "Hook requires an event name" if event.to_s.empty?
         raise ArgumentError, "Hook requires a handler" unless callback
 
@@ -38,7 +39,8 @@ module Kward
           source: source,
           order: order.to_i,
           match: Matcher.new(match),
-          callback: callback
+          callback: callback,
+          failure_policy: Catalog.failure_policy(event, failure_policy)
         )
         @handlers << handler
         handler
@@ -102,7 +104,11 @@ module Kward
                 end
         Decision.normalize(value)
       rescue StandardError => e
-        Decision.warn("Hook #{handler.id} failed: #{e.message}", metadata: { hook_id: handler.id, source: handler.source })
+        Catalog.failure_decision(
+          handler.failure_policy,
+          "Hook #{handler.id} failed: #{e.message}",
+          metadata: { hook_id: handler.id, source: handler.source }
+        )
       end
 
       def final_decision(decisions)

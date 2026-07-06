@@ -41,7 +41,7 @@ module Kward
     end
 
     # Registered lifecycle hook handler.
-    HookHandler = Struct.new(:event, :id, :description, :path, :order, :match, :handler, keyword_init: true)
+    HookHandler = Struct.new(:event, :id, :description, :path, :order, :match, :failure_policy, :handler, keyword_init: true)
 
     # Read-only transcript view exposed to plugin code.
     class Transcript
@@ -212,8 +212,8 @@ module Kward
       # @yieldparam ctx [Context] plugin execution context and decision helpers
       # @return [void]
       # @api public
-      def hook(event, id: nil, description: "", order: 100, match: nil, &block)
-        @registry.register_hook(event, id: id, description: description, order: order, match: match, path: @path, &block)
+      def hook(event, id: nil, description: "", order: 100, match: nil, failure_policy: nil, &block)
+        @registry.register_hook(event, id: id, description: description, order: order, match: match, failure_policy: failure_policy, path: @path, &block)
       end
 
       # Registers prompt context text injected into future system prompts.
@@ -335,7 +335,7 @@ module Kward
     def hook_manager
       manager = Hooks::Manager.new
       @hook_handlers.each do |hook|
-        manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match) do |event, context|
+        manager.register(hook.event, id: hook.id, source: hook.path, order: hook.order, match: hook.match, failure_policy: hook.failure_policy) do |event, context|
           hook.handler.call(event, context)
         end
       end
@@ -453,7 +453,7 @@ module Kward
       @prompt_context_renderers << { path: path, renderer: renderer }
     end
 
-    def register_hook(event, id: nil, description: "", order: 100, match: nil, path: nil, &handler)
+    def register_hook(event, id: nil, description: "", order: 100, match: nil, failure_policy: nil, path: nil, &handler)
       event = event.to_s
       raise "Plugin hook event is required" if event.empty?
       raise "Plugin hook #{event} requires a handler" unless handler
@@ -465,6 +465,7 @@ module Kward
         path: path,
         order: order.to_i,
         match: match,
+        failure_policy: failure_policy,
         handler: handler
       )
     end

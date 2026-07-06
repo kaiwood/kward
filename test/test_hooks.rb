@@ -28,6 +28,23 @@ class TestHooks < KwardTestCase
     assert Kward::Hooks::Decision.normalize(nil).allow?
   end
 
+  def test_catalog_lists_known_events_and_defaults
+    assert_includes Kward::Hooks::Catalog.event_names, "shell_command_before"
+    assert Kward::Hooks::Catalog.known?("tool_call_before")
+    assert_equal "deny", Kward::Hooks::Catalog.failure_policy("shell_command_before")
+    assert_equal "warn", Kward::Hooks::Catalog.failure_policy("file_change_after")
+  end
+
+  def test_manager_uses_failure_policy_for_hook_errors
+    manager = Kward::Hooks::Manager.new
+    manager.register("tool_call_before", id: "bad", failure_policy: "deny") { raise "boom" }
+
+    result = manager.run(Kward::Hooks::Event.new(name: "tool_call_before"))
+
+    assert result.denied?
+    assert_equal "Hook bad failed: boom", result.decision.message
+  end
+
   def test_manager_runs_matching_hooks_in_order_and_merges_modifications
     manager = Kward::Hooks::Manager.new
     calls = []
@@ -73,7 +90,7 @@ class TestHooks < KwardTestCase
 
   def test_hook_errors_become_warnings
     manager = Kward::Hooks::Manager.new
-    manager.register("turn_end", id: "bad") { raise "boom" }
+    manager.register("turn_end", id: "bad", failure_policy: "warn") { raise "boom" }
 
     result = manager.run(Kward::Hooks::Event.new(name: "turn_end"))
 
@@ -101,6 +118,14 @@ class TestHooks < KwardTestCase
       assert decision.deny?
       assert_equal "release blocked", decision.message
     end
+  end
+
+  def test_command_handler_failure_policy_can_deny_failures
+    handler = Kward::Hooks::CommandHandler.new(command: "ruby -e 'exit 7'", failure_policy: "deny")
+    decision = handler.call(Kward::Hooks::Event.new(name: "shell_command_before"))
+
+    assert decision.deny?
+    assert_match(/Command hook failed/, decision.message)
   end
 
   def test_config_loader_registers_command_hooks

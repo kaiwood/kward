@@ -75,6 +75,7 @@ Configure command lifecycle hooks with a top-level `hooks` object. Each key is a
         "type": "command",
         "command": "~/.kward/hooks/block-release.rb",
         "timeout_seconds": 5,
+        "failure_policy": "deny",
         "match": { "command_regex": "\\bgem push\\b" }
       }
     ]
@@ -82,7 +83,7 @@ Configure command lifecycle hooks with a top-level `hooks` object. Each key is a
 }
 ```
 
-See [Lifecycle hooks](lifecycle-hooks.md) for events, decisions, selectors, plugin hooks, command-hook protocol, and security notes.
+Use `failure_policy` (`allow`, `warn`, `deny`, or `ask`) to decide what happens if the hook command fails, times out, or returns invalid JSON. See [Lifecycle hooks](lifecycle-hooks.md) for events, decisions, selectors, plugin hooks, command-hook protocol, and security notes.
 
 ## Embedded shell config
 
