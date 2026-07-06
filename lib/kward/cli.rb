@@ -52,6 +52,7 @@ require_relative "cli/openrouter_commands"
 require_relative "cli/runtime_helpers"
 require_relative "cli/slash_commands"
 require_relative "cli/memory_commands"
+require_relative "cli/hook_commands"
 require_relative "cli/settings"
 require_relative "cli/sessions"
 require_relative "cli/tabs"
@@ -84,6 +85,7 @@ module Kward
     include CLI::RuntimeHelpers
     include CLI::SlashCommands
     include CLI::MemoryCommands
+    include CLI::HookCommands
     include CLI::Settings
     include CLI::Sessions
     include CLI::Tabs

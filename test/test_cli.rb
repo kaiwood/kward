@@ -459,6 +459,80 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_hooks_slash_command_lists_configured_hooks
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({
+        "hooks" => {
+          "shell_command_before" => [
+            { "id" => "block-release", "command" => "ruby hook.rb", "failure_policy" => "deny" }
+          ]
+        }
+      }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        conversation = Kward::Conversation.new(workspace_root: dir)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, replacement = cli.send(:handle_local_slash_command, "/hooks list", agent, nil)
+
+        assert_equal true, handled
+        assert_nil replacement
+        output = prompt.output.join
+        assert_includes output, "Lifecycle hooks"
+        assert_includes output, "block-release shell_command_before"
+        assert_includes output, "failure_policy=deny"
+      end
+    end
+  end
+
+  def test_hooks_slash_command_shows_events
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+    handled, = cli.send(:handle_local_slash_command, "/hooks events", agent, nil)
+
+    assert_equal true, handled
+    output = prompt.output.join
+    assert_includes output, "Lifecycle hook events"
+    assert_includes output, "shell_command_before failure_policy=deny"
+  end
+
+  def test_hooks_slash_command_shows_audit_logs
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      log_dir = File.join(dir, "logs")
+      FileUtils.mkdir_p(log_dir)
+      File.write(File.join(log_dir, "hooks.jsonl"), JSON.dump(
+        "timestamp" => "2026-07-06T12:00:00.000Z",
+        "kind" => "result",
+        "event" => "shell_command_before",
+        "decision" => "deny",
+        "message" => "blocked"
+      ) + "\n")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        conversation = Kward::Conversation.new(workspace_root: dir)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, = cli.send(:handle_local_slash_command, "/hooks logs", agent, nil)
+
+        assert_equal true, handled
+        output = prompt.output.join
+        assert_includes output, "Lifecycle hook audit log"
+        assert_includes output, "shell_command_before"
+        assert_includes output, "decision=deny"
+      end
+    end
+  end
+
   def test_skill_slash_command_activates_skill_without_model_turn
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))

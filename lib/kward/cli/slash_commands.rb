@@ -19,6 +19,9 @@ module Kward
           activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
           run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
           [true, nil]
+        when "hooks"
+          run_busy_local_command_and_requeue { handle_hooks_command(argument) }
+          [true, nil]
         when "skill"
           run_busy_local_command_and_requeue { activate_skill_command(argument, agent) }
           [true, nil]

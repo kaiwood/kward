@@ -118,6 +118,17 @@ Hook failures are different from hook decisions. A hook fails when Ruby plugin c
 
 Use `deny` for security or release-policy hooks. Use `warn` for logging, formatting, notifications, and other convenience hooks that should not block the agent.
 
+## Inspect hooks
+
+In interactive Kward sessions, use `/hooks` to inspect loaded hooks and recent hook activity:
+
+```text
+/hooks list      # configured command hooks and plugin hooks
+/hooks events    # known event names, defaults, and modifiable fields
+/hooks logs      # recent audit records from logs/hooks.jsonl
+/hooks doctor    # basic hook configuration diagnostics
+```
+
 ## Audit log
 
 Kward writes lifecycle hook audit records to:
