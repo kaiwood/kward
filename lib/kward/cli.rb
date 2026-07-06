@@ -336,7 +336,9 @@ module Kward
           hook_manager: lifecycle_hook_manager(conversation),
           hook_context: lifecycle_hook_context(conversation)
         ),
-        conversation: conversation
+        conversation: conversation,
+        hook_manager: lifecycle_hook_manager(conversation),
+        hook_context: lifecycle_hook_context(conversation)
       )
       answer = if filter
         agent.ask(input)

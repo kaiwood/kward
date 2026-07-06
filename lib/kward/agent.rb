@@ -4,6 +4,7 @@ require_relative "compactor"
 require_relative "model/context_overflow"
 require_relative "conversation"
 require_relative "events"
+require_relative "hooks"
 require_relative "steering"
 require_relative "telemetry/logger"
 require_relative "tools/registry"
@@ -24,11 +25,13 @@ module Kward
   # lowest layer that owns the behavior, and use `Agent` only for cross-step turn
   # coordination.
   class Agent
-    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: TelemetryLogger.new)
+    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: TelemetryLogger.new, hook_manager: nil, hook_context: nil)
       @client = client
       @tool_registry = tool_registry
       @conversation = conversation
       @telemetry_logger = telemetry_logger
+      @hook_manager = hook_manager
+      @hook_context = hook_context
     end
 
     attr_reader :conversation, :tool_registry
@@ -44,10 +47,19 @@ module Kward
       status = "completed"
       error = nil
       cancellation&.raise_if_cancelled!
+      turn_start = run_hook("turn_start", payload: { input: input, display_input: display_input })
+      return hook_denied_answer(turn_start) if turn_start.denied?
+
+      input = turn_start.payload[:input] || turn_start.payload["input"] || input
+      display_input = turn_start.payload[:display_input] || turn_start.payload["display_input"] || display_input
       @conversation.refresh_system_message_if_workspace_agents_changed!
       @conversation.append_user(input, display_content: display_input)
+      run_hook("turn_context_build_before", payload: { message_count: @conversation.messages.length })
       auto_compact_if_needed
-      run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, &block)
+      run_hook("turn_context_build_after", payload: { message_count: @conversation.messages.length })
+      answer = run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, &block)
+      run_hook("turn_end", payload: { input: input, answer: answer })
+      answer
     rescue StandardError => e
       status = "failed"
       error = e
@@ -215,21 +227,37 @@ module Kward
         on_retry&.call(event)
         yield event if block_given?
       end
-      ChatInvocation.call(
+      registry = tool_registry || @tool_registry
+      request = {
+        messages: @conversation.context_messages,
+        tools: registry.schemas,
+        provider: options[:provider] || @conversation.provider,
+        model: options[:model] || @conversation.model,
+        reasoning: options[:reasoning] || @conversation.reasoning_effort
+      }
+      before = run_hook("model_request_before", payload: request)
+      request = deep_merge(request, before.payload) if before.decision.modify?
+      return { "role" => "assistant", "content" => hook_denied_answer(before) } if before.denied?
+
+      run_hook("turn_model_request_before", payload: request)
+      response = ChatInvocation.call(
         @client,
-        @conversation.context_messages,
+        request[:messages] || request["messages"],
         {
-          tools: (tool_registry || @tool_registry).schemas,
+          tools: request[:tools] || request["tools"],
           on_reasoning_delta: reasoning_delta,
           on_assistant_delta: assistant_delta,
           on_retry: retry_callback,
           cancellation: cancellation,
           steering: steering,
-          provider: options[:provider] || @conversation.provider,
-          model: options[:model] || @conversation.model,
-          reasoning: options[:reasoning] || @conversation.reasoning_effort
+          provider: request[:provider] || request["provider"],
+          model: request[:model] || request["model"],
+          reasoning: request[:reasoning] || request["reasoning"]
         }
       )
+      run_hook("model_response_after_parse", payload: { message: response })
+      run_hook("turn_model_response_complete", payload: { message: response })
+      response
     end
 
     def update_conversation_runtime(message)
@@ -250,6 +278,51 @@ module Kward
       return "The file change tool returned an error or declined result, so I did not successfully change the file." if @conversation.last_file_change_result
 
       "I have not changed any files. I need to use write_file or edit_file successfully before claiming a file change."
+    end
+
+    def run_hook(name, payload: {})
+      return Hooks::Manager::Result.new(event: nil, decision: Hooks::Decision.allow, decisions: [], warnings: [], messages: [], payload: payload) unless @hook_manager
+
+      @hook_manager.run(Hooks::Event.new(
+        name: name,
+        session: { id: @conversation.respond_to?(:session_id) ? @conversation.session_id : nil },
+        workspace: { root: @conversation.respond_to?(:workspace_root) ? @conversation.workspace_root : nil },
+        agent: {
+          provider: @conversation.provider,
+          model: @conversation.model,
+          reasoning: @conversation.reasoning_effort
+        },
+        payload: payload
+      ), context: @hook_context)
+    end
+
+    def hook_denied_answer(result)
+      "Declined: #{result.decision.message || "lifecycle hook denied the operation"}"
+    end
+
+    def deep_merge(left, right)
+      left = deep_dup(left)
+      right.each do |key, value|
+        left[key] = if left[key].is_a?(Hash) && value.is_a?(Hash)
+                      deep_merge(left[key], value)
+                    else
+                      deep_dup(value)
+                    end
+      end
+      left
+    end
+
+    def deep_dup(value)
+      case value
+      when Hash
+        value.each_with_object({}) { |(key, item), result| result[key] = deep_dup(item) }
+      when Array
+        value.map { |item| deep_dup(item) }
+      else
+        value.dup
+      end
+    rescue TypeError
+      value
     end
 
     def claims_file_edit?(text)

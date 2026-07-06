@@ -129,7 +129,13 @@ module Kward
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
-        agent = Agent.new(client: @client, tool_registry: tool_registry, conversation: conversation)
+        agent = Agent.new(
+          client: @client,
+          tool_registry: tool_registry,
+          conversation: conversation,
+          hook_manager: lifecycle_hook_manager(conversation),
+          hook_context: lifecycle_hook_context(conversation)
+        )
         agent.instance_variable_set(:@tab_question_prompt, prompt)
         agent
       end

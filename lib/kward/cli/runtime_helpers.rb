@@ -66,7 +66,9 @@ module Kward
         Agent.new(
           client: @client,
           tool_registry: tool_registry,
-          conversation: conversation
+          conversation: conversation,
+          hook_manager: lifecycle_hook_manager(conversation),
+          hook_context: lifecycle_hook_context(conversation)
         )
       end
 

@@ -86,6 +86,41 @@ class TestAgent < KwardTestCase
     end
   end
 
+  def test_agent_runs_turn_and_model_lifecycle_hooks
+    manager = Kward::Hooks::Manager.new
+    events = []
+    manager.register("turn_start") do |event, _ctx|
+      events << [event.name, event.payload[:input]]
+      Kward::Hooks::Decision.modify(input: "modified prompt")
+    end
+    manager.register("model_request_before") do |event, _ctx|
+      events << [event.name, event.payload[:messages].last[:content]]
+      Kward::Hooks::Decision.modify(model: "hook-model")
+    end
+    manager.register("model_response_after_parse") do |event, _ctx|
+      events << [event.name, event.payload[:message]["content"]]
+      Kward::Hooks::Decision.allow
+    end
+    manager.register("turn_end") do |event, _ctx|
+      events << [event.name, event.payload[:answer]]
+      Kward::Hooks::Decision.allow
+    end
+    conversation = Kward::Conversation.new(system_message: nil, model: "original-model")
+    client = RuntimeCaptureClient.new
+    agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new, conversation: conversation, hook_manager: manager)
+
+    answer = agent.ask("hello")
+
+    assert_equal "ok", answer
+    assert_equal "hook-model", client.calls.first[:model]
+    assert_equal [
+      ["turn_start", "hello"],
+      ["model_request_before", "modified prompt"],
+      ["model_response_after_parse", "ok"],
+      ["turn_end", "ok"]
+    ], events
+  end
+
   def test_agent_passes_and_persists_conversation_runtime_after_model_request
     conversation = Kward::Conversation.new(system_message: nil, provider: "OpenRouter", model: "openai/gpt-test", reasoning_effort: "high")
     persisted = []
