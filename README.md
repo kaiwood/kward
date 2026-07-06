@@ -63,7 +63,7 @@ See [Authentication](doc/authentication.md) for more details about sign-in optio
 - Save, resume, clone, compact, and export sessions.
 - Extend the Agent with trusted Ruby plugins for custom commands, footer UI, prompt context, and transcript-event observers.
 - Use optional memory, personas, prompt templates, and skills.
-- Serve an experimental JSON-RPC backend for UI clients.
+- Serve a JSON-RPC backend for trusted local UI clients.
 
 ## Documentation
 
@@ -88,7 +88,7 @@ Advanced:
 
 - [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and extension choices.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
-- [RPC protocol](doc/rpc.md): experimental JSON-RPC backend mode for UI clients.
+- [RPC protocol](doc/rpc.md): JSON-RPC backend mode for trusted local UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
 - [Agent tools](doc/agent-tools.md): overview of model-callable tools, token-saving behavior, and tool categories.
 - [Workspace tools](doc/workspace-tools.md): local file, edit, and shell command tools.

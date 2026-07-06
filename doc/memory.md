@@ -164,4 +164,4 @@ If `KWARD_CONFIG_PATH` is set, memory files live beside that config file instead
 
 ## RPC support
 
-The experimental RPC backend exposes memory methods including `memory/status`, `memory/enable`, `memory/disable`, `memory/autoSummary/enable`, `memory/autoSummary/disable`, `memory/list`, `memory/add`, `memory/addCore`, `memory/forget`, `memory/promote`, `memory/relax`, `memory/inspect`, `memory/why`, and `memory/summarize`. See the [RPC documentation](rpc.md) for the full protocol.
+The RPC backend exposes memory methods including `memory/status`, `memory/enable`, `memory/disable`, `memory/autoSummary/enable`, `memory/autoSummary/disable`, `memory/list`, `memory/add`, `memory/addCore`, `memory/forget`, `memory/promote`, `memory/relax`, `memory/inspect`, `memory/why`, and `memory/summarize`. See the [RPC documentation](rpc.md) for the full protocol.

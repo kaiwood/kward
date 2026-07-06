@@ -19,7 +19,7 @@ require_relative "transport"
 module Kward
   # JSON-RPC backend namespace used by UI clients.
   module RPC
-    # Experimental JSON-RPC backend for UI clients.
+    # JSON-RPC backend for trusted local UI clients.
     #
     # The server speaks LSP-style Content-Length framing over stdin/stdout,
     # exposes capabilities during `initialize`, redacts secrets in errors and
@@ -353,7 +353,7 @@ module Kward
         {
           protocolVersion: PROTOCOL_VERSION,
           serverName: "kward",
-          experimental: true,
+          experimental: false,
           capabilities: capabilities
         }
       end
@@ -461,6 +461,7 @@ module Kward
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           workers: workers_capability,
+          stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: ["workers"] },
           commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           mcp: { supported: true, transport: "stdio", config: "mcpServers", exposes: ["tools"], unsupported: ["resources", "prompts", "sampling", "streamableHttp"] },
           startupResources: { supported: true, method: STARTUP_RESOURCE_METHODS.first },

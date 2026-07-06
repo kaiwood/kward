@@ -2,7 +2,7 @@
 
 <div class="kward-no-toc"></div>
 
-Kward RPC is an experimental backend protocol for UI clients. It is versioned as protocol version `1`, but method names and payloads may still change while the UI integration is built.
+Kward RPC is a JSON-RPC backend protocol for trusted local UI clients. It is versioned as protocol version `1`: new methods and fields may be added in compatible releases, and clients should ignore unknown fields. Removing or changing existing methods or field meanings requires a protocol version bump. Individual capability groups may still report experimental or unsupported status in `initialize.capabilities`.
 
 This page is for people building UI clients or integrations. If you use Kward from the terminal, you can skip it.
 

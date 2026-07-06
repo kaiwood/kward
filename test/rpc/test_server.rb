@@ -74,7 +74,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
     assert_equal "content-length", capabilities["framing"]
 
-    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands mcp startupResources extensionUi composer security export logging workers shell scratchpad]
+    detailed_groups = %w[transcript sessions turns events attachments models runtime runtimeSettings auth commands mcp startupResources extensionUi composer security export logging workers shell scratchpad stability]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
     assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
@@ -83,7 +83,7 @@ class TestRPCServer < KwardTestCase
     assert_equal true, capabilities["transcript"]["supportsReasoningRestore"]
     assert_equal "explicit", capabilities["sessions"]["mode"]
     assert_equal "jsonl", capabilities["sessions"]["persistence"]
-    assert_equal ["sessions/create", "sessions/resume", "sessions/list", "sessions/rename", "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork", "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate", "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"], capabilities["sessions"]["methods"]
+    assert_equal Kward::RPC::Server::SESSION_METHODS, capabilities["sessions"]["methods"]
     assert_equal true, capabilities["sessions"].dig("startupResume", "supported")
     assert_equal false, capabilities["sessions"].dig("startupResume", "default")
     assert_equal "resumeLast", capabilities["sessions"].dig("startupResume", "parameter")
@@ -194,7 +194,8 @@ class TestRPCServer < KwardTestCase
     assert_equal false, capabilities.dig("composer", "copy", "supported")
     assert_equal "clientClipboardOwnedByUi", capabilities.dig("composer", "copy", "reason")
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
-    assert_equal "none", capabilities["security"]["toolApproval"]
+    assert_equal true, capabilities.dig("security", "toolApproval", "supported")
+    assert_equal "none", capabilities.dig("security", "toolApproval", "defaultMode")
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
     assert_equal true, capabilities["logging"]["supported"]
     assert_equal false, capabilities["logging"]["defaultEnabled"]
@@ -228,7 +229,7 @@ class TestRPCServer < KwardTestCase
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
       protocol workspace tools prompts sessions turns models runtime runtime_settings
-      auth memory workers commands startup_resources config logging ui
+      auth memory workers commands startup_resources config logging ui tool_approval
     ]
 
     assert_equal expected_groups, Kward::RPC::Server::METHOD_GROUPS.keys
@@ -249,6 +250,7 @@ class TestRPCServer < KwardTestCase
     assert_includes docs, Kward::RPC::Server::TURN_EVENT_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::UI_QUESTION_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::UI_FOOTER_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::TOOL_APPROVAL_NOTIFICATION
   end
 
   def test_initialize_capability_method_lists_match_rpc_methods
@@ -268,6 +270,8 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::COMMAND_METHODS[0], capabilities["commands"]["method"]
     assert_equal Kward::RPC::Server::COMMAND_METHODS[1], capabilities["commands"]["runMethod"]
     assert_equal Kward::RPC::Server::STARTUP_RESOURCE_METHODS.first, capabilities["startupResources"]["method"]
+    assert_equal false, messages[0]["result"]["experimental"]
+    assert_equal "stable", capabilities["stability"]["protocol"]
     assert_equal Kward::RPC::Server::SESSION_METHODS, capabilities["sessions"]["methods"]
     assert_equal Kward::RPC::Server::SESSION_EVENT_NOTIFICATION, capabilities["sessions"]["compact"]["notification"]
     assert_equal Kward::RPC::Server::TURN_EVENT_NOTIFICATION, capabilities["events"]["notification"]

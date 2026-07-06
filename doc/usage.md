@@ -94,7 +94,7 @@ kward login                    # sign in or save credentials
 kward auth status              # show credential status without secrets
 kward sysprompt                # inspect assembled instructions
 kward stats tokens             # export local token telemetry as CSV
-kward rpc                      # start the experimental RPC backend
+kward rpc                      # start the RPC backend for trusted local UI clients
 ```
 
 Use another workspace without changing directories:
@@ -280,4 +280,4 @@ Use it only on trusted networks. It exposes the same file, shell, and web tools 
 
 ## RPC backend
 
-`kward rpc` starts the experimental JSON-RPC backend for UI clients and editor integrations. Terminal users can ignore it. Integration authors should read [RPC protocol](rpc.md).
+`kward rpc` starts the JSON-RPC backend for trusted local UI clients and editor integrations. Terminal users can ignore it. Integration authors should read [RPC protocol](rpc.md).

@@ -57,7 +57,7 @@ module Kward
             #{command.call("kward sysprompt")}                    Inspect the effective system prompt
             #{command.call("kward openrouter refresh")}           Refresh cached OpenRouter models
             #{command.call("kward pan")}                          Start Pan mode web UI
-            #{command.call("kward rpc")}                          Start the experimental JSON-RPC backend
+            #{command.call("kward rpc")}                          Start the JSON-RPC backend
 
           #{heading.call("Commands")}
             #{command.call("help")}                               Show this help
@@ -154,7 +154,7 @@ module Kward
           },
           "rpc" => {
             usage: "kward rpc",
-            description: "Start the experimental JSON-RPC backend for UI clients.",
+            description: "Start the JSON-RPC backend for trusted local UI clients.",
             examples: ["kward rpc", "kward --working-directory ~/code/project rpc"]
           }
         }

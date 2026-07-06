@@ -66,7 +66,7 @@ require_relative "cli/tool_summaries"
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line interface for interactive chat, one-shot prompts, login,
-  # telemetry export, Pan server mode, and the experimental JSON-RPC backend.
+  # telemetry export, Pan server mode, and the JSON-RPC backend.
   class CLI
     RESTORED_TOOL_OUTPUT_LIMIT = 2_000
     INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT = 10

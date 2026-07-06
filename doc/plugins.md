@@ -226,7 +226,7 @@ The transcript is read-only. Use context methods instead of mutating Kward inter
 
 ## RPC support
 
-Plugins are available in the CLI and experimental RPC backend.
+Plugins are available in the CLI and RPC backend.
 
 RPC clients can:
 
