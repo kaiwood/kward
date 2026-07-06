@@ -50,8 +50,8 @@ Result fields:
 Detailed capability fields include:
 
 - `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
-- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
-- `turns`: async turn mode, per-session concurrency, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope/tool approval, and structured client context for editor integrations.
+- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, active live-session discovery, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
+- `turns`: async turn mode, per-session concurrency, active/recent turn listing, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope/tool approval, and structured client context for editor integrations.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
@@ -224,6 +224,10 @@ Closes the RPC session. Empty unnamed session files may be cleaned up.
 
 Returns session metadata and full conversation messages. Assistant `reasoning_summary` values and existing `thinking`/`reasoning` content parts are restored as normalized `{ "type": "thinking", "thinking": "..." }` blocks before assistant text; reasoning is not merged into normal text blocks.
 
+### `sessions/active`
+
+Returns currently live RPC sessions in this server process. This is intended for clients reconnecting to an existing local RPC process; it does not list persisted sessions that are not currently open. Use `sessions/list` for persisted session files.
+
 ### `sessions/tree`
 
 Params:
@@ -296,6 +300,22 @@ Params:
 - `afterSequence`: optional sequence number.
 
 Returns recent in-memory events after the requested sequence. Event history is not persisted and is bounded in memory.
+
+### `turns/list`
+
+Params:
+
+- `sessionId`: optional active RPC session ID filter.
+
+Returns recent in-memory turn metadata for this server process. Turn metadata is not persisted across RPC process restarts.
+
+### `turns/listActive`
+
+Params:
+
+- `sessionId`: optional active RPC session ID filter.
+
+Returns queued and running turns for this server process. Use this after reconnecting to rebuild live UI state.
 
 ## Turn notifications
 

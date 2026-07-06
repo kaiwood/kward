@@ -142,6 +142,10 @@ module Kward
              .map { |info| session_info_payload(info, workspace_root: root) }
       end
 
+      def active_sessions
+        { sessions: @mutex.synchronize { @sessions.values.map { |rpc_session| session_payload(rpc_session) } } }
+      end
+
       # Renames the persisted session attached to an RPC session id.
       def rename_session(session_id:, name:)
         rpc_session = fetch_session(session_id)
@@ -384,6 +388,13 @@ module Kward
           turn: turn_payload(turn),
           events: turn.events.select { |event| event[:sequence].to_i > after_sequence }
         }
+      end
+
+      def list_turns(session_id: nil, active: false)
+        turns = @mutex.synchronize { @turns.values.dup }
+        turns.select! { |turn| turn.session_id == session_id.to_s } if session_id
+        turns.select! { |turn| ["queued", "running"].include?(turn.status) } if active
+        { turns: turns.map { |turn| turn_payload(turn) } }
       end
 
       def answer_question(session_id:, question_request_id:, answers:)

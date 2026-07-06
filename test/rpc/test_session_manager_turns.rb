@@ -110,6 +110,25 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_active_session_and_turn_discovery
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: SlowClient.new, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "slow")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+
+      assert_equal [session[:id]], manager.active_sessions[:sessions].map { |item| item[:id] }
+      assert_equal [turn[:id]], manager.list_turns[:turns].map { |item| item[:id] }
+      assert_equal [turn[:id]], manager.list_turns(active: true)[:turns].map { |item| item[:id] }
+      assert_equal [turn[:id]], manager.list_turns(session_id: session[:id], active: true)[:turns].map { |item| item[:id] }
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+      assert_empty manager.list_turns(active: true)[:turns]
+      assert_equal [turn[:id]], manager.list_turns(session_id: session[:id])[:turns].map { |item| item[:id] }
+    end
+  end
+
   def test_turn_start_per_turn_options_override_model_and_tool_scope
     Dir.mktmpdir do |config_dir|
       client = RecordingClient.new([

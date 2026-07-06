@@ -52,9 +52,9 @@ module Kward
         "sessions/create", "sessions/resume", "sessions/list", "sessions/rename",
         "sessions/clone", "sessions/compact", "sessions/forkMessages", "sessions/fork",
         "sessions/tree", "sessions/tree/setLabel", "sessions/tree/navigate",
-        "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript"
+        "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript", "sessions/active"
       ].freeze
-      TURN_METHODS = ["turns/start", "turns/cancel", "turns/status", "turns/events"].freeze
+      TURN_METHODS = ["turns/start", "turns/cancel", "turns/status", "turns/events", "turns/list", "turns/listActive"].freeze
       MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set"].freeze
       RUNTIME_METHODS = ["runtime/state", "runtime/stats"].freeze
       RUNTIME_SETTING_METHODS = ["runtime/updateSetting", "runtime/reload"].freeze
@@ -319,6 +319,8 @@ module Kward
           @session_manager.close_session(session_id: params.fetch("sessionId"))
         when SESSION_METHODS[14]
           @session_manager.transcript(session_id: params.fetch("sessionId"))
+        when SESSION_METHODS[15]
+          @session_manager.active_sessions
         when TURN_METHODS[0]
           @session_manager.start_turn(
             session_id: params.fetch("sessionId"),
@@ -334,6 +336,10 @@ module Kward
           @session_manager.turn_status(turn_id: params.fetch("turnId"))
         when TURN_METHODS[3]
           @session_manager.turn_events(turn_id: params.fetch("turnId"), after_sequence: params["afterSequence"] || 0)
+        when TURN_METHODS[4]
+          @session_manager.list_turns(session_id: params["sessionId"])
+        when TURN_METHODS[5]
+          @session_manager.list_turns(session_id: params["sessionId"], active: true)
         when UI_METHODS[0]
           @session_manager.answer_question(session_id: params.fetch("sessionId"), question_request_id: params.fetch("questionRequestId"), answers: params.fetch("answers"))
         when TOOL_APPROVAL_METHODS[0]
@@ -370,6 +376,7 @@ module Kward
             methods: SESSION_METHODS,
             startupResume: { supported: true, method: SESSION_METHODS[0], parameter: "resumeLast", default: session_auto_resume_enabled?, immediateTranscript: true, sessionActivePersonaLabel: true },
             list: { supported: true, source: "rpc", ancestry: true, treeFields: true },
+            active: { supported: true, method: SESSION_METHODS[15] },
             fork: { supported: true, methods: SESSION_METHODS.values_at(6, 7), entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: true, method: SESSION_METHODS[5], notification: SESSION_EVENT_NOTIFICATION, events: ["compactionStart", "compactionEnd"] },
             import: { supported: false },
@@ -399,6 +406,7 @@ module Kward
               perTurnReasoning: true,
               perTurnToolScope: true
             },
+            list: { supported: true, method: TURN_METHODS[4], activeMethod: TURN_METHODS[5] },
             context: {
               supported: true,
               method: TURN_METHODS[0],
