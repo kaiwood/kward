@@ -12,11 +12,14 @@ module Kward
           return
         end
 
+        initial_index = 0
         loop do
-          selected = @prompt.select("Settings category", settings_category_choices, title: "Settings")
+          choices = settings_category_choices
+          selected, selected_index = select_settings_menu_item("Settings category", choices, initial_index)
           category = selected_settings_category(selected)
           break unless category
 
+          initial_index = selected_index if selected_index
           break if category == "done"
 
           handle_settings_category(category, conversation)
@@ -83,14 +86,22 @@ module Kward
       end
 
       def configure_model_settings(conversation)
-        selected = @prompt.select("Model & Reasoning", ["Provider", "Default model", "Reasoning effort", "Back"], title: "Settings")
-        case selected.to_s.downcase
-        when /\Aprovider/
-          configure_provider(conversation)
-        when /\Adefault model/
-          configure_model(conversation)
-        when /\Areasoning effort/
-          configure_reasoning(conversation)
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Model & Reasoning", ["Provider", "Default model", "Reasoning effort", "Back"], initial_index)
+          break unless selected
+
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Aprovider/
+            configure_provider(conversation)
+          when /\Adefault model/
+            configure_model(conversation)
+          when /\Areasoning effort/
+            configure_reasoning(conversation)
+          else
+            break
+          end
         end
       end
 
@@ -125,22 +136,30 @@ module Kward
       end
 
       def configure_account_settings
-        selected = @prompt.select("Accounts", account_setting_choices, title: "Settings")
-        case selected.to_s.downcase
-        when /\Aopenai/
-          login(provider: "openai")
-          reload_client_config
-        when /\Aanthropic/, /\Aclaude/
-          login(provider: "anthropic")
-          reload_client_config
-        when /\Agithub/
-          login(provider: "github")
-          reload_client_config
-        when /\Aopenrouter/
-          login(provider: "openrouter")
-          reload_client_config
-        when /\Astatus/
-          print_auth_status
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Accounts", account_setting_choices, initial_index)
+          break unless selected
+
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Aopenai/
+            login(provider: "openai")
+            reload_client_config
+          when /\Aanthropic/, /\Aclaude/
+            login(provider: "anthropic")
+            reload_client_config
+          when /\Agithub/
+            login(provider: "github")
+            reload_client_config
+          when /\Aopenrouter/
+            login(provider: "openrouter")
+            reload_client_config
+          when /\Astatus/
+            print_auth_status
+          else
+            break
+          end
         end
       end
 
@@ -163,17 +182,25 @@ module Kward
       end
 
       def configure_memory_settings(conversation)
-        selected = @prompt.select("Memory", memory_setting_choices, title: "Settings")
-        case selected.to_s.downcase
-        when /\Aenable memory/, /\Adisable memory/
-          set_memory_enabled(!memory_enabled?)
-          conversation&.refresh_system_message!
-          runtime_output("Memory #{memory_enabled? ? "enabled" : "disabled"}.")
-        when /\Aenable auto-summary/, /\Adisable auto-summary/
-          set_memory_auto_summary_enabled(!memory_auto_summary_enabled?)
-          runtime_output("Memory auto-summary #{memory_auto_summary_enabled? ? "enabled" : "disabled"}.")
-        when /\Amanage/
-          runtime_output("Use /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize.")
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Memory", memory_setting_choices, initial_index)
+          break unless selected
+
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Aenable memory/, /\Adisable memory/
+            set_memory_enabled(!memory_enabled?)
+            conversation&.refresh_system_message!
+            runtime_output("Memory #{memory_enabled? ? "enabled" : "disabled"}.")
+          when /\Aenable auto-summary/, /\Adisable auto-summary/
+            set_memory_auto_summary_enabled(!memory_auto_summary_enabled?)
+            runtime_output("Memory auto-summary #{memory_auto_summary_enabled? ? "enabled" : "disabled"}.")
+          when /\Amanage/
+            runtime_output("Use /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize.")
+          else
+            break
+          end
         end
       end
 
@@ -205,43 +232,51 @@ module Kward
       end
 
       def configure_interface_settings
-        selected = @prompt.select("Interface", interface_setting_choices, title: "Settings")
-        case selected.to_s.downcase
-        when /\Aoverlay alignment/
-          settings = ConfigFiles.overlay_settings
-          alignment = choose_overlay_setting("Overlay alignment", overlay_alignment_choices(settings), ConfigFiles::OVERLAY_ALIGNMENTS)
-          return unless alignment
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Interface", interface_setting_choices, initial_index)
+          break unless selected
 
-          @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("alignment" => alignment))
-        when /\Aoverlay width/
-          settings = ConfigFiles.overlay_settings
-          width = choose_overlay_setting("Overlay width", overlay_width_choices(settings), ConfigFiles::OVERLAY_WIDTHS)
-          return unless width
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Aoverlay alignment/
+            settings = ConfigFiles.overlay_settings
+            alignment = choose_overlay_setting("Overlay alignment", overlay_alignment_choices(settings), ConfigFiles::OVERLAY_ALIGNMENTS)
+            next unless alignment
 
-          @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("width" => width))
-        when /\Ashow busy help/, /\Ahide busy help/
-          set_composer_busy_help(!composer_busy_help?)
-          runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
-        when /\Atab keybindings/
-          configure_tab_keybindings
-        when /\Aeditor mode/
-          configure_editor_mode
-        when /\Aeditor line numbers/
-          configure_editor_line_numbers
-        when /\Adiff view/
-          configure_diff_view
-        when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
-          set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
-          runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
-        when /\Aenable soft-wrap/, /\Adisable soft-wrap/
-          set_editor_soft_wrap_enabled(!editor_soft_wrap_enabled?)
-          runtime_output("Editor soft-wrap #{editor_soft_wrap_enabled? ? "enabled" : "disabled"}.")
-        when /\Aenable bar cursor/, /\Adisable bar cursor/
-          set_editor_bar_cursor_enabled(!editor_bar_cursor_enabled?)
-          runtime_output("Editor bar cursor #{editor_bar_cursor_enabled? ? "enabled" : "disabled"}.")
-        when /\Aenable session auto-resume/, /\Adisable session auto-resume/
-          set_session_auto_resume_enabled(!session_auto_resume_enabled?)
-          runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
+            @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("alignment" => alignment))
+          when /\Aoverlay width/
+            settings = ConfigFiles.overlay_settings
+            width = choose_overlay_setting("Overlay width", overlay_width_choices(settings), ConfigFiles::OVERLAY_WIDTHS)
+            next unless width
+
+            @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("width" => width))
+          when /\Ashow busy help/, /\Ahide busy help/
+            set_composer_busy_help(!composer_busy_help?)
+            runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
+          when /\Atab keybindings/
+            configure_tab_keybindings
+          when /\Aeditor mode/
+            configure_editor_mode
+          when /\Aeditor line numbers/
+            configure_editor_line_numbers
+          when /\Adiff view/
+            configure_diff_view
+          when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
+            set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
+            runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
+          when /\Aenable soft-wrap/, /\Adisable soft-wrap/
+            set_editor_soft_wrap_enabled(!editor_soft_wrap_enabled?)
+            runtime_output("Editor soft-wrap #{editor_soft_wrap_enabled? ? "enabled" : "disabled"}.")
+          when /\Aenable bar cursor/, /\Adisable bar cursor/
+            set_editor_bar_cursor_enabled(!editor_bar_cursor_enabled?)
+            runtime_output("Editor bar cursor #{editor_bar_cursor_enabled? ? "enabled" : "disabled"}.")
+          when /\Aenable session auto-resume/, /\Adisable session auto-resume/
+            set_session_auto_resume_enabled(!session_auto_resume_enabled?)
+            runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
+          else
+            break
+          end
         end
       end
 
@@ -383,22 +418,30 @@ module Kward
       end
 
       def configure_tools_settings
-        selected = @prompt.select("Tools & Search", tools_setting_choices, title: "Settings")
-        case selected.to_s.downcase
-        when /\Aenable web search/, /\Adisable web search/
-          set_web_search_enabled(!web_search_enabled?)
-          runtime_output("Web search #{web_search_enabled? ? "enabled" : "disabled"}.")
-        when /\Aweb search provider/
-          configure_web_search_provider
-        when /\Aallow model-provider/, /\Adisallow model-provider/
-          set_web_search_allow_model_providers(!web_search_allow_model_providers?)
-          runtime_output("Model-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.")
-        when /\Atrust project skills/, /\Auntrust project skills/
-          set_project_skills_trusted(!project_skills_trusted?)
-          runtime_output("Project skills #{project_skills_trusted? ? "trusted" : "untrusted"}.")
-        when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
-          set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
-          runtime_output("Workspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.")
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Tools & Search", tools_setting_choices, initial_index)
+          break unless selected
+
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Aenable web search/, /\Adisable web search/
+            set_web_search_enabled(!web_search_enabled?)
+            runtime_output("Web search #{web_search_enabled? ? "enabled" : "disabled"}.")
+          when /\Aweb search provider/
+            configure_web_search_provider
+          when /\Aallow model-provider/, /\Adisallow model-provider/
+            set_web_search_allow_model_providers(!web_search_allow_model_providers?)
+            runtime_output("Model-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.")
+          when /\Atrust project skills/, /\Auntrust project skills/
+            set_project_skills_trusted(!project_skills_trusted?)
+            runtime_output("Project skills #{project_skills_trusted? ? "trusted" : "untrusted"}.")
+          when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
+            set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
+            runtime_output("Workspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.")
+          else
+            break
+          end
         end
       end
 
@@ -459,13 +502,21 @@ module Kward
       end
 
       def configure_context_settings
-        selected = @prompt.select("Context & Compaction", context_setting_choices, title: "Settings")
-        case selected.to_s.downcase
-        when /\Aenable auto-compaction/, /\Adisable auto-compaction/
-          set_compaction_enabled(!compaction_enabled?)
-          runtime_output("Auto-compaction #{compaction_enabled? ? "enabled" : "disabled"}.")
-        else
-          runtime_output(auto_compaction_status_line) if selected.to_s.downcase.start_with?("status")
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Context & Compaction", context_setting_choices, initial_index)
+          break unless selected
+
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Aenable auto-compaction/, /\Adisable auto-compaction/
+            set_compaction_enabled(!compaction_enabled?)
+            runtime_output("Auto-compaction #{compaction_enabled? ? "enabled" : "disabled"}.")
+          when /\Astatus/
+            runtime_output(auto_compaction_status_line)
+          else
+            break
+          end
         end
       end
 
@@ -486,12 +537,20 @@ module Kward
       end
 
       def configure_personalization_settings(conversation)
-        selected = @prompt.select("Personalization", personalization_setting_choices(conversation), title: "Settings")
-        case selected.to_s.downcase
-        when /\Adefault persona/
-          configure_default_persona(conversation)
-        when /\Aactive instructions/
-          show_active_instructions_summary(conversation)
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Personalization", personalization_setting_choices(conversation), initial_index)
+          break unless selected
+
+          initial_index = selected_index if selected_index
+          case selected.to_s.downcase
+          when /\Adefault persona/
+            configure_default_persona(conversation)
+          when /\Aactive instructions/
+            show_active_instructions_summary(conversation)
+          else
+            break
+          end
         end
       end
 
@@ -540,12 +599,18 @@ module Kward
       end
 
       def configure_logging_settings
-        selected = @prompt.select("Logging", logging_setting_choices, title: "Settings")
-        key = logging_key_for_choice(selected)
-        return unless key
+        initial_index = 0
+        loop do
+          selected, selected_index = select_settings_menu_item("Logging", logging_setting_choices, initial_index)
+          break unless selected
 
-        set_logging_value(key, !logging_enabled?(key))
-        runtime_output("Logging #{key.tr("_", " ")} #{logging_enabled?(key) ? "enabled" : "disabled"}.")
+          initial_index = selected_index if selected_index
+          key = logging_key_for_choice(selected)
+          break unless key
+
+          set_logging_value(key, !logging_enabled?(key))
+          runtime_output("Logging #{key.tr("_", " ")} #{logging_enabled?(key) ? "enabled" : "disabled"}.")
+        end
       end
 
       def logging_setting_choices
@@ -595,6 +660,11 @@ module Kward
 
       def update_nested_config(section, values)
         ConfigFiles.update_nested_config(section, values)
+      end
+
+      def select_settings_menu_item(message, choices, initial_index)
+        selected = @prompt.select(message, choices, title: "Settings", initial_index: initial_index)
+        [selected, choices.index(selected)]
       end
 
       def on_off(value)

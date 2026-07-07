@@ -3442,6 +3442,31 @@ edit this prompt"
     input&.close unless input&.closed?
   end
 
+  def test_settings_returns_to_changed_interface_option
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({ "editor" => { "mode" => "modern" } }))
+      prompt = FakeSettingsPrompt.new(
+        ["/settings", "/exit"],
+        ["Interface", "Editor mode (modern)", "vibe", "Back", "Done"]
+      )
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      interface_indices = prompt.select_messages.each_index.select { |index| prompt.select_messages[index] == "Interface" }
+      assert_equal 2, interface_indices.length
+      changed_menu_index = interface_indices.last
+      changed_choices = prompt.select_choices[changed_menu_index]
+      assert_includes changed_choices[prompt.select_initial_indices[changed_menu_index]], "Editor mode"
+      assert_equal prompt.select_choices.first.index("Interface"), prompt.select_initial_indices.last
+    end
+  end
+
   def test_login_slash_command_selects_openai_provider_without_calling_client
     prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["OpenAI"])
     client = RecordingClient.new([])
