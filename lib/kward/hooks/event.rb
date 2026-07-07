@@ -1,5 +1,6 @@
 require "securerandom"
 require "time"
+require_relative "../deep_copy"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -13,12 +14,12 @@ module Kward
         @name = name.to_s
         @phase = phase&.to_s || inferred_phase(@name)
         @timestamp = timestamp.is_a?(Time) ? timestamp.utc : Time.parse(timestamp.to_s).utc
-        @session = deep_freeze(deep_dup(session || {}))
-        @turn = deep_freeze(deep_dup(turn || {}))
-        @workspace = deep_freeze(deep_dup(workspace || {}))
-        @frontend = deep_freeze(deep_dup(frontend || {}))
-        @agent = deep_freeze(deep_dup(agent || {}))
-        @payload = deep_freeze(deep_dup(payload || {}))
+        @session = frozen_copy(session || {})
+        @turn = frozen_copy(turn || {})
+        @workspace = frozen_copy(workspace || {})
+        @frontend = frozen_copy(frontend || {})
+        @agent = frozen_copy(agent || {})
+        @payload = frozen_copy(payload || {})
         freeze
       end
 
@@ -51,27 +52,8 @@ module Kward
         "during"
       end
 
-      def deep_dup(value)
-        case value
-        when Hash
-          value.each_with_object({}) { |(key, item), result| result[key] = deep_dup(item) }
-        when Array
-          value.map { |item| deep_dup(item) }
-        else
-          value.dup
-        end
-      rescue TypeError
-        value
-      end
-
-      def deep_freeze(value)
-        case value
-        when Hash
-          value.each_value { |item| deep_freeze(item) }
-        when Array
-          value.each { |item| deep_freeze(item) }
-        end
-        value.freeze
+      def frozen_copy(value)
+        DeepCopy.freeze(DeepCopy.dup(value))
       end
     end
   end

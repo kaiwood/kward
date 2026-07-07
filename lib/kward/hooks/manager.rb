@@ -1,3 +1,4 @@
+require_relative "../deep_copy"
 require_relative "audit_log"
 require_relative "catalog"
 require_relative "decision"
@@ -59,7 +60,7 @@ module Kward
         decisions = []
         warnings = []
         messages = []
-        payload = deep_dup(event.payload)
+        payload = DeepCopy.dup(event.payload)
 
         handlers_for(event).each do |handler|
           decision = call_handler(handler, event, context)
@@ -69,7 +70,7 @@ module Kward
 
           if decision.modify?
             modifications = Catalog.filter_modifications(event.name, decision.payload)
-            payload = deep_merge(payload, modifications)
+            payload = DeepCopy.merge(payload, modifications)
             event = event_with_payload(event, payload)
           end
 
@@ -152,30 +153,6 @@ module Kward
         )
       end
 
-      def deep_merge(left, right)
-        left = deep_dup(left)
-        right.each do |key, value|
-          left[key] = if left[key].is_a?(Hash) && value.is_a?(Hash)
-                        deep_merge(left[key], value)
-                      else
-                        deep_dup(value)
-                      end
-        end
-        left
-      end
-
-      def deep_dup(value)
-        case value
-        when Hash
-          value.each_with_object({}) { |(key, item), result| result[key] = deep_dup(item) }
-        when Array
-          value.map { |item| deep_dup(item) }
-        else
-          value.dup
-        end
-      rescue TypeError
-        value
-      end
     end
   end
 end

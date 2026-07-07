@@ -4,6 +4,7 @@ require_relative "compactor"
 require_relative "model/context_overflow"
 require_relative "conversation"
 require_relative "events"
+require_relative "deep_copy"
 require_relative "hooks"
 require_relative "steering"
 require_relative "telemetry/logger"
@@ -232,7 +233,7 @@ module Kward
         reasoning: options[:reasoning] || @conversation.reasoning_effort
       }
       before = run_hook("model_request_before", payload: request)
-      request = deep_merge(request, before.payload) if before.decision.modify?
+      request = DeepCopy.merge(request, before.payload) if before.decision.modify?
       return { "role" => "assistant", "content" => hook_denied_answer(before) } if before.denied?
 
       run_hook("turn_model_request_before", payload: request)
@@ -294,31 +295,6 @@ module Kward
 
     def hook_denied_answer(result)
       "Declined: #{result.decision.message || "lifecycle hook denied the operation"}"
-    end
-
-    def deep_merge(left, right)
-      left = deep_dup(left)
-      right.each do |key, value|
-        left[key] = if left[key].is_a?(Hash) && value.is_a?(Hash)
-                      deep_merge(left[key], value)
-                    else
-                      deep_dup(value)
-                    end
-      end
-      left
-    end
-
-    def deep_dup(value)
-      case value
-      when Hash
-        value.each_with_object({}) { |(key, item), result| result[key] = deep_dup(item) }
-      when Array
-        value.map { |item| deep_dup(item) }
-      else
-        value.dup
-      end
-    rescue TypeError
-      value
     end
 
     def claims_file_edit?(text)

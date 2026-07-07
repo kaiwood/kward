@@ -1,4 +1,5 @@
 require_relative "config_files"
+require_relative "deep_copy"
 require_relative "hooks"
 
 # Namespace for the Kward CLI agent runtime.
@@ -54,7 +55,7 @@ module Kward
       #
       # @return [Array<Hash>] immutable transcript message data
       def messages
-        PluginRegistry.deep_freeze(PluginRegistry.deep_dup(@conversation.messages))
+        DeepCopy.freeze(DeepCopy.dup(@conversation.messages))
       end
     end
 
@@ -255,29 +256,6 @@ module Kward
         registry = new(reserved_commands: reserved_commands)
         paths.each { |path| registry.load_file(path) }
         registry
-      end
-
-      def deep_dup(value)
-        case value
-        when Hash
-          value.each_with_object({}) { |(key, item), result| result[key] = deep_dup(item) }
-        when Array
-          value.map { |item| deep_dup(item) }
-        else
-          value.dup
-        end
-      rescue TypeError
-        value
-      end
-
-      def deep_freeze(value)
-        case value
-        when Hash
-          value.each_value { |item| deep_freeze(item) }
-        when Array
-          value.each { |item| deep_freeze(item) }
-        end
-        value.freeze
       end
     end
 
@@ -505,7 +483,7 @@ module Kward
     def transcript_event(type, payload)
       TranscriptEvent.new(
         type: type,
-        payload: PluginRegistry.deep_freeze(PluginRegistry.deep_dup(payload))
+        payload: DeepCopy.freeze(DeepCopy.dup(payload))
       ).freeze
     end
   end
