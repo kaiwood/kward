@@ -244,13 +244,13 @@ module Kward
             alignment = choose_overlay_setting("Overlay alignment", overlay_alignment_choices(settings), ConfigFiles::OVERLAY_ALIGNMENTS)
             next unless alignment
 
-            @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("alignment" => alignment))
+            update_overlay_settings("alignment" => alignment)
           when /\Aoverlay width/
             settings = ConfigFiles.overlay_settings
             width = choose_overlay_setting("Overlay width", overlay_width_choices(settings), ConfigFiles::OVERLAY_WIDTHS)
             next unless width
 
-            @prompt.update_overlay_settings(ConfigFiles.update_overlay_settings("width" => width))
+            update_overlay_settings("width" => width)
           when /\Ashow busy help/, /\Ahide busy help/
             set_composer_busy_help(!composer_busy_help?)
             runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
@@ -762,7 +762,13 @@ module Kward
       end
 
       def settings_overlay_available?
-        @prompt.respond_to?(:select) && @prompt.respond_to?(:update_overlay_settings)
+        @prompt.respond_to?(:select)
+      end
+
+      def update_overlay_settings(values)
+        settings = ConfigFiles.update_overlay_settings(values)
+        @prompt.update_overlay_settings(settings) if @prompt.respond_to?(:update_overlay_settings)
+        settings
       end
 
       def choose_overlay_setting(message, choices, values)

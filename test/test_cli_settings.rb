@@ -1,6 +1,20 @@
 require_relative "test_helper"
 
 class TestCLISettings < KwardTestCase
+  class SelectOnlySettingsPrompt < FakePrompt
+    def initialize(inputs, selections)
+      super(inputs)
+      @selections = selections
+    end
+
+    def select(_message, choices, title: "Settings", custom: false, initial_index: 0, action_keys: {}, action_handlers: {})
+      selection = @selections.shift
+      return nil if selection.nil?
+
+      choices.find { |choice| choice == selection || choice.to_s.start_with?(selection.to_s) } || selection
+    end
+  end
+
   def test_settings_slash_command_reports_unavailable_without_tui_prompt
     prompt = FakePrompt.new(["/settings", "/exit"])
     client = RecordingClient.new([])
@@ -11,6 +25,23 @@ class TestCLISettings < KwardTestCase
 
     assert_includes prompt.output.join("\n"), "Settings overlay is unavailable"
     assert_empty client.seen_messages
+  end
+
+  def test_settings_slash_command_allows_select_only_prompt_for_non_overlay_settings
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      prompt = SelectOnlySettingsPrompt.new(["/settings", "/exit"], ["Memory", "Enable memory", "Back", "Done"])
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal true, JSON.parse(File.read(config_path)).dig("memory", "enabled")
+    end
   end
 
   def test_model_slash_command_reports_unavailable_without_tui_prompt

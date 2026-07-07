@@ -13,6 +13,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Changed `/settings` to require only picker support, with live overlay redraw remaining optional for overlay-specific settings.
 - Changed new default configs to include explicit overlay and web-search defaults while preserving existing behavior for partial configs.
 - Changed interactive `/settings` menus to return to the last changed option instead of resetting to the first settings screen.
 - Changed the saved session picker slash command from `/sessions` to `/session`, kept `/resume` as an alias, and replaced `/name` with `/session name`.
