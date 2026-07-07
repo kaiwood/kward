@@ -136,7 +136,7 @@ class TestCLISettings < KwardTestCase
       workspace_dir = File.join(dir, "workspace")
       FileUtils.mkdir_p(workspace_dir)
       store = Kward::SessionStore.new(config_dir: dir, cwd: workspace_dir)
-      prompt = FakeSettingsPrompt.new(["/name keep", "/model", "/exit"], ["gpt-5.5"])
+      prompt = FakeSettingsPrompt.new(["/session name keep", "/model", "/exit"], ["gpt-5.5"])
       client = FakeClient.new([])
       client.model = "gpt-5.3-codex-spark"
       client.instance_variable_set(:@config_path, config_path)

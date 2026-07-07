@@ -1730,7 +1730,7 @@ class TestCLI < KwardTestCase
   def test_named_empty_session_kept_on_exit
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
-      prompt = FakePrompt.new(["/name Useful", "/exit"])
+      prompt = FakePrompt.new(["/session name Useful", "/exit"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
 
       cli.interactive_loop
@@ -1768,10 +1768,10 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_name_does_not_enter_busy_state
+  def test_session_name_does_not_enter_busy_state
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
-      prompt = BusyPrompt.new(["/name Useful", "/exit"])
+      prompt = BusyPrompt.new(["/session name Useful", "/exit"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
 
       cli.interactive_loop
@@ -1779,6 +1779,33 @@ class TestCLI < KwardTestCase
       refute_includes prompt.events, [:begin_busy_input, "You>", "loading"]
       assert prompt.output.any? { |line| line.include?("Named session: Useful") }
       assert jsonl_records(Dir.glob(File.join(store.session_dir, "*.jsonl")).first).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" }
+    end
+  end
+
+  def test_session_name_without_argument_clears_session_name
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/session name Useful", "/session name", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      assert prompt.output.any? { |line| line.include?("Cleared session name.") }
+      assert_empty Dir.glob(File.join(store.session_dir, "*.jsonl"))
+    end
+  end
+
+  def test_name_is_no_longer_a_builtin_command
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = FakePrompt.new(["/name Useful", "/exit"])
+      client = RecordingClient.new(["reply"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+
+      cli.interactive_loop
+
+      assert_equal "/name Useful", client.seen_messages.first.last[:content]
+      refute prompt.output.any? { |line| line.include?("Named session: Useful") }
     end
   end
 
@@ -1852,7 +1879,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_explicit_session_path_loads_prior_messages
+  def test_session_explicit_session_path_loads_prior_messages
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       saved = store.create
@@ -1860,7 +1887,7 @@ class TestCLI < KwardTestCase
       saved.attach(conversation)
       conversation.append_user("hello")
       conversation.append_assistant("reply")
-      prompt = BannerPrompt.new(["/sessions #{saved.path}", "again", "/exit"])
+      prompt = BannerPrompt.new(["/session #{saved.path}", "again", "/exit"])
       client = RecordingClient.new(["second"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
@@ -2181,7 +2208,7 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       export_path = File.join(store.session_dir, "session.md")
-      prompt = FakePrompt.new(["hello", "/name Draft", "/name Useful", "/clone", "/export #{export_path}", "/exit"])
+      prompt = FakePrompt.new(["hello", "/session name Draft", "/session name Useful", "/clone", "/export #{export_path}", "/exit"])
       client = RecordingClient.new(["reply"])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
@@ -2204,7 +2231,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_clone_action_ignores_missing_inserted_copy
+  def test_session_picker_clone_action_ignores_missing_inserted_copy
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
@@ -2224,7 +2251,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_clone_action_clones_and_keeps_picker_open
+  def test_session_picker_clone_action_clones_and_keeps_picker_open
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
@@ -2232,7 +2259,7 @@ class TestCLI < KwardTestCase
       source.attach(conversation)
       conversation.append_user("saved prompt")
       conversation.append_assistant("saved reply")
-      prompt = FakePrompt.new(["/sessions", "/exit"])
+      prompt = FakePrompt.new(["/session", "/exit"])
       prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
         @clone_result = action_handlers.fetch(action_keys.fetch("c")[:action]).call(choices.first)
         nil
@@ -2254,7 +2281,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_fork_action_opens_fork_prompt_selector
+  def test_session_picker_fork_action_opens_fork_prompt_selector
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
@@ -2264,7 +2291,7 @@ class TestCLI < KwardTestCase
       conversation.append_assistant("kept reply")
       conversation.append_user("saved prompt")
       conversation.append_assistant("saved reply")
-      prompt = FakePrompt.new(["/sessions", "/exit"])
+      prompt = FakePrompt.new(["/session", "/exit"])
       prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
         @select_messages ||= []
         @select_titles ||= []
@@ -2311,7 +2338,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_repeated_fork_action_does_not_escape_as_agent
+  def test_session_picker_repeated_fork_action_does_not_escape_as_agent
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
@@ -2321,7 +2348,7 @@ class TestCLI < KwardTestCase
       conversation.append_assistant("kept reply")
       conversation.append_user("saved prompt")
       conversation.append_assistant("saved reply")
-      prompt = FakePrompt.new(["/sessions"])
+      prompt = FakePrompt.new(["/session"])
       prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
         @select_messages ||= []
         @select_messages << message
@@ -2347,14 +2374,14 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_rename_action_keeps_picker_open
+  def test_session_picker_rename_action_keeps_picker_open
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
       conversation = Kward::Conversation.new
       source.attach(conversation)
       conversation.append_user("saved prompt")
-      prompt = FakePrompt.new(["/sessions", "/exit"])
+      prompt = FakePrompt.new(["/session", "/exit"])
       test = self
       prompt.define_singleton_method(:select) do |message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
         @select_messages ||= []
@@ -2383,14 +2410,14 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_sessions_picker_delete_action_deletes_selected_session
+  def test_session_picker_delete_action_deletes_selected_session
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       source = store.create
       conversation = Kward::Conversation.new
       source.attach(conversation)
       conversation.append_user("saved prompt")
-      prompt = FakePrompt.new(["/sessions", "/exit"])
+      prompt = FakePrompt.new(["/session", "/exit"])
       test = self
       prompt.define_singleton_method(:select) do |_message, choices, title: "Sessions", custom: false, initial_index: 0, action_keys: {}, action_handlers: {}|
         test.assert_equal "Press d again to delete, Esc to cancel.", action_keys.fetch("d")[:confirm]
@@ -3054,7 +3081,7 @@ edit this prompt"
       saved.attach(conversation)
       conversation.append_user("selected session")
       conversation.append_assistant("old reply")
-      prompt = FakeSessionSelectPrompt.new(["/resume #{saved.path}", "/name Useful", "/resume", "/exit"], "Useful")
+      prompt = FakeSessionSelectPrompt.new(["/resume #{saved.path}", "/session name Useful", "/resume", "/exit"], "Useful")
       client = RecordingClient.new([])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 

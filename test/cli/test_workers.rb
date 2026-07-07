@@ -315,6 +315,12 @@ class TestCLIWorkers < KwardTestCase
     assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "login"
   end
 
+  def test_session_is_builtin_slash_command
+    assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "session"
+    refute_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "sessions"
+    refute_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "name"
+  end
+
   def test_workers_show_streams_live_worker_events
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

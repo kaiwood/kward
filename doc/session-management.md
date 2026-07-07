@@ -23,7 +23,7 @@ cd ~/code/project
 kward
 ```
 
-To automatically resume the last active session for the current workspace on startup, enable `sessions.auto_resume` in your config — see [Configuration](configuration.md). When auto-resume is off (the default), Kward starts fresh each time and you can resume earlier work with `/sessions`.
+To automatically resume the last active session for the current workspace on startup, enable `sessions.auto_resume` in your config — see [Configuration](configuration.md). When auto-resume is off (the default), Kward starts fresh each time and you can resume earlier work with `/session`.
 
 ## A normal session workflow
 
@@ -33,7 +33,7 @@ Start a chat and give it a useful name:
 /rename oauth cleanup
 ```
 
-`/rename` requires a name. Use `/name` without an argument to clear the current session name.
+`/rename` requires a name. Use `/session name` without an argument to clear the current session name.
 
 Work normally:
 
@@ -52,19 +52,19 @@ Leave when you are done for now:
 Later, resume the work:
 
 ```text
-/sessions
+/session
 ```
 
 The session picker shows recent sessions for the current workspace. Choose one to restore its transcript and continue with the same context.
 
-`/resume` is an alias for `/sessions`.
+`/resume` is an alias for `/session`.
 
 ## The sessions picker
 
 Open it with:
 
 ```text
-/sessions
+/session
 ```
 
 Inside the picker you can:
@@ -91,7 +91,7 @@ From inside the active session:
 /clone
 ```
 
-Or from `/sessions`, highlight a session and press `c`.
+Or from `/session`, highlight a session and press `c`.
 
 A clone keeps the same conversation so far, but future messages are written to the new session file. The original session remains unchanged.
 
@@ -114,7 +114,7 @@ From inside the active session:
 /fork
 ```
 
-Or from `/sessions`, highlight a session and press `f`.
+Or from `/session`, highlight a session and press `f`.
 
 Kward shows earlier user prompts. Choose the prompt where the new path should begin. Kward creates a new session containing the conversation before that prompt, then pre-fills the selected prompt so you can edit or resubmit it.
 
@@ -228,9 +228,9 @@ This is useful when you want to confirm which session you are in or check whethe
 
 | Need | Use |
 | --- | --- |
-| Continue earlier work | `/sessions` or `/resume` |
+| Continue earlier work | `/session` or `/resume` |
 | Give the current session a better name | `/rename <name>` |
-| Clear the current session name | `/name` |
+| Clear the current session name | `/session name` |
 | Keep the current state but try another future | `/clone` |
 | Start a separate session from before an earlier prompt | `/fork` |
 | Quickly retry an earlier prompt in this session | `/rewind` |

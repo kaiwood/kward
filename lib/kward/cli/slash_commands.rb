@@ -80,38 +80,16 @@ module Kward
           [true, nil]
         when "new"
           [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
-        when "sessions", "resume"
-          unless session_store
-            say_sessions_unavailable
-            return [true, nil]
+        when "session"
+          session_command, session_argument = argument.to_s.split(/\s+/, 2)
+          if session_command == "name"
+            rename_session(session_argument)
+            [true, nil]
+          else
+            [true, open_or_resume_session(session_store, argument)]
           end
-
-          path = argument.to_s.strip
-          if path.empty?
-            sessions = run_busy_local_command_and_requeue { session_store.recent_tree(limit: nil) }
-            path = select_session_path_from_sessions(sessions, session_store: session_store)
-          end
-          replacement_agent = nil
-          selection = path
-          loop do
-            replacement_agent = if selection.respond_to?(:conversation)
-                                  selection
-                                elsif selection.is_a?(Hash) && selection[:action] == :clone
-                                  run_busy_local_command_and_requeue(activity: "cloning") { clone_session_from_path(session_store, selection[:path]) }
-                                elsif selection.is_a?(Hash) && selection[:action] == :fork
-                                  selection = reopen_sessions_after_fork(session_store, selection[:path], selection[:choice_label])
-                                  next
-                                elsif selection.to_s.empty?
-                                  nil
-                                else
-                                  run_busy_local_command_and_requeue { resume_session(session_store, selection) }
-                                end
-            break
-          end
-          [true, replacement_agent]
-        when "name"
-          rename_session(argument)
-          [true, nil]
+        when "resume"
+          [true, open_or_resume_session(session_store, argument)]
         when "rename"
           rename_session(argument, require_name: true)
           [true, nil]
@@ -148,6 +126,36 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def open_or_resume_session(session_store, argument)
+        unless session_store
+          say_sessions_unavailable
+          return nil
+        end
+
+        path = argument.to_s.strip
+        if path.empty?
+          sessions = run_busy_local_command_and_requeue { session_store.recent_tree(limit: nil) }
+          path = select_session_path_from_sessions(sessions, session_store: session_store)
+        end
+
+        selection = path
+        loop do
+          replacement_agent = if selection.respond_to?(:conversation)
+                                selection
+                              elsif selection.is_a?(Hash) && selection[:action] == :clone
+                                run_busy_local_command_and_requeue(activity: "cloning") { clone_session_from_path(session_store, selection[:path]) }
+                              elsif selection.is_a?(Hash) && selection[:action] == :fork
+                                selection = reopen_sessions_after_fork(session_store, selection[:path], selection[:choice_label])
+                                next
+                              elsif selection.to_s.empty?
+                                nil
+                              else
+                                run_busy_local_command_and_requeue { resume_session(session_store, selection) }
+                              end
+          return replacement_agent
+        end
       end
 
       def activate_skill_command(name, agent)

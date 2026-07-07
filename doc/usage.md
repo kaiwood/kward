@@ -135,9 +135,9 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/tab close` | close the active tab. |
 | `/tab new` | open a new tab. |
 | `/tab name <label>` | rename the active tab label. |
-| `/sessions` | open the saved sessions picker or continue a previous session by path. |
-| `/resume` | alias for `/sessions`. |
-| `/name <name>` | name or clear the current session. |
+| `/session` | open the saved sessions picker or continue a previous session by path. |
+| `/resume` | alias for `/session`. |
+| `/session name <name>` | name or clear the current session. |
 | `/rename <name>` | rename the current session. |
 | `/clone` | copy the current session into a new branch. |
 | `/rewind` | revisit an earlier prompt and try a different direction. |
@@ -208,10 +208,10 @@ Typical flow:
 Later:
 
 ```text
-/sessions
+/session
 ```
 
-In the sessions picker, press `r` to rename the highlighted session, `c` to clone it, `f` to fork from an earlier prompt, or `d` twice to delete it. `/resume` remains available as an alias for `/sessions`.
+In the sessions picker, press `r` to rename the highlighted session, `c` to clone it, `f` to fork from an earlier prompt, or `d` twice to delete it. `/resume` remains available as an alias for `/session`.
 
 For the full guide to context management, cloning, forking, rewinding, `/tree`, compaction, and exports, read [Sessions](session-management.md).
 
