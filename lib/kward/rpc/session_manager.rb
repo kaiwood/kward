@@ -35,6 +35,7 @@ require_relative "session_tree"
 require_relative "session_tree_rows"
 require_relative "tool_event_normalizer"
 require_relative "transcript_normalizer"
+require_relative "turn_context"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -342,7 +343,7 @@ module Kward
       def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [], options: {}, context: nil)
         rpc_session = fetch_session(session_id)
         normalized_options = normalize_turn_options(options)
-        normalized_context = normalize_turn_context(context)
+        normalized_context = TurnContext.normalize(context)
         normalized_attachments = normalize_attachments(attachments)
         plugin_command, plugin_arguments = plugin_command_turn(input, normalized_attachments)
         display_input = input.to_s if input.is_a?(String)
@@ -811,79 +812,10 @@ module Kward
         AttachmentNormalizer.new(max_bytes: RPC_ATTACHMENT_MAX_BYTES, mime_types: RPC_IMAGE_MIME_TYPES).normalize(attachments)
       end
 
-      def normalize_turn_context(context)
-        return nil if context.nil?
-        raise ArgumentError, "turn context must be an object" unless context.is_a?(Hash)
-
-        active_file = blank_to_nil(option_value(context, "activeFile"))
-        open_files = option_array(context, "openFiles")
-        selection = normalize_context_selection(option_value(context, "selection"))
-        diagnostics = normalize_context_diagnostics(option_value(context, "diagnostics"))
-        normalized = { active_file: active_file, open_files: open_files, selection: selection, diagnostics: diagnostics }.compact
-        normalized.empty? ? nil : normalized
-      end
-
-      def normalize_context_selection(selection)
-        return nil if selection.nil?
-        raise ArgumentError, "context.selection must be an object" unless selection.is_a?(Hash)
-
-        normalized = {
-          path: blank_to_nil(option_value(selection, "path")),
-          start_line: integer_or_nil(option_value(selection, "startLine")),
-          end_line: integer_or_nil(option_value(selection, "endLine")),
-          text: blank_to_nil(option_value(selection, "text"))
-        }.compact
-        normalized.empty? ? nil : normalized
-      end
-
-      def normalize_context_diagnostics(diagnostics)
-        return nil if diagnostics.nil?
-        raise ArgumentError, "context.diagnostics must be an array" unless diagnostics.is_a?(Array)
-
-        diagnostics.filter_map do |diagnostic|
-          next unless diagnostic.is_a?(Hash)
-
-          {
-            path: blank_to_nil(option_value(diagnostic, "path")),
-            line: integer_or_nil(option_value(diagnostic, "line")),
-            severity: blank_to_nil(option_value(diagnostic, "severity")),
-            message: blank_to_nil(option_value(diagnostic, "message"))
-          }.compact
-        end
-      end
-
-      def integer_or_nil(value)
-        return nil if value.nil? || value.to_s.empty?
-
-        Integer(value)
-      rescue ArgumentError, TypeError
-        nil
-      end
-
       def turn_input_with_context(input, context)
         return input unless context
 
-        [input.to_s, client_context_prompt(context)].reject(&:empty?).join("\n\n")
-      end
-
-      def client_context_prompt(context)
-        lines = ["Additional client context:"]
-        lines << "- Active file: #{context[:active_file]}" if context[:active_file]
-        lines << "- Open files: #{context[:open_files].join(", ")}" if context[:open_files]&.any?
-        if context[:selection]
-          selection = context[:selection]
-          location = [selection[:path], [selection[:start_line], selection[:end_line]].compact.join("-")].compact.reject(&:empty?).join(":")
-          lines << "- Selection: #{location}" unless location.empty?
-          lines << "```\n#{selection[:text]}\n```" if selection[:text]
-        end
-        Array(context[:diagnostics]).each do |diagnostic|
-          next if diagnostic.empty?
-
-          location = [diagnostic[:path], diagnostic[:line]].compact.join(":")
-          severity = diagnostic[:severity] ? "#{diagnostic[:severity]} " : ""
-          lines << "- Diagnostic: #{severity}#{location} #{diagnostic[:message]}".strip
-        end
-        lines.join("\n")
+        [input.to_s, TurnContext.prompt(context)].reject(&:empty?).join("\n\n")
       end
 
       def normalize_turn_options(options)
