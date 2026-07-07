@@ -108,7 +108,7 @@ class TestRPCServer < KwardTestCase
     detailed_groups = %w[transcript sessions turns events attachments models runtime lifecycleHooks runtimeSettings auth commands mcp startupResources extensionUi composer security export logging workers shell scratchpad stability]
     detailed_groups.each { |group| assert capabilities.key?(group), "missing capability group #{group}" }
 
-    assert_equal "tauren-transcript-v1", capabilities["transcript"]["format"]
+    assert_equal "kward-transcript-v1", capabilities["transcript"]["format"]
     assert_equal true, capabilities["transcript"]["messagesNormalized"]
     assert_equal true, capabilities["transcript"]["supportsCompactionSummaries"]
     assert_equal true, capabilities["transcript"]["supportsReasoningRestore"]
@@ -175,7 +175,7 @@ class TestRPCServer < KwardTestCase
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]
     assert_equal true, capabilities["auth"]["supported"]
-    assert_equal "tauren-auth-v1", capabilities["auth"]["providerFormat"]
+    assert_equal "kward-auth-v1", capabilities["auth"]["providerFormat"]
     assert_equal ["openai", "anthropic", "github"], capabilities["auth"]["oauthProviders"]
     assert_equal "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet.", capabilities["auth"].dig("unsupportedOAuthProviders", "github")
     assert_equal ["openrouter"], capabilities["auth"]["apiKeyProviders"]

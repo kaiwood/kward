@@ -2,7 +2,7 @@
 module Kward
   # JSON-RPC backend namespace used by UI clients.
   module RPC
-    # Builders for Tauren-compatible runtime state payloads.
+    # Builders for frontend-neutral runtime state payloads.
     module RuntimePayloads
       module_function
 

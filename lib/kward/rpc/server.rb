@@ -372,7 +372,7 @@ module Kward
         {
           framing: "content-length",
           transcript: {
-            format: "tauren-transcript-v1",
+            format: "kward-transcript-v1",
             messagesNormalized: true,
             supportsImages: true,
             supportsToolCalls: true,
@@ -390,7 +390,7 @@ module Kward
             fork: { supported: true, methods: SESSION_METHODS.values_at(6, 7), entryIdFormat: "entry-id", selectedMessage: "excludedFromForkComposerTextReturned" },
             compact: { supported: true, method: SESSION_METHODS[5], notification: SESSION_EVENT_NOTIFICATION, events: ["compactionStart", "compactionEnd"] },
             import: { supported: false },
-            tree: { supported: true, method: SESSION_METHODS[8], labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "tauren-tree-items-v1" },
+            tree: { supported: true, method: SESSION_METHODS[8], labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "kward-tree-items-v1" },
             updates: { supported: false, notification: SESSION_UPDATED_NOTIFICATION }
           },
           turns: {
@@ -476,7 +476,7 @@ module Kward
           },
           auth: {
             supported: true,
-            providerFormat: "tauren-auth-v1",
+            providerFormat: "kward-auth-v1",
             methods: AUTH_METHODS,
             oauthProviders: ["openai", "anthropic", "github"],
             unsupportedOAuthProviders: { github: "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet." },

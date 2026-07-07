@@ -5,8 +5,8 @@ module Kward
   # Kward stores transcript entries as plain hashes because model payloads,
   # JSONL sessions, plugins, and RPC normalizers all need to pass them around
   # without framework objects. Restored sessions may contain either symbol keys,
-  # string keys, or Tauren-style camelCase aliases. `MessageAccess` centralizes
-  # those lookup rules so callers do not grow one-off compatibility branches.
+  # string keys, or camelCase aliases. `MessageAccess` centralizes those lookup
+  # rules so callers do not grow one-off compatibility branches.
   module MessageAccess
     module_function
 

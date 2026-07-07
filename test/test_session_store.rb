@@ -517,7 +517,7 @@ class TestSessionStore < KwardTestCase
     end
   end
 
-  def test_tool_execution_end_record_matches_tauren_session_diff_shape
+  def test_tool_execution_end_record_matches_session_diff_shape
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       session = store.create

@@ -13,7 +13,7 @@ module Kward
     # this class owns only the mechanics of flattening tree nodes into the row
     # fields sent over JSON-RPC. Keeping row presentation here prevents the RPC
     # session coordinator from accumulating rendering details while preserving the
-    # exact Tauren-compatible payload shape.
+    # exact RPC payload shape.
     class SessionTreeRows
       # @param roots [Array<Hash>] tree roots returned by `SessionStore#session_tree`
       # @param current_leaf [String, nil] active persisted tree leaf id

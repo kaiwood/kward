@@ -45,11 +45,11 @@ Result fields:
 - `protocolVersion`: currently `1`.
 - `serverName`: `"kward"`.
 - `experimental`: `false`.
-- `capabilities`: includes Tauren-compatible capability groups.
+- `capabilities`: includes frontend-neutral capability groups.
 
 Detailed capability fields include:
 
-- `transcript`: Tauren transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
+- `transcript`: Kward transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, active live-session discovery, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
 - `turns`: async turn mode, per-session concurrency, active/recent turn listing, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope/tool approval, and structured client context for editor integrations.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
@@ -58,7 +58,7 @@ Detailed capability fields include:
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `lifecycleHooks`: supported lifecycle hook events, decisions, command/plugin/workspace/HTTP/async hook availability, audit log path, hook approval routing through tool approval, and hook notifications (`hook/event`, `hook/message`).
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
-- `auth`: Tauren auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
+- `auth`: Kward auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. MCP resources, prompts, sampling, and Streamable HTTP are explicitly unsupported for now.
@@ -252,7 +252,7 @@ Params:
 
 - `sessionId`
 
-Returns the full branching session tree as flattened Tauren-compatible rows (`tauren-tree-items-v1`). Each row includes `entryId`, `parentId`, `role`, `text` (compact display text), `current` (whether it is the active leaf), `depth`, `isLast`, `ancestorContinues`, `activePath`, `selectable`, `label`, `labelTimestamp`, and `prefix` (tree-drawing connector string). User-message entries are selectable; assistant/tool entries are not.
+Returns the full branching session tree as flattened frontend-neutral rows (`kward-tree-items-v1`). Each row includes `entryId`, `parentId`, `role`, `text` (compact display text), `current` (whether it is the active leaf), `depth`, `isLast`, `ancestorContinues`, `activePath`, `selectable`, `label`, `labelTimestamp`, and `prefix` (tree-drawing connector string). User-message entries are selectable; assistant/tool entries are not.
 
 ### `sessions/tree/setLabel`
 
@@ -374,7 +374,7 @@ Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFi
 
 `steeringApplied` is emitted after queued steering input has been appended to conversation context. Its payload includes `count`, the number of steering messages applied.
 
-`toolCall`, `toolUpdate`, and `toolResult` payloads include canonical Tauren-normalized fields:
+`toolCall`, `toolUpdate`, and `toolResult` payloads include canonical Kward-normalized fields:
 
 - `toolCallId`: tool call ID.
 - `toolName`: normalized tool name, such as `read`, `edit`, `write`, or `bash`.
@@ -455,7 +455,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns Tauren-compatible runtime state for the session, including session file, persisted session ID/name, active `rpcSessionId`, `persistentSessionId`, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. Clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. Unsupported runtime settings are returned as false or omitted.
+Returns frontend-neutral runtime state for the session, including session file, persisted session ID/name, active `rpcSessionId`, `persistentSessionId`, current model metadata, current thinking level, streaming/pending-message state, and stable Kward defaults. Clients must send the active RPC session `id`/`rpcSessionId` in RPC request params. Unsupported runtime settings are returned as false or omitted.
 
 ### `runtime/stats`
 
@@ -680,7 +680,7 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns Tauren-compatible slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
+Returns frontend-neutral slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
 
 ### `resources/startup`
 
@@ -727,7 +727,7 @@ Returns whether OpenAI OAuth, Anthropic OAuth, OpenAI access token env, and Open
 
 ### `auth/providers`
 
-Returns Tauren-compatible provider cards for OpenAI OAuth, Anthropic OAuth, OpenRouter API-key auth, and GitHub/Copilot status. Provider cards report whether credentials are configured, whether they came from stored config or environment variables, and whether stored credentials can be removed.
+Returns frontend-neutral provider cards for OpenAI OAuth, Anthropic OAuth, OpenRouter API-key auth, and GitHub/Copilot status. Provider cards report whether credentials are configured, whether they came from stored config or environment variables, and whether stored credentials can be removed.
 
 ### `auth/loginWithApiKey`
 
