@@ -46,6 +46,7 @@ end
 
 task default: :test
 
+desc "Run the full test suite"
 task :test do
   ruby "-Itest", "-e", 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }'
 end
