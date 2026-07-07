@@ -11,6 +11,7 @@ require_relative "../conversation"
 require_relative "../events"
 require_relative "../export_path"
 require_relative "../memory/manager"
+require_relative "../memory/turn_context"
 require_relative "../message_access"
 require_relative "../message_text"
 require_relative "../session_tree_tool_display"
@@ -1179,11 +1180,7 @@ module Kward
       end
 
       def prepare_memory_context(conversation, input)
-        manager = memory_manager
-        retrieval = manager.retrieve_relevant(input: input, workspace_root: conversation.workspace_root)
-        conversation.last_memory_retrieval = retrieval
-        conversation.memory_context = manager.memory_block(retrieval)
-        conversation.refresh_system_message!
+        Memory::TurnContext.apply(conversation: conversation, input: input, manager: memory_manager)
       rescue StandardError => e
         @server.log_error(e)
         nil

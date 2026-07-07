@@ -102,11 +102,7 @@ module Kward
       end
 
       def prepare_memory_context(conversation, input)
-        manager = Memory::Manager.new
-        retrieval = manager.retrieve_relevant(input: input, workspace_root: conversation.workspace_root)
-        conversation.last_memory_retrieval = retrieval
-        conversation.memory_context = manager.memory_block(retrieval)
-        conversation.refresh_system_message!
+        Memory::TurnContext.apply(conversation: conversation, input: input)
       rescue StandardError => e
         warn "Memory retrieval failed: #{e.message}"
         nil

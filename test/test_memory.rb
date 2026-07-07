@@ -1,5 +1,6 @@
 require_relative "test_helper"
 require_relative "../lib/kward/memory/manager"
+require_relative "../lib/kward/memory/turn_context"
 
 class MemoryManagerTest < KwardTestCase
   def setup
@@ -351,6 +352,18 @@ class MemoryManagerTest < KwardTestCase
     assert_equal File.join(@dir, "memory", "core.json"), manager.paths["core"]
     assert_equal File.join(@dir, "memory", "soft.jsonl"), manager.paths["soft"]
     assert_equal File.join(@dir, "memory", "events.jsonl"), manager.paths["events"]
+  end
+
+  def test_turn_context_applies_retrieved_memory_to_conversation
+    @manager.enable
+    @manager.add_core("The user prefers focused tests.")
+    conversation = Kward::Conversation.new(workspace_root: @dir)
+
+    retrieval = Kward::Memory::TurnContext.apply(conversation: conversation, input: "How should I verify this?", manager: @manager)
+
+    assert_equal retrieval, conversation.last_memory_retrieval
+    assert_includes conversation.memory_context, "The user prefers focused tests."
+    assert_includes conversation.system_message[:content], "The user prefers focused tests."
   end
 
   def test_summarize_conversation_persists_session_memories_from_user_messages
