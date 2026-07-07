@@ -26,6 +26,11 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("editor", "bar_cursor")
       assert_equal "absolute", config.dig("editor", "line_numbers")
       assert_equal "auto", config.dig("editor", "diff_view")
+      assert_equal "center", config.dig("overlay", "alignment")
+      assert_equal "maximum", config.dig("overlay", "width")
+      assert_equal true, config.dig("web_search", "enabled")
+      assert_equal "auto", config.dig("web_search", "provider")
+      assert_equal false, config.dig("web_search", "allow_model_providers")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config.dig("skills", "trust_project")
       assert_equal false, config["enforce_workspace_agents_file"]

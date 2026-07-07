@@ -205,7 +205,7 @@ Use environment variables for temporary or local-only secrets when possible. If 
 
 ## Overlay settings
 
-Overlay settings control terminal picker/card layout:
+Overlay settings control terminal picker/card layout. New default configs include this section, and partial existing configs use the same defaults for missing keys:
 
 ```json
 {
@@ -219,6 +219,22 @@ Overlay settings control terminal picker/card layout:
 `alignment` can be `left`, `center`, or `right`. `width` can be `maximum` to match the composer width or `capped` for a compact card.
 
 You can change these interactively with `/settings`.
+
+## Web search settings
+
+New default configs enable web search with the automatic provider order:
+
+```json
+{
+  "web_search": {
+    "enabled": true,
+    "provider": "auto",
+    "allow_model_providers": false
+  }
+}
+```
+
+Existing configs without `web_search` keep the same behavior: web search is enabled, the provider is `auto`, and model-provider fallbacks are disabled unless explicitly enabled.
 
 ## Composer settings
 

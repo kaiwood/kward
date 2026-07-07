@@ -121,6 +121,12 @@ module Kward
           "line_numbers" => "absolute",
           "diff_view" => "auto"
         },
+        "overlay" => DEFAULT_OVERLAY_SETTINGS.dup,
+        "web_search" => {
+          "enabled" => true,
+          "provider" => "auto",
+          "allow_model_providers" => false
+        },
         "sessions" => {
           "auto_resume" => false
         },
@@ -490,7 +496,7 @@ module Kward
       raise "Overlay settings must be an object" unless values.is_a?(Hash)
 
       config = read_config
-      overlay = config["overlay"].is_a?(Hash) ? config["overlay"].dup : {}
+      overlay = overlay_settings(config)
       values.each do |key, value|
         key = key.to_s
         value = value.to_s
