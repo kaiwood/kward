@@ -8,6 +8,7 @@ require_relative "../cancellation"
 require_relative "../config_files"
 require_relative "../openrouter_model_cache"
 require_relative "context_overflow"
+require_relative "copilot_models"
 require_relative "model_info"
 require_relative "payloads"
 require_relative "../telemetry/logger"
@@ -547,8 +548,7 @@ module Kward
     end
 
     def copilot_supported_model?(model)
-      text = model.to_s
-      copilot_responses_model?(text) || text.match?(/\A(?:gemini-|gpt-4\.1|oswe-)/)
+      CopilotModels.supported?(model)
     end
 
     def fetch_copilot_models
@@ -566,31 +566,9 @@ module Kward
       response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) { |http| http.request(request) }
       return [] unless response.is_a?(Net::HTTPSuccess)
 
-      @copilot_models = parse_copilot_models(response.body)
+      @copilot_models = CopilotModels.parse(response.body)
     rescue StandardError
       []
-    end
-
-    def parse_copilot_models(body)
-      model_catalog_entries(body).filter_map do |entry|
-        copilot_model_id(entry)
-      end.uniq
-    rescue JSON::ParserError
-      []
-    end
-
-    def model_catalog_entries(body)
-      data = JSON.parse(body.to_s)
-      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
-      Array(entries)
-    end
-
-    def copilot_model_id(entry)
-      return entry.to_s.strip unless entry.is_a?(Hash)
-      return nil if entry.key?("model_picker_enabled") && entry["model_picker_enabled"] == false
-
-      id = entry["id"] || entry["model"] || entry["name"]
-      id.to_s.strip unless id.to_s.strip.empty?
     end
 
     def copilot_responses_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
