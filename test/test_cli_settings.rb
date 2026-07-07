@@ -253,7 +253,7 @@ class TestCLISettings < KwardTestCase
       File.write(config_path, JSON.dump({ "openai_model" => "existing" }))
       prompt = FakeSettingsPrompt.new(
         ["/settings", "/exit"],
-        ["Interface", "Overlay alignment", "Right", "Interface", "Overlay width", "Maximum", "Done"]
+        ["Interface", "Overlay alignment", "Right", "Overlay width", "Maximum", "Back", "Done"]
       )
       client = RecordingClient.new([])
       agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
@@ -267,7 +267,7 @@ class TestCLISettings < KwardTestCase
       assert_equal "existing", config["openai_model"]
       assert_equal({ "alignment" => "right", "width" => "maximum" }, config["overlay"])
       assert_equal [{ "alignment" => "right", "width" => "maximum" }, { "alignment" => "right", "width" => "maximum" }], prompt.overlay_settings_updates
-      assert_equal ["Settings category", "Interface", "Overlay alignment", "Settings category", "Interface", "Overlay width", "Settings category"], prompt.select_messages
+      assert_equal ["Settings category", "Interface", "Overlay alignment", "Interface", "Overlay width", "Interface", "Settings category"], prompt.select_messages
       assert_equal ["Settings", "Settings", "Settings", "Settings", "Settings", "Settings", "Settings"], prompt.select_titles
     end
   end
@@ -279,11 +279,10 @@ class TestCLISettings < KwardTestCase
       prompt = FakeSettingsPrompt.new(
         ["/settings", "/exit"],
         [
-          "Memory", "Enable memory",
-          "Tools & Search", "Disable web search",
-          "Tools & Search", "Trust project skills",
-          "Context & Compaction", "Disable auto-compaction",
-          "Logging", "Enable local logging",
+          "Memory", "Enable memory", "Back",
+          "Tools & Search", "Disable web search", "Trust project skills", "Back",
+          "Context & Compaction", "Disable auto-compaction", "Back",
+          "Logging", "Enable local logging", "Back",
           "Done"
         ]
       )

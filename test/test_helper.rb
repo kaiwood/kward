@@ -439,7 +439,13 @@ class KwardTestCase < Minitest::Test
       @select_choices << choices
       @select_titles << title
       @select_initial_indices << initial_index
-      @selections.shift
+      selection = @selections.shift
+      return selection if custom || selection.nil?
+
+      matched = choices.find { |choice| choice == selection || choice.to_s.start_with?(selection.to_s) }
+      raise "FakeSettingsPrompt selection not found for #{message}: #{selection.inspect}" unless matched
+
+      matched
     end
 
     def update_overlay_settings(settings)
