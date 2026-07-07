@@ -69,8 +69,7 @@ module Kward
     end
 
     def self.truncate_text(text)
-      normalized = text.to_s.gsub(/\s+/, " ").strip
-      normalized.length > 120 ? "#{normalized.slice(0, 117)}..." : normalized
+      MessageText.truncate_preview(text)
     end
 
     private

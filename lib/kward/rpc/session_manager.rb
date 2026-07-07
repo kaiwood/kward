@@ -754,12 +754,7 @@ module Kward
       end
 
       def display_message_text(message)
-        truncate_tree_text(full_message_text(message))
-      end
-
-      def truncate_tree_text(text)
-        normalized = text.to_s.gsub(/\s+/, " ").strip
-        normalized.length > 120 ? "#{normalized.slice(0, 117)}..." : normalized
+        MessageText.preview(message)
       end
 
       def full_message_text(message)

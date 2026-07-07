@@ -28,6 +28,20 @@ module Kward
       content_text(MessageAccess.content(message)).strip
     end
 
+    # Returns compact one-line text for session tree and list previews.
+    #
+    # @param message [Hash] persisted conversation message
+    # @param length [Integer] maximum preview length
+    # @return [String] whitespace-normalized text, truncated with ellipsis
+    def preview(message, length: 120)
+      text = if MessageAccess.role(message) == "compactionSummary"
+               MessageAccess.summary(message).to_s
+             else
+               full_text(message)
+             end
+      truncate_preview(text, length: length)
+    end
+
     # Converts message content into plain text without applying display-content
     # overrides.
     #
@@ -40,6 +54,11 @@ module Kward
       else
         content.to_s
       end
+    end
+
+    def truncate_preview(text, length: 120)
+      normalized = text.to_s.gsub(/\s+/, " ").strip
+      normalized.length > length ? "#{normalized.slice(0, length - 3)}..." : normalized
     end
   end
 end

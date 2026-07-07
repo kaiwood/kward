@@ -6,6 +6,7 @@ require "time"
 require_relative "config_files"
 require_relative "conversation"
 require_relative "message_access"
+require_relative "message_text"
 require_relative "private_file"
 require_relative "rpc/tool_event_normalizer"
 require_relative "tools/tool_call"
@@ -907,23 +908,8 @@ module Kward
       MessageAccess.content(message)
     end
 
-    def message_display_content(message)
-      MessageAccess.display_content(message)
-    end
-
     def message_text(message)
-      return MessageAccess.summary(message).to_s.gsub(/\s+/, " ").strip.slice(0, 120) if message_role(message) == "compactionSummary"
-
-      display_content = message_display_content(message)
-      return display_content.to_s.gsub(/\s+/, " ").strip.slice(0, 120) unless display_content.nil?
-
-      content = message_content(message)
-      text = if content.is_a?(Array)
-               content.filter_map { |part| part["text"] || part[:text] }.join(" ")
-             else
-               content.to_s
-             end
-      text.gsub(/\s+/, " ").strip.slice(0, 120)
+      MessageText.preview(message)
     end
 
     def parse_time(value)

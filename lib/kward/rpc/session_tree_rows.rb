@@ -132,11 +132,11 @@ module Kward
       end
 
       def display_message_text(message)
-        SessionTreeNodes.truncate_text(MessageText.full_text(message))
+        MessageText.preview(message)
       end
 
       def truncate_tree_text(text)
-        SessionTreeNodes.truncate_text(text)
+        MessageText.truncate_preview(text)
       end
     end
   end
