@@ -188,14 +188,12 @@ module Kward
           text = plain_content(content).to_s
           blocks << { type: "text", text: text } unless text.empty?
           MessageAccess.tool_calls(message).each do |tool_call|
-            function = tool_call[:function] || tool_call["function"] || {}
-            name = function[:name] || function["name"]
-            arguments = function[:arguments] || function["arguments"] || "{}"
+            name = ToolCall.name(tool_call)
             blocks << {
               type: "tool_use",
-              id: normalize_anthropic_tool_call_id(tool_call[:id] || tool_call["id"] || "call_#{name}"),
+              id: normalize_anthropic_tool_call_id(ToolCall.id(tool_call) || "call_#{name}"),
               name: claude_code_tool_name(name),
-              input: parse_tool_arguments(arguments)
+              input: parse_tool_arguments(ToolCall.raw_arguments(tool_call) || "{}")
             }
           end
           output << { role: "assistant", content: blocks } unless blocks.empty?
@@ -260,11 +258,11 @@ module Kward
     end
 
     def anthropic_tool_schema(tool)
-      function = tool[:function] || tool["function"] || {}
-      schema = function[:parameters] || function["parameters"] || {}
+      function = ToolCall.function(tool)
+      schema = ToolCall.value(function, :parameters) || {}
       {
-        name: claude_code_tool_name(function[:name] || function["name"]),
-        description: function[:description] || function["description"] || "",
+        name: claude_code_tool_name(ToolCall.value(function, :name)),
+        description: ToolCall.value(function, :description) || "",
         input_schema: {
           type: "object",
           properties: schema[:properties] || schema["properties"] || {},
@@ -296,12 +294,12 @@ module Kward
             content = plain_content(content)
             input << codex_message("assistant", content.to_s) unless content.to_s.empty?
             MessageAccess.tool_calls(message).each do |tool_call|
-              function = tool_call[:function] || tool_call["function"] || {}
+              name = ToolCall.name(tool_call)
               input << {
                 type: "function_call",
-                call_id: tool_call[:id] || tool_call["id"] || function[:name] || function["name"] || "tool-call",
-                name: function[:name] || function["name"],
-                arguments: function[:arguments] || function["arguments"] || "{}"
+                call_id: ToolCall.id(tool_call) || name || "tool-call",
+                name: name,
+                arguments: ToolCall.raw_arguments(tool_call) || "{}"
               }
             end
           else
@@ -420,12 +418,12 @@ module Kward
     end
 
     def codex_tool_schema(tool)
-      function = tool[:function] || tool["function"] || {}
+      function = ToolCall.function(tool)
       {
         type: "function",
-        name: function[:name] || function["name"],
-        description: function[:description] || function["description"] || "",
-        parameters: function[:parameters] || function["parameters"] || {},
+        name: ToolCall.value(function, :name),
+        description: ToolCall.value(function, :description) || "",
+        parameters: ToolCall.value(function, :parameters) || {},
         strict: false
       }
     end
