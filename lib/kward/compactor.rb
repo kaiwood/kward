@@ -134,13 +134,11 @@ module Kward
       end
 
       def tool_call_name(tool_call)
-        function = value(tool_call, :function) || {}
-        value(function, :name)
+        ToolCall.name(tool_call)
       end
 
       def tool_call_arguments(tool_call)
-        function = value(tool_call, :function) || {}
-        arguments = value(function, :arguments)
+        arguments = ToolCall.raw_arguments(tool_call)
         arguments.is_a?(Hash) ? JSON.dump(arguments) : arguments.to_s
       end
 
@@ -324,17 +322,15 @@ module Kward
       end
 
       def tool_call_id(tool_call)
-        tool_call["id"] || tool_call[:id]
+        ToolCall.id(tool_call)
       end
 
       def tool_call_name(tool_call)
-        function = tool_call["function"] || tool_call[:function] || {}
-        function["name"] || function[:name] || "unknown_tool"
+        ToolCall.name(tool_call) || "unknown_tool"
       end
 
       def tool_call_args(tool_call)
-        function = tool_call["function"] || tool_call[:function] || {}
-        ToolCall.parse_arguments(function["arguments"] || function[:arguments])
+        ToolCall.arguments(tool_call)
       end
 
       def tool_command(tool_call)

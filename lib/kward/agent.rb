@@ -8,6 +8,7 @@ require_relative "hooks"
 require_relative "steering"
 require_relative "telemetry/logger"
 require_relative "tools/registry"
+require_relative "tools/tool_call"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -170,7 +171,7 @@ module Kward
 
     def log_tool(tool_call, content:, duration_ms:, status:, error:)
       payload = {
-        "tool_name" => tool_name(tool_call),
+        "tool_name" => ToolCall.name(tool_call),
         "duration_ms" => duration_ms,
         "status" => status,
         "result_bytes" => content.to_s.bytesize
@@ -184,11 +185,6 @@ module Kward
       return unless error
 
       @telemetry_logger.log("errors", event, payload.merge(TelemetryLogger.error_payload(error)))
-    end
-
-    def tool_name(tool_call)
-      function = tool_call["function"] || tool_call[:function] || {}
-      function["name"] || function[:name]
     end
 
     def auto_compact_if_needed

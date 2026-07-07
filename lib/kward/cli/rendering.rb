@@ -183,7 +183,7 @@ module Kward
       end
 
       def tool_call_id(tool_call)
-        tool_call["id"] || tool_call[:id]
+        ToolCall.id(tool_call)
       end
 
       # Writes the user transcript output for the terminal CLI flow.
