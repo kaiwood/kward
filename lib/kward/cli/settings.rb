@@ -190,11 +190,11 @@ module Kward
           initial_index = selected_index if selected_index
           case selected.to_s.downcase
           when /\Aenable memory/, /\Adisable memory/
-            set_memory_enabled(!memory_enabled?)
+            set_config_flag("memory", "enabled", !memory_enabled?)
             conversation&.refresh_system_message!
             runtime_output("Memory #{memory_enabled? ? "enabled" : "disabled"}.")
           when /\Aenable auto-summary/, /\Adisable auto-summary/
-            set_memory_auto_summary_enabled(!memory_auto_summary_enabled?)
+            set_config_flag("memory", "auto_summary", !memory_auto_summary_enabled?)
             runtime_output("Memory auto-summary #{memory_auto_summary_enabled? ? "enabled" : "disabled"}.")
           when /\Amanage/
             runtime_output("Use /memory enable|disable|auto-summary enable|disable|core <text>|add <text>|list|forget <id>|promote <id>|relax <id>|inspect|why|summarize.")
@@ -221,14 +221,6 @@ module Kward
       def memory_auto_summary_enabled?
         memory = safely_read_config.to_h["memory"]
         memory.is_a?(Hash) && memory["auto_summary"] == true
-      end
-
-      def set_memory_enabled(enabled)
-        update_nested_config("memory", "enabled" => enabled)
-      end
-
-      def set_memory_auto_summary_enabled(enabled)
-        update_nested_config("memory", "auto_summary" => enabled)
       end
 
       def configure_interface_settings
@@ -263,16 +255,16 @@ module Kward
           when /\Adiff view/
             configure_diff_view
           when /\Aenable auto-close pairs/, /\Adisable auto-close pairs/
-            set_editor_auto_close_pairs_enabled(!editor_auto_close_pairs_enabled?)
+            set_config_flag("editor", "auto_close_pairs", !editor_auto_close_pairs_enabled?)
             runtime_output("Editor auto-close pairs #{editor_auto_close_pairs_enabled? ? "enabled" : "disabled"}.")
           when /\Aenable soft-wrap/, /\Adisable soft-wrap/
-            set_editor_soft_wrap_enabled(!editor_soft_wrap_enabled?)
+            set_config_flag("editor", "soft_wrap", !editor_soft_wrap_enabled?)
             runtime_output("Editor soft-wrap #{editor_soft_wrap_enabled? ? "enabled" : "disabled"}.")
           when /\Aenable bar cursor/, /\Adisable bar cursor/
-            set_editor_bar_cursor_enabled(!editor_bar_cursor_enabled?)
+            set_config_flag("editor", "bar_cursor", !editor_bar_cursor_enabled?)
             runtime_output("Editor bar cursor #{editor_bar_cursor_enabled? ? "enabled" : "disabled"}.")
           when /\Aenable session auto-resume/, /\Adisable session auto-resume/
-            set_session_auto_resume_enabled(!session_auto_resume_enabled?)
+            set_config_flag("sessions", "auto_resume", !session_auto_resume_enabled?)
             runtime_output("Session auto-resume #{session_auto_resume_enabled? ? "enabled" : "disabled"}.")
           else
             break
@@ -385,24 +377,12 @@ module Kward
         ConfigFiles.editor_auto_close_pairs?(safely_read_config.to_h)
       end
 
-      def set_editor_auto_close_pairs_enabled(enabled)
-        update_nested_config("editor", "auto_close_pairs" => enabled)
-      end
-
       def editor_soft_wrap_enabled?
         ConfigFiles.editor_soft_wrap?(safely_read_config.to_h)
       end
 
-      def set_editor_soft_wrap_enabled(enabled)
-        update_nested_config("editor", "soft_wrap" => enabled)
-      end
-
       def editor_bar_cursor_enabled?
         ConfigFiles.editor_bar_cursor?(safely_read_config.to_h)
-      end
-
-      def set_editor_bar_cursor_enabled(enabled)
-        update_nested_config("editor", "bar_cursor" => enabled)
       end
 
       def session_auto_resume_enabled?
@@ -410,11 +390,7 @@ module Kward
       end
 
       def set_composer_busy_help(enabled)
-        update_nested_config("composer", "busy_help" => enabled)
-      end
-
-      def set_session_auto_resume_enabled(enabled)
-        update_nested_config("sessions", "auto_resume" => enabled)
+        set_config_flag("composer", "busy_help", enabled)
       end
 
       def configure_tools_settings
@@ -426,18 +402,18 @@ module Kward
           initial_index = selected_index if selected_index
           case selected.to_s.downcase
           when /\Aenable web search/, /\Adisable web search/
-            set_web_search_enabled(!web_search_enabled?)
+            set_config_flag("web_search", "enabled", !web_search_enabled?)
             runtime_output("Web search #{web_search_enabled? ? "enabled" : "disabled"}.")
           when /\Aweb search provider/
             configure_web_search_provider
           when /\Aallow model-provider/, /\Adisallow model-provider/
-            set_web_search_allow_model_providers(!web_search_allow_model_providers?)
+            set_config_flag("web_search", "allow_model_providers", !web_search_allow_model_providers?)
             runtime_output("Model-provider web search #{web_search_allow_model_providers? ? "enabled" : "disabled"}.")
           when /\Atrust project skills/, /\Auntrust project skills/
-            set_project_skills_trusted(!project_skills_trusted?)
+            set_config_flag("skills", "trust_project", !project_skills_trusted?)
             runtime_output("Project skills #{project_skills_trusted? ? "trusted" : "untrusted"}.")
           when /\Aenable workspace guardrails/, /\Adisable workspace guardrails/
-            set_workspace_guardrails_enabled(!workspace_guardrails_enabled?)
+            set_config_flag("tools", "workspace_guardrails", !workspace_guardrails_enabled?)
             runtime_output("Workspace guardrails #{workspace_guardrails_enabled? ? "enabled" : "disabled"}.")
           else
             break
@@ -481,24 +457,8 @@ module Kward
         web_search_config["allow_model_providers"] == true
       end
 
-      def set_web_search_enabled(enabled)
-        update_nested_config("web_search", "enabled" => enabled)
-      end
-
-      def set_web_search_allow_model_providers(enabled)
-        update_nested_config("web_search", "allow_model_providers" => enabled)
-      end
-
       def project_skills_trusted?
         ConfigFiles.project_skills_trusted?(safely_read_config.to_h)
-      end
-
-      def set_project_skills_trusted(enabled)
-        update_nested_config("skills", "trust_project" => enabled)
-      end
-
-      def set_workspace_guardrails_enabled(enabled)
-        update_nested_config("tools", "workspace_guardrails" => enabled)
       end
 
       def configure_context_settings
@@ -510,7 +470,7 @@ module Kward
           initial_index = selected_index if selected_index
           case selected.to_s.downcase
           when /\Aenable auto-compaction/, /\Adisable auto-compaction/
-            set_compaction_enabled(!compaction_enabled?)
+            set_config_flag("compaction", "enabled", !compaction_enabled?)
             runtime_output("Auto-compaction #{compaction_enabled? ? "enabled" : "disabled"}.")
           when /\Astatus/
             runtime_output(auto_compaction_status_line)
@@ -530,10 +490,6 @@ module Kward
 
       def compaction_enabled?
         Kward::Compaction::Settings.from_config(safely_read_config.to_h).enabled
-      end
-
-      def set_compaction_enabled(enabled)
-        update_nested_config("compaction", "enabled" => enabled)
       end
 
       def configure_personalization_settings(conversation)
@@ -641,7 +597,7 @@ module Kward
       end
 
       def set_logging_value(key, value)
-        update_nested_config("logging", key => value)
+        set_config_flag("logging", key, value)
       end
 
       def show_advanced_settings
@@ -660,6 +616,10 @@ module Kward
 
       def update_nested_config(section, values)
         ConfigFiles.update_nested_config(section, values)
+      end
+
+      def set_config_flag(section, key, enabled)
+        update_nested_config(section, key => enabled)
       end
 
       def select_settings_menu_item(message, choices, initial_index)
