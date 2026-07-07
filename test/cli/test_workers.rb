@@ -424,7 +424,7 @@ class TestCLIWorkers < KwardTestCase
       assert_equal ["abc123"], archived
       assert_equal "archived", worker.status
       assert_equal "archived", worker_store.find("abc123").fetch("status")
-      refute_includes cli.send(:worker_jobs, agent).map { |job| job.fetch("id") }, "abc123"
+      refute_includes cli.send(:worker_jobs).map { |job| job.fetch("id") }, "abc123"
     end
   end
 

@@ -491,7 +491,7 @@ module Kward
       def open_worker_list(agent, session_store, title: "Workers", empty_message: "No workers in the pipeline.")
         return runtime_output(empty_message) unless @prompt.respond_to?(:select)
 
-        jobs = worker_jobs(agent)
+        jobs = worker_jobs
         if jobs.empty?
           runtime_output(empty_message)
           return
@@ -505,15 +505,15 @@ module Kward
         open_worker_actions(selected, agent, session_store) if selected
       end
 
-      def worker_jobs(agent)
+      def worker_jobs
         runtime_worker_ids = @worker_manager ? @worker_manager.list.map(&:id) : []
         persisted_workers = worker_store.list.reject { |job| runtime_worker_ids.include?(job["id"]) }
         live_workers = @worker_manager ? @worker_manager.list.map(&:to_h) : []
-        [implementation_worker_job(agent)].compact + persisted_workers + live_workers
+        [implementation_worker_job].compact + persisted_workers + live_workers
       end
 
-      def implementation_worker_job(agent)
-        remember_implementation_worker(agent) if implementation_agent?(agent)
+      def implementation_worker_job
+        remember_implementation_worker if implementation_agent?
         path = @implementation_worker_session_path || @active_session&.path
         return nil if path.to_s.empty?
 
@@ -521,18 +521,18 @@ module Kward
           "id" => "implementation",
           "title" => @implementation_worker_title || @active_session&.name || "Implementation",
           "role" => "implementation",
-          "status" => implementation_agent?(agent) ? "active" : "idle",
+          "status" => implementation_agent? ? "active" : "idle",
           "session_path" => path
         }
       end
 
-      def implementation_agent?(agent)
+      def implementation_agent?
         @active_worker_role.to_s.empty? || @active_worker_role == "implementation"
       end
 
-      def remember_implementation_worker(agent)
+      def remember_implementation_worker
         return unless @active_session&.path
-        return unless implementation_agent?(agent)
+        return unless implementation_agent?
 
         @implementation_worker_session_path = @active_session.path
         @implementation_worker_title = @active_session.name || "Implementation"
