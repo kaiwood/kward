@@ -4,6 +4,7 @@ require "json"
 require "yaml"
 require_relative "frontmatter"
 require_relative "private_file"
+require_relative "path_guard"
 require_relative "ekwsh"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
@@ -835,7 +836,7 @@ module Kward
     end
 
     def inside_directory?(path, base)
-      path == base || path.start_with?(base + File::SEPARATOR)
+      PathGuard.inside?(path, base)
     end
 
     def presence(value)

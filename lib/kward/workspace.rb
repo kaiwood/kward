@@ -2,6 +2,8 @@ require "pathname"
 require_relative "local_command_runner"
 require_relative "session_diff"
 
+require_relative "path_guard"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Filesystem and shell-command boundary for workspace tools.
@@ -212,7 +214,7 @@ module Kward
     end
 
     def inside_workspace?(path)
-      path.to_s == @root.to_s || path.to_s.start_with?("#{@root}/")
+      PathGuard.inside?(path, @root)
     end
 
     def relative_path(path)

@@ -5,6 +5,7 @@ require "net/http"
 require "open3"
 require "pathname"
 require "uri"
+require_relative "../../path_guard"
 require_relative "../../config_files"
 require_relative "web"
 
@@ -357,7 +358,7 @@ module Kward
     end
 
     def inside_root?(root, path)
-      path == root || path.start_with?(root + File::SEPARATOR)
+      PathGuard.inside?(path, root)
     end
 
     def inside_cache?(path)
