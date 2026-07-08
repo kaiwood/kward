@@ -151,7 +151,7 @@ Defaults:
 
 - OpenAI/Codex: `gpt-5.5`
 - OpenRouter: `openai/gpt-5.5`
-- Anthropic: `claude-sonnet-4-5`
+- Anthropic: `claude-sonnet-4-6`
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
 

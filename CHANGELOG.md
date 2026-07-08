@@ -20,6 +20,10 @@ All notable changes to Kward will be documented in this file.
 - Changed the saved session picker slash command from `/sessions` to `/session`, kept `/resume` as an alias, and replaced `/name` with `/session name`.
 - Changed session picker search to use Tab, and Tab again returns to the list without clearing the current search text.
 
+### Fixed
+
+- Fixed default persona spelling in new configs and the documented Anthropic default model.
+
 ## [0.74.0] - 2026-06-30
 
 ### Added
