@@ -6,6 +6,7 @@ require "open3"
 require "pathname"
 require "uri"
 require_relative "../../config_files"
+require_relative "web"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -24,7 +25,7 @@ module Kward
     ACTIONS = %w[package_search github_search repo_clone repo_search repo_read list_cache refresh_cache clear_cache].freeze
 
     # Creates an object for code search and repository cache operations.
-    def initialize(cache_root: nil, http_client: NetHttpClient.new, git_runner: GitRunner.new, max_output_bytes: MAX_OUTPUT_BYTES)
+    def initialize(cache_root: nil, http_client: WebSearch::NetHttpClient.new(user_agent: "Kward code_search"), git_runner: GitRunner.new, max_output_bytes: MAX_OUTPUT_BYTES)
       @cache_root = File.expand_path(cache_root || ConfigFiles.code_search_cache_dir)
       @http_client = http_client
       @git_runner = git_runner
@@ -47,26 +48,6 @@ module Kward
       end
     rescue StandardError => e
       "Error: code_search failed: #{redact(e.message)}"
-    end
-
-    # HTTP adapter used by code search registry/package lookups.
-    class NetHttpClient
-      def get_json(url, headers: {})
-        JSON.parse(get_text(url, headers: headers.merge("Accept" => "application/json")))
-      end
-
-      def get_text(url, headers: {})
-        uri = URI(url)
-        request = Net::HTTP::Get.new(uri)
-        request["User-Agent"] = "Kward code_search"
-        headers.each { |key, val| request[key] = val }
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: HTTP_TIMEOUT_SECONDS, read_timeout: HTTP_TIMEOUT_SECONDS) do |http|
-          http.request(request)
-        end
-        raise "HTTP #{response.code} from #{uri.host}" unless response.is_a?(Net::HTTPSuccess)
-
-        response.body
-      end
     end
 
     # Git command adapter used by repository cache operations.

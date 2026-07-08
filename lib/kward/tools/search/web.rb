@@ -717,8 +717,24 @@ module Kward
     class NetHttpClient
       Response = Struct.new(:code, :body, :headers, keyword_init: true)
 
+      def initialize(user_agent: nil)
+        @user_agent = user_agent
+      end
+
       def get(url, headers: {})
         request(url, Net::HTTP::Get, headers: headers)
+      end
+
+      def get_json(url, headers: {})
+        JSON.parse(get_text(url, headers: headers.merge("Accept" => "application/json")))
+      end
+
+      def get_text(url, headers: {})
+        uri = URI.parse(url)
+        response = get(uri.to_s, headers: headers)
+        raise "HTTP #{response.code} from #{uri.host}" unless success?(response.code)
+
+        response.body
       end
 
       def post(url, form:, headers: {})
@@ -739,11 +755,16 @@ module Kward
         uri = URI.parse(url)
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: HTTP_TIMEOUT_SECONDS, read_timeout: HTTP_TIMEOUT_SECONDS) do |http|
           http_request = request_class.new(uri)
+          http_request["User-Agent"] = @user_agent if @user_agent
           headers.each { |key, value| http_request[key] = value }
           yield http_request if block_given?
           response = http.request(http_request)
           Response.new(code: response.code, body: response.body, headers: response.each_header.to_h)
         end
+      end
+
+      def success?(code)
+        code.to_i.between?(200, 299)
       end
     end
   end
