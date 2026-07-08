@@ -1,4 +1,5 @@
 require_relative "message_access"
+require_relative "message_text"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -37,10 +38,10 @@ module Kward
     end
 
     def message_display_text(message)
-      display_content = MessageAccess.value(message, :display_content) || MessageAccess.value(message, :displayContent)
-      return display_content.to_s unless display_content.nil?
+      return MessageText.full_text(message) unless MessageAccess.display_content(message).nil?
 
-      markdown_content(MessageAccess.content(message))
+      content = MessageAccess.content(message)
+      content.is_a?(Array) ? markdown_content(content) : MessageText.full_text(message)
     end
 
     def markdown_content(content)

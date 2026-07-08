@@ -52,13 +52,6 @@ module Kward
       end.join
     end
 
-    def display_text(message)
-      display_content = MessageAccess.display_content(message)
-      return display_content.to_s unless display_content.nil?
-
-      content_text(MessageAccess.content(message))
-    end
-
     def user_display_text(message)
       display_content = MessageAccess.display_content(message)
       return display_content.to_s unless display_content.nil?
