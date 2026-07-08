@@ -80,6 +80,10 @@ module Kward
 
   # Structured context usage result returned to frontends.
   class TiktokenTokenCounter
+    def initialize
+      @encodings = {}
+    end
+
     def count(text, model:)
       text = text.to_s
       tokenizer = encoding(model)
@@ -93,11 +97,13 @@ module Kward
     private
 
     def encoding(model)
-      require "tiktoken_ruby"
+      @encodings[model.to_s] ||= begin
+        require "tiktoken_ruby"
 
-      Tiktoken.encoding_for_model(model.to_s) || Tiktoken.get_encoding(encoding_name_for_model(model))
-    rescue StandardError
-      Tiktoken.get_encoding(encoding_name_for_model(model)) if defined?(Tiktoken)
+        Tiktoken.encoding_for_model(model.to_s) || Tiktoken.get_encoding(encoding_name_for_model(model))
+      rescue StandardError
+        Tiktoken.get_encoding(encoding_name_for_model(model)) if defined?(Tiktoken)
+      end
     end
 
     def rough_count(text)
