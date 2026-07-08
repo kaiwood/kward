@@ -33,22 +33,6 @@ module Kward
       @roots.flat_map { |root| visible_nodes(root) }
     end
 
-    def contains_active_path?(node, active_path)
-      stack = [node]
-      seen = {}
-      until stack.empty?
-        current = stack.pop
-        next if seen[current.object_id]
-
-        seen[current.object_id] = true
-        entry_id = (current[:source]["entry"] || {})["id"].to_s
-        return true if active_path.include?(entry_id)
-
-        stack.concat(current[:children])
-      end
-      false
-    end
-
     def tool_calls
       @roots.each_with_object({}) do |root, calls|
         stack = [root]
@@ -71,10 +55,11 @@ module Kward
     def layout_rows
       active = active_path
       roots = visible_roots
+      active_nodes = active_node_lookup(roots, active)
       multiple_roots = roots.length > 1
       result = []
 
-      stack = roots.sort_by { |root| contains_active_path?(root, active) ? 0 : 1 }.each_with_index.map do |root, index|
+      stack = roots.sort_by { |root| active_nodes[root.object_id] ? 0 : 1 }.each_with_index.map do |root, index|
         [root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == roots.length - 1, [], multiple_roots]
       end.reverse
 
@@ -95,7 +80,7 @@ module Kward
           prefix: self.class.tree_prefix(display_indent, gutters, show_node_connector, is_last, !node[:children].empty?)
         }
 
-        children = node[:children].sort_by { |child| contains_active_path?(child, active) ? 0 : 1 }
+        children = node[:children].sort_by { |child| active_nodes[child.object_id] ? 0 : 1 }
         multiple_children = children.length > 1
         child_indent = if multiple_children
                          indent + 1
@@ -145,6 +130,30 @@ module Kward
     end
 
     private
+
+    def active_node_lookup(roots, active_path)
+      active_ids = active_path.to_h { |id| [id, true] }
+      lookup = {}
+      stack = roots.map { |root| [root, false] }
+      seen = {}
+
+      until stack.empty?
+        node, visited = stack.pop
+        node_key = node.object_id
+        if visited
+          entry_id = (node[:source]["entry"] || {})["id"].to_s
+          lookup[node_key] = active_ids[entry_id] || node[:children].any? { |child| lookup[child.object_id] }
+        else
+          next if seen[node_key]
+
+          seen[node_key] = true
+          stack << [node, true]
+          node[:children].each { |child| stack << [child, false] }
+        end
+      end
+
+      lookup
+    end
 
     def visible_nodes(node)
       results = {}
