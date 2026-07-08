@@ -245,9 +245,9 @@ module Kward
     def create_independent_from_messages(messages, read_paths: [], provider: nil, model: nil, reasoning_effort: nil, parent_session: nil)
       session = create(provider: provider, model: model, reasoning_effort: reasoning_effort, parent_id: parent_session&.id, parent_path: parent_session&.path)
       session.rename(parent_session.name) unless parent_session&.name.to_s.strip.empty?
-      persisted = deep_copy(messages)
+      persisted = persistence_copy(messages)
       persisted.each { |message| session.append_message(message) }
-      conversation = Conversation.new(messages: deep_copy(persisted), read_paths: read_paths, workspace_root: @cwd, provider: provider, model: model, reasoning_effort: reasoning_effort)
+      conversation = Conversation.new(messages: persistence_copy(persisted), read_paths: read_paths, workspace_root: @cwd, provider: provider, model: model, reasoning_effort: reasoning_effort)
       session.attach(conversation)
       [session, conversation]
     end
@@ -852,10 +852,10 @@ module Kward
     end
 
     def persisted_messages(conversation)
-      conversation.messages.reject { |message| message_role(message) == "system" }.map { |message| deep_copy(message) }
+      conversation.messages.reject { |message| message_role(message) == "system" }.map { |message| persistence_copy(message) }
     end
 
-    def deep_copy(value)
+    def persistence_copy(value)
       JSON.parse(JSON.generate(value))
     end
 
