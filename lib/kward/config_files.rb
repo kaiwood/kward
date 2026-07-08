@@ -771,8 +771,8 @@ module Kward
     # Lists configured skills discovered under the config directory.
     #
     # @return [Array<Skill>] skill metadata available to the model
-    def skills
-      skills_registry.skills
+    def skills(workspace_root: Dir.pwd)
+      skills_registry(workspace_root: workspace_root).skills
     end
 
     # @return [String] trusted user plugin directory
@@ -809,14 +809,14 @@ module Kward
     # @param name [String] configured skill name
     # @param relative_path [String, nil] path inside the skill directory
     # @return [String] file contents or an error string
-    def read_skill_file(name, relative_path = nil)
-      skills_registry.read_skill_file(name, relative_path)
+    def read_skill_file(name, relative_path = nil, workspace_root: Dir.pwd)
+      skills_registry(workspace_root: workspace_root).read_skill_file(name, relative_path)
     end
 
-    def skills_registry
+    def skills_registry(workspace_root: Dir.pwd)
       Skills::Registry.new(
         config_dir: config_dir,
-        workspace_root: Dir.pwd,
+        workspace_root: workspace_root,
         project_skills_trusted: project_skills_trusted?,
         skill_class: Skill,
         max_file_bytes: MAX_SKILL_FILE_BYTES,

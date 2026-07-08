@@ -480,8 +480,12 @@ module Kward
       true
     end
 
-    def discovered_skills
-      @discovered_skills ||= @skills.nil? ? ConfigFiles.skills : @skills
+    def discovered_skills(workspace_root: nil)
+      return @skills unless @skills.nil?
+
+      @discovered_skills ||= {}
+      root = workspace_root || (@workspace.respond_to?(:root) ? @workspace.root : Dir.pwd)
+      @discovered_skills[root] ||= ConfigFiles.skills(workspace_root: root)
     end
 
     def skills_available?

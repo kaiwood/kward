@@ -25,11 +25,12 @@ module Kward
       end
 
       # Executes the tool and returns model-facing output text.
-      def call(args, _conversation, cancellation: nil)
+      def call(args, conversation, cancellation: nil)
         name = argument(args, :name, "")
         path = argument(args, :path)
+        workspace_root = conversation.respond_to?(:workspace_root) ? conversation.workspace_root : Dir.pwd
 
-        ConfigFiles.read_skill_file(name, path)
+        ConfigFiles.read_skill_file(name, path, workspace_root: workspace_root)
       end
     end
   end

@@ -451,6 +451,34 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_project_skills_use_conversation_workspace_root_without_chdir
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      other_workspace = File.join(dir, "other")
+      FileUtils.mkdir_p(config_dir)
+      FileUtils.mkdir_p(workspace)
+      FileUtils.mkdir_p(other_workspace)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({ "skills" => { "trust_project" => true } }))
+
+      skill_dir = File.join(workspace, ".agents", "skills", "project-agent")
+      other_skill_dir = File.join(other_workspace, ".agents", "skills", "wrong-agent")
+      FileUtils.mkdir_p(skill_dir)
+      FileUtils.mkdir_p(other_skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: project-agent\ndescription: Project workspace skill.\n---\n")
+      File.write(File.join(other_skill_dir, "SKILL.md"), "---\nname: wrong-agent\ndescription: Wrong workspace skill.\n---\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        Dir.chdir(other_workspace) do
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
+
+          assert_includes content, "- project-agent: Project workspace skill."
+          refute_includes content, "wrong-agent"
+        end
+      end
+    end
+  end
+
   def test_skills_include_project_and_shared_agent_skill_locations
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

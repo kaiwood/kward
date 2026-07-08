@@ -25,7 +25,8 @@ module Kward
         sections << prompt_section("Persona", persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now))
         sections << prompt_section("Plugin context", plugin_context) unless plugin_context.to_s.empty?
       end
-      sections << prompt_section("Configured skills", skills_prompt, source: ConfigFiles.skills.empty? ? nil : File.join(ConfigFiles.config_dir, "skills"))
+      skills = ConfigFiles.skills(workspace_root: workspace_root)
+      sections << prompt_section("Configured skills", skills_prompt(skills), source: skills.empty? ? nil : File.join(ConfigFiles.config_dir, "skills"))
       sections << prompt_section(workspace_agents_context_label(workspace_root), workspace_agents_context(workspace_root), source: ConfigFiles.workspace_agents_file?(workspace_root) ? ConfigFiles.workspace_agents_path(workspace_root) : nil)
       sections.compact
     end
@@ -97,8 +98,7 @@ module Kward
       { label: label, content: content, source: source }
     end
 
-    def skills_prompt
-      skills = ConfigFiles.skills
+    def skills_prompt(skills = ConfigFiles.skills)
       return nil if skills.empty?
 
       lines = [
