@@ -52,14 +52,16 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
         writer_id = worker_writer_id(role)
+        hook_manager = lifecycle_hook_manager(conversation)
+        hook_context = lifecycle_hook_context(conversation)
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: @prompt,
           allowed_tool_names: Workers::ToolPolicy.allowed_tool_names(role),
           write_lock: @worker_write_lock,
           writer_id: writer_id,
-          hook_manager: lifecycle_hook_manager(conversation),
-          hook_context: lifecycle_hook_context(conversation)
+          hook_manager: hook_manager,
+          hook_context: hook_context
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
@@ -67,8 +69,8 @@ module Kward
           client: @client,
           tool_registry: tool_registry,
           conversation: conversation,
-          hook_manager: lifecycle_hook_manager(conversation),
-          hook_context: lifecycle_hook_context(conversation)
+          hook_manager: hook_manager,
+          hook_context: hook_context
         )
       end
 

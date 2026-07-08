@@ -341,17 +341,19 @@ module Kward
       markdown_chunks = []
       conversation = new_conversation
       apply_filter_system_prompt(conversation) if filter
+      hook_manager = lifecycle_hook_manager(conversation)
+      hook_context = lifecycle_hook_context(conversation)
       agent = Agent.new(
         client: @client,
         tool_registry: ToolRegistry.new(
           workspace: configured_workspace,
           prompt: @prompt,
-          hook_manager: lifecycle_hook_manager(conversation),
-          hook_context: lifecycle_hook_context(conversation)
+          hook_manager: hook_manager,
+          hook_context: hook_context
         ),
         conversation: conversation,
-        hook_manager: lifecycle_hook_manager(conversation),
-        hook_context: lifecycle_hook_context(conversation)
+        hook_manager: hook_manager,
+        hook_context: hook_context
       )
       answer = if filter
         agent.ask(input)
