@@ -68,6 +68,78 @@ module Kward
       end
     end
 
+    def layout_rows
+      active = active_path
+      roots = visible_roots
+      multiple_roots = roots.length > 1
+      result = []
+
+      stack = roots.sort_by { |root| contains_active_path?(root, active) ? 0 : 1 }.each_with_index.map do |root, index|
+        [root, multiple_roots ? 1 : 0, multiple_roots, multiple_roots, index == roots.length - 1, [], multiple_roots]
+      end.reverse
+
+      until stack.empty?
+        node, indent, just_branched, show_connector, is_last, gutters, virtual_root_child = stack.pop
+        entry = node[:source]["entry"] || {}
+        entry_id = entry["id"].to_s
+        display_indent = multiple_roots ? [indent - 1, 0].max : indent
+        show_node_connector = show_connector && !virtual_root_child
+
+        result << {
+          source: node[:source],
+          entry: entry,
+          depth: display_indent,
+          is_last: is_last,
+          gutters: gutters,
+          active_path: active.include?(entry_id),
+          prefix: self.class.tree_prefix(display_indent, gutters, show_node_connector, is_last, !node[:children].empty?)
+        }
+
+        children = node[:children].sort_by { |child| contains_active_path?(child, active) ? 0 : 1 }
+        multiple_children = children.length > 1
+        child_indent = if multiple_children
+                         indent + 1
+                       elsif just_branched && indent.positive?
+                         indent + 1
+                       else
+                         indent
+                       end
+        connector_position = [display_indent - 1, 0].max
+        child_gutters = show_node_connector ? gutters + [{ position: connector_position, show: !is_last }] : gutters
+
+        children.each_with_index.reverse_each do |child, index|
+          stack << [child, child_indent, multiple_children, multiple_children, index == children.length - 1, child_gutters, false]
+        end
+      end
+
+      result
+    end
+
+    def self.tree_prefix(display_indent, gutters, show_connector, is_last, foldable)
+      return "" if display_indent.to_i <= 0
+
+      connector_position = show_connector ? display_indent - 1 : -1
+      (0...(display_indent * 3)).map do |index|
+        level = index / 3
+        position = index % 3
+        gutter = gutters.find { |candidate| candidate[:position] == level }
+
+        if gutter
+          position.zero? && gutter[:show] ? "│" : " "
+        elsif show_connector && level == connector_position
+          if position.zero?
+            is_last ? "└" : "├"
+          elsif position == 1
+            foldable ? "⊟" : "─"
+          else
+            " "
+          end
+        else
+          " "
+        end
+      end.join
+    end
+
     def self.truncate_text(text)
       MessageText.truncate_preview(text)
     end
