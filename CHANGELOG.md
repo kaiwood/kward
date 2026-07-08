@@ -14,6 +14,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Changed code search to share the web/fetch HTTP adapter for package and GitHub lookups.
+- Changed OpenAI and Anthropic OAuth flows to share browser callback and token helper mechanics.
 - Changed RPC capability format names from Tauren-specific identifiers to Kward-neutral identifiers.
 - Changed `/settings` to require only picker support, with live overlay redraw remaining optional for overlay-specific settings.
 - Changed new default configs to include explicit overlay and web-search defaults while preserving existing behavior for partial configs.
