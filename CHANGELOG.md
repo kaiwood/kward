@@ -23,6 +23,7 @@ All notable changes to Kward will be documented in this file.
 ### Fixed
 
 - Fixed default persona spelling in new configs and the documented Anthropic default model.
+- Fixed context-usage estimates for restored sessions whose provider differs from the current client default.
 
 ## [0.74.0] - 2026-06-30
 

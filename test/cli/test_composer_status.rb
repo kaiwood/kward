@@ -130,27 +130,26 @@ class TestCLIComposerStatus < KwardTestCase
 
   def test_composer_status_uses_resumed_session_runtime_over_client_defaults
     context_usage = Object.new
-    def context_usage.call(provider:, model:, context_window:, **_kwargs)
-      @seen = { provider: provider, model: model, context_window: context_window }
+    def context_usage.call(provider:, model:, context_window:, context_parts:)
+      @seen = { provider: provider, model: model, context_window: context_window, context_parts: context_parts }
       { percent: 12.4 }
     end
     def context_usage.seen
       @seen
     end
-    client = FakeClient.new([])
-    client.provider = "Codex"
-    client.model = "gpt-5.5"
-    client.reasoning_effort = "medium"
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: client, context_usage: context_usage)
     hide_composer_git_branch(cli)
-    conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "gpt-5.5", reasoning_effort: "low")
+    conversation = Kward::Conversation.new(system_message: nil, provider: "Anthropic", model: "claude-sonnet-4-6", reasoning_effort: "low")
     conversation.append_user("Status report.")
     cli.instance_variable_set(:@footer_conversation, conversation)
 
-    assert_equal "12% · Codex gpt-5.5 · low", cli.send(:composer_status_text)
-    assert_equal "Codex", context_usage.seen[:provider]
-    assert_equal "gpt-5.5", context_usage.seen[:model]
-    assert_equal Kward::ModelInfo.context_window("Codex", "gpt-5.5"), context_usage.seen[:context_window]
+    assert_equal "12% · Anthropic claude-sonnet-4-6 · low", cli.send(:composer_status_text)
+    assert_equal "Anthropic", context_usage.seen[:provider]
+    assert_equal "claude-sonnet-4-6", context_usage.seen[:model]
+    assert_equal Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-4-6"), context_usage.seen[:context_window]
+    assert_equal "Anthropic", context_usage.seen[:context_parts][:provider]
+    assert context_usage.seen[:context_parts].key?(:system)
   end
 
   def test_composer_status_colors_context_percentage_by_threshold

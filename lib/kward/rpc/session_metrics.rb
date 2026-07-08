@@ -34,7 +34,7 @@ module Kward
 
       def context_usage(rpc_session, model, client:)
         context_parts = if client.respond_to?(:current_context_parts)
-                          client.current_context_parts(rpc_session.conversation.context_messages, rpc_session.tool_registry.schemas)
+                          client.current_context_parts(rpc_session.conversation.context_messages, rpc_session.tool_registry.schemas, provider: model[:provider], model: model[:id])
                         else
                           {
                             provider: model[:provider],

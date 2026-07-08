@@ -228,8 +228,8 @@ module Kward
     end
 
     # Projects messages/tools into the provider-specific context shape without sending it.
-    def current_context_parts(messages, tools)
-      build_context_parts(current_provider, messages, tools)
+    def current_context_parts(messages, tools, provider: current_provider, model: nil)
+      build_context_parts(ModelInfo.provider_label(provider), messages, tools, model: model)
     end
 
     # Returns whether the active provider can accept steering while a turn is streaming.
