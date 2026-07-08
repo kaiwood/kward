@@ -73,6 +73,18 @@ class TestWebSearch < KwardTestCase
     assert_includes result, "... truncated to 120 bytes"
   end
 
+  def test_web_search_reads_false_values_without_falling_back_to_symbol_keys
+    html = '<div class="result"><a class="result__a" href="https://example.com/ruby">Ruby News</a><a class="result__snippet">Ruby release notes</a></div>'
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, html)
+    )
+    research = Kward::WebSearch.new(http_client: http, searxng_instances: [], config: { "provider" => "legacy" })
+
+    result = research.search("queries" => ["ruby"], "provider" => false, provider: "duckduckgo")
+
+    assert_equal "Error: provider must be one of: auto, exa, perplexity, gemini, duckduckgo", result
+  end
+
   def test_web_search_rejects_legacy_provider_name
     research = Kward::WebSearch.new
 

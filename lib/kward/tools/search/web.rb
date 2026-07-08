@@ -54,7 +54,10 @@ module Kward
       return "Error: queries must be an array with 1-#{MAX_QUERIES} strings" unless valid_queries?(queries)
 
       max_results = bounded_max_results(args_value(args, "max_results") || args_value(args, "num_results"))
-      provider = normalize_provider(args_value(args, "provider") || config_value("provider") || "auto")
+      provider_value = args_value(args, "provider")
+      provider_value = config_value("provider") if provider_value.nil?
+      provider_value = "auto" if provider_value.nil? || provider_value.to_s.empty?
+      provider = normalize_provider(provider_value)
       return "Error: provider must be one of: #{PROVIDERS.join(", ")}" unless provider
 
       options = {
@@ -549,8 +552,10 @@ module Kward
 
     def args_value(args, key)
       return nil unless args.is_a?(Hash)
+      return args[key] if args.key?(key)
+      return args[key.to_sym] if args.key?(key.to_sym)
 
-      args[key] || args[key.to_sym]
+      nil
     end
 
     def success?(response)
