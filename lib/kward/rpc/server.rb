@@ -1,6 +1,5 @@
 require "json"
 require_relative "../model/client"
-require_relative "../mcp/server_config"
 require_relative "../config_files"
 require_relative "../memory/manager"
 require_relative "../plugin_registry"
@@ -12,6 +11,7 @@ require_relative "../telemetry/logger"
 require_relative "../telemetry/stats"
 require_relative "auth_manager"
 require_relative "config_manager"
+require_relative "mcp_status"
 require_relative "redactor"
 require_relative "session_manager"
 require_relative "transport"
@@ -212,7 +212,7 @@ module Kward
         when TOOL_METHODS[0]
           @session_manager.tool_schemas(session_id: params["sessionId"])
         when MCP_METHODS[0]
-          mcp_status
+          MCPStatus.new(config_manager: @config_manager).to_h
         when PROMPT_METHODS[0]
           prompts_list
         when PROMPT_METHODS[1]
@@ -584,40 +584,6 @@ module Kward
 
       def models_list
         { models: @session_manager.available_models }
-      end
-
-      def mcp_status
-        config = @config_manager.read(redacted: false)
-        clients = MCP::ServerConfig.clients_from_config(config).to_h { |client| [client.name, client] }
-        servers = MCP::ServerConfig.configured_servers(config).map do |name, settings|
-          client = clients[name.to_s]
-          status_for_mcp_server(name, settings, client)
-        end
-        { servers: servers }
-      end
-
-      def status_for_mcp_server(name, settings, client)
-        base = { name: name.to_s, transport: "stdio", toolCount: 0 }
-        unless client
-          return base.merge(status: "unavailable", error: "command not configured") if settings["command"].to_s.empty?
-
-          return base.merge(status: "unavailable", error: "unsupported MCP server configuration")
-        end
-
-        tools = client.list_tools
-        base.merge(status: "available", toolCount: tools.length)
-      rescue StandardError => e
-        base.merge(status: "unavailable", toolCount: 0, error: redacted_mcp_error(e.message, client))
-      ensure
-        client&.close
-      end
-
-      def redacted_mcp_error(message, client)
-        text = Redactor.redact_string(message.to_s)
-        command = client&.transport&.respond_to?(:command) ? client.transport.command.to_s : ""
-        return text if command.empty?
-
-        text.gsub(command, File.basename(command))
       end
 
       def config_update(params)
