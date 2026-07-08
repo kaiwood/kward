@@ -742,15 +742,13 @@ module Kward
         current_provider = conversation.provider || (@client.respond_to?(:current_provider) ? @client.current_provider : "Codex")
         current_model = conversation.model || (@client.respond_to?(:current_model) ? @client.current_model : nil)
         current_reasoning = conversation.reasoning_effort || (@client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil)
-        models = @client.respond_to?(:available_models) ? Array(@client.available_models) : []
-        models.map do |model|
-          ModelInfo.normalize(
-            model,
-            current_provider: current_provider,
-            current_model: current_model,
-            current_reasoning_effort: current_reasoning
-          )
-        end
+        models = @client.respond_to?(:available_models) ? @client.available_models : []
+        ModelInfo.normalize_available(
+          models,
+          current_provider: current_provider,
+          current_model: current_model,
+          current_reasoning_effort: current_reasoning
+        )
       end
 
       def model_choices(models, conversation = current_footer_conversation)

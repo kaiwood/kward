@@ -472,8 +472,9 @@ module Kward
       def current_model
         provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
         model = @client.respond_to?(:current_model) ? @client.current_model : nil
+        reasoning_effort = @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil
         context_window = @client.respond_to?(:current_context_window) ? @client.current_context_window : nil
-        normalize_model(provider: provider, id: model, model: model, contextWindow: context_window, current: true)
+        ModelInfo.current_payload(provider: provider, model: model, reasoning_effort: reasoning_effort, context_window: context_window)
       end
 
       def session_model(rpc_session)
@@ -483,13 +484,11 @@ module Kward
         reasoning_effort = rpc_session.conversation.reasoning_effort || current_reasoning_effort
         reasoning_effort = nil unless ModelInfo.reasoning_supported?(provider, model)
         context_window = context_window_for(provider, model)
-        normalize_model(
+        ModelInfo.current_payload(
           provider: provider,
-          id: model,
           model: model,
-          reasoningEffort: reasoning_effort,
-          contextWindow: context_window,
-          current: true
+          reasoning_effort: reasoning_effort,
+          context_window: context_window
         )
       end
 
@@ -654,12 +653,12 @@ module Kward
           id = model[:id] || model["id"] || model[:model] || model["model"]
           model = model.merge(contextWindow: context_window_for(provider, id))
         end
-        ModelInfo.normalize(
-          model,
+        ModelInfo.normalize_available(
+          [model],
           current_provider: (@client.current_provider if @client.respond_to?(:current_provider)),
           current_model: (@client.current_model if @client.respond_to?(:current_model)),
           current_reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
-        )
+        ).first
       end
 
       def context_window_for(provider, model)

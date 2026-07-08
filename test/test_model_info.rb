@@ -115,4 +115,26 @@ class TestModelInfo < KwardTestCase
     assert_equal "high", Kward::ModelInfo.reasoning_effort(config: config, provider: "Copilot", env: {})
     assert_equal "xhigh", Kward::ModelInfo.reasoning_effort(config: config, provider: "Copilot", env: { "COPILOT_REASONING_EFFORT" => "xhigh" })
   end
+
+  def test_normalizes_available_models_against_current_runtime
+    models = Kward::ModelInfo.normalize_available(
+      [{ provider: "Codex", id: "gpt-5.5" }],
+      current_provider: "Codex",
+      current_model: "gpt-5.5",
+      current_reasoning_effort: "high"
+    )
+
+    assert_equal true, models.first[:current]
+    assert_equal "high", models.first[:reasoningEffort]
+  end
+
+  def test_current_payload_preserves_reasoning_effort
+    model = Kward::ModelInfo.current_payload(provider: "Codex", model: "gpt-5.5", reasoning_effort: "high", context_window: 200_000)
+
+    assert_equal "Codex", model[:provider]
+    assert_equal "gpt-5.5", model[:id]
+    assert_equal true, model[:current]
+    assert_equal "high", model[:reasoningEffort]
+    assert_equal 200_000, model[:contextWindow]
+  end
 end

@@ -412,6 +412,30 @@ module Kward
       }.compact
     end
 
+    def normalize_available(models, current_provider:, current_model:, current_reasoning_effort: nil)
+      Array(models).map do |model|
+        normalize(
+          model,
+          current_provider: current_provider,
+          current_model: current_model,
+          current_reasoning_effort: current_reasoning_effort
+        )
+      end
+    end
+
+    def current_payload(provider:, model:, reasoning_effort: nil, context_window: nil)
+      normalize(
+        {
+          provider: provider,
+          id: model,
+          model: model,
+          reasoningEffort: reasoning_effort,
+          contextWindow: context_window,
+          current: true
+        }
+      )
+    end
+
     def boolean_value(value, default: false)
       return default if value.nil?
       return value if value == true || value == false
