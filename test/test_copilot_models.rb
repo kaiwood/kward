@@ -26,4 +26,12 @@ class TestCopilotModels < KwardTestCase
     assert Kward::CopilotModels.supported?("oswe-agent")
     refute Kward::CopilotModels.supported?("claude-sonnet")
   end
+
+  def test_filters_supported_choices
+    assert_equal ["gpt-5-mini", "gemini-2.5-pro"], Kward::CopilotModels.supported_choices(["gpt-5-mini", "claude-sonnet", "gemini-2.5-pro", "gpt-5-mini"])
+  end
+
+  def test_resolves_chat_model_to_first_supported_live_choice
+    assert_equal "gemini-2.5-pro", Kward::CopilotModels.resolved_chat_model("claude-sonnet", ["claude-sonnet-4", "gemini-2.5-pro"])
+  end
 end

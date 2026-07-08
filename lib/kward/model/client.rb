@@ -526,29 +526,15 @@ module Kward
       live_models = fetch_copilot_models
       return static_copilot_model_choices if live_models.empty?
 
-      supported_copilot_model_choices(live_models)
+      CopilotModels.supported_choices(live_models)
     end
 
     def static_copilot_model_choices
-      supported_copilot_model_choices(ModelInfo::COPILOT_MODEL_CHOICES)
-    end
-
-    def supported_copilot_model_choices(choices)
-      choices.select { |model| copilot_supported_model?(model) }.uniq
+      CopilotModels.supported_choices(ModelInfo::COPILOT_MODEL_CHOICES)
     end
 
     def resolved_copilot_chat_model(configured_model)
-      choices = fetch_copilot_models
-      return configured_model if choices.empty? || choices.include?(configured_model)
-
-      supported = choices.find { |model| copilot_supported_model?(model) }
-      raise "No Copilot models supported by Kward are available for this account. Kward currently supports Copilot GPT-5 Responses and Gemini/GPT-4.1 chat models." unless supported
-
-      supported
-    end
-
-    def copilot_supported_model?(model)
-      CopilotModels.supported?(model)
+      CopilotModels.resolved_chat_model(configured_model, fetch_copilot_models)
     end
 
     def fetch_copilot_models
