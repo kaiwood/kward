@@ -26,6 +26,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed RPC memory auto-summary so completed RPC turns learn memories when memory and auto-summary are enabled.
 - Fixed worker lifecycle hooks so create/start blocking decisions stop worker jobs before they run.
 - Fixed RPC plugin reloads so existing sessions rebuild their agent, tool registry, and lifecycle hook runtime.
 - Fixed streamed Codex reasoning whitespace so repeated blank lines collapse to a single empty line.

@@ -17,6 +17,25 @@ class TestRPCSessionManagerMemory < KwardTestCase
     end
   end
 
+  def test_memory_auto_summary_runs_after_completed_turn_when_enabled
+    Dir.mktmpdir do |config_dir|
+      client = FakeClient.new([
+        { "role" => "assistant", "content" => "ok" },
+        { "content" => "The user prefers concise and practical answers" }
+      ])
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      manager.memory_enable
+      manager.memory_auto_summary_enable
+      session = manager.create_session(workspace_root: Dir.pwd)
+
+      turn = manager.start_turn(session_id: session[:id], input: "Here is an important information: I usually prefer concise and practical answers.")
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+      rpc_session = manager.send(:fetch_session, session[:id])
+      assert_equal ["The user prefers concise and practical answers"], rpc_session.conversation.session_memories.map { |memory| memory["text"] }
+    end
+  end
+
   def test_memory_summarize_only_uses_user_messages_for_inference
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

@@ -1151,6 +1151,7 @@ module Kward
             handle_agent_event(turn, event)
           end
           persist_memory_state(rpc_session)
+          auto_summarize_memory(rpc_session) unless turn.cancel_requested
           finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
         end
       rescue Cancellation::CancelledError
@@ -1197,6 +1198,17 @@ module Kward
       def persist_memory_state(rpc_session)
         rpc_session.session.update_memory_state(session_memories: rpc_session.conversation.session_memories, last_retrieval: rpc_session.conversation.last_memory_retrieval)
       rescue StandardError
+        nil
+      end
+
+      def auto_summarize_memory(rpc_session)
+        manager = memory_manager
+        return unless manager.enabled? && manager.auto_summary_enabled?
+
+        manager.summarize_conversation(rpc_session.conversation, client: @client)
+        persist_memory_state(rpc_session)
+      rescue StandardError => e
+        @server.log_error(e)
         nil
       end
 
