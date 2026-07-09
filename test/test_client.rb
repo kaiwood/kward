@@ -827,6 +827,21 @@ class TestClient < KwardTestCase
     assert_equal "Planning detailed event inspection\n\nSearching session logs locally\n\n", message["response_items"].first["summary"].first["text"]
   end
 
+  def test_codex_sse_compacts_reasoning_blank_lines_across_stream_chunks
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    deltas = []
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_text.delta", "delta" => "First step\n")}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_text.delta", "delta" => "\n\nSecond step\n\t\n   \nThird step")}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "First step\n\n\nSecond step\n\t\n   \nThird step" }] })}\n\n"
+
+    message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
+
+    assert_equal "First step\n\nSecond step\n\nThird step", message["reasoning_summary"]
+    assert_equal ["First step\n", "\nSecond step\n\nThird step"], deltas
+    assert_equal "First step\n\nSecond step\n\nThird step", message["response_items"].first["summary"].first["text"]
+  end
+
   def test_codex_sse_can_show_raw_reasoning_when_configured
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

@@ -474,13 +474,17 @@ module Kward
     end
 
     def compact_blank_codex_reasoning_lines(text)
-      text.to_s.gsub(/\n{3,}/, "\n\n")
+      text.to_s.gsub(/(?:[ \t]*\n){3,}/, "\n\n")
     end
 
     def compact_codex_reasoning_delta_spacing(existing, text)
       text = compact_blank_codex_reasoning_lines(text)
-      text = text.sub(/\A\n+/, "") if existing.to_s.end_with?("\n\n")
-      text
+      trailing_newlines = existing.to_s[/\n+\z/].to_s.length
+      leading_newlines = text[/\A\n+/].to_s.length
+      excess_newlines = trailing_newlines + leading_newlines - 2
+      return text unless excess_newlines.positive? && leading_newlines.positive?
+
+      text[[excess_newlines, leading_newlines].min..].to_s
     end
 
     def codex_tool_arguments_delta(state, delta)

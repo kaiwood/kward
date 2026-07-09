@@ -26,6 +26,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed streamed Codex reasoning whitespace so repeated blank lines collapse to a single empty line.
 - Fixed default persona spelling in new configs and the documented Anthropic default model.
 - Fixed context-usage estimates for restored sessions whose provider differs from the current client default.
 - Fixed project skill discovery to use the active conversation workspace instead of the process working directory.
