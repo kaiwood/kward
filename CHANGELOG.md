@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-07-09
+
 ### Added
 
 - Added `rake release:preflight` to run release checks, build docs, build the gem, and print packaged files.
