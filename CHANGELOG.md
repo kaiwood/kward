@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added cached RubyGems update notices on the fresh interactive startup screen.
 - Added an Interface `/settings` option for choosing the integrated diff viewer mode: auto, unified, or side-by-side.
 - Added lifecycle hooks for deterministic runtime policy and automation, including Ruby plugin hooks, command hooks configured in `config.json`, tool/shell/file/turn/model events, and allow/deny/ask/modify/warn decisions.
 - Added Agent Skills interoperability across `~/.agents/skills`, project `.agents/skills`, Kward-native skill directories, explicit `/skill` activation, RPC skill commands, resource listing, and compaction preservation for activated skills.

@@ -71,11 +71,13 @@ module Kward
         return unless @prompt.respond_to?(:print_visual_banner)
 
         @prompt.print_visual_banner(startup_info_screen)
+        refresh_startup_update_check if prompt_interface?
       end
 
       def startup_info_screen
         [
           startup_status_line,
+          *startup_update_notice_lines,
           "",
           startup_info_line("Workspace", startup_workspace_label),
           startup_info_line("Branch", startup_branch_value),
@@ -118,7 +120,32 @@ module Kward
       end
 
       def startup_status_line
-        "#{ANSI.colorize("●", :green, enabled: @color_enabled)} Kward v#{Kward::VERSION} is online."
+        color = startup_update_notice ? :yellow : :green
+        "#{ANSI.colorize("●", color, enabled: @color_enabled)} Kward v#{Kward::VERSION} is online."
+      end
+
+      def startup_update_notice_lines
+        notice = startup_update_notice
+        return [] unless notice
+
+        [
+          "  New version available: #{notice.latest_version}",
+          "  Run: gem update kward"
+        ]
+      end
+
+      def startup_update_notice
+        return @startup_update_notice if defined?(@startup_update_notice)
+
+        @startup_update_check = UpdateCheck.new(current_version: Kward::VERSION)
+        @startup_update_notice = @startup_update_check.notice
+      end
+
+      def refresh_startup_update_check
+        checker = @startup_update_check || UpdateCheck.new(current_version: Kward::VERSION)
+        return unless checker.enabled?
+
+        Thread.new { checker.refresh_if_stale }
       end
 
       def startup_info_line(label, value)

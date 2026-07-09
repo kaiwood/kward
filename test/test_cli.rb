@@ -1624,14 +1624,58 @@ class TestCLI < KwardTestCase
     cli.instance_variable_set(:@color_enabled, true)
     cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
 
-    output = cli.send(:startup_info_screen)
+    with_env("KWARD_DISABLE_UPDATE_CHECK" => "1") do
+      output = cli.send(:startup_info_screen)
 
-    assert_includes output, "\e[32m●\e[0m Kward v#{Kward::VERSION} is online."
-    refute_includes output, "\e[36;1mKward\e[0m"
-    assert_includes output, "\e[90mWorkspace   \e[0m"
-    assert_includes output, "\e[1mState your business.\e[0m"
-    refute_includes output, "\e[33;1mState your business.\e[0m"
-    assert_includes Kward::ANSI.strip(output), "Plugins     none"
+      assert_includes output, "\e[32m●\e[0m Kward v#{Kward::VERSION} is online."
+      refute_includes output, "\e[36;1mKward\e[0m"
+      assert_includes output, "\e[90mWorkspace   \e[0m"
+      assert_includes output, "\e[1mState your business.\e[0m"
+      refute_includes output, "\e[33;1mState your business.\e[0m"
+      assert_includes Kward::ANSI.strip(output), "Plugins     none"
+    end
+  end
+
+  def test_startup_info_screen_shows_cached_update_notice
+    Dir.mktmpdir do |config_dir|
+      cache_path = File.join(config_dir, "cache", "update_check.json")
+      FileUtils.mkdir_p(File.dirname(cache_path))
+      File.write(cache_path, JSON.dump("checked_at" => Time.now.utc.iso8601, "latest_version" => "999.0.0"))
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      cli.instance_variable_set(:@color_enabled, true)
+      cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        output = cli.send(:startup_info_screen)
+
+        assert_includes output, "\e[33m●\e[0m Kward v#{Kward::VERSION} is online."
+        assert_includes output, "  New version available: 999.0.0"
+        assert_includes output, "  Run: gem update kward"
+      end
+    end
+  end
+
+  def test_update_check_disabled_ignores_cached_notice
+    Dir.mktmpdir do |config_dir|
+      cache_path = File.join(config_dir, "cache", "update_check.json")
+      FileUtils.mkdir_p(File.dirname(cache_path))
+      File.write(cache_path, JSON.dump("checked_at" => Time.now.utc.iso8601, "latest_version" => "999.0.0"))
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("updates" => { "check" => false }))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      cli.instance_variable_set(:@color_enabled, true)
+      cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        output = cli.send(:startup_info_screen)
+
+        assert_includes output, "\e[32m●\e[0m Kward v#{Kward::VERSION} is online."
+        refute_includes output, "New version available"
+        refute_includes output, "gem update kward"
+      end
+    end
   end
 
   def test_startup_workspace_label_uses_parent_and_folder_outside_home

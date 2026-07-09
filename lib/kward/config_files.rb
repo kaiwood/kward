@@ -161,6 +161,10 @@ module Kward
       File.join(cache_dir, "openrouter_models.json")
     end
 
+    def update_check_cache_path
+      File.join(cache_dir, "update_check.json")
+    end
+
     def project_browser_state_path
       File.join(cache_dir, "project_browser_state.json")
     end
