@@ -1,3 +1,4 @@
+require_relative "../message_access"
 require_relative "../tools/tool_call"
 require_relative "tool_metadata"
 
@@ -24,7 +25,7 @@ module Kward
       def normalize_message(message)
         return nil unless message.is_a?(Hash)
 
-        case ToolCall.value(message, :role).to_s
+        case MessageAccess.role(message).to_s
         when "system"
           nil
         when "user"
@@ -45,7 +46,7 @@ module Kward
       end
 
       def normalize_compaction_summary(message)
-        summary = ToolCall.value(message, :summary) || ToolCall.value(message, :content)
+        summary = MessageAccess.summary(message) || MessageAccess.content(message)
         result = { role: "compactionSummary", summary: summary.to_s }
         tokens_before = ToolCall.value(message, :tokensBefore) || ToolCall.value(message, :tokens_before)
         result[:tokensBefore] = tokens_before if tokens_before
@@ -55,12 +56,12 @@ module Kward
       def normalize_user_message(message)
         {
           role: "user",
-          content: normalize_content(ToolCall.value(message, :content))
+          content: normalize_content(MessageAccess.content(message))
         }
       end
 
       def normalize_assistant_message(message)
-        content = reasoning_first_content(normalize_content(ToolCall.value(message, :content), preserve_thinking: true))
+        content = reasoning_first_content(normalize_content(MessageAccess.content(message), preserve_thinking: true))
         content = response_item_content(message) if text_content_empty?(content)
         reasoning = normalize_reasoning_summary(message)
         content.unshift(reasoning) if reasoning && !thinking_content?(content)
@@ -83,7 +84,7 @@ module Kward
         matching_call = @tool_calls_by_id[tool_call_id]
         raw_name = ToolCall.value(message, :toolName) || ToolCall.value(message, :tool_name) || ToolCall.value(message, :name)
         tool_name = normalize_tool_name(raw_name) || raw_name || matching_call&.dig(:name)
-        content = normalize_content(ToolCall.value(message, :content))
+        content = normalize_content(MessageAccess.content(message))
 
         result = {
           role: "toolResult",
@@ -173,8 +174,7 @@ module Kward
       end
 
       def response_items(message)
-        items = ToolCall.value(message, :response_items) || ToolCall.value(message, :responseItems)
-        items.is_a?(Array) ? items : []
+        MessageAccess.response_items(message)
       end
 
       def reasoning_item_text(item)
@@ -276,8 +276,7 @@ module Kward
       end
 
       def tool_calls(message)
-        calls = ToolCall.value(message, :tool_calls) || ToolCall.value(message, :toolCalls)
-        calls.is_a?(Array) ? calls : []
+        MessageAccess.tool_calls(message)
       end
 
       def normalize_tool_name(name)
