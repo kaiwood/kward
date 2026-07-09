@@ -554,6 +554,7 @@ module Kward
         sessions.each do |rpc_session|
           rpc_session.conversation.plugin_registry = registry if rpc_session.conversation.respond_to?(:plugin_registry=)
           rpc_session.conversation.refresh_system_message! if rpc_session.conversation.respond_to?(:refresh_system_message!)
+          rebuild_session_tools(rpc_session)
           if registry.footer_renderer
             start_footer_worker(rpc_session)
             emit_footer_update(rpc_session)
@@ -614,12 +615,25 @@ module Kward
       end
 
       def rebuild_session_tools(rpc_session)
-        tool_registry = build_tool_registry(rpc_session.workspace_root, rpc_session.prompt)
+        hook_context = lifecycle_hook_context(
+          conversation: rpc_session.conversation,
+          session: rpc_session.session,
+          workspace_root: rpc_session.workspace_root
+        )
+        hook_manager = lifecycle_hook_manager(rpc_session.workspace_root)
+        tool_registry = build_tool_registry(
+          rpc_session.workspace_root,
+          rpc_session.prompt,
+          hook_manager: hook_manager,
+          hook_context: hook_context
+        )
         rpc_session.tool_registry = tool_registry
         rpc_session.agent = Agent.new(
           client: @client,
           tool_registry: tool_registry,
-          conversation: rpc_session.conversation
+          conversation: rpc_session.conversation,
+          hook_manager: hook_manager,
+          hook_context: hook_context
         )
       end
 

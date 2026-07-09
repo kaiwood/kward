@@ -59,6 +59,37 @@ class TestRPCPluginFooter < KwardTestCase
     end
   end
 
+  def test_rpc_reload_rebuilds_existing_session_hook_runtime
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |home|
+        plugins_dir = File.join(home, ".kward", "plugins")
+        plugin_path = File.join(plugins_dir, "hook.rb")
+        FileUtils.mkdir_p(plugins_dir)
+        client = RecordingClient.new(["done"])
+        manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+        session = nil
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+          session = manager.create_session(workspace_root: Dir.pwd)
+          File.write(plugin_path, <<~'RUBY')
+            Kward.plugin do |plugin|
+              plugin.hook "model_request_before" do |_event, ctx|
+                ctx.modify({ model: "plugin-model" })
+              end
+            end
+          RUBY
+
+          manager.reload_plugins
+          turn = manager.start_turn(session_id: session[:id], input: "hello")
+          wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+        end
+
+        assert_equal "plugin-model", client.requests.last[:model]
+        manager.close_session(session_id: session[:id])
+      end
+    end
+  end
+
   def test_rpc_plugin_footer_refreshes_on_interval
     original_interval = Kward::RPC::SessionManager::FOOTER_REFRESH_INTERVAL
     Kward::RPC::SessionManager.send(:remove_const, :FOOTER_REFRESH_INTERVAL)

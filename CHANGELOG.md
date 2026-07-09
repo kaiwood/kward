@@ -26,6 +26,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed RPC plugin reloads so existing sessions rebuild their agent, tool registry, and lifecycle hook runtime.
 - Fixed streamed Codex reasoning whitespace so repeated blank lines collapse to a single empty line.
 - Fixed default persona spelling in new configs and the documented Anthropic default model.
 - Fixed context-usage estimates for restored sessions whose provider differs from the current client default.
