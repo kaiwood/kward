@@ -39,7 +39,7 @@ module Kward
 
       def start(role:, prompt:, title: nil, id: nil)
         worker = build_worker(role: role, prompt: prompt, title: title, id: id)
-        run_hook("worker_job_create", worker)
+        run_blocking_hook("worker_job_create", worker)
         enqueue(worker)
       end
 
@@ -109,7 +109,7 @@ module Kward
         worker.conversation = conversation
         attach_session(worker, conversation)
         writer_id = wait_for_worker_writer(worker)
-        run_hook("worker_job_start_before", worker)
+        run_blocking_hook("worker_job_start_before", worker)
         update_status(worker, "running")
         run_hook("worker_job_start_after", worker)
         registry = ToolRegistry.new(
@@ -142,6 +142,13 @@ module Kward
         release_worker_writer(worker)
       end
 
+      def run_blocking_hook(name, worker, payload = {})
+        result = run_hook(name, worker, payload)
+        return result unless result && !result.allowed?
+
+        raise HookDenied, result.decision.message || "Worker lifecycle hook #{name} blocked the job"
+      end
+
       def run_hook(name, worker, payload = {})
         return unless @hook_manager
 
@@ -150,9 +157,9 @@ module Kward
           workspace: { root: worker.workspace_root },
           payload: worker_payload(worker).merge(payload)
         ), context: @hook_context)
-      rescue StandardError
-        nil
       end
+
+      HookDenied = Class.new(StandardError)
 
       def worker_payload(worker)
         {

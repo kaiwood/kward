@@ -269,6 +269,44 @@ class TestWorkers < KwardTestCase
     end
   end
 
+  def test_worker_manager_denies_worker_create_hook
+    Dir.mktmpdir do |dir|
+      hook_manager = Kward::Hooks::Manager.new
+      hook_manager.register("worker_job_create") { Kward::Hooks::Decision.deny("No workers today") }
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { FakeClient.new([]) },
+        workspace_root: dir,
+        hook_manager: hook_manager
+      )
+
+      error = assert_raises(Kward::Workers::Manager::HookDenied) do
+        manager.start(role: "request", prompt: "Explore tests")
+      end
+
+      assert_equal "No workers today", error.message
+      assert_empty manager.list
+    end
+  end
+
+  def test_worker_manager_denies_worker_start_before_model_call
+    Dir.mktmpdir do |dir|
+      client = RecordingClient.new(["done"])
+      hook_manager = Kward::Hooks::Manager.new
+      hook_manager.register("worker_job_start_before") { Kward::Hooks::Decision.deny("Not now") }
+      manager = Kward::Workers::Manager.new(
+        client_factory: -> { client },
+        workspace_root: dir,
+        hook_manager: hook_manager
+      )
+
+      worker = manager.start(role: "request", prompt: "Explore tests")
+      wait_until(timeout: 1) { worker.status == "failed" }
+
+      assert_equal "Not now", worker.error
+      assert_empty client.seen_messages
+    end
+  end
+
   def test_worker_manager_emits_lifecycle_hooks
     Dir.mktmpdir do |dir|
       client = FakeClient.new([{ "role" => "assistant", "content" => "done" }])
