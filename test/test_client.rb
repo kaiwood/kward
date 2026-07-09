@@ -797,6 +797,70 @@ class TestClient < KwardTestCase
     assert_equal ["thinking"], deltas
   end
 
+  def test_codex_sse_hides_raw_reasoning_by_default
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    deltas = []
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_text.delta", "delta" => "Planning Ruby code review focus\n\n<!-- -->")}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [], "content" => [{ "type" => "reasoning_text", "text" => "Planning Ruby code review focus\n\n<!-- -->" }] })}\n\n"
+
+    message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
+
+    refute message.key?("reasoning_summary")
+    assert_empty deltas
+    assert_equal [], message["response_items"].first["summary"]
+    refute message["response_items"].first.key?("content")
+  end
+
+  def test_codex_sse_strips_comment_artifacts_from_reasoning_summary
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    deltas = []
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_text.delta", "delta" => "Planning detailed event inspection\n\n<!")}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_text.delta", "delta" => "-- -->\n\nSearching session logs locally\n\n<!-- -->")}\n\n" \
+      "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "Planning detailed event inspection\n\n<!-- -->\n\nSearching session logs locally\n\n<!-- -->" }] })}\n\n"
+
+    message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
+
+    assert_equal "Planning detailed event inspection\n\nSearching session logs locally\n\n", message["reasoning_summary"]
+    assert_equal ["Planning detailed event inspection\n\n", "Searching session logs locally\n\n"], deltas
+    assert_equal "Planning detailed event inspection\n\nSearching session logs locally\n\n", message["response_items"].first["summary"].first["text"]
+  end
+
+  def test_codex_sse_can_show_raw_reasoning_when_configured
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("codex_show_raw_reasoning" => true))
+      client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil), config_path: config_path)
+      deltas = []
+      body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
+        "data: #{JSON.dump("type" => "response.reasoning_text.delta", "delta" => "Planning Ruby code review focus\n\n<!-- -->")}\n\n"
+
+      message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
+
+      assert_equal "Planning Ruby code review focus\n\n", message["reasoning_summary"]
+      assert_equal ["Planning Ruby code review focus\n\n"], deltas
+      assert_equal [], message["response_items"].first["summary"]
+      assert_equal "Planning Ruby code review focus\n\n<!-- -->", message["response_items"].first["content"].first["text"]
+    end
+  end
+
+  def test_codex_sse_can_show_completed_raw_reasoning_when_configured
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("codex_show_raw_reasoning" => true))
+      client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil), config_path: config_path)
+      deltas = []
+      body = "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [], "content" => [{ "type" => "reasoning_text", "text" => "Raw reasoning only" }] })}\n\n"
+
+      message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
+
+      assert_equal "Raw reasoning only", message["reasoning_summary"]
+      assert_equal ["Raw reasoning only"], deltas
+      assert_equal "Raw reasoning only", message["response_items"].first["summary"].first["text"]
+    end
+  end
+
   def test_codex_sse_parses_response_usage
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     event = {

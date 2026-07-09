@@ -45,11 +45,12 @@ module Kward
       raise "Copilot returned invalid SSE JSON: #{e.message}"
     end
 
-    def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
-      state = codex_sse_state
+    def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
+      state = codex_sse_state(show_raw_reasoning: show_raw_reasoning)
       body.split(/\r?\n\r?\n/).each do |block|
         process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
       end
+      flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
       codex_sse_message(state)
     rescue JSON::ParserError => e
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
@@ -60,8 +61,8 @@ module Kward
     # Deltas are yielded as soon as complete SSE blocks arrive so interactive
     # frontends can render streamed assistant and reasoning text without waiting
     # for the provider to close the response.
-    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, usage_normalizer: nil, request_error_class: nil)
-      state = codex_sse_state
+    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
+      state = codex_sse_state(show_raw_reasoning: show_raw_reasoning)
       buffer = +""
 
       response.read_body do |chunk|
@@ -76,6 +77,7 @@ module Kward
       end
       cancellation&.raise_if_cancelled!
       process_codex_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class) unless buffer.empty?
+      flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
       codex_sse_message(state)
     rescue JSON::ParserError => e
       raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
@@ -218,17 +220,21 @@ module Kward
       end
     end
 
-    def codex_sse_state
+    def codex_sse_state(show_raw_reasoning: false)
       {
         content: +"",
         raw_content: +"",
         emitted_message_keys: [],
         reasoning_summary: +"",
+        raw_reasoning_visible: +"",
+        pending_reasoning_delta: +"",
+        show_raw_reasoning: show_raw_reasoning,
         tool_calls: [],
         response_item_keys: [],
         items_by_id: {},
         active_item_id: nil,
         current_text_content_part: nil,
+        current_reasoning_content_part: nil,
         usage: nil
       }
     end
@@ -252,7 +258,9 @@ module Kward
       when "response.reasoning_summary_part.done"
         codex_reasoning_part_done(state, on_reasoning_delta: on_reasoning_delta)
       when "response.reasoning_text.delta"
-        codex_reasoning_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta)
+        codex_raw_reasoning_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta)
+      when "response.reasoning_text.done"
+        codex_raw_reasoning_done(state, event["text"], on_reasoning_delta: on_reasoning_delta)
       when "response.function_call_arguments.delta", "response.custom_tool_call_input.delta"
         codex_tool_arguments_delta(state, event["delta"])
       when "response.function_call_arguments.done"
@@ -299,6 +307,7 @@ module Kward
       remember_codex_item(state, item)
       state[:active_item_id] = codex_item_key(item)
       state[:current_text_content_part] = nil
+      state[:current_reasoning_content_part] = nil
     end
 
     def codex_content_part_added(state, part)
@@ -333,10 +342,69 @@ module Kward
 
       item["summary"] ||= []
       item["summary"] << deep_dup_hash(part)
+      state[:current_reasoning_content_part] = nil
     end
 
     def codex_reasoning_delta(state, delta, on_reasoning_delta: nil)
+      text = visible_codex_reasoning_delta(state, delta)
+      return if text.empty?
+
+      append_codex_reasoning_text(state, text, on_reasoning_delta: on_reasoning_delta)
+    end
+
+    def codex_raw_reasoning_delta(state, delta, on_reasoning_delta: nil)
       text = delta.to_s
+      return if text.empty?
+
+      item = active_codex_item(state)
+      if item&.fetch("type", nil) == "reasoning" && state[:show_raw_reasoning]
+        item["content"] ||= [{ "type" => "reasoning_text", "text" => +"" }]
+        part = state[:current_reasoning_content_part] || item["content"].last
+        part = item["content"].last unless part.is_a?(Hash)
+        part["type"] ||= "reasoning_text"
+        part["text"] = part["text"].to_s + text
+        state[:current_reasoning_content_part] = part
+      end
+      return unless state[:show_raw_reasoning]
+
+      visible = visible_codex_reasoning_delta(state, text)
+      append_codex_raw_reasoning_text(state, visible, on_reasoning_delta: on_reasoning_delta) unless visible.empty?
+    end
+
+    def codex_raw_reasoning_done(state, text, on_reasoning_delta: nil)
+      item = active_codex_item(state)
+      full_text = text.to_s
+      if item&.fetch("type", nil) == "reasoning" && state[:show_raw_reasoning]
+        item["content"] ||= [{ "type" => "reasoning_text", "text" => +"" }]
+        part = state[:current_reasoning_content_part] || item["content"].last
+        part = item["content"].last unless part.is_a?(Hash)
+        part["type"] ||= "reasoning_text"
+        part["text"] = full_text
+        state[:current_reasoning_content_part] = part
+      end
+      return unless state[:show_raw_reasoning]
+
+      flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
+      visible = sanitize_codex_reasoning_text(full_text)
+      emitted = state[:raw_reasoning_visible]
+      text = visible.start_with?(emitted) ? visible[emitted.length..].to_s : (emitted.empty? ? visible : +"")
+      append_codex_raw_reasoning_text(state, text, on_reasoning_delta: on_reasoning_delta) unless text.empty?
+    end
+
+    def codex_reasoning_part_done(state, on_reasoning_delta: nil)
+      item = active_codex_item(state)
+      return unless item&.fetch("type", nil) == "reasoning"
+      return if item["summary"].to_a.empty?
+
+      flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
+      text = "\n\n"
+      item["summary"].last["text"] = item["summary"].last["text"].to_s + text
+      state[:reasoning_summary] << text
+      on_reasoning_delta&.call(text)
+    end
+
+    def append_codex_reasoning_text(state, text, on_reasoning_delta: nil)
+      text = compact_codex_reasoning_delta_spacing(state[:reasoning_summary], text)
       return if text.empty?
 
       item = active_codex_item(state)
@@ -349,15 +417,70 @@ module Kward
       on_reasoning_delta&.call(text)
     end
 
-    def codex_reasoning_part_done(state, on_reasoning_delta: nil)
-      item = active_codex_item(state)
-      return unless item&.fetch("type", nil) == "reasoning"
-      return if item["summary"].to_a.empty?
+    def append_codex_raw_reasoning_text(state, text, on_reasoning_delta: nil)
+      text = compact_codex_reasoning_delta_spacing(state[:reasoning_summary], text)
+      return if text.empty?
 
-      text = "\n\n"
-      item["summary"].last["text"] = item["summary"].last["text"].to_s + text
+      state[:raw_reasoning_visible] << text
       state[:reasoning_summary] << text
       on_reasoning_delta&.call(text)
+    end
+
+    def visible_codex_reasoning_delta(state, delta)
+      state[:pending_reasoning_delta] << delta.to_s
+      sanitized = sanitize_codex_reasoning_text(state[:pending_reasoning_delta], keep_incomplete_comment: true)
+      text, pending_prefix = split_trailing_comment_prefix(sanitized[:text])
+      state[:pending_reasoning_delta].replace(pending_prefix + sanitized[:pending])
+      text
+    end
+
+    def flush_codex_reasoning_delta(state, on_reasoning_delta: nil)
+      pending = state[:pending_reasoning_delta].to_s
+      state[:pending_reasoning_delta].clear
+      text = sanitize_codex_reasoning_text(pending)
+      append_codex_raw_reasoning_text(state, text, on_reasoning_delta: on_reasoning_delta) unless text.empty?
+    end
+
+    def split_trailing_comment_prefix(text)
+      string = text.to_s
+      prefix = ["<!-", "<!", "<"].find { |candidate| string.end_with?(candidate) }
+      return [string, +""] unless prefix
+
+      [string[0...-prefix.length], prefix.dup]
+    end
+
+    def sanitize_codex_reasoning_text(text, keep_incomplete_comment: false)
+      string = text.to_s
+      visible = +""
+      index = 0
+
+      while (start_index = string.index("<!--", index))
+        end_index = string.index("-->", start_index + 4)
+        if end_index
+          visible << string[index...start_index]
+          index = end_index + 3
+        elsif keep_incomplete_comment
+          visible << string[index...start_index]
+          return { text: visible, pending: string[start_index..] }
+        else
+          visible << string[index..]
+          index = string.length
+        end
+      end
+
+      visible << string[index..].to_s
+      visible = compact_blank_codex_reasoning_lines(visible)
+      keep_incomplete_comment ? { text: visible, pending: +"" } : visible
+    end
+
+    def compact_blank_codex_reasoning_lines(text)
+      text.to_s.gsub(/\n{3,}/, "\n\n")
+    end
+
+    def compact_codex_reasoning_delta_spacing(existing, text)
+      text = compact_blank_codex_reasoning_lines(text)
+      text = text.sub(/\A\n+/, "") if existing.to_s.end_with?("\n\n")
+      text
     end
 
     def codex_tool_arguments_delta(state, delta)
@@ -379,10 +502,40 @@ module Kward
       return unless item.is_a?(Hash)
 
       item = merge_codex_item(active_or_known_codex_item(state, item), item)
+      item = codex_visible_reasoning_item(state, item)
       remember_codex_item(state, item)
       collect_codex_item_output(state, item, on_assistant_delta: on_assistant_delta, on_reasoning_delta: on_reasoning_delta)
       state[:active_item_id] = nil if state[:active_item_id] == codex_item_key(item)
       state[:current_text_content_part] = nil
+      state[:current_reasoning_content_part] = nil
+    end
+
+    def codex_visible_reasoning_item(state, item)
+      return item unless item.is_a?(Hash) && item["type"] == "reasoning"
+
+      visible = deep_dup_hash(item)
+      sanitize_codex_reasoning_summary_item(visible)
+      visible.delete("content") unless state[:show_raw_reasoning]
+      return visible unless state[:show_raw_reasoning]
+      return visible if visible["summary"].is_a?(Array) && !visible["summary"].empty?
+
+      text = sanitize_codex_reasoning_text(raw_reasoning_from_codex_items([visible]))
+      visible["summary"] = [{ "type" => "summary_text", "text" => text }] unless text.empty?
+      visible
+    end
+
+    def sanitize_codex_reasoning_summary_item(item)
+      return unless item["summary"].is_a?(Array)
+
+      pending = +""
+      item["summary"].each do |part|
+        next unless part.is_a?(Hash) && part.key?("text")
+
+        pending << part["text"].to_s
+        sanitized = sanitize_codex_reasoning_text(pending, keep_incomplete_comment: true)
+        part["text"] = sanitized[:text]
+        pending.replace(sanitized[:pending])
+      end
     end
 
     def collect_codex_item_output(state, item, on_assistant_delta: nil, on_reasoning_delta: nil)
@@ -398,7 +551,7 @@ module Kward
           state[:emitted_message_keys] << key
         end
       when "reasoning"
-        text = reasoning_summary_from_codex_items([item])
+        text = sanitize_codex_reasoning_text(reasoning_summary_from_codex_items([item]))
         if state[:reasoning_summary].empty? && !text.empty?
           state[:reasoning_summary] << text
           on_reasoning_delta&.call(text)
@@ -561,6 +714,14 @@ module Kward
         else
           []
         end
+      end.join
+    end
+
+    def raw_reasoning_from_codex_items(items)
+      items.flat_map do |item|
+        next [] unless item.is_a?(Hash) && item["type"] == "reasoning" && item["content"].is_a?(Array)
+
+        item["content"].filter_map { |part| part["text"] if part.is_a?(Hash) && part["type"] == "reasoning_text" }
       end.join
     end
   end

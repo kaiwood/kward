@@ -682,11 +682,11 @@ module Kward
     end
 
     def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil)
-      ModelStreamParser.parse_codex_sse(body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
+      ModelStreamParser.parse_codex_sse(body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
     end
 
     def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
-      ModelStreamParser.parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
+      ModelStreamParser.parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
     end
 
     def parse_anthropic_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
@@ -833,6 +833,10 @@ module Kward
 
     def config_value(*keys)
       ConfigFiles.config_value(@config, *keys)
+    end
+
+    def codex_show_raw_reasoning?
+      @config["codex_show_raw_reasoning"] == true
     end
 
     def load_config
