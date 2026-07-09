@@ -90,6 +90,42 @@ class TestRPCPluginFooter < KwardTestCase
     end
   end
 
+  def test_rpc_reload_rebuilds_existing_session_tool_hooks
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |home|
+        Dir.mktmpdir do |workspace|
+          target_dir = File.join(workspace, "hooked")
+          FileUtils.mkdir_p(target_dir)
+          File.write(File.join(target_dir, "from_reloaded_hook.txt"), "ok")
+          plugins_dir = File.join(home, ".kward", "plugins")
+          plugin_path = File.join(plugins_dir, "tool_hook.rb")
+          FileUtils.mkdir_p(plugins_dir)
+          manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+          session = nil
+
+          with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+            session = manager.create_session(workspace_root: workspace)
+            File.write(plugin_path, <<~'RUBY')
+              Kward.plugin do |plugin|
+                plugin.hook "tool_call_before" do |_event, ctx|
+                  ctx.modify({ arguments: { path: "hooked" } })
+                end
+              end
+            RUBY
+
+            manager.reload_plugins
+          end
+
+          rpc_session = manager.send(:fetch_session, session[:id])
+          result = rpc_session.tool_registry.dispatch(tool_call("list_directory", { path: "." }), rpc_session.conversation)
+
+          assert_includes result, "from_reloaded_hook.txt"
+          manager.close_session(session_id: session[:id])
+        end
+      end
+    end
+  end
+
   def test_rpc_plugin_footer_refreshes_on_interval
     original_interval = Kward::RPC::SessionManager::FOOTER_REFRESH_INTERVAL
     Kward::RPC::SessionManager.send(:remove_const, :FOOTER_REFRESH_INTERVAL)
