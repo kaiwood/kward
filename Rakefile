@@ -1,8 +1,10 @@
 require "fileutils"
 require "html-proofer"
 require "rdoc/task"
+require "rubygems/package"
 require "webrick"
 require "yard"
+require_relative "lib/kward/version"
 require "yard/rake/yardoc_task"
 
 DOCS_WATCH_GLOBS = [
@@ -24,6 +26,11 @@ end
 
 def rebuild_docs
   system({ "DOCS_SERVE_REBUILD" => "1" }, "bundle", "exec", "rake", "docs:build") || abort("Documentation rebuild failed")
+end
+
+def packaged_gem_files(gem_name)
+  gem = Gem::Package.new(gem_name)
+  gem.spec.files.sort
 end
 
 def rewrite_yard_markdown_links
@@ -65,6 +72,16 @@ YARD::Rake::YardocTask.new do |yard|
     "--markup", "markdown",
     "--template-path", "templates"
   ]
+end
+
+namespace :release do
+  desc "Run release checks and build a local gem"
+  task preflight: [:test, "docs:check"] do
+    gem_name = "kward-#{Kward::VERSION}.gem"
+    FileUtils.rm_f(gem_name)
+    sh "gem", "build", "kward.gemspec"
+    puts packaged_gem_files(gem_name)
+  end
 end
 
 namespace :docs do

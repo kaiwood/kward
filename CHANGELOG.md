@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `rake release:preflight` to run release checks, build docs, build the gem, and print packaged files.
 - Added cached RubyGems update notices on the fresh interactive startup screen.
 - Added an Interface `/settings` option for choosing the integrated diff viewer mode: auto, unified, or side-by-side.
 - Added lifecycle hooks for deterministic runtime policy and automation, including Ruby plugin hooks, command hooks configured in `config.json`, tool/shell/file/turn/model events, and allow/deny/ask/modify/warn decisions.
