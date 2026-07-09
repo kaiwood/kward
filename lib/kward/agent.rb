@@ -6,6 +6,7 @@ require_relative "conversation"
 require_relative "events"
 require_relative "deep_copy"
 require_relative "hooks"
+require_relative "message_access"
 require_relative "steering"
 require_relative "telemetry/logger"
 require_relative "tools/registry"
@@ -99,11 +100,11 @@ module Kward
         steered_after_message = append_steering_events(steering_state)
         yield Events::SteeringApplied.new(count: steered_after_message) if block_given? && steered_after_message.positive?
 
-        tool_calls = message["tool_calls"] || message[:tool_calls] || []
+        tool_calls = MessageAccess.tool_calls(message)
         if tool_calls.empty?
           next if steered_after_message.positive?
 
-          answer = safe_answer(message.fetch("content", message[:content] || ""))
+          answer = safe_answer(MessageAccess.content(message).to_s)
           yield Events::Answer.new(content: answer) if block_given?
           return answer
         end
