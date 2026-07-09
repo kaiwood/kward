@@ -15,6 +15,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - Prefer straightforward Ruby from the standard library unless an existing dependency is already used.
 - Keep user-facing behavior consistent with existing docs and tests.
 - Do not introduce broad rewrites, formatting-only churn, or unrelated cleanup.
+- Do not split large orchestration files such as `RPC::SessionManager` or `Model::Client` just because they are large; extract only when a behavior change exposes a clear, tested ownership boundary.
 - Be careful with auth tokens, API keys, config files, session data, user prompts, and workspace file contents. Do not log secrets.
 
 ## Important paths
