@@ -38,6 +38,16 @@ By default, Kward loads user-level skills but skips project-level skills from th
 
 ```json
 {
+  "updates": {
+    "check": true
+  }
+}
+```
+
+Kward checks RubyGems for newer `kward` versions on the interactive startup screen. Results are cached under `~/.kward/cache/update_check.json` so startup does not hit RubyGems every time. Set `updates.check` to `false`, or set `KWARD_DISABLE_UPDATE_CHECK=1`, to disable the check.
+
+```json
+{
   "memory": {
     "enabled": true
   }

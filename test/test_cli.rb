@@ -1657,6 +1657,24 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_startup_info_screen_can_refresh_update_notice_before_rendering
+    checker = Object.new
+    requested_refresh = nil
+    checker.define_singleton_method(:notice) do |refresh: false|
+      requested_refresh = refresh
+      Kward::UpdateCheck::Notice.new(latest_version: "999.0.0")
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.instance_variable_set(:@color_enabled, true)
+    cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
+    cli.instance_variable_set(:@startup_update_check, checker)
+
+    output = cli.send(:startup_info_screen, refresh_update_check: true)
+
+    assert_equal true, requested_refresh
+    assert_includes output, "  New version available: 999.0.0"
+  end
+
   def test_update_check_disabled_ignores_cached_notice
     Dir.mktmpdir do |config_dir|
       cache_path = File.join(config_dir, "cache", "update_check.json")

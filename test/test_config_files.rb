@@ -31,6 +31,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("web_search", "enabled")
       assert_equal "auto", config.dig("web_search", "provider")
       assert_equal false, config.dig("web_search", "allow_model_providers")
+      assert_equal true, config.dig("updates", "check")
       assert_equal false, config.dig("sessions", "auto_resume")
       assert_equal false, config.dig("skills", "trust_project")
       assert_equal false, config["enforce_workspace_agents_file"]

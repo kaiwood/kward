@@ -29,15 +29,11 @@ module Kward
       true
     end
 
-    def notice
+    def notice(refresh: false)
       return nil unless enabled?
 
-      latest_version = cache["latest_version"].to_s
-      return nil if latest_version.empty?
-      return nil if dismissed_version == latest_version
-      return nil unless newer_than_current?(latest_version)
-
-      Notice.new(latest_version: latest_version)
+      refresh_if_stale if refresh
+      notice_from_cache
     end
 
     def refresh_if_stale
@@ -67,6 +63,15 @@ module Kward
 
     def dismissed_version
       cache["dismissed_version"].to_s
+    end
+
+    def notice_from_cache
+      latest_version = cache["latest_version"].to_s
+      return nil if latest_version.empty?
+      return nil if dismissed_version == latest_version
+      return nil unless newer_than_current?(latest_version)
+
+      Notice.new(latest_version: latest_version)
     end
 
     def stale?

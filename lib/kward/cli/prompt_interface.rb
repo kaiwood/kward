@@ -70,13 +70,12 @@ module Kward
       def print_visual_banner
         return unless @prompt.respond_to?(:print_visual_banner)
 
-        @prompt.print_visual_banner(startup_info_screen)
-        refresh_startup_update_check if prompt_interface?
+        @prompt.print_visual_banner(startup_info_screen(refresh_update_check: prompt_interface?))
       end
 
-      def startup_info_screen
+      def startup_info_screen(refresh_update_check: false)
         [
-          startup_status_line,
+          startup_status_line(refresh_update_check: refresh_update_check),
           *startup_update_notice_lines,
           "",
           startup_info_line("Workspace", startup_workspace_label),
@@ -119,8 +118,8 @@ module Kward
         filenames.empty? ? "none" : filenames.join(", ")
       end
 
-      def startup_status_line
-        color = startup_update_notice ? :yellow : :green
+      def startup_status_line(refresh_update_check: false)
+        color = startup_update_notice(refresh: refresh_update_check) ? :yellow : :green
         "#{ANSI.colorize("●", color, enabled: @color_enabled)} Kward v#{Kward::VERSION} is online."
       end
 
@@ -134,18 +133,11 @@ module Kward
         ]
       end
 
-      def startup_update_notice
-        return @startup_update_notice if defined?(@startup_update_notice)
+      def startup_update_notice(refresh: false)
+        return @startup_update_notice if defined?(@startup_update_notice) && !refresh
 
-        @startup_update_check = UpdateCheck.new(current_version: Kward::VERSION)
-        @startup_update_notice = @startup_update_check.notice
-      end
-
-      def refresh_startup_update_check
-        checker = @startup_update_check || UpdateCheck.new(current_version: Kward::VERSION)
-        return unless checker.enabled?
-
-        Thread.new { checker.refresh_if_stale }
+        @startup_update_check ||= UpdateCheck.new(current_version: Kward::VERSION)
+        @startup_update_notice = @startup_update_check.notice(refresh: refresh)
       end
 
       def startup_info_line(label, value)

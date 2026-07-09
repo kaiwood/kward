@@ -129,6 +129,9 @@ module Kward
           "provider" => "auto",
           "allow_model_providers" => false
         },
+        "updates" => {
+          "check" => true
+        },
         "sessions" => {
           "auto_resume" => false
         },
