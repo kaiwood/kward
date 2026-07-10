@@ -65,7 +65,7 @@ module Kward
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :mutex, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
       def initialize(
@@ -325,7 +325,7 @@ module Kward
       # Stops all live RPC session workers during server shutdown.
       def shutdown_sessions
         rpc_sessions = @mutex.synchronize { @sessions.values.dup }
-        rpc_sessions.reverse_each { |rpc_session| close_rpc_session(rpc_session) if session_idle?(rpc_session) }
+        rpc_sessions.reverse_each { |rpc_session| close_rpc_session(rpc_session) }
         { closed: true }
       end
 
@@ -368,7 +368,8 @@ module Kward
           plugin_command_name: plugin_command&.name,
           plugin_arguments: plugin_arguments,
           options: normalized_options,
-          tool_registry: scoped_tool_registry(rpc_session, normalized_options)
+          tool_registry: scoped_tool_registry(rpc_session, normalized_options),
+          mutex: Mutex.new
         )
         @mutex.synchronize { @turns[turn.id] = turn }
         rpc_session.queue << turn.id
@@ -379,12 +380,13 @@ module Kward
 
       def cancel_turn(turn_id:)
         turn = fetch_turn(turn_id)
-        turn.cancel_requested = true
-        turn.cancellation&.cancel!
-        emit_turn_event(turn, "turnCancelRequested", {})
-        if turn.status == "queued"
-          finish_turn(turn, "canceled")
+        queued, event = turn.mutex.synchronize do
+          turn.cancel_requested = true
+          [turn.status == "queued", append_turn_event_locked(turn, "turnCancelRequested", {})]
         end
+        @server.notify("turn/event", event)
+        turn.cancellation&.cancel!
+        finish_turn(turn, "canceled") if queued
         turn_payload(turn)
       end
 
@@ -395,10 +397,12 @@ module Kward
       def turn_events(turn_id:, after_sequence: 0)
         turn = fetch_turn(turn_id)
         after_sequence = after_sequence.to_i
-        {
-          turn: turn_payload(turn),
-          events: turn.events.select { |event| event[:sequence].to_i > after_sequence }
-        }
+        turn.mutex.synchronize do
+          {
+            turn: turn_payload_unlocked(turn),
+            events: turn.events.select { |event| event[:sequence].to_i > after_sequence }
+          }
+        end
       end
 
       def list_turns(session_id: nil, active: false)
@@ -1043,6 +1047,8 @@ module Kward
       end
 
       def close_rpc_session(rpc_session, delete_unused: true)
+        cancel_session_turns(rpc_session)
+        stop_worker(rpc_session, wait: true)
         remove_live_session(rpc_session)
         rpc_session.session.delete_if_unused if delete_unused && rpc_session.session.respond_to?(:delete_if_unused)
       end
@@ -1066,12 +1072,20 @@ module Kward
         stop_footer_worker(rpc_session)
       end
 
-      def stop_worker(rpc_session)
+      def stop_worker(rpc_session, wait: false)
         worker = rpc_session.worker
         return unless worker&.alive?
         return if worker == Thread.current
 
         rpc_session.queue << WORKER_STOP
+        worker.join if wait
+      end
+
+      def cancel_session_turns(rpc_session)
+        turns = @mutex.synchronize do
+          @turns.values.select { |turn| turn.session_id == rpc_session.id && ["queued", "running"].include?(turn.status) }
+        end
+        turns.each { |turn| cancel_turn(turn_id: turn.id) }
       end
 
       def start_footer_worker(rpc_session)
@@ -1128,11 +1142,18 @@ module Kward
       def run_turn(rpc_session, turn)
         previous_turn_id = Thread.current[:kward_rpc_turn_id]
         Thread.current[:kward_rpc_turn_id] = turn.id
+        started, event = turn.mutex.synchronize do
+          next [false, nil] if turn.status == "canceled"
+
+          turn.status = "running"
+          turn.started_at = now
+          [true, append_turn_event_locked(turn, "turnStarted", { status: "running" })]
+        end
+        return unless started
+
+        @server.notify("turn/event", event)
         rpc_session.running_turn_id = turn.id
         turn.steering = build_steering(turn) if supports_in_flight_steer? && !turn.plugin_command_name
-        turn.status = "running"
-        turn.started_at = now
-        emit_turn_event(turn, "turnStarted", { status: "running" })
 
         if turn.cancel_requested
           finish_turn(turn, "canceled")
@@ -1292,11 +1313,16 @@ module Kward
       end
 
       def finish_turn(turn, status)
-        return if ["completed", "failed", "canceled"].include?(turn.status)
+        event = turn.mutex.synchronize do
+          next nil if ["completed", "failed", "canceled"].include?(turn.status)
 
-        turn.status = status
-        turn.finished_at = now
-        emit_turn_event(turn, "turnFinished", { status: status, error: turn.error })
+          turn.status = status
+          turn.finished_at = now
+          append_turn_event_locked(turn, "turnFinished", { status: status, error: turn.error })
+        end
+        return unless event
+
+        @server.notify("turn/event", event)
         rpc_session = @mutex.synchronize { @sessions[turn.session_id] }
         emit_footer_update(rpc_session) if rpc_session
       end
@@ -1326,6 +1352,12 @@ module Kward
       end
 
       def emit_turn_event(turn, type, payload)
+        event = turn.mutex.synchronize { append_turn_event_locked(turn, type, payload) }
+        @server.notify("turn/event", event)
+        event
+      end
+
+      def append_turn_event_locked(turn, type, payload)
         event = {
           sequence: turn.next_sequence,
           timestamp: now,
@@ -1337,7 +1369,6 @@ module Kward
         turn.next_sequence += 1
         turn.events << event
         turn.events.shift while turn.events.length > RECENT_EVENT_LIMIT
-        @server.notify("turn/event", event)
         event
       end
 
@@ -1351,6 +1382,10 @@ module Kward
       end
 
       def turn_payload(turn)
+        turn.mutex.synchronize { turn_payload_unlocked(turn) }
+      end
+
+      def turn_payload_unlocked(turn)
         {
           id: turn.id,
           sessionId: turn.session_id,

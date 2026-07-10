@@ -338,6 +338,23 @@ class TestRPCSessionManagerTurns < KwardTestCase
     end
   end
 
+  def test_turn_event_sequences_remain_unique_during_concurrent_cancellation
+    Dir.mktmpdir do |config_dir|
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: BlockingCancellableClient.new, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "running")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      threads = 5.times.map { Thread.new { manager.cancel_turn(turn_id: turn[:id]) } }
+      threads.each(&:join)
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "canceled" }
+
+      sequences = manager.turn_events(turn_id: turn[:id])[:events].map { |event| event[:sequence] }
+      assert_equal sequences.sort, sequences
+      assert_equal sequences.uniq, sequences
+    end
+  end
+
   def test_cancel_turn_waiting_for_rpc_question_unblocks_worker
     Dir.mktmpdir do |config_dir|
       server = RecordingServer.new

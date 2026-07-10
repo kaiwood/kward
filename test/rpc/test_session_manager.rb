@@ -633,6 +633,38 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_close_session_cancels_running_turn_before_closing
+    Dir.mktmpdir do |config_dir|
+      client = BlockingCancellableClient.new
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      manager.close_session(session_id: session[:id])
+
+      assert client.cancelled?
+      assert_equal "canceled", manager.turn_status(turn_id: turn[:id])[:status]
+      assert_raises(RuntimeError) { manager.runtime_state(session_id: session[:id]) }
+    end
+  end
+
+  def test_delete_session_cancels_running_turn_before_deleting
+    Dir.mktmpdir do |config_dir|
+      client = BlockingCancellableClient.new
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      manager.delete_session(session_id: session[:id])
+
+      assert client.cancelled?
+      assert_equal "canceled", manager.turn_status(turn_id: turn[:id])[:status]
+      refute_path_exists session[:path]
+    end
+  end
+
   def test_shutdown_sessions_stops_idle_workers
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
@@ -647,6 +679,22 @@ class TestRPCSessionManager < KwardTestCase
       manager.shutdown_sessions
 
       wait_until { !worker.alive? && rpc_session.worker.nil? }
+    end
+  end
+
+  def test_shutdown_sessions_cancels_running_turns
+    Dir.mktmpdir do |config_dir|
+      client = BlockingCancellableClient.new
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      manager.shutdown_sessions
+
+      assert client.cancelled?
+      assert_equal "canceled", manager.turn_status(turn_id: turn[:id])[:status]
+      assert_raises(RuntimeError) { manager.runtime_state(session_id: session[:id]) }
     end
   end
 

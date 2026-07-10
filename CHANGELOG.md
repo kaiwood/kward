@@ -4,6 +4,11 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed RPC session close, delete, and shutdown operations to cancel active turns before releasing session state.
+- Fixed concurrent RPC turn event recording so replay sequence numbers remain unique and ordered.
+
 ## [0.76.0] - 2026-07-10
 
 ### Added
