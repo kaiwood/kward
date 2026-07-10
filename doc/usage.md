@@ -186,6 +186,8 @@ Current MVP limitations:
 
 ## Prompt history
 
+The [Interactive composer](composer.md) guide covers multiline editing, slash and file completion, reasoning shortcuts, busy input, cancellation, attachments, and terminal compatibility.
+
 In interactive mode, Kward keeps prompt history per workspace under `~/.kward/history/`. Press Up/Down to recall previous prompts across restarts.
 
 Press `Ctrl-R` to search history. Type a fuzzy query in the composer, use Up/Down to choose a result from the overlay, then press Enter to place it back in the composer for editing or resubmission. Press Esc or Ctrl-C to cancel the search and restore the draft.
@@ -266,7 +268,7 @@ Important guardrails:
 
 ## Images
 
-If the active model supports images, Kward can attach image paths, Markdown image links, `file://` URLs, or image data URLs pasted into the composer. Supported formats are GIF, JPEG, PNG, and WebP, up to 20 MB per image.
+If the active model supports images, Kward can attach image paths, Markdown image links, `file://` URLs, or image data URLs pasted into the composer. Supported formats are GIF, JPEG, PNG, and WebP, up to 20 MB per image. See [Interactive composer](composer.md#Attach_images) for attachment badges, removal, and terminal previews.
 
 Use this for tasks such as:
 

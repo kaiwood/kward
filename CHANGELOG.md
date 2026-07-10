@@ -8,6 +8,7 @@ All notable changes to Kward will be documented in this file.
 
 - Added a security and trust guide covering local permissions, external data flow, trusted extensions, stored data, and safe use with unfamiliar repositories.
 - Added a dedicated Pan mode guide covering setup, browser and session workflows, prompt queueing, extensions, network security, and limitations.
+- Added an interactive composer guide covering editing keys, command and file completion, history, reasoning and tab shortcuts, busy input, cancellation, images, and terminal compatibility.
 - Added session browsing, creation, resume, rename, and deletion to Pan mode, with a responsive mobile-first interface using the documentation palette, Kward logo, and CLI-inspired startup screen.
 
 ### Fixed

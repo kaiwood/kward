@@ -17,6 +17,7 @@ module KwardDocsNavigationData
       "Feature guides",
       [
         ["Sessions", "file.session-management.html"],
+        ["Interactive composer", "file.composer.html"],
         ["Tabs", "file.tabs.html"],
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"],
