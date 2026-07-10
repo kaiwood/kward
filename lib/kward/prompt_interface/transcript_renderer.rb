@@ -40,10 +40,6 @@ module Kward
         @transcript_buffer.append(text.to_s)
       end
 
-      def invalidate_transcript_display_rows_cache
-        @transcript_buffer.invalidate_display_rows_cache
-      end
-
       def ensure_transcript_block_separator_locked
         return if @transcript_buffer.empty? || @transcript_buffer.end_with?("\n\n")
 
@@ -65,10 +61,6 @@ module Kward
         @output_io.print(terminal_newlines(rows.join("\n")))
       end
 
-      def transcript_viewport_text(row_count, width)
-        transcript_viewport_rows(row_count, width).join("\n")
-      end
-
       def transcript_viewport_rows(row_count, width)
         return [] unless row_count.positive?
 
@@ -87,10 +79,6 @@ module Kward
 
       def transcript_display_rows(width)
         @transcript_buffer.display_rows(width)
-      end
-
-      def transcript_text_display_rows(width)
-        @transcript_buffer.text_display_rows(width)
       end
 
       def reset_stream_position_from_transcript_locked(width = screen_width)

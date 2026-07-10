@@ -10,10 +10,6 @@ module Kward
         @banner.rows(width, message: message)
       end
 
-      def banner_logo_rows
-        @banner.logo_rows(screen_width)
-      end
-
       def transcript_redraw_row_count(height = screen_height)
         [[@transcript_viewport_rows, transcript_bottom_row(height)].max, height].min
       end

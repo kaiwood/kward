@@ -37,7 +37,7 @@ module Kward
 
     Cut = Struct.new(:first_kept_index, :messages_to_summarize, :turn_prefix_messages, :split_turn, :preserved_messages, :preserved_start_index, keyword_init: true)
 
-    # Interactive settings menu actions mixed into the CLI frontend.
+    # Configuration for manual and automatic conversation compaction.
     class Settings
       DEFAULT_ENABLED = true
       DEFAULT_RESERVE_TOKENS = 16_384
@@ -731,7 +731,7 @@ module Kward
     SummarizationFailed = Compaction::SummarizationFailed
 
     AUTO_COMPACTION_GUARD_RATIO = 0.10
-    AUTO_COMPACTION_EXTRA_GUARD_CAP = 12_000
+    AUTO_COMPACTION_EXTRA_GUARD_FLOOR = 12_000
 
     # Creates an object for conversation compaction.
     def initialize(conversation:, client:, tool_result_summarizer: nil, settings: nil, summarizer: nil)
@@ -805,7 +805,7 @@ module Kward
     def self.auto_compaction_reserve_tokens(context_window:, configured_reserve_tokens:)
       context_window_i = context_window.to_i
       dynamic_guard = (context_window_i * AUTO_COMPACTION_GUARD_RATIO).to_i
-      [configured_reserve_tokens.to_i, dynamic_guard, AUTO_COMPACTION_EXTRA_GUARD_CAP].max
+      [configured_reserve_tokens.to_i, dynamic_guard, AUTO_COMPACTION_EXTRA_GUARD_FLOOR].max
     end
 
     def compaction_messages(custom_instructions = nil)

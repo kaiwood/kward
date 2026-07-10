@@ -551,9 +551,5 @@ module Kward
       ANSI.sanitize_transcript(text)
     end
 
-    def clean_output(value)
-      text = clean_chunk(value)
-      text.end_with?("\n") || text.empty? ? text : "#{text}\n"
-    end
   end
 end

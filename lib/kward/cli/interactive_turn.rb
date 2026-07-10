@@ -235,22 +235,6 @@ module Kward
         ["/exit", "/quit", "/new"].include?(input.to_s.strip)
       end
 
-      def handle_busy_worker_input(input, agent, queued_inputs)
-        return false unless agent
-
-        command = input.to_s.strip
-        return false unless command == "/workers" || command.start_with?("/workers ")
-
-        _handled, replacement_agent = handle_local_slash_command(command, agent, @session_store)
-        @busy_replacement_agent = replacement_agent if replacement_agent?(replacement_agent)
-        restore_busy_input_prompt
-        true
-      rescue StandardError => e
-        runtime_output("Error: #{e.message}")
-        restore_busy_input_prompt
-        true
-      end
-
       def replacement_agent?(object)
         object.respond_to?(:conversation) && object.respond_to?(:ask)
       end
