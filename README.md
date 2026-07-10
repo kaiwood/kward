@@ -90,6 +90,7 @@ Feature guides:
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
 - [Skills](doc/skills.md): add reusable instructions that load only for matching tasks.
 - [MCP servers](doc/mcp.md): connect trusted local Model Context Protocol tool servers.
+- [Pan mode](doc/pan.md): use the mobile-friendly browser interface on a trusted local network.
 
 Advanced:
 

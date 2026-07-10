@@ -20,7 +20,8 @@ module KwardDocsNavigationData
         ["Tabs", "file.tabs.html"],
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"],
-        ["Skills", "file.skills.html"]
+        ["Skills", "file.skills.html"],
+        ["Pan mode", "file.pan.html"]
       ]
     ],
     [

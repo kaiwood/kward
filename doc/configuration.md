@@ -436,7 +436,7 @@ Manual `/compact [instructions]` works even when auto-compaction is disabled.
 
 `host` defaults to `0.0.0.0` and `port` defaults to `8765`. Kward fails to start pan mode unless `username` and `password` are configured.
 
-These credentials are stored in plaintext config. Use a private, user-specific password and do not share the config file. Pan mode exposes the agent's file, shell, and web tools to anyone on the LAN who has the credentials, so use it only on trusted networks.
+These credentials are stored in plaintext config. Use a private, user-specific password and do not share the config file. Pan mode exposes the agent's file, shell, web, and configured extension tools to anyone on the LAN who has the credentials, so use it only on trusted networks. See [Pan mode](pan.md) for the full browser workflow, session behavior, security guidance, and limitations.
 
 ## Web search
 
