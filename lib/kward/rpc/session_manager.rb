@@ -62,6 +62,7 @@ module Kward
       RPC_IMAGE_MIME_TYPES = AttachmentNormalizer::IMAGE_MIME_TYPES
       STREAMING_BEHAVIORS = ["newTurn", "followUp", "steer"].freeze
       FOOTER_REFRESH_INTERVAL = 1.0
+      WORKER_STOP_TIMEOUT = 2.0
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
@@ -74,7 +75,8 @@ module Kward
         config_dir: ConfigFiles.config_dir,
         config_manager: ConfigManager.new(config_path: File.join(config_dir, "config.json")),
         context_usage: ContextUsage.new,
-        session_trash: SessionTrash.new
+        session_trash: SessionTrash.new,
+        worker_stop_timeout: WORKER_STOP_TIMEOUT
       )
         @server = server
         @client = client
@@ -83,6 +85,7 @@ module Kward
         @context_usage = context_usage
         @session_metrics = SessionMetrics.new(context_usage: context_usage)
         @session_trash = session_trash
+        @worker_stop_timeout = worker_stop_timeout
         @sessions = {}
         @turns = {}
         @mutex = Mutex.new
@@ -1051,8 +1054,8 @@ module Kward
       end
 
       def close_rpc_session(rpc_session, delete_unused: true)
-        cancel_session_turns(rpc_session)
-        stop_worker(rpc_session, wait: true)
+        turns = cancel_session_turns(rpc_session)
+        turns.each { |turn| finish_turn(turn, "canceled") } if stop_worker(rpc_session, wait: true)
         remove_live_session(rpc_session)
         rpc_session.session.delete_if_unused if delete_unused && rpc_session.session.respond_to?(:delete_if_unused)
       end
@@ -1078,11 +1081,18 @@ module Kward
 
       def stop_worker(rpc_session, wait: false)
         worker = rpc_session.worker
-        return unless worker&.alive?
-        return if worker == Thread.current
+        return false unless worker&.alive?
+        return false if worker == Thread.current
 
         rpc_session.queue << WORKER_STOP
-        worker.join if wait
+        return false unless wait
+
+        worker.join(@worker_stop_timeout)
+        return false unless worker.alive?
+
+        worker.kill
+        worker.join
+        true
       end
 
       def cancel_session_turns(rpc_session)
@@ -1090,6 +1100,7 @@ module Kward
           @turns.values.select { |turn| turn.session_id == rpc_session.id && ["queued", "running"].include?(turn.status) }
         end
         turns.each { |turn| cancel_turn(turn_id: turn.id) }
+        turns
       end
 
       def start_footer_worker(rpc_session)

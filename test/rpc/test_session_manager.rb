@@ -664,6 +664,24 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_close_session_forces_uncooperative_worker_to_stop_after_timeout
+    Dir.mktmpdir do |config_dir|
+      client = Object.new
+      client.define_singleton_method(:chat) { |_messages, **_options| sleep 10 }
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: client, config_dir: config_dir, worker_stop_timeout: 0.01)
+      session = manager.create_session(workspace_root: Dir.pwd)
+      rpc_session = manager.send(:fetch_session, session[:id])
+      turn = manager.start_turn(session_id: session[:id], input: "hello")
+
+      wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      worker = rpc_session.worker
+      manager.close_session(session_id: session[:id])
+
+      refute worker.alive?
+      assert_equal "canceled", manager.turn_status(turn_id: turn[:id])[:status]
+    end
+  end
+
   def test_delete_session_cancels_running_turn_before_deleting
     Dir.mktmpdir do |config_dir|
       client = BlockingCancellableClient.new
