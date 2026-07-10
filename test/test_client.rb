@@ -51,12 +51,12 @@ class TestClient < KwardTestCase
     assert_equal Kward::Client::AUTH_ERROR, error.message
   end
 
-  def test_codex_oauth_defaults_to_gpt_5_5_medium_reasoning
+  def test_codex_oauth_defaults_to_gpt_5_6_sol_medium_reasoning
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
     payload = client.send(:codex_payload, [{ role: "user", content: "hello" }], [])
 
-    assert_equal "gpt-5.5", payload[:model]
+    assert_equal "gpt-5.6-sol", payload[:model]
     assert_equal({ effort: "medium", summary: "auto" }, payload[:reasoning])
     assert_equal true, payload[:stream]
     assert_equal false, payload[:store]
@@ -174,7 +174,10 @@ class TestClient < KwardTestCase
 
     models = client.available_models
 
-    assert_includes_model models, { provider: "Codex", id: "gpt-5.5", current: true, contextWindow: 400_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.6-sol", current: true, contextWindow: 1_050_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.6-terra", current: false, contextWindow: 1_050_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.6-luna", current: false, contextWindow: 1_050_000 }
+    assert_includes_model models, { provider: "Codex", id: "gpt-5.5", current: false, contextWindow: 400_000 }
     assert_includes_model models, { provider: "Codex", id: "gpt-5.4", current: false, contextWindow: 1_050_000 }
     assert_includes_model models, { provider: "Codex", id: "gpt-5.4-mini", current: false, contextWindow: 400_000 }
     assert_includes_model models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false, contextWindow: 128_000 }

@@ -4,11 +4,11 @@ require_relative "../config_files"
 module Kward
   # Static and configured model metadata helpers.
   module ModelInfo
-    DEFAULT_OPENAI_MODEL = "gpt-5.5"
+    DEFAULT_OPENAI_MODEL = "gpt-5.6-sol"
     DEFAULT_COPILOT_MODEL = "gpt-5-mini"
     DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
     DEFAULT_REASONING_EFFORT = "medium"
-    OPENAI_MODEL_CHOICES = %w[gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
+    OPENAI_MODEL_CHOICES = %w[gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     ANTHROPIC_MODEL_CHOICES = %w[
       claude-opus-4-8
       claude-sonnet-4-6
@@ -46,6 +46,10 @@ module Kward
       ["none", "None"],
       *REASONING_EFFORT_CHOICES
     ].freeze
+    OPENAI_MAX_REASONING_EFFORT_CHOICES = [
+      *OPENAI_REASONING_EFFORT_CHOICES,
+      ["max", "Max"]
+    ].freeze
     ANTHROPIC_HIGH_REASONING_EFFORT_CHOICES = [
       ["low", "Low"],
       ["medium", "Medium"],
@@ -70,6 +74,7 @@ module Kward
     ].freeze
 
     CODEX_CONTEXT_WINDOWS = [
+      [/\Agpt-5\.6/, 1_050_000],
       [/\Agpt-5\.5/, 400_000],
       [/\Agpt-5\.4-mini/, 400_000],
       [/\Agpt-5\.4/, 1_050_000],
@@ -87,6 +92,7 @@ module Kward
       [/\Agpt-3\.5-turbo/, 16_385]
     ].freeze
     OPENAI_CONTEXT_WINDOWS = [
+      [/\Agpt-5\.6/, 1_050_000],
       [/\Agpt-5\.5/, 1_050_000],
       [/\Agpt-5\.4-mini/, 400_000],
       [/\Agpt-5\.4/, 1_050_000],
@@ -382,6 +388,7 @@ module Kward
     def openai_reasoning_effort_choices(id)
       text = id.to_s.delete_prefix("openai/")
       return REASONING_EFFORT_CHOICES if text.match?(/\Agpt-5\.[23]-codex/)
+      return OPENAI_MAX_REASONING_EFFORT_CHOICES if text.match?(/\Agpt-5\.6(?:\z|-)/)
 
       OPENAI_REASONING_EFFORT_CHOICES
     end

@@ -9,7 +9,7 @@ Small examples:
 ```json
 {
   "provider": "openrouter",
-  "openrouter_model": "openai/gpt-5.5"
+  "openrouter_model": "openai/gpt-5.6-sol"
 }
 ```
 
@@ -141,9 +141,9 @@ Model settings:
 
 ```json
 {
-  "model": "gpt-5.5",
-  "openai_model": "gpt-5.5",
-  "openrouter_model": "openai/gpt-5.5",
+  "model": "gpt-5.6-sol",
+  "openai_model": "gpt-5.6-sol",
+  "openrouter_model": "openai/gpt-5.6-sol",
   "anthropic_model": "claude-sonnet-4-5",
   "copilot_model": "gpt-5-mini",
   "reasoning_effort": "medium",
@@ -161,8 +161,8 @@ Set `codex_show_raw_reasoning` to `true` to display raw Codex `reasoning_text` w
 
 Defaults:
 
-- OpenAI/Codex: `gpt-5.5`
-- OpenRouter: `openai/gpt-5.5`
+- OpenAI/Codex: `gpt-5.6-sol`
+- OpenRouter: `openai/gpt-5.6-sol`
 - Anthropic: `claude-sonnet-4-6`
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`

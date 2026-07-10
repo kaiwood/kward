@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added GPT-5.6 Sol, Terra, and Luna to the OpenAI/Codex model choices and made GPT-5.6 Sol the default OpenAI/Codex model.
+
 ### Fixed
 
 - Fixed interactive update notices so stale checks refresh before the startup banner and new configs expose the `updates.check` setting.

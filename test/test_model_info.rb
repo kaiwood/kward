@@ -3,6 +3,9 @@ require_relative "test_helper"
 class TestModelInfo < KwardTestCase
   def test_context_window_uses_known_codex_model_patterns
     cases = {
+      "gpt-5.6-sol" => 1_050_000,
+      "gpt-5.6-terra" => 1_050_000,
+      "gpt-5.6-luna" => 1_050_000,
       "gpt-5.5" => 400_000,
       "gpt-5.5-latest" => 400_000,
       "gpt-5.4" => 1_050_000,
@@ -27,6 +30,7 @@ class TestModelInfo < KwardTestCase
   end
 
   def test_context_window_uses_provider_model_patterns
+    assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.6-sol")
     assert_equal 1_050_000, Kward::ModelInfo.context_window("OpenRouter", "openai/gpt-5.5")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("OpenRouter", "anthropic/claude-opus-4.8")
     assert_equal 1_048_576, Kward::ModelInfo.context_window("OpenRouter", "google/gemini-3.1-pro-preview")
@@ -97,6 +101,7 @@ class TestModelInfo < KwardTestCase
   end
 
   def test_reasoning_effort_choices_are_model_specific
+    assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.6-sol").map(&:first)
     assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.5").map(&:first)
     assert_equal %w[low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.3-codex").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-opus-4-8").map(&:first)
