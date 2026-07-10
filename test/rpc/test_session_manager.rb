@@ -250,6 +250,21 @@ class TestRPCSessionManager < KwardTestCase
     end
   end
 
+  def test_session_list_keeps_live_empty_session_without_client_path_hint
+    Dir.mktmpdir do |config_dir|
+      workspace_root = File.realpath(Dir.mktmpdir)
+      manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)
+      session = manager.create_session(workspace_root: workspace_root)
+      abandoned = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace_root).create
+
+      assert_empty manager.list_sessions(workspace_root: workspace_root, limit: 10)
+      assert_path_exists session[:path]
+      refute_path_exists abandoned.path
+    ensure
+      FileUtils.remove_entry(workspace_root) if workspace_root && File.exist?(workspace_root)
+    end
+  end
+
   def test_session_list_keeps_current_empty_session_file_until_first_turn_persists
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

@@ -2046,9 +2046,9 @@ class TestCLI < KwardTestCase
         events << [:select_session]
         choices.first
       end
-      store.define_singleton_method(:recent_tree) do |limit: 20|
+      store.define_singleton_method(:recent_tree) do |limit: 20, keep_empty_path: nil|
         prompt.events << [:recent_tree, limit]
-        super(limit: limit)
+        super(limit: limit, keep_empty_path: keep_empty_path)
       end
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
 

@@ -140,7 +140,11 @@ module Kward
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
         requested_limit = limit.to_i if limit
         requested_limit = nil unless requested_limit&.positive?
-        store.recent(limit: requested_limit, keep_empty_path: current_session_path)
+        live_paths = @mutex.synchronize do
+          @sessions.values.filter_map { |rpc_session| rpc_session.session.path if rpc_session.workspace_root == root }
+        end
+        live_paths << current_session_path unless current_session_path.to_s.empty?
+        store.recent(limit: requested_limit, keep_empty_path: live_paths)
              .map { |info| session_info_payload(info, workspace_root: root) }
       end
 

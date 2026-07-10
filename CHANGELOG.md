@@ -8,6 +8,7 @@ All notable changes to Kward will be documented in this file.
 
 - Fixed RPC session close, delete, and shutdown operations to cancel active turns before releasing session state.
 - Fixed concurrent RPC turn event recording so replay sequence numbers remain unique and ordered.
+- Kept intentional empty-session garbage collection from deleting live CLI or RPC session files.
 
 ## [0.76.0] - 2026-07-10
 

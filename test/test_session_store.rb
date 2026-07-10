@@ -149,6 +149,20 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_recent_preserves_multiple_live_empty_sessions_while_garbage_collecting_others
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      live_sessions = 2.times.map { store.create }
+      abandoned = store.create
+
+      recent = store.recent(limit: 10, keep_empty_path: live_sessions.map(&:path))
+
+      assert_empty recent
+      live_sessions.each { |session| assert_path_exists session.path }
+      refute_path_exists abandoned.path
+    end
+  end
+
   def test_recent_without_limit_returns_all_sessions
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

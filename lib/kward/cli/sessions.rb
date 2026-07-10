@@ -80,6 +80,15 @@ module Kward
         @cleanup_sessions.clear
       end
 
+      def live_session_paths
+        (Array(@tabs).filter_map { |tab| tab.session&.path } + [@active_session&.path]).compact.uniq
+      end
+
+      def recent_sessions(session_store, tree: false, limit: nil)
+        method = tree ? :recent_tree : :recent
+        session_store.public_send(method, limit: limit, keep_empty_path: live_session_paths)
+      end
+
       def cleanup_replaced_session(previous_session)
         return unless previous_session
         return if @active_session && File.expand_path(previous_session.path) == File.expand_path(@active_session.path)
@@ -590,8 +599,8 @@ module Kward
       end
 
       def insert_session_copy(session_store, sessions, labels, source, copy_path)
-        copy_info = session_store.recent_tree(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(copy_path) }
-        copy_info ||= session_store.recent(limit: nil).find { |session| File.expand_path(session.path) == File.expand_path(copy_path) }
+        copy_info = recent_sessions(session_store, tree: true).find { |session| File.expand_path(session.path) == File.expand_path(copy_path) }
+        copy_info ||= recent_sessions(session_store).find { |session| File.expand_path(session.path) == File.expand_path(copy_path) }
         return nil unless copy_info
 
         source_index = sessions.index(source) || 0
@@ -618,7 +627,7 @@ module Kward
         return nil unless source
 
         session_store.load(source.path).first.rename(name)
-        updated = session_store.recent_tree(limit: nil)
+        updated = recent_sessions(session_store, tree: true)
         sessions.replace(updated)
         labels.replace(session_picker_labels(sessions))
         index = sessions.index { |session| File.expand_path(session.path) == File.expand_path(source.path) } || 0
@@ -716,7 +725,7 @@ module Kward
       end
 
       def select_session_path(session_store)
-        select_session_path_from_sessions(session_store.recent_tree(limit: nil), session_store: session_store)
+        select_session_path_from_sessions(recent_sessions(session_store, tree: true), session_store: session_store)
       end
 
       def reopen_sessions_after_fork(session_store, source_path, source_label)
@@ -724,7 +733,7 @@ module Kward
           fork_session_from_picker(session_store, source_path)
         end
 
-        sessions = session_store.recent_tree(limit: nil)
+        sessions = recent_sessions(session_store, tree: true)
         labels = session_picker_labels(sessions)
         initial_index = if fork_path
                           sessions.index { |session| File.expand_path(session.path) == File.expand_path(fork_path) }

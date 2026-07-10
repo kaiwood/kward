@@ -309,7 +309,7 @@ module Kward
     # Lists recent non-empty sessions for this workspace.
     #
     # @param limit [Integer, nil] maximum number of sessions, or nil for all
-    # @param keep_empty_path [String, nil] empty session path to keep visible
+    # @param keep_empty_path [String, Array<String>, nil] live empty session path(s) to preserve while omitting them from results
     # @return [Array<SessionInfo>] newest sessions first
     def recent(limit: 20, keep_empty_path: nil)
       sessions = recent_sessions(keep_empty_path: keep_empty_path)
@@ -771,19 +771,21 @@ module Kward
     end
 
     def recent_sessions(keep_empty_path: nil)
-      keep_empty_path = File.expand_path(keep_empty_path) unless keep_empty_path.to_s.empty?
+      keep_empty_paths = Array(keep_empty_path).filter_map do |path|
+        File.expand_path(path) unless path.to_s.empty?
+      end
       Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
         info = session_info(path)
         next unless info
-        next if delete_empty_unnamed_session_info(info, keep_empty_path: keep_empty_path)
+        next if delete_empty_unnamed_session_info(info, keep_empty_paths: keep_empty_paths)
 
         info
       end.sort_by { |info| info.modified_at || Time.at(0) }.reverse
     end
 
-    def delete_empty_unnamed_session_info(info, keep_empty_path: nil)
+    def delete_empty_unnamed_session_info(info, keep_empty_paths: [])
       return false unless info.name.to_s.strip.empty? && info.message_count.to_i.zero?
-      return true if keep_empty_path && File.expand_path(info.path) == keep_empty_path
+      return true if keep_empty_paths.include?(File.expand_path(info.path))
 
       File.delete(info.path)
       true

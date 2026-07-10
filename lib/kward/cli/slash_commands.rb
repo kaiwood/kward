@@ -136,7 +136,7 @@ module Kward
 
         path = argument.to_s.strip
         if path.empty?
-          sessions = run_busy_local_command_and_requeue { session_store.recent_tree(limit: nil) }
+          sessions = run_busy_local_command_and_requeue { recent_sessions(session_store, tree: true) }
           path = select_session_path_from_sessions(sessions, session_store: session_store)
         end
 
