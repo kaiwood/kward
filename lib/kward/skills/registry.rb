@@ -4,7 +4,13 @@ require "pathname"
 module Kward
   # Skill discovery and metadata parsing from configured skill folders.
   module Skills
-    # Parsed skill metadata and instruction path.
+    # Discovers Agent Skills and reads their bounded instruction resources.
+    #
+    # Project sources are included only when the caller marks them trusted. If
+    # duplicate skill names exist, the first source in documented precedence
+    # order wins.
+    #
+    # @api public
     class Registry
       SkillSource = Struct.new(:root, :label, :scope, :precedence, keyword_init: true)
 
@@ -18,6 +24,10 @@ module Kward
         @inside_directory = inside_directory
       end
 
+      # Returns discovered, validated skills in precedence order.
+      #
+      # @return [Array<ConfigFiles::Skill>]
+      # @api public
       def skills
         seen = {}
         skill_sources.flat_map do |source|
@@ -39,6 +49,16 @@ module Kward
         []
       end
 
+      # Reads a skill's main instructions or a bounded relative resource.
+      #
+      # Absolute paths, paths escaping the skill folder, missing files, and files
+      # above the configured size limit return user-facing error strings.
+      #
+      # @param name [String, #to_s] discovered skill name
+      # @param relative_path [String, nil] file relative to the skill directory;
+      #   defaults to `SKILL.md`
+      # @return [String] skill content or an error message
+      # @api public
       def read_skill_file(name, relative_path = nil)
         skill = skills.find { |candidate| candidate.name == name.to_s }
         return "Error: unknown skill: #{name}" unless skill

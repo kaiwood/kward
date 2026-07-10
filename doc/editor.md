@@ -16,7 +16,20 @@ The editor is scoped to the current workspace. It only opens files inside that d
 
 ## Quick start
 
-Open the file picker by typing `$` as the first character in the composer:
+Open a file directly from your shell:
+
+```bash
+cd ~/code/my-project
+kward edit lib/kward/agent.rb
+```
+
+Kward uses the current directory as the workspace, opens the file in the integrated editor, and exits when you close the editor. Use `--working-directory` when the file belongs to another workspace:
+
+```bash
+kward --working-directory ~/code/my-project edit lib/kward/agent.rb
+```
+
+From an interactive Kward session, open the file picker by typing `$` as the first character in the composer:
 
 ```text
 $lib/kward/agent.rb

@@ -45,6 +45,8 @@ Generated entry points:
 - [`Kward::Tools::Base`](Kward/Tools/Base.html)
 - [`Kward::ToolRegistry`](Kward/ToolRegistry.html)
 
+These pages document the schema and dispatch contract used by built-in tools. Kward does not yet provide a plugin DSL for registering arbitrary model-callable tools; contributors add them through the built-in registry and keep schemas, validation, docs, and tests aligned.
+
 ### RPC and frontend authors
 
 The RPC protocol is the supported integration surface for UI clients. Prefer the protocol guide before reading implementation classes.
@@ -77,6 +79,8 @@ Generated entry points:
 - [`Kward::Skills`](Kward/Skills.html)
 - [`Kward::Skills::Registry`](Kward/Skills/Registry.html)
 - [`Kward::ConfigFiles`](Kward/ConfigFiles.html)
+
+The generated comments focus on these supported extension boundaries rather than trying to make every internal orchestration helper public. When a generated method lacks guide coverage, treat it as internal unless the page explicitly marks it as a public API.
 
 ## Public API expectations
 

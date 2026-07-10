@@ -87,14 +87,17 @@ module Kward
         nil
       end
 
+      # @return [String, nil] active session identifier
       def session_id
         @session&.id
       end
 
+      # @return [String, nil] human-readable active session name
       def session_name
         @session&.name
       end
 
+      # @return [String, nil] saved active session path
       def session_path
         @session&.path
       end
@@ -108,30 +111,45 @@ module Kward
         nil
       end
 
+      # Allows the current lifecycle event to continue.
+      # @return [Hooks::Decision]
       def allow(message = nil, metadata: nil)
         Hooks::Decision.allow(message, metadata: metadata)
       end
 
+      # Denies the current lifecycle event.
+      # @return [Hooks::Decision]
       def deny(message = nil, metadata: nil)
         Hooks::Decision.deny(message, metadata: metadata)
       end
 
+      # Requests frontend approval for the current lifecycle event.
+      # @return [Hooks::Decision]
       def ask(message = nil, metadata: nil)
         Hooks::Decision.ask(message, metadata: metadata)
       end
 
+      # Continues with an event-specific payload replacement.
+      # @param payload [Hash] replacement fields supported by the event
+      # @return [Hooks::Decision]
       def modify(payload, message: nil, metadata: nil)
         Hooks::Decision.modify(payload, message: message, metadata: metadata)
       end
 
+      # Allows the event while recording a warning.
+      # @return [Hooks::Decision]
       def warn(message = nil, metadata: nil)
         Hooks::Decision.warn(message, metadata: metadata)
       end
 
+      # Requests a retry when the current event supports it.
+      # @return [Hooks::Decision]
       def retry(message = nil, payload: nil, metadata: nil)
         Hooks::Decision.retry(message, payload: payload, metadata: metadata)
       end
 
+      # Defers the event when the current workflow supports it.
+      # @return [Hooks::Decision]
       def defer(message = nil, payload: nil, metadata: nil)
         Hooks::Decision.defer(message, payload: payload, metadata: metadata)
       end

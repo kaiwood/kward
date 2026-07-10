@@ -19,7 +19,7 @@ module Kward
       { name: "export", description: "Export the current session as Markdown.", argument_hint: "[path]" },
       { name: "compact", description: "Compact the current conversation context.", argument_hint: "[instructions]" },
       { name: "redraw", description: "Refresh the visible terminal.", argument_hint: "" },
-      { name: "settings", description: "Configure prompt overlays.", argument_hint: "" },
+      { name: "settings", description: "Configure Kward interactively.", argument_hint: "" },
       { name: "login", description: "Log in with an OAuth provider.", argument_hint: "" },
       { name: "model", description: "Select the default model.", argument_hint: "" },
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },

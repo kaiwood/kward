@@ -33,6 +33,7 @@ module Kward
     # `SessionManager`, `AuthManager`, and `ConfigManager`. When adding an RPC
     # feature, update dispatch, capabilities, docs, and tests together so clients
     # can trust `initialize` as the source of supported behavior.
+    # @api public
     class Server
       PROTOCOL_VERSION = 1
       JSONRPC_VERSION = "2.0"
@@ -110,6 +111,12 @@ module Kward
       RPC_METHODS = METHOD_GROUPS.values.flatten.freeze
 
       # Creates the RPC server and its stateful managers.
+      #
+      # @param input [IO] framed JSON-RPC input stream
+      # @param output [IO] framed JSON-RPC output stream
+      # @param error_output [IO, nil] redacted diagnostic stream
+      # @param client [Client] model-provider client shared by sessions
+      # @param experimental_workers [Boolean] expose experimental worker methods
       def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new, experimental_workers: false)
         @transport = Transport.new(input: input, output: output)
         @error_output = error_output
@@ -162,6 +169,10 @@ module Kward
         })
       end
 
+      # Writes a redacted server diagnostic without exposing error payload data.
+      #
+      # @param error [Exception]
+      # @return [void]
       def log_error(error)
         @error_output.puts("Kward RPC error: #{Redactor.redact_string(error.message)}") if @error_output
       end

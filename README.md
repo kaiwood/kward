@@ -41,17 +41,18 @@ kward init
 
 This downloads Kward's default prompts and base `PRINCIPLES.md` into your config directory. It is useful for a first setup, but safe to skip if you prefer to create your own instructions. Existing files are left untouched.
 
-Then start Kward and sign in when needed:
+Then sign in and start Kward:
 
 ```bash
+kward login                    # sign in or save provider credentials
 kward                          # start an interactive chat
 kward help                     # show available commands and examples
-/login                         # from inside Kward: sign in or save provider credentials
-kward login                    # from your shell: sign in or save provider credentials
 kward hooks doctor             # inspect lifecycle hook setup
 kward "Explain this project"   # run one prompt and exit
 kward --working-directory ~/code/project "Explain this project"
 ```
+
+From inside Kward, `/login` opens the same provider picker.
 
 See [Authentication](doc/authentication.md) for more details about sign-in options and provider credentials.
 
@@ -79,11 +80,15 @@ Start here:
 Feature guides:
 
 - [Sessions](doc/session-management.md): resume, clone, fork, rewind, compact, and navigate saved work.
-- [Integrated Editor](doc/editor.md): open files from the composer, edit in-place, and choose editor keybindings.
+- [Tabs](doc/tabs.md): keep several conversations open and run work in another tab.
+- [Project files](doc/files.md): browse, search, mention, open, and edit workspace files.
+- [Integrated Editor](doc/editor.md): open files from the shell or composer, edit in-place, and choose editor keybindings.
 - [Git](doc/git.md): review changes, use the diff viewer, stage files, and commit from the interactive TUI.
 - [Shell](doc/shell.md): use `/shell`, the embedded Kward shell with aliases, completion, and per-tab state.
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
+- [Skills](doc/skills.md): add reusable instructions that load only for matching tasks.
+- [MCP servers](doc/mcp.md): connect trusted local Model Context Protocol tool servers.
 
 Advanced:
 

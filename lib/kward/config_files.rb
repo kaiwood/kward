@@ -24,7 +24,9 @@ module Kward
   # Keep path decisions here. Higher-level code should ask `ConfigFiles` for
   # config, prompt, skill, plugin, cache, memory, and session locations instead of
   # reconstructing `~/.kward` paths independently.
+  # @api public
   module ConfigFiles
+    # Raised when a user configuration file cannot be parsed.
     class ConfigError < StandardError
       attr_reader :path, :format, :detail
 
@@ -87,10 +89,12 @@ module Kward
       File.expand_path(ENV["KWARD_CONFIG_PATH"] || File.join(config_dir, "config.json"))
     end
 
+    # @return [String] directory containing reusable local caches
     def cache_dir
       File.join(config_dir, "cache")
     end
 
+    # @return [String] embedded-shell YAML config path
     def ekwsh_config_path
       File.join(config_dir, "ekwsh.yml")
     end
@@ -103,6 +107,9 @@ module Kward
       File.join(config_dir, "trusted_workspace_hooks.json")
     end
 
+    # Returns a fresh default config suitable for first-run persistence.
+    #
+    # @return [Hash] deep-mutable config defaults
     def default_config
       {
         "personas" => JSON.parse(JSON.generate(DEFAULT_PERSONAS)),

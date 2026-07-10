@@ -78,7 +78,7 @@ For several commands, enter the embedded Kward shell:
 /shell
 ```
 
-`/shell` opens `ekwsh`, a Kward-native command mode. Kward keeps the tab bar, composer editing, and transcript rendering while each command runs through your configured shell. Built-ins such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, `pty`, and `exit` maintain shell-mode state between commands. Plain Tab completes built-in command names, configured aliases, executables from `$PATH`, and file paths from the shell's current directory; `cd` completion suggests directories only. `ekwsh` preserves safe ANSI SGR color/style output while stripping terminal-control sequences that could corrupt the TUI, and sets conservative color-friendly environment defaults such as `CLICOLOR=1`, `COLORTERM=truecolor`, and `TERM=xterm-256color` when needed. Use `pty git log` or `/pty git log` when you intentionally want to hand the terminal to an interactive tool such as `less` or `vim`. You can set global shell env vars and aliases in `~/.kward/ekwsh.yml`; see [Configuration](configuration.md).
+`/shell` opens `ekwsh`, a Kward-native command mode that keeps the tab bar and transcript visible. It preserves state such as the current directory, environment variables, and aliases between commands. Use `pty git log` or `/pty git log` when you intentionally want to hand the terminal to an interactive tool such as `less` or `vim`. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
 
 ## Shell commands
 
@@ -125,7 +125,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/files` | browse project files in a nested tree and open them in the editor. |
 | `/shell` | run workspace commands in the embedded Kward shell. |
 | `/pty <command>` | hand the terminal to an interactive command such as `git log`/`less` or `vim`. |
-| `/settings` | configure prompt overlays. |
+| `/settings` | configure models, accounts, memory, interface, tools, context, personalization, and logging. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session in the current tab. |
 | `/tab 2` | switch to tab 2. |
@@ -140,6 +140,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/session name <name>` | name or clear the current session. |
 | `/rename <name>` | rename the current session. |
 | `/clone` | copy the current session into a new branch. |
+| `/fork` | fork from an earlier prompt into a new session. |
 | `/rewind` | revisit an earlier prompt and try a different direction. |
 | `/tree` | inspect and navigate the full technical session tree. |
 | `/copy last` | copy the latest assistant answer. |
@@ -147,13 +148,18 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/export notes.md` | write the transcript to a Markdown file. |
 | `/compact [instructions]` | summarize older context so a long chat can continue. |
 | `/memory ...` | manage opt-in memory. |
+| `/skill <name>` | activate a configured skill explicitly for the current session. |
+| `/stats [range]` | summarize enabled local telemetry. |
+| `/hooks ...` | inspect, diagnose, trust, or untrust lifecycle hooks. |
+| `/scratchpad [text|markdown|ruby]` | open an unsaved editor buffer. |
 | `/redraw` | fix terminal drawing after resize or glitches. |
 | `/reload` | reload installed plugins. |
 | `/workers` | open the experimental worker pipeline (`new`, `do <task>`, or `list`). |
 | `/queue` | manage the experimental tab-backed worker queue (`add`, `list`, `open <id>`, `run`, `suspend <id>`, or `resume <id>`). |
 | `/exit` | leave Kward. |
+| `/quit` | alias for `/exit`. |
 
-Prompt templates and plugins can add more slash commands.
+Prompt templates, configured skills, and plugins can add more slash commands. Their commands appear in the interactive slash-command picker alongside built-ins. Experimental `/workers` and `/queue` commands appear only when Kward starts with `--experimental-workers`.
 
 ### Experimental tab-backed worker queue
 

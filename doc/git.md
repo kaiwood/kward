@@ -44,7 +44,7 @@ Use `Shift+Enter` to insert a newline if you need a multi-line commit message.
 
 Highlight a file in the `/git` overlay and press `Enter`.
 
-Kward opens a read-only diff viewer in the composer area. It shows classic Git diff output with added and removed lines colorized when terminal color is enabled.
+Kward opens a read-only diff viewer in the composer area. Added and removed lines are colorized when terminal color is enabled. The viewer supports unified and side-by-side layouts; its default `auto` mode uses side-by-side output at 120 columns or wider and unified output in narrower terminals. Choose a fixed layout with `/settings` → Interface → Diff view. See [Configuration](configuration.md#Editor_settings) for the JSON setting.
 
 Useful keys in the diff viewer:
 
@@ -61,7 +61,7 @@ Useful keys in the diff viewer:
 
 After you close the viewer, Kward returns to the Git overlay with the file list refreshed.
 
-The diff viewer is read-only. It is meant for checking what changed, not editing. If you spot something you want to fix, close the viewer, return to chat, and ask Kward to make the change or open the file with the built-in editor using `$path/to/file` (see [Configuration](configuration.md) for editor modes and settings).
+The diff viewer is read-only. It is meant for checking what changed, not editing. If you spot something you want to fix, close the viewer, return to chat, and ask Kward to make the change or open the file with the built-in editor using `$path/to/file`. See [Integrated Editor](editor.md) for editor workflows and keybindings.
 
 ## Example workflow
 

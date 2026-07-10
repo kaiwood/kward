@@ -1,10 +1,25 @@
 # Configuration
 
-Kward reads user configuration from `~/.kward/config.json` by default. Most users do not need to edit this file by hand at first: use `/login`, `/model`, `/reasoning`, and `/settings` from inside Kward when possible.
+Kward reads user configuration from `~/.kward/config.json` by default. Most users should start with `/settings`, `/login`, `/model`, or `/reasoning` inside Kward. Edit JSON directly when you need an advanced setting, an integration, or a reproducible configuration.
 
-On first start, if the file does not exist, Kward creates a starter config with an active Kward persona, explicit disabled memory settings, and the default composer busy-help setting so you can inspect and edit them. Provider-specific model defaults are added only when you choose a provider/model. See [Personas](personas.md) for configuring persona selection by workspace, model, or reasoning effort. If `KWARD_CONFIG_PATH` is set, Kward uses that file instead and treats that file's directory as the config directory for prompts, skills, memory, logs, and caches.
+On first start, Kward creates the file when it does not exist. The starter config records defaults for personas, memory, the composer, editor, overlays, web search, update checks, sessions, skills, MCP, and workspace guardrails. Provider-specific model defaults are added only when you choose a provider or model.
 
-Small examples:
+If `KWARD_CONFIG_PATH` is set, Kward uses that file and treats its directory as the config directory for prompts, skills, memory, logs, and caches.
+
+## Common changes
+
+| Goal | Recommended path |
+| --- | --- |
+| Sign in or change accounts | `/settings` → Accounts, or `/login` |
+| Choose a provider, model, or reasoning effort | `/settings` → Model & Reasoning, `/model`, or `/reasoning` |
+| Change editor, diff, overlay, or session UI behavior | `/settings` → Interface |
+| Enable memory | `/settings` → Memory |
+| Configure web search or trust project skills | `/settings` → Tools & Search |
+| Tune compaction | `/settings` → Context & Compaction |
+| Configure personas | `/settings` → Personalization; see [Personas](personas.md) |
+| Add MCP servers, lifecycle hooks, or environment-specific paths | Edit `config.json` directly |
+
+Here is a minimal direct provider configuration:
 
 ```json
 {
@@ -12,6 +27,10 @@ Small examples:
   "openrouter_model": "openai/gpt-5.6-sol"
 }
 ```
+
+### MCP servers
+
+Add trusted local Model Context Protocol servers under `mcpServers`:
 
 ```json
 {
@@ -24,7 +43,11 @@ Small examples:
 }
 ```
 
-See [MCP servers](mcp.md) for connecting local Model Context Protocol servers such as Safari's browser automation server.
+See [MCP servers](mcp.md) for setup, supported fields, and security notes.
+
+### Project skills
+
+Kward loads user-level skills but skips project-level skills by default. Enable them only for repositories you trust, either through `/settings` → Tools & Search → Trust project skills or with:
 
 ```json
 {
@@ -34,40 +57,42 @@ See [MCP servers](mcp.md) for connecting local Model Context Protocol servers su
 }
 ```
 
-By default, Kward loads user-level skills but skips project-level skills from the workspace. Set `skills.trust_project` to `true`, or use `/settings` → `Tools & Search` → `Trust project skills`, when you trust the repository's `.kward/skills` or `.agents/skills` directories. See [Skills](skills.md) for skill locations and examples.
+See [Skills](skills.md) for skill locations, precedence, examples, and trust behavior.
+
+### Update checks
+
+Kward checks RubyGems for newer versions on the interactive startup screen. Results are cached so startup does not contact RubyGems every time. Disable this automatic network request with:
 
 ```json
 {
   "updates": {
-    "check": true
+    "check": false
   }
 }
 ```
 
-Kward checks RubyGems for newer `kward` versions on the interactive startup screen. Results are cached under `~/.kward/cache/update_check.json` so startup does not hit RubyGems every time. Set `updates.check` to `false`, or set `KWARD_DISABLE_UPDATE_CHECK=1`, to disable the check.
-
-```json
-{
-  "memory": {
-    "enabled": true
-  }
-}
-```
+You can also set `KWARD_DISABLE_UPDATE_CHECK=1` for one run. The cache lives at `<config-dir>/cache/update_check.json`.
 
 ## Config directory
 
-By default, Kward stores user data under `~/.kward`:
+By default, Kward stores user data under `~/.kward`. Common files and directories include:
 
 ```text
 ~/.kward/config.json
 ~/.kward/auth.json
 ~/.kward/anthropic_auth.json
 ~/.kward/github_auth.json
+~/.kward/PRINCIPLES.md
+~/.kward/ekwsh.yml
+~/.kward/prompts/
+~/.kward/skills/
+~/.kward/plugins/
 ~/.kward/sessions/
+~/.kward/history/
 ~/.kward/memory/
 ~/.kward/logs/
 ~/.kward/cache/
-~/.kward/plugins/
+~/.kward/trusted_workspace_hooks.json
 ```
 
 When `KWARD_CONFIG_PATH=/path/to/config.json` is set, most config-related files live beside that file instead. User plugins are the exception: they are loaded only from `~/.kward/plugins`. See [Plugins](plugins.md) for writing and loading user plugins.
@@ -234,22 +259,6 @@ Overlay settings control terminal picker/card layout. New default configs includ
 
 You can change these interactively with `/settings`.
 
-## Web search settings
-
-New default configs enable web search with the automatic provider order:
-
-```json
-{
-  "web_search": {
-    "enabled": true,
-    "provider": "auto",
-    "allow_model_providers": false
-  }
-}
-```
-
-Existing configs without `web_search` keep the same behavior: web search is enabled, the provider is `auto`, and model-provider fallbacks are disabled unless explicitly enabled.
-
 ## Composer settings
 
 The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:
@@ -290,7 +299,19 @@ The built-in TUI file editor supports three keybinding modes. Modern is the defa
 }
 ```
 
-`mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` > Interface > Editor mode; newly opened editor buffers pick up the setting immediately.
+`mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` → Interface → Editor mode; newly opened editor buffers pick up the setting immediately.
+
+The integrated Git and session diff viewers support unified and side-by-side layouts:
+
+```json
+{
+  "editor": {
+    "diff_view": "auto"
+  }
+}
+```
+
+`diff_view` can be `auto`, `unified`, or `side_by_side`. In `auto` mode, Kward uses side-by-side output when the terminal is at least 120 columns wide and unified output in narrower terminals. Change it with `/settings` → Interface → Diff view.
 
 The editor automatically highlights Ruby, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
 
@@ -419,7 +440,19 @@ These credentials are stored in plaintext config. Use a private, user-specific p
 
 ## Web search
 
-Web search works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool:
+Web search is enabled by default with automatic provider selection. Model-backed fallback providers remain disabled unless you explicitly allow them:
+
+```json
+{
+  "web_search": {
+    "enabled": true,
+    "provider": "auto",
+    "allow_model_providers": false
+  }
+}
+```
+
+Existing configs without a `web_search` object use those same defaults. Web search works without an API key through Exa's public MCP endpoint and is advertised to the model by default. To hide the tool:
 
 ```json
 {

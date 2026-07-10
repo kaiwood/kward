@@ -3,11 +3,22 @@ module Kward
   # Model-callable tool wrappers and their argument schemas.
   module Tools
     # Base class for model-callable tools and their JSON schemas.
+    #
+    # Concrete built-in tools initialize this class with their model-facing name,
+    # description, and strict argument schema, then implement `call` to perform
+    # the operation. Tool execution is coordinated by {Kward::ToolRegistry}.
+    #
+    # @api public
     class Base
       # @return [String] function name exposed to the model
       attr_reader :name
 
       # Creates a tool schema definition shared by all concrete tool wrappers.
+      #
+      # @param name [String] function name exposed to the model
+      # @param description [String] model-facing description of the operation
+      # @param properties [Hash] JSON Schema properties keyed by argument name
+      # @param required [Array<String, Symbol>] required argument names
       def initialize(name, description, properties: {}, required: [])
         @name = name
         @description = description
@@ -16,6 +27,9 @@ module Kward
       end
 
       # Returns the strict JSON schema advertised to model providers.
+      #
+      # @return [Hash] function schema with additional properties disabled
+      # @api public
       def schema
         {
           type: "function",

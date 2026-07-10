@@ -46,6 +46,7 @@ module Kward
   # individual tools, and legacy-compatible shapes are accepted where already
   # supported. Required fields and invalid required values should still return
   # explicit tool errors.
+  # @api public
   class ToolRegistry
     # Tool schemas advertised to the model for the current frontend and config.
     #
@@ -148,6 +149,14 @@ module Kward
       model_content
     end
 
+    # Returns frontend discovery metadata for a tool name.
+    #
+    # Unknown names return metadata with an unknown source rather than raising,
+    # which lets RPC clients render restored or unsupported tool calls safely.
+    #
+    # @param name [String, #to_s] exposed tool name
+    # @return [Hash] source, display name, and optional MCP identity
+    # @api public
     def metadata_for(name)
       tool = @tools[name.to_s]
       return unknown_tool_metadata(name) unless tool

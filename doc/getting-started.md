@@ -34,6 +34,8 @@ kward doctor
 
 This checks your config, auth, writable directories, and workspace. Run `kward help` to see all available commands and examples.
 
+Interactive startup also performs a cached RubyGems version check by default. It does not contact RubyGems on every start; disable it with `KWARD_DISABLE_UPDATE_CHECK=1` or the `updates.check` configuration setting. See [Configuration](configuration.md#Update_checks).
+
 If you are working from a checkout instead:
 
 ```bash

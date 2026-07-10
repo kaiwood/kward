@@ -337,9 +337,9 @@ Worker hooks are observe-and-warn hooks for background worker automation and aud
 
 `file_change_before` fires before `write_file` or `edit_file` mutates the workspace and can deny or ask for approval. `file_change_after` fires only after successful `write_file` or `edit_file` results.
 
-### MCP events
+### Matching MCP tools
 
-MCP tools are surfaced through generic tool events with:
+In addition to the dedicated MCP events above, MCP tools are surfaced through generic tool events with:
 
 - `source: "mcp"`
 - `server_name`

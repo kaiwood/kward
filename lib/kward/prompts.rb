@@ -3,9 +3,25 @@ require_relative "config_files"
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # System prompt assembly from config, workspace instructions, memory, and plugins.
+  #
+  # Call {system_message} for the provider-ready message or {prompt_sections}
+  # when a frontend needs to inspect the labeled sources separately.
+  #
+  # @api public
   module Prompts
     module_function
 
+    # Builds the system message sent to a model provider.
+    #
+    # @param workspace_root [String] active workspace root
+    # @param include_workspace_personality [Boolean] include persona and plugin context
+    # @param model [String, nil] model used for persona matching
+    # @param reasoning_effort [String, nil] reasoning effort used for persona matching
+    # @param now [Time] time used for persona modifiers
+    # @param memory_context [String, nil] retrieved memory text
+    # @param plugin_context [String, nil] trusted plugin-provided instructions
+    # @return [Hash] role/content system message
+    # @api public
     def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
       {
         role: "system",
@@ -17,6 +33,10 @@ module Kward
       prompt_sections(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context).map { |section| section[:content] }
     end
 
+    # Returns labeled prompt sections for inspection by CLI and RPC frontends.
+    #
+    # @return [Array<Hash>] section hashes with label, content, and optional source
+    # @api public
     def prompt_sections(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
       sections = [prompt_section("Built-in system prompt", base_prompt)]
       sections << prompt_section(config_agents_prompt_label, config_agents_prompt, source: config_agents_prompt_source)
