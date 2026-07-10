@@ -775,7 +775,7 @@ class TestRPCSessionManager < KwardTestCase
       result = manager.compact_session(session_id: session[:id], custom_instructions: "focus")
 
       assert_includes result[:summary], "summary"
-      assert_match /\A(?:message:\d+|[0-9a-f]{8})\z/, result[:firstKeptEntryId]
+      assert_match(/\A(?:message:\d+|[0-9a-f]{8})\z/, result[:firstKeptEntryId])
       assert_includes client.seen_messages.last.last[:content], "Additional focus: focus"
       live_messages = rpc_session.conversation.messages.reject { |message| (message["role"] || message[:role]) == "system" }
       assert_equal ["compactionSummary", "user", "assistant"], live_messages.map { |message| message[:role] || message["role"] }

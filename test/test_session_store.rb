@@ -465,7 +465,6 @@ class TestSessionStore < KwardTestCase
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       session = store.create
-      conversation = Kward::Conversation.new(system_message: nil)
       session.append_message({ role: "user", content: "hello" })
       session.append_message({ role: "assistant", content: "reply" })
 

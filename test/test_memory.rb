@@ -296,8 +296,7 @@ class MemoryManagerTest < KwardTestCase
 
   def test_infer_soft_from_text_uses_summarized_text
     mock_client = Object.new
-    mock_client.define_singleton_method(:chat) do |messages, **opts|
-      text = messages.last[:content].to_s.gsub(/^Reformulate this as a memory statement: /, "")
+    mock_client.define_singleton_method(:chat) do |_messages, **_opts|
       { "content" => "The captain likes eating steak" }
     end
 
