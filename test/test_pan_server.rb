@@ -33,6 +33,28 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_server_displays_routed_lan_address_for_default_host
+    Dir.mktmpdir do |dir|
+      socket = LanAddressSocket.new("192.168.1.25")
+      socket_class = Class.new { define_singleton_method(:new) { socket } }
+      server = build_server(dir, host: "0.0.0.0", udp_socket_class: socket_class)
+
+      assert_equal "192.168.1.25", server.send(:display_host)
+
+      assert_equal [Kward::PanServer::ROUTING_PROBE_ADDRESS, Kward::PanServer::ROUTING_PROBE_PORT], socket.connection
+      assert_equal true, socket.closed
+    end
+  end
+
+  def test_pan_server_uses_placeholder_when_lan_address_is_unavailable
+    Dir.mktmpdir do |dir|
+      socket_class = Class.new { define_singleton_method(:new) { raise Errno::ENETUNREACH } }
+      server = build_server(dir, host: "0.0.0.0", udp_socket_class: socket_class)
+
+      assert_equal "<lan-address>", server.send(:display_host)
+    end
+  end
+
   def test_pan_server_rejects_unauthorized_request
     Dir.mktmpdir do |dir|
       server = build_server(dir)
@@ -215,9 +237,30 @@ class TestPanServer < KwardTestCase
 
   private
 
-  def build_server(dir, client: PanStreamingClient.new([]))
-    config = { "pan_mode" => { "username" => "kward", "password" => "secret", "host" => "127.0.0.1", "port" => 0 } }
-    Kward::PanServer.new(client: client, working_directory: dir, config: config, config_dir: File.join(dir, ".kward"), output: StringIO.new)
+  class LanAddressSocket
+    attr_reader :closed, :connection
+
+    def initialize(address)
+      @address = address
+      @closed = false
+    end
+
+    def connect(address, port)
+      @connection = [address, port]
+    end
+
+    def addr
+      ["AF_INET", 0, nil, @address]
+    end
+
+    def close
+      @closed = true
+    end
+  end
+
+  def build_server(dir, client: PanStreamingClient.new([]), host: "127.0.0.1", udp_socket_class: UDPSocket)
+    config = { "pan_mode" => { "username" => "kward", "password" => "secret", "host" => host, "port" => 0 } }
+    Kward::PanServer.new(client: client, working_directory: dir, config: config, config_dir: File.join(dir, ".kward"), output: StringIO.new, udp_socket_class: udp_socket_class)
   end
 
   def auth_header

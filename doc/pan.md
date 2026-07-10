@@ -56,7 +56,7 @@ Or select the workspace explicitly:
 kward --working-directory ~/code/my-project pan
 ```
 
-Kward prints the listening address, workspace, and initial session path. With the default LAN binding, open port `8765` through the machine's LAN address, for example:
+Kward prints the listening URL, workspace, and initial session path. With the default LAN binding, it detects and prints the machine's routed LAN address when available. Open port `8765` at that address, for example:
 
 ```text
 http://192.168.1.25:8765/

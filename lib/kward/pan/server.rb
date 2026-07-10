@@ -26,10 +26,13 @@ module Kward
     DEFAULT_HOST = "0.0.0.0"
     DEFAULT_PORT = 8765
     MAX_REQUEST_BODY_BYTES = 64 * 1024
+    ROUTING_PROBE_ADDRESS = "8.8.8.8"
+    ROUTING_PROBE_PORT = 80
 
-    def initialize(client:, working_directory:, config: ConfigFiles.read_config, config_dir: ConfigFiles.config_dir, output: $stderr)
+    def initialize(client:, working_directory:, config: ConfigFiles.read_config, config_dir: ConfigFiles.config_dir, output: $stderr, udp_socket_class: UDPSocket)
       @client = client
       @output = output
+      @udp_socket_class = udp_socket_class
       @workspace = Workspace.new(root: working_directory)
       @config = pan_config(config)
       @host = @config.fetch("host", DEFAULT_HOST).to_s
@@ -528,7 +531,19 @@ module Kward
     end
 
     def display_host
-      @host == "0.0.0.0" ? "<lan-address>" : @host
+      return @host unless @host == "0.0.0.0"
+
+      lan_address || "<lan-address>"
+    end
+
+    def lan_address
+      socket = @udp_socket_class.new
+      socket.connect(ROUTING_PROBE_ADDRESS, ROUTING_PROBE_PORT)
+      socket.addr.last
+    rescue SocketError, SystemCallError
+      nil
+    ensure
+      socket&.close
     end
 
     def set_active(value)
