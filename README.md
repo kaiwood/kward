@@ -75,6 +75,7 @@ Start here:
 - [Usage](doc/usage.md): interactive chat, slash commands, sessions, tools, images, and Pan mode.
 - [Configuration](doc/configuration.md): config files, providers, models, web search, logging, and color output.
 - [Authentication](doc/authentication.md): OpenAI OAuth, Anthropic OAuth, OpenRouter API keys, and Copilot/GitHub setup.
+- [Security and trust](doc/security.md): local permissions, external data flow, trusted extensions, and safe work in unfamiliar repositories.
 - [Troubleshooting](doc/troubleshooting.md): environment-specific install and runtime issues.
 
 Feature guides:

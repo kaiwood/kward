@@ -131,4 +131,5 @@ Inside interactive Kward:
 
 - Read [Usage](usage.md) for day-to-day workflows.
 - Read [Configuration](configuration.md) when you want to change providers, models, memory, or web search.
+- Read [Security and trust](security.md) before using Kward with sensitive data, untrusted repositories, or third-party extensions.
 - Read [Extensibility](extensibility.md) when you want reusable prompts, skills, or project rules.
