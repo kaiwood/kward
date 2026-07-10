@@ -126,12 +126,12 @@
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
   </style>
 </head>
-<body>
+<body data-assistant-label="<%= ERB::Util.html_escape(@assistant_label) %>">
   <div class="app">
     <aside class="sidebar" aria-label="Sessions">
       <div class="brand">
         <img class="brand-logo" src="/kward-logo.png" alt="">
-        <div class="brand-copy"><strong>Kward</strong><span>Pan mode</span></div>
+        <div class="brand-copy"><strong><%= ERB::Util.html_escape(@assistant_label) %></strong><span>Pan mode</span></div>
         <button class="icon-button" id="close-sessions" type="button" aria-label="Close sessions">×</button>
       </div>
       <button class="new-session" id="new-session" type="button"><span>＋</span> New session</button>
@@ -160,7 +160,7 @@
       <div class="composer-shell">
         <form id="prompt-form">
           <div class="composer">
-            <textarea id="prompt" name="prompt" rows="1" autocomplete="off" enterkeyhint="send" aria-label="Prompt" placeholder="Give Kward an order…"></textarea>
+            <textarea id="prompt" name="prompt" rows="1" autocomplete="off" enterkeyhint="send" aria-label="Prompt" placeholder="Give <%= ERB::Util.html_escape(@assistant_label) %> an order…"></textarea>
             <button class="send" id="send" type="submit" aria-label="Send prompt">↑</button>
           </div>
           <div class="composer-meta"><span id="status">Connecting…</span><span>Return to send · Shift Return for a new line</span></div>
@@ -170,6 +170,7 @@
   </div>
 
   <script>
+    const assistantLabel = document.body.dataset.assistantLabel;
     const transcript = document.getElementById('transcript');
     const transcriptInner = document.getElementById('transcript-inner');
     const form = document.getElementById('prompt-form');
@@ -189,7 +190,7 @@
         <div class="empty">
           <section class="startup" aria-label="Kward startup information">
             <img class="startup-logo" src="/kward-logo.png" alt="Kward">
-            <div class="startup-status"><span class="live-dot"></span><strong>Kward v<%= ERB::Util.html_escape(@version) %> is online.</strong></div>
+            <div class="startup-status"><span class="live-dot"></span><strong><%= ERB::Util.html_escape(@assistant_label) %> v<%= ERB::Util.html_escape(@version) %> is online.</strong></div>
             <dl class="startup-info">
               <dt>Workspace</dt><dd><%= ERB::Util.html_escape(@workspace_label) %></dd>
               <dt>Interface</dt><dd>Pan mode</dd>
@@ -222,7 +223,7 @@
     function setStatus(payload) {
       const queued = payload && Number(payload.queued || 0);
       const active = payload && payload.active;
-      statusEl.textContent = active ? `Kward is working${queued ? ` · ${queued} queued` : ''}` : (queued ? `${queued} queued` : 'Ready');
+      statusEl.textContent = active ? `${assistantLabel} is working${queued ? ` · ${queued} queued` : ''}` : (queued ? `${queued} queued` : 'Ready');
       statusEl.dataset.state = active || queued ? 'working' : 'ready';
     }
 
@@ -345,7 +346,7 @@
     });
     events.addEventListener('reasoning_boundary', () => { currentReasoning = null; });
     events.addEventListener('assistant_delta', event => {
-      if (!currentAssistant) currentAssistant = entry('assistant', 'Kward', '');
+      if (!currentAssistant) currentAssistant = entry('assistant', assistantLabel, '');
       currentAssistant.textContent += JSON.parse(event.data).delta;
       transcript.scrollTop = transcript.scrollHeight;
     });
@@ -358,7 +359,7 @@
       entry('tool', 'Tool output', `${data.name}: ${data.content}`);
     });
     events.addEventListener('answer', event => {
-      if (!currentAssistant) entry('assistant', 'Kward', JSON.parse(event.data).content);
+      if (!currentAssistant) entry('assistant', assistantLabel, JSON.parse(event.data).content);
     });
     events.addEventListener('retry', event => entry('tool', 'Retry', JSON.parse(event.data).message));
     events.addEventListener('error', event => {

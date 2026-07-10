@@ -34,6 +34,7 @@ module Kward
       @output = output
       @udp_socket_class = udp_socket_class
       @workspace = Workspace.new(root: working_directory)
+      @full_config = config
       @config = pan_config(config)
       @host = @config.fetch("host", DEFAULT_HOST).to_s
       @port = positive_port(@config.fetch("port", DEFAULT_PORT))
@@ -500,10 +501,21 @@ module Kward
     def render_index
       @workspace_root = @workspace.root.to_s
       @workspace_label = pan_workspace_label
+      @assistant_label = assistant_label
       @session_path = @session.path
       @version = Kward::VERSION
       template = File.read(File.join(__dir__, "index.html.erb"))
       ERB.new(template).result(binding)
+    end
+
+    def assistant_label
+      ConfigFiles.active_persona_label(
+        workspace_root: @conversation.workspace_root,
+        model: @conversation.model,
+        config: @full_config
+      ) || "Assistant"
+    rescue StandardError
+      "Assistant"
     end
 
     def pan_workspace_label
@@ -596,9 +608,9 @@ module Kward
           text.to_s.empty? ? nil : { role: "reasoning", label: "Reasoning", text: text }
         when "text"
           text = part[:text] || part["text"]
-          text.to_s.empty? ? nil : { role: "assistant", label: "Assistant", text: text }
+          text.to_s.empty? ? nil : { role: "assistant", label: assistant_label, text: text }
         when "image"
-          { role: "assistant", label: "Assistant", text: image_part_text(part) }
+          { role: "assistant", label: assistant_label, text: image_part_text(part) }
         when "toolCall"
           { role: "tool", label: "Tool", text: tool_call_part_text(part) }
         end

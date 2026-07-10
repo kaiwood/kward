@@ -72,6 +72,7 @@ class TestPanServer < KwardTestCase
 
       assert_includes response, "HTTP/1.1 200 OK"
       assert_includes response, "Kward Pan Mode"
+      assert_includes response, "<strong>Assistant</strong>"
       assert_includes response, "Workspace: #{File.realpath(dir)}"
       assert_includes response, "State your business."
       assert_includes response, "src=\"/kward-logo.png\""
@@ -142,6 +143,23 @@ class TestPanServer < KwardTestCase
       refute File.exist?(resumed.dig("session", "path"))
     ensure
       stop_worker(server)
+    end
+  end
+
+  def test_pan_server_uses_active_persona_label
+    Dir.mktmpdir do |dir|
+      server = build_server(dir, config: {
+        "pan_mode" => { "username" => "kward", "password" => "secret", "host" => "127.0.0.1", "port" => 0 },
+        "personas" => {
+          "crew" => { "samantha" => { "label" => "Samantha", "instruction" => "Helpful." } },
+          "default" => "samantha"
+        }
+      })
+      conversation = server.instance_variable_get(:@conversation)
+      conversation.messages << { role: "assistant", content: [{ type: "text", text: "Hello, captain." }] }
+
+      assert_includes request(server, "GET / HTTP/1.1\r\nHost: example\r\n#{auth_header}\r\n\r\n"), "<strong>Samantha</strong>"
+      assert_includes server.transcript_items, { role: "assistant", label: "Samantha", text: "Hello, captain." }
     end
   end
 
@@ -258,8 +276,8 @@ class TestPanServer < KwardTestCase
     end
   end
 
-  def build_server(dir, client: PanStreamingClient.new([]), host: "127.0.0.1", udp_socket_class: UDPSocket)
-    config = { "pan_mode" => { "username" => "kward", "password" => "secret", "host" => host, "port" => 0 } }
+  def build_server(dir, client: PanStreamingClient.new([]), host: "127.0.0.1", udp_socket_class: UDPSocket, config: nil)
+    config ||= { "pan_mode" => { "username" => "kward", "password" => "secret", "host" => host, "port" => 0 } }
     Kward::PanServer.new(client: client, working_directory: dir, config: config, config_dir: File.join(dir, ".kward"), output: StringIO.new, udp_socket_class: udp_socket_class)
   end
 
