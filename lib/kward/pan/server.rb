@@ -13,13 +13,15 @@ require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../rpc/transcript_normalizer"
 require_relative "../session_store"
+require_relative "../session_trash"
 require_relative "../tools/tool_call"
 require_relative "../tools/registry"
+require_relative "../version"
 require_relative "../workspace"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
-  # Minimal local HTTP server for the experimental Pan web UI.
+  # Local HTTP server for the mobile-friendly Pan web UI.
   class PanServer
     DEFAULT_HOST = "0.0.0.0"
     DEFAULT_PORT = 8765
@@ -37,28 +39,22 @@ module Kward
       raise "Pan mode requires pan_mode.username and pan_mode.password in #{ConfigFiles.config_path}" if @username.empty? || @password.empty?
 
       @session_store = SessionStore.new(config_dir: config_dir, cwd: @workspace.root.to_s)
-      @session = @session_store.create
-      @conversation = Conversation.new(
-        workspace_root: @workspace.root.to_s,
+      @session = @session_store.create(
+        provider: (@client.current_provider if @client.respond_to?(:current_provider)),
         model: (@client.current_model if @client.respond_to?(:current_model)),
         reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
       )
+      @conversation = new_conversation
       @session.attach(@conversation)
-      hook_context = lifecycle_hook_context
-      hook_manager = lifecycle_hook_manager
-      @agent = Agent.new(
-        client: @client,
-        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false, hook_manager: hook_manager, hook_context: hook_context),
-        conversation: @conversation,
-        hook_manager: hook_manager,
-        hook_context: hook_context
-      )
+      @agent = build_agent
       @prompt_queue = Queue.new
       @subscribers = []
       @subscribers_mutex = Mutex.new
       @worker_started = false
       @active = false
+      @pending_turns = 0
       @state_mutex = Mutex.new
+      @session_mutex = Mutex.new
     end
 
     attr_reader :host, :port, :session, :workspace
@@ -91,8 +87,11 @@ module Kward
       text = prompt.to_s
       return { ok: false, error: "Prompt is required" } if text.strip.empty?
 
-      queued_at = Time.now.utc.iso8601(3)
-      @prompt_queue << { prompt: text, queued_at: queued_at }
+      @session_mutex.synchronize do
+        queued_at = Time.now.utc.iso8601(3)
+        @state_mutex.synchronize { @pending_turns += 1 }
+        @prompt_queue << { prompt: text, queued_at: queued_at }
+      end
       broadcast("queue", queue_payload)
       { ok: true, queued: @prompt_queue.size, active: active? }
     end
@@ -102,6 +101,27 @@ module Kward
     end
 
     private
+
+    def new_conversation
+      Conversation.new(
+        workspace_root: @workspace.root.to_s,
+        provider: (@client.current_provider if @client.respond_to?(:current_provider)),
+        model: (@client.current_model if @client.respond_to?(:current_model)),
+        reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+      )
+    end
+
+    def build_agent
+      hook_context = lifecycle_hook_context
+      hook_manager = lifecycle_hook_manager
+      Agent.new(
+        client: @client,
+        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false, hook_manager: hook_manager, hook_context: hook_context),
+        conversation: @conversation,
+        hook_manager: hook_manager,
+        hook_context: hook_context
+      )
+    end
 
     def lifecycle_hook_manager
       manager = Hooks::ConfigLoader.new(ConfigFiles.lifecycle_hooks_config(@workspace.root)).manager
@@ -185,7 +205,10 @@ module Kward
       broadcast("error", { message: e.message })
       broadcast("turn_finished", queue_payload.merge(status: "failed"))
     ensure
-      set_active(false)
+      @state_mutex.synchronize do
+        @active = false
+        @pending_turns -= 1 if @pending_turns.positive?
+      end
       broadcast("queue", queue_payload)
     end
 
@@ -201,12 +224,18 @@ module Kward
       case [request[:method], request[:path]]
       when ["GET", "/"]
         write_response(socket, 200, { "Content-Type" => "text/html; charset=utf-8" }, render_index)
+      when ["GET", "/kward-logo.png"]
+        write_response(socket, 200, { "Content-Type" => "image/png", "Cache-Control" => "public, max-age=86400" }, File.binread(File.join(__dir__, "kward_logo.png")))
       when ["GET", "/transcript"]
-        write_json(socket, 200, transcript: transcript_items, session: { id: @session.id, path: @session.path }, workspace: @workspace.root.to_s)
+        write_json(socket, 200, transcript: transcript_items, session: active_session_payload, workspace: @workspace.root.to_s)
+      when ["GET", "/sessions"]
+        write_json(socket, 200, sessions: session_payloads, activeSessionId: @session.id)
       when ["GET", "/events"]
         stream_events(socket)
       when ["POST", "/turn"]
-        handle_turn(socket, request[:body])
+        handle_turn(socket, request[:body], request[:headers])
+      when ["POST", "/sessions"]
+        handle_session_action(socket, request[:body], request[:headers])
       else
         write_response(socket, 404, { "Content-Type" => "text/plain; charset=utf-8" }, "Not found\n")
       end
@@ -254,13 +283,164 @@ module Kward
       left.bytes.zip(right.bytes).reduce(0) { |memo, pair| memo | (pair[0] ^ pair[1]) }.zero?
     end
 
-    def handle_turn(socket, body)
+    def handle_turn(socket, body, headers)
+      return write_json(socket, 415, ok: false, error: "Content-Type must be application/json") unless json_request?(headers)
+
       params = JSON.parse(body.empty? ? "{}" : body)
       result = enqueue_prompt(params["prompt"])
       status = result[:ok] ? 202 : 422
       write_json(socket, status, result)
     rescue JSON::ParserError
       write_json(socket, 400, ok: false, error: "Invalid JSON")
+    end
+
+    def handle_session_action(socket, body, headers)
+      return write_json(socket, 415, ok: false, error: "Content-Type must be application/json") unless json_request?(headers)
+
+      params = JSON.parse(body.empty? ? "{}" : body)
+      result = update_session(params)
+      write_json(socket, result.delete(:status), result)
+    rescue JSON::ParserError
+      write_json(socket, 400, ok: false, error: "Invalid JSON")
+    end
+
+    def update_session(params)
+      return { status: 409, ok: false, error: "Wait for queued turns to finish before changing sessions" } if turns_pending?
+
+      result = @session_mutex.synchronize do
+        return { status: 409, ok: false, error: "Wait for queued turns to finish before changing sessions" } if turns_pending?
+
+        case params["action"]
+        when "new" then create_session
+        when "resume" then resume_session(params["id"])
+        when "rename" then rename_session(params["id"], params["name"])
+        when "delete" then delete_session(params["id"])
+        else { status: 422, ok: false, error: "Unknown session action" }
+        end
+      end
+      broadcast("session_changed", result[:session]) if result[:ok] && result[:session]
+      result
+    rescue StandardError => e
+      { status: 422, ok: false, error: e.message }
+    end
+
+    def create_session
+      previous = @session
+      session = @session_store.create(
+        provider: (@client.current_provider if @client.respond_to?(:current_provider)),
+        model: (@client.current_model if @client.respond_to?(:current_model)),
+        reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+      )
+      conversation = new_conversation
+      session.attach(conversation)
+      activate_session(session, conversation)
+      previous.delete_if_unused
+      { status: 200, ok: true, session: active_session_payload }
+    end
+
+    def resume_session(id)
+      info = find_session(id)
+      return { status: 404, ok: false, error: "Session not found" } unless info
+      return { status: 200, ok: true, session: active_session_payload } if info.id == @session.id
+
+      previous = @session
+      session, conversation = @session_store.load(
+        info.path,
+        workspace: @workspace,
+        provider: (@client.current_provider if @client.respond_to?(:current_provider)),
+        model: (@client.current_model if @client.respond_to?(:current_model)),
+        reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort))
+      )
+      activate_session(session, conversation)
+      previous.delete_if_unused
+      { status: 200, ok: true, session: active_session_payload }
+    end
+
+    def rename_session(id, name)
+      clean_name = name.to_s.strip
+      return { status: 422, ok: false, error: "Session name is too long" } if clean_name.length > 120
+
+      target = id.to_s == @session.id ? @session : find_session(id)
+      return { status: 404, ok: false, error: "Session not found" } unless target
+
+      session = target.respond_to?(:rename) ? target : @session_store.load(target.path, workspace: @workspace).first
+      session.rename(clean_name)
+      @session.name = session.name if session.id == @session.id
+      { status: 200, ok: true, session: session_payload(session) }
+    end
+
+    def delete_session(id)
+      if id.to_s == @session.id
+        deleted_id = @session.id
+        deleted_path = @session.path
+        create_session
+        SessionTrash.new.delete(deleted_path)
+        return { status: 200, ok: true, deletedSessionId: deleted_id, session: active_session_payload }
+      end
+
+      info = find_session(id)
+      return { status: 404, ok: false, error: "Session not found" } unless info
+
+      SessionTrash.new.delete(info.path)
+      { status: 200, ok: true, deletedSessionId: info.id }
+    end
+
+    def activate_session(session, conversation)
+      @session = session
+      @conversation = conversation
+      @agent = build_agent
+      @session_store.remember_last_session(session)
+    end
+
+    def find_session(id)
+      session_infos.find { |info| info.id.to_s == id.to_s }
+    end
+
+    def session_infos
+      @session_store.recent(limit: 50, keep_empty_path: @session.path)
+    end
+
+    def session_payloads
+      sessions = session_infos.map { |info| session_payload(info) }
+      sessions.unshift(active_session_payload) unless sessions.any? { |item| item[:id] == @session.id }
+      sessions.sort_by { |item| item[:modifiedAt].to_s }.reverse
+    end
+
+    def active_session_payload
+      info = session_infos.find { |item| item.id == @session.id }
+      return session_payload(info).merge(active: true, path: @session.path) if info
+
+      session_payload(@session).merge(
+        active: true,
+        path: @session.path,
+        modifiedAt: File.mtime(@session.path).utc.iso8601(3),
+        preview: transcript_items.find { |item| item[:role] == "user" }&.fetch(:text, "") || "",
+        messageCount: transcript_items.length
+      )
+    end
+
+    def session_payload(session)
+      name = session.name.to_s.strip
+      preview = session.respond_to?(:first_message) ? session.first_message.to_s : ""
+      {
+        id: session.id,
+        name: name.empty? ? nil : name,
+        title: name.empty? ? (preview.empty? ? "New session" : preview) : name,
+        preview: preview,
+        createdAt: session.created_at&.utc&.iso8601(3),
+        modifiedAt: (session.respond_to?(:modified_at) ? session.modified_at&.utc&.iso8601(3) : nil),
+        messageCount: (session.respond_to?(:message_count) ? session.message_count.to_i : 0),
+        model: (session.respond_to?(:model) ? session.model : @conversation.model),
+        active: session.id == @session.id
+      }
+    end
+
+    def turns_pending?
+      @state_mutex.synchronize { @pending_turns.positive? }
+    end
+
+    def json_request?(headers)
+      headers["content-type"].to_s.downcase.start_with?("application/json")
     end
 
     def stream_events(socket)
@@ -316,9 +496,25 @@ module Kward
 
     def render_index
       @workspace_root = @workspace.root.to_s
+      @workspace_label = pan_workspace_label
       @session_path = @session.path
+      @version = Kward::VERSION
       template = File.read(File.join(__dir__, "index.html.erb"))
       ERB.new(template).result(binding)
+    end
+
+    def pan_workspace_label
+      root = File.expand_path(@workspace.root.to_s)
+      home = Dir.home
+      if root == home || root.start_with?("#{home}/")
+        relative = root.delete_prefix(home).delete_prefix("/")
+        return "~" if relative.empty?
+        return "~/#{relative}" unless relative.include?("/")
+      end
+
+      [File.basename(File.dirname(root)), File.basename(root)].reject(&:empty?).join("/")
+    rescue StandardError
+      @workspace.root.to_s
     end
 
     def pan_config(config)
@@ -442,6 +638,8 @@ module Kward
       when 400 then "Bad Request"
       when 401 then "Unauthorized"
       when 404 then "Not Found"
+      when 409 then "Conflict"
+      when 415 then "Unsupported Media Type"
       when 422 then "Unprocessable Content"
       else "Internal Server Error"
       end

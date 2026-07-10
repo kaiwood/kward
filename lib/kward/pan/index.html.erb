@@ -2,71 +2,219 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b07">
   <title>Kward Pan Mode</title>
   <style>
-    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; padding: 1rem; max-width: 56rem; margin-inline: auto; }
-    header { margin-bottom: 1rem; }
-    h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
-    .meta { color: #666; font-size: .85rem; overflow-wrap: anywhere; }
-    #transcript { border: 1px solid #9995; border-radius: .5rem; min-height: 45vh; max-height: 65vh; overflow-y: auto; padding: .75rem; background: #7771; }
-    .entry { margin: 0 0 .75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .label { font-weight: 700; margin-bottom: .15rem; }
-    .user .label { color: #2f6fca; }
-    .assistant .label { color: #14833b; }
-    .tool .label { color: #9b4ab8; }
-    .reasoning .label { color: #9a6b00; }
-    form { position: sticky; bottom: 0; background: Canvas; padding-top: .75rem; margin-top: .75rem; }
-    textarea { box-sizing: border-box; width: 100%; min-height: 7rem; font: inherit; padding: .65rem; border-radius: .5rem; border: 1px solid #999; }
-    .controls { display: flex; gap: .5rem; align-items: center; margin-top: .5rem; }
-    button { font: inherit; padding: .6rem .9rem; border-radius: .45rem; border: 1px solid #777; }
-    #status { color: #666; font-size: .9rem; }
-    @media (max-width: 600px) {
-      body { padding: .65rem; }
-      #transcript { max-height: 58vh; }
-      .controls { align-items: stretch; flex-direction: column; }
-      button { width: 100%; }
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #070b07;
+      --panel: #0d120d;
+      --panel-raised: #141a13;
+      --panel-soft: #101610;
+      --ink: #efe8d0;
+      --muted: #afa88f;
+      --subtle: #777c68;
+      --line: #293024;
+      --line-bright: #465035;
+      --accent: #9caf35;
+      --accent-bright: #d2df62;
+      --danger: #ff7f6f;
+      --radius: 16px;
+      --shadow: 0 18px 60px #0008;
     }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; overflow: hidden; background: var(--bg); color: var(--ink); }
+    button, textarea { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
+
+    .app { display: grid; grid-template-columns: 19rem minmax(0, 1fr); height: 100dvh; }
+    .sidebar { display: flex; min-height: 0; flex-direction: column; border-right: 1px solid var(--line); background: #090e09; }
+    .brand { display: flex; align-items: center; gap: .7rem; min-height: 4.25rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+    .brand-logo { width: 2.15rem; height: 2.15rem; flex: 0 0 auto; object-fit: contain; }
+    .brand-copy strong { display: block; letter-spacing: .02em; }
+    .brand-copy span { color: var(--muted); font-size: .75rem; }
+    .icon-button { display: grid; width: 2.65rem; height: 2.65rem; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-raised); cursor: pointer; }
+    .icon-button:hover { border-color: var(--line-bright); background: #1a2118; }
+    #close-sessions { display: none; margin-left: auto; }
+    .new-session { display: flex; align-items: center; justify-content: center; gap: .5rem; margin: .85rem; padding: .72rem 1rem; border: 1px solid var(--accent); border-radius: 11px; background: #18200e; color: var(--accent-bright); font-weight: 700; cursor: pointer; }
+    .new-session:hover { background: #222d12; }
+    .session-heading { padding: .1rem 1rem .55rem; color: var(--subtle); font-size: .7rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .session-list { min-height: 0; overflow-y: auto; padding: 0 .55rem 1rem; }
+    .session-item { display: flex; width: 100%; gap: .65rem; align-items: flex-start; padding: .72rem; border: 1px solid transparent; border-radius: 11px; background: transparent; text-align: left; cursor: pointer; }
+    .session-item:hover { background: var(--panel-raised); }
+    .session-item.active { border-color: #3e4926; background: #171e10; }
+    .session-dot { width: .48rem; height: .48rem; flex: 0 0 auto; margin-top: .42rem; border-radius: 99px; background: var(--line-bright); }
+    .session-item.active .session-dot { background: var(--accent-bright); box-shadow: 0 0 10px #d2df6277; }
+    .session-copy { min-width: 0; }
+    .session-title { overflow: hidden; color: var(--ink); font-size: .84rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .session-meta { margin-top: .2rem; color: var(--subtle); font-size: .7rem; }
+    .sidebar-footer { padding: .8rem 1rem calc(.8rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); color: var(--subtle); font-size: .72rem; overflow-wrap: anywhere; }
+
+    .main { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; background: radial-gradient(circle at 50% -10%, #18210f 0, transparent 28rem), var(--bg); }
+    .topbar { display: flex; min-height: 4.25rem; align-items: center; gap: .8rem; padding: .65rem clamp(.8rem, 3vw, 2rem); border-bottom: 1px solid var(--line); background: #070b07d9; backdrop-filter: blur(18px); }
+    #open-sessions { display: none; }
+    .title-block { min-width: 0; flex: 1; }
+    .title-row { display: flex; align-items: center; gap: .55rem; }
+    #conversation-title { overflow: hidden; margin: 0; font-size: .96rem; text-overflow: ellipsis; white-space: nowrap; }
+    .live-dot { width: .42rem; height: .42rem; border-radius: 99px; background: var(--accent); }
+    .top-meta { margin-top: .17rem; overflow: hidden; color: var(--muted); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+    .text-button { padding: .45rem .65rem; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font-size: .76rem; cursor: pointer; }
+    .text-button:hover { border-color: var(--line); color: var(--ink); }
+    .text-button.danger:hover { border-color: #6b332d; color: var(--danger); }
+
+    #transcript { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scroll-behavior: smooth; }
+    .transcript-inner { width: min(100%, 52rem); min-height: 100%; margin-inline: auto; padding: 1.5rem clamp(1rem, 4vw, 2rem) 2rem; }
+    .empty { display: grid; min-height: 100%; place-content: center; padding: 2rem; }
+    .startup { width: min(29rem, 100%); }
+    .startup-status { display: flex; align-items: center; gap: .55rem; margin-bottom: 1.4rem; font-size: .92rem; }
+    .startup-status .live-dot { box-shadow: 0 0 11px #9caf3577; }
+    .startup-info { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .55rem .9rem; margin: 0; padding: 0; }
+    .startup-info dt { color: var(--subtle); }
+    .startup-info dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--accent-bright); }
+    .startup-business { margin: 1.55rem 0 0; font-size: 1.02rem; font-weight: 750; letter-spacing: .01em; }
+    .startup-logo { display: block; width: 7.5rem; height: 7.5rem; margin: 0 auto 1.4rem; object-fit: contain; filter: drop-shadow(0 12px 22px #0008); }
+    .entry { margin: 0 0 1.15rem; animation: appear .18s ease-out; }
+    @keyframes appear { from { opacity: 0; transform: translateY(3px); } }
+    .entry.user { display: flex; justify-content: flex-end; }
+    .message { max-width: min(88%, 42rem); }
+    .label { margin: 0 0 .35rem; color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .user .label { display: none; }
+    .text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.58; }
+    .user .message { padding: .72rem .9rem; border: 1px solid #3a4328; border-radius: 15px 15px 4px 15px; background: #1b2312; }
+    .assistant .message { max-width: 100%; }
+    .assistant .label { color: var(--accent-bright); }
+    .reasoning, .tool, .system { margin-left: .75rem; padding-left: .8rem; border-left: 2px solid var(--line); color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; }
+    .reasoning .label { color: #f0bf6a; }
+    .tool .label { color: #a7c884; }
+    .tool .text, .reasoning .text { max-height: 11rem; overflow: auto; }
+
+    .composer-shell { padding: .7rem clamp(.7rem, 3vw, 2rem) calc(.75rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: linear-gradient(180deg, #070b07e8, #070b07); }
+    #prompt-form { width: min(100%, 50rem); margin-inline: auto; }
+    .composer { display: flex; align-items: flex-end; gap: .55rem; padding: .5rem; border: 1px solid var(--line-bright); border-radius: 15px; background: var(--panel-raised); box-shadow: 0 8px 30px #0005; }
+    .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px #9caf3512, 0 8px 30px #0005; }
+    textarea { width: 100%; min-height: 2.5rem; max-height: 10rem; resize: none; padding: .55rem .45rem; border: 0; outline: 0 !important; background: transparent; color: var(--ink); line-height: 1.45; }
+    textarea::placeholder { color: var(--subtle); }
+    .send { width: 2.65rem; height: 2.65rem; flex: 0 0 auto; border: 0; border-radius: 10px; background: var(--accent-bright); color: #101408; font-size: 1.15rem; font-weight: 900; cursor: pointer; }
+    .send:hover { background: #e3ee77; }
+    .send:disabled { cursor: default; opacity: .4; }
+    .composer-meta { display: flex; justify-content: space-between; gap: 1rem; padding: .4rem .2rem 0; color: var(--subtle); font-size: .68rem; }
+    #status[data-state="working"] { color: var(--accent-bright); }
+    #status[data-state="error"] { color: var(--danger); }
+    .backdrop { display: none; }
+
+    @media (max-width: 760px) {
+      .app { display: block; }
+      .sidebar { position: fixed; z-index: 30; inset: 0 auto 0 0; width: min(88vw, 21rem); transform: translateX(-102%); transition: transform .2s ease; box-shadow: var(--shadow); }
+      body.sessions-open .sidebar { transform: translateX(0); }
+      #close-sessions, #open-sessions { display: grid; }
+      .backdrop { position: fixed; z-index: 20; inset: 0; display: block; visibility: hidden; background: #0009; opacity: 0; transition: opacity .2s, visibility .2s; }
+      body.sessions-open .backdrop { visibility: visible; opacity: 1; }
+      .main { height: 100dvh; }
+      .topbar { min-height: 3.75rem; padding-inline: .7rem; }
+      .topbar .text-button { display: none; }
+      .transcript-inner { padding: 1rem .8rem 1.5rem; }
+      .message { max-width: 92%; }
+      .composer-shell { padding-inline: .55rem; }
+      .composer-meta span:last-child { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Kward Pan Mode</h1>
-    <div class="meta">Workspace: <%= ERB::Util.html_escape(@workspace_root) %></div>
-    <div class="meta">Session: <%= ERB::Util.html_escape(@session_path) %></div>
-  </header>
+  <div class="app">
+    <aside class="sidebar" aria-label="Sessions">
+      <div class="brand">
+        <img class="brand-logo" src="/kward-logo.png" alt="">
+        <div class="brand-copy"><strong>Kward</strong><span>Pan mode</span></div>
+        <button class="icon-button" id="close-sessions" type="button" aria-label="Close sessions">×</button>
+      </div>
+      <button class="new-session" id="new-session" type="button"><span>＋</span> New session</button>
+      <div class="session-heading">Recent sessions</div>
+      <nav class="session-list" id="session-list"></nav>
+      <div class="sidebar-footer">Workspace: <%= ERB::Util.html_escape(@workspace_root) %></div>
+    </aside>
 
-  <main id="transcript" aria-live="polite"></main>
+    <div class="backdrop" id="backdrop"></div>
 
-  <form id="prompt-form">
-    <label for="prompt">Prompt</label>
-    <textarea id="prompt" name="prompt" autocomplete="off" placeholder="Give Kward an order..."></textarea>
-    <div class="controls">
-      <button type="submit">Send</button>
-      <span id="status">Connecting…</span>
-    </div>
-  </form>
+    <section class="main">
+      <header class="topbar">
+        <button class="icon-button" id="open-sessions" type="button" aria-label="Open sessions">☰</button>
+        <div class="title-block">
+          <div class="title-row"><span class="live-dot"></span><h1 id="conversation-title">New session</h1></div>
+          <div class="top-meta" id="session-meta">Secure LAN workspace</div>
+        </div>
+        <button class="text-button" id="rename-session" type="button">Rename</button>
+        <button class="text-button danger" id="delete-session" type="button">Delete</button>
+      </header>
+
+      <main id="transcript" aria-live="polite">
+        <div class="transcript-inner" id="transcript-inner"></div>
+      </main>
+
+      <div class="composer-shell">
+        <form id="prompt-form">
+          <div class="composer">
+            <textarea id="prompt" name="prompt" rows="1" autocomplete="off" enterkeyhint="send" aria-label="Prompt" placeholder="Give Kward an order…"></textarea>
+            <button class="send" id="send" type="submit" aria-label="Send prompt">↑</button>
+          </div>
+          <div class="composer-meta"><span id="status">Connecting…</span><span>Return to send · Shift Return for a new line</span></div>
+        </form>
+      </div>
+    </section>
+  </div>
 
   <script>
     const transcript = document.getElementById('transcript');
+    const transcriptInner = document.getElementById('transcript-inner');
     const form = document.getElementById('prompt-form');
     const promptBox = document.getElementById('prompt');
+    const sendButton = document.getElementById('send');
     const statusEl = document.getElementById('status');
+    const sessionList = document.getElementById('session-list');
+    const titleEl = document.getElementById('conversation-title');
+    const sessionMeta = document.getElementById('session-meta');
+    let activeSession = null;
+    let sessions = [];
     let currentAssistant = null;
     let currentReasoning = null;
 
+    function emptyState() {
+      transcriptInner.innerHTML = `
+        <div class="empty">
+          <section class="startup" aria-label="Kward startup information">
+            <img class="startup-logo" src="/kward-logo.png" alt="Kward">
+            <div class="startup-status"><span class="live-dot"></span><strong>Kward v<%= ERB::Util.html_escape(@version) %> is online.</strong></div>
+            <dl class="startup-info">
+              <dt>Workspace</dt><dd><%= ERB::Util.html_escape(@workspace_label) %></dd>
+              <dt>Interface</dt><dd>Pan mode</dd>
+              <dt>Session</dt><dd>New session</dd>
+            </dl>
+            <p class="startup-business">State your business.</p>
+          </section>
+        </div>`;
+    }
+
     function entry(role, label, text) {
+      transcriptInner.querySelector('.empty')?.remove();
       const node = document.createElement('section');
       node.className = `entry ${role}`;
+      const message = document.createElement('div');
+      message.className = 'message';
       const labelNode = document.createElement('div');
       labelNode.className = 'label';
       labelNode.textContent = label;
       const textNode = document.createElement('div');
       textNode.className = 'text';
       textNode.textContent = text || '';
-      node.append(labelNode, textNode);
-      transcript.appendChild(node);
+      message.append(labelNode, textNode);
+      node.appendChild(message);
+      transcriptInner.appendChild(node);
       transcript.scrollTop = transcript.scrollHeight;
       return textNode;
     }
@@ -74,26 +222,121 @@
     function setStatus(payload) {
       const queued = payload && Number(payload.queued || 0);
       const active = payload && payload.active;
-      statusEl.textContent = active ? `Working${queued ? ` — ${queued} queued` : ''}` : (queued ? `${queued} queued` : 'Ready');
+      statusEl.textContent = active ? `Kward is working${queued ? ` · ${queued} queued` : ''}` : (queued ? `${queued} queued` : 'Ready');
+      statusEl.dataset.state = active || queued ? 'working' : 'ready';
     }
 
-    function resetStreamBlocks() {
-      currentAssistant = null;
-      currentReasoning = null;
+    function showError(message) {
+      entry('tool', 'Error', message);
+      statusEl.textContent = message;
+      statusEl.dataset.state = 'error';
     }
 
-    fetch('/transcript')
-      .then(response => response.json())
-      .then(data => {
-        (data.transcript || []).forEach(item => entry(item.role || 'system', item.label || item.role || 'Message', item.text || ''));
-      })
-      .catch(error => entry('tool', 'Error', error.message));
+    function resetStreamBlocks() { currentAssistant = null; currentReasoning = null; }
+    function closeSessions() { document.body.classList.remove('sessions-open'); }
+    function formatDate(value) {
+      if (!value) return 'Just now';
+      return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+    }
+
+    function renderSessions() {
+      sessionList.replaceChildren();
+      sessions.forEach(session => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `session-item${session.active ? ' active' : ''}`;
+        button.dataset.id = session.id;
+        const dot = document.createElement('span');
+        dot.className = 'session-dot';
+        const copy = document.createElement('span');
+        copy.className = 'session-copy';
+        const title = document.createElement('div');
+        title.className = 'session-title';
+        title.textContent = session.title || 'New session';
+        const meta = document.createElement('div');
+        meta.className = 'session-meta';
+        meta.textContent = `${formatDate(session.modifiedAt || session.createdAt)} · ${session.messageCount || 0} messages`;
+        copy.append(title, meta);
+        button.append(dot, copy);
+        button.addEventListener('click', () => changeSession('resume', { id: session.id }));
+        sessionList.appendChild(button);
+      });
+    }
+
+    async function loadSessions() {
+      const response = await fetch('/sessions', { cache: 'no-store' });
+      const data = await response.json();
+      sessions = data.sessions || [];
+      activeSession = sessions.find(session => session.id === data.activeSessionId) || activeSession;
+      renderSessions();
+      renderSessionHeader();
+    }
+
+    async function loadTranscript() {
+      const response = await fetch('/transcript', { cache: 'no-store' });
+      const data = await response.json();
+      activeSession = data.session;
+      transcriptInner.replaceChildren();
+      (data.transcript || []).forEach(item => entry(item.role || 'system', item.label || item.role || 'Message', item.text || ''));
+      if (!(data.transcript || []).length) emptyState();
+      renderSessionHeader();
+      transcript.scrollTop = transcript.scrollHeight;
+    }
+
+    function renderSessionHeader() {
+      if (!activeSession) return;
+      titleEl.textContent = activeSession.title || activeSession.name || 'New session';
+      const details = [activeSession.model, activeSession.messageCount != null ? `${activeSession.messageCount} messages` : null].filter(Boolean);
+      sessionMeta.textContent = details.join(' · ') || 'Secure LAN workspace';
+    }
+
+    async function changeSession(action, values = {}) {
+      try {
+        const response = await fetch('/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, ...values })
+        });
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'Session could not be changed.');
+        closeSessions();
+        await Promise.all([loadSessions(), loadTranscript()]);
+      } catch (error) { showError(error.message); }
+    }
+
+    document.getElementById('open-sessions').addEventListener('click', () => document.body.classList.add('sessions-open'));
+    document.getElementById('close-sessions').addEventListener('click', closeSessions);
+    document.getElementById('backdrop').addEventListener('click', closeSessions);
+    document.getElementById('new-session').addEventListener('click', () => changeSession('new'));
+    document.getElementById('rename-session').addEventListener('click', () => {
+      if (!activeSession) return;
+      const name = window.prompt('Session name', activeSession.name || '');
+      if (name !== null) changeSession('rename', { id: activeSession.id, name });
+    });
+    document.getElementById('delete-session').addEventListener('click', () => {
+      if (!activeSession || !window.confirm('Delete this session? This cannot be undone from Pan.')) return;
+      changeSession('delete', { id: activeSession.id });
+    });
+
+    promptBox.addEventListener('input', () => {
+      promptBox.style.height = 'auto';
+      promptBox.style.height = `${Math.min(promptBox.scrollHeight, 160)}px`;
+    });
+    promptBox.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    Promise.all([loadTranscript(), loadSessions()]).catch(error => showError(error.message));
 
     const events = new EventSource('/events');
     events.addEventListener('ready', event => setStatus(JSON.parse(event.data)));
     events.addEventListener('queue', event => setStatus(JSON.parse(event.data)));
     events.addEventListener('turn_started', event => { resetStreamBlocks(); setStatus(JSON.parse(event.data)); });
-    events.addEventListener('turn_finished', event => { resetStreamBlocks(); setStatus(JSON.parse(event.data)); });
+    events.addEventListener('turn_finished', event => { resetStreamBlocks(); setStatus(JSON.parse(event.data)); loadSessions().catch(() => {}); });
+    events.addEventListener('session_changed', () => Promise.all([loadSessions(), loadTranscript()]).catch(error => showError(error.message)));
     events.addEventListener('user', event => entry('user', 'You', JSON.parse(event.data).text));
     events.addEventListener('reasoning_delta', event => {
       if (!currentReasoning) currentReasoning = entry('reasoning', 'Reasoning', '');
@@ -102,7 +345,7 @@
     });
     events.addEventListener('reasoning_boundary', () => { currentReasoning = null; });
     events.addEventListener('assistant_delta', event => {
-      if (!currentAssistant) currentAssistant = entry('assistant', 'Assistant', '');
+      if (!currentAssistant) currentAssistant = entry('assistant', 'Kward', '');
       currentAssistant.textContent += JSON.parse(event.data).delta;
       transcript.scrollTop = transcript.scrollHeight;
     });
@@ -115,17 +358,21 @@
       entry('tool', 'Tool output', `${data.name}: ${data.content}`);
     });
     events.addEventListener('answer', event => {
-      if (!currentAssistant) entry('assistant', 'Assistant', JSON.parse(event.data).content);
+      if (!currentAssistant) entry('assistant', 'Kward', JSON.parse(event.data).content);
     });
     events.addEventListener('retry', event => entry('tool', 'Retry', JSON.parse(event.data).message));
-    events.addEventListener('error', event => entry('tool', 'Error', JSON.parse(event.data).message));
-    events.onerror = () => { statusEl.textContent = 'Disconnected'; };
+    events.addEventListener('error', event => {
+      if (typeof event.data === 'string' && event.data.startsWith('{')) showError(JSON.parse(event.data).message);
+    });
+    events.onerror = () => { statusEl.textContent = 'Reconnecting…'; statusEl.dataset.state = 'error'; };
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const prompt = promptBox.value;
       if (!prompt.trim()) return;
       promptBox.value = '';
+      promptBox.style.height = 'auto';
+      sendButton.disabled = true;
       try {
         const response = await fetch('/turn', {
           method: 'POST',
@@ -133,11 +380,10 @@
           body: JSON.stringify({ prompt })
         });
         const data = await response.json();
-        if (!data.ok) entry('tool', 'Error', data.error || 'Prompt was not accepted.');
+        if (!data.ok) throw new Error(data.error || 'Prompt was not accepted.');
         setStatus(data);
-      } catch (error) {
-        entry('tool', 'Error', error.message);
-      }
+      } catch (error) { showError(error.message); }
+      finally { sendButton.disabled = false; promptBox.focus(); }
     });
   </script>
 </body>

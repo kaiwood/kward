@@ -276,13 +276,13 @@ This screenshot shows the broken layout. Find the likely CSS issue.
 
 ## Pan mode
 
-Pan mode starts a simple LAN web UI:
+Pan mode starts a mobile-friendly LAN web UI:
 
 ```bash
 kward --working-directory ~/code/project pan
 ```
 
-Use it only on trusted networks. It exposes the same file, shell, and web tools through a browser UI and requires credentials configured in `config.json`. See [Configuration](configuration.md).
+Use it only on trusted networks. It exposes the same file, shell, and web tools through a browser UI and requires credentials configured in `config.json`. Pan saves conversations to the normal workspace session store; its session drawer can create, resume, rename, and delete sessions. Session changes are disabled while turns are active or queued. See [Configuration](configuration.md).
 
 ## RPC backend
 

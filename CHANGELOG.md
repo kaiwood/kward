@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added session browsing, creation, resume, rename, and deletion to Pan mode, with a responsive mobile-first interface using the documentation palette, Kward logo, and CLI-inspired startup screen.
+
 ### Fixed
 
 - Fixed RPC session close, delete, and shutdown operations to cancel active turns before releasing session state, with a bounded fallback for uncooperative workers.

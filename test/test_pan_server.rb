@@ -51,6 +51,20 @@ class TestPanServer < KwardTestCase
       assert_includes response, "HTTP/1.1 200 OK"
       assert_includes response, "Kward Pan Mode"
       assert_includes response, "Workspace: #{File.realpath(dir)}"
+      assert_includes response, "State your business."
+      assert_includes response, "src=\"/kward-logo.png\""
+    end
+  end
+
+  def test_pan_server_serves_logo_asset
+    Dir.mktmpdir do |dir|
+      server = build_server(dir)
+      response = request(server, "GET /kward-logo.png HTTP/1.1\r\nHost: example\r\n#{auth_header}\r\n\r\n")
+      headers, body = response.split("\r\n\r\n", 2)
+
+      assert_includes headers, "HTTP/1.1 200 OK"
+      assert_includes headers, "Content-Type: image/png"
+      assert_equal "\x89PNG\r\n\x1A\n".b, body.byteslice(0, 8)
     end
   end
 
@@ -70,6 +84,54 @@ class TestPanServer < KwardTestCase
       records = jsonl_records(server.session.path)
       assert records.any? { |record| record["type"] == "message" && record["message"]["role"] == "user" && record["message"]["content"] == "hello" }
       assert records.any? { |record| record["type"] == "message" && record["message"]["role"] == "assistant" && record["message"]["content"] == "reply" }
+    ensure
+      stop_worker(server)
+    end
+  end
+
+  def test_pan_server_lists_creates_renames_and_resumes_sessions
+    Dir.mktmpdir do |dir|
+      client = PanStreamingClient.new(["first reply"])
+      server = build_server(dir, client: client)
+      server.send(:start_worker)
+      original_id = server.session.id
+
+      server.enqueue_prompt("first prompt")
+      wait_until { client.seen_messages.length == 1 && !server.send(:turns_pending?) }
+
+      created = json_response(request(server, json_request("POST", "/sessions", action: "new")))
+      refute_equal original_id, created.dig("session", "id")
+
+      renamed = json_response(request(server, json_request("POST", "/sessions", action: "rename", id: created.dig("session", "id"), name: "Mobile review")))
+      assert_equal "Mobile review", renamed.dig("session", "name")
+
+      listing = json_response(request(server, "GET /sessions HTTP/1.1\r\nHost: example\r\n#{auth_header}\r\n\r\n"))
+      assert_equal 2, listing.fetch("sessions").length
+      assert listing.fetch("sessions").any? { |session| session["id"] == original_id && session["title"] == "first prompt" }
+
+      resumed = json_response(request(server, json_request("POST", "/sessions", action: "resume", id: original_id)))
+      assert_equal original_id, resumed.dig("session", "id")
+      assert_includes server.transcript_items, { role: "user", label: "You", text: "first prompt" }
+      assert_includes server.transcript_items, { role: "assistant", label: "Assistant", text: "first reply" }
+
+      deleted = json_response(request(server, json_request("POST", "/sessions", action: "delete", id: original_id)))
+      assert_equal original_id, deleted["deletedSessionId"]
+      refute_equal original_id, deleted.dig("session", "id")
+      refute File.exist?(resumed.dig("session", "path"))
+    ensure
+      stop_worker(server)
+    end
+  end
+
+  def test_pan_server_rejects_session_changes_while_a_turn_is_pending
+    Dir.mktmpdir do |dir|
+      server = build_server(dir)
+      server.enqueue_prompt("waiting")
+
+      response = request(server, json_request("POST", "/sessions", action: "new"))
+
+      assert_includes response, "HTTP/1.1 409 Conflict"
+      assert_equal false, json_response(response)["ok"]
     ensure
       stop_worker(server)
     end
@@ -160,6 +222,15 @@ class TestPanServer < KwardTestCase
 
   def auth_header
     "Authorization: Basic #{Base64.strict_encode64("kward:secret")}"
+  end
+
+  def json_request(method, path, payload)
+    body = JSON.generate(payload)
+    "#{method} #{path} HTTP/1.1\r\nHost: example\r\n#{auth_header}\r\nContent-Type: application/json\r\nContent-Length: #{body.bytesize}\r\n\r\n#{body}"
+  end
+
+  def json_response(response)
+    JSON.parse(response.split("\r\n\r\n", 2).last)
   end
 
   def request(server, raw_request)
