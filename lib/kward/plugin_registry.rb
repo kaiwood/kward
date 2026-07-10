@@ -454,6 +454,8 @@ module Kward
       case event.class.name
       when "Kward::Events::ReasoningDelta"
         transcript_event("reasoning_delta", delta: event.delta)
+      when "Kward::Events::ReasoningBoundary"
+        transcript_event("reasoning_boundary")
       when "Kward::Events::AssistantDelta"
         transcript_event("assistant_delta", delta: event.delta)
       when "Kward::Events::AssistantMessage"

@@ -3,6 +3,7 @@ module Kward
   # Frontend-neutral event objects emitted during agent turns.
   module Events
     ReasoningDelta = Struct.new(:delta, keyword_init: true)
+    ReasoningBoundary = Data.define
     AssistantDelta = Struct.new(:delta, keyword_init: true)
     AssistantMessage = Struct.new(:message, keyword_init: true)
     Retry = Struct.new(:provider, :model, :attempt, :max_attempts, :delay_seconds, :error, :request_bytes, keyword_init: true)

@@ -116,6 +116,9 @@ module Kward
         when Events::ReasoningDelta
           stream_state[:streamed] = true
           append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
+        when Events::ReasoningBoundary
+          stream_state[:streamed] = true
+          finish_interactive_markdown_deltas(markdown_chunks, stream_state)
         when Events::AssistantDelta
           stream_state[:streamed] = true
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)

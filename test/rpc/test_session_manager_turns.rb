@@ -39,6 +39,8 @@ class TestRPCSessionManagerTurns < KwardTestCase
 
       reasoning = events.find { |event| event[:type] == "reasoningDelta" }
       assert_equal({ delta: "because" }, reasoning[:payload])
+      boundary = events.find { |event| event[:type] == "reasoningBoundary" }
+      assert_equal({}, boundary[:payload])
       assistant = events.find { |event| event[:type] == "assistantDelta" }
       assert_equal({ delta: "answer" }, assistant[:payload])
 

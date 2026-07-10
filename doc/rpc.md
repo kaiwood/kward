@@ -357,6 +357,7 @@ Known event types:
 - `steeringApplied`
 - `turnStarted`
 - `reasoningDelta`
+- `reasoningBoundary`
 - `assistantDelta`
 - `assistantMessage`
 - `modelRetry`
@@ -367,6 +368,8 @@ Known event types:
 - `turnCancelRequested`
 - `error`
 - `turnFinished`
+
+`reasoningBoundary` has an empty payload and marks the end of one reasoning summary message, allowing clients to render the next `reasoningDelta` as a separate block.
 
 Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFinished`. Exactly one terminal `turnFinished` is emitted per turn with `status` set to `completed`, `failed`, or `canceled`; failed turns include a sanitized `{ "message": "...", "code": "...", "fatal": false }` error payload.
 

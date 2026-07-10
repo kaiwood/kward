@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Codex reasoning summaries so separate summary messages render as separate blocks with one empty line between transcript blocks.
 - Fixed interactive update notices so stale checks refresh before the startup banner and new configs expose the `updates.check` setting.
 
 ## [0.75.0] - 2026-07-09

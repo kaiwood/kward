@@ -94,7 +94,7 @@ module Kward
       @openrouter_models = nil
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil)
       cancellation&.raise_if_cancelled!
       requested_provider = provider
       url, token, resolved_provider, account_id = credentials(provider: requested_provider)
@@ -126,6 +126,7 @@ module Kward
             request_body: request_body,
             current_model: current_model,
             on_reasoning_delta: on_reasoning_delta,
+            on_reasoning_boundary: on_reasoning_boundary,
             on_assistant_delta: on_assistant_delta,
             cancellation: cancellation,
             max_tokens: max_tokens
@@ -257,7 +258,7 @@ module Kward
       }
     end
 
-    def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:, max_tokens:)
+    def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:, max_tokens:)
       case provider
       when "Codex"
         chat_codex_provider(
@@ -269,6 +270,7 @@ module Kward
           request_body: request_body,
           current_model: current_model,
           on_reasoning_delta: on_reasoning_delta,
+          on_reasoning_boundary: on_reasoning_boundary,
           on_assistant_delta: on_assistant_delta,
           cancellation: cancellation,
           max_tokens: max_tokens
@@ -306,7 +308,7 @@ module Kward
       end
     end
 
-    def chat_codex_provider(url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:, max_tokens:)
+    def chat_codex_provider(url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:, max_tokens:)
       message = codex_chat(
         url,
         token,
@@ -315,6 +317,7 @@ module Kward
         tools,
         request_body: request_body,
         on_reasoning_delta: on_reasoning_delta,
+        on_reasoning_boundary: on_reasoning_boundary,
         on_assistant_delta: on_assistant_delta,
         cancellation: cancellation,
         max_tokens: max_tokens
@@ -649,7 +652,7 @@ module Kward
       role.to_s == "user" ? "user" : "agent"
     end
 
-    def codex_chat(url, token, account_id, messages, tools, request_body: nil, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
+    def codex_chat(url, token, account_id, messages, tools, request_body: nil, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
       request = Net::HTTP::Post.new(url)
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
@@ -669,7 +672,7 @@ module Kward
             raise RequestError.new(provider: "Codex", code: response.code, body: redact(body, token))
           end
 
-          message = parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+          message = parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
         end
       end
 
@@ -681,12 +684,12 @@ module Kward
       raise e
     end
 
-    def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil)
-      ModelStreamParser.parse_codex_sse(body, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
+    def parse_codex_sse(body, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil)
+      ModelStreamParser.parse_codex_sse(body, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
     end
 
-    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
-      ModelStreamParser.parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, cancellation: cancellation, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
+    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil)
+      ModelStreamParser.parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, cancellation: cancellation, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
     end
 
     def parse_anthropic_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)

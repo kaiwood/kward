@@ -166,6 +166,8 @@ module Kward
         case event
         when Events::ReasoningDelta
           broadcast("reasoning_delta", { delta: event.delta.to_s })
+        when Events::ReasoningBoundary
+          broadcast("reasoning_boundary", {})
         when Events::AssistantDelta
           broadcast("assistant_delta", { delta: event.delta.to_s })
         when Events::Retry

@@ -15,7 +15,7 @@ module Kward
             @stream_state.start_block(label)
           end
           write_transcript_text_locked(delta) unless delta.empty?
-          write_transcript_text_locked("\n") if finish && @stream_state.block
+          write_transcript_text_locked("\n") if finish && @stream_state.block && !@transcript_buffer.end_with?("\n")
           @stream_state.finish_block if finish
           restore_composer_cursor_locked unless @restoring_transcript
         end

@@ -92,6 +92,29 @@ class TestRPCTranscriptNormalizer < KwardTestCase
     ], messages.first[:content]
   end
 
+  def test_assistant_response_item_preserves_separate_reasoning_summary_parts
+    messages = Kward::RPC::TranscriptNormalizer.new([
+      {
+        "role" => "assistant",
+        "content" => "",
+        "response_items" => [
+          {
+            "type" => "reasoning",
+            "summary" => [
+              { "type" => "summary_text", "text" => "Checked context." },
+              { "type" => "summary_text", "text" => "Planned the edit." }
+            ]
+          }
+        ]
+      }
+    ]).normalize
+
+    assert_equal [
+      { type: "thinking", thinking: "Checked context." },
+      { type: "thinking", thinking: "Planned the edit." }
+    ], messages.first[:content]
+  end
+
   def test_session_transcript_normalizes_tool_calls_and_results
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

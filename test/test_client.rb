@@ -832,6 +832,33 @@ class TestClient < KwardTestCase
     assert_equal "Planning detailed event inspection\n\nSearching session logs locally\n\n", message["response_items"].first["summary"].first["text"]
   end
 
+  def test_codex_sse_preserves_reasoning_summary_parts_as_separate_events
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    events = []
+    body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_part.added", "part" => { "type" => "summary_text", "text" => "" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_text.delta", "delta" => "First step\n\n\n") }\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_part.done")}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_part.added", "part" => { "type" => "summary_text", "text" => "" })}\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_text.delta", "delta" => "Second step") }\n\n" \
+      "data: #{JSON.dump("type" => "response.reasoning_summary_part.done")}\n\n"
+
+    message = client.send(
+      :parse_codex_sse,
+      body,
+      on_reasoning_delta: ->(delta) { events << [:delta, delta] },
+      on_reasoning_boundary: -> { events << [:boundary] }
+    )
+
+    assert_equal "First step\n\nSecond step\n\n", message["reasoning_summary"]
+    assert_equal [
+      [:delta, "First step\n\n"],
+      [:boundary],
+      [:delta, "Second step"],
+      [:boundary]
+    ], events
+  end
+
   def test_codex_sse_compacts_reasoning_blank_lines_across_stream_chunks
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     deltas = []

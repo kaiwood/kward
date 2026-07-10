@@ -1256,6 +1256,8 @@ module Kward
         case event
         when Events::ReasoningDelta
           emit_turn_event(turn, "reasoningDelta", { delta: event.delta })
+        when Events::ReasoningBoundary
+          emit_turn_event(turn, "reasoningBoundary", {})
         when Events::AssistantDelta
           emit_turn_event(turn, "assistantDelta", { delta: event.delta })
         when Events::AssistantMessage

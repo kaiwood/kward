@@ -38,8 +38,9 @@ module Kward
       end
 
       def render_reasoning(message)
-        reasoning = CLITranscriptFormatter.reasoning(message)
-        render_transcript_block("Reasoning", reasoning) unless reasoning.empty?
+        CLITranscriptFormatter.reasoning_blocks(message).each do |reasoning|
+          render_transcript_block("Reasoning", reasoning)
+        end
       end
 
       def render_assistant_message(message)
@@ -66,7 +67,7 @@ module Kward
       def render_transcript_block(label, content)
         return if content.to_s.empty?
 
-        rendered = render_markdown_transcript(content)
+        rendered = render_markdown_transcript(content).sub(/\n+\z/, "")
         if prompt_interface?
           print_block_delta(label, rendered)
           finish_stream_block
@@ -83,6 +84,9 @@ module Kward
         case event
         when Events::ReasoningDelta
           append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
+          :streamed
+        when Events::ReasoningBoundary
+          flush_markdown_deltas(markdown_chunks)
           :streamed
         when Events::AssistantDelta
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)

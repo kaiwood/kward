@@ -426,7 +426,7 @@ module Kward
           events: {
             notification: TURN_EVENT_NOTIFICATION,
             assistantText: "assistantDelta",
-            reasoning: { start: false, delta: true, end: false },
+            reasoning: { start: false, delta: true, boundary: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
             steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
             tools: { call: true, update: true, result: true, normalizedMetadata: true, diffs: true, changedFiles: true, workspaceGuardrails: workspace_guardrails_enabled?, focusedContext: true, contextBudgetStats: true },

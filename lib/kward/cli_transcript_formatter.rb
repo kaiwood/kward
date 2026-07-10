@@ -10,25 +10,31 @@ module Kward
     module_function
 
     def reasoning(message)
-      direct = MessageAccess.value(message, :reasoning_summary)
-      return direct.to_s unless direct.to_s.empty?
+      reasoning_blocks(message).join("\n")
+    end
+
+    def reasoning_blocks(message)
+      response_blocks = response_items(message).flat_map do |item|
+        next [] unless MessageAccess.value(item, :type) == "reasoning"
+
+        summary = response_item_text_parts(MessageAccess.value(item, :summary))
+        summary.empty? ? response_item_text_parts(MessageAccess.value(item, :content)) : summary
+      end
+      return response_blocks unless response_blocks.empty?
 
       content = MessageAccess.content(message)
       if content.is_a?(Array)
-        text = content.filter_map do |part|
+        blocks = content.filter_map do |part|
           type = MessageAccess.value(part, :type)
           next unless ["thinking", "reasoning"].include?(type)
 
           MessageAccess.value(part, :thinking) || MessageAccess.value(part, :reasoning) || MessageAccess.value(part, :text)
-        end.join("\n")
-        return text unless text.empty?
+        end.map(&:to_s).reject(&:empty?)
+        return blocks unless blocks.empty?
       end
 
-      response_items(message).filter_map do |item|
-        next unless MessageAccess.value(item, :type) == "reasoning"
-
-        response_item_text(MessageAccess.value(item, :summary)).empty? ? response_item_text(MessageAccess.value(item, :content)) : response_item_text(MessageAccess.value(item, :summary))
-      end.join("\n")
+      direct = MessageAccess.value(message, :reasoning_summary).to_s
+      direct.empty? ? [] : [direct]
     end
 
     def content_text(content)
@@ -113,11 +119,15 @@ module Kward
     end
 
     def response_item_text(parts)
+      response_item_text_parts(parts).join
+    end
+
+    def response_item_text_parts(parts)
       Array(parts).filter_map do |part|
         next unless part.is_a?(Hash)
 
         MessageAccess.value(part, :text) || MessageAccess.value(part, :refusal)
-      end.join
+      end.map(&:to_s).reject(&:empty?)
     end
 
     def image_part_reference(part)

@@ -199,6 +199,7 @@ Event payloads are read-only copies. Handler errors are caught and printed as wa
 Common event types include:
 
 - `reasoning_delta`
+- `reasoning_boundary`
 - `assistant_delta`
 - `assistant_message`
 - `model_retry`

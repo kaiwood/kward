@@ -125,8 +125,9 @@ module KwardRPCTestSupport
   end
 
   class ReasoningStreamingClient
-    def chat(_messages, tools: [], on_reasoning_delta: nil, on_assistant_delta: nil)
+    def chat(_messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil)
       on_reasoning_delta&.call("because")
+      on_reasoning_boundary&.call
       on_assistant_delta&.call("answer")
       { "role" => "assistant", "content" => "answer" }
     end

@@ -157,18 +157,19 @@ module Kward
       end
 
       def response_item_content(message)
-        response_items(message).filter_map do |item|
-          next unless item.is_a?(Hash)
+        response_items(message).flat_map do |item|
+          next [] unless item.is_a?(Hash)
 
           case ToolCall.value(item, :type).to_s
           when "reasoning"
-            thinking = reasoning_item_text(item)
-            { type: "thinking", thinking: thinking } unless thinking.empty?
+            reasoning_item_blocks(item).map { |thinking| { type: "thinking", thinking: thinking } }
           when "message"
-            next if ToolCall.value(item, :phase).to_s == "commentary"
+            next [] if ToolCall.value(item, :phase).to_s == "commentary"
 
             text = response_message_item_text(item)
-            { type: "text", text: text } unless text.empty?
+            text.empty? ? [] : [{ type: "text", text: text }]
+          else
+            []
           end
         end
       end
@@ -177,10 +178,9 @@ module Kward
         MessageAccess.response_items(message)
       end
 
-      def reasoning_item_text(item)
-        summary = ToolCall.value(item, :summary)
-        content = ToolCall.value(item, :content)
-        response_text_parts(summary).empty? ? response_text_parts(content).join("\n\n") : response_text_parts(summary).join("\n\n")
+      def reasoning_item_blocks(item)
+        summary = response_text_parts(ToolCall.value(item, :summary))
+        summary.empty? ? response_text_parts(ToolCall.value(item, :content)) : summary
       end
 
       def response_message_item_text(item)

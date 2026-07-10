@@ -1361,6 +1361,20 @@ class TestPromptInterface < KwardTestCase
     assert_includes stripped, "Assistant> assistant text\r\n\r\nReasoning> reasoning text"
   end
 
+  def test_prompt_interface_does_not_add_extra_newline_when_finished_block_already_ends_with_one
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.write_stream_block("Reasoning", "First step\n\n", finish: true)
+    prompt.write_stream_block("Reasoning", "Second step", finish: true)
+
+    stripped = strip_ansi(output.string)
+    assert_includes stripped, "Reasoning> First step\r\n\r\nReasoning> Second step\r\n"
+    refute_includes stripped, "First step\r\n\r\n\r\nReasoning>"
+  ensure
+    prompt&.close
+  end
+
   def test_prompt_interface_advances_after_full_width_stream_chunk
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

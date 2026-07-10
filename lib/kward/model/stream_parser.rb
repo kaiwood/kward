@@ -45,10 +45,10 @@ module Kward
       raise "Copilot returned invalid SSE JSON: #{e.message}"
     end
 
-    def parse_codex_sse(body, on_reasoning_delta: nil, on_assistant_delta: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
+    def parse_codex_sse(body, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
       state = codex_sse_state(show_raw_reasoning: show_raw_reasoning)
       body.split(/\r?\n\r?\n/).each do |block|
-        process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
+        process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
       end
       flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
       codex_sse_message(state)
@@ -61,7 +61,7 @@ module Kward
     # Deltas are yielded as soon as complete SSE blocks arrive so interactive
     # frontends can render streamed assistant and reasoning text without waiting
     # for the provider to close the response.
-    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
+    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
       state = codex_sse_state(show_raw_reasoning: show_raw_reasoning)
       buffer = +""
 
@@ -72,11 +72,11 @@ module Kward
           delimiter = Regexp.last_match[0]
           block = buffer[0...index]
           buffer = buffer[(index + delimiter.length)..] || +""
-          process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
+          process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
         end
       end
       cancellation&.raise_if_cancelled!
-      process_codex_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class) unless buffer.empty?
+      process_codex_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class) unless buffer.empty?
       flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
       codex_sse_message(state)
     rescue JSON::ParserError => e
@@ -239,7 +239,7 @@ module Kward
       }
     end
 
-    def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
+    def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
       data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
       return if data.empty? || data == "[DONE]"
 
@@ -256,7 +256,7 @@ module Kward
       when "response.reasoning_summary_text.delta"
         codex_reasoning_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta)
       when "response.reasoning_summary_part.done"
-        codex_reasoning_part_done(state, on_reasoning_delta: on_reasoning_delta)
+        codex_reasoning_part_done(state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary)
       when "response.reasoning_text.delta"
         codex_raw_reasoning_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta)
       when "response.reasoning_text.done"
@@ -391,16 +391,16 @@ module Kward
       append_codex_raw_reasoning_text(state, text, on_reasoning_delta: on_reasoning_delta) unless text.empty?
     end
 
-    def codex_reasoning_part_done(state, on_reasoning_delta: nil)
+    def codex_reasoning_part_done(state, on_reasoning_delta: nil, on_reasoning_boundary: nil)
       item = active_codex_item(state)
       return unless item&.fetch("type", nil) == "reasoning"
       return if item["summary"].to_a.empty?
 
       flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
-      text = "\n\n"
-      item["summary"].last["text"] = item["summary"].last["text"].to_s + text
-      state[:reasoning_summary] << text
-      on_reasoning_delta&.call(text)
+      item["summary"].last["text"] = "#{item["summary"].last["text"].to_s.rstrip}\n\n"
+      state[:reasoning_summary].rstrip!
+      state[:reasoning_summary] << "\n\n"
+      on_reasoning_boundary&.call
     end
 
     def append_codex_reasoning_text(state, text, on_reasoning_delta: nil)

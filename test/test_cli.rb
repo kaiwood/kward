@@ -1325,6 +1325,23 @@ class TestCLI < KwardTestCase
     assert_equal ["live"], prompt.write_deltas
   end
 
+  def test_prompt_interface_interactive_turn_renders_reasoning_boundaries_as_separate_blocks
+    prompt = BusyPrompt.new([])
+    events = [
+      Kward::Events::ReasoningDelta.new(delta: "First step\n\n"),
+      Kward::Events::ReasoningBoundary.new,
+      Kward::Events::ReasoningDelta.new(delta: "Second step"),
+      Kward::Events::ReasoningBoundary.new
+    ]
+    agent = EventAgent.new(events)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal 2, prompt.events.count { |event| event == [:start_stream_block, "Reasoning"] }
+    assert_equal ["First step\n\n", "Second step"], prompt.write_deltas
+  end
+
   def test_prompt_interface_interactive_turn_keeps_stream_block_open_between_throttled_flushes
     prompt = BusyPrompt.new([])
     events = ["I am Commander K’", "warD, sir —", " your officer"].map do |chunk|
@@ -2091,6 +2108,38 @@ class TestCLI < KwardTestCase
       assert_equal "9% · Codex fake-model · medium", cli.send(:composer_status_text)
       assert_equal "resumed context", seen_messages.last["content"] || seen_messages.last[:content]
       assert_equal 1, prompt.redraw_count
+    end
+  end
+
+  def test_resume_renders_reasoning_summary_parts_as_separate_blocks
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      saved = store.create
+      conversation = Kward::Conversation.new
+      saved.attach(conversation)
+      conversation.append_user("inspect file")
+      conversation.append_assistant({
+        "role" => "assistant",
+        "content" => "",
+        "response_items" => [
+          {
+            "type" => "reasoning",
+            "summary" => [
+              { "type" => "summary_text", "text" => "Planning provider tests" },
+              { "type" => "summary_text", "text" => "Documenting availability" }
+            ]
+          }
+        ]
+      })
+      prompt = FakePrompt.new(["/resume #{saved.path}", "/exit"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+
+      cli.interactive_loop
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Reasoning> Planning provider tests"
+      assert_includes output, "Reasoning> Documenting availability"
+      refute_includes output, "Planning provider tests\nDocumenting availability"
     end
   end
 

@@ -215,6 +215,10 @@ module Kward
         on_reasoning_delta&.call(delta)
         yield Events::ReasoningDelta.new(delta: delta) if block_given?
       end
+      reasoning_boundary = lambda do
+        cancellation&.raise_if_cancelled!
+        yield Events::ReasoningBoundary.new if block_given?
+      end
       assistant_delta = lambda do |delta|
         cancellation&.raise_if_cancelled!
         yield Events::AssistantDelta.new(delta: delta) if block_given?
@@ -244,6 +248,7 @@ module Kward
         {
           tools: request[:tools] || request["tools"],
           on_reasoning_delta: reasoning_delta,
+          on_reasoning_boundary: reasoning_boundary,
           on_assistant_delta: assistant_delta,
           on_retry: retry_callback,
           cancellation: cancellation,
