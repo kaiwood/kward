@@ -312,8 +312,7 @@ module Kward
     # @param keep_empty_path [String, Array<String>, nil] live empty session path(s) to preserve while omitting them from results
     # @return [Array<SessionInfo>] newest sessions first
     def recent(limit: 20, keep_empty_path: nil)
-      sessions = recent_sessions(keep_empty_path: keep_empty_path)
-      limit ? sessions.first(limit) : sessions
+      recent_sessions(limit: limit, keep_empty_path: keep_empty_path)
     end
 
     # Persists the last active session pointer for workspace auto-resume.
@@ -344,9 +343,7 @@ module Kward
     #
     # @return [Array<SessionInfo>] recent sessions with tree depth fields
     def recent_tree(limit: 20, keep_empty_path: nil)
-      sessions = recent_sessions(keep_empty_path: keep_empty_path)
-      sessions = sessions.first(limit) if limit
-      decorate_tree(sessions)
+      decorate_tree(recent_sessions(limit: limit, keep_empty_path: keep_empty_path))
     end
 
     # Deletes an empty unnamed session file.
@@ -770,17 +767,25 @@ module Kward
       nil
     end
 
-    def recent_sessions(keep_empty_path: nil)
+    def recent_sessions(limit: nil, keep_empty_path: nil)
       keep_empty_paths = Array(keep_empty_path).filter_map do |path|
         File.expand_path(path) unless path.to_s.empty?
       end
-      Dir.glob(File.join(session_dir, "*.jsonl")).filter_map do |path|
-        info = session_info(path)
-        next unless info
-        next if delete_empty_unnamed_session_info(info, keep_empty_paths: keep_empty_paths)
+      paths = Dir.glob(File.join(session_dir, "*.jsonl")).sort_by { |path| session_file_mtime(path) }.reverse
+      sessions = []
 
-        info
-      end.sort_by { |info| info.modified_at || Time.at(0) }.reverse
+      paths.each do |path|
+        if limit.nil? || sessions.length < limit
+          info = session_info(path)
+          next unless info
+          next if delete_empty_unnamed_session_info(info, keep_empty_paths: keep_empty_paths)
+
+          sessions << info
+        else
+          delete_empty_unnamed_session_path(path, keep_empty_paths: keep_empty_paths)
+        end
+      end
+      sessions
     end
 
     def delete_empty_unnamed_session_info(info, keep_empty_paths: [])
@@ -790,6 +795,38 @@ module Kward
       File.delete(info.path)
       true
     rescue StandardError
+      false
+    end
+
+    def session_file_mtime(path)
+      File.mtime(path)
+    rescue StandardError
+      Time.at(0)
+    end
+
+    def delete_empty_unnamed_session_path(path, keep_empty_paths: [])
+      return false unless empty_unnamed_session_path?(path)
+      return true if keep_empty_paths.include?(File.expand_path(path))
+
+      File.delete(path)
+      true
+    rescue StandardError
+      false
+    end
+
+    def empty_unnamed_session_path?(path)
+      header = false
+      name = nil
+      File.foreach(path) do |line|
+        record = JSON.parse(line)
+        header = true if record["type"] == "session" && !record["id"].to_s.empty?
+        name = record["name"] if record["type"] == "session_info" && record.key?("name")
+        next unless record["type"] == "message"
+
+        return false if ["user", "assistant", "tool"].include?(message_role(record["message"] || {}))
+      end
+      header && name.to_s.strip.empty?
+    rescue JSON::ParserError
       false
     end
 

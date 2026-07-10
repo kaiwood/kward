@@ -16,6 +16,7 @@ All notable changes to Kward will be documented in this file.
 - CI now tests the minimum supported Ruby and the current stable Ruby.
 - Removed unused private CLI, transcript-rendering, layout, and shell helpers, and clarified compaction guard naming.
 - Removed production Ruby warnings and added a warning-free runtime require check to CI.
+- Limited session listings now fully reconstruct only the requested newest sessions while still garbage-collecting abandoned empty files.
 
 ## [0.76.0] - 2026-07-10
 

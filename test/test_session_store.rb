@@ -181,6 +181,33 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_limited_recent_only_builds_full_metadata_for_requested_sessions
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      sessions = 5.times.map do |index|
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil)
+        session.attach(conversation)
+        conversation.append_user("saved prompt #{index}")
+        File.utime(Time.now + index, Time.now + index, session.path)
+        session
+      end
+      abandoned = store.create
+      File.utime(Time.at(0), Time.at(0), abandoned.path)
+      session_info_calls = 0
+      store.define_singleton_method(:session_info) do |path|
+        session_info_calls += 1
+        super(path)
+      end
+
+      recent = store.recent(limit: 2)
+
+      assert_equal sessions.last(2).map(&:id).reverse, recent.map(&:id)
+      assert_equal 2, session_info_calls
+      refute_path_exists abandoned.path
+    end
+  end
+
   def test_cloned_session_persists_parent_metadata_and_tree_shape
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
