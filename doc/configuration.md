@@ -144,7 +144,7 @@ Model settings:
   "model": "gpt-5.6-sol",
   "openai_model": "gpt-5.6-sol",
   "openrouter_model": "openai/gpt-5.6-sol",
-  "anthropic_model": "claude-sonnet-4-5",
+  "anthropic_model": "claude-sonnet-5",
   "copilot_model": "gpt-5-mini",
   "reasoning_effort": "medium",
   "openai_reasoning_effort": "medium",
@@ -163,9 +163,11 @@ Defaults:
 
 - OpenAI/Codex: `gpt-5.6-sol`
 - OpenRouter: `openai/gpt-5.6-sol`
-- Anthropic: `claude-sonnet-4-6`
+- Anthropic: `claude-sonnet-5`
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
+
+The Anthropic model choices include `claude-fable-5`, but Fable availability depends on the logged-in account and organization. Selecting it without access returns an Anthropic provider error.
 
 The interactive `/model` picker reads cached OpenRouter models when available. Run `kward openrouter refresh` to fetch text-capable models available to the configured OpenRouter API key and cache them under `~/.kward/cache/openrouter_models.json`. Run `kward openrouter list` to inspect the cached model ids.
 

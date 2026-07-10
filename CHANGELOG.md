@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added GPT-5.6 Sol, Terra, and Luna to the OpenAI/Codex model choices and made GPT-5.6 Sol the default OpenAI/Codex model.
+- Added Claude Sonnet 5 and Fable 5 to the Anthropic model choices and made Claude Sonnet 5 the default Anthropic model.
 
 ### Fixed
 
