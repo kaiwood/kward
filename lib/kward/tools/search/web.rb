@@ -1,4 +1,4 @@
-require "cgi"
+require "cgi/escape"
 require "json"
 require "net/http"
 require "nokogiri"

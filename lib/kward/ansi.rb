@@ -262,8 +262,8 @@ module Kward
     end
 
     def inline_links(text, enabled: enabled?)
-      text.split(/(\[[^\]\n]+\]\([^)\s\n]+\))/).map do |part|
-        if (match = part.match(/\A\[([^\]\n]+)\]\(([^)\s\n]+)\)\z/))
+      text.split(/(\[[^\n\]]+\]\([^)\s]+\))/).map do |part|
+        if (match = part.match(/\A\[([^\n\]]+)\]\(([^)\s]+)\)\z/))
           "#{colorize(match[1], :cyan, enabled: enabled)} (#{colorize(match[2], :dim, enabled: enabled)})"
         else
           inline_emphasis(part, enabled: enabled)

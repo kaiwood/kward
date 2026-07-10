@@ -1,4 +1,4 @@
-require "cgi"
+require "cgi/escape"
 require_relative "markdown_transcript"
 
 # Namespace for the Kward CLI agent runtime.

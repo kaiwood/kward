@@ -68,7 +68,6 @@ module Kward
         return false unless sequence
 
         code = sequence[:code]
-        modifiers = sequence[:modifiers]
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 

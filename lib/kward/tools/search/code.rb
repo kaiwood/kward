@@ -1,4 +1,4 @@
-require "cgi"
+require "cgi/escape"
 require "fileutils"
 require "json"
 require "net/http"
