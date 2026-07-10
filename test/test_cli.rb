@@ -1344,6 +1344,11 @@ class TestCLI < KwardTestCase
 
   def test_prompt_interface_interactive_turn_keeps_stream_block_open_between_throttled_flushes
     prompt = BusyPrompt.new([])
+    flushed = Queue.new
+    prompt.define_singleton_method(:write_delta) do |delta|
+      super(delta)
+      flushed << true
+    end
     events = ["I am Commander K’", "warD, sir —", " your officer"].map do |chunk|
       Kward::Events::AssistantDelta.new(delta: chunk)
     end
@@ -1351,11 +1356,13 @@ class TestCLI < KwardTestCase
     agent.define_singleton_method(:ask) do |_input, **_options, &block|
       events.each do |event|
         block.call(event)
-        sleep Kward::CLI::STREAM_RENDER_INTERVAL + 0.01
+        flushed.pop
       end
       ""
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    clock = 0.0
+    cli.define_singleton_method(:monotonic_now) { clock += Kward::CLI::STREAM_RENDER_INTERVAL }
 
     cli.send(:run_interactive_turn, agent, "hello")
 

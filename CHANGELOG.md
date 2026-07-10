@@ -9,6 +9,11 @@ All notable changes to Kward will be documented in this file.
 - Fixed RPC session close, delete, and shutdown operations to cancel active turns before releasing session state.
 - Fixed concurrent RPC turn event recording so replay sequence numbers remain unique and ordered.
 - Kept intentional empty-session garbage collection from deleting live CLI or RPC session files.
+- Removed scheduler timing from the throttled CLI streaming test and restored Ruby 4 image-attachment compatibility.
+
+### Changed
+
+- CI now tests the minimum supported Ruby and the current stable Ruby.
 
 ## [0.76.0] - 2026-07-10
 
