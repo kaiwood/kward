@@ -25,6 +25,10 @@ All notable changes to Kward will be documented in this file.
 - Kept intentional empty-session garbage collection from deleting live CLI or RPC session files.
 - Removed scheduler timing from the throttled CLI streaming test and restored Ruby 4 image-attachment compatibility.
 
+### Removed
+
+- Removed the experimental worker pipeline, tab-backed worker queue, related CLI flag and commands, RPC capability, lifecycle hooks, and stored-runtime integration. Existing session files, worker metadata, and Git stashes are left untouched.
+
 ### Changed
 
 - Improved documentation navigation, command and settings coverage, editor and diff-view workflows, configuration task guidance, and generated API comments for supported extension surfaces.

@@ -67,7 +67,6 @@ Detailed capability fields include:
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
 - `security`: trusted-local behavior with optional per-turn tool approval. By default there is no workspace mutation guard or tool approval and shell/file mutation can run. File-tool workspace guardrails are reported under `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
-- `workers`: experimental agent worker pipeline. Reports `supported: false` by default; set to `supported: true` with `methods: ["workers/list", "workers/show"]` when Kward is launched with `--experimental-workers`.
 - `starterPack`: explicitly unsupported (`supported: false`, reason `cliOnlyInstallCommand`). Use `kward init` from the shell.
 - `shell`: explicitly unsupported (`supported: false`, reason `interactiveTuiOnly`) because `/shell` is the local embedded TUI shell.
 - `logging`: local redacted telemetry logging support, the log directory, enabled categories, `methods: ["logging/stats", "logging/tokenCsv"]`, `usageCsv` sub-capability with bucket support, JSONL format, rotation (10 MB, manual retention), config key `logging`, env prefix `KWARD_LOGGING`, and redacted-metadata-only content.
@@ -783,27 +782,6 @@ Completes the login using the submitted code.
 ### `auth/loginStatus`
 
 Returns login status for a login ID.
-
-## Worker methods (experimental)
-
-Worker methods are available only when Kward is launched with `--experimental-workers`. The `workers` capability reports `supported: false` by default and `supported: true` with `methods: ["workers/list", "workers/show"]` when the flag is active.
-
-### `workers/list`
-
-Params:
-
-- `sessionId`: active RPC session ID.
-
-Returns the list of agent workers for the session.
-
-### `workers/show`
-
-Params:
-
-- `sessionId`: active RPC session ID.
-- `workerId`: worker ID.
-
-Returns details for a specific worker.
 
 ## Security and privacy notes
 

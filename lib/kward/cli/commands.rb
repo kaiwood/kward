@@ -220,8 +220,6 @@ module Kward
             @prompt_delimited = true
             remaining.concat(arguments[(index + 1)..] || [])
             break
-          when "--experimental-workers"
-            @experimental_workers = true
           when "--skip-config"
             @skip_config = true
           when "--filter"

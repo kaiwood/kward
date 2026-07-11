@@ -43,23 +43,13 @@ module Kward
       end
 
       def build_interactive_agent(conversation)
-        @active_worker_role = "implementation"
-        set_visible_worker("implementation", status: "active")
-        build_worker_agent(conversation, role: "implementation")
-      end
-
-      def build_worker_agent(conversation, role: "implementation")
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         workspace = configured_workspace(root: conversation.workspace_root)
-        writer_id = worker_writer_id(role)
         hook_manager = lifecycle_hook_manager(conversation)
         hook_context = lifecycle_hook_context(conversation)
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: @prompt,
-          allowed_tool_names: Workers::ToolPolicy.allowed_tool_names(role),
-          write_lock: @worker_write_lock,
-          writer_id: writer_id,
           hook_manager: hook_manager,
           hook_context: hook_context
         )
@@ -72,34 +62,6 @@ module Kward
           hook_manager: hook_manager,
           hook_context: hook_context
         )
-      end
-
-      def set_visible_worker(id, status: nil, worker: nil)
-        @visible_worker_id = id.to_s
-        @visible_worker_status = status
-        @visible_worker = worker
-      end
-
-      def worker_writer_id(role)
-        return nil unless Workers::ToolPolicy.write_capable?(role)
-
-        @worker_write_lock ||= Workers::WriteLock.new
-        owner_id = role.to_s.empty? ? "implementation" : role.to_s
-        return owner_id if @worker_write_lock.acquire(owner_id)
-
-        nil
-      end
-
-      def refresh_implementation_writer(agent)
-        return agent unless @active_worker_role == "implementation"
-        return agent unless agent&.respond_to?(:tool_registry)
-        return agent if agent.tool_registry.writer_id && @worker_write_lock&.owned_by?(agent.tool_registry.writer_id)
-
-        build_interactive_agent(agent.conversation)
-      end
-
-      def release_implementation_writer
-        @worker_write_lock&.release("implementation")
       end
 
       def handle_interactive_shell_command(input, agent)

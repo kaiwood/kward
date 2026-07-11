@@ -24,8 +24,6 @@ module Kward
       { name: "model", description: "Select the default model.", argument_hint: "" },
       { name: "reasoning", description: "Select reasoning effort.", argument_hint: "" },
       { name: "reload", description: "Reload installed plugins.", argument_hint: "" },
-      { name: "workers", description: "Open the worker pipeline.", argument_hint: "[new|do <task>]" },
-      { name: "queue", description: "Manage the tab-backed worker queue.", argument_hint: "[add|list|open|run|suspend|resume]" },
       { name: "git", description: "Review uncommitted changes and commit them.", argument_hint: "" },
       { name: "diff", description: "Open the file changes recorded in this session.", argument_hint: "" },
       { name: "files", description: "Browse project files.", argument_hint: "" },

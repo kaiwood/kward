@@ -51,7 +51,7 @@ module Kward
     # Tool schemas advertised to the model for the current frontend and config.
     #
     # @return [Array<Hash>] tool schemas currently advertised to the model
-    attr_reader :schemas, :writer_id
+    attr_reader :schemas
 
     # Builds tool objects and the schema list for the current frontend/config.
     #
@@ -64,7 +64,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, write_lock: nil, writer_id: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, hook_manager: nil, hook_context: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, hook_manager: nil, hook_context: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -74,8 +74,6 @@ module Kward
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
       @allowed_tool_names = allowed_tool_names&.map(&:to_s)
-      @write_lock = write_lock
-      @writer_id = writer_id
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
@@ -116,8 +114,6 @@ module Kward
                              hook_denied_content(before_tool, "tool call denied: #{name}")
                            elsif before_tool.approval_required? && hook_approval_denied?(before_tool, tool_call, name, args, cancellation)
                              hook_denied_content(before_tool, "tool call approval denied: #{name}")
-                           elsif mutation_tool?(name) && !write_lock_owned?
-                             "Workspace write denied: another worker owns the write lock."
                            elsif tool_approval_denied?(tool_call, name, args, cancellation)
                              "Declined: tool execution denied by user: #{name}"
                            else
@@ -424,20 +420,10 @@ module Kward
       (metadata[:source] || metadata["source"]).to_s == "mcp"
     end
 
-    def mutation_tool?(name)
-      ToolCall.write_lock_required?(name)
-    end
-
     def tool_approval_denied?(tool_call, name, args, cancellation)
       return false unless @tool_approval
 
       @tool_approval.call(tool_call: tool_call, name: name, args: args, cancellation: cancellation) == false
-    end
-
-    def write_lock_owned?
-      return true unless @write_lock
-
-      @write_lock.owned_by?(@writer_id)
     end
 
     def build_tools

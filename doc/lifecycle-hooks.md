@@ -302,18 +302,6 @@ MCP events are emitted in addition to generic `tool_call_*` events for tools pro
 | `shell_command_before` | `command`, `timeout_seconds`, `cwd` | `command`, `timeout_seconds` |
 | `shell_command_after` | shell metadata plus `content` | none |
 
-### Worker events
-
-| Event | Payload highlights | Supported modifications |
-| --- | --- | --- |
-| `worker_job_create` | `worker_id`, `role`, `title`, `status`, `session_path` | none |
-| `worker_job_start_before` | worker metadata | none |
-| `worker_job_start_after` | worker metadata | none |
-| `worker_job_ready_for_review` | worker metadata | none |
-| `worker_job_failed` | worker metadata plus `error` | none |
-
-Worker hooks are observe-and-warn hooks for background worker automation and audit trails. They do not control worker scheduling.
-
 ### Git events
 
 | Event | Payload highlights | Supported modifications |

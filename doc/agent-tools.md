@@ -8,7 +8,6 @@ Tools are part of Kward's safety and context-management boundary:
 - Ruby tool objects validate and execute those calls,
 - workspace tools stay inside the active workspace by default (see [Configuration](configuration.md) for the guardrail setting),
 - file-changing tools require the file to be read first,
-- mutation tools (`edit_file`, `write_file`, `run_shell_command`) are gated by a write lock when agent workers are active, so only one worker can change the workspace at a time,
 - large outputs are bounded or compacted before they enter model context,
 - full tool outputs are kept in the session record for later inspection.
 
@@ -44,8 +43,6 @@ This lets the assistant reason from focused evidence while preserving access to 
 - web tools can be hidden with web search configuration,
 - `read_skill` is advertised only when skills are available,
 - `ask_user_question` is advertised only when the frontend can display structured questions.
-
-When agent workers are active, the registry can scope each worker to a subset of tools via an allowed-tool-names filter, so workers only see the tools they need.
 
 When `write_file` or `edit_file` changes an `AGENTS.md` file in the workspace root, Kward automatically rebuilds the system message so the model picks up the new instructions without a restart.
 

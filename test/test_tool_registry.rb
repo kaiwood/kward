@@ -83,24 +83,6 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
-  def test_write_lock_denies_mutating_tool_for_non_owner
-    Dir.mktmpdir do |dir|
-      write_lock = Kward::Workers::WriteLock.new
-      assert write_lock.acquire("implementation")
-      registry = Kward::ToolRegistry.new(
-        workspace: Kward::Workspace.new(root: dir),
-        write_lock: write_lock,
-        writer_id: "other-worker"
-      )
-      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
-
-      result = registry.dispatch(tool_call("write_file", path: "demo.txt", content: "nope"), conversation)
-
-      assert_equal "Workspace write denied: another worker owns the write lock.", result
-      refute File.exist?(File.join(dir, "demo.txt"))
-    end
-  end
-
   def test_tool_schemas_include_code_search
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 

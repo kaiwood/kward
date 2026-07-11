@@ -404,7 +404,6 @@ module Kward
       end
 
       def start_tab_turn(tab, input, display_input: nil)
-        stop_live_worker_view if respond_to?(:stop_live_worker_view, true)
         prepare_memory_context(tab.agent.conversation, input) if tab.agent.respond_to?(:conversation)
         print_user_transcript(input, display_input: display_input) if prompt_interface?
         tab.status = "queued"

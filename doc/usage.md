@@ -113,7 +113,7 @@ kward --skip-config edit ~/.kward/config.json
 
 ## Interactive slash commands
 
-Slash commands run local actions in the current session. Most do not send a prompt to the model; exceptions like `/git` and `/workers` orchestrate local flows that may then trigger model work.
+Slash commands run local actions in the current session. Most do not send a prompt to the model; exceptions like `/git` orchestrate local flows that may then trigger model work.
 
 | Command | Use it when you want to... |
 | --- | --- |
@@ -154,35 +154,10 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/scratchpad [text|markdown|ruby]` | open an unsaved editor buffer. |
 | `/redraw` | fix terminal drawing after resize or glitches. |
 | `/reload` | reload installed plugins. |
-| `/workers` | open the experimental worker pipeline (`new`, `do <task>`, or `list`). |
-| `/queue` | manage the experimental tab-backed worker queue (`add`, `list`, `open <id>`, `run`, `suspend <id>`, or `resume <id>`). |
 | `/exit` | leave Kward. |
 | `/quit` | alias for `/exit`. |
 
-Prompt templates, configured skills, and plugins can add more slash commands. Their commands appear in the interactive slash-command picker alongside built-ins. Experimental `/workers` and `/queue` commands appear only when Kward starts with `--experimental-workers`.
-
-### Experimental tab-backed worker queue
-
-Start Kward with `--experimental-workers` to try the tab-backed worker queue. The queue is an MVP for turning an existing tab/session into implementation work that can be reviewed later.
-
-Typical flow:
-
-```text
-/plan Add retry handling to webhook delivery
-/queue add
-/queue run
-/queue open <id>
-```
-
-`/queue add` stores the current tab session as a queued worker job. `/queue run` drains queued jobs one at a time. Each job continues its saved session as an implementation worker, starts only from a clean git workspace, commits any resulting changes, and then becomes `ready_for_review`. Use `/queue open <id>` to inspect the worker session, test the feature yourself, and continue the same session if a follow-up fix is needed.
-
-Current MVP limitations:
-
-- The queue is manual: run it with `/queue run` when you want it to work.
-- Jobs run sequentially and stop when one becomes `blocked` or `failed`.
-- A job will not start if the workspace is dirty; clean, commit, or stash your changes first.
-- `/queue suspend <id>` and `/queue resume <id>` provide explicit stash-based parking primitives, but automatic foreground-tool-triggered yielding is not wired yet.
-- The queue is experimental and stores metadata locally in Kward's config directory.
+Prompt templates, configured skills, and plugins can add more slash commands. Their commands appear in the interactive slash-command picker alongside built-ins.
 
 ## Prompt history
 

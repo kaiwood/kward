@@ -5,7 +5,6 @@ require_relative "../memory/manager"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../tools/registry"
-require_relative "../workers"
 require_relative "../workspace"
 require_relative "../telemetry/logger"
 require_relative "../telemetry/stats"
@@ -71,7 +70,6 @@ module Kward
         "memory/forget", "memory/promote", "memory/relax", "memory/inspect",
         "memory/why", "memory/summarize"
       ].freeze
-      WORKER_METHODS = ["workers/list", "workers/show"].freeze
       COMMAND_METHODS = ["commands/list", "commands/run"].freeze
       STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
       CONFIG_METHODS = ["config/read", "config/update"].freeze
@@ -99,7 +97,6 @@ module Kward
         runtime_settings: RUNTIME_SETTING_METHODS,
         auth: AUTH_METHODS,
         memory: MEMORY_METHODS,
-        workers: WORKER_METHODS,
         commands: COMMAND_METHODS,
         startup_resources: STARTUP_RESOURCE_METHODS,
         config: CONFIG_METHODS,
@@ -116,16 +113,13 @@ module Kward
       # @param output [IO] framed JSON-RPC output stream
       # @param error_output [IO, nil] redacted diagnostic stream
       # @param client [Client] model-provider client shared by sessions
-      # @param experimental_workers [Boolean] expose experimental worker methods
-      def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new, experimental_workers: false)
+      def initialize(input: $stdin, output: $stdout, error_output: $stderr, client: Client.new)
         @transport = Transport.new(input: input, output: output)
         @error_output = error_output
         @client = client
         @config_manager = ConfigManager.new
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
-        @worker_store = Workers::Store.new
-        @experimental_workers = experimental_workers
         @shutdown = false
       end
 
@@ -288,12 +282,6 @@ module Kward
           @session_manager.memory_why(session_id: params["sessionId"])
         when MEMORY_METHODS[13]
           @session_manager.memory_summarize(session_id: params.fetch("sessionId"))
-        when WORKER_METHODS[0]
-          require_experimental_workers!
-          workers_list(params)
-        when WORKER_METHODS[1]
-          require_experimental_workers!
-          workers_show(params)
         when AUTH_METHODS[0]
           @auth_manager.status
         when AUTH_METHODS[1]
@@ -495,8 +483,7 @@ module Kward
             logout: true
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
-          workers: workers_capability,
-          stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: ["workers"] },
+          stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: [] },
           commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           mcp: {
             supported: true,
@@ -552,18 +539,6 @@ module Kward
             content: "redacted-metadata-only"
           }
         }
-      end
-
-      def workers_capability
-        return { supported: false, reason: "experimentalWorkersFlagRequired", flag: "--experimental-workers" } unless @experimental_workers
-
-        { supported: true, methods: WORKER_METHODS, roles: ["implementation", "request"], statuses: Workers::Worker::STATUSES, transcriptStorage: "sessions", metadataStorage: "json" }
-      end
-
-      def require_experimental_workers!
-        return if @experimental_workers
-
-        raise NoMethodError, "workers require --experimental-workers"
       end
 
       def workspace_info(root)
@@ -724,20 +699,6 @@ module Kward
         sections << { name: "Prompts", items: prompts } unless prompts.empty?
         sections << { name: "Plugins", items: plugins } unless plugins.empty?
         { sections: sections }
-      end
-
-      def workers_list(params)
-        include_archived = params["includeArchived"] == true
-        workers = @worker_store.list(include_archived: include_archived)
-        { workers: workers }
-      end
-
-      def workers_show(params)
-        id = params.fetch("id").to_s.delete_prefix("#")
-        worker = @worker_store.find(id)
-        return { worker: worker } if worker
-
-        raise ArgumentError, "Unknown worker: #{id}"
       end
 
       def auth_login_with_api_key(params)

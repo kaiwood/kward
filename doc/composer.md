@@ -67,7 +67,7 @@ The picker includes:
 - plugin slash commands,
 - plugin interactive commands.
 
-Experimental worker commands appear only when Kward starts with `--experimental-workers`. See [Usage](usage.md#Interactive_slash_commands) for the built-in command reference and [Extensibility](extensibility.md) for adding commands.
+See [Usage](usage.md#Interactive_slash_commands) for the built-in command reference and [Extensibility](extensibility.md) for adding commands.
 
 ## Mention a file with `@`
 

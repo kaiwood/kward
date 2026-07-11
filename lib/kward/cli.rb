@@ -40,7 +40,6 @@ require_relative "session_tree_renderer"
 require_relative "starter_pack_installer"
 require_relative "steering"
 require_relative "update_check"
-require_relative "workers"
 require_relative "tools/tool_call"
 require_relative "tools/registry"
 require_relative "telemetry/stats"
@@ -114,8 +113,6 @@ module Kward
       @prompt_delimited = false
       @requested_mode = "auto"
       @skip_config = false
-      @experimental_workers = false
-      @foreground_turn_active = false
       @pending_reasoning_config = nil
       @pending_reasoning_config_mutex = Mutex.new
       @color_enabled = ANSI.enabled?($stdout)
@@ -253,7 +250,7 @@ module Kward
         raise ArgumentError, command_usage("rpc") unless @argv.length == 1
 
         ensure_client!
-        Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client, experimental_workers: @experimental_workers).run
+        Kward::RPC::Server.new(input: @stdin, output: $stdout, client: @client).run
         return
       end
 
@@ -473,25 +470,16 @@ module Kward
           end
         end
         next if handled
-        request_handled, request_replacement = handle_request_worker_input(command_input, agent, session_store)
-        if request_handled
-          if replacement_agent?(request_replacement)
-            agent = active_tab ? replace_active_tab_agent(request_replacement) : request_replacement
-          end
-          next
-        end
         next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
 
         flush_pending_reasoning_config(conversation: agent.conversation)
         expanded_input = expand_prompt_template(input)
         display_input = display_input || input if expanded_input
         input = expanded_input || input
-        agent = refresh_implementation_writer(agent)
         @footer_conversation = agent.conversation
         begin
           @rewind_return_leaf_id = nil
           auto_name_active_session(display_input || input)
-          @foreground_turn_active = true if @active_worker_role == "implementation"
           if active_tab
             submit_tab_input(active_tab, input, display_input: display_input)
             pending_inputs = []
@@ -503,9 +491,6 @@ module Kward
           pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         rescue StandardError => e
           runtime_output("Error: #{e.message}")
-        ensure
-          @foreground_turn_active = false if @active_worker_role == "implementation"
-          release_implementation_writer if @active_worker_role == "implementation"
         end
       end
 
@@ -518,7 +503,6 @@ module Kward
     ensure
       begin
         stop_tabs if respond_to?(:stop_tabs, true)
-        stop_live_worker_view if respond_to?(:stop_live_worker_view, true)
         @prompt.close if prompt_interface?
       ensure
         cleanup_unused_sessions

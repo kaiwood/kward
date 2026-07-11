@@ -203,29 +203,6 @@ class TestCLIComposerStatus < KwardTestCase
     assert_equal "Copilot gemini-2.5-pro · n/a", cli.send(:composer_status_text)
   end
 
-  def test_composer_status_hides_visible_worker_label
-    context_usage = Object.new
-    def context_usage.call(**_kwargs)
-      { percent: 42 }
-    end
-    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]), context_usage: context_usage)
-    hide_composer_git_branch(cli)
-    cli.instance_variable_set(:@visible_worker_id, "abc123")
-    cli.instance_variable_set(:@visible_worker_status, "ready")
-    cli.instance_variable_set(:@session_diff, Kward::SessionDiff.new(additions: 7, deletions: 5))
-
-    assert_equal "+7|-5 · 42% · Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
-  end
-
-  def test_build_interactive_agent_keeps_worker_label_out_of_composer_status
-    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), client: FakeClient.new([]))
-    hide_composer_git_branch(cli)
-
-    cli.send(:build_interactive_agent, Kward::Conversation.new)
-
-    assert_equal "Codex fake-model · medium", strip_ansi(cli.send(:composer_status_text))
-  end
-
   def test_composer_status_shows_session_diff_before_context_percentage
     context_usage = Object.new
     def context_usage.call(**_kwargs)

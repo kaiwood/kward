@@ -524,7 +524,7 @@ class TestTabs < KwardTestCase
     end
   end
 
-  def test_tabs_run_turns_in_parallel_without_worker_write_lock
+  def test_tabs_run_turns_in_parallel
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       prompt = TabPrompt.new
@@ -542,9 +542,6 @@ class TestTabs < KwardTestCase
 
       assert first_tab.running?
       assert second_tab.running?
-      assert_nil first_tab.agent.tool_registry.writer_id
-      assert_nil second_tab.agent.tool_registry.writer_id
-
       client.release << true
       client.release << true
       first_tab.thread.join(1)

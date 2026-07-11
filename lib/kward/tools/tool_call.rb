@@ -67,10 +67,6 @@ module Kward
       TOOL_NAME_MAP[name.to_s]
     end
 
-    def write_lock_required?(name)
-      %w[edit_file write_file run_shell_command edit write bash].include?(name.to_s)
-    end
-
     def file_change_tool?(name)
       %w[edit_file write_file edit write].include?(name.to_s)
     end

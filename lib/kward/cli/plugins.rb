@@ -127,17 +127,11 @@ module Kward
       end
 
       def builtin_slash_commands
-        return BUILTIN_SLASH_COMMANDS if experimental_workers_enabled?
-
-        BUILTIN_SLASH_COMMANDS.reject { |command| %w[workers queue].include?(command[:name]) }
+        BUILTIN_SLASH_COMMANDS
       end
 
       def builtin_slash_command_names
         builtin_slash_commands.map { |command| command[:name] }
-      end
-
-      def experimental_workers_enabled?
-        @experimental_workers == true
       end
 
       def expand_prompt_template(input)
