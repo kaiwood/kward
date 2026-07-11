@@ -89,6 +89,15 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_renders_nerd_font_icons_when_enabled
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", project_browser_icon_theme: "nerd-font")
+
+    assert_equal "▾  lib/", prompt.send(:project_browser_row_text, { name: "lib", path: "lib", depth: 0, directory: true, expanded: true })
+    assert_equal "   main.rb", prompt.send(:project_browser_row_text, { name: "main.rb", path: "lib/main.rb", depth: 0, directory: false })
+    assert_equal "   README.md", prompt.send(:project_browser_row_text, { name: "README.md", path: "README.md", depth: 0, directory: false })
+    assert_equal "   notes.txt", prompt.send(:project_browser_row_text, { name: "notes.txt", path: "notes.txt", depth: 0, directory: false })
+  end
+
   def test_prompt_interface_project_browser_restores_after_editor_closes
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib", "kward"))

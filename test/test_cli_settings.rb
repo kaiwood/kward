@@ -303,6 +303,24 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_settings_slash_command_enables_nerd_font_file_icons
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      prompt = FakeSettingsPrompt.new(["/settings", "/exit"], ["Interface", "File icons", "nerd-font", "Back", "Done"])
+      client = RecordingClient.new([])
+      agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal "nerd-font", JSON.parse(File.read(config_path)).dig("project_browser", "icons")
+      assert_includes prompt.output.join("\n"), "File icons set to nerd-font."
+    end
+  end
+
   def test_settings_slash_command_toggles_memory_web_search_compaction_and_logging
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

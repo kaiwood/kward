@@ -12,6 +12,28 @@ module Kward
       PROJECT_BROWSER_ROOT = "".freeze
       PROJECT_BROWSER_RESULT_LIMIT = 200
       PROJECT_BROWSER_STATE_VERSION = 1
+      PROJECT_BROWSER_FILENAME_ICONS = {
+        ".gitignore" => "",
+        "Gemfile" => "",
+        "Rakefile" => "",
+        "README" => "",
+        "README.md" => "",
+        "package.json" => ""
+      }.freeze
+      PROJECT_BROWSER_EXTENSION_ICONS = {
+        "css" => "",
+        "html" => "",
+        "js" => "",
+        "json" => "",
+        "md" => "",
+        "rb" => "",
+        "sh" => "",
+        "ts" => "",
+        "yaml" => "",
+        "yml" => ""
+      }.freeze
+      PROJECT_BROWSER_DIRECTORY_ICON = ""
+      PROJECT_BROWSER_FILE_ICON = ""
 
       def open_project_browser
         @mutex.synchronize do
@@ -399,8 +421,25 @@ module Kward
                  else
                    "  "
                  end
+        icon = project_browser_icon(row)
         suffix = row[:directory] ? "/" : ""
-        "#{indent}#{marker}#{row[:name]}#{suffix}"
+        "#{indent}#{marker}#{icon}#{row[:name]}#{suffix}"
+      end
+
+      def project_browser_icon(row)
+        return "" unless @project_browser_icon_theme == "nerd-font"
+
+        icon = if row[:directory]
+                 PROJECT_BROWSER_DIRECTORY_ICON
+               else
+                 project_browser_file_icon(row[:path])
+               end
+        "#{icon} "
+      end
+
+      def project_browser_file_icon(path)
+        name = File.basename(path.to_s)
+        PROJECT_BROWSER_FILENAME_ICONS[name] || PROJECT_BROWSER_EXTENSION_ICONS[File.extname(name).delete_prefix(".").downcase] || PROJECT_BROWSER_FILE_ICON
       end
 
       def saved_project_browser_state

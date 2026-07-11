@@ -42,7 +42,7 @@ Outside Git, Kward scans the workspace directory and skips common noisy director
 | `Esc` | Leave search; press again to close the browser |
 | `@` | Insert the selected file as an `@path` mention |
 
-Directories use `▸` and `▾` markers to show collapsed and expanded state. Files are shown under their containing directory with indentation.
+Directories use `▸` and `▾` markers to show collapsed and expanded state. Files are shown under their containing directory with indentation. File-type icons are off by default; users with a compatible Nerd Font can enable them under Interface in `/settings`. See [Configuration](configuration.md#project-browser-icons).
 
 ## Search files
 

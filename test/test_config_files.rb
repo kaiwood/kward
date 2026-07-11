@@ -28,6 +28,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal "auto", config.dig("editor", "diff_view")
       assert_equal "center", config.dig("overlay", "alignment")
       assert_equal "maximum", config.dig("overlay", "width")
+      assert_equal "off", config.dig("project_browser", "icons")
       assert_equal true, config.dig("web_search", "enabled")
       assert_equal "auto", config.dig("web_search", "provider")
       assert_equal false, config.dig("web_search", "allow_model_providers")
@@ -198,6 +199,13 @@ class TestConfigFiles < KwardTestCase
       assert_equal({ "mode" => "vibe", "soft_wrap" => false, "line_numbers" => "relative" }, config["editor"])
       assert_equal config, Kward::ConfigFiles.read_config(path)
     end
+  end
+
+  def test_project_browser_icon_theme_defaults_to_off_and_accepts_nerd_font
+    assert_equal "off", Kward::ConfigFiles.project_browser_icon_theme({})
+    assert_equal "off", Kward::ConfigFiles.project_browser_icon_theme("project_browser" => {})
+    assert_equal "off", Kward::ConfigFiles.project_browser_icon_theme("project_browser" => { "icons" => "emoji" })
+    assert_equal "nerd-font", Kward::ConfigFiles.project_browser_icon_theme("project_browser" => { "icons" => "nerd-font" })
   end
 
   def test_editor_mode_defaults_to_modern_and_accepts_emacs_and_vibe

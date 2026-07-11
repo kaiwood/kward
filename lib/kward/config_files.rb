@@ -41,6 +41,7 @@ module Kward
     MAX_SKILL_FILE_BYTES = 100_000
     MAX_PROMPT_FILE_BYTES = 32 * 1024
     DEFAULT_OVERLAY_SETTINGS = { "alignment" => "center", "width" => "maximum" }.freeze
+    PROJECT_BROWSER_ICON_THEMES = %w[off nerd-font].freeze
     DEFAULT_PERSONAS = {
       "characters" => [
         {
@@ -131,6 +132,9 @@ module Kward
           "diff_view" => "auto"
         },
         "overlay" => DEFAULT_OVERLAY_SETTINGS.dup,
+        "project_browser" => {
+          "icons" => "off"
+        },
         "web_search" => {
           "enabled" => true,
           "provider" => "auto",
@@ -414,6 +418,13 @@ module Kward
       settings["alignment"] = alignment if OVERLAY_ALIGNMENTS.include?(alignment)
       settings["width"] = width if OVERLAY_WIDTHS.include?(width)
       settings
+    end
+
+    # Returns the project browser icon theme, or off when unset or invalid.
+    def project_browser_icon_theme(config = read_config)
+      browser = config["project_browser"].is_a?(Hash) ? config["project_browser"] : {}
+      theme = browser["icons"].to_s
+      PROJECT_BROWSER_ICON_THEMES.include?(theme) ? theme : "off"
     end
 
     # Returns whether the composer should show busy-state keyboard help.

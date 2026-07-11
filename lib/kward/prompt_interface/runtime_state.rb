@@ -74,6 +74,10 @@ module Kward
         ANSI.colorize(text, *styles, enabled: @color_enabled)
       end
 
+      def normalize_project_browser_icon_theme(value)
+        value.to_s == "nerd-font" ? "nerd-font" : "off"
+      end
+
       def normalize_tab_keybindings(value)
         text = value.to_s.downcase
         return "ctrl" if text == "ctrl"

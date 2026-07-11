@@ -259,6 +259,20 @@ Overlay settings control terminal picker/card layout. New default configs includ
 
 You can change these interactively with `/settings`.
 
+## Project browser icons
+
+`/files` uses text-only rows by default so it remains legible in terminals without a patched icon font. To enable Nerd Font icons explicitly:
+
+```json
+{
+  "project_browser": {
+    "icons": "nerd-font"
+  }
+}
+```
+
+`icons` defaults to `off`; the supported values are `off` and `nerd-font`. Kward does not detect terminal fonts. Enable `nerd-font` only after configuring a compatible Nerd Font, such as Hack Nerd Font, in your terminal. You can also select **File icons** under the Interface section of `/settings`.
+
 ## Composer settings
 
 The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:

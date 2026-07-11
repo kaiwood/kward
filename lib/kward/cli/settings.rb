@@ -243,6 +243,8 @@ module Kward
             next unless width
 
             update_overlay_settings("width" => width)
+          when /\Afile icons/
+            configure_project_browser_icon_theme
           when /\Ashow busy help/, /\Ahide busy help/
             set_composer_busy_help(!composer_busy_help?)
             runtime_output("Busy help #{composer_busy_help? ? "enabled" : "disabled"}. Restart the TUI to apply this setting.")
@@ -277,6 +279,7 @@ module Kward
         [
           "Overlay alignment (#{settings["alignment"]})",
           "Overlay width (#{settings["width"]})",
+          "File icons (#{project_browser_icon_theme})",
           "#{composer_busy_help? ? "Hide" : "Show"} busy help (currently #{on_off(composer_busy_help?)})",
           "Tab keybindings (#{composer_tab_keybindings})",
           "Editor mode (#{editor_mode})",
@@ -288,6 +291,25 @@ module Kward
           "#{session_auto_resume_enabled? ? "Disable" : "Enable"} session auto-resume (currently #{on_off(session_auto_resume_enabled?)})",
           "Back"
         ]
+      end
+
+      def project_browser_icon_theme
+        ConfigFiles.project_browser_icon_theme(safely_read_config.to_h)
+      end
+
+      def configure_project_browser_icon_theme
+        selected = @prompt.select("File icons", project_browser_icon_theme_choices, title: "Settings")
+        theme = selected.to_s.split.first.to_s.downcase
+        return unless ConfigFiles::PROJECT_BROWSER_ICON_THEMES.include?(theme)
+
+        update_nested_config("project_browser", "icons" => theme)
+        @prompt.update_project_browser_icon_theme(theme) if @prompt.respond_to?(:update_project_browser_icon_theme)
+        runtime_output("File icons set to #{theme}.")
+      end
+
+      def project_browser_icon_theme_choices
+        current = project_browser_icon_theme
+        ConfigFiles::PROJECT_BROWSER_ICON_THEMES.map { |theme| theme == current ? "#{theme} (current)" : theme }
       end
 
       def composer_busy_help?

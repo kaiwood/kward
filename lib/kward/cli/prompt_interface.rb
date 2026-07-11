@@ -18,6 +18,7 @@ module Kward
         @prompt = prompt_interface.new(
           slash_commands: slash_command_entries,
           overlay_settings: ConfigFiles.overlay_settings,
+          project_browser_icon_theme: ConfigFiles.project_browser_icon_theme,
           footer: prompt_footer_renderer,
           composer_status: method(:composer_status_text),
           busy_help: ConfigFiles.composer_busy_help?,

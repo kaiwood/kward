@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added an opt-in Nerd Font icon theme for the `/files` browser, configurable through Interface settings or `project_browser.icons`; text-only rows remain the default.
 - Added Vim-style Vibe editor reindent commands: `==`, `={motion}` and text objects, plus visual `=`; reindentation uses the built-in language-aware auto-indent rules.
 - Added a security and trust guide covering local permissions, external data flow, trusted extensions, stored data, and safe use with unfamiliar repositories.
 - Added a dedicated Pan mode guide covering setup, browser and session workflows, prompt queueing, extensions, network security, and limitations.

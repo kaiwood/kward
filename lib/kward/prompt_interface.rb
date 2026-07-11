@@ -126,7 +126,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -186,6 +186,7 @@ module Kward
       @editor_bar_cursor_active = false
       @synchronized_output_depth = 0
       @overlay_settings = normalize_overlay_settings(overlay_settings)
+      @project_browser_icon_theme = normalize_project_browser_icon_theme(project_browser_icon_theme)
       @footer = footer
       @composer_status = composer_status
       @busy_help = busy_help
@@ -667,6 +668,13 @@ module Kward
       @mutex.synchronize do
         @overlay_settings = normalize_overlay_settings(settings)
         render_prompt_locked if @started && @asking
+      end
+    end
+
+    def update_project_browser_icon_theme(theme)
+      @mutex.synchronize do
+        @project_browser_icon_theme = normalize_project_browser_icon_theme(theme)
+        render_prompt_locked if @started && @asking && project_browser_visible?
       end
     end
 
