@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.77.0] - 2026-07-11
+
 ### Added
 
 - Added `firstChangedLine` to successful RPC file-mutation results when Kward can derive it from the unified diff, allowing clients to navigate to the first changed line.

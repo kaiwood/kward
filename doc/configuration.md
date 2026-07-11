@@ -259,6 +259,7 @@ Overlay settings control terminal picker/card layout. New default configs includ
 
 You can change these interactively with `/settings`.
 
+<a id="project-browser-icons"></a>
 ## Project browser icons
 
 `/files` uses text-only rows by default so it remains legible in terminals without a patched icon font. To enable Nerd Font icons explicitly:
