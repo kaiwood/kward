@@ -156,7 +156,7 @@ Do not change the public API. Keep the fix internal.
 
 Use a separate tab when you want an independent task rather than a correction to the current one.
 
-Most slash commands typed into a busy composer are intentionally ignored because delayed local state changes would be surprising. `/exit`, `/quit`, and `/new` are queued as control actions. Tab switching remains available while work runs.
+Most slash commands typed into a busy composer are intentionally ignored because delayed local state changes would be surprising. `/exit`, `/quit`, and `/new` are queued as control actions. `/tab` commands run immediately while work runs, so you can name, switch, open, or move tabs; closing the running tab remains unavailable.
 
 During local operations that do not support steering, submitted text is queued for later processing.
 

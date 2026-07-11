@@ -15,6 +15,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Restored busy-tab `/tab` commands, including tab naming, switching, opening, and moving, without replacing the running tab's agent.
 - Fixed `/reload` so newly loaded plugin slash commands appear in the interactive completion overlay.
 - Pan mode now uses the active persona label for assistant messages and interface copy instead of a fixed Kward label.
 - Pan mode now prints the routed LAN address in its startup URL when available.

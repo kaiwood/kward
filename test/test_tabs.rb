@@ -407,6 +407,49 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_busy_tab_commands_manage_tabs_without_replacing_running_tab_agent
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      client = BlockingClient.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      running_tab = cli.send(:active_tab)
+      running_agent = running_tab.agent
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+
+      cli.send(:submit_tab_input, running_tab, "hello")
+      client.started.pop
+
+      cli.send(:handle_tab_busy_input, running_tab, "/tab name Ops")
+      assert_equal "Ops", running_tab.label
+      assert_same running_agent, running_tab.agent
+      assert running_tab.running?
+
+      cli.send(:handle_tab_busy_input, running_tab, "/tab move right")
+      assert_equal 1, cli.instance_variable_get(:@active_tab_index)
+      assert_same running_tab, cli.send(:active_tab)
+      assert_same running_agent, running_tab.agent
+
+      prompt.queue_poll("/tab new")
+      assert_equal({ tab_action: :busy_command }, cli.send(:poll_active_tab_input))
+      cli.send(:handle_tab_action, { tab_action: :busy_command }, store)
+      refute_same running_tab, cli.send(:active_tab)
+      assert running_tab.running?
+      assert_same running_agent, running_tab.agent
+
+      cli.send(:handle_tab_command, "2", store)
+      cli.send(:handle_tab_busy_input, running_tab, "/tab close")
+      assert_equal 3, cli.instance_variable_get(:@tabs).length
+      assert_includes prompt.output.join, "Tab 2 is running and cannot be closed yet."
+
+      client.release << true
+      running_tab.thread.join(1)
+      assert_equal "ready", running_tab.status
+    end
+  end
+
   def test_busy_tab_switches_while_original_turn_keeps_running
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

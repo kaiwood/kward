@@ -489,7 +489,7 @@ module Kward
             tab.queued_inputs << "/exit"
             @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
           when String
-            handle_tab_busy_input(tab, poll_result)
+            return { tab_action: :busy_command } if handle_tab_busy_input(tab, poll_result) == :active_tab_changed
           end
           return next_tab_queued_input(tab) if tab.idle? && !tab.queued_inputs.empty?
           return :tab_idle if tab.idle?
@@ -512,6 +512,15 @@ module Kward
           tab.queued_inputs << input
           @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
           return
+        elsif busy_tab_command?(input)
+          handle_tab_command(input.to_s.strip.sub(%r{\A/tab(?:\s+|\z)}, ""), @session_store)
+          unless active_tab.equal?(tab)
+            @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+            return :active_tab_changed
+          end
+
+          restore_busy_input_prompt
+          return
         elsif slash_command_input?(input)
           # Slash commands are local control actions. Running or queuing them
           # from the busy composer is surprising because the state they act on
@@ -530,6 +539,10 @@ module Kward
         end
         tab.queued_inputs << input unless input.to_s.strip.empty?
         @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
+      end
+
+      def busy_tab_command?(input)
+        input.to_s.strip.match?(%r{\A/tab(?:\s|\z)})
       end
 
       def refresh_active_tab
