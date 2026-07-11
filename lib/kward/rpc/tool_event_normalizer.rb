@@ -65,6 +65,8 @@ module Kward
           if mutation_tool?
             diff = ToolMetadata.extract_unified_diff(text)
             result[:diff] = diff if diff
+            first_changed_line = ToolMetadata.first_changed_line(diff)
+            result[:firstChangedLine] = first_changed_line if first_changed_line
           end
 
           files = changed_files

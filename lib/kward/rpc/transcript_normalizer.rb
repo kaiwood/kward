@@ -246,6 +246,8 @@ module Kward
 
         diff = details[:diff] || details["diff"] || ToolMetadata.extract_unified_diff(text)
         details[:diff] = diff if diff
+        first_changed_line = details[:firstChangedLine] || details["firstChangedLine"] || ToolMetadata.first_changed_line(diff)
+        details[:firstChangedLine] = first_changed_line if first_changed_line
 
         changed_files = details[:changedFiles] || details["changedFiles"] || ToolMetadata.changed_files_from_result(text, matching_call)
         details[:changedFiles] = changed_files if changed_files && !changed_files.empty?
@@ -257,6 +259,8 @@ module Kward
         allowed = {}
         diff = ToolCall.value(details, :diff)
         allowed[:diff] = diff if diff
+        first_changed_line = ToolCall.value(details, :firstChangedLine) || ToolCall.value(details, :first_changed_line)
+        allowed[:firstChangedLine] = first_changed_line if first_changed_line.is_a?(Integer) && first_changed_line.positive?
         changed_files = ToolCall.value(details, :changedFiles) || ToolCall.value(details, :changed_files)
         allowed[:changedFiles] = changed_files if changed_files.is_a?(Array)
         allowed

@@ -75,6 +75,29 @@ module Kward
         index ? text.to_s[index..] : nil
       end
 
+      # Returns the first changed line in the post-edit file from a unified diff.
+      # A deletion-only hunk uses the next surviving new-file line as its anchor.
+      def first_changed_line(diff)
+        new_line = nil
+
+        diff.to_s.each_line do |line|
+          if (match = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/))
+            new_line = match[1].to_i
+          elsif new_line
+            case line
+            when /^\+[^+]/
+              return new_line
+            when /^-[^-]/
+              return new_line
+            when /^ /
+              new_line += 1
+            end
+          end
+        end
+
+        nil
+      end
+
       def changed_files_from_result(text, matching_call = nil)
         path = matching_call&.dig(:arguments, :path) || matching_call&.dig(:arguments, "path")
         return [path] if path

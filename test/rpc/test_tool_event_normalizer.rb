@@ -7,7 +7,7 @@ class TestRPCToolEventNormalizer < KwardTestCase
     Dir.mktmpdir do |config_dir|
       workspace_root = Dir.mktmpdir
       path = File.join(workspace_root, "test.txt")
-      File.write(path, "old one\nold two\n")
+      File.write(path, "unchanged\nold one\nold two\n")
       edit_file_args = {
         path: "test.txt",
         edits: [
@@ -42,6 +42,7 @@ class TestRPCToolEventNormalizer < KwardTestCase
       end
       result = tool_events.find { |event| event[:type] == "toolResult" }[:payload][:result]
       assert_equal false, result[:isError]
+      assert_equal 2, result[:firstChangedLine]
       assert_equal ["test.txt"], result[:changedFiles]
       assert_includes result[:diff], "--- test.txt"
     ensure
