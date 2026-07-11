@@ -211,6 +211,15 @@ module Kward
       @diff_view_source = diff_view_source
     end
 
+    def update_slash_commands(commands)
+      @mutex.synchronize do
+        @slash_commands = normalize_slash_commands(commands)
+        reset_slash_selection
+        @slash_overlay_dismissed_input = nil
+        render_prompt_locked if @started
+      end
+    end
+
     def start(render: true)
       @mutex.synchronize do
         return if @started

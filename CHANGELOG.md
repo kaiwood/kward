@@ -14,6 +14,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `/reload` so newly loaded plugin slash commands appear in the interactive completion overlay.
 - Pan mode now uses the active persona label for assistant messages and interface copy instead of a fixed Kward label.
 - Pan mode now prints the routed LAN address in its startup URL when available.
 - Fixed RPC session close, delete, and shutdown operations to cancel active turns before releasing session state, with a bounded fallback for uncooperative workers.

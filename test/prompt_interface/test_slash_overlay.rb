@@ -21,6 +21,22 @@ class TestPromptInterfaceSlashOverlay < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_updates_slash_overlay_commands
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      slash_commands: [{ name: "plan", description: "Plan work.", argument_hint: "<task>" }]
+    )
+    prompt.send(:composer_input=, "/usage")
+
+    refute prompt.send(:slash_overlay_visible?)
+
+    prompt.update_slash_commands([{ name: "usage", description: "Show usage.", argument_hint: "" }])
+
+    assert prompt.send(:slash_overlay_visible?)
+    assert_equal "usage", prompt.send(:selected_slash_command)[:name]
+  end
+
   def test_prompt_interface_can_disable_slash_overlay_for_completion_provider
     input, writer = IO.pipe
     output = StringIO.new

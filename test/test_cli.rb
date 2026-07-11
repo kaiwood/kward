@@ -3778,6 +3778,8 @@ edit this prompt"
 
       with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
         prompt = FakePrompt.new([])
+        slash_command_updates = []
+        prompt.define_singleton_method(:update_slash_commands) { |commands| slash_command_updates << commands }
         cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
         registry = cli.send(:plugin_registry)
         conversation = Kward::Conversation.new(plugin_registry: registry)
@@ -3789,6 +3791,9 @@ edit this prompt"
             plugin.command "version" do |_args, ctx|
               ctx.say("plugin=v2")
             end
+            plugin.command "release" do |_args, ctx|
+              ctx.say("release")
+            end
             plugin.prompt_context do |_ctx|
               "Plugin context: v2"
             end
@@ -3796,6 +3801,8 @@ edit this prompt"
         RUBY
         cli.send(:reload_plugins, conversation)
         cli.send(:run_plugin_command, "version", "", agent)
+
+        assert_includes slash_command_updates.last.map { |entry| entry[:name] }, "release"
 
         output = prompt.output.join("\n")
         assert_includes output, "plugin=v1"
