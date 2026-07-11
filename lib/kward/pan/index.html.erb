@@ -85,6 +85,21 @@
     .label { margin: 0 0 .35rem; color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
     .user .label { display: none; }
     .text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.58; }
+    .text > :first-child { margin-top: 0; }
+    .text > :last-child { margin-bottom: 0; }
+    .markdown-heading { margin: 1rem 0 .45rem; line-height: 1.25; }
+    .markdown-heading.level-1 { font-size: 1.35rem; }
+    .markdown-heading.level-2 { font-size: 1.18rem; }
+    .markdown-heading.level-3 { font-size: 1.05rem; }
+    .markdown-paragraph { margin: 0 0 .8rem; }
+    .markdown-code { margin: .7rem 0; padding: .7rem .8rem; overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; background: #090e09; color: var(--ink); font: .82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; }
+    .markdown-code code { font: inherit; }
+    .markdown-quote { margin: .65rem 0; padding-left: .8rem; border-left: 2px solid var(--line-bright); color: var(--muted); }
+    .markdown-list { margin: .45rem 0 .8rem; padding-left: 1.4rem; }
+    .markdown-list li + li { margin-top: .2rem; }
+    .markdown-task { display: inline-block; width: 1.3rem; color: var(--accent-bright); }
+    .markdown-link { color: var(--accent-bright); }
+    .markdown-strike { color: var(--muted); }
     .user .message { padding: .72rem .9rem; border: 1px solid #3a4328; border-radius: 15px 15px 4px 15px; background: #1b2312; }
     .assistant .message { max-width: 100%; }
     .assistant .label { color: var(--accent-bright); }
@@ -212,12 +227,145 @@
       labelNode.textContent = label;
       const textNode = document.createElement('div');
       textNode.className = 'text';
-      textNode.textContent = text || '';
+      renderMarkdown(textNode, text || '');
       message.append(labelNode, textNode);
       node.appendChild(message);
       transcriptInner.appendChild(node);
       transcript.scrollTop = transcript.scrollHeight;
       return textNode;
+    }
+
+    function appendTranscriptText(node, text) {
+      renderMarkdown(node, `${node.markdownSource || ''}${text || ''}`);
+    }
+
+    function renderMarkdown(node, source) {
+      node.markdownSource = source;
+      node.replaceChildren();
+      const lines = source.split(/\r\n|\r|\n/);
+      let index = 0;
+
+      while (index < lines.length) {
+        if (!lines[index]) { index += 1; continue; }
+
+        const fence = lines[index].match(/^\s*```([^`]*)\s*$/);
+        if (fence) {
+          const code = [];
+          index += 1;
+          while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) code.push(lines[index++]);
+          if (index < lines.length) index += 1;
+          const pre = document.createElement('pre');
+          pre.className = 'markdown-code';
+          const codeNode = document.createElement('code');
+          codeNode.textContent = code.join('\n');
+          if (fence[1].trim()) codeNode.dataset.language = fence[1].trim();
+          pre.appendChild(codeNode);
+          node.appendChild(pre);
+          continue;
+        }
+
+        const heading = lines[index].match(/^(#{1,6})\s+(.+)$/);
+        if (heading) {
+          const level = heading[1].length;
+          const element = document.createElement(`h${level}`);
+          element.className = `markdown-heading level-${level}`;
+          appendInlineMarkdown(element, heading[2]);
+          node.appendChild(element);
+          index += 1;
+          continue;
+        }
+
+        if (/^>\s?/.test(lines[index])) {
+          const quote = document.createElement('blockquote');
+          quote.className = 'markdown-quote';
+          while (index < lines.length && /^>\s?/.test(lines[index])) {
+            if (quote.childNodes.length) quote.appendChild(document.createElement('br'));
+            appendInlineMarkdown(quote, lines[index].replace(/^>\s?/, ''));
+            index += 1;
+          }
+          node.appendChild(quote);
+          continue;
+        }
+
+        const list = lines[index].match(/^\s*((?:[-+*])|\d+[.)])\s+(.+)$/);
+        if (list) {
+          const ordered = /^\d/.test(list[1]);
+          const element = document.createElement(ordered ? 'ol' : 'ul');
+          element.className = 'markdown-list';
+          while (index < lines.length) {
+            const item = lines[index].match(/^\s*((?:[-+*])|\d+[.)])\s+(.+)$/);
+            if (!item || /^\d/.test(item[1]) !== ordered) break;
+            const entry = document.createElement('li');
+            const task = item[2].match(/^\[([ xX])\]\s+(.+)$/);
+            if (task) {
+              const marker = document.createElement('span');
+              marker.className = 'markdown-task';
+              marker.textContent = task[1].toLowerCase() === 'x' ? '☑' : '☐';
+              entry.appendChild(marker);
+              appendInlineMarkdown(entry, task[2]);
+            } else {
+              appendInlineMarkdown(entry, item[2]);
+            }
+            element.appendChild(entry);
+            index += 1;
+          }
+          node.appendChild(element);
+          continue;
+        }
+
+        const paragraph = document.createElement('p');
+        paragraph.className = 'markdown-paragraph';
+        while (index < lines.length && lines[index]) {
+          if (paragraph.childNodes.length) paragraph.appendChild(document.createElement('br'));
+          appendInlineMarkdown(paragraph, lines[index]);
+          index += 1;
+        }
+        node.appendChild(paragraph);
+      }
+    }
+
+    function appendInlineMarkdown(node, source) {
+      const pattern = /(`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|\*\*[^*\n]+\*\*|~~[^~\n]+~~|(?<!\*)\*[^*\n]+\*(?!\*)|(?<!\w)_[^_\n]+_(?!\w))/g;
+      let lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        node.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+        const token = match[0];
+        if (token.startsWith('`')) {
+          const code = document.createElement('code');
+          code.textContent = token.slice(1, -1);
+          node.appendChild(code);
+        } else if (token.startsWith('[')) {
+          const link = token.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
+          const href = safeLinkHref(link[2]);
+          if (href) {
+            const anchor = document.createElement('a');
+            anchor.className = 'markdown-link';
+            anchor.href = href;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.textContent = link[1];
+            node.appendChild(anchor);
+          } else {
+            node.appendChild(document.createTextNode(token));
+          }
+        } else {
+          const element = document.createElement(token.startsWith('**') ? 'strong' : token.startsWith('~~') ? 's' : 'em');
+          if (token.startsWith('~~')) element.className = 'markdown-strike';
+          element.textContent = token.startsWith('**') ? token.slice(2, -2) : token.slice(1, -1);
+          node.appendChild(element);
+        }
+        lastIndex = match.index + token.length;
+      }
+      node.appendChild(document.createTextNode(source.slice(lastIndex)));
+    }
+
+    function safeLinkHref(value) {
+      try {
+        const url = new URL(value);
+        return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? url.href : null;
+      } catch (_) {
+        return null;
+      }
     }
 
     function setStatus(payload) {
@@ -341,13 +489,13 @@
     events.addEventListener('user', event => entry('user', 'You', JSON.parse(event.data).text));
     events.addEventListener('reasoning_delta', event => {
       if (!currentReasoning) currentReasoning = entry('reasoning', 'Reasoning', '');
-      currentReasoning.textContent += JSON.parse(event.data).delta;
+      appendTranscriptText(currentReasoning, JSON.parse(event.data).delta);
       transcript.scrollTop = transcript.scrollHeight;
     });
     events.addEventListener('reasoning_boundary', () => { currentReasoning = null; });
     events.addEventListener('assistant_delta', event => {
       if (!currentAssistant) currentAssistant = entry('assistant', assistantLabel, '');
-      currentAssistant.textContent += JSON.parse(event.data).delta;
+      appendTranscriptText(currentAssistant, JSON.parse(event.data).delta);
       transcript.scrollTop = transcript.scrollHeight;
     });
     events.addEventListener('tool_call', event => {

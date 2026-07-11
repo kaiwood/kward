@@ -79,6 +79,20 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_server_serves_a_dependency_free_safe_markdown_transcript_renderer
+    Dir.mktmpdir do |dir|
+      server = build_server(dir)
+      response = request(server, "GET / HTTP/1.1\r\nHost: example\r\n#{auth_header}\r\n\r\n")
+
+      assert_includes response, "function renderMarkdown(node, source)"
+      assert_includes response, "function appendInlineMarkdown(node, source)"
+      assert_includes response, "function safeLinkHref(value)"
+      assert_includes response, "node.replaceChildren()"
+      assert_includes response, "['http:', 'https:', 'mailto:'].includes(url.protocol)"
+      refute_includes response, "innerHTML = text"
+    end
+  end
+
   def test_pan_server_serves_logo_asset
     Dir.mktmpdir do |dir|
       server = build_server(dir)

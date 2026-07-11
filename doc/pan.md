@@ -120,6 +120,8 @@ The transcript displays:
 - retries and errors,
 - restored compaction summaries and prior session content.
 
+Assistant and reasoning entries use a built-in, dependency-free Markdown renderer. It supports headings, paragraphs, fenced code blocks, blockquotes, ordered and unordered lists (including task lists), inline code, emphasis, strikethrough, and HTTP(S) or `mailto:` links. Message content remains text-based; unsupported Markdown stays readable as plain text.
+
 Structured clarification questions are disabled in Pan because it does not have the interactive question picker. Ask the model to state uncertainties in the transcript when a task needs your decision.
 
 Pan does not reproduce terminal-only interfaces such as `/git`, `/files`, `/shell`, the integrated editor, settings pickers, tabs, or clipboard commands. Use natural-language requests for agent work and return to the CLI for those local UI workflows.

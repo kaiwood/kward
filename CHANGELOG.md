@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 - Added a dedicated Pan mode guide covering setup, browser and session workflows, prompt queueing, extensions, network security, and limitations.
 - Added an interactive composer guide covering editing keys, command and file completion, history, reasoning and tab shortcuts, busy input, cancellation, images, and terminal compatibility.
 - Added session browsing, creation, resume, rename, and deletion to Pan mode, with a responsive mobile-first interface using the documentation palette, Kward logo, and CLI-inspired startup screen.
+- Added dependency-free Markdown rendering for Pan transcript entries, including fenced code blocks, lists, blockquotes, inline styles, and safe links.
 
 ### Fixed
 
