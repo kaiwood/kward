@@ -1072,6 +1072,65 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_reindents_current_lines_with_equals
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "def greet\nputs :hello\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+
+        "==".each_char { |key| prompt.send(:handle_editor_key, key) }
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "def greet\nputs :hello\nend\n", editor.buffer
+
+        prompt.send(:handle_editor_key, "j")
+        prompt.send(:handle_editor_key, "=")
+        prompt.send(:handle_editor_key, "=")
+        assert_equal "def greet\n  puts :hello\nend\n", editor.buffer
+
+        prompt.send(:handle_editor_key, "u")
+        assert_equal "def greet\nputs :hello\nend\n", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_reindents_motion_and_text_object_ranges
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "def first\nputs :one\nend\n\ndef second\nputs :two\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+
+        "=j".each_char { |key| prompt.send(:handle_editor_key, key) }
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "def first\n  puts :one\nend\n\ndef second\nputs :two\nend\n", editor.buffer
+
+        editor.set_cursor_line_and_column(4, 0)
+        "=ar".each_char { |key| prompt.send(:handle_editor_key, key) }
+        assert_equal "def first\n  puts :one\nend\n\ndef second\n  puts :two\nend\n", editor.buffer
+
+        prompt.send(:handle_editor_key, "u")
+        assert_equal "def first\n  puts :one\nend\n\ndef second\nputs :two\nend\n", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_reindents_to_file_motion
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.rb"), "def greet\nputs :hello\nend\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.rb")
+
+        "=G".each_char { |key| prompt.send(:handle_editor_key, key) }
+
+        editor = prompt.instance_variable_get(:@editor_state)
+        assert_equal "def greet\n  puts :hello\nend\n", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_vibe_mode_big_y_yanks_current_line
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")

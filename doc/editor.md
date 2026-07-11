@@ -310,6 +310,8 @@ Use normal mode for movement, operators, marks, registers, macros, search, and c
 | `dir` / `cir` / `yir`   | Delete / change / yank inside a Ruby block      |
 | `dar` / `car` / `yar`   | Delete / change / yank around a Ruby block      |
 | `yy`                    | Yank line                                       |
+| `==`                    | Reindent current line                           |
+| `={motion}`             | Reindent lines covered by a motion or text object |
 | `"ayy` / `"ap`         | Yank / paste with named registers               |
 | `p`                     | Paste after cursor                              |
 | `P`                     | Paste before cursor                             |
@@ -351,6 +353,7 @@ Visual mode uses the same motion language as normal mode where practical. Start 
 | `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |
 | `iw` / `a(` / `ip`      | Select visual text objects                      |
 | `>` / `<`               | Indent / outdent selected lines                 |
+| `=`                     | Reindent selected lines                         |
 | `I` / `A`               | Insert / append text across visual block lines  |
 | `J`                     | Join selected lines                             |
 | `~` / `u` / `U`         | Swapcase / lowercase / uppercase selection      |
@@ -421,7 +424,7 @@ Vibe mode is not trying to be Vim. It is a focused subset designed for quick edi
 - **Counts work with commands and motions**: `3dd` deletes three lines, `2w` moves two words, `5x` deletes five characters.
 - **`.` repeats the last change**: after `cw word Esc`, pressing `.` changes the next word the same way. Insert-mode keystrokes are recorded as part of the change.
 - **`/` and `?` search forward and backward**: `n` and `N` repeat the last search. `*` and `#` search for the word under the cursor.
-- **Operators with motions**: `d`, `y`, and `c` work with `w` (word), `e` (end of word), `b` (back word), `$` (end of line), `0` (start of line), and `^` (first non-blank).
+- **Operators with motions**: `d`, `y`, `c`, and `=` work with `w` (word), `e` (end of word), `b` (back word), `$` (end of line), `0` (start of line), and `^` (first non-blank). `=` uses Kward's built-in language-aware auto-indent rules.
 - **Yanks copy to the terminal clipboard**: when OSC 52 is supported, yanked text is also sent to the system clipboard, so you can paste into other applications.
 - **Registers and macros are supported**: named registers work with yank/delete/paste flows, and `q`/`@` record and replay simple macros for repeated edits.
 - **Viewport commands**: `zz`, `zt`, and `zb` reposition the cursor line to the center, top, or bottom of the viewport without moving the cursor itself — the same as Vim.

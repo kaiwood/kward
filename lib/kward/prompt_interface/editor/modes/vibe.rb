@@ -452,9 +452,10 @@ module Kward
         return true if command.match?(/\A\d*g\z/)
         return true if command.match?(/\A\d*g[uU~]\z/)
         return true if command.match?(/\A\d*z\z/)
-        return true if command.match?(/\A\d*[cdy]\d*\z/)
-        return true if command.match?(/\A\d*[cdy]\d*[ai]\z/)
-        return true if command.match?(/\A\d*[cdy]\d*[fFtT]\z/)
+        return true if command.match?(/\A\d*[=cdy](?:[1-9]\d*)?\z/)
+        return true if command.match?(/\A\d*[=cdy]\d*g\z/)
+        return true if command.match?(/\A\d*[=cdy]\d*[ai]\z/)
+        return true if command.match?(/\A\d*[=cdy]\d*[fFtT]\z/)
         return true if command.match?(/\A\d*[fFtT]\z/)
         return true if command.match?(/\A\d*r\z/)
         return true if command.match?(/\Am\z/)
@@ -635,6 +636,10 @@ module Kward
         when "<<"
           vibe_indent_lines(count, :left)
           vibe_remember_change(command)
+        when "=="
+          vibe_reindent_lines(count, command)
+        when /\A=(.+)\z/
+          vibe_reindent_operator(Regexp.last_match(1), count, command)
         when "p"
           vibe_active_register_linewise? ? vibe_paste_line(:below, original_command) : vibe_paste_after(original_command)
         when "P"
@@ -704,6 +709,8 @@ module Kward
           vibe_indent_visual_selection(:right)
         when "<"
           vibe_indent_visual_selection(:left)
+        when "="
+          vibe_reindent_visual_selection
         when "J"
           vibe_join_visual_selection
         when "~"
@@ -1077,6 +1084,18 @@ module Kward
         vibe_cancel_visual_mode
       end
 
+      def vibe_reindent_visual_selection
+        ranges = @editor_state.selection_ranges
+        return false if ranges.empty?
+
+        start_index = ranges.map(&:first).min
+        end_index = ranges.map(&:last).max
+        start_line, = @editor_state.cursor_line_and_column_for(start_index)
+        end_line, = @editor_state.cursor_line_and_column_for([end_index - 1, start_index].max)
+        vibe_reindent_line_range(start_line, end_line)
+        vibe_cancel_visual_mode
+      end
+
       def vibe_count_and_body(command)
         return [0, "0"] if command == "0"
 
@@ -1281,6 +1300,56 @@ module Kward
         replacement += "\n" if original_text.end_with?("\n")
         vibe_record_undo { @editor_state.replace_range(start_index, end_index, replacement) }
         @editor_state.set_cursor_line_and_column(line, 0)
+        true
+      end
+
+      def vibe_reindent_lines(count, command = nil)
+        line, = @editor_state.cursor_line_and_column
+        vibe_reindent_line_range(line, line + count - 1, command)
+      end
+
+      def vibe_reindent_operator(motion, count, command = nil)
+        motion_count, motion = vibe_count_and_body(motion)
+        return vibe_reindent_to_line(motion_count, command) if motion == "G"
+        return vibe_reindent_to_line(motion_count.positive? ? motion_count : 1, command) if motion == "gg"
+        return vibe_reindent_lines(count, command) if motion == "=" || motion == "g_"
+
+        count *= motion_count if motion_count.positive?
+        target = vibe_operator_target(motion, count)
+        return false unless target
+
+        vibe_reindent_target(target, motion, command)
+      end
+
+      def vibe_reindent_to_line(line_count, command)
+        line, = @editor_state.cursor_line_and_column
+        target_line = line_count.positive? ? line_count - 1 : @editor_state.lines.length - 1
+        vibe_reindent_line_range(line, target_line, command)
+      end
+
+      def vibe_reindent_target(target, motion, command)
+        start_line, = @editor_state.cursor_line_and_column_for(target.start_index)
+        end_line = if motion.match?(/\A[ai].\z/)
+                     @editor_state.cursor_line_and_column_for([target.end_index - 1, target.start_index].max).first
+                   else
+                     @editor_state.cursor_line_and_column.first
+                   end
+        vibe_reindent_line_range(start_line, end_line, command)
+      end
+
+      def vibe_reindent_line_range(first_line, last_line, command = nil)
+        start_line, end_line = [first_line, last_line].minmax
+        end_line = [end_line, @editor_state.lines.length - 1].min
+        vibe_record_undo do
+          (start_line..end_line).each do |line_index|
+            next if @editor_state.lines[line_index].to_s.strip.empty?
+
+            editor_reindent_line(line_index, editor_expected_indent_for_line(line_index))
+          end
+        end
+        @editor_state.move_to_line_first_non_blank(end_line)
+        @editor_state.status = "Reindented #{end_line - start_line + 1} line#{end_line == start_line ? "" : "s"}"
+        vibe_remember_change(command) if command
         true
       end
 

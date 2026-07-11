@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vim-style Vibe editor reindent commands: `==`, `={motion}` and text objects, plus visual `=`; reindentation uses the built-in language-aware auto-indent rules.
 - Added a security and trust guide covering local permissions, external data flow, trusted extensions, stored data, and safe use with unfamiliar repositories.
 - Added a dedicated Pan mode guide covering setup, browser and session workflows, prompt queueing, extensions, network security, and limitations.
 - Added an interactive composer guide covering editing keys, command and file completion, history, reasoning and tab shortcuts, busy input, cancellation, images, and terminal compatibility.

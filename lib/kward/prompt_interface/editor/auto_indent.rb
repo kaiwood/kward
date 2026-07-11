@@ -177,7 +177,7 @@ module Kward
       def editor_expected_indent_for_line(line_index)
         line = @editor_state.lines[line_index].to_s
         code = editor_indent_code(line, editor_syntax_language).strip
-        matching_indent = editor_matching_indent_for_line(code)
+        matching_indent = editor_matching_indent_for_line(code, line_index)
         return matching_indent if matching_indent
 
         previous_line = previous_non_blank_editor_line(line_index)
@@ -188,11 +188,11 @@ module Kward
         indent
       end
 
-      def editor_matching_indent_for_line(code)
+      def editor_matching_indent_for_line(code, line_index = nil)
         return nil if code.empty?
-        return editor_matching_punctuation_indent(code[0]) if editor_closing_punctuation?(code[0])
+        return editor_matching_punctuation_indent(code[0], line_index) if editor_closing_punctuation?(code[0])
 
-        editor_matching_word_indent if editor_completed_word_closer?(code, editor_syntax_language)
+        editor_matching_word_indent(line_index) if editor_completed_word_closer?(code, editor_syntax_language)
       end
 
       def previous_non_blank_editor_line(line_index)
@@ -371,7 +371,8 @@ module Kward
       def editor_reindent_for_closing_punctuation(text)
         return unless editor_cursor_in_leading_indent?
 
-        indent = editor_matching_punctuation_indent(text)
+        line_index, = @editor_state.cursor_line_and_column
+        indent = editor_matching_punctuation_indent(text, line_index)
         editor_reindent_current_line(indent) if indent
       end
 
@@ -381,7 +382,7 @@ module Kward
         before_cursor = line[0...column].to_s
         return unless editor_completed_word_closer?(before_cursor, editor_syntax_language)
 
-        indent = editor_matching_word_indent
+        indent = editor_matching_word_indent(line_index)
         editor_reindent_current_line(indent) if indent
       end
 
@@ -394,14 +395,21 @@ module Kward
       def editor_reindent_current_line(indent)
         line_index, column = @editor_state.cursor_line_and_column
         line_start = @editor_state.line_start_offset(line_index)
-        line = @editor_state.lines[line_index].to_s
-        old_indent = line[/\A[ \t]*/].to_s
+        old_indent = @editor_state.lines[line_index].to_s[/\A[ \t]*/].to_s
+        return false unless editor_reindent_line(line_index, indent)
+
+        content_column = [column - old_indent.length, 0].max
+        @editor_state.cursor = line_start + indent.to_s.length + content_column
+        true
+      end
+
+      def editor_reindent_line(line_index, indent)
+        line_start = @editor_state.line_start_offset(line_index)
+        old_indent = @editor_state.lines[line_index].to_s[/\A[ \t]*/].to_s
         new_indent = indent.to_s
         return false if old_indent == new_indent
 
-        content_column = [column - old_indent.length, 0].max
         @editor_state.replace_range(line_start, line_start + old_indent.length, new_indent)
-        @editor_state.cursor = line_start + new_indent.length + content_column
         true
       end
 
@@ -421,23 +429,23 @@ module Kward
         end
       end
 
-      def editor_matching_word_indent
+      def editor_matching_word_indent(line_index = nil)
         case editor_syntax_language
         when :ruby
-          editor_matching_keyword_indent("end", %w[end])
+          editor_matching_keyword_indent("end", %w[end], line_index)
         when :lua
-          editor_matching_keyword_indent("end", %w[end until])
+          editor_matching_keyword_indent("end", %w[end until], line_index)
         when :shell
-          editor_matching_keyword_indent(nil, SHELL_DEDENT_KEYWORDS)
+          editor_matching_keyword_indent(nil, SHELL_DEDENT_KEYWORDS, line_index)
         when :html
-          editor_matching_html_indent
+          editor_matching_html_indent(line_index)
         end
       end
 
-      def editor_matching_punctuation_indent(text)
+      def editor_matching_punctuation_indent(text, line_index = nil)
         opener = PUNCTUATION_PAIRS[text]
         stack = []
-        editor_previous_code_lines.each do |line|
+        editor_previous_code_lines(line_index).each do |line|
           editor_scan_punctuation_tokens(line[:code]).each do |token|
             if token == opener
               stack << line[:indent]
@@ -449,9 +457,9 @@ module Kward
         stack.last || ""
       end
 
-      def editor_matching_keyword_indent(opener = nil, closers = [])
+      def editor_matching_keyword_indent(opener = nil, closers = [], line_index = nil)
         stack = []
-        editor_previous_code_lines.each do |line|
+        editor_previous_code_lines(line_index).each do |line|
           code = line[:code].strip
           next if code.empty?
 
@@ -461,9 +469,9 @@ module Kward
         stack.last || ""
       end
 
-      def editor_matching_html_indent
+      def editor_matching_html_indent(line_index = nil)
         stack = []
-        editor_previous_code_lines.each do |line|
+        editor_previous_code_lines(line_index).each do |line|
           code = line[:code].strip
           next if code.empty?
 
@@ -473,8 +481,8 @@ module Kward
         stack.last || ""
       end
 
-      def editor_previous_code_lines
-        line_index, = @editor_state.cursor_line_and_column
+      def editor_previous_code_lines(line_index = nil)
+        line_index ||= @editor_state.cursor_line_and_column.first
         @editor_state.lines.first(line_index).filter_map do |line|
           code = editor_indent_code(line, editor_syntax_language).rstrip
           next if code.strip.empty?
