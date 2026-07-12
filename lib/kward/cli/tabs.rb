@@ -151,9 +151,7 @@ module Kward
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: prompt,
-          tool_approval: lambda { |tool_call:, name:, args:, cancellation:|
-            prompt.ask_tool_approval(tool_name: name, args: args, reason: args["hook_message"] || args[:hook_message])
-          },
+          tool_approval: tab_tool_approval_callback(prompt),
           hook_manager: hook_manager,
           hook_context: hook_context
         )
@@ -168,6 +166,14 @@ module Kward
         )
         agent.instance_variable_set(:@tab_question_prompt, prompt)
         agent
+      end
+
+      def tab_tool_approval_callback(prompt)
+        return nil unless ConfigFiles.permission_policy(safely_read_config.to_h).enabled?
+
+        lambda do |tool_call:, name:, args:, cancellation:|
+          prompt.ask_tool_approval(tool_name: name, args: args, reason: args["hook_message"] || args[:hook_message])
+        end
       end
 
       def build_tab(session, agent, label: nil)

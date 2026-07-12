@@ -67,6 +67,7 @@ module Kward
 
       def interactive_tool_approval_callback
         return nil unless @prompt.respond_to?(:ask_tool_approval)
+        return nil unless ConfigFiles.permission_policy(safely_read_config.to_h).enabled?
 
         lambda do |tool_call:, name:, args:, cancellation:|
           @prompt.ask_tool_approval(
