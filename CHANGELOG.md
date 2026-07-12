@@ -8,6 +8,14 @@ All notable changes to Kward will be documented in this file.
 
 - Added an opt-in permission policy for model-requested tools, with allow/ask/deny rules, read-only and workspace-write modes, write scopes, and interactive approval overlays. Permissions remain disabled by default and are not an OS sandbox.
 
+### Changed
+
+- Kward-owned HTTP requests now identify themselves with `User-Agent: Kward/<version>`.
+
+### Fixed
+
+- Restored GPT-5.6 Luna requests through Codex with a scoped Responses Lite compatibility workaround; normal Codex requests retain Kward's own identity.
+
 ## [0.77.0] - 2026-07-11
 
 ### Added

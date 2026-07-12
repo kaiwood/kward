@@ -3,6 +3,7 @@ require "net/http"
 require "uri"
 require_relative "catalog"
 require_relative "decision"
+require_relative "../http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -33,7 +34,7 @@ module Kward
       private
 
       def post(body)
-        request = Net::HTTP::Post.new(@uri)
+        request = Http.apply_user_agent(Net::HTTP::Post.new(@uri))
         request["Content-Type"] = "application/json"
         request["Accept"] = "application/json"
         @headers.each { |key, value| request[key] = value }

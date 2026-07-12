@@ -3,6 +3,7 @@ require "json"
 require "net/http"
 require "time"
 require "uri"
+require_relative "http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -102,7 +103,7 @@ module Kward
 
     def fetch_latest_version
       request = Net::HTTP::Get.new(LATEST_VERSION_URL)
-      request["User-Agent"] = "kward/#{Kward::VERSION}"
+      Http.apply_user_agent(request)
       response = Net::HTTP.start(LATEST_VERSION_URL.hostname, LATEST_VERSION_URL.port, use_ssl: true, open_timeout: 2, read_timeout: 2) do |http|
         http.request(request)
       end

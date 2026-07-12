@@ -6,6 +6,7 @@ require "tmpdir"
 require "uri"
 require "zlib"
 require_relative "config_files"
+require_relative "http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -56,8 +57,9 @@ module Kward
 
     def download(url)
       uri = URI(url)
+      request = Http.apply_user_agent(Net::HTTP::Get.new(uri))
       response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https", open_timeout: 10, read_timeout: 30) do |http|
-        http.get(uri.request_uri)
+        http.request(request)
       end
       raise "Starter pack download failed with HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 

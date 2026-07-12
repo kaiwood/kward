@@ -6,6 +6,7 @@ require_relative "../auth/github_oauth"
 require_relative "../auth/openai_oauth"
 require_relative "../cancellation"
 require_relative "../config_files"
+require_relative "../http"
 require_relative "../openrouter_model_cache"
 require_relative "context_overflow"
 require_relative "copilot_models"
@@ -335,7 +336,7 @@ module Kward
     end
 
     def chat_anthropic_provider(url:, token:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:)
-      request = Net::HTTP::Post.new(url)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
@@ -361,7 +362,7 @@ module Kward
     end
 
     def chat_openrouter_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
-      request = Net::HTTP::Post.new(url)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"
       request.body = request_body
@@ -547,7 +548,7 @@ module Kward
       return [] if token.empty?
 
       url = URI("#{@github_oauth.base_url}/models")
-      request = Net::HTTP::Get.new(url)
+      request = Http.apply_user_agent(Net::HTTP::Get.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["Accept"] = "application/json"
       copilot_headers([]).each { |key, value| request[key] = value }
@@ -577,7 +578,7 @@ module Kward
 
     def copilot_responses_chat(token, request_body:, on_assistant_delta: nil, cancellation: nil)
       url = URI("#{@github_oauth.base_url}/responses")
-      request = Net::HTTP::Post.new(url)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
@@ -603,7 +604,7 @@ module Kward
     end
 
     def copilot_chat(url, token, messages, tools, request_body: nil, on_assistant_delta: nil, cancellation: nil)
-      request = Net::HTTP::Post.new(url)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
@@ -633,7 +634,6 @@ module Kward
         "anthropic-version" => "2023-06-01",
         "anthropic-beta" => "claude-code-20250219,oauth-2025-04-20",
         "anthropic-dangerous-direct-browser-access" => "true",
-        "user-agent" => "claude-cli/2.1.75",
         "x-app" => "cli"
       }
     end
@@ -653,13 +653,13 @@ module Kward
     end
 
     def codex_chat(url, token, account_id, messages, tools, request_body: nil, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil, max_tokens: nil)
-      request = Net::HTTP::Post.new(url)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["ChatGPT-Account-Id"] = account_id if account_id
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
-      request["originator"] = "codex_cli_rs"
       request.body = request_body || JSON.dump(codex_payload(messages, tools, max_tokens: max_tokens))
+      apply_codex_identity(request, luna: luna_request?(request.body))
 
       message = nil
       Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
@@ -682,6 +682,22 @@ module Kward
       raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
 
       raise e
+    end
+
+    def apply_codex_identity(request, luna:)
+      request["originator"] = "kward"
+      return unless luna
+
+      # TODO: Remove this Luna-specific Responses Lite workaround when Codex accepts Kward's own client identity.
+      request["originator"] = "codex_cli_rs"
+      request["User-Agent"] = "codex_cli_rs/0.144.1"
+      request["x-openai-internal-codex-responses-lite"] = "true"
+    end
+
+    def luna_request?(request_body)
+      JSON.parse(request_body)["model"] == "gpt-5.6-luna"
+    rescue JSON::ParserError
+      false
     end
 
     def parse_codex_sse(body, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil)

@@ -4,6 +4,7 @@ require "net/http"
 require "nokogiri"
 require "uri"
 require_relative "../../config_files"
+require_relative "../../http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -590,7 +591,7 @@ module Kward
       {
         "Accept" => accept,
         "Accept-Language" => "en-US,en;q=0.9",
-        "User-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent" => Http.user_agent,
         "Sec-Fetch-Dest" => "document",
         "Sec-Fetch-Mode" => "navigate",
         "Sec-Fetch-Site" => "none",
@@ -722,7 +723,7 @@ module Kward
     class NetHttpClient
       Response = Struct.new(:code, :body, :headers, keyword_init: true)
 
-      def initialize(user_agent: nil)
+      def initialize(user_agent: Http.user_agent)
         @user_agent = user_agent
       end
 

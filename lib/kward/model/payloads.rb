@@ -126,7 +126,12 @@ module Kward
         store: false,
         include: []
       }
-      payload[:reasoning] = { effort: reasoning || reasoning_effort("Codex"), summary: "auto" } unless reasoning == false
+      unless reasoning == false
+        effort = reasoning || reasoning_effort("Codex")
+        payload[:reasoning] = { effort: effort, summary: "auto" }
+        # TODO: Remove this Luna-specific Responses Lite workaround when Codex accepts Kward's own client identity.
+        payload[:reasoning][:context] = "all_turns" if parts[:model] == "gpt-5.6-luna"
+      end
       payload
     end
 

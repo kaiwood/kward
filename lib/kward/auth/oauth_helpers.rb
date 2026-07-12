@@ -6,6 +6,7 @@ require "securerandom"
 require "socket"
 require "time"
 require "uri"
+require_relative "../http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -59,7 +60,7 @@ module Kward
     end
 
     def post_json(uri, params, headers: {})
-      request = Net::HTTP::Post.new(uri)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(uri))
       request["Content-Type"] = "application/json"
       headers.each { |key, value| request[key] = value }
       request.body = JSON.dump(params)

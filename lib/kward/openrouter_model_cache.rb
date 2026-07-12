@@ -4,6 +4,7 @@ require "net/http"
 require "time"
 require "uri"
 require_relative "config_files"
+require_relative "http"
 require_relative "private_file"
 
 # Namespace for the Kward CLI agent runtime.
@@ -71,7 +72,7 @@ module Kward
     private
 
     def refresh_request
-      Net::HTTP::Get.new(MODELS_URL).tap do |request|
+      Http.apply_user_agent(Net::HTTP::Get.new(MODELS_URL)).tap do |request|
         request["Authorization"] = "Bearer #{@api_key}"
         request["Accept"] = "application/json"
       end

@@ -5,6 +5,7 @@ require "time"
 require "uri"
 require_relative "file"
 require_relative "oauth_helpers"
+require_relative "../http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -215,7 +216,7 @@ module Kward
     end
 
     def post_form(uri, params)
-      request = Net::HTTP::Post.new(uri)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(uri))
       request["Content-Type"] = "application/x-www-form-urlencoded"
       request.body = URI.encode_www_form(params)
 

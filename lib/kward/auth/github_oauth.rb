@@ -4,6 +4,7 @@ require "time"
 require "uri"
 require_relative "file"
 require_relative "../config_files"
+require_relative "../http"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -15,7 +16,6 @@ module Kward
     DEFAULT_SCOPE = "read:user"
     DEFAULT_CLIENT_ID = "Iv1.b507a08c87ecfe98"
     COPILOT_HEADERS = {
-      "User-Agent" => "GitHubCopilotChat/0.35.0",
       "Editor-Version" => "vscode/1.107.0",
       "Editor-Plugin-Version" => "copilot-chat/0.35.0",
       "Copilot-Integration-Id" => "vscode-chat"
@@ -150,7 +150,7 @@ module Kward
     end
 
     def post_form(uri, params)
-      request = Net::HTTP::Post.new(uri)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(uri))
       request["Content-Type"] = "application/x-www-form-urlencoded"
       request["Accept"] = "application/json"
       request.body = URI.encode_www_form(params)
@@ -160,7 +160,7 @@ module Kward
     end
 
     def get_json(uri, headers = {})
-      request = Net::HTTP::Get.new(uri)
+      request = Http.apply_user_agent(Net::HTTP::Get.new(uri))
       request["Accept"] = "application/json"
       COPILOT_HEADERS.merge(headers).each { |key, value| request[key] = value }
 

@@ -561,6 +561,36 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_codex_requests_identify_as_kward
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+
+    with_fake_http([success]) do |http|
+      client.chat([{ role: "user", content: "hello" }])
+
+      request = http.requests.first
+      assert_equal "Kward/#{Kward::VERSION}", request["User-Agent"]
+      assert_equal "kward", request["originator"]
+      assert_nil request["x-openai-internal-codex-responses-lite"]
+    end
+  end
+
+  def test_luna_uses_responses_lite_workaround
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), model: "gpt-5.6-luna", config_path: "missing_kward_config.json")
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+
+    with_fake_http([success]) do |http|
+      client.chat([{ role: "user", content: "hello" }])
+
+      request = http.requests.first
+      payload = JSON.parse(request.body)
+      assert_equal "codex_cli_rs", request["originator"]
+      assert_equal "codex_cli_rs/0.144.1", request["User-Agent"]
+      assert_equal "true", request["x-openai-internal-codex-responses-lite"]
+      assert_equal "all_turns", payload.dig("reasoning", "context")
+    end
+  end
+
   def test_codex_request_retries_transient_failure_and_reports_retry
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     retries = []
