@@ -473,7 +473,8 @@ module Kward
               next
             end
             if active_tab.driver.respond_to?(:handle_command) && active_tab.driver.handles_command?(command)
-              active_tab.driver.handle_command(command)
+              output = active_tab.driver.handle_command(command)
+              runtime_output(output) unless output.to_s.empty?
               next
             end
           end
