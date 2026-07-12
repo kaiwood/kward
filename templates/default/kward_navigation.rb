@@ -10,7 +10,6 @@ module KwardDocsNavigationData
         ["Configuration", "file.configuration.html"],
         ["Authentication", "file.authentication.html"],
         ["Security and trust", "file.security.html"],
-        ["Permissions", "file.permissions.html"],
         ["Troubleshooting", "file.troubleshooting.html"]
       ]
     ],
@@ -43,7 +42,8 @@ module KwardDocsNavigationData
       [
         ["Extensibility", "file.extensibility.html"],
         ["Plugins", "file.plugins.html"],
-        ["Lifecycle hooks", "file.lifecycle-hooks.html"]
+        ["Lifecycle hooks", "file.lifecycle-hooks.html"],
+        ["Permissions", "file.permissions.html"]
       ]
     ],
     [
