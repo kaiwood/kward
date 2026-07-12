@@ -65,7 +65,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, permission_policy: nil, hook_manager: nil, hook_context: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -79,6 +79,7 @@ module Kward
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
       @tool_approval = tool_approval
+      @approval_for_allowed_tools = approval_for_allowed_tools == true
       @permission_policy = permission_policy || Permissions::Policy.from_config(ConfigFiles.read_config)
       @hook_manager = hook_manager
       @hook_context = hook_context
@@ -121,12 +122,16 @@ module Kward
                              if permission_decision.denied?
                                "Declined: #{permission_decision.reason}: #{name}"
                              elsif permission_decision.approval_required?
-                               if permission_approval_denied?(tool_call, name, args, cancellation)
-                                 "Declined: tool execution denied by user: #{name}"
-                               else
+                               approval = permission_approval_result(tool_call, name, args, cancellation)
+                               if approval == :allow_for_session
+                                 @permission_policy.allow_for_session!(name)
                                  execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                               elsif approval == true
+                                 execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                               else
+                                 "Declined: tool execution denied by user: #{name}"
                                end
-                             elsif tool_approval_denied?(tool_call, name, args, cancellation)
+                             elsif @approval_for_allowed_tools && tool_approval_denied?(tool_call, name, args, cancellation)
                                "Declined: tool execution denied by user: #{name}"
                              else
                                execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
@@ -435,10 +440,10 @@ module Kward
       (metadata[:source] || metadata["source"]).to_s == "mcp"
     end
 
-    def permission_approval_denied?(tool_call, name, args, cancellation)
-      return true unless @tool_approval
+    def permission_approval_result(tool_call, name, args, cancellation)
+      return false unless @tool_approval
 
-      @tool_approval.call(tool_call: tool_call, name: name, args: args, cancellation: cancellation) == false
+      @tool_approval.call(tool_call: tool_call, name: name, args: args, cancellation: cancellation)
     end
 
     def tool_approval_denied?(tool_call, name, args, cancellation)

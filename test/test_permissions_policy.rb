@@ -50,6 +50,17 @@ class TestPermissionsPolicy < KwardTestCase
     end
   end
 
+  def test_allows_a_tool_for_the_policy_lifetime
+    policy = Kward::Permissions::Policy.new(enabled: true)
+
+    assert policy.decision_for("read_skill", { name: "testing-verification" }).allowed?
+    assert policy.decision_for("run_shell_command", { command: "bundle exec rake" }).approval_required?
+
+    policy.allow_for_session!("run_shell_command")
+
+    assert policy.decision_for("run_shell_command", { command: "bundle exec rake" }).allowed?
+  end
+
   def test_treats_mcp_tools_as_risky
     policy = Kward::Permissions::Policy.new(enabled: true)
 

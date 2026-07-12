@@ -856,6 +856,39 @@ class TestToolRegistry < KwardTestCase
     assert_equal "run_shell_command", approvals.first[1]
   end
 
+  def test_permission_policy_does_not_ask_for_allowed_read_tools
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "README.md"), "read me\n")
+      policy = Kward::Permissions::Policy.new(enabled: true)
+      registry = Kward::ToolRegistry.new(
+        workspace: Kward::Workspace.new(root: dir),
+        permission_policy: policy,
+        tool_approval: ->(**_kwargs) { flunk "read tools should not request approval" }
+      )
+
+      result = registry.dispatch(tool_call("read_file", path: "README.md"), Kward::Conversation.new)
+
+      assert_equal "read me\n", result
+    end
+  end
+
+  def test_permission_policy_can_allow_a_tool_for_the_session
+    calls = 0
+    workspace = Kward::Workspace.new
+    workspace.define_singleton_method(:run_shell_command) { |_command, **_kwargs| calls += 1; "ran" }
+    policy = Kward::Permissions::Policy.new(enabled: true)
+    registry = Kward::ToolRegistry.new(
+      workspace: workspace,
+      permission_policy: policy,
+      tool_approval: ->(**_kwargs) { :allow_for_session }
+    )
+    conversation = Kward::Conversation.new
+
+    assert_equal "ran", registry.dispatch(tool_call("run_shell_command", command: "echo first"), conversation)
+    assert_equal "ran", registry.dispatch(tool_call("run_shell_command", command: "echo second"), conversation)
+    assert_equal 2, calls
+  end
+
   def test_permission_policy_fails_closed_without_an_approval_callback
     policy = Kward::Permissions::Policy.new(enabled: true)
     registry = Kward::ToolRegistry.new(permission_policy: policy)

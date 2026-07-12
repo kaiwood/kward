@@ -47,10 +47,17 @@ module Kward
         @ask = normalize_rules(ask)
         @deny = normalize_rules(deny)
         @write_scopes = normalize_scopes(write_scopes)
+        @session_allowed_tools = {}
       end
 
       def enabled?
         @enabled
+      end
+
+      # Allows this model tool for the remaining lifetime of this policy object.
+      # A matching deny or ask rule still takes precedence over this temporary grant.
+      def allow_for_session!(tool_name)
+        @session_allowed_tools[tool_name.to_s] = true
       end
 
       def decision_for(tool_name, arguments, source: nil)
@@ -60,6 +67,7 @@ module Kward
         return Decision.new(action: :deny, reason: "matched deny rule") if matches?(@deny, request)
         return Decision.new(action: :ask, reason: "matched ask rule") if matches?(@ask, request)
         return Decision.new(action: :allow, reason: "matched allow rule") if matches?(@allow, request)
+        return Decision.new(action: :allow, reason: "allowed for this session") if @session_allowed_tools[request.fetch("tool")]
 
         default_decision(request)
       end

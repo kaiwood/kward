@@ -1,3 +1,5 @@
+require "json"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   class PromptInterface
@@ -15,11 +17,16 @@ module Kward
             question: question,
             options: [
               { label: "Allow once", description: "Run this tool call." },
+              { label: "Allow this tool for this session", description: "Run this call and future calls to #{tool_name}." },
               { label: "Deny", description: "Do not run this tool call." }
             ]
           }
         ])
-        answers&.first&.fetch(:answer, nil) == "Allow once"
+        case answers&.first&.fetch(:answer, nil)
+        when "Allow once" then true
+        when "Allow this tool for this session" then :allow_for_session
+        else false
+        end
       end
 
       private
@@ -36,21 +43,16 @@ module Kward
       end
 
       def tool_approval_details(tool_name, args)
-        args = args.to_h
-        case tool_name.to_s
-        when "run_shell_command"
-          ["run this shell command", ["Command: #{args[:command] || args["command"]}"]]
-        when "write_file"
-          ["write this file", ["Path: #{args[:path] || args["path"]}"]]
-        when "edit_file"
-          ["edit this file", ["Path: #{args[:path] || args["path"]}"]]
-        when "fetch_content", "fetch_raw"
-          ["make this network request", ["URL: #{args[:url] || args["url"]}"]]
-        when "web_search"
-          ["search the web", ["Queries: #{Array(args[:queries] || args["queries"]).join(", ")}"]]
-        else
-          ["use #{tool_name}", []]
-        end
+        action = case tool_name.to_s
+                 when "run_shell_command" then "run this shell command"
+                 when "write_file" then "write this file"
+                 when "edit_file" then "edit this file"
+                 when "read_file", "read_skill" then "read these resources"
+                 when "fetch_content", "fetch_raw" then "make this network request"
+                 when "web_search" then "search the web"
+                 else "use #{tool_name}"
+                 end
+        [action, ["Arguments:\n#{JSON.pretty_generate(args.to_h)}"]]
       end
     end
   end

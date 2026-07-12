@@ -968,6 +968,7 @@ module Kward
           prompt: prompt,
           allowed_tool_names: allowed_tool_names,
           tool_approval: tool_approval,
+          approval_for_allowed_tools: !tool_approval.nil?,
           hook_manager: hook_manager,
           hook_context: hook_context
         )

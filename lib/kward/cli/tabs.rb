@@ -1,3 +1,4 @@
+require "json"
 require "thread"
 require_relative "../cancellation"
 
@@ -60,23 +61,22 @@ module Kward
         end
 
         def ask_tool_approval(tool_name:, args:, reason: nil)
-          details = case tool_name.to_s
-                    when "run_shell_command" then "Command: #{args[:command] || args["command"]}"
-                    when "write_file", "edit_file" then "Path: #{args[:path] || args["path"]}"
-                    when "fetch_content", "fetch_raw" then "URL: #{args[:url] || args["url"]}"
-                    else nil
-                    end
           answers = ask_user_question([
             {
               header: "Approval required · #{tool_name.to_s.tr("_", " ").capitalize}",
-              question: (["The agent wants to use #{tool_name}.", details, reason].compact).join("\n"),
+              question: (["The agent wants to use #{tool_name}.", "Arguments:\n#{JSON.pretty_generate(args.to_h)}", reason].compact).join("\n"),
               options: [
                 { label: "Allow once", description: "Run this tool call." },
+                { label: "Allow this tool for this session", description: "Run this call and future calls to #{tool_name}." },
                 { label: "Deny", description: "Do not run this tool call." }
               ]
             }
           ])
-          answers&.first&.fetch(:answer, nil) == "Allow once"
+          case answers&.first&.fetch(:answer, nil)
+          when "Allow once" then true
+          when "Allow this tool for this session" then :allow_for_session
+          else false
+          end
         end
       end
 
