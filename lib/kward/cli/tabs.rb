@@ -11,6 +11,7 @@ module Kward
       TabRuntime = Struct.new(
         :session,
         :agent,
+        :driver,
         :diff,
         :snapshot,
         :status,
@@ -96,7 +97,8 @@ module Kward
 
         if agent.nil? && (resumed_agent = resume_last_session(session_store))
           release_implementation_writer
-          @tabs << build_tab(@active_session, build_tab_agent(resumed_agent.conversation, @active_session), label: default_tab_label(0))
+          restored_agent = build_tab_agent(resumed_agent.conversation, @active_session)
+          @tabs << build_tab(@active_session, restored_agent, driver: SessionTabDriver.new(session: @active_session, agent: restored_agent), label: default_tab_label(0))
           return activate_tab(0, render: false)
         end
 
@@ -110,19 +112,18 @@ module Kward
           @active_session.attach(conversation)
           tab_agent = build_tab_agent(conversation, @active_session)
         end
-        @tabs << build_tab(@active_session, tab_agent, label: default_tab_label(0))
+        @tabs << build_tab(@active_session, tab_agent, driver: SessionTabDriver.new(session: @active_session, agent: tab_agent), label: default_tab_label(0))
         activate_tab(0, render: false)
       end
 
       def restore_tabs(session_store)
         data = @tab_store&.load || {}
-        paths = Array(data["session_paths"]).map(&:to_s)
-        return nil if paths.empty?
+        descriptors = Array(data["tabs"])
+        return nil if descriptors.empty?
 
-        paths.each_with_index do |path, index|
-          session, conversation = restore_tab_session(session_store, path)
-          tab = build_tab(session, build_tab_agent(conversation, session), label: restored_tab_label(data, index))
-          @tabs << tab
+        descriptors.each_with_index do |_descriptor, index|
+          tab = build_tab_from_descriptor(data.fetch("tabs")[index], session_store, label: restored_tab_label(data, index))
+          @tabs << tab if tab
         rescue StandardError
           next
         end
@@ -131,6 +132,47 @@ module Kward
         @active_tab_index = [[data["active_index"].to_i, 0].max, @tabs.length - 1].min
         @restored_tabs = true
         activate_tab(@active_tab_index)
+      end
+
+      def build_tab_from_descriptor(descriptor, session_store, label: nil)
+        descriptor = descriptor.transform_keys(&:to_s)
+        if descriptor["kind"] == "session"
+          session, conversation = restore_tab_session(session_store, descriptor.fetch("session_path"))
+          agent = build_tab_agent(conversation, session)
+          return build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent), label: label)
+        end
+
+        tab_type = plugin_registry.tab_type_for_id(descriptor["plugin_tab_type"])
+        driver = if tab_type
+          host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
+          tab_type.handler.call(host, descriptor)
+        else
+          UnavailableTabDriver.new(descriptor: descriptor, message: "Plugin tab #{descriptor["plugin_tab_type"].inspect} is unavailable.")
+        end
+        raise "Plugin tab #{descriptor["plugin_tab_type"].inspect} did not return a tab driver." unless driver
+        build_tab(nil, nil, driver: driver, label: label || descriptor["label"] || tab_type&.title)
+      end
+
+      def open_plugin_tab(name, session_store)
+        tab_type = plugin_registry.tab_type_for(name)
+        return runtime_output("Plugin tab #{name.inspect} is not available.") unless tab_type
+
+        if tab_type.singleton == :global && (existing = @tabs.find { |tab| tab.driver.descriptor["plugin_tab_type"] == tab_type.id })
+          return switch_tab(@tabs.index(existing))
+        end
+
+        save_active_tab_state
+        stop_tab_live_view
+        descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title }
+        host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
+        driver = tab_type.handler.call(host, descriptor)
+        raise "Plugin tab #{name.inspect} did not return a tab driver." unless driver
+
+        @tabs << build_tab(nil, nil, driver: driver, label: tab_type.title)
+        @active_tab_index = @tabs.length - 1
+        activate_tab(@active_tab_index)
+      rescue StandardError => e
+        runtime_output("Could not open plugin tab #{name.inspect}: #{e.message}")
       end
 
       def restore_tab_session(session_store, path)
@@ -179,10 +221,12 @@ module Kward
         end
       end
 
-      def build_tab(session, agent, label: nil)
+      def build_tab(session, agent, driver: nil, label: nil)
+        driver ||= SessionTabDriver.new(session: session, agent: agent)
         TabRuntime.new(
           session: session,
           agent: agent,
+          driver: driver,
           diff: session&.path ? SessionDiff.from_session_file(session.path) : SessionDiff.new,
           snapshot: nil,
           status: "idle",
@@ -194,7 +238,7 @@ module Kward
           steering: nil,
           error: nil,
           answer: nil,
-          stream_state: new_tab_stream_state(agent),
+          stream_state: new_tab_stream_state(driver),
           markdown_chunks: [],
           label: label,
           unread: false,
@@ -207,6 +251,17 @@ module Kward
 
       def active_tab
         @tabs && @tabs[@active_tab_index]
+      end
+
+      def plugin_tab?(tab = active_tab)
+        tab && tab.session.nil?
+      end
+
+      def plugin_tab_command_allowed?(command)
+        name, = parse_slash_command(command)
+        return true if %w[tab exit quit].include?(name)
+
+        active_tab.driver.respond_to?(:handles_command?) && active_tab.driver.handles_command?(command)
       end
 
       def assign_tab_question_prompt(agent, tab)
@@ -275,7 +330,8 @@ module Kward
         session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
         conversation = new_conversation(workspace_root: session_store.cwd)
         session.attach(conversation)
-        @tabs << build_tab(session, build_tab_agent(conversation, session), label: default_tab_label(@tabs.length))
+        agent = build_tab_agent(conversation, session)
+        @tabs << build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent), label: default_tab_label(@tabs.length))
         @active_tab_index = @tabs.length - 1
         activate_tab(@active_tab_index)
       end
@@ -295,6 +351,7 @@ module Kward
 
         stop_tab_live_view
         tab.session&.delete_if_unused if tab&.session.respond_to?(:delete_if_unused)
+        tab.driver.close if tab.driver.respond_to?(:close)
         @tabs.delete_at(@active_tab_index)
         @active_tab_index = [@active_tab_index, @tabs.length - 1].min
         activate_tab(@active_tab_index)
@@ -317,6 +374,7 @@ module Kward
 
         tab.session = @active_session
         tab.agent = build_tab_agent(agent.conversation, tab.session)
+        tab.driver = SessionTabDriver.new(session: tab.session, agent: tab.agent)
         assign_tab_question_prompt(tab.agent, tab)
         tab.diff = @session_diff || (tab.session&.path ? SessionDiff.from_session_file(tab.session.path) : SessionDiff.new)
         tab.snapshot = nil
@@ -330,7 +388,7 @@ module Kward
         tab.queued_inputs.clear
         tab.steering = nil
         tab.shell = nil
-        tab.stream_state = new_tab_stream_state(tab.agent)
+        tab.stream_state = new_tab_stream_state(tab.driver)
         tab.markdown_chunks.clear
         update_prompt_tabs
         persist_tabs
@@ -355,9 +413,16 @@ module Kward
 
         @active_session = tab.session
         @session_diff = tab.diff || SessionDiff.new
-        @footer_conversation = tab.agent.conversation
-        @footer_tool_registry = tab.agent.tool_registry if tab.agent.respond_to?(:tool_registry)
-        update_assistant_prompt(tab.agent.conversation)
+        if tab.agent
+          @footer_conversation = tab.agent.conversation
+          @footer_tool_registry = tab.agent.tool_registry if tab.agent.respond_to?(:tool_registry)
+          update_assistant_prompt(tab.agent.conversation)
+        else
+          @footer_conversation = nil
+          @footer_tool_registry = nil
+          @assistant_prompt = "#{tab.driver.assistant_label || "Plugin"}>"
+          @prompt.update_assistant_label(assistant_prompt_name) if @prompt.respond_to?(:update_assistant_label)
+        end
         tab.unread = false
         restore_tab_composer_snapshot(tab.snapshot)
         update_prompt_tabs
@@ -376,10 +441,10 @@ module Kward
         end
 
         restore_prompt_transcript do
-          if empty_tab_conversation?(tab.agent.conversation)
+          if tab.agent && empty_tab_conversation?(tab.agent.conversation)
             print_visual_banner
           else
-            render_conversation_transcript(tab.agent.conversation)
+            render_transcript_messages(tab.driver.messages)
           end
           report_tab_runtime_error(tab) if %w[failed cancelled].include?(tab.status.to_s)
         end
@@ -441,14 +506,14 @@ module Kward
         tab.status = "queued"
         tab.unread = false
         tab.cancellation = Cancellation.new
-        tab.steering = steering_supported? ? Steering.new : nil
+        tab.steering = tab.driver.supports_steering? && steering_supported? ? Steering.new : nil
         tab.error = nil
         tab.answer = nil
         tab.error_reported = false
         tab.event_history.clear
         tab.seen_events = 0
         tab.markdown_chunks.clear
-        tab.stream_state = new_tab_stream_state(tab.agent)
+        tab.stream_state = new_tab_stream_state(tab.driver)
         update_prompt_tabs
         tab.thread = Thread.new { run_tab_turn(tab, input, display_input: display_input) }
         tab.thread.report_on_exception = false
@@ -456,12 +521,9 @@ module Kward
       end
 
       def run_tab_turn(tab, input, display_input: nil)
-        options = agent_display_options(display_input)
-        options[:cancellation] = tab.cancellation
-        options[:steering] = tab.steering if tab.steering
         tab.status = "running"
         update_prompt_tabs
-        tab.answer = tab.agent.ask(input, **options) do |event|
+        tab.answer = tab.driver.submit(input, display_input: display_input, cancellation: tab.cancellation, steering: tab.steering) do |event|
           tab.record_event(event)
         end
         tab.status = "ready"
@@ -606,10 +668,10 @@ module Kward
         renderer = tab_live_renderer(tab)
         until @tab_live_view_stop
           events = tab.event_history[tab.seen_events..] || []
-          events.each { |event| renderer.call(event, tab.agent) }
+          events.each { |event| renderer.call(event, tab.driver) }
           tab.seen_events += events.length
           if tab.idle?
-            renderer.call(:flush, tab.agent)
+            renderer.call(:flush, tab.driver)
             break
           end
           sleep 0.05
@@ -619,7 +681,7 @@ module Kward
       end
 
       def tab_live_renderer(tab)
-        lambda do |event, agent|
+        lambda do |event, driver|
           if event == :flush
             flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state, force: true)
             render_tab_answer(tab)
@@ -627,7 +689,7 @@ module Kward
             next
           end
 
-          notify_plugin_transcript_event(event, agent.respond_to?(:conversation) ? agent.conversation : nil)
+          notify_plugin_transcript_event(event, driver.conversation) if driver.respond_to?(:conversation)
           handle_interactive_event(event, tab.markdown_chunks, tab.stream_state)
           flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state)
         rescue StandardError => e
@@ -643,13 +705,13 @@ module Kward
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(tab.answer)}\n")
       end
 
-      def new_tab_stream_state(agent)
+      def new_tab_stream_state(driver)
         {
           streamed: false,
           last_flush: monotonic_now,
           stream_block_open: false,
           markdown_streams: {},
-          defer_assistant_streaming: defer_assistant_streaming?(agent)
+          defer_assistant_streaming: driver.respond_to?(:conversation) && defer_assistant_streaming?(driver.agent)
         }
       end
 
@@ -682,7 +744,7 @@ module Kward
         action, value = argument.to_s.strip.split(/\s+/, 2)
         case action
         when nil, ""
-          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab name <label>")
+          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label>")
           nil
         when /^\d+$/
           switch_tab_number(action)
@@ -696,11 +758,16 @@ module Kward
         when "new"
           open_new_tab(session_store)
           active_tab&.agent
+        when "open"
+          return runtime_output("Usage: /tab open <plugin-tab>") if value.to_s.strip.empty?
+
+          open_plugin_tab(value.strip, session_store)
+          active_tab&.agent
         when "name", "rename"
           rename_active_tab(value)
           active_tab&.agent
         else
-          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab name <label>")
+          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label>")
           nil
         end
       end
@@ -775,8 +842,7 @@ module Kward
         return unless @tab_store
 
         @tab_store.save(
-          session_paths: @tabs.map { |tab| tab.session&.path }.compact,
-          labels: @tabs.map { |tab| tab.label.to_s },
+          tabs: @tabs.map { |tab| tab.driver.descriptor.merge("label" => tab.label.to_s) },
           active_index: @active_tab_index
         )
       end

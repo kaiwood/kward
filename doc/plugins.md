@@ -178,6 +178,44 @@ Returning `:exit` from the tick callback ends the loop, same as calling
 Interactive commands require the TUI prompt interface. They are not available
 in piped/non-interactive mode or through RPC.
 
+## Add a plugin-owned tab
+
+A plugin can provide a persistent tab with Kward's normal composer, transcript
+rendering, streaming, image input, cancellation, and tab switching. The plugin
+owns its transcript, storage, model behavior, and any global state; it does not
+need to use a Kward workspace session.
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.tab_type "example", id: "com.example.chat", title: "Example", singleton: :global do |host, descriptor|
+    ExampleChat.new(client: host.client, descriptor: descriptor)
+  end
+end
+```
+
+Open it from interactive Kward:
+
+```text
+/tab open example
+```
+
+`id` is a stable persisted identifier: do not change it after release.
+Use `singleton: :global` for one plugin-managed chat shared by all tab views.
+The tab driver returned by the block must provide:
+
+- `messages` — renderable transcript messages;
+- `submit(input, display_input:, cancellation:, steering:)` — a turn method
+  that returns the final response and yields stream events;
+- `descriptor` — the durable tab descriptor;
+- `supports_steering?` and `assistant_label`.
+
+A driver may optionally implement `handles_command?(input)` and
+`handle_command(input)` for its own slash commands. Other Kward session and
+workspace commands stay unavailable inside plugin tabs.
+
+This API is currently available only in the interactive CLI. It is not exposed
+through RPC.
+
 ## Observe transcript events
 
 Use transcript events when you need to log or react to live activity:

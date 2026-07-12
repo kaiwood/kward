@@ -22,6 +22,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 
 - `lib/main.rb` - executable entrypoint.
 - `lib/kward/cli.rb` - command-line flow and interactive chat orchestration.
+- `lib/kward/tab_driver.rb` - session and plugin tab-driver boundary used by interactive tabs.
 - `lib/kward/agent.rb` - agent loop and tool execution flow.
 - `lib/kward/model/` - model provider HTTP client and stream parsing behavior.
 - `lib/kward/auth/` - OAuth providers and auth credential file helpers.
@@ -77,6 +78,7 @@ ruby lib/main.rb "Explain this project"
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
 - When changing prompt/skill behavior, update `doc/extensibility.md`, CLI/RPC exposure, compaction behavior when activated instructions are durable, and prompt-related tests as needed.
 - Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
+- Plugin-owned tabs register through `plugin.tab_type`, open through `/tab open <name>`, and own their storage and turn behavior. Keep their drivers independent of workspace sessions, agents, prompts, and tools; the interactive tab host owns composer, rendering, streaming, cancellation, and layouts. Plugin tabs are intentionally CLI-only until RPC support is designed.
 
 ## Feature exposure rule
 

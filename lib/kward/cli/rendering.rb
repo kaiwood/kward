@@ -7,9 +7,15 @@ module Kward
       private
 
       def render_conversation_transcript(conversation)
+        render_transcript_messages(conversation.messages)
+      end
+
+      # Renders a transcript supplied by either a Kward conversation or a
+      # plugin-owned tab driver.
+      def render_transcript_messages(messages)
         tool_calls_by_id = {}
         @prompt.say("\n#{colored("Transcript", :gray, :bold)}\n")
-        conversation.messages.each do |message|
+        Array(messages).each do |message|
           role = message_role(message)
           next if role == "system"
 

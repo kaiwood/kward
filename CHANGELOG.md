@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added plugin-owned tab types, opened with `/tab open <plugin-tab>`, with typed tab persistence and the normal interactive composer, transcript, streaming, and image-input behavior. Plugin tabs are CLI-only in this release and own their own storage rather than Kward sessions.
 - Added an opt-in permission policy for model-requested tools, with allow/ask/deny rules, read-only and workspace-write modes, write scopes, and interactive approval overlays. Permissions remain disabled by default and are not an OS sandbox.
 - Added a custom-response path to permission approval overlays: choosing `Type something` denies the requested tool call and returns the entered guidance to the agent.
 

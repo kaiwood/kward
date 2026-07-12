@@ -35,6 +35,7 @@ require_relative "session_diff"
 require_relative "session_store"
 require_relative "session_naming"
 require_relative "tab_store"
+require_relative "tab_driver"
 require_relative "session_trash"
 require_relative "session_tree_renderer"
 require_relative "starter_pack_installer"
@@ -438,13 +439,15 @@ module Kward
         if input.is_a?(Hash) && input[:tab_action]
           tab_result = handle_tab_action(input, session_store)
           break if tab_result == PromptInterface::EXIT_INPUT
-          agent = active_tab.agent if active_tab
+          agent = active_tab.agent if active_tab&.agent
           next
         end
         if input.is_a?(Hash) && input[:reasoning_action]
+          next if active_tab && plugin_tab?
+
           conversation = active_tab ? active_tab.agent.conversation : agent.conversation
           cycle_reasoning(conversation, direction: input[:reasoning_action], persist: :debounced)
-          agent = active_tab.agent if active_tab
+          agent = active_tab.agent if active_tab&.agent
           next
         end
         next if input == :tab_idle
@@ -464,22 +467,36 @@ module Kward
             display_input = input if display_input
           end
           break if ["/exit", "/quit"].include?(command)
+          if active_tab && plugin_tab?
+            unless plugin_tab_command_allowed?(command)
+              runtime_output("#{command.split.first} is unavailable in this plugin tab.")
+              next
+            end
+            if active_tab.driver.respond_to?(:handle_command) && active_tab.driver.handles_command?(command)
+              active_tab.driver.handle_command(command)
+              next
+            end
+          end
           handled, replacement_agent = handle_local_slash_command(command, agent, session_store)
           if replacement_agent?(replacement_agent)
             agent = active_tab ? replace_active_tab_agent(replacement_agent) : replacement_agent
+          elsif active_tab&.agent
+            agent = active_tab.agent
           end
         end
         next if handled
         next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
 
-        flush_pending_reasoning_config(conversation: agent.conversation)
+        flush_pending_reasoning_config(conversation: active_tab.agent.conversation) if active_tab&.agent
+        flush_pending_reasoning_config(conversation: agent.conversation) unless active_tab
         expanded_input = expand_prompt_template(input)
         display_input = display_input || input if expanded_input
         input = expanded_input || input
-        @footer_conversation = agent.conversation
+        @footer_conversation = active_tab.agent.conversation if active_tab&.agent
+        @footer_conversation = agent.conversation unless active_tab
         begin
           @rewind_return_leaf_id = nil
-          auto_name_active_session(display_input || input)
+          auto_name_active_session(display_input || input) unless active_tab && plugin_tab?
           if active_tab
             submit_tab_input(active_tab, input, display_input: display_input)
             pending_inputs = []
@@ -494,12 +511,14 @@ module Kward
         end
       end
 
-      flush_pending_reasoning_config(conversation: agent.conversation)
-      agent.conversation
+      flush_pending_reasoning_config(conversation: active_tab.agent.conversation) if active_tab&.agent
+      flush_pending_reasoning_config(conversation: agent.conversation) unless active_tab
+      active_tab&.agent&.conversation || agent.conversation
     rescue Interrupt
-      flush_pending_reasoning_config(conversation: agent&.conversation)
+      flush_pending_reasoning_config(conversation: active_tab.agent.conversation) if active_tab&.agent
+      flush_pending_reasoning_config(conversation: agent&.conversation) unless active_tab
       runtime_output("Goodbye.")
-      agent&.conversation
+      active_tab&.agent&.conversation || agent&.conversation
     ensure
       begin
         stop_tabs if respond_to?(:stop_tabs, true)

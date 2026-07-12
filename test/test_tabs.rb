@@ -84,6 +84,48 @@ class TestTabs < KwardTestCase
     end
   end
 
+  class PluginTabDriver
+    attr_reader :descriptor, :messages, :submissions
+
+    def initialize(descriptor)
+      @descriptor = descriptor
+      @messages = []
+      @submissions = []
+    end
+
+    def submit(input, display_input:, cancellation:, steering: nil)
+      @submissions << { input: input, display_input: display_input, cancellation: cancellation, steering: steering }
+      @messages << { role: "user", content: input }
+      yield Kward::Events::AssistantDelta.new(delta: "Plugin reply") if block_given?
+      @messages << { role: "assistant", content: "Plugin reply" }
+      "Plugin reply"
+    end
+
+    def session?
+      false
+    end
+
+    def supports_steering?
+      false
+    end
+
+    def assistant_label
+      "Plugin"
+    end
+  end
+
+  def self.write_plugin_tab(home)
+    plugins = File.join(home, ".kward", "plugins")
+    FileUtils.mkdir_p(plugins)
+    File.write(File.join(plugins, "example.rb"), <<~'RUBY')
+      Kward.plugin do |plugin|
+        plugin.tab_type "example", id: "test.example", title: "Example", singleton: :global do |_host, descriptor|
+          TestTabs::PluginTabDriver.new(descriptor)
+        end
+      end
+    RUBY
+  end
+
   class BlockingClient
     attr_reader :started, :release
 
@@ -186,6 +228,40 @@ class TestTabs < KwardTestCase
 
     def asked_question?
       !@questions.empty?
+    end
+  end
+
+  def test_opens_persists_and_restores_plugin_tab
+    Dir.mktmpdir do |home|
+      Dir.mktmpdir do |config_dir|
+        Dir.mktmpdir do |workspace|
+          self.class.write_plugin_tab(home)
+          store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+          prompt = TabPrompt.new
+
+          with_env("HOME" => home) do
+            cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+            cli.send(:setup_interactive_tabs, store, nil)
+            cli.send(:handle_tab_command, "open example", store)
+
+            tab = cli.send(:active_tab)
+            assert_nil tab.session
+            assert_instance_of PluginTabDriver, tab.driver
+            assert_equal "Example", tab.label
+
+            cli.send(:submit_tab_input, tab, "hello")
+            tab.thread.join
+            assert_equal "Plugin reply", tab.answer
+            assert_equal ["hello"], tab.driver.submissions.map { |submission| submission[:input] }
+            assert_equal "test.example", Kward::TabStore.new(config_dir: config_dir, cwd: workspace).load["tabs"].last["plugin_tab_type"]
+
+            restored_prompt = TabPrompt.new
+            restored_cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: restored_prompt, client: RecordingClient.new([]), session_store: store)
+            restored_cli.send(:setup_interactive_tabs, store, nil)
+            assert_instance_of PluginTabDriver, restored_cli.send(:active_tab).driver
+          end
+        end
+      end
     end
   end
 

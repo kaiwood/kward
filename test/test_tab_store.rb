@@ -15,11 +15,34 @@ class TestTabStore < KwardTestCase
     end
   end
 
+  def test_loads_legacy_session_layout_as_tab_descriptors
+    Dir.mktmpdir do |dir|
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      store = Kward::TabStore.new(config_dir: dir, cwd: workspace)
+      FileUtils.mkdir_p(File.dirname(store.path))
+      File.write(store.path, JSON.dump({ "session_paths" => ["/tmp/one.jsonl"], "labels" => ["Main"], "active_index" => 0 }))
+
+      assert_equal [{ "kind" => "session", "session_path" => "/tmp/one.jsonl", "label" => "Main" }], store.load["tabs"]
+    end
+  end
+
+  def test_save_and_load_plugin_tab_descriptor
+    Dir.mktmpdir do |dir|
+      store = Kward::TabStore.new(config_dir: dir, cwd: dir)
+      descriptor = { "kind" => "plugin", "plugin_tab_type" => "example.chat", "label" => "Example" }
+
+      store.save(tabs: [descriptor], active_index: 0)
+
+      assert_equal [descriptor], store.load["tabs"]
+    end
+  end
+
   def test_load_returns_empty_state_for_missing_file
     Dir.mktmpdir do |dir|
       store = Kward::TabStore.new(config_dir: dir, cwd: dir)
 
-      assert_equal({ "session_paths" => [], "active_index" => 0 }, store.load)
+      assert_equal({ "tabs" => [], "session_paths" => [], "labels" => [], "active_index" => 0 }, store.load)
     end
   end
 end

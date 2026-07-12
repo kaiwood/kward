@@ -34,6 +34,10 @@ module Kward
       end
     end
 
+    # Registered plugin-owned tab runtime. Its factory receives a
+    # `PluginTabHost` and its persisted descriptor, then returns a driver.
+    TabType = Struct.new(:id, :name, :title, :singleton, :path, :handler, keyword_init: true)
+
     # Read-only event passed to plugin transcript observers.
     TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
       def to_h
@@ -264,6 +268,22 @@ module Kward
       def interactive_command(name, rows:, fps: 30, description: "", argument_hint: "", &block)
         @registry.register_interactive_command(name, rows: rows, fps: fps, description: description, argument_hint: argument_hint, path: @path, &block)
       end
+
+      # Registers a plugin-owned tab type for the interactive CLI. `id` is a
+      # durable identifier used in persisted tab layouts and must not change.
+      # The factory receives a `PluginTabHost` and a descriptor hash.
+      #
+      # @param name [String] command name used by `/tab open <name>`
+      # @param id [String] stable persisted tab type identifier
+      # @param title [String] default tab label
+      # @param singleton [Symbol] `:global` for one shared plugin runtime
+      # @yieldparam host [PluginTabHost] supported host dependencies
+      # @yieldparam descriptor [Hash] persisted tab descriptor
+      # @return [void]
+      # @api public
+      def tab_type(name, id:, title: nil, singleton: nil, &block)
+        @registry.register_tab_type(name, id: id, title: title, singleton: singleton, path: @path, &block)
+      end
     end
 
     # Mutable singleton guard used while loading trusted plugin files.
@@ -282,6 +302,8 @@ module Kward
       @reserved_commands = reserved_commands.map(&:to_s)
       @commands = {}
       @interactive_commands = {}
+      @tab_types = {}
+      @tab_types_by_id = {}
       @footer = nil
       @footer_path = nil
       @transcript_event_handlers = []
@@ -310,6 +332,18 @@ module Kward
 
     def interactive_command_for(name)
       @interactive_commands[name.to_s]
+    end
+
+    def tab_types
+      @tab_types.values
+    end
+
+    def tab_type_for(name)
+      @tab_types[name.to_s]
+    end
+
+    def tab_type_for_id(id)
+      @tab_types_by_id[id.to_s]
     end
 
     def footer_renderer
@@ -427,6 +461,23 @@ module Kward
         path: path,
         handler: handler
       )
+    end
+
+    def register_tab_type(name, id:, title: nil, singleton: nil, path: nil, &handler)
+      name = name.to_s
+      id = id.to_s
+      raise "Plugin tab type name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin tab type id is required" if id.empty?
+      raise "Plugin tab type #{name} requires a handler" unless handler
+
+      if @tab_types.key?(name) || @tab_types_by_id.key?(id)
+        warn "Warning: skipping duplicate Kward plugin tab type #{id}: #{path}"
+        return nil
+      end
+
+      tab_type = TabType.new(id: id, name: name, title: title.to_s.empty? ? name.capitalize : title.to_s, singleton: singleton&.to_sym, path: path, handler: handler)
+      @tab_types[name] = tab_type
+      @tab_types_by_id[id] = tab_type
     end
 
     def register_footer(path: nil, &renderer)

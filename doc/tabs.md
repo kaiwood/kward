@@ -2,7 +2,7 @@
 
 Use tabs when you want more than one Kward conversation open in the same interactive terminal session.
 
-Each tab has its own session-backed conversation, transcript, composer state, and running agent turn. That makes tabs useful for splitting work without losing your place: one tab can investigate a bug, another can draft docs, and a third can wait on a long-running answer.
+Normal tabs have their own session-backed conversation, transcript, composer state, and running agent turn. Plugins can also provide their own persistent tab types while Kward continues to supply the same composer and tab behavior. This makes tabs useful for splitting work without losing your place: one tab can investigate a bug, another can draft docs, and a third can wait on a long-running answer.
 
 ## Quick start
 
@@ -56,6 +56,7 @@ Tabs keep the conversations separate, so context from one tab does not automatic
 | Command | Action |
 | ------- | ------ |
 | `/tab new` | Open a new tab with a fresh conversation |
+| `/tab open <plugin-tab>` | Open a plugin-provided tab, such as a persistent companion chat. |
 | `/tab 1` through `/tab 9` | Switch to a numbered tab |
 | `/tab close` | Close the current tab |
 | `/tab name <label>` | Rename the current tab |
@@ -110,9 +111,9 @@ Slash commands such as `/tab` still work while a tab is busy, so you can switch 
 
 ## Persistence
 
-Tabs are backed by normal Kward sessions. Kward stores the open tab list, labels, and active tab per workspace, then restores them the next time you start interactive Kward in that workspace.
+Normal tabs are backed by Kward sessions. Plugins may also provide their own tab types; those tabs own their transcript and persistence independently of Kward sessions.
 
-The tab layout is stored in Kward's config directory under `tabs/`. Session transcripts stay in the normal sessions directory. See [Sessions](session-management.md) for session naming, resuming, forking, exporting, and cleanup.
+Kward stores the open tab list, labels, and active tab per workspace, then restores them the next time you start interactive Kward in that workspace. The tab layout is stored in Kward's config directory under `tabs/`. Session transcripts stay in the normal sessions directory. See [Sessions](session-management.md) for session naming, resuming, forking, exporting, and cleanup.
 
 ## Notes and limitations
 
