@@ -265,6 +265,25 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_plugin_tab_allows_normal_messages
+    Dir.mktmpdir do |home|
+      Dir.mktmpdir do |config_dir|
+        Dir.mktmpdir do |workspace|
+          self.class.write_plugin_tab(home)
+          store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+
+          with_env("HOME" => home) do
+            cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TabPrompt.new(["/tab open example", "Hallo?", "/exit"]), client: RecordingClient.new([]), session_store: store)
+            cli.send(:interactive_loop)
+
+            tab = cli.instance_variable_get(:@tabs).find { |candidate| candidate.driver.is_a?(PluginTabDriver) }
+            assert_equal ["Hallo?"], tab.driver.submissions.map { |submission| submission[:input] }
+          end
+        end
+      end
+    end
+  end
+
   def test_restored_tabs_render_active_session_on_startup
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|

@@ -467,7 +467,7 @@ module Kward
             display_input = input if display_input
           end
           break if ["/exit", "/quit"].include?(command)
-          if active_tab && plugin_tab?
+          if active_tab && plugin_tab? && command.start_with?("/")
             unless plugin_tab_command_allowed?(command)
               runtime_output("#{command.split.first} is unavailable in this plugin tab.")
               next
