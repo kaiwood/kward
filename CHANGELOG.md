@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added an opt-in permission policy for model-requested tools, with allow/ask/deny rules, read-only and workspace-write modes, write scopes, and interactive approval overlays. Permissions remain disabled by default and are not an OS sandbox.
+
 ## [0.77.0] - 2026-07-11
 
 ### Added

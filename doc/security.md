@@ -69,6 +69,10 @@ Pan mode does not provide a dedicated hook-approval UI. Use `deny` or `warn` for
 
 See [Lifecycle hooks](lifecycle-hooks.md) for policy examples and [RPC protocol](rpc.md#Tool_approval_bridge) for the approval contract.
 
+## Opt-in permission policy
+
+`permissions.enabled` is off by default. When enabled, Kward can allow, ask, or deny model-requested file changes, shell commands, web tools, and MCP tools before execution. The interactive CLI uses an approval overlay; an unavailable approval bridge fails closed. The policy is not a sandbox: after Kward permits a shell command, it still runs with the permissions of your user account. See [Configuration](configuration.md#Permissions) for modes and rules.
+
 ## Know what you are trusting
 
 ### Workspace instructions

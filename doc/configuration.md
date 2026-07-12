@@ -528,6 +528,43 @@ Workspace guardrails are enabled by default. File tools such as `read_file`, `wr
 
 This is not a sandbox setting. Shell commands already run as your OS user from the workspace directory and can access anything that user can access.
 
+## Permissions
+
+Permissions are off by default. When enabled, Kward evaluates model-requested tools before execution. This is a permission policy, not an operating-system sandbox: permitted shell commands still run with your user account's access.
+
+```json
+{
+  "permissions": {
+    "enabled": true,
+    "mode": "ask"
+  }
+}
+```
+
+Available modes are:
+
+| Mode | Behavior |
+| --- | --- |
+| `ask` | Read-only tools run normally; file changes, shell commands, web tools, and MCP tools need approval. |
+| `workspace-write` | File changes within `write_scopes` run without approval; shell and network tools still need approval. |
+| `read-only` | Denies file changes, shell commands, web tools, and MCP tools. |
+| `deny-by-default` | Denies risky tools unless an `allow` rule matches. |
+
+`allow`, `ask`, and `deny` rules are arrays of objects matching `tool`, `path`, `host`, `command`, or `source`. Deny rules always take precedence, then ask, then allow. Use `write_scopes` to restrict writes in `workspace-write` mode:
+
+```json
+{
+  "permissions": {
+    "enabled": true,
+    "mode": "workspace-write",
+    "write_scopes": ["lib/**", "test/**"],
+    "deny": [{ "tool": "run_shell_command", "command": "git push*" }]
+  }
+}
+```
+
+The interactive CLI presents an approval overlay for an `ask` decision. RPC clients can use their existing `approvalMode: "ask"` bridge. Frontends without an approval bridge, including Pan, fail closed for policy approvals.
+
 ## Logging and stats
 
 Local telemetry logs are off by default. Enable logging with the master flag and each category you want:
