@@ -191,6 +191,8 @@ module Kward
 
     def source_for_tool(tool)
       case tool
+      when Tools::MCPTool
+        "mcp"
       when Tools::WebSearch, Tools::FetchContent, Tools::FetchRaw
         "web"
       when Tools::ReadSkill

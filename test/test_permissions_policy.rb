@@ -50,6 +50,12 @@ class TestPermissionsPolicy < KwardTestCase
     end
   end
 
+  def test_treats_mcp_tools_as_risky
+    policy = Kward::Permissions::Policy.new(enabled: true)
+
+    assert policy.decision_for("browser_console", {}, source: "mcp").approval_required?
+  end
+
   def test_fetch_rules_match_requested_host
     policy = Kward::Permissions::Policy.new(enabled: true, allow: [{ tool: "fetch_content", host: "*.example.com" }])
 
