@@ -24,7 +24,9 @@ In `ask` mode, Kward allows ordinary read-only tools and asks before the agent:
 - searches or fetches content on the web,
 - calls an MCP tool.
 
-When approval is required in the interactive CLI, Kward opens a modal overlay. It shows the complete tool arguments, so an approval for `read_skill` includes the requested skill name and relative path, and an approval for a write includes its path and content. Choose **Allow once** to run that one call, **Allow this tool for this session** to allow later calls to the same tool in the current Kward session, or **Deny** to stop it. Pressing `Esc`, cancelling the overlay, or losing the approval bridge denies the call.
+When approval is required in the interactive CLI, Kward opens a modal overlay. It shows the complete tool arguments, so an approval for `read_skill` includes the requested skill name and relative path, and an approval for a write includes its path and content. Choose **Allow once** to run that one call, **Allow this tool for this session** to allow later calls to the same tool in the current Kward session, or **Deny** to stop it. Selecting **Type something** denies the tool call and returns your text to the agent, which is useful when you want to provide an alternative value or direction. Pressing `Esc`, cancelling the overlay, or losing the approval bridge denies the call.
+
+Typed approval text is added to the conversation as the denied tool result. Treat it like any other message you provide to Kward: it is stored in the session and may be sent to the active model provider. Do not use this field to share secrets unless that is acceptable for your selected provider and retained session data.
 
 Use this mode first when working in an unfamiliar repository or when you want to review an agent's actions without preventing ordinary exploration.
 

@@ -856,6 +856,18 @@ class TestToolRegistry < KwardTestCase
     assert_equal "run_shell_command", approvals.first[1]
   end
 
+  def test_permission_policy_returns_a_custom_denial_message_to_the_agent
+    policy = Kward::Permissions::Policy.new(enabled: true)
+    registry = Kward::ToolRegistry.new(
+      permission_policy: policy,
+      tool_approval: ->(**_kwargs) { { denied_message: "Don't read my env file; use this supplied value instead." } }
+    )
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "cat ~/.env"), Kward::Conversation.new)
+
+    assert_equal "Declined: Don't read my env file; use this supplied value instead.", result
+  end
+
   def test_permission_policy_does_not_ask_for_allowed_read_tools
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "README.md"), "read me\n")

@@ -24,6 +24,15 @@ class TestApprovalPrompt < KwardTestCase
     assert_includes question, '"recency_filter": "month"'
   end
 
+  def test_returns_custom_text_as_a_denial_message
+    prompt = approval_prompt(answer: "Use the supplied token instead.", custom: true)
+
+    assert_equal(
+      { denied_message: "Use the supplied token instead." },
+      prompt.ask_tool_approval(tool_name: "read_file", args: { path: ".env" })
+    )
+  end
+
   def test_can_allow_a_tool_for_the_session
     prompt = approval_prompt(answer: "Allow this tool for this session")
 
@@ -37,13 +46,13 @@ class TestApprovalPrompt < KwardTestCase
 
   private
 
-  def approval_prompt(answer:)
+  def approval_prompt(answer:, custom: false)
     Object.new.tap do |prompt|
       prompt.extend(Kward::PromptInterface::ApprovalPrompt)
       prompt.define_singleton_method(:questions) { @questions ||= [] }
       prompt.define_singleton_method(:ask_user_question) do |questions|
         self.questions << questions
-        answer.nil? ? nil : [{ answer: answer }]
+        answer.nil? ? nil : [{ answer: answer, custom: custom }]
       end
     end
   end

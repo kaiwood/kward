@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added an opt-in permission policy for model-requested tools, with allow/ask/deny rules, read-only and workspace-write modes, write scopes, and interactive approval overlays. Permissions remain disabled by default and are not an OS sandbox.
+- Added a custom-response path to permission approval overlays: choosing `Type something` denies the requested tool call and returns the entered guidance to the agent.
 
 ### Changed
 

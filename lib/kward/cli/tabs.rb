@@ -72,7 +72,10 @@ module Kward
               ]
             }
           ])
-          case answers&.first&.fetch(:answer, nil)
+          answer = answers&.first
+          return { denied_message: answer[:answer] } if answer&.fetch(:custom, false) && !answer[:answer].to_s.empty?
+
+          case answer&.fetch(:answer, nil)
           when "Allow once" then true
           when "Allow this tool for this session" then :allow_for_session
           else false

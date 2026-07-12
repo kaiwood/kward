@@ -129,7 +129,7 @@ module Kward
                                elsif approval == true
                                  execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
                                else
-                                 "Declined: tool execution denied by user: #{name}"
+                                 approval_denied_content(approval, name)
                                end
                              elsif @approval_for_allowed_tools && tool_approval_denied?(tool_call, name, args, cancellation)
                                "Declined: tool execution denied by user: #{name}"
@@ -444,6 +444,13 @@ module Kward
       return false unless @tool_approval
 
       @tool_approval.call(tool_call: tool_call, name: name, args: args, cancellation: cancellation)
+    end
+
+    def approval_denied_content(approval, name)
+      message = approval[:denied_message] if approval.is_a?(Hash)
+      return "Declined: #{message}" unless message.to_s.empty?
+
+      "Declined: tool execution denied by user: #{name}"
     end
 
     def tool_approval_denied?(tool_call, name, args, cancellation)
