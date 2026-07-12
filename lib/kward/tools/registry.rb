@@ -22,6 +22,7 @@ require_relative "search/web"
 require_relative "search/web_fetch"
 require_relative "tool_call"
 require_relative "../mcp/server_config"
+require_relative "../permissions/policy"
 require_relative "../telemetry/logger"
 require_relative "../tool_output_compactor"
 require_relative "../workspace"
@@ -64,7 +65,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, hook_manager: nil, hook_context: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, permission_policy: nil, hook_manager: nil, hook_context: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -78,6 +79,7 @@ module Kward
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
       @tool_approval = tool_approval
+      @permission_policy = permission_policy || Permissions::Policy.from_config(ConfigFiles.read_config)
       @hook_manager = hook_manager
       @hook_context = hook_context
       @mcp_clients = if mcp_clients
@@ -114,10 +116,15 @@ module Kward
                              hook_denied_content(before_tool, "tool call denied: #{name}")
                            elsif before_tool.approval_required? && hook_approval_denied?(before_tool, tool_call, name, args, cancellation)
                              hook_denied_content(before_tool, "tool call approval denied: #{name}")
-                           elsif tool_approval_denied?(tool_call, name, args, cancellation)
-                             "Declined: tool execution denied by user: #{name}"
                            else
-                             execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                             permission_decision = @permission_policy.decision_for(name, args, source: source_for_tool(tool))
+                             if permission_decision.denied?
+                               "Declined: #{permission_decision.reason}: #{name}"
+                             elsif permission_decision.approval_required? && tool_approval_denied?(tool_call, name, args, cancellation)
+                               "Declined: tool execution denied by user: #{name}"
+                             else
+                               execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
+                             end
                            end
                          else
                            "Unknown tool: #{name}"

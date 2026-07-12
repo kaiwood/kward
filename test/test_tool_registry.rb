@@ -826,6 +826,36 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_permission_policy_denies_a_tool_before_execution
+    workspace = Kward::Workspace.new
+    executed = false
+    workspace.define_singleton_method(:run_shell_command) { |_command, **_kwargs| executed = true }
+    policy = Kward::Permissions::Policy.new(enabled: true, mode: "read-only")
+    registry = Kward::ToolRegistry.new(workspace: workspace, permission_policy: policy)
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "echo should-not-run"), Kward::Conversation.new)
+
+    assert_equal "Declined: read-only mode: run_shell_command", result
+    refute executed
+  end
+
+  def test_permission_policy_uses_existing_approval_callback
+    approvals = []
+    policy = Kward::Permissions::Policy.new(enabled: true)
+    registry = Kward::ToolRegistry.new(
+      permission_policy: policy,
+      tool_approval: lambda { |tool_call:, name:, args:, cancellation:|
+        approvals << [tool_call, name, args, cancellation]
+        false
+      }
+    )
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "echo should-not-run"), Kward::Conversation.new)
+
+    assert_equal "Declined: tool execution denied by user: run_shell_command", result
+    assert_equal "run_shell_command", approvals.first[1]
+  end
+
   def test_tool_registry_shell_command_runs_without_confirmation
     prompt = FakePrompt.new([], confirmations: [false])
     conversation = Kward::Conversation.new
