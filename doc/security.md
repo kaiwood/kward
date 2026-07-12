@@ -71,7 +71,7 @@ See [Lifecycle hooks](lifecycle-hooks.md) for policy examples and [RPC protocol]
 
 ## Opt-in permission policy
 
-`permissions.enabled` is off by default. When enabled, Kward can allow, ask, or deny model-requested file changes, shell commands, web tools, and MCP tools before execution. The interactive CLI uses an approval overlay; an unavailable approval bridge fails closed. The policy is not a sandbox: after Kward permits a shell command, it still runs with the permissions of your user account. See [Configuration](configuration.md#Permissions) for modes and rules.
+`permissions.enabled` is off by default. When enabled, Kward can allow, ask, or deny model-requested file changes, shell commands, web tools, and MCP tools before execution. The interactive CLI uses an approval overlay; an unavailable approval bridge fails closed. The policy is not a sandbox: after Kward permits a shell command, it still runs with the permissions of your user account. See [Permissions](permissions.md) for workflows, modes, rules, and limits.
 
 ## Know what you are trusting
 
