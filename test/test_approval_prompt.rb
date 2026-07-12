@@ -10,6 +10,20 @@ class TestApprovalPrompt < KwardTestCase
     assert_includes prompt.questions.first.first[:question], '"path": "references/style.md"'
   end
 
+  def test_shows_web_search_queries_and_filters
+    prompt = approval_prompt(answer: "Allow once")
+
+    assert prompt.ask_tool_approval(
+      tool_name: "web_search",
+      args: { queries: ["Ruby sandboxing"], domain_filter: ["ruby-lang.org"], recency_filter: "month" }
+    )
+
+    question = prompt.questions.first.first[:question]
+    assert_includes question, '"queries": ['
+    assert_includes question, '"domain_filter": ['
+    assert_includes question, '"recency_filter": "month"'
+  end
+
   def test_can_allow_a_tool_for_the_session
     prompt = approval_prompt(answer: "Allow this tool for this session")
 

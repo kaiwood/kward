@@ -1058,6 +1058,24 @@ class TestPromptInterface < KwardTestCase
     assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
   end
 
+  def test_question_overlay_wraps_each_line_of_approval_details
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@question_state, {
+      question: "The agent wants to run this shell command.\nArguments:\n{\n  \"command\": \"bundle exec ruby -Itest test/test_permissions_policy.rb\"\n}",
+      header: "Approval required · Shell command",
+      options: question_args("Proceed?")[:options],
+      selection_index: 0,
+      index: 1,
+      total: 1
+    })
+
+    rows = prompt.send(:question_overlay_rows, 40).map { |row| Kward::ANSI.strip(row) }
+
+    assert rows.any? { |row| row.include?("\"command\":") }
+    assert rows.any? { |row| row.include?("test_permissions") }
+  end
+
   def test_prompt_interface_busy_poll_does_not_handle_key_after_question_modal_activates
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

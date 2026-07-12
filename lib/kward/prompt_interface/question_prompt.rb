@@ -337,16 +337,25 @@ module Kward
 
       def question_overlay_rows(width)
         title = "Question #{@question_state[:index]}/#{@question_state[:total]} · #{@question_state[:header]}"
-        lines = [
-          overlay_text_line(@question_state[:question].to_s, :bold),
+        content_width = [overlay_card_width(width) - 4, 1].max
+        lines = question_text_rows(@question_state[:question], content_width, :bold)
+        lines.concat([
           overlay_text_line("↑/↓ select · Enter choose · Esc cancel", :muted),
           overlay_blank_line
-        ]
+        ])
         question_choices.each_with_index do |choice, index|
           selected = index == question_selection_index
           lines << overlay_choice_line(choice_text(choice, selected: selected), selected: selected)
         end
         overlay_card_rows(title, lines, width)
+      end
+
+      def question_text_rows(text, width, style)
+        text.to_s.split("\n", -1).flat_map do |line|
+          wrapped = ANSI.wrap_visible(line, width)
+          wrapped = [""] if wrapped.empty?
+          wrapped.map { |row| overlay_text_line(row, style) }
+        end
       end
 
       def choice_text(choice, selected: false)
