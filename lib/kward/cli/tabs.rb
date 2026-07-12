@@ -58,6 +58,26 @@ module Kward
         def ask_user_question(questions, cancellation: nil)
           @cli.send(:ask_tab_user_question, @tab, questions, cancellation: cancellation)
         end
+
+        def ask_tool_approval(tool_name:, args:, reason: nil)
+          details = case tool_name.to_s
+                    when "run_shell_command" then "Command: #{args[:command] || args["command"]}"
+                    when "write_file", "edit_file" then "Path: #{args[:path] || args["path"]}"
+                    when "fetch_content", "fetch_raw" then "URL: #{args[:url] || args["url"]}"
+                    else nil
+                    end
+          answers = ask_user_question([
+            {
+              header: "Approval required · #{tool_name.to_s.tr("_", " ").capitalize}",
+              question: (["The agent wants to use #{tool_name}.", details, reason].compact).join("\n"),
+              options: [
+                { label: "Allow once", description: "Run this tool call." },
+                { label: "Deny", description: "Do not run this tool call." }
+              ]
+            }
+          ])
+          answers&.first&.fetch(:answer, nil) == "Allow once"
+        end
       end
 
       private
@@ -131,6 +151,9 @@ module Kward
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: prompt,
+          tool_approval: lambda { |tool_call:, name:, args:, cancellation:|
+            prompt.ask_tool_approval(tool_name: name, args: args, reason: args["hook_message"] || args[:hook_message])
+          },
           hook_manager: hook_manager,
           hook_context: hook_context
         )
