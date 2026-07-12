@@ -96,7 +96,6 @@ module Kward
         return restored if restored
 
         if agent.nil? && (resumed_agent = resume_last_session(session_store))
-          release_implementation_writer
           restored_agent = build_tab_agent(resumed_agent.conversation, @active_session)
           @tabs << build_tab(@active_session, restored_agent, driver: SessionTabDriver.new(session: @active_session, agent: restored_agent), label: default_tab_label(0))
           return activate_tab(0, render: false)

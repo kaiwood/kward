@@ -1437,6 +1437,24 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_mode_resumes_last_session_with_tabs_when_enabled
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump("sessions" => { "auto_resume" => true }))
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new(["hello", "/exit"]), client: RecordingClient.new(["reply"]), session_store: store).interactive_loop
+        prompt = FakePrompt.new(["again", "/exit"])
+        client = RecordingClient.new(["second"])
+
+        Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store).interactive_loop
+
+        assert_equal "hello", client.seen_messages[0][1]["content"]
+        assert_equal "again", client.seen_messages[0][3][:content]
+      end
+    end
+  end
+
   def test_interactive_mode_starts_new_session_when_auto_resume_disabled
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
