@@ -8,7 +8,7 @@ module Kward
       # a side effect.
       def ask_tool_approval(tool_name:, args:, reason: nil)
         summary, details = tool_approval_details(tool_name, args)
-        question = (["The agent wants to #{summary}."] + details + [reason.to_s].reject(&:empty?)).join("\n")
+        question = (["The agent wants to #{summary}."] + Array(details) + [reason.to_s].reject(&:empty?)).join("\n")
         answers = ask_user_question([
           {
             header: "Approval required · #{tool_approval_title(tool_name)}",
@@ -39,15 +39,17 @@ module Kward
         args = args.to_h
         case tool_name.to_s
         when "run_shell_command"
-          ["Command: #{args[:command] || args["command"]}"]
-        when "write_file", "edit_file"
-          ["Path: #{args[:path] || args["path"]}"]
+          ["run this shell command", ["Command: #{args[:command] || args["command"]}"]]
+        when "write_file"
+          ["write this file", ["Path: #{args[:path] || args["path"]}"]]
+        when "edit_file"
+          ["edit this file", ["Path: #{args[:path] || args["path"]}"]]
         when "fetch_content", "fetch_raw"
-          ["URL: #{args[:url] || args["url"]}"]
+          ["make this network request", ["URL: #{args[:url] || args["url"]}"]]
         when "web_search"
-          ["Queries: #{Array(args[:queries] || args["queries"]).join(", ")}"]
+          ["search the web", ["Queries: #{Array(args[:queries] || args["queries"]).join(", ")}"]]
         else
-          []
+          ["use #{tool_name}", []]
         end
       end
     end
