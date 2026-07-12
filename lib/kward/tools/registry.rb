@@ -120,7 +120,7 @@ module Kward
                              permission_decision = @permission_policy.decision_for(name, args, source: source_for_tool(tool))
                              if permission_decision.denied?
                                "Declined: #{permission_decision.reason}: #{name}"
-                             elsif permission_decision.approval_required? && tool_approval_denied?(tool_call, name, args, cancellation)
+                             elsif permission_decision.approval_required? && permission_approval_denied?(tool_call, name, args, cancellation)
                                "Declined: tool execution denied by user: #{name}"
                              else
                                execute_tool_with_hooks(tool, name, args, tool_call, conversation, cancellation)
@@ -425,6 +425,12 @@ module Kward
     def mcp_tool?(name)
       metadata = metadata_for(name)
       (metadata[:source] || metadata["source"]).to_s == "mcp"
+    end
+
+    def permission_approval_denied?(tool_call, name, args, cancellation)
+      return true unless @tool_approval
+
+      @tool_approval.call(tool_call: tool_call, name: name, args: args, cancellation: cancellation) == false
     end
 
     def tool_approval_denied?(tool_call, name, args, cancellation)

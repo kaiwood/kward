@@ -50,6 +50,7 @@ module Kward
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: @prompt,
+          tool_approval: interactive_tool_approval_callback,
           hook_manager: hook_manager,
           hook_context: hook_context
         )
@@ -62,6 +63,18 @@ module Kward
           hook_manager: hook_manager,
           hook_context: hook_context
         )
+      end
+
+      def interactive_tool_approval_callback
+        return nil unless @prompt.respond_to?(:ask_tool_approval)
+
+        lambda do |tool_call:, name:, args:, cancellation:|
+          @prompt.ask_tool_approval(
+            tool_name: name,
+            args: args,
+            reason: args["hook_message"] || args[:hook_message]
+          )
+        end
       end
 
       def handle_interactive_shell_command(input, agent)

@@ -5,6 +5,7 @@ require "yaml"
 require_relative "frontmatter"
 require_relative "private_file"
 require_relative "path_guard"
+require_relative "permissions/policy"
 require_relative "ekwsh"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
@@ -153,6 +154,10 @@ module Kward
         "mcpServers" => {},
         "tools" => {
           "workspace_guardrails" => true
+        },
+        "permissions" => {
+          "enabled" => false,
+          "mode" => "ask"
         }
       }
     end
@@ -486,6 +491,11 @@ module Kward
     def workspace_guardrails_enabled?(config = read_config)
       tools = config["tools"].is_a?(Hash) ? config["tools"] : {}
       tools["workspace_guardrails"] != false
+    end
+
+    # Builds the opt-in model-tool permission policy from persisted configuration.
+    def permission_policy(config = read_config)
+      Permissions::Policy.from_config(config)
     end
 
     # Returns whether project-level Agent Skills should be loaded from the workspace.

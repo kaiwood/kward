@@ -37,6 +37,8 @@ class TestConfigFiles < KwardTestCase
       assert_equal false, config.dig("skills", "trust_project")
       assert_equal false, config["enforce_workspace_agents_file"]
       assert_equal true, config.dig("tools", "workspace_guardrails")
+      assert_equal false, config.dig("permissions", "enabled")
+      assert_equal "ask", config.dig("permissions", "mode")
       refute config.key?("provider")
       refute config.key?("model")
       refute config.key?("openai_model")

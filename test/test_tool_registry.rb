@@ -856,6 +856,15 @@ class TestToolRegistry < KwardTestCase
     assert_equal "run_shell_command", approvals.first[1]
   end
 
+  def test_permission_policy_fails_closed_without_an_approval_callback
+    policy = Kward::Permissions::Policy.new(enabled: true)
+    registry = Kward::ToolRegistry.new(permission_policy: policy)
+
+    result = registry.dispatch(tool_call("run_shell_command", command: "echo should-not-run"), Kward::Conversation.new)
+
+    assert_equal "Declined: tool execution denied by user: run_shell_command", result
+  end
+
   def test_tool_registry_shell_command_runs_without_confirmation
     prompt = FakePrompt.new([], confirmations: [false])
     conversation = Kward::Conversation.new

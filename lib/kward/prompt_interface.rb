@@ -25,6 +25,7 @@ require_relative "prompt_interface/file_overlay"
 require_relative "prompt_interface/project_browser"
 require_relative "prompt_interface/selection_prompt"
 require_relative "prompt_interface/question_prompt"
+require_relative "prompt_interface/approval_prompt"
 require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor/renderer"
@@ -75,6 +76,7 @@ module Kward
     include ProjectBrowser
     include SelectionPrompt
     include QuestionPrompt
+    include ApprovalPrompt
     include GitPrompt
     include OverlayRenderer
     include EditorRenderer
