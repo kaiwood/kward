@@ -24,9 +24,39 @@ In `ask` mode, Kward allows ordinary read-only tools and asks before the agent:
 - searches or fetches content on the web,
 - calls an MCP tool.
 
-When approval is required in the interactive CLI, Kward opens a modal overlay. It shows the complete tool arguments, so an approval for `read_skill` includes the requested skill name and relative path, and an approval for a write includes its path and content. Choose **Allow once** to run that one call, **Allow this tool for this session** to allow later calls to the same tool in the current Kward session, or **Deny** to stop it. Selecting **Type something** denies the tool call and returns your text to the agent, which is useful when you want to provide an alternative value or direction. Pressing `Esc`, cancelling the overlay, or losing the approval bridge denies the call.
+When approval is required in the interactive CLI, Kward opens a modal overlay. It shows the complete tool arguments, so an approval for `read_skill` includes the requested skill name and relative path, and an approval for a write includes its path and content. Choose **Allow once** to run that one call, **Allow this tool for this session** to allow later calls to the same tool in the current Kward session, or **Deny** to stop it. Pressing `Esc`, cancelling the overlay, or losing the approval bridge denies the call.
 
-Typed approval text is added to the conversation as the denied tool result. Treat it like any other message you provide to Kward: it is stored in the session and may be sent to the active model provider. Do not use this field to share secrets unless that is acceptable for your selected provider and retained session data.
+### Steer the agent with `Type something`
+
+**Type something** is more than a denial. It stops the requested tool call and sends your text back to the agent as the tool result, so you can redirect its workflow without waiting for it to finish a wrong turn.
+
+For example, the agent may propose this command:
+
+```text
+run_shell_command: grep -R "Permission" lib test
+```
+
+Choose **Type something** and enter:
+
+```text
+Use ack instead of grep; it is installed here and respects our ignore files.
+```
+
+Kward does not run `grep`. The agent receives:
+
+```text
+Declined: Use ack instead of grep; it is installed here and respects our ignore files.
+```
+
+It can then continue by choosing an `ack` command. This is useful for steering details that are difficult to encode in a static rule, such as:
+
+- use the project’s preferred formatter or test runner;
+- run a focused test rather than the full suite;
+- use a local mirror or a documented API endpoint;
+- explain a proposed database command before running it;
+- choose an existing project script instead of inventing a new command.
+
+The typed response is part of the conversation, just like a normal follow-up message. It is stored in the session and may be sent to the active model provider. Do not put secrets in it unless that is acceptable for your selected provider and retained session data.
 
 Use this mode first when working in an unfamiliar repository or when you want to review an agent's actions without preventing ordinary exploration.
 
@@ -111,7 +141,7 @@ For a normal coding task:
 1. Enable `ask` mode.
 2. Ask Kward to inspect the project and propose a change.
 3. Approve the file edit after checking its path and intent.
-4. Approve a focused test command, or deny it and ask the agent for a safer alternative.
+4. Approve a focused test command, or choose **Type something** to redirect it—for example, “run `bin/test unit` instead of the full suite.”
 5. Review the diff and `git status` as usual.
 
 If you repeatedly work in one source tree, move to `workspace-write` with narrow write scopes. Keep shell and network calls in approval mode unless you have a well-understood policy for them.
