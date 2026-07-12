@@ -102,6 +102,17 @@ module Kward
         end
       end
 
+      def update_plugin_tab_slash_commands(tab)
+        return unless @prompt.respond_to?(:update_slash_commands)
+
+        entries = if tab&.driver&.respond_to?(:slash_command_entries)
+          tab.driver.slash_command_entries
+        else
+          []
+        end
+        @prompt.update_slash_commands(slash_command_entries + Array(entries))
+      end
+
       def slash_command_entries
         prompt_entries = prompt_templates.map do |template|
           {

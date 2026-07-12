@@ -424,6 +424,7 @@ module Kward
         end
         tab.unread = false
         restore_tab_composer_snapshot(tab.snapshot)
+        update_plugin_tab_slash_commands(tab)
         update_prompt_tabs
         render_tab(tab) if render
         start_tab_live_view(tab) if tab.running?

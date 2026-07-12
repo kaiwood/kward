@@ -2,7 +2,7 @@ require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
-    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count
+    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates
 
     def initialize(inputs = [])
       super(inputs)
@@ -12,6 +12,11 @@ class TestTabs < KwardTestCase
       @busy_started = 0
       @busy_finished = 0
       @banner_count = 0
+      @slash_command_updates = []
+    end
+
+    def update_slash_commands(entries)
+      @slash_command_updates << entries
     end
 
     def update_tabs(labels:, active_index: 0)
@@ -111,6 +116,10 @@ class TestTabs < KwardTestCase
 
     def assistant_label
       "Plugin"
+    end
+
+    def slash_command_entries
+      [{ name: "plugin status", description: "Show plugin status", argument_hint: "" }]
     end
   end
 
@@ -248,6 +257,7 @@ class TestTabs < KwardTestCase
             assert_nil tab.session
             assert_instance_of PluginTabDriver, tab.driver
             assert_equal "Example", tab.label
+            assert_includes prompt.slash_command_updates.last, { name: "plugin status", description: "Show plugin status", argument_hint: "" }
 
             cli.send(:submit_tab_input, tab, "hello")
             tab.thread.join
