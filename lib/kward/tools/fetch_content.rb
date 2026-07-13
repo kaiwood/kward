@@ -12,7 +12,7 @@ module Kward
         @web_fetch = web_fetch
         super(
           "fetch_content",
-          "Fetch a specific URL and extract readable bounded content.",
+          "Fetch a specific URL and extract readable bounded content, including links and simple tables.",
           properties: {
             url: {
               type: "string",

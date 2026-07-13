@@ -33,6 +33,71 @@ class TestWebFetch < KwardTestCase
     refute_includes result, "ignore()"
   end
 
+  def test_fetch_content_prefers_main_over_nested_article_cards
+    html = <<~HTML
+      <html><head><title>Home</title></head><body>
+        <nav><a href="/guide">Guide</a></nav>
+        <main>
+          <h1>Welcome</h1>
+          <p><a href="/start">Get started</a> with the project.</p>
+          <section>
+            <article><h2>First card</h2><p>One.</p></article>
+            <article><h2>Second card</h2><p>Two.</p></article>
+          </section>
+          <a href="/install">Installation docs</a>
+        </main>
+      </body></html>
+    HTML
+    http = FakeHttpClient.new(
+      ["GET", "https://example.com/"] => fake_response(200, html, headers: { "content-type" => "text/html" })
+    )
+    fetch = Kward::WebFetch.new(http_client: http)
+
+    result = fetch.fetch_content("url" => "https://example.com/")
+
+    assert_includes result, "# Welcome"
+    assert_includes result, "## First card"
+    assert_includes result, "## Second card"
+    assert_includes result, "[Get started](https://example.com/start) with the project."
+    assert_includes result, "[Installation docs](https://example.com/install)"
+    assert_includes result, "### Primary navigation"
+    assert_includes result, "[Guide](https://example.com/guide)"
+    refute_includes result, "\n\nNavigation\n\n"
+  end
+
+  def test_fetch_content_preserves_tables_and_nested_lists
+    html = <<~HTML
+      <html><body><main>
+        <ol><li>First<ul><li>Nested</li></ul></li><li>Second</li></ol>
+        <table><thead><tr><th>Command</th><th>Action</th></tr></thead>
+          <tbody><tr><td><code>/tab new</code></td><td><a href="/tabs">Open a tab</a></td></tr></tbody>
+        </table>
+      </main></body></html>
+    HTML
+    http = FakeHttpClient.new(
+      ["GET", "https://example.com/reference"] => fake_response(200, html, headers: { "content-type" => "text/html" })
+    )
+    fetch = Kward::WebFetch.new(http_client: http)
+
+    result = fetch.fetch_content("url" => "https://example.com/reference")
+
+    assert_includes result, "1. First\n  - Nested\n2. Second"
+    assert_includes result, "| Command | Action |"
+    assert_includes result, "| `/tab new` | [Open a tab](https://example.com/tabs) |"
+  end
+
+  def test_fetch_content_text_mode_keeps_link_destinations
+    html = '<html><body><main><p>Read <a href="/guide">the guide</a>.</p></main></body></html>'
+    http = FakeHttpClient.new(
+      ["GET", "https://example.com/start"] => fake_response(200, html, headers: { "content-type" => "text/html" })
+    )
+    fetch = Kward::WebFetch.new(http_client: http)
+
+    result = fetch.fetch_content("url" => "https://example.com/start", "extract" => "text")
+
+    assert_includes result, "Read the guide (https://example.com/guide)."
+  end
+
   def test_fetch_content_parses_html_beyond_output_limit
     html = "<html><head><title>Large page</title><script>#{"x" * 20_000}</script></head><body><main><h1>Tabs</h1><p>Readable guide body.</p></main></body></html>"
     http = FakeHttpClient.new(

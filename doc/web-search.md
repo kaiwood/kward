@@ -85,7 +85,7 @@ Arguments:
 - `max_bytes`: default 16384, capped at 131072.
 - `extract`: optional `auto`, `text`, or `markdown`.
 
-In `auto` mode (default), Kward detects HTML content and extracts readable text by stripping scripts, styles, navigation, and forms, preserving headings, paragraphs, lists, code blocks, and blockquotes. Non-HTML content is returned as cleaned text. Use `markdown` to format extracted headings and code blocks as Markdown, or `text` for plain text without formatting.
+In `auto` mode (default), Kward detects HTML content and extracts readable text while stripping scripts, styles, navigation prose, and forms. It preserves headings, paragraphs, ordered and unordered lists, code blocks, blockquotes, simple tables, and inline link destinations. A bounded `Links` section lists discovered main-content and navigation destinations so an agent can continue through a site without raw HTML. Relative links are resolved against the final fetched URL. Non-HTML content is returned as cleaned text. Use `markdown` to retain Markdown structure, or `text` for plain text with link destinations in parentheses.
 
 Kward downloads and parses up to 2 MB of a page before applying `max_bytes` to the extracted result. This lets pages with large scripts or metadata before their main content remain readable while keeping model-facing output bounded. Responses above the download limit are rejected rather than parsed as incomplete HTML.
 
