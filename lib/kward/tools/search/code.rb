@@ -129,13 +129,16 @@ module Kward
       query = value(args, "query").to_s
       return "Error: query is required" if query.strip.empty?
 
-      path, = ensure_repo(repo, refresh: false)
+      path, revision = synchronized_repo(repo, value(args, "ref") || repo[:requested_ref])
       max_results = bounded_max_results(value(args, "max_results"))
       context = bounded_integer(value(args, "context_lines"), DEFAULT_CONTEXT_LINES, 0, 5)
       matches = search_files(path, query, max_results: max_results, context_lines: context)
-      return "Error: no matches found in #{repo[:full_name]}" if matches.empty?
+      if matches.empty?
+        suffix = revision == "unknown" ? "" : " at #{revision}"
+        return "Error: no matches found in #{repo[:full_name]}#{suffix}"
+      end
 
-      lines = ["# Code search", "- Repository: #{repo[:full_name]}", "- Query: #{query}", ""]
+      lines = ["# Code search", "- Repository: #{repo[:full_name]}", "- Revision: #{revision}", "- Query: #{query}", ""]
       matches.each do |match|
         lines << "## #{match[:path]}:#{match[:line]}"
         lines << "```"
@@ -148,10 +151,10 @@ module Kward
     def repo_read(args)
       repo = require_repo(args)
       return repo if repo.is_a?(String)
-      file = value(args, "path") || value(args, "file")
+      file = value(args, "path") || value(args, "file") || repo[:requested_path]
       return "Error: path is required" if file.to_s.empty?
 
-      root, = ensure_repo(repo, refresh: false)
+      root, revision = synchronized_repo(repo, value(args, "ref") || repo[:requested_ref])
       target = safe_existing_path(root, file.to_s)
       return "Error: path is not a file: #{file}" unless File.file?(target)
       return "Error: file is too large: #{file}" if File.size(target) > MAX_FILE_BYTES
@@ -161,7 +164,7 @@ module Kward
       lines = File.readlines(target, chomp: true)
       selected = lines.drop(start_line - 1).first(line_count)
       numbered = selected.each_with_index.map { |line, index| "#{start_line + index}: #{line}" }
-      truncate((["# Code read", "- Repository: #{repo[:full_name]}", "- Path: #{file}", ""] + numbered).join("\n"))
+      truncate((["# Code read", "- Repository: #{repo[:full_name]}", "- Revision: #{revision}", "- Path: #{file}", ""] + numbered).join("\n"))
     rescue ArgumentError => e
       "Error: #{e.message}"
     end
@@ -231,16 +234,36 @@ module Kward
       path = cache_path(repo)
       FileUtils.mkdir_p(@cache_root, mode: 0o700)
       if Dir.exist?(File.join(path, ".git"))
-        if refresh
-          @git_runner.run("fetch", "--depth", "1", "origin", chdir: path)
-          @git_runner.run("reset", "--hard", "FETCH_HEAD", chdir: path)
-        end
+        synchronize_checkout(path) if refresh
         return [path, false]
       end
 
       FileUtils.rm_rf(path) if Dir.exist?(path)
       @git_runner.run("clone", "--depth", "1", repo[:clone_url], path)
       [path, true]
+    end
+
+    def synchronized_repo(repo, ref)
+      path = cache_path(repo)
+      lock_path = "#{path}.lock"
+      FileUtils.mkdir_p(@cache_root, mode: 0o700)
+      File.open(lock_path, File::RDWR | File::CREAT, 0o600) do |lock|
+        lock.flock(File::LOCK_EX)
+        path, created = ensure_repo(repo, refresh: false)
+        synchronize_checkout(path, ref: ref) unless created && ref.to_s.empty?
+        revision = @git_runner.run("rev-parse", "HEAD", chdir: path).strip
+        revision = "unknown" if revision.empty?
+        [path, revision]
+      end
+    end
+
+    def synchronize_checkout(path, ref: nil)
+      if ref.to_s.empty?
+        @git_runner.run("fetch", "--depth", "1", "origin", chdir: path)
+      else
+        @git_runner.run("fetch", "--depth", "1", "origin", ref.to_s, chdir: path)
+      end
+      @git_runner.run("reset", "--hard", "FETCH_HEAD", chdir: path)
     end
 
     def search_files(root, query, max_results:, context_lines:)
@@ -327,7 +350,12 @@ module Kward
       return nil unless owner.match?(%r{\A[A-Za-z0-9_.-]+\z}) && name.match?(%r{\A[A-Za-z0-9_.-]+\z})
 
       full_name = "#{owner}/#{name}"
-      { full_name: full_name, html_url: "https://github.com/#{full_name}", clone_url: "https://github.com/#{full_name}.git" }
+      result = { full_name: full_name, html_url: "https://github.com/#{full_name}", clone_url: "https://github.com/#{full_name}.git" }
+      if parts[2] == "blob" && parts.length >= 5
+        result[:requested_ref] = parts[3]
+        result[:requested_path] = parts[4..].join("/")
+      end
+      result
     rescue URI::InvalidURIError
       nil
     end

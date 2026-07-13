@@ -189,6 +189,42 @@ class TestCodeSearch < KwardTestCase
     end
   end
 
+  def test_repo_read_synchronizes_cached_repository_before_reading
+    Dir.mktmpdir do |dir|
+      repo = File.join(dir, "example__project")
+      FileUtils.mkdir_p(File.join(repo, ".git"))
+      File.write(File.join(repo, "README.md"), "old\n")
+      git = Class.new(FakeGitRunner) do
+        def run(*args, chdir: nil)
+          super
+          File.write(File.join(chdir, "README.md"), "fresh\n") if args.first == "reset"
+          args.first == "rev-parse" ? "abc123\n" : ""
+        end
+      end.new
+      search = Kward::CodeSearch.new(cache_root: dir, http_client: FakeHttpClient.new, git_runner: git)
+
+      result = search.call("action" => "repo_read", "repo" => "example/project", "path" => "README.md")
+
+      assert_includes result, "- Revision: abc123"
+      assert_includes result, "1: fresh"
+      assert_equal "fetch", git.calls[0][0][0]
+    end
+  end
+
+  def test_repo_read_infers_path_and_ref_from_blob_url
+    Dir.mktmpdir do |dir|
+      repo = File.join(dir, "example__project")
+      FileUtils.mkdir_p(File.join(repo, ".git"))
+      FileUtils.mkdir_p(File.join(repo, "doc"))
+      File.write(File.join(repo, "doc", "guide.md"), "guide\n")
+      search = Kward::CodeSearch.new(cache_root: dir, http_client: FakeHttpClient.new, git_runner: FakeGitRunner.new)
+
+      result = search.call("action" => "repo_read", "repo" => "https://github.com/example/project/blob/main/doc/guide.md")
+
+      assert_includes result, "- Path: doc/guide.md"
+    end
+  end
+
   def test_repo_read_returns_numbered_line_range
     Dir.mktmpdir do |dir|
       repo = File.join(dir, "example__project")

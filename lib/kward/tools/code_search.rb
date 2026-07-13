@@ -37,7 +37,11 @@ module Kward
             },
             path: {
               type: "string",
-              description: "Repo-relative path."
+              description: "Repo-relative path; inferred from GitHub blob URLs when omitted."
+            },
+            ref: {
+              type: "string",
+              description: "Git branch, tag, or commit; inferred from GitHub blob URLs when omitted."
             },
             start_line: {
               type: "integer",
