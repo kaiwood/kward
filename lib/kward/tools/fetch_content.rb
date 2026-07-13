@@ -34,7 +34,9 @@ module Kward
 
       # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
-        @web_fetch.fetch_content(args)
+        return @web_fetch.fetch_content(args) unless cancellation
+
+        @web_fetch.fetch_content(args, cancellation: cancellation)
       end
     end
   end

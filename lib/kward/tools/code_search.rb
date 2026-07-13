@@ -67,7 +67,9 @@ module Kward
       # Executes the tool and returns model-facing output text.
       def call(args, _conversation, cancellation: nil)
         cancellation&.raise_if_cancelled!
-        @code_search.call(args)
+        return @code_search.call(args) unless cancellation
+
+        @code_search.call(args, cancellation: cancellation)
       end
     end
   end

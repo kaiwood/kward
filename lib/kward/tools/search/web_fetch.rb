@@ -19,7 +19,9 @@ module Kward
     end
 
     # Fetches a URL and extracts readable text for human-facing pages.
-    def fetch_content(args)
+    def fetch_content(args = nil, cancellation: nil, **keyword_args)
+      args ||= keyword_args
+      cancellation&.raise_if_cancelled!
       url = args_value(args, "url").to_s.strip
       return "Error: url is required" if url.empty?
 
@@ -27,7 +29,7 @@ module Kward
       extract = normalize_extract(args_value(args, "extract") || "auto")
       return "Error: extract must be one of: auto, text, markdown" unless extract
 
-      response = fetch_url(url, max_bytes: MAX_DOWNLOAD_BYTES)
+      response = fetch_url(url, max_bytes: MAX_DOWNLOAD_BYTES, cancellation: cancellation)
       return response if response.is_a?(String)
       return "Error: response exceeds #{MAX_DOWNLOAD_BYTES} byte download limit" if response[:truncated]
 
@@ -46,18 +48,22 @@ module Kward
         "",
         text.empty? ? "(No readable text extracted.)" : text
       ].join("\n")
+    rescue Cancellation::CancelledError
+      raise
     rescue StandardError => e
       "Error: fetch_content failed: #{e.message}"
     end
 
     # Fetches a URL and returns bounded raw response content.
-    def fetch_raw(args)
+    def fetch_raw(args = nil, cancellation: nil, **keyword_args)
+      args ||= keyword_args
+      cancellation&.raise_if_cancelled!
       url = args_value(args, "url").to_s.strip
       return "Error: url is required" if url.empty?
 
       max_bytes = bounded_max_bytes(args_value(args, "max_bytes") || args_value(args, "maxBytes"))
       accept = args_value(args, "accept").to_s.strip
-      response = fetch_url(url, max_bytes: max_bytes, accept: accept.empty? ? "*/*" : accept)
+      response = fetch_url(url, max_bytes: max_bytes, accept: accept.empty? ? "*/*" : accept, cancellation: cancellation)
       return response if response.is_a?(String)
 
       body = response[:body].to_s
@@ -72,17 +78,20 @@ module Kward
         "",
         body
       ].join("\n")
+    rescue Cancellation::CancelledError
+      raise
     rescue StandardError => e
       "Error: fetch_raw failed: #{e.message}"
     end
 
     private
 
-    def fetch_url(url, max_bytes:, accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8")
+    def fetch_url(url, max_bytes:, accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8", cancellation: nil)
       current_url = normalize_url(url)
       redirects = 0
 
       loop do
+        cancellation&.raise_if_cancelled!
         response = @http_client.get(current_url, headers: browser_headers(accept), max_bytes: max_bytes)
         code = response.code.to_i
         headers = response_headers(response)

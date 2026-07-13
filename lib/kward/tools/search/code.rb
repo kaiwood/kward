@@ -33,7 +33,10 @@ module Kward
       @max_output_bytes = max_output_bytes
     end
 
-    def call(args)
+    def call(args = nil, cancellation: nil, **keyword_args)
+      args ||= keyword_args
+      cancellation&.raise_if_cancelled!
+      @cancellation = cancellation
       action = value(args, "action").to_s
       return "Error: action must be one of: #{ACTIONS.join(", ")}" unless ACTIONS.include?(action)
 
@@ -47,6 +50,8 @@ module Kward
       when "refresh_cache" then refresh_cache(args)
       when "clear_cache" then clear_cache(args)
       end
+    rescue Cancellation::CancelledError
+      raise
     rescue StandardError => e
       "Error: code_search failed: #{redact(e.message)}"
     end
@@ -271,6 +276,7 @@ module Kward
       base = File.realpath(root)
       scanned = 0
       Dir.glob(File.join(root, "**", "*"), File::FNM_DOTMATCH).sort.each do |path|
+        @cancellation&.raise_if_cancelled!
         next if matches.length >= max_results || scanned >= MAX_SCANNED_FILES
         next if skip_search_path?(base, path)
 

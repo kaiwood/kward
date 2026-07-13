@@ -50,7 +50,9 @@ module Kward
       true
     end
 
-    def search(args)
+    def search(args = nil, cancellation: nil, **keyword_args)
+      args ||= keyword_args
+      cancellation&.raise_if_cancelled!
       queries = args_value(args, "queries")
       return "Error: queries must be an array with 1-#{MAX_QUERIES} strings" unless valid_queries?(queries)
 
@@ -73,7 +75,8 @@ module Kward
       any_results = false
 
       queries.each do |query|
-        response, error = search_query(query, options)
+        cancellation&.raise_if_cancelled!
+        response, error = search_query(query, options, cancellation: cancellation)
         any_results = true if successful_response?(response)
         failures << "#{query}: #{error}" if error && !successful_response?(response)
         sections << format_query_results(query, response, error)
@@ -88,9 +91,10 @@ module Kward
 
     private
 
-    def search_query(query, options)
+    def search_query(query, options, cancellation: nil)
       errors = []
       provider_order(options[:provider]).each do |provider|
+        cancellation&.raise_if_cancelled!
         begin
           response = case provider
                      when "exa"
