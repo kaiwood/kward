@@ -85,6 +85,27 @@ class TestWebSearch < KwardTestCase
     assert_equal "Error: provider must be one of: auto, exa, perplexity, gemini, duckduckgo", result
   end
 
+  def test_web_search_rejects_invalid_recency_filter
+    research = Kward::WebSearch.new
+
+    result = research.search("queries" => ["ruby"], "recency_filter" => "today")
+
+    assert_equal "Error: recency_filter must be one of: day, week, month, year", result
+  end
+
+  def test_web_search_reports_multi_query_success_summary
+    html = '<div class="result"><a class="result__a" href="https://example.com/ruby">Ruby</a></div>'
+    http = FakeHttpClient.new(
+      ["POST", "https://html.duckduckgo.com/html/"] => fake_response(200, html)
+    )
+    research = Kward::WebSearch.new(http_client: http, searxng_instances: [])
+
+    result = research.search("queries" => ["ruby", "ruby docs"], "provider" => "duckduckgo")
+
+    assert_includes result, "- Queries: 2"
+    assert_includes result, "- Succeeded: 2"
+  end
+
   def test_web_search_rejects_legacy_provider_name
     research = Kward::WebSearch.new
 

@@ -63,29 +63,35 @@ module Kward
       provider = normalize_provider(provider_value)
       return "Error: provider must be one of: #{PROVIDERS.join(", ")}" unless provider
 
+      recency_value = args_value(args, "recency_filter") || args_value(args, "recencyFilter")
+      recency = normalize_recency(recency_value)
+      return "Error: recency_filter must be one of: day, week, month, year" if recency_value && !recency
+
       options = {
         max_results: max_results,
-        recency_filter: normalize_recency(args_value(args, "recency_filter") || args_value(args, "recencyFilter")),
+        recency_filter: recency,
         domain_filter: normalize_domain_filter(args_value(args, "domain_filter") || args_value(args, "domainFilter")),
         provider: provider
       }
 
-      sections = ["# Web search", "Use fetch_content with a result URL to verify human-readable pages, or fetch_raw for specs, JSON, YAML, XML, and other machine-readable resources."]
+      sections = ["# Web search"]
       failures = []
-      any_results = false
+      succeeded = 0
 
       queries.each do |query|
         cancellation&.raise_if_cancelled!
         response, error = search_query(query, options, cancellation: cancellation)
-        any_results = true if successful_response?(response)
+        succeeded += 1 if successful_response?(response)
         failures << "#{query}: #{error}" if error && !successful_response?(response)
         sections << format_query_results(query, response, error)
       end
 
-      unless any_results
+      if succeeded.zero?
         return "Error: web_search found no results\n#{failures.map { |failure| "- #{failure}" }.join("\n")}".strip
       end
 
+      sections.insert(1, "- Queries: #{queries.length}\n- Succeeded: #{succeeded}\n- Failed: #{queries.length - succeeded}")
+      sections.insert(2, "Use fetch_content with a result URL to verify human-readable pages, or fetch_raw for specs, JSON, YAML, XML, and other machine-readable resources.")
       truncate_output(sections.join("\n\n"))
     end
 
@@ -519,7 +525,7 @@ module Kward
         lines << answer
       end
 
-      results = response.results || []
+      results = unique_results(response.results || [])
       unless results.empty?
         lines << "Sources:" unless answer.empty?
         results.each_with_index do |result, index|
@@ -530,6 +536,25 @@ module Kward
         end
       end
       lines.join("\n")
+    end
+
+    def unique_results(results)
+      seen = {}
+      results.each_with_object([]) do |result, unique|
+        url = clean_result_url(result.url)
+        uri = URI.parse(url)
+        next unless %w[http https].include?(uri.scheme) && uri.host
+
+        uri.fragment = nil
+        key = uri.to_s
+        next if seen[key]
+
+        seen[key] = true
+        result.url = key
+        unique << result
+      rescue URI::InvalidURIError
+        next
+      end
     end
 
     def answer_from_results(results)
