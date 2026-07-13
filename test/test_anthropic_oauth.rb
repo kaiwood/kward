@@ -37,4 +37,30 @@ class TestAnthropicOAuth < KwardTestCase
       assert data["expires_at"]
     end
   end
+
+  def test_refresh_posts_keyword_params
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "anthropic_auth.json")
+      oauth = Kward::AnthropicOAuth.new(auth_path: path, client_id: "client", config_path: "missing_config.json")
+      oauth.save_auth(tokens: { "access_token" => "old", "refresh_token" => "refresh", "expires_at" => (Time.now.utc - 60).iso8601 })
+      posted = nil
+      response = Net::HTTPOK.new("1.1", "200", "OK")
+      response.instance_variable_set(:@read, true)
+      response.body = JSON.dump("access_token" => "new", "expires_in" => 3600)
+      http = Object.new
+      http.define_singleton_method(:request) do |request|
+        posted = JSON.parse(request.body)
+        response
+      end
+
+      original_start = Net::HTTP.method(:start)
+      Net::HTTP.define_singleton_method(:start) { |_host, _port, use_ssl:, &block| block.call(http) }
+      assert_equal "new", oauth.access_token
+      assert_equal "refresh_token", posted["grant_type"]
+      assert_equal "client", posted["client_id"]
+      assert_equal "refresh", posted["refresh_token"]
+    ensure
+      Net::HTTP.define_singleton_method(:start, original_start) if original_start
+    end
+  end
 end

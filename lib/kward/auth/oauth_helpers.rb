@@ -59,7 +59,8 @@ module Kward
       socket&.close
     end
 
-    def post_json(uri, params, headers: {})
+    def post_json(uri, params = nil, headers: {}, **keyword_params)
+      params = (params || {}).merge(keyword_params)
       request = Http.apply_user_agent(Net::HTTP::Post.new(uri))
       request["Content-Type"] = "application/json"
       headers.each { |key, value| request[key] = value }

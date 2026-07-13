@@ -202,8 +202,8 @@ module Kward
       parse_successful_json(response, "Anthropic OAuth token exchange")
     end
 
-    def post_json(uri, params)
-      super(uri, params, headers: { "Accept" => "application/json" })
+    def post_json(uri, params = nil, **keyword_params)
+      super(uri, params, headers: { "Accept" => "application/json" }, **keyword_params)
     end
   end
 end
