@@ -551,7 +551,7 @@ module Kward
       end
     end
 
-    def transcript_event(type, payload)
+    def transcript_event(type, payload = {})
       TranscriptEvent.new(
         type: type,
         payload: DeepCopy.freeze(DeepCopy.dup(payload))

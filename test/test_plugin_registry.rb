@@ -205,6 +205,23 @@ class TestPluginRegistry < KwardTestCase
     assert_raises(FrozenError) { event.payload[:delta] = "changed" }
   end
 
+  def test_transcript_event_handlers_receive_payloadless_events
+    registry = Kward::PluginRegistry.new
+    received = []
+    registry.evaluate do |plugin|
+      plugin.on_transcript_event do |event, _ctx|
+        received << event
+      end
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    registry.notify_transcript_event(Kward::Events::ReasoningBoundary.new, context)
+
+    assert_equal 1, received.length
+    assert_equal "reasoning_boundary", received.first.type
+    assert_equal({}, received.first.payload)
+  end
+
   def test_registers_plugin_tab_type
     registry = Kward::PluginRegistry.new
     registry.evaluate do |plugin|
