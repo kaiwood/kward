@@ -85,9 +85,9 @@ The tool uses an `action` parameter:
 | --- | --- |
 | `package_search` | find package metadata and likely source repositories. |
 | `github_search` | search public GitHub repositories. |
-| `repo_clone` | clone a GitHub repository into cache. |
-| `repo_search` | search files in a cached repository. |
-| `repo_read` | read a bounded line range from a cached file. |
+| `repo_clone` | prewarm the local Git repository store. |
+| `repo_search` | synchronize and search files in a repository. |
+| `repo_read` | synchronize and read a bounded line range from a file. |
 | `list_cache` | show cached repositories. |
 | `refresh_cache` | fetch updates for a cached repository. |
 | `clear_cache` | remove a cached repository. |
@@ -99,13 +99,16 @@ The tool uses an `action` parameter:
 | `package_search` | `ecosystem`, `package` | — |
 | `github_search` | `query` | `ecosystem`, `max_results` |
 | `repo_clone` | `repo` | — |
-| `repo_search` | `repo`, `query` | `max_results`, `context_lines` |
-| `repo_read` | `repo`, `path` | `start_line`, `line_count` |
+| `repo_search` | `repo`, `query` | `ref`, `max_results`, `context_lines` |
+| `repo_read` | `repo` | `path`, `ref`, `start_line`, `line_count` |
 | `list_cache` | — | — |
 | `refresh_cache` | `repo` | — |
 | `clear_cache` | `repo` | — |
 
-- `repo` is a GitHub URL or `owner/name`.
+- `repo` is a GitHub URL or `owner/name`. A GitHub `blob` URL can supply the file path and ref for `repo_read`.
+- `ref` selects a branch, tag, or commit. Mutable refs are fetched before every read or search; without `ref`, Kward synchronizes the remote default branch.
+- Successful reads and searches report the exact commit revision used. The local Git store reduces repeated downloads but is never silently treated as current source.
+- If synchronization fails, Kward returns an error instead of silently answering from stale files.
 - `query` is a plain-text search string (not regex). Matching is case-sensitive substring.
 - `start_line` is 1-indexed.
 - `context_lines` controls how many lines before and after a match are included in search snippets.

@@ -87,6 +87,8 @@ Arguments:
 
 In `auto` mode (default), Kward detects HTML content and extracts readable text by stripping scripts, styles, navigation, and forms, preserving headings, paragraphs, lists, code blocks, and blockquotes. Non-HTML content is returned as cleaned text. Use `markdown` to format extracted headings and code blocks as Markdown, or `text` for plain text without formatting.
 
+Kward downloads and parses up to 2 MB of a page before applying `max_bytes` to the extracted result. This lets pages with large scripts or metadata before their main content remain readable while keeping model-facing output bounded. Responses above the download limit are rejected rather than parsed as incomplete HTML.
+
 Fetches follow up to 5 redirects and use a 10-second HTTP timeout.
 
 ### `fetch_raw`
@@ -99,4 +101,4 @@ Arguments:
 - `max_bytes`: default 16384, capped at 131072.
 - `accept`: optional HTTP `Accept` header.
 
-Fetches follow up to 5 redirects and use a 10-second HTTP timeout.
+Fetches follow up to 5 redirects, enforce the requested byte limit while reading the response, and use a 10-second HTTP timeout.

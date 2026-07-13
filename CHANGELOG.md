@@ -12,10 +12,15 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Code search now synchronizes mutable repository refs before every read and search, reports the resolved commit, and accepts GitHub blob URLs as file inputs.
+- Web and code research tools now cooperate with turn cancellation between requests, provider attempts, redirects, and repository scan files.
 - Kward-owned HTTP requests now identify themselves with `User-Agent: Kward/<version>`.
 
 ### Fixed
 
+- Fixed `fetch_content` on documentation pages with large scripts or metadata before the main content by separating bounded page downloads from extracted output limits; plain-text extraction now parses HTML instead of returning cleaned markup.
+- Fixed raw fetches so their response limit is enforced while reading the network body.
+- Fixed stale code-search reads and searches by treating cached repositories as reusable local storage rather than authoritative snapshots.
 - Restored GPT-5.6 Luna requests through Codex with a scoped Responses Lite compatibility workaround; normal Codex requests retain Kward's own identity.
 
 ## [0.77.0] - 2026-07-11
