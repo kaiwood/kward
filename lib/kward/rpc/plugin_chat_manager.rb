@@ -43,12 +43,20 @@ module Kward
       def open(type_id:)
         type = supported_types.find { |entry| entry.id == type_id.to_s } || raise(ArgumentError, "Unknown RPC plugin chat: #{type_id}")
         chat = chat_for(type)
-        chat_payload(chat, include_transcript: true)
+        return chat_payload(chat) if chat.driver.respond_to?(:transcript_page)
+
+        chat_payload(chat).merge(messages: TranscriptNormalizer.new(chat.driver.messages).normalize)
       end
 
-      def transcript(chat_id:)
+      def transcript(chat_id:, limit: nil, before: nil)
         chat = fetch_chat(chat_id)
-        { chat: chat_payload(chat), messages: TranscriptNormalizer.new(chat.driver.messages).normalize }
+        page = transcript_page(chat.driver, limit: limit, before: before)
+        {
+          chat: chat_payload(chat),
+          messages: TranscriptNormalizer.new(page.fetch(:messages)).normalize,
+          hasMore: page.fetch(:has_more),
+          nextBefore: page[:next_before]
+        }.compact
       end
 
       def subscribe(chat_id:)
@@ -262,10 +270,14 @@ module Kward
         { id: type.id, name: type.name, title: type.title, singleton: type.singleton }.compact
       end
 
-      def chat_payload(chat, include_transcript: false)
-        payload = type_payload(chat.type).merge(id: chat.id, subscribed: @mutex.synchronize { @subscriptions[chat.id] == true })
-        payload[:messages] = TranscriptNormalizer.new(chat.driver.messages).normalize if include_transcript
-        payload
+      def transcript_page(driver, limit:, before:)
+        return { messages: driver.messages, has_more: false } unless limit && driver.respond_to?(:transcript_page)
+
+        driver.transcript_page(limit: limit, before: before)
+      end
+
+      def chat_payload(chat)
+        type_payload(chat.type).merge(id: chat.id, subscribed: @mutex.synchronize { @subscriptions[chat.id] == true })
       end
 
       def turn_payload(turn)

@@ -13,6 +13,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Plugin-chat transcript RPC supports optional bounded, cursor-based pages for plugin drivers that opt in, avoiding full-history payloads for long-lived chats.
 - Code search now synchronizes mutable repository refs before every read and search, reports the resolved commit, and accepts GitHub blob URLs as file inputs.
 - Web and code research tools now cooperate with turn cancellation between requests, provider attempts, redirects, and repository scan files.
 - Kward-owned HTTP requests now identify themselves with `User-Agent: Kward/<version>`.

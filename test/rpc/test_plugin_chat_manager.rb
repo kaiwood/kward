@@ -23,11 +23,43 @@ class TestRPCPluginChatManager < KwardTestCase
     end
   end
 
+  class PagedDriver < Driver
+    def transcript_page(limit:, before: nil)
+      messages = [
+        { role: "user", content: "older", timestamp: "2026-07-12T12:00:00.000Z" },
+        { role: "assistant", content: "newer", timestamp: "2026-07-13T12:00:00.000Z" }
+      ]
+      page = before ? messages.first(1) : messages.last(limit)
+      { messages: page, has_more: !before, next_before: before ? nil : messages.first[:timestamp] }
+    end
+  end
+
   class RetryingDriver < Driver
     def submit(input, display_input:, cancellation:)
       yield Kward::Events::Retry.new(provider: "Codex", model: "test-model", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream", request_bytes: 123)
       super
     end
+  end
+
+  def test_returns_a_bounded_plugin_transcript_page_when_the_driver_supports_paging
+    manager = nil
+    Dir.mktmpdir do |home|
+      write_plugin(home, driver: "PagedDriver")
+      with_env("HOME" => home) do
+        manager = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
+        first_page = manager.transcript(chat_id: "test.chat", limit: 1)
+
+        assert_equal ["newer"], first_page[:messages].map { |message| message[:content].first[:text] }
+        assert_equal true, first_page[:hasMore]
+        assert_equal "2026-07-12T12:00:00.000Z", first_page[:nextBefore]
+
+        earlier_page = manager.transcript(chat_id: "test.chat", limit: 1, before: first_page[:nextBefore])
+        assert_equal ["older"], earlier_page[:messages].map { |message| message[:content].first[:text] }
+        assert_equal false, earlier_page[:hasMore]
+      end
+    end
+  ensure
+    manager&.shutdown
   end
 
   def test_emits_model_retry_events

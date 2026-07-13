@@ -359,7 +359,7 @@ module Kward
         when PLUGIN_CHAT_METHODS[1]
           @plugin_chat_manager.open(type_id: params.fetch("typeId"))
         when PLUGIN_CHAT_METHODS[2]
-          @plugin_chat_manager.transcript(chat_id: params.fetch("chatId"))
+          @plugin_chat_manager.transcript(chat_id: params.fetch("chatId"), limit: params["limit"], before: params["before"])
         when PLUGIN_CHAT_METHODS[3]
           @plugin_chat_manager.subscribe(chat_id: params.fetch("chatId"))
         when PLUGIN_CHAT_METHODS[4]

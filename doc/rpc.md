@@ -293,9 +293,11 @@ Opens the plugin-owned chat in this RPC process and returns its metadata plus no
 
 Params:
 
-- `chatId`.
+- `chatId`;
+- `limit`: optional bounded page size for plugin drivers that support transcript paging;
+- `before`: optional opaque cursor returned by a preceding page.
 
-Returns chat metadata and its normalized transcript.
+Returns chat metadata and its normalized transcript. Paging-capable plugin chats return the newest page first plus `hasMore` and, when more history is available, `nextBefore`. Clients send that cursor as `before` to load the preceding page. Plugins that do not opt in retain the original complete-transcript behavior.
 
 ### `pluginChats/subscribe` and `pluginChats/unsubscribe`
 
