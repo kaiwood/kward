@@ -190,11 +190,16 @@ module Kward
         when Events::ReasoningBoundary then ["reasoningBoundary", {}]
         when Events::AssistantDelta then ["assistantDelta", { delta: event.delta }]
         when Events::AssistantMessage then ["assistantMessage", { message: TranscriptNormalizer.new([event.message]).normalize.first }]
+        when Events::Retry then ["modelRetry", retry_event_payload(event)]
         when Events::ToolCall then ["toolCall", tool_call_payload(event.tool_call)]
         when Events::ToolResult then ["toolResult", tool_result_payload(event.tool_call, event.content)]
         when Events::Answer then ["answer", { content: event.content }]
         end
         emit_event(turn, type, payload) if type
+      end
+
+      def retry_event_payload(event)
+        { provider: event.provider, model: event.model, attempt: event.attempt, maxAttempts: event.max_attempts, delaySeconds: event.delay_seconds, error: event.error, requestBytes: event.request_bytes }.compact
       end
 
       def tool_call_payload(tool_call)

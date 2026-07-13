@@ -23,6 +23,39 @@ class TestRPCPluginChatManager < KwardTestCase
     end
   end
 
+  class RetryingDriver < Driver
+    def submit(input, display_input:, cancellation:)
+      yield Kward::Events::Retry.new(provider: "Codex", model: "test-model", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream", request_bytes: 123)
+      super
+    end
+  end
+
+  def test_emits_model_retry_events
+    manager = nil
+    Dir.mktmpdir do |home|
+      write_plugin(home, driver: "RetryingDriver")
+      with_env("HOME" => home) do
+        server = RecordingServer.new
+        manager = Kward::RPC::PluginChatManager.new(server: server)
+        manager.subscribe(chat_id: "test.chat")
+
+        turn = manager.start_turn(chat_id: "test.chat", input: "retry")
+        wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+        event = manager.turn_events(turn_id: turn[:id])[:events].find { |entry| entry[:type] == "modelRetry" }
+        assert_equal "Codex", event[:payload][:provider]
+        assert_equal "test-model", event[:payload][:model]
+        assert_equal 2, event[:payload][:attempt]
+        assert_equal 3, event[:payload][:maxAttempts]
+        assert_equal 1, event[:payload][:delaySeconds]
+        assert_equal "Codex request failed: 503 upstream", event[:payload][:error]
+        assert_equal 123, event[:payload][:requestBytes]
+      end
+    end
+  ensure
+    manager&.shutdown
+  end
+
   def test_exposes_opted_in_plugin_chat_and_streams_only_after_subscription
     manager = nil
     Dir.mktmpdir do |home|
@@ -57,13 +90,13 @@ class TestRPCPluginChatManager < KwardTestCase
 
   private
 
-  def write_plugin(home)
+  def write_plugin(home, driver: "Driver")
     plugins = File.join(home, ".kward", "plugins")
     FileUtils.mkdir_p(plugins)
-    File.write(File.join(plugins, "chat.rb"), <<~'RUBY')
+    File.write(File.join(plugins, "chat.rb"), <<~RUBY)
       Kward.plugin do |plugin|
         plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: :global, rpc: true do |_host, descriptor|
-          TestRPCPluginChatManager::Driver.new(descriptor)
+          TestRPCPluginChatManager::#{driver}.new(descriptor)
         end
       end
     RUBY
