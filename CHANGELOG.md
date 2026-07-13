@@ -18,6 +18,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Prevented duplicate session-backed tabs from restoring as mirrored conversations after restart.
 - Fixed `fetch_content` on documentation pages with large scripts or metadata before the main content by separating bounded page downloads from extracted output limits; plain-text extraction now parses HTML instead of returning cleaned markup.
 - Fixed raw fetches so their response limit is enforced while reading the network body.
 - Fixed stale code-search reads and searches by treating cached repositories as reusable local storage rather than authoritative snapshots.

@@ -317,6 +317,36 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_restore_tabs_discards_duplicate_session_descriptors
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+        session = store.create
+        conversation = Kward::Conversation.new(workspace_root: workspace)
+        session.attach(conversation)
+        conversation.append_user("restored once")
+        tab_store = Kward::TabStore.new(config_dir: config_dir, cwd: workspace)
+        FileUtils.mkdir_p(File.dirname(tab_store.path))
+        File.write(tab_store.path, JSON.dump({
+          "tabs" => [
+            { "kind" => "session", "session_path" => session.path, "label" => "Main" },
+            { "kind" => "session", "session_path" => session.path, "label" => "Main" }
+          ],
+          "active_index" => 1
+        }))
+
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+
+        tabs = cli.instance_variable_get(:@tabs)
+        assert_equal 1, tabs.length
+        assert_equal session.path, tabs.first.session.path
+        assert_equal ["Main"], tabs.map(&:label)
+        assert_equal 1, JSON.parse(File.read(tab_store.path)).fetch("tabs").length
+      end
+    end
+  end
+
   def test_restore_tabs_keeps_empty_tab_slot_when_saved_session_was_cleaned_up
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|

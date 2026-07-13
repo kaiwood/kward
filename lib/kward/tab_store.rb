@@ -81,6 +81,8 @@ module Kward
     end
 
     def normalize_tabs(tabs)
+      session_paths = {}
+
       Array(tabs).filter_map do |tab|
         next unless tab.is_a?(Hash)
 
@@ -88,6 +90,13 @@ module Kward
         kind = normalized["kind"].to_s
         next if kind.empty?
         next if kind == "session" && normalized["session_path"].to_s.empty?
+
+        if kind == "session"
+          session_path = File.expand_path(normalized["session_path"].to_s, @cwd)
+          next if session_paths[session_path]
+
+          session_paths[session_path] = true
+        end
 
         normalized
       end

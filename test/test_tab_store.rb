@@ -27,6 +27,30 @@ class TestTabStore < KwardTestCase
     end
   end
 
+  def test_load_discards_duplicate_session_tab_descriptors
+    Dir.mktmpdir do |dir|
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(workspace)
+      store = Kward::TabStore.new(config_dir: dir, cwd: workspace)
+      session_path = File.join(dir, "session.jsonl")
+
+      FileUtils.mkdir_p(File.dirname(store.path))
+      File.write(store.path, JSON.dump({
+        "tabs" => [
+          { "kind" => "session", "session_path" => session_path, "label" => "Main" },
+          { "kind" => "session", "session_path" => session_path, "label" => "Main" },
+          { "kind" => "plugin", "plugin_tab_type" => "example.chat", "label" => "Example" }
+        ],
+        "active_index" => 2
+      }))
+
+      state = store.load
+      assert_equal [session_path, nil], state["tabs"].map { |tab| tab["session_path"] }
+      assert_equal ["Main", "Example"], state["labels"]
+      assert_equal 1, state["active_index"]
+    end
+  end
+
   def test_save_and_load_plugin_tab_descriptor
     Dir.mktmpdir do |dir|
       store = Kward::TabStore.new(config_dir: dir, cwd: dir)
