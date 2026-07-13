@@ -29,6 +29,16 @@ class TestRPCTranscriptNormalizer < KwardTestCase
     end
   end
 
+  def test_preserves_a_persisted_message_timestamp
+    messages = Kward::RPC::TranscriptNormalizer.new([
+      { role: "user", content: "hello", timestamp: "2026-07-13T12:36:44.785Z" },
+      { role: "assistant", content: "hello", timestamp: "2026-07-13T12:36:45.123Z" }
+    ]).normalize
+
+    assert_equal "2026-07-13T12:36:44.785Z", messages[0][:timestamp]
+    assert_equal "2026-07-13T12:36:45.123Z", messages[1][:timestamp]
+  end
+
   def test_session_transcript_restores_reasoning_summary_as_thinking_block
     Dir.mktmpdir do |config_dir|
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: FakeClient.new([]), config_dir: config_dir)

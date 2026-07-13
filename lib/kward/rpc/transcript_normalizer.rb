@@ -54,10 +54,13 @@ module Kward
       end
 
       def normalize_user_message(message)
-        {
-          role: "user",
-          content: normalize_content(MessageAccess.content(message))
-        }
+        with_timestamp(
+          {
+            role: "user",
+            content: normalize_content(MessageAccess.content(message))
+          },
+          message
+        )
       end
 
       def normalize_assistant_message(message)
@@ -76,7 +79,7 @@ module Kward
         result = { role: "assistant", content: content }
         error_message = ToolCall.value(message, :errorMessage) || ToolCall.value(message, :error_message)
         result[:errorMessage] = error_message unless error_message.to_s.empty?
-        result
+        with_timestamp(result, message)
       end
 
       def normalize_tool_result_message(message)
@@ -96,6 +99,12 @@ module Kward
 
         details = tool_result_details(message, matching_call, content)
         result[:details] = details unless details.empty?
+        with_timestamp(result, message)
+      end
+
+      def with_timestamp(result, message)
+        timestamp = ToolCall.value(message, :timestamp)
+        result[:timestamp] = timestamp if timestamp
         result
       end
 
