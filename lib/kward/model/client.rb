@@ -36,6 +36,7 @@ module Kward
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
     RETRY_DELAYS = [1, 2].freeze
+    DEFAULT_STREAM_IDLE_TIMEOUT_SECONDS = 120
     NON_RETRYABLE_PROVIDER_LIMIT_PATTERNS = [
       /GoUsageLimitError/i,
       /FreeUsageLimitError/i,
@@ -344,7 +345,7 @@ module Kward
       request.body = request_body
 
       message = nil
-      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
         cancellation&.on_cancel { close_http(http) }
         cancellation&.raise_if_cancelled!
         http.request(request) do |response|
@@ -586,7 +587,7 @@ module Kward
       request.body = request_body
 
       message = nil
-      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
         cancellation&.on_cancel { close_http(http) }
         cancellation&.raise_if_cancelled!
         http.request(request) do |response|
@@ -662,7 +663,7 @@ module Kward
       apply_codex_identity(request, luna: luna_request?(request.body))
 
       message = nil
-      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: nil) do |http|
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
         cancellation&.on_cancel { close_http(http) }
         cancellation&.raise_if_cancelled!
         http.request(request) do |response|
@@ -856,6 +857,11 @@ module Kward
 
     def codex_show_raw_reasoning?
       @config["codex_show_raw_reasoning"] == true
+    end
+
+    def stream_idle_timeout_seconds
+      value = @config["stream_idle_timeout_seconds"].to_i
+      value.positive? ? value : DEFAULT_STREAM_IDLE_TIMEOUT_SECONDS
     end
 
     def load_config

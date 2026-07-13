@@ -561,6 +561,61 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_codex_stream_uses_configured_idle_timeout
+    config_path = File.join(Dir.mktmpdir, "config.json")
+    File.write(config_path, JSON.dump("stream_idle_timeout_seconds" => 17))
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: config_path)
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+    start_options = nil
+    original_start = Net::HTTP.method(:start)
+    Net::HTTP.define_singleton_method(:start) do |_host, _port, **options, &block|
+      start_options = options
+      block.call(TestClient::FakeHTTP.new([success]))
+    end
+
+    client.chat([{ role: "user", content: "hello" }])
+
+    assert_equal 17, start_options[:read_timeout]
+  ensure
+    Net::HTTP.define_singleton_method(:start, original_start) if original_start
+  end
+
+  def test_copilot_responses_stream_uses_configured_idle_timeout
+    config_path = File.join(Dir.mktmpdir, "config.json")
+    File.write(config_path, JSON.dump("stream_idle_timeout_seconds" => 17))
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("copilot-token"), config_path: config_path)
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+    start_options = nil
+    original_start = Net::HTTP.method(:start)
+    Net::HTTP.define_singleton_method(:start) do |_host, _port, **options, &block|
+      start_options = options
+      block.call(TestClient::FakeHTTP.new([success]))
+    end
+
+    client.chat([{ role: "user", content: "hello" }], provider: "Copilot", model: "gpt-5-mini")
+
+    assert_equal 17, start_options[:read_timeout]
+  ensure
+    Net::HTTP.define_singleton_method(:start, original_start) if original_start
+  end
+
+  def test_codex_stream_uses_default_idle_timeout
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
+    start_options = nil
+    original_start = Net::HTTP.method(:start)
+    Net::HTTP.define_singleton_method(:start) do |_host, _port, **options, &block|
+      start_options = options
+      block.call(TestClient::FakeHTTP.new([success]))
+    end
+
+    client.chat([{ role: "user", content: "hello" }])
+
+    assert_equal Kward::Client::DEFAULT_STREAM_IDLE_TIMEOUT_SECONDS, start_options[:read_timeout]
+  ensure
+    Net::HTTP.define_singleton_method(:start, original_start) if original_start
+  end
+
   def test_codex_requests_identify_as_kward
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
     success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")

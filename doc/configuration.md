@@ -184,6 +184,8 @@ Model settings:
 
 Set `codex_show_raw_reasoning` to `true` to display raw Codex `reasoning_text` when the API does not provide reasoning summary text. It defaults to `false`; raw reasoning can include internal or unstable model output, so enable it only when you explicitly want to inspect that stream.
 
+`stream_idle_timeout_seconds` limits how long a streamed Codex or Anthropic response may go without receiving data. It defaults to `120`; set a positive value to override it. When the provider is silent longer than this limit, Kward closes the request and applies its normal transient-network retry behavior.
+
 Defaults:
 
 - OpenAI/Codex: `gpt-5.6-sol`
