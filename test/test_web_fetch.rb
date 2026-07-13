@@ -33,6 +33,46 @@ class TestWebFetch < KwardTestCase
     refute_includes result, "ignore()"
   end
 
+  def test_fetch_content_parses_html_beyond_output_limit
+    html = "<html><head><title>Large page</title><script>#{"x" * 20_000}</script></head><body><main><h1>Tabs</h1><p>Readable guide body.</p></main></body></html>"
+    http = FakeHttpClient.new(
+      ["GET", "https://example.com/tabs"] => fake_response(200, html, headers: { "content-type" => "text/html" })
+    )
+    fetch = Kward::WebFetch.new(http_client: http)
+
+    result = fetch.fetch_content("url" => "https://example.com/tabs")
+
+    assert_includes result, "# Tabs"
+    assert_includes result, "Readable guide body."
+    refute_includes result, "x" * 100
+  end
+
+  def test_fetch_content_text_mode_extracts_plain_text_from_html
+    html = "<html><head><title>Guide</title></head><body><main><h1>Start</h1><p>Read me.</p></main></body></html>"
+    http = FakeHttpClient.new(
+      ["GET", "https://example.com/guide"] => fake_response(200, html, headers: { "content-type" => "text/html" })
+    )
+    fetch = Kward::WebFetch.new(http_client: http)
+
+    result = fetch.fetch_content("url" => "https://example.com/guide", "extract" => "text")
+
+    assert_includes result, "Guide\n\nStart\n\nRead me."
+    refute_includes result, "<html>"
+    refute_includes result, "# Start"
+  end
+
+  def test_fetch_content_does_not_duplicate_nested_code
+    html = "<html><body><main><pre><code>puts :ok</code></pre></main></body></html>"
+    http = FakeHttpClient.new(
+      ["GET", "https://example.com/code"] => fake_response(200, html, headers: { "content-type" => "text/html" })
+    )
+    fetch = Kward::WebFetch.new(http_client: http)
+
+    result = fetch.fetch_content("url" => "https://example.com/code")
+
+    assert_equal 1, result.scan("puts :ok").length
+  end
+
   def test_fetch_content_follows_redirects
     http = FakeHttpClient.new(
       ["GET", "https://example.com/start"] => fake_response(302, "", headers: { "location" => "/final" }),

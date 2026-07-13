@@ -128,8 +128,11 @@ class KwardTestCase < Minitest::Test
       @requests = []
     end
 
-    def get(url, headers: {})
-      request("GET", url, headers: headers)
+    def get(url, headers: {}, max_bytes: nil)
+      response = request("GET", url, headers: headers)
+      return response unless max_bytes && response.body.to_s.bytesize > max_bytes
+
+      response.class.new(code: response.code, body: response.body.to_s.byteslice(0, max_bytes), headers: response.headers, truncated: true)
     end
 
     def post(url, form:, headers: {})

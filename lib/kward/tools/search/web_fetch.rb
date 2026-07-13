@@ -10,6 +10,7 @@ module Kward
     DEFAULT_MAX_BYTES = 16 * 1024
     MAX_MAX_BYTES = 128 * 1024
     MAX_REDIRECTS = 5
+    MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
     HTTP_TIMEOUT_SECONDS = 10
 
     # Creates a fetcher for web content and raw resources.
@@ -26,19 +27,22 @@ module Kward
       extract = normalize_extract(args_value(args, "extract") || "auto")
       return "Error: extract must be one of: auto, text, markdown" unless extract
 
-      response = fetch_url(url, max_bytes: max_bytes)
+      response = fetch_url(url, max_bytes: MAX_DOWNLOAD_BYTES)
       return response if response.is_a?(String)
+      return "Error: response exceeds #{MAX_DOWNLOAD_BYTES} byte download limit" if response[:truncated]
 
       body = response[:body].to_s
       content_type = header_value(response[:headers], "content-type")
-      text = extract_readable_text(body, content_type: content_type, mode: extract)
-      text = truncate_bytes(text, max_bytes)
+      text = extract_readable_text(body, content_type: content_type, mode: extract, base_url: response[:url])
+      text, truncated = truncate_bytes(text, max_bytes)
 
       [
         "# Fetched content",
         "- URL: #{response[:url]}",
         "- Content type: #{content_type.empty? ? "unknown" : content_type}",
+        "- Downloaded bytes: #{body.bytesize}",
         "- Bytes returned: #{text.bytesize}",
+        "- Truncated: #{truncated ? "yes" : "no"}",
         "",
         text.empty? ? "(No readable text extracted.)" : text
       ].join("\n")
@@ -56,13 +60,15 @@ module Kward
       response = fetch_url(url, max_bytes: max_bytes, accept: accept.empty? ? "*/*" : accept)
       return response if response.is_a?(String)
 
-      body = truncate_bytes(response[:body].to_s, max_bytes)
+      body = response[:body].to_s
       content_type = header_value(response[:headers], "content-type")
+      body = "#{body.to_s.scrub}\n... truncated to #{max_bytes} bytes" if response[:truncated]
       [
         "# Fetched raw content",
         "- URL: #{response[:url]}",
         "- Content type: #{content_type.empty? ? "unknown" : content_type}",
-        "- Bytes returned: #{body.bytesize}",
+        "- Bytes returned: #{response[:body].to_s.bytesize}",
+        "- Truncated: #{response[:truncated] ? "yes" : "no"}",
         "",
         body
       ].join("\n")
@@ -77,7 +83,7 @@ module Kward
       redirects = 0
 
       loop do
-        response = @http_client.get(current_url, headers: browser_headers(accept))
+        response = @http_client.get(current_url, headers: browser_headers(accept), max_bytes: max_bytes)
         code = response.code.to_i
         headers = response_headers(response)
 
@@ -94,9 +100,7 @@ module Kward
 
         return "Error: fetch failed with HTTP #{response.code}" unless code.between?(200, 299)
 
-        body = response.body.to_s
-        body = truncate_bytes(body, max_bytes)
-        return { url: current_url, headers: headers, body: body }
+        return { url: current_url, headers: headers, body: response.body.to_s, truncated: response.respond_to?(:truncated) && response.truncated }
       end
     end
 
@@ -135,20 +139,22 @@ module Kward
       %w[auto text markdown].include?(normalized) ? normalized : nil
     end
 
-    def extract_readable_text(body, content_type:, mode:)
-      return clean_text(body) if mode == "text" || !html_content?(content_type, body)
+    def extract_readable_text(body, content_type:, mode:, base_url:)
+      return clean_text(body) unless html_content?(content_type, body)
 
       document = Nokogiri::HTML(body)
-      document.css("script, style, noscript, svg, nav, footer, form").remove
-      title = document.at_css("title")&.text.to_s.strip
-      root = document.at_css("article") || document.at_css("main") || document.at_css("body") || document
+      document.css("script, style, noscript, template, svg, canvas, nav, footer, form, iframe, [hidden], [aria-hidden='true']").remove
+      title = clean_text(document.at_css("title")&.text)
+      root = document.at_css("article") || document.at_css("main") || document.at_css("[role='main']") || document.at_css("body") || document
       parts = []
-      parts << "# #{clean_text(title)}" unless title.empty?
-      root.css("h1, h2, h3, h4, h5, h6, p, li, pre, code, blockquote").each do |node|
-        text = clean_text(node.text)
+      parts << (mode == "text" ? title : "# #{title}") unless title.empty?
+      root.css("h1, h2, h3, h4, h5, h6, p, li, pre, blockquote").each do |node|
+        next if node.ancestors.any? { |ancestor| %w[li pre blockquote].include?(ancestor.name) }
+
+        text = node.name == "pre" ? node.text.to_s.strip : clean_text(node.text)
         next if text.empty?
 
-        parts << format_html_node(node, text, mode: mode)
+        parts << format_html_node(node, text, mode: mode, base_url: base_url)
       end
       parts.uniq.join("\n\n")
     end
@@ -157,15 +163,16 @@ module Kward
       content_type.to_s.include?("html") || body.to_s.lstrip.start_with?("<!DOCTYPE html", "<html", "<HTML")
     end
 
-    def format_html_node(node, text, mode:)
+    def format_html_node(node, text, mode:, base_url:)
       return text if mode == "text"
 
+      text = markdown_links(node, text, base_url)
       case node.name
       when /^h([1-6])$/
         "#{"#" * Regexp.last_match(1).to_i} #{text}"
       when "li"
         "- #{text}"
-      when "pre", "code"
+      when "pre"
         "```\n#{text}\n```"
       when "blockquote"
         "> #{text}"
@@ -178,10 +185,22 @@ module Kward
       text.to_s.gsub(/\s+/, " ").strip
     end
 
-    def truncate_bytes(text, max_bytes)
-      return text if text.bytesize <= max_bytes
+    def markdown_links(node, text, base_url)
+      return text unless node.name == "p" && (link = node.at_css("a[href]")) && clean_text(node.text) == clean_text(link.text)
 
-      "#{text.byteslice(0, max_bytes).to_s.scrub}\n... truncated to #{max_bytes} bytes"
+      href = URI.join(base_url, link["href"]).to_s
+      "[#{clean_text(link.text)}](#{href})"
+    rescue URI::InvalidURIError
+      text
+    end
+
+    def truncate_bytes(text, max_bytes)
+      return [text, false] if text.bytesize <= max_bytes
+
+      marker = "\n... extracted content truncated ..."
+      available = [max_bytes - marker.bytesize, 0].max
+      truncated = text.byteslice(0, available).to_s.scrub.sub(/\n?[^\n]*\z/, "")
+      ["#{truncated}#{marker}", true]
     end
 
     def browser_headers(accept)

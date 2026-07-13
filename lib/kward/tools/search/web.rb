@@ -721,14 +721,14 @@ module Kward
 
     # HTTP adapter used by web-search providers and fallbacks.
     class NetHttpClient
-      Response = Struct.new(:code, :body, :headers, keyword_init: true)
+      Response = Struct.new(:code, :body, :headers, :truncated, keyword_init: true)
 
       def initialize(user_agent: Http.user_agent)
         @user_agent = user_agent
       end
 
-      def get(url, headers: {})
-        request(url, Net::HTTP::Get, headers: headers)
+      def get(url, headers: {}, max_bytes: nil)
+        request(url, Net::HTTP::Get, headers: headers, max_bytes: max_bytes)
       end
 
       def get_json(url, headers: {})
@@ -757,15 +757,28 @@ module Kward
 
       private
 
-      def request(url, request_class, headers: {})
+      def request(url, request_class, headers: {}, max_bytes: nil)
         uri = URI.parse(url)
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: HTTP_TIMEOUT_SECONDS, read_timeout: HTTP_TIMEOUT_SECONDS) do |http|
           http_request = request_class.new(uri)
           http_request["User-Agent"] = @user_agent if @user_agent
           headers.each { |key, value| http_request[key] = value }
           yield http_request if block_given?
-          response = http.request(http_request)
-          Response.new(code: response.code, body: response.body, headers: response.each_header.to_h)
+          response = nil
+          body = +""
+          truncated = false
+          http.request(http_request) do |http_response|
+            response = http_response
+            http_response.read_body do |chunk|
+              if max_bytes && body.bytesize + chunk.bytesize > max_bytes
+                body << chunk.byteslice(0, max_bytes - body.bytesize)
+                truncated = true
+                break
+              end
+              body << chunk
+            end
+          end
+          Response.new(code: response.code, body: body, headers: response.each_header.to_h, truncated: truncated)
         end
       end
 
