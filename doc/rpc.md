@@ -52,6 +52,7 @@ Detailed capability fields include:
 - `transcript`: Kward transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, active live-session discovery, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, and unsupported live session updates reported with `notification: "session/updated"`.
 - `turns`: async turn mode, per-session concurrency, active/recent turn listing, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope/tool approval, and structured client context for editor integrations.
+- `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
@@ -275,6 +276,64 @@ Params:
 Moves the active branch to the selected tree entry. If the entry is a user message, its parent becomes the new active leaf and the user message text is returned as `editorText` so clients can place it into the composer for editing/resubmission. When `summarize` is true, a branch summary is generated and appended to the session before moving.
 
 Returns `{ "session": {}, "editorText": "...", "cancelled": false, "aborted": false }`. Fields with no value are omitted.
+
+## Plugin chat methods
+
+Plugin chats are optional trusted-plugin capabilities, not Kward workspace sessions. When `initialize.capabilities.pluginChats.supported` is true, use `pluginChats/list` to discover available types.
+
+### `pluginChats/open`
+
+Params:
+
+- `typeId`: an opted-in plugin chat type, such as `kward.ensign`.
+
+Opens the plugin-owned chat in this RPC process and returns its metadata plus normalized transcript.
+
+### `pluginChats/transcript`
+
+Params:
+
+- `chatId`.
+
+Returns chat metadata and its normalized transcript.
+
+### `pluginChats/subscribe` and `pluginChats/unsubscribe`
+
+Params:
+
+- `chatId`.
+
+Subscriptions are opt-in. `pluginChats/subscribe` enables live `pluginChat/event` notifications for that chat on the current RPC connection. `pluginChats/unsubscribe` disables them without affecting the chat or archive.
+
+### `pluginChats/turns/start`
+
+Params:
+
+- `chatId`;
+- `input`;
+- `attachments`: optional base64 image attachments using the same MIME and size limits as `turns/start`.
+
+Queues a plugin-chat turn and returns `{ id, chatId, status, ... }`. Plugin chat turns are serialized per chat and do not use workspace sessions, agents, or model overrides.
+
+### `pluginChats/turns/cancel`, `pluginChats/turns/status`, `pluginChats/turns/events`, `pluginChats/turns/list`, `pluginChats/turns/listActive`
+
+These methods mirror the corresponding `turns/*` lifecycle methods, using `chatId` where a list filter is needed. Event replay is bounded in memory and subscriptions are required for live notifications.
+
+## Plugin chat notifications
+
+Subscribed clients receive `pluginChat/event` notifications:
+
+```json
+{
+  "chatId": "kward.ensign",
+  "turnId": "...",
+  "sequence": 1,
+  "type": "assistantDelta",
+  "payload": { "delta": "text" }
+}
+```
+
+Known event types are `turnQueued`, `turnStarted`, `reasoningDelta`, `reasoningBoundary`, `assistantDelta`, `assistantMessage`, `toolCall`, `toolResult`, `answer`, `turnCancelRequested`, and `turnFinished`.
 
 ## Turn methods
 

@@ -78,7 +78,7 @@ ruby lib/main.rb "Explain this project"
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
 - When changing prompt/skill behavior, update `doc/extensibility.md`, CLI/RPC exposure, compaction behavior when activated instructions are durable, and prompt-related tests as needed.
 - Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
-- Plugin-owned tabs register through `plugin.tab_type`, open through `/tab open <name>`, and own their storage and turn behavior. Keep their drivers independent of workspace sessions, agents, prompts, and tools; the interactive tab host owns composer, rendering, streaming, cancellation, and layouts. Plugin tabs are intentionally CLI-only until RPC support is designed.
+- Plugin-owned tabs register through `plugin.tab_type`, open through `/tab open <name>`, and own their storage and turn behavior. Keep their drivers independent of workspace sessions, agents, prompts, and tools; the interactive tab host owns composer, rendering, streaming, cancellation, and layouts. Plugin tabs opt into RPC explicitly with `rpc: true`; `PluginChatManager` owns optional RPC subscriptions, turn events, attachments, replay, and cancellation without creating workspace sessions.
 
 ## Feature exposure rule
 

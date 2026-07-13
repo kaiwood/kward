@@ -13,6 +13,7 @@ require_relative "config_manager"
 require_relative "mcp_status"
 require_relative "redactor"
 require_relative "session_manager"
+require_relative "plugin_chat_manager"
 require_relative "transport"
 
 # Namespace for the Kward CLI agent runtime.
@@ -57,6 +58,7 @@ module Kward
         "sessions/export", "sessions/delete", "sessions/close", "sessions/transcript", "sessions/active"
       ].freeze
       TURN_METHODS = ["turns/start", "turns/cancel", "turns/status", "turns/events", "turns/list", "turns/listActive"].freeze
+      PLUGIN_CHAT_METHODS = ["pluginChats/list", "pluginChats/open", "pluginChats/transcript", "pluginChats/subscribe", "pluginChats/unsubscribe", "pluginChats/turns/start", "pluginChats/turns/cancel", "pluginChats/turns/status", "pluginChats/turns/events", "pluginChats/turns/list", "pluginChats/turns/listActive"].freeze
       MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set"].freeze
       RUNTIME_METHODS = ["runtime/state", "runtime/stats"].freeze
       RUNTIME_SETTING_METHODS = ["runtime/updateSetting", "runtime/reload"].freeze
@@ -92,6 +94,7 @@ module Kward
         prompts: PROMPT_METHODS,
         sessions: SESSION_METHODS,
         turns: TURN_METHODS,
+        plugin_chats: PLUGIN_CHAT_METHODS,
         models: MODEL_METHODS,
         runtime: RUNTIME_METHODS,
         runtime_settings: RUNTIME_SETTING_METHODS,
@@ -119,6 +122,7 @@ module Kward
         @client = client
         @config_manager = ConfigManager.new
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
+        @plugin_chat_manager = PluginChatManager.new(server: self, client: client)
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @shutdown = false
       end
@@ -140,6 +144,7 @@ module Kward
           end
         end
       ensure
+        @plugin_chat_manager.shutdown
         @session_manager.shutdown_sessions
       end
 
@@ -349,6 +354,28 @@ module Kward
           @session_manager.list_turns(session_id: params["sessionId"])
         when TURN_METHODS[5]
           @session_manager.list_turns(session_id: params["sessionId"], active: true)
+        when PLUGIN_CHAT_METHODS[0]
+          @plugin_chat_manager.list
+        when PLUGIN_CHAT_METHODS[1]
+          @plugin_chat_manager.open(type_id: params.fetch("typeId"))
+        when PLUGIN_CHAT_METHODS[2]
+          @plugin_chat_manager.transcript(chat_id: params.fetch("chatId"))
+        when PLUGIN_CHAT_METHODS[3]
+          @plugin_chat_manager.subscribe(chat_id: params.fetch("chatId"))
+        when PLUGIN_CHAT_METHODS[4]
+          @plugin_chat_manager.unsubscribe(chat_id: params.fetch("chatId"))
+        when PLUGIN_CHAT_METHODS[5]
+          @plugin_chat_manager.start_turn(chat_id: params.fetch("chatId"), input: params.fetch("input"), attachments: params["attachments"] || [])
+        when PLUGIN_CHAT_METHODS[6]
+          @plugin_chat_manager.cancel_turn(turn_id: params.fetch("turnId"))
+        when PLUGIN_CHAT_METHODS[7]
+          @plugin_chat_manager.turn_status(turn_id: params.fetch("turnId"))
+        when PLUGIN_CHAT_METHODS[8]
+          @plugin_chat_manager.turn_events(turn_id: params.fetch("turnId"), after_sequence: params["afterSequence"] || 0)
+        when PLUGIN_CHAT_METHODS[9]
+          @plugin_chat_manager.list_turns(chat_id: params["chatId"])
+        when PLUGIN_CHAT_METHODS[10]
+          @plugin_chat_manager.list_turns(chat_id: params["chatId"], active: true)
         when UI_METHODS[0]
           @session_manager.answer_question(session_id: params.fetch("sessionId"), question_request_id: params.fetch("questionRequestId"), answers: params.fetch("answers"))
         when TOOL_APPROVAL_METHODS[0]
@@ -391,6 +418,14 @@ module Kward
             import: { supported: false },
             tree: { supported: true, method: SESSION_METHODS[8], labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "kward-tree-items-v1" },
             updates: { supported: false, notification: SESSION_UPDATED_NOTIFICATION }
+          },
+          pluginChats: {
+            supported: @plugin_chat_manager.supported_types.any?,
+            methods: PLUGIN_CHAT_METHODS,
+            notification: "pluginChat/event",
+            subscriptions: { supported: true, methods: PLUGIN_CHAT_METHODS.values_at(3, 4), requiredForLiveEvents: true },
+            attachments: { supported: true, method: PLUGIN_CHAT_METHODS[5], encoding: "base64", mimeTypes: SessionManager::RPC_IMAGE_MIME_TYPES, maxBytes: SessionManager::RPC_ATTACHMENT_MAX_BYTES },
+            types: @plugin_chat_manager.supported_types.map { |type| { id: type.id, name: type.name, title: type.title, singleton: type.singleton }.compact }
           },
           turns: {
             mode: "async",

@@ -213,8 +213,15 @@ A driver may optionally implement `handles_command?(input)` and
 `handle_command(input)` for its own slash commands. Other Kward session and
 workspace commands stay unavailable inside plugin tabs.
 
-This API is currently available only in the interactive CLI. It is not exposed
-through RPC.
+Set `rpc: true` when the plugin tab can also be exposed as a trusted local RPC chat:
+
+```ruby
+plugin.tab_type "example", id: "com.example.chat", rpc: true do |host, descriptor|
+  ExampleChat.new(client: host.client, descriptor: descriptor)
+end
+```
+
+RPC clients discover opted-in types through `initialize.capabilities.pluginChats`, open a chat with `pluginChats/open`, and must explicitly subscribe before receiving live `pluginChat/event` notifications. See [RPC](rpc.md) for the protocol. Plugin tabs remain CLI-only unless they opt in.
 
 ## Observe transcript events
 

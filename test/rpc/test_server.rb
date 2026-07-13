@@ -241,6 +241,29 @@ class TestRPCServer < KwardTestCase
     FileUtils.remove_entry(config_dir) if config_dir && Dir.exist?(config_dir)
   end
 
+  def test_initialize_reports_plugin_chat_support_only_for_opted_in_plugins
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      File.write(File.join(plugins, "chat.rb"), <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.tab_type "chat", id: "test.chat", title: "Test Chat", rpc: true do |_host, _descriptor|
+            Object.new
+          end
+        end
+      RUBY
+
+      with_env("HOME" => home) do
+        messages = run_rpc([{ jsonrpc: "2.0", id: 1, method: "initialize" }, { jsonrpc: "2.0", id: 2, method: "shutdown" }])
+        capability = messages.first.dig("result", "capabilities", "pluginChats")
+
+        assert_equal true, capability["supported"]
+        assert_equal "test.chat", capability["types"].first["id"]
+        assert_includes capability["methods"], "pluginChats/subscribe"
+      end
+    end
+  end
+
   def test_tools_list_matches_default_registry_tools
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "tools/list" },
@@ -322,7 +345,7 @@ class TestRPCServer < KwardTestCase
 
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
-      protocol workspace tools mcp prompts sessions turns models runtime runtime_settings
+      protocol workspace tools mcp prompts sessions turns plugin_chats models runtime runtime_settings
       auth memory commands startup_resources config logging lifecycle_hooks ui tool_approval
     ]
 
@@ -331,6 +354,7 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::RPC_METHODS.uniq, Kward::RPC::Server::RPC_METHODS
     assert_includes Kward::RPC::Server::RPC_METHODS, "sessions/create"
     assert_includes Kward::RPC::Server::RPC_METHODS, "turns/start"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "pluginChats/list"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
     assert_includes Kward::RPC::Server::RPC_METHODS, "hooks/logs"
   end
@@ -356,6 +380,7 @@ class TestRPCServer < KwardTestCase
     capabilities = messages[0]["result"]["capabilities"]
 
     assert_equal Kward::RPC::Server::MODEL_METHODS, capabilities["models"]["methods"]
+    assert_equal Kward::RPC::Server::PLUGIN_CHAT_METHODS, capabilities["pluginChats"]["methods"]
     assert_equal Kward::RPC::Server::RUNTIME_METHODS, capabilities["runtime"]["methods"]
     assert_equal Kward::RPC::Server::RUNTIME_SETTING_METHODS, capabilities["runtimeSettings"]["methods"]
     assert_equal Kward::RPC::Server::AUTH_METHODS, capabilities["auth"]["methods"]

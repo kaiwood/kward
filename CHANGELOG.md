@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added opt-in RPC support for plugin-owned chats, including explicit subscriptions, transcript snapshots, attachment-capable turns, event replay, and cancellation. Plugins remain disabled from this surface unless their tab type explicitly opts in.
 - Added plugin-owned tab types, opened with `/tab open <plugin-tab>`, with typed tab persistence and the normal interactive composer, transcript, streaming, and image-input behavior. Plugin tabs are CLI-only in this release and own their own storage rather than Kward sessions.
 - Added an opt-in permission policy for model-requested tools, with allow/ask/deny rules, read-only and workspace-write modes, write scopes, and interactive approval overlays. Permissions remain disabled by default and are not an OS sandbox.
 - Added a custom-response path to permission approval overlays: choosing `Type something` denies the requested tool call and returns the entered guidance to the agent.
@@ -18,6 +19,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed `fetch_content` site navigation by preferring semantic main content over nested article cards, preserving inline and standalone link destinations, listing bounded discovered navigation links, and extracting ordered lists and simple tables.
 - Prevented duplicate session-backed tabs from restoring as mirrored conversations after restart.
 - Fixed `fetch_content` on documentation pages with large scripts or metadata before the main content by separating bounded page downloads from extracted output limits; plain-text extraction now parses HTML instead of returning cleaned markup.
 - Fixed raw fetches so their response limit is enforced while reading the network body.

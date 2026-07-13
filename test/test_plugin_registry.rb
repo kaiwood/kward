@@ -234,6 +234,7 @@ class TestPluginRegistry < KwardTestCase
     assert_equal "example.chat", tab_type.id
     assert_equal "Example", tab_type.title
     assert_equal :global, tab_type.singleton
+    refute tab_type.rpc
     assert_same tab_type, registry.tab_type_for_id("example.chat")
   end
 
