@@ -34,6 +34,10 @@ class TestRPCPluginChatManager < KwardTestCase
     end
   end
 
+  class << self
+    attr_accessor :plugin_events
+  end
+
   class RetryingDriver < Driver
     def submit(input, display_input:, cancellation:)
       yield Kward::Events::Retry.new(provider: "Codex", model: "test-model", attempt: 2, max_attempts: 3, delay_seconds: 1, error: "Codex request failed: 503 upstream", request_bytes: 123)
@@ -88,6 +92,38 @@ class TestRPCPluginChatManager < KwardTestCase
     manager&.shutdown
   end
 
+  def test_opted_in_plugin_chat_notifies_transcript_observers
+    manager = nil
+    Dir.mktmpdir do |home|
+      write_plugin(home, transcript_events: true, observe_events: true)
+      with_env("HOME" => home) do
+        manager = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
+        turn = manager.start_turn(chat_id: "test.chat", input: "hello")
+        wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+        assert_equal %w[assistant_delta answer], self.class.plugin_events
+      end
+    end
+  ensure
+    manager&.shutdown
+  end
+
+  def test_plugin_chat_does_not_notify_transcript_observers_without_opt_in
+    manager = nil
+    Dir.mktmpdir do |home|
+      write_plugin(home, observe_events: true)
+      with_env("HOME" => home) do
+        manager = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
+        turn = manager.start_turn(chat_id: "test.chat", input: "hello")
+        wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
+
+        assert_empty self.class.plugin_events
+      end
+    end
+  ensure
+    manager&.shutdown
+  end
+
   def test_exposes_opted_in_plugin_chat_and_streams_only_after_subscription
     manager = nil
     Dir.mktmpdir do |home|
@@ -122,14 +158,25 @@ class TestRPCPluginChatManager < KwardTestCase
 
   private
 
-  def write_plugin(home, driver: "Driver")
+  def write_plugin(home, driver: "Driver", transcript_events: false, observe_events: false)
     plugins = File.join(home, ".kward", "plugins")
     FileUtils.mkdir_p(plugins)
+    self.class.plugin_events = []
+    observer = if observe_events
+      <<~RUBY
+
+          plugin.on_transcript_event do |event, _ctx|
+            TestRPCPluginChatManager.plugin_events << event.type
+          end
+      RUBY
+    else
+      ""
+    end
     File.write(File.join(plugins, "chat.rb"), <<~RUBY)
       Kward.plugin do |plugin|
-        plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: :global, rpc: true do |_host, descriptor|
+        plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: :global, rpc: true, transcript_events: #{transcript_events} do |_host, descriptor|
           TestRPCPluginChatManager::#{driver}.new(descriptor)
-        end
+        end#{observer}
       end
     RUBY
   end

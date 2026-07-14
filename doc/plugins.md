@@ -201,7 +201,20 @@ Open it from interactive Kward:
 
 `id` is a stable persisted identifier: do not change it after release.
 Use `singleton: :global` for one plugin-managed chat shared by all tab views.
-The tab driver returned by the block must provide:
+
+Plugin tabs do not notify global transcript observers by default. Set
+`transcript_events: true` only when the tab explicitly permits its streamed
+content to be delivered to every installed `on_transcript_event` handler, such
+as a local text-to-speech plugin:
+
+```ruby
+plugin.tab_type "example", id: "com.example.chat", transcript_events: true do |host, descriptor|
+  ExampleChat.new(client: host.client, descriptor: descriptor)
+end
+```
+
+The observer context exposes the plugin tab's `messages` through
+`ctx.transcript.messages`; it has no workspace session. The tab driver returned by the block must provide:
 
 - `messages` — renderable transcript messages;
 - `submit(input, display_input:, cancellation:, steering:)` — a turn method

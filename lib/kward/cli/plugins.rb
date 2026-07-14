@@ -203,6 +203,17 @@ module Kward
         plugin_registry.notify_transcript_event(event, plugin_context(conversation, ""))
       end
 
+      def notify_plugin_tab_transcript_event(event, driver)
+        return if plugin_registry.transcript_event_handlers.empty?
+
+        context = PluginRegistry::Context.new(
+          conversation: driver,
+          workspace_root: current_workspace_root,
+          say_callback: lambda { |message| runtime_output(message) }
+        )
+        plugin_registry.notify_transcript_event(event, context)
+      end
+
     end
   end
 end

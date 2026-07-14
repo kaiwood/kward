@@ -689,12 +689,20 @@ module Kward
             next
           end
 
-          notify_plugin_transcript_event(event, driver.conversation) if driver.respond_to?(:conversation)
+          if driver.respond_to?(:conversation)
+            notify_plugin_transcript_event(event, driver.conversation)
+          elsif plugin_tab_type_for(driver)&.transcript_events
+            notify_plugin_tab_transcript_event(event, driver)
+          end
           handle_interactive_event(event, tab.markdown_chunks, tab.stream_state)
           flush_interactive_markdown_deltas(tab.markdown_chunks, tab.stream_state)
         rescue StandardError => e
           runtime_output("Tab view error: #{e.message}")
         end
+      end
+
+      def plugin_tab_type_for(driver)
+        plugin_registry.tab_type_for_id(driver.descriptor["plugin_tab_type"])
       end
 
       def render_tab_answer(tab)

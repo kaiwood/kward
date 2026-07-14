@@ -180,7 +180,7 @@ module Kward
         chat.running_turn_id = turn.id
         emit_event(turn, "turnStarted", { status: "running" })
         chat.driver.submit(turn.input, display_input: turn.display_input, cancellation: turn.cancellation) do |event|
-          handle_driver_event(turn, event)
+          handle_driver_event(chat, turn, event)
         end
         finish_turn(turn, turn.cancellation.cancelled? ? "canceled" : "completed")
       rescue Cancellation::CancelledError
@@ -192,7 +192,9 @@ module Kward
         chat.running_turn_id = nil if chat.running_turn_id == turn.id
       end
 
-      def handle_driver_event(turn, event)
+      def handle_driver_event(chat, turn, event)
+        notify_plugin_tab_transcript_event(chat, event) if chat.type.transcript_events
+
         type, payload = case event
         when Events::ReasoningDelta then ["reasoningDelta", { delta: event.delta }]
         when Events::ReasoningBoundary then ["reasoningBoundary", {}]
@@ -204,6 +206,13 @@ module Kward
         when Events::Answer then ["answer", { content: event.content }]
         end
         emit_event(turn, type, payload) if type
+      end
+
+      def notify_plugin_tab_transcript_event(chat, event)
+        return if plugin_registry.transcript_event_handlers.empty?
+
+        context = PluginRegistry::Context.new(conversation: chat.driver, workspace_root: Dir.pwd)
+        plugin_registry.notify_transcript_event(event, context)
       end
 
       def retry_event_payload(event)

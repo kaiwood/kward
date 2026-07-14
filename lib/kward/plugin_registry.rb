@@ -36,7 +36,7 @@ module Kward
 
     # Registered plugin-owned tab runtime. Its factory receives a
     # `PluginTabHost` and its persisted descriptor, then returns a driver.
-    TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :path, :handler, keyword_init: true)
+    TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :transcript_events, :path, :handler, keyword_init: true)
 
     # Read-only event passed to plugin transcript observers.
     TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
@@ -277,12 +277,13 @@ module Kward
       # @param id [String] stable persisted tab type identifier
       # @param title [String] default tab label
       # @param singleton [Symbol] `:global` for one shared plugin runtime
+      # @param transcript_events [Boolean] allow global transcript observers to receive this tab's events
       # @yieldparam host [PluginTabHost] supported host dependencies
       # @yieldparam descriptor [Hash] persisted tab descriptor
       # @return [void]
       # @api public
-      def tab_type(name, id:, title: nil, singleton: nil, rpc: false, &block)
-        @registry.register_tab_type(name, id: id, title: title, singleton: singleton, rpc: rpc, path: @path, &block)
+      def tab_type(name, id:, title: nil, singleton: nil, rpc: false, transcript_events: false, &block)
+        @registry.register_tab_type(name, id: id, title: title, singleton: singleton, rpc: rpc, transcript_events: transcript_events, path: @path, &block)
       end
     end
 
@@ -463,7 +464,7 @@ module Kward
       )
     end
 
-    def register_tab_type(name, id:, title: nil, singleton: nil, rpc: false, path: nil, &handler)
+    def register_tab_type(name, id:, title: nil, singleton: nil, rpc: false, transcript_events: false, path: nil, &handler)
       name = name.to_s
       id = id.to_s
       raise "Plugin tab type name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
@@ -475,7 +476,7 @@ module Kward
         return nil
       end
 
-      tab_type = TabType.new(id: id, name: name, title: title.to_s.empty? ? name.capitalize : title.to_s, singleton: singleton&.to_sym, rpc: rpc == true, path: path, handler: handler)
+      tab_type = TabType.new(id: id, name: name, title: title.to_s.empty? ? name.capitalize : title.to_s, singleton: singleton&.to_sym, rpc: rpc == true, transcript_events: transcript_events == true, path: path, handler: handler)
       @tab_types[name] = tab_type
       @tab_types_by_id[id] = tab_type
     end

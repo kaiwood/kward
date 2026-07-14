@@ -123,13 +123,22 @@ class TestTabs < KwardTestCase
     end
   end
 
-  def self.write_plugin_tab(home)
+  class << self
+    attr_accessor :plugin_events
+  end
+
+  def self.write_plugin_tab(home, transcript_events: false)
     plugins = File.join(home, ".kward", "plugins")
     FileUtils.mkdir_p(plugins)
-    File.write(File.join(plugins, "example.rb"), <<~'RUBY')
+    self.plugin_events = []
+    File.write(File.join(plugins, "example.rb"), <<~RUBY)
       Kward.plugin do |plugin|
-        plugin.tab_type "example", id: "test.example", title: "Example", singleton: :global do |_host, descriptor|
+        plugin.tab_type "example", id: "test.example", title: "Example", singleton: :global, transcript_events: #{transcript_events} do |_host, descriptor|
           TestTabs::PluginTabDriver.new(descriptor)
+        end
+
+        plugin.on_transcript_event do |event, ctx|
+          TestTabs.plugin_events << [event.type, event.payload[:delta], ctx.transcript.messages]
         end
       end
     RUBY
@@ -269,6 +278,50 @@ class TestTabs < KwardTestCase
             restored_cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: restored_prompt, client: RecordingClient.new([]), session_store: store)
             restored_cli.send(:setup_interactive_tabs, store, nil)
             assert_instance_of PluginTabDriver, restored_cli.send(:active_tab).driver
+          end
+        end
+      end
+    end
+  end
+
+  def test_opted_in_plugin_tab_notifies_transcript_observers
+    Dir.mktmpdir do |home|
+      Dir.mktmpdir do |config_dir|
+        Dir.mktmpdir do |workspace|
+          self.class.write_plugin_tab(home, transcript_events: true)
+          store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+
+          with_env("HOME" => home) do
+            cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+            cli.send(:setup_interactive_tabs, store, nil)
+            cli.send(:handle_tab_command, "open example", store)
+            tab = cli.send(:active_tab)
+
+            cli.send(:tab_live_renderer, tab).call(Kward::Events::AssistantDelta.new(delta: "Plugin reply"), tab.driver)
+
+            assert_equal [["assistant_delta", "Plugin reply", []]], self.class.plugin_events
+          end
+        end
+      end
+    end
+  end
+
+  def test_plugin_tab_does_not_notify_transcript_observers_without_opt_in
+    Dir.mktmpdir do |home|
+      Dir.mktmpdir do |config_dir|
+        Dir.mktmpdir do |workspace|
+          self.class.write_plugin_tab(home)
+          store = Kward::SessionStore.new(config_dir: config_dir, cwd: workspace)
+
+          with_env("HOME" => home) do
+            cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+            cli.send(:setup_interactive_tabs, store, nil)
+            cli.send(:handle_tab_command, "open example", store)
+            tab = cli.send(:active_tab)
+
+            cli.send(:tab_live_renderer, tab).call(Kward::Events::AssistantDelta.new(delta: "Private reply"), tab.driver)
+
+            assert_empty self.class.plugin_events
           end
         end
       end
