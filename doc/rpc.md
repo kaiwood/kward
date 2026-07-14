@@ -285,7 +285,7 @@ Plugin chats are optional trusted-plugin capabilities, not Kward workspace sessi
 
 Params:
 
-- `typeId`: an opted-in plugin chat type, such as `kward.ensign`.
+- `typeId`: an opted-in plugin chat type, such as `kward.maria`.
 
 Opens the plugin-owned chat in this RPC process and returns its metadata plus normalized transcript.
 
@@ -327,7 +327,7 @@ Subscribed clients receive `pluginChat/event` notifications:
 
 ```json
 {
-  "chatId": "kward.ensign",
+  "chatId": "kward.maria",
   "turnId": "...",
   "sequence": 1,
   "type": "assistantDelta",
