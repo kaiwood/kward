@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.78.0] - 2026-07-15
+
 ### Added
 
 - Added opt-in transcript-observer delivery for plugin-owned tabs, including RPC plugin chats, so local integrations such as text-to-speech can receive permitted streamed replies.
