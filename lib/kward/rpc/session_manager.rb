@@ -164,6 +164,11 @@ module Kward
         { tools: registry.schemas }
       end
 
+      # Returns the plugin registry shared by RPC sessions and plugin chats.
+      def plugin_registry
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+      end
+
       # Renames the persisted session attached to an RPC session id.
       def rename_session(session_id:, name:)
         rpc_session = fetch_session(session_id)
@@ -917,10 +922,6 @@ module Kward
           name = schema.dig(:function, :name) || schema.dig("function", "name")
           name unless disabled[name]
         end
-      end
-
-      def plugin_registry
-        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
       end
 
       def reserved_plugin_command_names

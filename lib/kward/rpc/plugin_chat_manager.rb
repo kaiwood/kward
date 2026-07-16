@@ -23,9 +23,10 @@ module Kward
       Chat = Struct.new(:id, :type, :driver, :queue, :worker, :running_turn_id, keyword_init: true)
       Turn = Struct.new(:id, :chat_id, :input, :display_input, :status, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :mutex, keyword_init: true)
 
-      def initialize(server:, client: Client.new)
+      def initialize(server:, client: Client.new, plugin_registry_provider: nil)
         @server = server
         @client = client
+        @plugin_registry_provider = plugin_registry_provider
         @chats = {}
         @turns = {}
         @subscriptions = {}
@@ -132,6 +133,8 @@ module Kward
       private
 
       def plugin_registry
+        return @plugin_registry_provider.call if @plugin_registry_provider
+
         @plugin_registry ||= PluginRegistry.load
       end
 

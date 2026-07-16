@@ -264,6 +264,38 @@ class TestRPCServer < KwardTestCase
     end
   end
 
+  def test_rpc_loads_plugins_once_when_initializing_and_creating_a_session
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      File.write(File.join(plugins, "constant.rb"), <<~'RUBY')
+        File.open(ENV.fetch("KWARD_PLUGIN_LOAD_LOG"), "a") { |file| file.puts "loaded" }
+
+        module RPCPluginLoadOnceRegression
+          VALUE = true
+        end
+      RUBY
+      workspace = Dir.mktmpdir
+      config_path = File.join(home, ".kward", "config.json")
+      load_log = File.join(home, "plugin-loads.log")
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => config_path, "KWARD_PLUGIN_LOAD_LOG" => load_log) do
+        _stdout, stderr = capture_io do
+          run_rpc([
+            { jsonrpc: "2.0", id: 1, method: "initialize" },
+            { jsonrpc: "2.0", id: 2, method: "sessions/create", params: { workspaceRoot: workspace, resumeLast: false } },
+            { jsonrpc: "2.0", id: 3, method: "shutdown" }
+          ])
+        end
+
+        assert_equal ["loaded"], File.readlines(load_log, chomp: true)
+        refute_includes stderr, "already initialized constant RPCPluginLoadOnceRegression::VALUE"
+      end
+    ensure
+      FileUtils.remove_entry(workspace) if workspace && Dir.exist?(workspace)
+    end
+  end
+
   def test_tools_list_matches_default_registry_tools
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "tools/list" },

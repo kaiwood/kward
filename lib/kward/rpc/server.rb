@@ -122,7 +122,11 @@ module Kward
         @client = client
         @config_manager = ConfigManager.new
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
-        @plugin_chat_manager = PluginChatManager.new(server: self, client: client)
+        @plugin_chat_manager = PluginChatManager.new(
+          server: self,
+          client: client,
+          plugin_registry_provider: -> { @session_manager.plugin_registry }
+        )
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @shutdown = false
       end
