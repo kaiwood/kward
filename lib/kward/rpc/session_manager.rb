@@ -1162,6 +1162,8 @@ module Kward
         started, event = turn.mutex.synchronize do
           next [false, nil] if turn.status == "canceled"
 
+          rpc_session.running_turn_id = turn.id
+          turn.steering = build_steering(turn) if supports_in_flight_steer? && !turn.plugin_command_name
           turn.status = "running"
           turn.started_at = now
           [true, append_turn_event_locked(turn, "turnStarted", { status: "running" })]
@@ -1169,8 +1171,6 @@ module Kward
         return unless started
 
         @server.notify("turn/event", event)
-        rpc_session.running_turn_id = turn.id
-        turn.steering = build_steering(turn) if supports_in_flight_steer? && !turn.plugin_command_name
 
         if turn.cancel_requested
           finish_turn(turn, "canceled")

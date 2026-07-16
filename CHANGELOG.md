@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed an RPC race where follow-up input could queue instead of steering a turn immediately after it began.
 - Prevented the RPC server from loading trusted Ruby plugins separately for plugin chats and workspace sessions, eliminating duplicate constant-definition warnings during startup.
 
 ## [0.78.0] - 2026-07-15
