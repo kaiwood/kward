@@ -94,9 +94,11 @@ module KwardRPCTestSupport
       @mutex = Mutex.new
       @condition = ConditionVariable.new
       @cancelled = false
+      @started = false
     end
 
     def chat(_messages, tools: [], cancellation: nil, on_reasoning_delta: nil, on_assistant_delta: nil)
+      @mutex.synchronize { @started = true }
       cancellation&.on_cancel do
         @mutex.synchronize do
           @cancelled = true
@@ -109,6 +111,10 @@ module KwardRPCTestSupport
       cancellation&.raise_if_cancelled!
       on_assistant_delta&.call("late")
       { "role" => "assistant", "content" => "late" }
+    end
+
+    def started?
+      @mutex.synchronize { @started }
     end
 
     def cancelled?

@@ -325,6 +325,7 @@ class TestRPCSessionManagerTurns < KwardTestCase
       turn = manager.start_turn(session_id: session[:id], input: "running")
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      wait_until { client.started? }
       manager.cancel_turn(turn_id: turn[:id])
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "canceled" }

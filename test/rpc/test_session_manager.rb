@@ -656,6 +656,7 @@ class TestRPCSessionManager < KwardTestCase
       turn = manager.start_turn(session_id: session[:id], input: "hello")
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      wait_until { client.started? }
       manager.close_session(session_id: session[:id])
 
       assert client.cancelled?
@@ -690,6 +691,7 @@ class TestRPCSessionManager < KwardTestCase
       turn = manager.start_turn(session_id: session[:id], input: "hello")
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      wait_until { client.started? }
       manager.delete_session(session_id: session[:id])
 
       assert client.cancelled?
@@ -723,6 +725,7 @@ class TestRPCSessionManager < KwardTestCase
       turn = manager.start_turn(session_id: session[:id], input: "hello")
 
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "running" }
+      wait_until { client.started? }
       manager.shutdown_sessions
 
       assert client.cancelled?
