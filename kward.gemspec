@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.description = "Kward is a Ruby CLI coding agent with local workspace tools, configurable prompts, web search, sessions, and an experimental JSON-RPC backend."
   spec.homepage = "https://github.com/kaiwood/kward"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.2"
+  spec.required_ruby_version = ">= 3.4"
 
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["source_code_uri"] = "https://github.com/kaiwood/kward"

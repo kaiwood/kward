@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Raised the minimum supported Ruby version from 3.2 to 3.4.
+
 ### Fixed
 
 - Prevented the RPC server from loading trusted Ruby plugins separately for plugin chats and workspace sessions, eliminating duplicate constant-definition warnings during startup.

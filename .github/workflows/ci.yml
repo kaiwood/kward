@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby-version: ['3.2', 'ruby']
+        ruby-version: ['3.4', 'ruby']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
         run: find lib test -name '*.rb' -print0 | xargs -0 ruby -c
 
       - name: Check runtime warnings
-        run: ruby -w -Ilib -e 'require "kward"'
+        run: bundle exec ruby -w -Ilib -e 'require "kward"'
 
       - name: Run tests
         run: bundle exec rake test

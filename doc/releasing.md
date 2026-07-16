@@ -1,6 +1,6 @@
 # Releasing Kward
 
-Kward requires Ruby >= 3.2 (`spec.required_ruby_version` in `kward.gemspec`). If you develop with a newer Ruby, verify tests pass against the minimum supported version before releasing.
+Kward requires Ruby >= 3.4 (`spec.required_ruby_version` in `kward.gemspec`). If you develop with a newer Ruby, verify tests pass against the minimum supported version before releasing.
 
 Release steps before publishing:
 
