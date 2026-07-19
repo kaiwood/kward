@@ -1,3 +1,5 @@
+require "securerandom"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Coordinates Git worktree bindings with session-backed tab runtimes.
@@ -73,6 +75,166 @@ module Kward
           update_assistant_prompt(tab.agent.conversation)
         end
         tab
+      end
+
+      def handle_worktree_command(argument)
+        case argument.to_s.strip
+        when "", "toggle"
+          toggle_active_tab_worktree
+        when "status"
+          print_active_worktree_status
+        when "remove"
+          remove_active_worktree
+        else
+          runtime_output("Usage: /tab worktree [status|remove]")
+        end
+      end
+
+      def toggle_active_tab_worktree
+        tab = active_tab
+        return runtime_output("Worktrees are available only for normal session tabs.") if plugin_tab?(tab)
+        return runtime_output("Tab #{active_tab_number} is running and cannot change workspaces yet.") if tab&.running? || tab&.local_busy? || tab&.shell
+
+        binding = worktree_binding_for(tab)
+        return detach_active_worktree(tab, binding) if binding&.active?
+        return activate_existing_worktree(tab, binding) if binding
+
+        attach_new_worktree(tab)
+      rescue GitWorktreeManager::Error => e
+        runtime_output("Worktree error: #{e.message}")
+      end
+
+      def attach_new_worktree(tab)
+        origin_root = tab.agent.conversation.workspace_root
+        repository_root = git_worktree_manager.repository_root(origin_root)
+        status = git_worktree_manager.status(origin_root)
+        if status.dirty? && !confirm_worktree_action(<<~MESSAGE)
+          #{origin_root} has #{status.entries.length} local change(s).
+
+          The new worktree will be created from HEAD. Existing changes will remain in the original workspace and will not be copied.
+
+          Create the worktree anyway?
+        MESSAGE
+          return
+        end
+
+        branch = generated_worktree_branch(tab)
+        path = default_worktree_path(repository_root, branch)
+        binding = git_worktree_manager.create(
+          repository_root: repository_root,
+          origin_root: origin_root,
+          path: path,
+          branch: branch
+        )
+        begin
+          rebind_active_tab(tab, root: binding.path, worktree: binding)
+        rescue StandardError
+          git_worktree_manager.remove(repository_root: binding.repository_root, path: binding.path)
+          raise
+        end
+        runtime_output("Tab #{active_tab_number} is now using #{binding.branch} at #{binding.path}.")
+      end
+
+      def activate_existing_worktree(tab, binding)
+        binding.active = true
+        validate_worktree_binding!(binding)
+        rebind_active_tab(tab, root: binding.path, worktree: binding)
+        runtime_output("Tab #{active_tab_number} is now using #{binding.branch} at #{binding.path}.")
+      rescue StandardError
+        binding.active = false
+        raise
+      end
+
+      def detach_active_worktree(tab, binding)
+        status = git_worktree_manager.status(binding.path)
+        if status.dirty? && !confirm_worktree_action(<<~MESSAGE)
+          #{binding.path} has #{status.entries.length} local change(s).
+
+          They will remain in the worktree after this tab switches back to #{binding.origin_root}.
+
+          Detach and keep the worktree?
+        MESSAGE
+          return
+        end
+
+        binding.active = false
+        rebind_active_tab(tab, root: binding.origin_root, worktree: binding)
+        runtime_output("Tab #{active_tab_number} returned to #{binding.origin_root}; worktree kept at #{binding.path}.")
+      rescue StandardError
+        binding.active = true
+        raise
+      end
+
+      def rebind_active_tab(tab, root:, worktree:)
+        save_active_tab_state
+        stop_tab_live_view
+        rebind_session_tab(tab, root: root, worktree: worktree)
+        activate_tab(@active_tab_index)
+        persist_tabs
+      end
+
+      def print_active_worktree_status
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+
+        lines = [
+          "Worktree: #{binding.active? ? "active" : "detached"}",
+          "Origin: #{binding.origin_root}",
+          "Path: #{binding.path}",
+          "Branch: #{binding.branch}",
+          "Base: #{binding.base_revision}"
+        ]
+        begin
+          validate_worktree_binding!(binding) if binding.active?
+          root = worktree_root_for(binding, fallback: binding.origin_root)
+          status = git_worktree_manager.status(root)
+          lines << "Changes: #{status.clean? ? "clean" : "#{status.entries.length} local change(s)"}"
+        rescue GitWorktreeManager::Error => e
+          lines << "State: unavailable (#{e.message})"
+        end
+        runtime_output(lines.join("\n"))
+      end
+
+      def remove_active_worktree
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+        return runtime_output("Tab #{active_tab_number} is running and cannot remove its worktree yet.") if tab.running? || tab.local_busy? || tab.shell
+
+        status = git_worktree_manager.status(binding.path)
+        return runtime_output("Worktree has local changes; detach it or clean it before removing it.") if status.dirty?
+
+        was_active = binding.active?
+        detached = false
+        if was_active
+          binding.active = false
+          rebind_active_tab(tab, root: binding.origin_root, worktree: binding)
+          detached = true
+        end
+        git_worktree_manager.remove(repository_root: binding.repository_root, path: binding.path)
+        tab.driver = SessionTabDriver.new(session: tab.session, agent: tab.agent)
+        tab.stream_state = new_tab_stream_state(tab.driver)
+        persist_tabs
+        runtime_output("Removed worktree #{binding.path}. Branch #{binding.branch} was kept.")
+      rescue GitWorktreeManager::Error => e
+        binding.active = true if was_active && !detached
+        runtime_output("Worktree error: #{e.message}")
+      end
+
+      def confirm_worktree_action(message)
+        @prompt.respond_to?(:yes?) && @prompt.yes?(message, default: false)
+      end
+
+      def generated_worktree_branch(tab)
+        label = tab.label.to_s.downcase.gsub(/[^a-z0-9]+/, "-").sub(/\A-+|-+\z/, "")
+        label = "tab-#{active_tab_number}" if label.empty?
+        "kward/#{label}-#{SecureRandom.hex(3)}"
+      end
+
+      def default_worktree_path(repository_root, branch)
+        slug = branch.to_s.delete_prefix("kward/").gsub(/[^a-zA-Z0-9._-]+/, "-")
+        File.join(File.dirname(repository_root), ".kward-worktrees", File.basename(repository_root), slug)
       end
 
       def unavailable_worktree_tab(descriptor, error, label: nil)

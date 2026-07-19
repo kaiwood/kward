@@ -1,11 +1,12 @@
+require "open3"
 require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
     attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates
 
-    def initialize(inputs = [])
-      super(inputs)
+    def initialize(inputs = [], confirmations: [])
+      super(inputs, confirmations: confirmations)
       @tabs_updates = []
       @restores = []
       @poll_inputs = []
@@ -340,6 +341,77 @@ class TestTabs < KwardTestCase
         cli.instance_variable_set(:@active_session, Struct.new(:cwd).new(origin))
 
         assert_equal File.realpath(worktree), cli.send(:current_workspace_root)
+      end
+    end
+  end
+
+  def test_worktree_toggle_warns_for_dirty_origin_and_preserves_transcript
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new([], confirmations: [true])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        tab.agent.conversation.append_user("research first")
+        File.write(File.join(root, "tracked.txt"), "origin changes\n")
+
+        cli.send(:handle_tab_command, "worktree", store)
+
+        binding = tab.driver.worktree
+        assert binding.active?
+        assert_equal File.realpath(root), binding.origin_root
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+        assert_equal "research first", tab.agent.conversation.messages.first.fetch("content")
+        assert_equal "initial\n", File.read(File.join(binding.path, "tracked.txt"))
+        assert_equal "origin changes\n", File.read(File.join(root, "tracked.txt"))
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
+  def test_worktree_toggle_off_keeps_dirty_worktree_changes
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new([], confirmations: [true])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "worktree.txt"), "keep me\n")
+
+        cli.send(:handle_tab_command, "worktree", store)
+
+        refute binding.active?
+        assert_equal File.realpath(root), tab.agent.conversation.workspace_root
+        assert_equal "keep me\n", File.read(File.join(binding.path, "worktree.txt"))
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
+  def test_worktree_remove_returns_to_origin_and_keeps_branch
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+
+        cli.send(:handle_tab_command, "worktree remove", store)
+
+        assert_nil tab.driver.worktree
+        assert_equal File.realpath(root), tab.agent.conversation.workspace_root
+        refute File.exist?(binding.path)
+        assert_equal binding.branch, git_in_test(root, "branch", "--list", binding.branch).strip
+      ensure
+        remove_test_worktree(binding)
       end
     end
   end
@@ -949,6 +1021,33 @@ class TestTabs < KwardTestCase
       assert_equal cli.send(:active_tab).agent, replacement
       assert_equal 1, cli.instance_variable_get(:@tabs).length
     end
+  end
+
+  def with_git_repository
+    Dir.mktmpdir("kward-git-repository") do |root|
+      git_in_test(root, "init", "-q")
+      git_in_test(root, "config", "user.email", "kward@example.test")
+      git_in_test(root, "config", "user.name", "Kward Test")
+      File.write(File.join(root, "tracked.txt"), "initial\n")
+      git_in_test(root, "add", "tracked.txt")
+      git_in_test(root, "commit", "-m", "initial")
+      yield root
+    end
+  end
+
+  def git_in_test(root, *arguments)
+    output, status = Open3.capture2e("git", *arguments, chdir: root)
+    flunk "git #{arguments.join(" ")} failed: #{output}" unless status.success?
+
+    output
+  end
+
+  def remove_test_worktree(binding)
+    return unless binding && File.directory?(binding.path)
+
+    Kward::GitWorktreeManager.new.remove(repository_root: binding.repository_root, path: binding.path, force: true)
+  rescue Kward::GitWorktreeManager::Error
+    nil
   end
 
   def test_running_tab_cannot_be_closed

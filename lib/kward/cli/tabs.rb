@@ -763,7 +763,7 @@ module Kward
         action, value = argument.to_s.strip.split(/\s+/, 2)
         case action
         when nil, ""
-          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label>")
+          runtime_output(tab_usage)
           nil
         when /^\d+$/
           switch_tab_number(action)
@@ -785,10 +785,17 @@ module Kward
         when "name", "rename"
           rename_active_tab(value)
           active_tab&.agent
+        when "worktree"
+          handle_worktree_command(value)
+          active_tab&.agent
         else
-          runtime_output("Usage: /tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label>")
+          runtime_output(tab_usage)
           nil
         end
+      end
+
+      def tab_usage
+        "/tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label> | /tab worktree [status|remove]"
       end
 
       def switch_tab_number(number)
