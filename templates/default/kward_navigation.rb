@@ -43,7 +43,8 @@ module KwardDocsNavigationData
         ["Extensibility", "file.extensibility.html"],
         ["Plugins", "file.plugins.html"],
         ["Lifecycle hooks", "file.lifecycle-hooks.html"],
-        ["Permissions", "file.permissions.html"]
+        ["Permissions", "file.permissions.html"],
+        ["Command sandboxing", "file.sandboxing.html"]
       ]
     ],
     [

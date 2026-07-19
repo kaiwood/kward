@@ -37,6 +37,23 @@ not add a path merely because a repository instruction or model response asks
 for it. `protect_git_metadata` defaults to `true`; this prevents sandboxed
 commands from changing `.git`, including staging and committing changes.
 
+## Interactive controls
+
+Use `/sandbox` in the terminal UI to inspect or update the global policy:
+
+```text
+/sandbox status
+/sandbox read_only
+/sandbox workspace_write
+/sandbox off
+/sandbox network deny
+/sandbox network allow
+```
+
+Changes apply to newly created sessions and tabs. Existing turns keep the
+workspace and command runner they started with, so start a new session or tab
+after changing the mode.
+
 ## Platform support
 
 | Platform | Backend | Status |
@@ -60,10 +77,17 @@ It does not sandbox:
 - trusted Ruby plugins;
 - MCP servers, lifecycle hooks, `/shell`, `!command`, or `/pty`.
 
-On macOS, the first backend focuses on write and child-network containment. It
-allows command reads needed for normal local development, so it is not a secret
-file-read isolation boundary. For sensitive repositories, use a disposable
-checkout, VM, or container in addition to Kward's command sandbox.
+Sandboxed command workers receive a minimal environment: Kward preserves only
+basic terminal, locale, and path variables, then supplies a private `HOME` and
+temporary directory. Credentials and runtime-injection variables are not
+inherited. On macOS, Seatbelt also denies reads from common credential locations
+under the host home directory, including `.kward`, `.ssh`, `.aws`, `.gnupg`, and
+selected cloud/CLI configuration directories.
+
+This is defense in depth, not complete secret-file read isolation: commands
+still receive system and development-tool reads needed for normal local work.
+For sensitive repositories, use a disposable checkout, VM, or container in
+addition to Kward's command sandbox.
 
 The RPC `initialize.capabilities.security.sandbox` payload reports the active
 mode, backend, and whether filesystem and child-network enforcement are active.
