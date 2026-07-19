@@ -241,6 +241,7 @@ module Kward
         @editor_text_width = nil
         @editor_save_as_active = false
         @editor_save_as_buffer = ""
+        @editor_save_callback = nil
         @editor_state = nil
         @prompt_label = "You>"
         self.composer_input = ""
@@ -1169,6 +1170,17 @@ module Kward
         if @editor_state.readonly?
           @editor_state.status = "Read-only diff"
           return true
+        end
+
+        if @editor_save_callback
+          result = @editor_save_callback.call(@editor_state.buffer)
+          if result.to_s.empty?
+            close_editor
+            return true
+          end
+
+          @editor_state.status = result.to_s
+          return false
         end
 
         if path.to_s.strip.empty? && @editor_state.path.to_s.empty?

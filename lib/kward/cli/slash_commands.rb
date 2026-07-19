@@ -26,7 +26,11 @@ module Kward
           run_busy_local_command_and_requeue { handle_hooks_command(argument) }
           [true, nil]
         when "skill"
-          run_busy_local_command_and_requeue { activate_skill_command(argument, agent) }
+          if argument.to_s.strip == "capture"
+            capture_skill_from_session(session_store)
+          else
+            run_busy_local_command_and_requeue { activate_skill_command(argument, agent) }
+          end
           [true, nil]
         when "redraw"
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
@@ -187,6 +191,65 @@ module Kward
                               end
           return replacement_agent
         end
+      end
+
+      def capture_skill_from_session(session_store)
+        unless session_store
+          say_sessions_unavailable
+          return
+        end
+        unless @prompt.respond_to?(:review_document)
+          runtime_output("Skill capture is available only in the interactive terminal prompt.")
+          return
+        end
+
+        source_path = select_skill_capture_session(session_store)
+        return unless source_path
+
+        capture = Skills::Capture.new(session_store: session_store, client: @client)
+        draft = run_busy_local_command_and_requeue(activity: "capturing skill") { capture.generate(source_path) }
+        review_captured_skill(capture, draft)
+      rescue Skills::Capture::Error => error
+        runtime_output("Skill capture failed: #{error.message}")
+      end
+
+      def select_skill_capture_session(session_store)
+        sessions = recent_sessions(session_store, tree: true, limit: nil)
+        if sessions.empty?
+          runtime_output("No saved sessions found.")
+          return nil
+        end
+
+        labels = session_picker_labels(sessions)
+        if @prompt.respond_to?(:select)
+          choice = @prompt.select("Capture session>", labels, title: "Capture skill from session")
+          return sessions[labels.index(choice)]&.path
+        end
+
+        runtime_output((["Saved sessions:"] + labels.each_with_index.map { |label, index| "#{index + 1}. #{label}" }).join("\n"))
+        answer = @prompt.ask("Session number or path>").to_s.strip
+        answer.match?(/\A\d+\z/) ? sessions[answer.to_i - 1]&.path : answer
+      end
+
+      def review_captured_skill(capture, draft)
+        overwrite = false
+        saved = nil
+        @prompt.review_document(title: "Review captured skill", content: draft.content) do |content|
+          begin
+            saved = capture.save(content, overwrite: overwrite)
+            nil
+          rescue Skills::Capture::ConflictError
+            if overwrite
+              "Could not overwrite the existing skill. Review the name and try again."
+            else
+              overwrite = true
+              "A personal skill with this name exists. Press Ctrl+S again to overwrite it."
+            end
+          rescue Skills::Capture::Error => error
+            error.message
+          end
+        end
+        runtime_output("Saved personal skill: #{capture.skill_path(saved.name)}") if saved
       end
 
       def activate_skill_command(name, agent)

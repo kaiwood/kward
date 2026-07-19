@@ -364,6 +364,24 @@ module Kward
       run_editor
     end
 
+    # Opens an in-memory document editor. The callback receives edited content
+    # when the user saves; return an error message to keep the editor open.
+    def review_document(title:, content:, &on_save)
+      raise ArgumentError, "review_document requires a save callback" unless on_save
+
+      start(render: false)
+      opened = @mutex.synchronize do
+        @editor_save_callback = on_save
+        open_scratchpad(:markdown, content: content).tap do
+          @editor_state.status = "#{title} · Ctrl+S save · Ctrl+Q cancel"
+          render_prompt_locked
+        end
+      end
+      return false unless opened
+
+      run_editor
+    end
+
     def run_editor
       loop do
         key = read_key(nonblock: true)

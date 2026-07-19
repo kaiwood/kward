@@ -624,6 +624,45 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_skill_capture_slash_command_reviews_and_saves_a_personal_skill
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      store = Kward::SessionStore.new(config_dir: dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("Prepare a release")
+      conversation.append_assistant("Run the release checks")
+      prompt_class = Class.new(FakePrompt) do
+        attr_reader :reviewed_content
+
+        def select(_message, choices, **_options)
+          choices.first
+        end
+
+        def review_document(title:, content:)
+          @reviewed_content = [title, content]
+          yield content
+        end
+      end
+      prompt = prompt_class.new([])
+      client = RecordingClient.new(["---\nname: release-checklist\ndescription: Prepare a release.\n---\nRun the release checks.\n"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        agent = Struct.new(:conversation, :tool_registry).new(Kward::Conversation.new, Kward::ToolRegistry.new)
+
+        handled, = cli.send(:handle_local_slash_command, "/skill capture", agent, store)
+
+        assert_equal true, handled
+        assert_equal "Review captured skill", prompt.reviewed_content.first
+        assert_equal "release-checklist", YAML.safe_load(File.read(File.join(dir, "skills", "release-checklist", "SKILL.md")))["name"]
+        assert_includes prompt.output.join, "Saved personal skill:"
+      end
+    end
+  end
+
   def test_skill_colon_slash_command_activates_skill
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "config.json"), JSON.dump({}))
