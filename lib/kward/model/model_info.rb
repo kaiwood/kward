@@ -128,6 +128,8 @@ module Kward
       return override_model if override_model
 
       case provider
+      when "Local"
+        env["KWARD_LOCAL_MODEL"] || ConfigFiles.config_value(config, "local_model")
       when "OpenRouter"
         env["OPENROUTER_MODEL"] || ConfigFiles.config_value(config, "openrouter_model", "model")
       when "Copilot"
@@ -175,6 +177,8 @@ module Kward
 
     def reasoning_effort(config:, env: ENV, provider: nil)
       case provider.to_s
+      when "Local"
+        nil
       when "OpenRouter"
         env["OPENROUTER_REASONING_EFFORT"] || ConfigFiles.config_value(config, "openrouter_reasoning_effort", "reasoning_effort", "thinking_level") || DEFAULT_REASONING_EFFORT
       when "Copilot"
@@ -191,6 +195,7 @@ module Kward
       when "openrouter" then "OpenRouter"
       when "copilot" then "Copilot"
       when "anthropic", "claude" then "Anthropic"
+      when "local" then "Local"
       when "codex", "openai" then "Codex"
       else provider.to_s
       end
@@ -201,6 +206,7 @@ module Kward
       when "openrouter" then "openrouter"
       when "copilot" then "copilot"
       when "anthropic", "claude" then "anthropic"
+      when "local" then "local"
       else "codex"
       end
     end
@@ -210,6 +216,7 @@ module Kward
       when "openrouter" then "openrouter_model"
       when "copilot" then "copilot_model"
       when "anthropic", "claude" then "anthropic_model"
+      when "local" then "local_model"
       else "openai_model"
       end
     end
@@ -219,6 +226,7 @@ module Kward
       when "openrouter" then "openrouter_reasoning_effort"
       when "copilot" then "copilot_reasoning_effort"
       when "anthropic", "claude" then "anthropic_reasoning_effort"
+      when "local" then "local_reasoning_effort"
       else "openai_reasoning_effort"
       end
     end
@@ -357,7 +365,9 @@ module Kward
       pattern_context_window(ANTHROPIC_CONTEXT_WINDOWS, normalize_anthropic_model(id))
     end
 
-    def supports_images?(_provider, id)
+    def supports_images?(provider, id)
+      return false if provider == "Local"
+
       IMAGE_UNSUPPORTED_MODELS.none? { |pattern| id.to_s.match?(pattern) }
     end
 

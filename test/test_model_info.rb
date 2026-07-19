@@ -76,6 +76,7 @@ class TestModelInfo < KwardTestCase
     assert_equal "copilot_model", Kward::ModelInfo.config_key_for_provider("copilot")
     assert_equal "anthropic_model", Kward::ModelInfo.config_key_for_provider("Anthropic")
     assert_equal "anthropic_model", Kward::ModelInfo.config_key_for_provider("claude")
+    assert_equal "local_model", Kward::ModelInfo.config_key_for_provider("local")
 
     assert_equal "openai_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Codex")
     assert_equal "openrouter_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("OpenRouter")
@@ -84,6 +85,21 @@ class TestModelInfo < KwardTestCase
     assert_equal "copilot_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("copilot")
     assert_equal "anthropic_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("Anthropic")
     assert_equal "anthropic_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("claude")
+    assert_equal "local_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("local")
+  end
+
+  def test_local_model_and_provider_metadata
+    config = { "local_model" => "qwen2.5-coder:7b" }
+
+    assert_equal "Local", Kward::ModelInfo.provider_label("local")
+    assert_equal "local", Kward::ModelInfo.provider_config_value("Local")
+    assert_equal "local_model", Kward::ModelInfo.config_key_for_provider("Local")
+    assert_equal "qwen2.5-coder:7b", Kward::ModelInfo.model_for("Local", config: config, env: {})
+    assert_equal "override", Kward::ModelInfo.model_for("Local", config: config, override_model: "override", env: {})
+    assert_nil Kward::ModelInfo.reasoning_effort(config: config, provider: "Local", env: {})
+    refute Kward::ModelInfo.reasoning_supported?("Local", "qwen2.5-coder:7b")
+    refute Kward::ModelInfo.supports_images?("Local", "qwen2.5-coder:7b")
+    assert_nil Kward::ModelInfo.context_window("Local", "qwen2.5-coder:7b")
   end
 
   def test_anthropic_model_and_provider_metadata
