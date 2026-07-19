@@ -43,6 +43,8 @@ If `KWARD_CONFIG_PATH` is set, `PRINCIPLES.md` lives beside that config file.
 
 If `PRINCIPLES.md` is absent, Kward also reads `~/.kward/AGENTS.md` (or the equivalent beside a custom config path) as a legacy alias. New setups should use `PRINCIPLES.md`. See [Configuration](configuration.md) for details.
 
+For a small local model, set `system_prompt.include_principles` to `false` to keep Kward's normal prompt without global principles. Set `system_prompt.file` only when you want the file to replace the entire assembled system prompt; replacement mode also omits personas, skills, memory, plugins, and workspace guidance. See [Local models](local-models.md) for a complete setup.
+
 ## Project instructions: `AGENTS.md`
 
 Put repository-specific rules in the workspace root:

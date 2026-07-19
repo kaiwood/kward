@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a Local OpenAI-compatible model provider for Ollama, LM Studio, and llama.cpp, including model discovery, streamed tool calls, configurable context windows, CLI/RPC model selection, and a local-model setup guide.
+- Added replacement system-prompt files and an option to omit global principles for smaller-model prompt budgets.
 - Added skill capture from saved session branches. Review model-generated personal `SKILL.md` drafts in the CLI or Pan, or use the equivalent RPC workflow before explicitly saving them.
 - Added opt-in OS-enforced sandboxing for model-requested shell commands. macOS uses Seatbelt and Linux uses Bubblewrap when available; requested sandboxing fails closed when no supported backend can enforce it. The interactive `/sandbox` command reports and updates the global policy.
 

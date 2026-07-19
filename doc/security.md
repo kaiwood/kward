@@ -16,6 +16,12 @@ This guide explains the trust boundaries and gives you a safe way to start work 
 
 If a task involves secrets, production credentials, customer data, or an untrusted repository, narrow the workspace and tools before asking Kward to act.
 
+## Local model endpoints and replacement prompts
+
+The Local provider defaults to loopback endpoints. If you set `local_base_url` to another host, Kward can send prompts, selected workspace content, attachments, and tool results to that host. Treat a non-loopback endpoint as a model provider: use TLS and authentication where appropriate, and do not assume a private-network address is harmless.
+
+A `system_prompt.file` replacement is model-visible and may be retained in session prompt snapshots. Do not put tokens, credentials, customer data, or other secrets in that file. Replacement mode intentionally removes Kward's normal prompt layers, including workspace guidance and skill descriptions; verify it with `kward sysprompt` before using a permissive local model.
+
 ## A safe first run in an unfamiliar repository
 
 Start with project-provided extensions disabled, which is the default:

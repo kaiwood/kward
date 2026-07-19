@@ -22,7 +22,8 @@ module KwardDocsNavigationData
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"],
         ["Skills", "file.skills.html"],
-        ["Pan mode", "file.pan.html"]
+        ["Pan mode", "file.pan.html"],
+        ["Local models", "file.local-models.html"]
       ]
     ],
     [

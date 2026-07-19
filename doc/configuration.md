@@ -162,6 +162,7 @@ Supported values are:
 - `anthropic` for Anthropic Claude Pro/Max subscription support.
 - `openrouter` for OpenRouter.
 - `copilot` for experimental Copilot provider support.
+- `local` for an OpenAI-compatible Ollama, LM Studio, or llama.cpp server. See [Local models](local-models.md).
 
 Model settings:
 
@@ -172,6 +173,7 @@ Model settings:
   "openrouter_model": "openai/gpt-5.6-sol",
   "anthropic_model": "claude-sonnet-5",
   "copilot_model": "gpt-5-mini",
+  "local_model": "qwen2.5-coder:7b",
   "reasoning_effort": "medium",
   "openai_reasoning_effort": "medium",
   "openrouter_reasoning_effort": "medium",
@@ -185,7 +187,7 @@ Model settings:
 
 Set `codex_show_raw_reasoning` to `true` to display raw Codex `reasoning_text` when the API does not provide reasoning summary text. It defaults to `false`; raw reasoning can include internal or unstable model output, so enable it only when you explicitly want to inspect that stream.
 
-`stream_idle_timeout_seconds` limits how long a streamed Codex or Anthropic response may go without receiving data. It defaults to `120`; set a positive value to override it. When the provider is silent longer than this limit, Kward closes the request and applies its normal transient-network retry behavior.
+`stream_idle_timeout_seconds` limits how long a streamed Codex, Anthropic, or Local response may go without receiving data. It defaults to `120`; set a positive value to override it. When the provider is silent longer than this limit, Kward closes the request and applies its normal transient-network retry behavior.
 
 Defaults:
 
@@ -199,6 +201,24 @@ The Anthropic model choices include `claude-fable-5`, but Fable availability dep
 
 The interactive `/model` picker reads cached OpenRouter models when available. Run `kward openrouter refresh` to fetch text-capable models available to the configured OpenRouter API key and cache them under `~/.kward/cache/openrouter_models.json`. Run `kward openrouter list` to inspect the cached model ids.
 
+### Local model server
+
+The `local` provider uses OpenAI-compatible Chat Completions and model-list endpoints. Configure a running local server with a model id and its actual context window:
+
+```json
+{
+  "provider": "local",
+  "local_backend": "ollama",
+  "local_base_url": "http://127.0.0.1:11434/v1",
+  "local_model": "qwen2.5-coder:7b",
+  "local_context_window": 32768
+}
+```
+
+`local_backend` selects a convenience default: `ollama`, `lm_studio`, or `llama_cpp`. Their default base URLs are `http://127.0.0.1:11434/v1`, `http://127.0.0.1:1234/v1`, and `http://127.0.0.1:8080/v1`, respectively. Set `local_base_url` to use a custom endpoint. `local_api_key` is optional and is sent as a bearer token only when configured.
+
+Set `local_context_window` to the context length configured for the loaded model. Kward does not infer this safely from an arbitrary local model name; without it, automatic context budgeting cannot report a reliable limit. Local providers do not expose Kward reasoning or image controls by default.
+
 ## Environment overrides
 
 Use environment variables for one-off runs or local secrets that you do not want in config.
@@ -210,6 +230,11 @@ Provider and model:
 - `OPENAI_REASONING_EFFORT`
 - `OPENROUTER_MODEL`
 - `OPENROUTER_REASONING_EFFORT`
+- `KWARD_LOCAL_BACKEND`
+- `KWARD_LOCAL_BASE_URL`
+- `KWARD_LOCAL_MODEL`
+- `KWARD_LOCAL_CONTEXT_WINDOW`
+- `KWARD_LOCAL_API_KEY`
 - `ANTHROPIC_MODEL`
 - `ANTHROPIC_REASONING_EFFORT`
 - `COPILOT_MODEL`
@@ -502,6 +527,31 @@ Do not put shared or published API keys in this file.
 ## Global principles
 
 Put global engineering principles in `PRINCIPLES.md` beside your config file, usually `~/.kward/PRINCIPLES.md`. Kward appends this file to its built-in system instructions when present. Existing config-directory `AGENTS.md` files are still read as a legacy alias when `PRINCIPLES.md` is absent.
+
+## Replacement system prompt
+
+Set `system_prompt.file` to use a file as the entire system prompt. In replacement mode Kward does not append its built-in instructions, global principles, memory context, personas, plugin context, skills, or workspace `AGENTS.md` guidance.
+
+```json
+{
+  "system_prompt": {
+    "file": "prompts/local-minimal.md",
+    "include_principles": false
+  }
+}
+```
+
+Relative paths are resolved beside `config.json`. The file is sent to the configured model and can be recorded in session prompt snapshots, so do not place secrets in it. Use `kward sysprompt` to inspect the exact active prompt.
+
+To retain Kward's normal prompt while omitting only global `PRINCIPLES.md` (and its legacy config-directory `AGENTS.md` fallback), configure:
+
+```json
+{
+  "system_prompt": {
+    "include_principles": false
+  }
+}
+```
 
 ## Workspace AGENTS.md
 
