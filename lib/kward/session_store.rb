@@ -430,6 +430,22 @@ module Kward
       current_leaf_id(records_from_file(resolve_session_path(path)))
     end
 
+    # Returns the complete persisted active branch for an explicit export-like
+    # consumer. Unlike #load, this does not attach a conversation or mutate the
+    # session file.
+    #
+    # @return [Hash] session metadata, saved system-prompt snapshots, and active branch records
+    def capture_branch(path)
+      resolved_path = resolve_session_path(path)
+      records = records_from_file(resolved_path)
+      {
+        path: resolved_path,
+        header: session_header(records, resolved_path),
+        system_prompts: records.select { |record| record["type"] == "system_prompt" },
+        entries: branch_records(records)
+      }
+    end
+
     def append_record(path, record)
       File.open(path, "a", 0o600) do |file|
         file.write(JSON.generate(record))
