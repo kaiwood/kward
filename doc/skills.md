@@ -42,6 +42,16 @@ The `name` and `description` fields are required. The description matters: Kward
 
 Skill names should be lowercase letters, numbers, and hyphens, such as `testing`, `code-review`, or `release-checklist`.
 
+## Capture a skill from a session
+
+Use `/skill capture` after a useful session. Choose any saved session; Kward uses its active branch and asks your active model to draft a reusable `SKILL.md`. Review and edit the draft in the terminal editor, then save it explicitly. Captured skills always go to your personal Kward skill directory and are not activated automatically.
+
+The draft request includes the complete persisted branch, including available raw tool output and saved session context. Treat it like any other model request: do not capture a session whose contents you are not willing to send to the active provider. Kward rejects a source that does not fit the active model context instead of silently truncating it.
+
+If the reviewed name already exists, Kward requires an explicit overwrite confirmation. Activate a saved draft later with `/skill <name>`.
+
+Pan provides the same saved-session picker and editable review flow. RPC clients use `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`; see the [RPC protocol](rpc.md).
+
 ## Skill locations
 
 User-level skills are available in every project:

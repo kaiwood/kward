@@ -13,6 +13,7 @@ require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../rpc/transcript_normalizer"
 require_relative "../session_store"
+require_relative "../skills/capture"
 require_relative "../session_trash"
 require_relative "../tools/tool_call"
 require_relative "../tools/registry"
@@ -238,12 +239,18 @@ module Kward
         write_json(socket, 200, transcript: transcript_items, session: active_session_payload, workspace: @workspace.root.to_s)
       when ["GET", "/sessions"]
         write_json(socket, 200, sessions: session_payloads, activeSessionId: @session.id)
+      when ["GET", "/skill-capture/sessions"]
+        write_json(socket, 200, sessions: skill_capture_sessions)
       when ["GET", "/events"]
         stream_events(socket)
       when ["POST", "/turn"]
         handle_turn(socket, request[:body], request[:headers])
       when ["POST", "/sessions"]
         handle_session_action(socket, request[:body], request[:headers])
+      when ["POST", "/skill-capture/draft"]
+        handle_skill_capture_draft(socket, request[:body], request[:headers])
+      when ["POST", "/skill-capture/save"]
+        handle_skill_capture_save(socket, request[:body], request[:headers])
       else
         write_response(socket, 404, { "Content-Type" => "text/plain; charset=utf-8" }, "Not found\n")
       end
@@ -310,6 +317,42 @@ module Kward
       write_json(socket, result.delete(:status), result)
     rescue JSON::ParserError
       write_json(socket, 400, ok: false, error: "Invalid JSON")
+    end
+
+    def handle_skill_capture_draft(socket, body, headers)
+      return write_json(socket, 415, ok: false, error: "Content-Type must be application/json") unless json_request?(headers)
+
+      params = JSON.parse(body.empty? ? "{}" : body)
+      draft = skill_capture.generate(params.fetch("sessionPath"))
+      write_json(socket, 200, ok: true, content: draft.content, sourcePath: draft.source_path, name: draft.name, description: draft.description)
+    rescue JSON::ParserError
+      write_json(socket, 400, ok: false, error: "Invalid JSON")
+    rescue Skills::Capture::Error => error
+      write_json(socket, 422, ok: false, error: error.message)
+    end
+
+    def handle_skill_capture_save(socket, body, headers)
+      return write_json(socket, 415, ok: false, error: "Content-Type must be application/json") unless json_request?(headers)
+
+      params = JSON.parse(body.empty? ? "{}" : body)
+      draft = skill_capture.save(params.fetch("content"), overwrite: params["overwrite"] == true)
+      write_json(socket, 200, ok: true, path: skill_capture.skill_path(draft.name), name: draft.name, description: draft.description)
+    rescue JSON::ParserError
+      write_json(socket, 400, ok: false, error: "Invalid JSON")
+    rescue Skills::Capture::ConflictError => error
+      write_json(socket, 409, ok: false, error: error.message)
+    rescue Skills::Capture::Error => error
+      write_json(socket, 422, ok: false, error: error.message)
+    end
+
+    def skill_capture_sessions
+      @session_store.capture_candidates.map do |session|
+        { path: session.path, name: session.name, firstMessage: session.first_message, workspaceRoot: session.cwd, modifiedAt: session.modified_at.utc.iso8601(3) }
+      end
+    end
+
+    def skill_capture
+      @skill_capture ||= Skills::Capture.new(session_store: @session_store, client: @client, config_dir: @session_store.config_dir)
     end
 
     def update_session(params)

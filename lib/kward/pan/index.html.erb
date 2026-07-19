@@ -164,6 +164,7 @@
           <div class="title-row"><span class="live-dot"></span><h1 id="conversation-title">New session</h1></div>
           <div class="top-meta" id="session-meta">Secure LAN workspace</div>
         </div>
+        <button class="text-button" id="capture-skill" type="button">Capture skill</button>
         <button class="text-button" id="rename-session" type="button">Rename</button>
         <button class="text-button danger" id="delete-session" type="button">Delete</button>
       </header>
@@ -456,7 +457,56 @@
     document.getElementById('open-sessions').addEventListener('click', () => document.body.classList.add('sessions-open'));
     document.getElementById('close-sessions').addEventListener('click', closeSessions);
     document.getElementById('backdrop').addEventListener('click', closeSessions);
+    async function captureSkill() {
+      try {
+        const sourceResponse = await fetch('/skill-capture/sessions', { cache: 'no-store' });
+        const sourceData = await sourceResponse.json();
+        const candidates = sourceData.sessions || [];
+        if (!candidates.length) throw new Error('No saved sessions found.');
+        const choices = candidates.map((session, index) => `${index + 1}. ${session.name || session.firstMessage || 'Untitled session'}`).join('\n');
+        const answer = window.prompt(`Capture a personal skill from which saved session?\n\n${choices}`, '1');
+        if (answer === null) return;
+        const source = candidates[Number(answer) - 1];
+        if (!source) throw new Error('Choose a session number from the list.');
+        setStatus({ active: true, pending: 0 });
+        const draftResponse = await fetch('/skill-capture/draft', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionPath: source.path })
+        });
+        const draft = await draftResponse.json();
+        if (!draftResponse.ok || !draft.ok) throw new Error(draft.error || 'Could not create a skill draft.');
+        reviewSkillDraft(draft.content);
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setStatus({ active: false, pending: 0 });
+      }
+    }
+
+    function reviewSkillDraft(content) {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:1rem;background:#000b';
+      const panel = document.createElement('section');
+      panel.style.cssText = 'display:grid;gap:.8rem;width:min(58rem,100%);max-height:90dvh;padding:1rem;border:1px solid var(--line-bright);border-radius:12px;background:var(--panel)';
+      const heading = document.createElement('strong'); heading.textContent = 'Review captured skill';
+      const note = document.createElement('p'); note.style.margin = '0'; note.style.color = 'var(--muted)'; note.textContent = 'Edit the draft. Saving writes a personal skill but does not activate it.';
+      const editor = document.createElement('textarea'); editor.value = content; editor.style.cssText = 'min-height:55dvh;resize:vertical;padding:.75rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-family:ui-monospace,monospace;font-size:.8rem';
+      const actions = document.createElement('div'); actions.style.cssText = 'display:flex;justify-content:flex-end;gap:.6rem';
+      const cancel = document.createElement('button'); cancel.className = 'text-button'; cancel.textContent = 'Cancel';
+      const save = document.createElement('button'); save.className = 'new-session'; save.style.margin = '0'; save.textContent = 'Save personal skill';
+      cancel.onclick = () => overlay.remove();
+      save.onclick = async () => {
+        const request = async overwrite => fetch('/skill-capture/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: editor.value, overwrite }) });
+        let response = await request(false); let result = await response.json();
+        if (response.status === 409 && window.confirm(`${result.error}\n\nOverwrite it?`)) { response = await request(true); result = await response.json(); }
+        if (!response.ok || !result.ok) { showError(result.error || 'Could not save the skill.'); return; }
+        overlay.remove();
+        window.alert(`Saved personal skill: ${result.path}`);
+      };
+      actions.append(cancel, save); panel.append(heading, note, editor, actions); overlay.append(panel); document.body.append(overlay); editor.focus();
+    }
+
     document.getElementById('new-session').addEventListener('click', () => changeSession('new'));
+    document.getElementById('capture-skill').addEventListener('click', captureSkill);
     document.getElementById('rename-session').addEventListener('click', () => {
       if (!activeSession) return;
       const name = window.prompt('Session name', activeSession.name || '');

@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added skill capture from saved session branches. Review model-generated personal `SKILL.md` drafts in the CLI or Pan, or use the equivalent RPC workflow before explicitly saving them.
 - Added opt-in OS-enforced sandboxing for model-requested shell commands. macOS uses Seatbelt and Linux uses Bubblewrap when available; requested sandboxing fails closed when no supported backend can enforce it. The interactive `/sandbox` command reports and updates the global policy.
 
 ### Changed
