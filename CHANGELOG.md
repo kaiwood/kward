@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.79.0] - 2026-07-19
+
 ### Added
 
 - Added a Local OpenAI-compatible model provider for Ollama, LM Studio, and llama.cpp, including model discovery, streamed tool calls, configurable context windows, CLI/RPC model selection, and a local-model setup guide.
