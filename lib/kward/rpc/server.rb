@@ -73,6 +73,7 @@ module Kward
         "memory/why", "memory/summarize"
       ].freeze
       COMMAND_METHODS = ["commands/list", "commands/run"].freeze
+      SKILL_CAPTURE_METHODS = ["skills/captureSessions", "skills/captureDraft", "skills/saveCapturedDraft"].freeze
       STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
@@ -101,6 +102,7 @@ module Kward
         auth: AUTH_METHODS,
         memory: MEMORY_METHODS,
         commands: COMMAND_METHODS,
+        skill_capture: SKILL_CAPTURE_METHODS,
         startup_resources: STARTUP_RESOURCE_METHODS,
         config: CONFIG_METHODS,
         logging: LOGGING_METHODS,
@@ -251,6 +253,12 @@ module Kward
           commands_list(params)
         when COMMAND_METHODS[1]
           commands_run(params)
+        when SKILL_CAPTURE_METHODS[0]
+          { sessions: @session_manager.skill_capture_sessions }
+        when SKILL_CAPTURE_METHODS[1]
+          @session_manager.capture_skill(session_path: params.fetch("sessionPath"))
+        when SKILL_CAPTURE_METHODS[2]
+          @session_manager.save_captured_skill(content: params.fetch("content"), overwrite: params["overwrite"] == true)
         when STARTUP_RESOURCE_METHODS[0]
           startup_resources(params)
         when CONFIG_METHODS[0]
@@ -524,6 +532,7 @@ module Kward
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: [] },
           commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
+          skillCapture: { supported: true, methods: SKILL_CAPTURE_METHODS, destination: "personal", source: "savedSessionActiveLeaf", reviewRequired: true, overwrite: "explicit", autoActivate: false },
           mcp: {
             supported: true,
             transport: "stdio",

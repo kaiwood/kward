@@ -15,6 +15,7 @@ require_relative "../memory/turn_context"
 require_relative "../message_access"
 require_relative "../message_text"
 require_relative "../session_tree_tool_display"
+require_relative "../skills/capture"
 require_relative "../model/model_info"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
@@ -153,6 +154,38 @@ module Kward
 
       def active_sessions
         { sessions: @mutex.synchronize { @sessions.values.map { |rpc_session| session_payload(rpc_session) } } }
+      end
+
+      def skill_capture_sessions
+        SessionStore.new(config_dir: @config_dir).capture_candidates.map do |session|
+          {
+            path: session.path,
+            workspaceRoot: session.cwd,
+            name: session.name,
+            firstMessage: session.first_message,
+            modifiedAt: session.modified_at.utc.iso8601(3)
+          }
+        end
+      end
+
+      def capture_skill(session_path:)
+        capture = Skills::Capture.new(
+          session_store: SessionStore.new(config_dir: @config_dir),
+          client: @client,
+          config_dir: @config_dir
+        )
+        draft = capture.generate(session_path)
+        { content: draft.content, sourcePath: draft.source_path, name: draft.name, description: draft.description }
+      end
+
+      def save_captured_skill(content:, overwrite: false)
+        capture = Skills::Capture.new(
+          session_store: SessionStore.new(config_dir: @config_dir),
+          client: @client,
+          config_dir: @config_dir
+        )
+        draft = capture.save(content, overwrite: overwrite)
+        { path: capture.skill_path(draft.name), name: draft.name, description: draft.description }
       end
 
       def tool_schemas(session_id: nil)

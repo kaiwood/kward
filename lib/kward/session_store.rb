@@ -315,6 +315,16 @@ module Kward
       recent_sessions(limit: limit, keep_empty_path: keep_empty_path)
     end
 
+    # Lists all persisted sessions under this config directory for an explicit
+    # user-selected operation such as skill capture. Unlike #recent, this is not
+    # scoped to the store's current workspace.
+    def capture_candidates
+      pattern = File.join(@config_dir, "sessions", "**", "*.jsonl")
+      Dir.glob(pattern).filter_map { |path| session_info(path) }.sort_by(&:modified_at).reverse
+    rescue StandardError
+      []
+    end
+
     # Persists the last active session pointer for workspace auto-resume.
     def remember_last_session(session)
       return unless session&.path

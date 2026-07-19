@@ -30,6 +30,7 @@ module Kward
       end
 
       def generate(session_path, cancellation: nil)
+        ensure_personal_session_path!(session_path)
         source = @session_store.capture_branch(session_path)
         raise Error, "Session has no active branch to capture" if source[:entries].empty?
 
@@ -56,6 +57,16 @@ module Kward
       end
 
       private
+
+      def ensure_personal_session_path!(session_path)
+        sessions_root = File.realpath(File.join(@config_dir, "sessions"))
+        source_path = File.realpath(session_path)
+        return if source_path.start_with?("#{sessions_root}#{File::SEPARATOR}")
+
+        raise Error, "Skill capture source must be a persisted Kward session"
+      rescue Errno::ENOENT
+        raise Error, "Skill capture source must be a persisted Kward session"
+      end
 
       def ensure_source_fits!(source_json)
         context_window = @client.current_context_window

@@ -62,6 +62,7 @@ Detailed capability fields include:
 - `auth`: Kward auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
+- `skillCapture`: capture a reviewed personal `SKILL.md` from any saved session’s active branch through `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`.
 - `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. MCP resources, prompts, sampling, and Streamable HTTP are explicitly unsupported for now.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
@@ -744,6 +745,16 @@ Params:
 - `sessionId`: active RPC session ID.
 
 Returns frontend-neutral slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
+
+### `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`
+
+Use this two-step workflow to capture a personal skill from a saved session:
+
+1. Call `skills/captureSessions` to list available persisted session sources.
+2. Call `skills/captureDraft` with `sessionPath`. Kward sends the selected active branch, including available raw tool output, to the active model provider and returns an editable `SKILL.md` draft. It rejects a source that exceeds the active model context rather than truncating it.
+3. Review and edit `content`, then call `skills/saveCapturedDraft`. Set `overwrite: true` only after explicitly confirming replacement of an existing personal skill.
+
+Captured skills are saved under the Kward config directory, are not activated automatically, and no file is written until the final save call succeeds.
 
 ### `resources/startup`
 

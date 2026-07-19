@@ -383,7 +383,7 @@ class TestRPCServer < KwardTestCase
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
       protocol workspace tools mcp prompts sessions turns plugin_chats models runtime runtime_settings
-      auth memory commands startup_resources config logging lifecycle_hooks ui tool_approval
+      auth memory commands skill_capture startup_resources config logging lifecycle_hooks ui tool_approval
     ]
 
     assert_equal expected_groups, Kward::RPC::Server::METHOD_GROUPS.keys
@@ -394,6 +394,7 @@ class TestRPCServer < KwardTestCase
     assert_includes Kward::RPC::Server::RPC_METHODS, "pluginChats/list"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
     assert_includes Kward::RPC::Server::RPC_METHODS, "hooks/logs"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "skills/captureDraft"
   end
 
   def test_rpc_documentation_mentions_public_methods_and_notifications

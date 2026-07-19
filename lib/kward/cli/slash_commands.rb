@@ -214,7 +214,7 @@ module Kward
       end
 
       def select_skill_capture_session(session_store)
-        sessions = recent_sessions(session_store, tree: true, limit: nil)
+        sessions = session_store.capture_candidates
         if sessions.empty?
           runtime_output("No saved sessions found.")
           return nil
