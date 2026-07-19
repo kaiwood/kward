@@ -30,6 +30,12 @@ jobs:
       - name: Install sandbox test dependency
         run: sudo apt-get update && sudo apt-get install --yes bubblewrap
 
+      - name: Enable Bubblewrap namespaces
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          bwrap --ro-bind / / --unshare-net true
+
       - name: Check syntax
         run: find lib test -name '*.rb' -print0 | xargs -0 ruby -c
 
