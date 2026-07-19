@@ -302,6 +302,32 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sysprompt_reports_replacement_prompt_without_generated_sections
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        FileUtils.mkdir_p(File.join(config_dir, "prompts"))
+        replacement = File.join(config_dir, "prompts", "minimal.md")
+        File.write(replacement, "Minimal instructions.\n")
+        File.write(File.join(config_dir, "PRINCIPLES.md"), "Global principles.\n")
+        File.write(File.join(workspace_dir, "AGENTS.md"), "Workspace instructions.\n")
+        File.write(File.join(config_dir, "config.json"), JSON.dump("system_prompt" => { "file" => "prompts/minimal.md" }))
+
+        prompt = FakePrompt.new([])
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          Kward::CLI.new(argv: ["--working-directory=#{workspace_dir}", "sysprompt"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+        end
+
+        output = prompt.output.join("\n")
+        assert_includes output, "## Custom system prompt (replacement)"
+        assert_includes output, "Source: #{replacement}"
+        assert_includes output, "Minimal instructions."
+        refute_includes output, "## Built-in system prompt"
+        refute_includes output, "Global principles."
+        refute_includes output, "Workspace guidance is available"
+      end
+    end
+  end
+
   def test_init_command_creates_default_config_and_reports_result
     Dir.mktmpdir do |config_dir|
       prompt = FakePrompt.new([])

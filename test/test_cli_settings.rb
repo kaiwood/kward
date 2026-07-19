@@ -51,6 +51,22 @@ class TestCLISettings < KwardTestCase
     assert_equal "Local", cli.send(:selected_provider, "Local")
   end
 
+  def test_global_principles_toggle_updates_prompt_configuration
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({}))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:toggle_global_principles, nil)
+
+        assert_equal false, JSON.parse(File.read(config_path)).dig("system_prompt", "include_principles")
+        assert_includes cli.send(:personalization_setting_choices, nil), "Enable global principles"
+      end
+    end
+  end
+
   def test_model_slash_command_reports_unavailable_without_tui_prompt
     prompt = FakePrompt.new(["/model", "/exit"])
     client = RecordingClient.new([])

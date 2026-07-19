@@ -555,6 +555,10 @@ module Kward
           case selected.to_s.downcase
           when /\Adefault persona/
             configure_default_persona(conversation)
+          when /\Aenable global principles/, /\Adisable global principles/
+            toggle_global_principles(conversation)
+          when /\Aglobal principles \(ignored/
+            runtime_output("Global principles are ignored while a replacement system prompt is configured.")
           when /\Aactive instructions/
             show_active_instructions_summary(conversation)
           else
@@ -564,11 +568,29 @@ module Kward
       end
 
       def personalization_setting_choices(conversation)
+        config = safely_read_config.to_h
+        replacement = ConfigFiles.system_prompt_file_path(config)
+        principles = if replacement
+                       "Global principles (ignored by replacement)"
+                     elsif ConfigFiles.include_config_principles?(config)
+                       "Disable global principles"
+                     else
+                       "Enable global principles"
+                     end
         [
           "Default persona (#{default_persona_label})",
+          principles,
           "Active instructions summary",
           "Back"
         ]
+      end
+
+      def toggle_global_principles(conversation)
+        config = safely_read_config.to_h
+        settings = config["system_prompt"].is_a?(Hash) ? config["system_prompt"] : {}
+        ConfigFiles.update_config("system_prompt" => settings.merge("include_principles" => !ConfigFiles.include_config_principles?(config)))
+        conversation&.refresh_system_message!
+        @prompt.redraw if @prompt.respond_to?(:redraw)
       end
 
       def default_persona_label
