@@ -39,6 +39,10 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("tools", "workspace_guardrails")
       assert_equal false, config.dig("permissions", "enabled")
       assert_equal "ask", config.dig("permissions", "mode")
+      assert_equal "off", config.dig("sandbox", "mode")
+      assert_equal "deny", config.dig("sandbox", "network")
+      assert_equal [], config.dig("sandbox", "writable_roots")
+      assert_equal true, config.dig("sandbox", "protect_git_metadata")
       refute config.key?("provider")
       refute config.key?("model")
       refute config.key?("openai_model")
@@ -49,6 +53,29 @@ class TestConfigFiles < KwardTestCase
       refute config.key?("copilot_reasoning_effort")
       refute config.key?("openai_oauth_client_id")
       refute config.key?("openrouter_api_key")
+    end
+  end
+
+  def test_sandbox_policy_uses_only_global_configured_roots
+    Dir.mktmpdir do |dir|
+      workspace = File.join(dir, "workspace")
+      extra_root = File.join(dir, "extra")
+      FileUtils.mkdir_p([workspace, extra_root])
+      config = {
+        "sandbox" => {
+          "mode" => "workspace_write",
+          "network" => "allow",
+          "writable_roots" => [extra_root],
+          "protect_git_metadata" => false
+        }
+      }
+
+      policy = Kward::ConfigFiles.sandbox_policy(workspace, config)
+
+      assert_equal "workspace_write", policy.mode
+      assert_equal "allow", policy.network
+      assert_equal [File.realpath(workspace), File.realpath(extra_root)], policy.command_writable_roots
+      refute policy.protect_git_metadata?
     end
   end
 

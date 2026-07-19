@@ -6,6 +6,7 @@ require_relative "frontmatter"
 require_relative "private_file"
 require_relative "path_guard"
 require_relative "permissions/policy"
+require_relative "sandbox/policy"
 require_relative "ekwsh"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
@@ -158,6 +159,12 @@ module Kward
         "permissions" => {
           "enabled" => false,
           "mode" => "ask"
+        },
+        "sandbox" => {
+          "mode" => "off",
+          "network" => "deny",
+          "writable_roots" => [],
+          "protect_git_metadata" => true
         }
       }
     end
@@ -496,6 +503,18 @@ module Kward
     # Builds the opt-in model-tool permission policy from persisted configuration.
     def permission_policy(config = read_config)
       Permissions::Policy.from_config(config)
+    end
+
+    # Builds the user-controlled command sandbox policy for a workspace.
+    def sandbox_policy(workspace_root, config = read_config)
+      sandbox = config["sandbox"].is_a?(Hash) ? config["sandbox"] : {}
+      Sandbox::Policy.new(
+        mode: sandbox.fetch("mode", "off"),
+        network: sandbox.fetch("network", "deny"),
+        workspace_root: workspace_root,
+        writable_roots: sandbox.fetch("writable_roots", []),
+        protect_git_metadata: sandbox.fetch("protect_git_metadata", true)
+      )
     end
 
     # Returns whether project-level Agent Skills should be loaded from the workspace.
