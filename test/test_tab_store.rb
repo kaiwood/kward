@@ -62,6 +62,30 @@ class TestTabStore < KwardTestCase
     end
   end
 
+  def test_save_and_load_worktree_tab_descriptor
+    Dir.mktmpdir do |dir|
+      store = Kward::TabStore.new(config_dir: dir, cwd: dir)
+      descriptor = {
+        "kind" => "session",
+        "session_path" => File.join(dir, "session.jsonl"),
+        "label" => "Feature",
+        "worktree" => {
+          "repository_root" => "/repo",
+          "origin_root" => "/repo",
+          "path" => "/worktrees/feature",
+          "branch" => "kward/feature",
+          "base_revision" => "abc123",
+          "active" => true,
+          "owned" => true
+        }
+      }
+
+      store.save(tabs: [descriptor], active_index: 0)
+
+      assert_equal [descriptor], store.load["tabs"]
+    end
+  end
+
   def test_load_returns_empty_state_for_missing_file
     Dir.mktmpdir do |dir|
       store = Kward::TabStore.new(config_dir: dir, cwd: dir)

@@ -3,11 +3,12 @@ module Kward
   # Adapts a session-backed agent to the tab runtime interface. Plugin tab
   # drivers implement the same small surface without becoming Kward sessions.
   class SessionTabDriver
-    attr_reader :session, :agent
+    attr_reader :session, :agent, :worktree
 
-    def initialize(session:, agent:)
+    def initialize(session:, agent:, worktree: nil)
       @session = session
       @agent = agent
+      @worktree = worktree
     end
 
     def messages
@@ -26,7 +27,9 @@ module Kward
     end
 
     def descriptor
-      { "kind" => "session", "session_path" => session.path }
+      descriptor = { "kind" => "session", "session_path" => session.path }
+      descriptor["worktree"] = worktree.descriptor if worktree
+      descriptor
     end
 
     def session?
