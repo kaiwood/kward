@@ -7,20 +7,38 @@ class TestPrompts < KwardTestCase
     assert_equal false, Kward::ConfigFiles.composer_busy_help?({ "composer" => { "busy_help" => false } })
   end
 
-  def test_base_prompt_includes_web_research_guidance
+  def test_base_prompt_includes_capability_aware_web_research_guidance
     content = Kward::Prompts.base_prompt
 
+    assert_includes content, "Only call tools advertised for the current turn."
+    assert_includes content, "When web tools are available"
     assert_includes content, "use web_search to discover sources"
     assert_includes content, "fetch_content for important human-readable pages"
     assert_includes content, "fetch_raw for machine-readable resources"
+    assert_includes content, "Use code_search for package, GitHub repository, and source-code research."
   end
 
-  def test_base_prompt_includes_context_budget_guidance
+  def test_base_prompt_includes_context_budget_and_clarification_guidance
     content = Kward::Prompts.base_prompt
 
     assert_includes content, "Prefer context_for_task"
     assert_includes content, "read_file mode=\"outline\"/\"preview\""
     assert_includes content, "use mode=\"full\" only when focused context is insufficient"
+    assert_includes content, "use retrieve_tool_output to inspect the needed original detail"
+    assert_includes content, "use ask_user_question when it is available"
+  end
+
+  def test_web_guidance_remains_conditional_when_web_tools_are_disabled
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({ "web_search" => { "enabled" => false } }))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
+
+        refute_includes tool_names, "web_search"
+        assert_includes Kward::Prompts.base_prompt, "When web tools are available"
+      end
+    end
   end
 
   def test_config_principles_prompt_appends_from_config_dir
@@ -444,9 +462,26 @@ class TestPrompts < KwardTestCase
         assert_includes content, "Available skills:"
         assert_includes content, "- planner: Helps plan work."
         assert_includes content, "Agent Skills are available."
-        assert_includes content, "use read_skill"
-        assert_includes content, "relative path"
+        assert_includes content, "When read_skill is available"
+        assert_includes content, "When using read_skill, use a relative path"
         refute_includes content, "Secret full body."
+      end
+    end
+  end
+
+  def test_skills_prompt_keeps_read_skill_guidance_conditional_when_tool_is_not_advertised
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump({}))
+      skill_dir = File.join(dir, "skills", "planner")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        content = Kward::Conversation.new(workspace_root: dir).system_message[:content]
+        tool_names = Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir), allowed_tool_names: ["read_file"]).schemas.map { |schema| schema[:function][:name] }
+
+        assert_equal ["read_file"], tool_names
+        assert_includes content, "When read_skill is available"
       end
     end
   end

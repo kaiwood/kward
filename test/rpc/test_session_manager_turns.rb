@@ -156,6 +156,8 @@ class TestRPCSessionManagerTurns < KwardTestCase
       assert_equal "anthropic/claude-sonnet-4.5", request[:model]
       assert_equal "high", request[:reasoning]
       assert_equal ["read_file"], request[:tools].map { |schema| schema[:function][:name] }
+      system_message = client.seen_messages.first.find { |message| message[:role] == "system" }
+      assert_includes system_message[:content], "Only call tools advertised for the current turn."
     end
   end
 

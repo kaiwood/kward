@@ -49,6 +49,19 @@ module Kward
   # explicit tool errors.
   # @api public
   class ToolRegistry
+    CORE_TOOL_NAMES = %w[
+      list_directory
+      read_file
+      write_file
+      edit_file
+      run_shell_command
+      code_search
+      summarize_file_structure
+      context_for_task
+      context_budget_stats
+      retrieve_tool_output
+    ].freeze
+
     # Tool schemas advertised to the model for the current frontend and config.
     #
     # @return [Array<Hash>] tool schemas currently advertised to the model
@@ -462,13 +475,15 @@ module Kward
     def build_tools
       tools = all_tools
       tools = tools.select { |tool| @allowed_tool_names.include?(tool.name) } if @allowed_tool_names
-      tools.to_h { |tool| [tool.name, tool] }
+      tools.each_with_object({}) do |tool, result|
+        raise ArgumentError, "Duplicate tool name: #{tool.name}" if result.key?(tool.name)
+
+        result[tool.name] = tool
+      end
     end
 
     def build_schema_tools
-      tools = @tools.values_at(
-        "list_directory", "read_file", "write_file", "edit_file", "run_shell_command", "code_search", "summarize_file_structure", "context_for_task", "context_budget_stats", "retrieve_tool_output"
-      )
+      tools = @tools.values_at(*CORE_TOOL_NAMES)
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
       tools << @tools["read_skill"] if skills_available?

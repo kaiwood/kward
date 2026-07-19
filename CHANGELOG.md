@@ -6,10 +6,12 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Improved built-in tool guidance so agents use only tools advertised for the current turn and select code search, compacted-output retrieval, and structured clarification when appropriate.
 - Raised the minimum supported Ruby version from 3.2 to 3.4.
 
 ### Fixed
 
+- Reject duplicate discovered tool names instead of silently replacing one MCP tool with another.
 - Fixed an RPC race where follow-up input could queue instead of steering a turn immediately after it began.
 - Prevented the RPC server from loading trusted Ruby plugins separately for plugin chats and workspace sessions, eliminating duplicate constant-definition warnings during startup.
 - Prevented `/reload` and RPC runtime reloads from emitting duplicate constant-definition warnings for plugin-defined constants.

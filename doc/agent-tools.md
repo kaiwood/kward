@@ -38,7 +38,7 @@ This lets the assistant reason from focused evidence while preserving access to 
 
 ## How tools are exposed
 
-`Kward::ToolRegistry` builds the available tool objects and the schemas advertised to the model. Some tools are always available in normal CLI/RPC sessions, while others depend on configuration or frontend capability:
+`Kward::ToolRegistry` builds the available tool objects and the schemas advertised to the model. Kward instructs models to call only tools advertised for the current turn; a restricted RPC turn therefore receives schemas only for its selected set. Some tools are always available in normal CLI/RPC sessions, while others depend on configuration or frontend capability:
 
 - web tools can be hidden with web search configuration,
 - `read_skill` is advertised only when skills are available,

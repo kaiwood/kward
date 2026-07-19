@@ -83,6 +83,15 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_normal_session_advertises_every_core_tool
+    registry = Kward::ToolRegistry.new
+    advertised_names = registry.schemas.map { |schema| schema[:function][:name] }
+    core_names = registry.send(:core_tools).map(&:name)
+
+    assert_equal Kward::ToolRegistry::CORE_TOOL_NAMES, core_names
+    assert_equal Kward::ToolRegistry::CORE_TOOL_NAMES, advertised_names.first(Kward::ToolRegistry::CORE_TOOL_NAMES.length)
+  end
+
   def test_tool_schemas_include_code_search
     tool_names = Kward::ToolRegistry.new.schemas.map { |schema| schema[:function][:name] }
 
@@ -368,6 +377,22 @@ class TestToolRegistry < KwardTestCase
 
       assert_equal false, parameters[:additionalProperties], "#{schema[:function][:name]} should not advertise extra fields"
     end
+  end
+
+  def test_tool_registry_rejects_colliding_mcp_tool_names
+    remote_name = "a" * 60
+    clients = ["one", "two"].map do |suffix|
+      Object.new.tap do |client|
+        client.define_singleton_method(:name) { "demo" }
+        client.define_singleton_method(:list_tools) do
+          [{ "name" => "#{remote_name}#{suffix}", "inputSchema" => {} }]
+        end
+      end
+    end
+
+    error = assert_raises(ArgumentError) { Kward::ToolRegistry.new(mcp_clients: clients) }
+
+    assert_equal "Duplicate tool name: demo__#{remote_name}", error.message
   end
 
   def test_tool_registry_runs_mcp_lifecycle_hooks
