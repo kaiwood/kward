@@ -12,14 +12,14 @@ Kward normally chooses these tools itself. You do not need to know their exact n
 
 ## Guardrails
 
-Workspace tools use the active workspace as their boundary. File paths are workspace-relative by default, and file tools are guarded so Kward does not edit arbitrary unread files. Guardrails can be disabled with the `tools.workspace_guardrails` setting — see [Configuration](configuration.md). When disabled, file tools can access paths outside the workspace, but shell commands are unaffected since they already run as your OS user.
+Workspace tools use the active workspace as their boundary. File paths are workspace-relative by default, and file tools are guarded so Kward does not edit arbitrary unread files. Guardrails can be disabled with the `tools.workspace_guardrails` setting — see [Configuration](configuration.md). When disabled, file tools can access paths outside the workspace. These guardrails do not affect shell commands; model-requested commands can instead use the separate, opt-in [command sandbox](sandboxing.md).
 
 Important behavior:
 
 - Existing files must be read in the current conversation before `write_file` or `edit_file` can change them.
 - Reads are bounded to avoid pulling very large files into context by accident. Files larger than 256 KB cannot be read or edited. Read output is capped at 50 KB or 2,000 lines, whichever comes first.
 - Edits use exact text replacement, so accidental partial or fuzzy changes fail instead of guessing.
-- Shell commands run as your operating-system user from the workspace. They are powerful and should be treated like commands you run yourself. Command output is capped at 128 KB.
+- With sandboxing off (the default), shell commands run as your operating-system user from the workspace. Enable [command sandboxing](sandboxing.md) to apply an OS boundary to model-requested `run_shell_command` workers. Command output is capped at 128 KB.
 
 ## Reading the workspace
 
@@ -124,7 +124,7 @@ Arguments:
 - `command`: command to run.
 - `timeout_seconds`: optional timeout, default 30 seconds.
 
-Kward uses shell commands for tests, linters, build checks, and simple repository inspection. Command output is bounded at 128 KB and may be compacted before it is sent back into model context, while the original output remains available in the session record.
+Kward uses shell commands for tests, linters, build checks, and simple repository inspection. When configured, the [command sandbox](sandboxing.md) applies to this tool and its descendants. Command output is bounded at 128 KB and may be compacted before it is sent back into model context, while the original output remains available in the session record.
 
 The output format is `Exit status: N` followed by `STDOUT:` and `STDERR:` sections. On timeout, Kward sends SIGTERM then SIGKILL after 0.2 seconds and returns a timeout error. Commands support cooperative cancellation when the session is cancelled.
 

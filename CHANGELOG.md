@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Clarified command-sandbox configuration, platform setup, and limits across the security, permissions, workspace-tools, RPC, and configuration guides.
 - Sandboxed command workers now receive a sanitized environment with a private home and temporary directory; the macOS backend also blocks reads from common credential directories.
 - Improved built-in tool guidance so agents use only tools advertised for the current turn and select code search, compacted-output retrieval, and structured clarification when appropriate.
 - Raised the minimum supported Ruby version from 3.2 to 3.4.

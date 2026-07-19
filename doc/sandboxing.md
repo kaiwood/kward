@@ -32,10 +32,19 @@ Available modes are:
 | `read_only` | Workspace writes are denied. Kward gives the command a private temporary directory for command-local scratch files. |
 | `workspace_write` | Writes are allowed in the active workspace and the private command temporary directory. |
 
-`writable_roots` is reserved for user-controlled additional writable paths. Do
-not add a path merely because a repository instruction or model response asks
-for it. `protect_git_metadata` defaults to `true`; this prevents sandboxed
-commands from changing `.git`, including staging and committing changes.
+`writable_roots` lets you grant additional, existing host paths to commands in
+`workspace_write` mode—for example, a known local build cache. Configure these
+paths only in your user config. Do not add a path merely because a repository
+instruction or model response asks for it. `protect_git_metadata` defaults to
+`true`; this prevents sandboxed commands from changing `.git`, including
+staging and committing changes.
+
+`network` controls child-process network access:
+
+| Value | Child-process network access |
+| --- | --- |
+| `deny` | Denied by the operating-system backend. This is the default. |
+| `allow` | Allowed with the same network reachability as your user account. |
 
 ## Interactive controls
 
@@ -59,8 +68,13 @@ after changing the mode.
 | Platform | Backend | Status |
 | --- | --- | --- |
 | macOS | Seatbelt through `/usr/bin/sandbox-exec` | Supported for command workers. Kward checks availability at runtime. |
-| Linux | Bubblewrap | Supported when `bwrap` and the required namespace capabilities are available. |
+| Linux | Bubblewrap | Supported when `bwrap` can create the required namespaces. |
 | Windows | None | Unsupported. A requested non-off policy fails closed. |
+
+On Debian or Ubuntu, install Bubblewrap with `sudo apt install bubblewrap`; on
+Fedora, use `sudo dnf install bubblewrap`. A present `bwrap` executable can
+still be prevented from creating namespaces by host policy. In that case,
+Kward fails the command closed instead of running it unrestricted.
 
 The macOS `sandbox-exec` utility is deprecated by Apple. Kward therefore treats
 it as a capability-detected backend and verifies enforcement with platform
@@ -86,10 +100,21 @@ selected cloud/CLI configuration directories.
 
 This is defense in depth, not complete secret-file read isolation: commands
 still receive system and development-tool reads needed for normal local work.
-For sensitive repositories, use a disposable checkout, VM, or container in
-addition to Kward's command sandbox.
+On Linux, Bubblewrap provides a read-only view of the host filesystem outside
+its explicitly writable paths; it does not hide every file your account can
+read. For sensitive repositories, use a disposable checkout, VM, or container
+in addition to Kward's command sandbox.
 
 The RPC `initialize.capabilities.security.sandbox` payload reports the active
 mode, backend, and whether filesystem and child-network enforcement are active.
 It also reports unsupported features, including session pinning and one-time
 sandbox elevation; those are not available yet.
+
+## Related guides
+
+- [Security and trust](security.md) explains Kward's broader trust boundaries.
+- [Permissions](permissions.md) controls whether Kward starts a model-requested
+  tool; it does not constrain a command after it starts.
+- [Configuration](configuration.md#Command_sandboxing) covers the full config
+  section, while [Workspace tools](workspace-tools.md) explains the separate
+  file-tool guardrails.

@@ -2,7 +2,7 @@
 
 Kward's permission policy lets you put a human decision between a model-requested tool call and its side effect. It is useful when you want the agent to inspect a project freely, but want to confirm edits, commands, web requests, or MCP calls as they arise.
 
-Permissions are **off by default**. Enabling them does not sandbox Kward or its subprocesses: an allowed shell command still runs with your operating-system user permissions.
+Permissions are **off by default**. Enabling them does not sandbox Kward or its subprocesses: an allowed shell command still runs with your operating-system user permissions unless you separately enable [command sandboxing](sandboxing.md) for model-requested shell commands.
 
 ## Start with approval mode
 
@@ -169,11 +169,12 @@ The policy runs before Kward dispatches a model-requested tool. It does not cons
 - direct commands that you type yourself—`!command`, `/shell`, and `/pty`—are treated as your actions and are outside this first policy scope;
 - plugins, hooks, and MCP servers are trusted local extensions with their own process access.
 
-For sensitive work, use a restricted operating-system account, container, virtual machine, or disposable checkout. A future OS-enforced sandbox may provide stronger filesystem and network isolation; it is not part of the current permissions feature.
+For sensitive work, use a restricted operating-system account, container, virtual machine, or disposable checkout. [Command sandboxing](sandboxing.md) is a separate, opt-in operating-system boundary for model-requested `run_shell_command` workers. It can add filesystem and child-network restrictions, but does not cover Kward's host process, extensions, or direct interactive commands.
 
 ## Related guides
 
 - [Security and trust](security.md): trust boundaries, extensions, and safe work in unfamiliar repositories.
 - [Configuration](configuration.md#Permissions): the complete configuration reference.
+- [Command sandboxing](sandboxing.md): configure the separate OS boundary for model-requested shell commands.
 - [Lifecycle hooks](lifecycle-hooks.md): add trusted local policy or automation around Kward events.
 - [RPC protocol](rpc.md#Tool_approval_bridge): implement the approval bridge in an RPC client.

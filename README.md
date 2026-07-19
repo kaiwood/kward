@@ -1,6 +1,6 @@
 # Kward
 
-Kward is an extendable Ruby CLI coding agent. It can chat with you about a project, inspect and edit files, run confirmed shell commands, search the web, look up public source code, save local sessions, and load trusted Ruby plugins for custom workflows.
+Kward is an extendable Ruby CLI coding agent. It can chat with you about a project, inspect and edit files, run local shell commands, search the web, look up public source code, save local sessions, and load trusted Ruby plugins for custom workflows.
 
 It currently supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscription, OpenRouter, and experimental Copilot provider support.
 

@@ -15,6 +15,7 @@ If `KWARD_CONFIG_PATH` is set, Kward uses that file and treats its directory as 
 | Change editor, diff, overlay, or session UI behavior | `/settings` → Interface |
 | Enable memory | `/settings` → Memory |
 | Configure web search or trust project skills | `/settings` → Tools & Search |
+| Contain model-requested shell commands | `/sandbox` for mode and child-network access; edit config for additional writable roots |
 | Tune compaction | `/settings` → Context & Compaction |
 | Configure personas | `/settings` → Personalization; see [Personas](personas.md) |
 | Add MCP servers, lifecycle hooks, or environment-specific paths | Edit `config.json` directly |
@@ -532,7 +533,7 @@ This is not a sandbox setting. File guardrails constrain Kward file tools, not a
 
 ## Command sandboxing
 
-Sandboxing is off by default. Configure `sandbox.mode` as `off`, `read_only`, or `workspace_write`; `sandbox.network` defaults to `deny`, and `sandbox.protect_git_metadata` defaults to `true`.
+Sandboxing is off by default. Use `/sandbox` to inspect or change the mode and child-network access. For additional writable roots or Git metadata protection, edit the `sandbox` config directly. `sandbox.mode` accepts `off`, `read_only`, or `workspace_write`; `sandbox.network` defaults to `deny`, and `sandbox.protect_git_metadata` defaults to `true`.
 
 ```json
 {
