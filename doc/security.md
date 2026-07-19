@@ -6,8 +6,8 @@ This guide explains the trust boundaries and gives you a safe way to start work 
 
 ## The short version
 
-- Kward and anything it launches run with your operating-system permissions.
-- File tools stay inside the active workspace by default, but shell commands are not sandboxed.
+- Kward and its trusted host-process extensions run with your operating-system permissions.
+- File tools stay inside the active workspace by default. Model-requested shell commands can also use an opt-in OS-enforced command sandbox.
 - Existing files must be read before Kward's file tools can edit or overwrite them.
 - Plugins, MCP servers, command hooks, and HTTP hooks should be configured only from sources and endpoints you trust.
 - Project skills and workspace hooks are disabled until you opt in or trust them.
@@ -42,7 +42,7 @@ Before enabling or running anything:
 6. Do not add repository-provided Ruby files to `~/.kward/plugins` unless you are willing to run them as your user.
 7. Ask Kward to explain proposed edits and commands before applying them when the impact is unclear.
 
-For especially sensitive work, use a disposable checkout, container, virtual machine, or restricted operating-system account. Kward's own guardrails do not replace operating-system isolation.
+For especially sensitive work, use a disposable checkout, container, virtual machine, or restricted operating-system account. Enable [command sandboxing](sandboxing.md) for model-requested shell commands, but remember that its first release does not sandbox the Kward host process, plugins, MCP servers, hooks, or interactive shell features.
 
 ## Workspace access is a guardrail, not a sandbox
 
@@ -50,8 +50,8 @@ Kward's built-in file tools normally resolve paths inside the active workspace. 
 
 These protections reduce accidental edits. They do not contain the whole process:
 
-- `run_shell_command`, `!command`, `/shell`, and `/pty` run with your user permissions.
-- A shell command can access files, environment variables, processes, and networks available to your account.
+- With `sandbox.mode: off` (the default), `run_shell_command`, `!command`, `/shell`, and `/pty` run with your user permissions.
+- A non-off [command sandbox](sandboxing.md) restricts only model-requested `run_shell_command` workers and their descendants. It does not cover `!command`, `/shell`, or `/pty`.
 - Plugins, command hooks, and MCP servers are local processes with the same general operating-system access.
 - Read-before-edit applies to Kward's file tools, not to arbitrary shell commands or extension code.
 

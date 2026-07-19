@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added opt-in OS-enforced sandboxing for model-requested shell commands. macOS uses Seatbelt and Linux uses Bubblewrap when available; requested sandboxing fails closed when no supported backend can enforce it.
+
 ### Changed
 
 - Improved built-in tool guidance so agents use only tools advertised for the current turn and select code search, compacted-output retrieval, and structured clarification when appropriate.

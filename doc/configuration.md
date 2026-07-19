@@ -528,7 +528,22 @@ Workspace guardrails are enabled by default. File tools such as `read_file`, `wr
 }
 ```
 
-This is not a sandbox setting. Shell commands already run as your OS user from the workspace directory and can access anything that user can access.
+This is not a sandbox setting. File guardrails constrain Kward file tools, not arbitrary shell commands. See [Command sandboxing](sandboxing.md) to apply an opt-in operating-system boundary to model-requested `run_shell_command` workers.
+
+## Command sandboxing
+
+Sandboxing is off by default. Configure `sandbox.mode` as `off`, `read_only`, or `workspace_write`; `sandbox.network` defaults to `deny`, and `sandbox.protect_git_metadata` defaults to `true`.
+
+```json
+{
+  "sandbox": {
+    "mode": "workspace_write",
+    "network": "deny"
+  }
+}
+```
+
+When Kward cannot enforce a requested non-off mode, it denies the command rather than running it unrestricted. Current support and limits are documented in [Command sandboxing](sandboxing.md).
 
 ## Permissions
 

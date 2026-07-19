@@ -560,7 +560,8 @@ module Kward
             workspaceMutationGuard: "none",
             toolApproval: { supported: true, defaultMode: "none", modes: ["none", "ask"], requestNotification: TOOL_APPROVAL_NOTIFICATION, answerMethod: TOOL_APPROVAL_METHODS.first },
             canRunShell: true,
-            canWriteFiles: true
+            canWriteFiles: true,
+            sandbox: sandbox_capabilities
           },
           export: { supported: true, formats: ["markdown", "html"], defaultFormat: "markdown" },
           logging: {
@@ -577,6 +578,30 @@ module Kward
             rotation: { maxBytes: TelemetryLogger::DEFAULT_MAX_BYTES, retention: "manual" },
             content: "redacted-metadata-only"
           }
+        }
+      end
+
+      def sandbox_capabilities
+        config = @config_manager.read(redacted: false)
+        policy = ConfigFiles.sandbox_policy(Dir.pwd, config)
+        runner = Sandbox::RunnerFactory.build(policy)
+        runner.capabilities.to_h.merge(
+          mode: policy.mode,
+          network: policy.network,
+          scope: "shellCommandsOnly",
+          sessionPinning: false,
+          oneTimeElevation: false
+        )
+      rescue ArgumentError => error
+        {
+          available: false,
+          filesystemEnforced: false,
+          childNetworkEnforced: false,
+          backend: "invalidConfiguration",
+          reason: error.message,
+          scope: "shellCommandsOnly",
+          sessionPinning: false,
+          oneTimeElevation: false
         }
       end
 

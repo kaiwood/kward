@@ -77,6 +77,7 @@ Start here:
 - [Authentication](doc/authentication.md): OpenAI OAuth, Anthropic OAuth, OpenRouter API keys, and Copilot/GitHub setup.
 - [Security and trust](doc/security.md): local permissions, external data flow, trusted extensions, and safe work in unfamiliar repositories.
 - [Permissions](doc/permissions.md): opt-in tool approval, write scopes, policy rules, and current limits.
+- [Command sandboxing](doc/sandboxing.md): opt-in OS-enforced boundaries for model-requested shell commands.
 - [Troubleshooting](doc/troubleshooting.md): environment-specific install and runtime issues.
 
 Feature guides:

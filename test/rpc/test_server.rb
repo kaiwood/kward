@@ -223,6 +223,11 @@ class TestRPCServer < KwardTestCase
     assert_equal "none", capabilities["security"]["workspaceMutationGuard"]
     assert_equal true, capabilities.dig("security", "toolApproval", "supported")
     assert_equal "none", capabilities.dig("security", "toolApproval", "defaultMode")
+    assert_equal "off", capabilities.dig("security", "sandbox", "mode")
+    assert_equal "off", capabilities.dig("security", "sandbox", "backend")
+    assert_equal "shellCommandsOnly", capabilities.dig("security", "sandbox", "scope")
+    assert_equal false, capabilities.dig("security", "sandbox", "sessionPinning")
+    assert_equal false, capabilities.dig("security", "sandbox", "oneTimeElevation")
     assert_equal ["markdown", "html"], capabilities["export"]["formats"]
     assert_equal true, capabilities["logging"]["supported"]
     assert_equal false, capabilities["logging"]["defaultEnabled"]
