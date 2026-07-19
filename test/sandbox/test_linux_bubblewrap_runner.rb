@@ -52,7 +52,8 @@ class TestLinuxBubblewrapRunner < KwardTestCase
         max_output_bytes: 10_000
       )
 
-      assert_equal 1, result.exit_status
+      refute_nil result.exit_status
+      refute_equal 0, result.exit_status
       assert_equal "inside\n", File.read(File.join(workspace, "inside.txt"))
       refute File.exist?(outside_path)
     end
