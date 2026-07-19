@@ -301,6 +301,7 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     assert_includes output_text, "Renaming · Enter save · Esc cancel"
     assert_includes output_text, "Name"
     assert_includes output_text, "renamed"
+    refute_includes output_text, "No matches"
     refute_includes output_text, "streaming"
     assert_match(/#{Regexp.escape(Kward::PromptInterface::CURSOR_SHOW)}.*Renamed/m, output.string)
   ensure

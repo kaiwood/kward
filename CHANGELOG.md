@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Prevented session-picker rename input from filtering the visible session list.
+
 ## [0.79.0] - 2026-07-19
 
 ### Added

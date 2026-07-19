@@ -626,7 +626,13 @@ module Kward
 
       def selection_matches
         choices = @select_state ? @select_state[:choices] : []
-        filter = (select_search_active? || !composer_input.strip.empty?) ? composer_input.downcase.strip : ""
+        filter = if select_input_active?
+                   ""
+                 elsif select_search_active? || !composer_input.strip.empty?
+                   composer_input.downcase.strip
+                 else
+                   ""
+                 end
         matches = filter.empty? ? choices : choices.select { |choice| choice.downcase.include?(filter) }
         clamp_selection_index(matches.length)
         matches
