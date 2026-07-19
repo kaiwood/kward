@@ -69,6 +69,24 @@ class TestConversation < KwardTestCase
     end
   end
 
+  def test_refreshes_system_prompt_when_replacement_file_changes
+    Dir.mktmpdir do |dir|
+      prompt_path = File.join(dir, "minimal.md")
+      File.write(prompt_path, "First instructions.\n")
+      File.write(File.join(dir, "config.json"), JSON.dump("system_prompt" => { "file" => "minimal.md" }))
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        conversation = Kward::Conversation.new
+        File.write(prompt_path, "Second, longer instructions.\n")
+
+        conversation.refresh_system_message_if_sources_changed!
+
+        assert_equal "Second, longer instructions.\n", conversation.system_message[:content]
+        assert_equal "Second, longer instructions.\n", conversation.compaction_system_message[:content]
+      end
+    end
+  end
+
   def test_compact_preserves_system_message_and_resets_read_paths
     compacted = nil
     conversation = Kward::Conversation.new(system_message: { role: "system", content: "system" }, read_paths: ["README.md"])

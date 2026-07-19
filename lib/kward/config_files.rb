@@ -152,6 +152,9 @@ module Kward
           "trust_project" => false
         },
         "enforce_workspace_agents_file" => false,
+        "system_prompt" => {
+          "include_principles" => true
+        },
         "mcpServers" => {},
         "tools" => {
           "workspace_guardrails" => true
@@ -577,11 +580,59 @@ module Kward
     # alias for existing installations.
     #
     # @return [String, nil] prompt text, or nil when absent/too large
-    def agents_prompt
+    def agents_prompt(config: read_config)
+      return nil unless include_config_principles?(config)
+
       path = config_principles_path
       return read_prompt_file(path, "Kward principles file") if File.exist?(path)
 
       read_prompt_file(config_agents_path, "Kward AGENTS.md alias")
+    end
+
+    # Returns whether config-directory principles are included in normal system
+    # prompt assembly. Replacement prompt files bypass all assembled sections.
+    def include_config_principles?(config = read_config)
+      settings = config["system_prompt"]
+      return true unless settings.is_a?(Hash)
+
+      settings["include_principles"] != false
+    end
+
+    # Returns the configured replacement system prompt path, or nil when normal
+    # prompt assembly should be used. Relative paths are anchored to the config
+    # directory so configuration remains portable with KWARD_CONFIG_PATH.
+    def system_prompt_file_path(config = read_config)
+      settings = config["system_prompt"]
+      value = settings.is_a?(Hash) ? settings["file"].to_s.strip : ""
+      return nil if value.empty?
+
+      File.expand_path(value, config_dir)
+    end
+
+    # Returns the replacement system prompt text when configured. A configured
+    # but unavailable file intentionally yields nil: callers must not fall back
+    # to Kward's larger assembled prompt in replacement mode.
+    def system_prompt_file(config = read_config)
+      path = system_prompt_file_path(config)
+      return nil unless path
+
+      read_prompt_file(path, "custom system prompt file")
+    end
+
+    def replacement_system_prompt?(config = read_config)
+      !system_prompt_file_path(config).nil?
+    end
+
+    # Returns a lightweight fingerprint for config-owned prompt sources. It is
+    # used by active conversations to pick up prompt edits without a restart.
+    def system_prompt_sources_fingerprint
+      config = read_config
+      paths = [config_path, system_prompt_file_path(config)]
+      if include_config_principles?(config)
+        paths << (File.exist?(config_principles_path) ? config_principles_path : config_agents_path)
+      end
+
+      paths.compact.map { |path| prompt_source_signature(path) }.join("\0")
     end
 
     def config_principles_path
@@ -703,6 +754,15 @@ module Kward
 
     def workspace_agents_prompt(workspace_root)
       read_prompt_file(workspace_agents_path(workspace_root), "workspace AGENTS.md")
+    end
+
+    def prompt_source_signature(path)
+      return "#{path}:missing" unless File.exist?(path)
+
+      stat = File.stat(path)
+      "#{path}:#{stat.size}:#{stat.mtime.to_f}"
+    rescue StandardError
+      "#{path}:unavailable"
     end
 
     def read_prompt_file(path, label)

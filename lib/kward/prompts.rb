@@ -38,6 +38,8 @@ module Kward
     # @return [Array<Hash>] section hashes with label, content, and optional source
     # @api public
     def prompt_sections(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
+      return replacement_prompt_sections if ConfigFiles.replacement_system_prompt?
+
       sections = [prompt_section("Built-in system prompt", base_prompt)]
       sections << prompt_section(config_agents_prompt_label, config_agents_prompt, source: config_agents_prompt_source)
       sections << prompt_section("Memory context", memory_context) unless memory_context.to_s.empty?
@@ -73,6 +75,7 @@ module Kward
     end
 
     def config_agents_prompt_source
+      return nil unless ConfigFiles.include_config_principles?
       return ConfigFiles.config_principles_path if File.exist?(ConfigFiles.config_principles_path)
       return ConfigFiles.config_agents_path if File.exist?(ConfigFiles.config_agents_path)
 
@@ -110,6 +113,14 @@ module Kward
       return "Workspace AGENTS.md" if ConfigFiles.enforce_workspace_agents_file?
 
       "Workspace AGENTS.md hint"
+    end
+
+    def replacement_prompt_sections
+      path = ConfigFiles.system_prompt_file_path
+      content = ConfigFiles.system_prompt_file
+      return [] if content.to_s.empty?
+
+      [prompt_section("Custom system prompt (replacement)", content, source: path)]
     end
 
     def prompt_section(label, content, source: nil)

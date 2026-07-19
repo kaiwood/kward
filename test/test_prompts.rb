@@ -107,6 +107,55 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_config_principles_can_be_disabled_without_changing_builtin_prompt
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "config.json"), JSON.dump("system_prompt" => { "include_principles" => false }))
+      File.write(File.join(dir, "PRINCIPLES.md"), "Config prompt instructions.\n")
+      File.write(File.join(dir, "AGENTS.md"), "Legacy config instructions.\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(dir, "config.json")) do
+        content = Kward::Conversation.new.system_message[:content]
+
+        assert_includes content, "You are Kward"
+        refute_includes content, "Config prompt instructions."
+        refute_includes content, "Legacy config instructions."
+      end
+    end
+  end
+
+  def test_custom_system_prompt_file_replaces_all_assembled_sections
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        FileUtils.mkdir_p(File.join(config_dir, "prompts"))
+        prompt_path = File.join(config_dir, "prompts", "minimal.md")
+        File.write(prompt_path, "Use tools carefully.\n")
+        File.write(File.join(config_dir, "PRINCIPLES.md"), "Config prompt instructions.\n")
+        File.write(File.join(workspace, "AGENTS.md"), "Workspace instructions.\n")
+        skill_dir = File.join(config_dir, "skills", "planner")
+        FileUtils.mkdir_p(skill_dir)
+        File.write(File.join(skill_dir, "SKILL.md"), "---\nname: planner\ndescription: Helps plan work.\n---\n")
+        File.write(File.join(config_dir, "config.json"), JSON.dump({
+          "enforce_workspace_agents_file" => true,
+          "personas" => { "default" => "Persona instructions." },
+          "system_prompt" => { "file" => "prompts/minimal.md", "include_principles" => false }
+        }))
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          message = Kward::Prompts.system_message(
+            workspace_root: workspace,
+            memory_context: "Remember this.",
+            plugin_context: "Plugin instructions."
+          )
+          sections = Kward::Prompts.prompt_sections(workspace_root: workspace)
+
+          assert_equal "Use tools carefully.\n", message[:content]
+          assert_equal ["Custom system prompt (replacement)"], sections.map { |section| section[:label] }
+          assert_equal prompt_path, sections.first[:source]
+        end
+      end
+    end
+  end
+
   def test_plugin_prompt_context_is_injected_after_personas
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|

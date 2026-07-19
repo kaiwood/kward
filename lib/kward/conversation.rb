@@ -87,6 +87,7 @@ module Kward
       end
       @compaction_system_message = compaction_system_message
       @workspace_agents_mtime = workspace_agents_mtime
+      @system_prompt_sources_fingerprint = ConfigFiles.system_prompt_sources_fingerprint
       @last_entry_compaction = false
       @memory_context = memory_context
       @session_memories = Array(session_memories)
@@ -191,6 +192,7 @@ module Kward
       @on_system_message_change&.call(replacement)
       @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time)
       @workspace_agents_mtime = workspace_agents_mtime
+      @system_prompt_sources_fingerprint = ConfigFiles.system_prompt_sources_fingerprint
       replacement
     end
 
@@ -206,7 +208,18 @@ module Kward
     end
 
     def refresh_system_message_if_workspace_agents_changed!
-      refresh_system_message! if @system_message_enabled && workspace_agents_mtime != @workspace_agents_mtime
+      refresh_system_message_if_sources_changed!
+    end
+
+    # Refreshes runtime prompt state after workspace or config-owned prompt
+    # sources change. Keep the older public method above as a compatibility
+    # alias for existing callers.
+    def refresh_system_message_if_sources_changed!
+      return unless @system_message_enabled
+
+      changed = workspace_agents_mtime != @workspace_agents_mtime ||
+        ConfigFiles.system_prompt_sources_fingerprint != @system_prompt_sources_fingerprint
+      refresh_system_message! if changed
     end
 
     def mark_read(path)
