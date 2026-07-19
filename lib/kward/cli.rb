@@ -60,6 +60,7 @@ require_relative "cli/hook_commands"
 require_relative "cli/settings"
 require_relative "cli/sessions"
 require_relative "cli/tabs"
+require_relative "cli/worktrees"
 require_relative "cli/compaction"
 require_relative "cli/rendering"
 require_relative "cli/prompt_interface"
@@ -93,6 +94,7 @@ module Kward
     include CLI::Settings
     include CLI::Sessions
     include CLI::Tabs
+    include CLI::Worktrees
     include CLI::CompactionCommands
     include CLI::Rendering
     include CLI::PromptInterfaceSupport

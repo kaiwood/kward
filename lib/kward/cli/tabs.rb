@@ -120,11 +120,14 @@ module Kward
         descriptors = Array(data["tabs"])
         return nil if descriptors.empty?
 
-        descriptors.each_with_index do |_descriptor, index|
-          tab = build_tab_from_descriptor(data.fetch("tabs")[index], session_store, label: restored_tab_label(data, index))
+        descriptors.each_with_index do |descriptor, index|
+          tab = build_tab_from_descriptor(descriptor, session_store, label: restored_tab_label(data, index))
           @tabs << tab if tab
-        rescue StandardError
-          next
+        rescue StandardError => e
+          descriptor = descriptor.transform_keys(&:to_s) if descriptor.respond_to?(:transform_keys)
+          if descriptor.is_a?(Hash) && descriptor.key?("worktree")
+            @tabs << unavailable_worktree_tab(descriptor, e, label: restored_tab_label(data, index))
+          end
         end
         return nil if @tabs.empty?
 
@@ -136,9 +139,17 @@ module Kward
       def build_tab_from_descriptor(descriptor, session_store, label: nil)
         descriptor = descriptor.transform_keys(&:to_s)
         if descriptor["kind"] == "session"
-          session, conversation = restore_tab_session(session_store, descriptor.fetch("session_path"))
+          worktree = if descriptor.key?("worktree")
+            binding = GitWorktreeBinding.from_descriptor(descriptor["worktree"])
+            raise GitWorktreeManager::Error, "Invalid worktree binding." unless binding
+
+            binding
+          end
+          validate_worktree_binding!(worktree)
+          root = worktree_root_for(worktree, fallback: session_store.cwd)
+          session, conversation = restore_tab_session(session_store, descriptor.fetch("session_path"), workspace_root: root)
           agent = build_tab_agent(conversation, session)
-          return build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent), label: label)
+          return build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent, worktree: worktree), label: label)
         end
 
         tab_type = plugin_registry.tab_type_for_id(descriptor["plugin_tab_type"])
@@ -174,14 +185,14 @@ module Kward
         runtime_output("Could not open plugin tab #{name.inspect}: #{e.message}")
       end
 
-      def restore_tab_session(session_store, path)
+      def restore_tab_session(session_store, path, workspace_root: session_store.cwd)
         if File.file?(path)
-          session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+          session, conversation = session_store.load(path, workspace: configured_workspace(root: workspace_root), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
           return [track_session(session), conversation]
         end
 
         session = track_session(session_store.create(provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort))
-        conversation = new_conversation(workspace_root: session_store.cwd)
+        conversation = new_conversation(workspace_root: workspace_root)
         session.attach(conversation)
         [session, conversation]
       end
