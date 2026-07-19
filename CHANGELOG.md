@@ -15,6 +15,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed an RPC race where follow-up input could queue instead of steering a turn immediately after it began.
 - Prevented the RPC server from loading trusted Ruby plugins separately for plugin chats and workspace sessions, eliminating duplicate constant-definition warnings during startup.
 - Prevented `/reload` and RPC runtime reloads from emitting duplicate constant-definition warnings for plugin-defined constants.
+- Wrapped long side-by-side diff cells when editor soft wrap is enabled instead of clipping their contents.
 
 ## [0.78.0] - 2026-07-15
 

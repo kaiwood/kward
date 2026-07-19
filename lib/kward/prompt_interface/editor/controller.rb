@@ -153,11 +153,11 @@ module Kward
             pending_deletions << line[1..].to_s
           elsif line.start_with?("+")
             deleted = pending_deletions.shift
-            rows << side_by_side_diff_row(deleted && "- #{deleted}", "+ #{line[1..]}", width)
+            rows.concat(side_by_side_diff_rows(deleted && "- #{deleted}", "+ #{line[1..]}", width))
           else
             rows.concat(flush_side_by_side_deletions(pending_deletions, width))
             text = line.start_with?(" ") ? line[1..].to_s : line
-            rows << side_by_side_diff_row("  #{text}", "  #{text}", width)
+            rows.concat(side_by_side_diff_rows("  #{text}", "  #{text}", width))
           end
         end
 
@@ -170,7 +170,17 @@ module Kward
       end
 
       def flush_side_by_side_deletions(lines, width)
-        lines.shift(lines.length).map { |line| side_by_side_diff_row("- #{line}", nil, width) }
+        lines.shift(lines.length).flat_map { |line| side_by_side_diff_rows("- #{line}", nil, width) }
+      end
+
+      def side_by_side_diff_rows(left, right, width)
+        return [side_by_side_diff_row(left, right, width)] unless current_editor_soft_wrap?
+
+        left_lines = side_by_side_diff_cell_lines(left, width)
+        right_lines = side_by_side_diff_cell_lines(right, width)
+        [left_lines.length, right_lines.length].max.times.map do |index|
+          side_by_side_diff_row(left_lines[index], right_lines[index], width)
+        end
       end
 
       def side_by_side_diff_row(left, right, width)
@@ -182,6 +192,17 @@ module Kward
       def side_by_side_diff_cell(text, width)
         value = text.nil? ? "" : text.to_s
         visible_truncate(value, width)
+      end
+
+      def side_by_side_diff_cell_lines(text, width)
+        return [""] if text.nil?
+
+        value = text.to_s
+        prefix = value.start_with?("- ", "+ ", "  ") ? value[0, 2] : ""
+        content = value.delete_prefix(prefix)
+        return [prefix] if content.empty?
+
+        content.chars.each_slice([width - prefix.length, 1].max).map { |characters| "#{prefix}#{characters.join}" }
       end
 
       def side_by_side_diff_column_width

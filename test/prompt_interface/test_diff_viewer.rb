@@ -30,6 +30,32 @@ class TestPromptInterfaceDiffViewer < KwardTestCase
     assert_includes state.lines[2], " │ "
   end
 
+  def test_side_by_side_diff_wraps_each_column_when_soft_wrap_is_enabled
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, diff_view: "side_by_side", editor_soft_wrap: true)
+    prompt.define_singleton_method(:screen_width) { 140 }
+    deleted = "old #{"x" * 140}"
+    added = "new #{"y" * 140}"
+
+    prompt.send(:open_diff_viewer, "example.txt", "-#{deleted}\n+#{added}\n")
+
+    rows = prompt.instance_variable_get(:@editor_state).lines.grep(/ │ /)
+    assert_operator rows.length, :>, 1
+    assert_equal deleted, rows.map { |row| row.split(" │ ", 2).first.delete_prefix("- ").rstrip }.join
+    assert_equal added, rows.map { |row| row.split(" │ ", 2).last.delete_prefix("+ ").rstrip }.join
+  end
+
+  def test_side_by_side_diff_truncates_columns_when_soft_wrap_is_disabled
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, diff_view: "side_by_side", editor_soft_wrap: false)
+    prompt.define_singleton_method(:screen_width) { 140 }
+    added = "new #{"y" * 140}"
+
+    prompt.send(:open_diff_viewer, "example.txt", "+#{added}\n")
+
+    rows = prompt.instance_variable_get(:@editor_state).lines.grep(/ │ /)
+    assert_equal 1, rows.length
+    refute_includes rows.first, added
+  end
+
   def test_open_diff_viewer_honors_explicit_unified_mode_on_wide_terminal
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, diff_view: "unified")
     prompt.define_singleton_method(:screen_width) { 160 }
