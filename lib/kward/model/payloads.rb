@@ -26,6 +26,7 @@ module Kward
 
       payload = { model: parts[:model], messages: parts[:messages], tools: parts[:tools] }
       payload[:reasoning] = { effort: reasoning || reasoning_effort("OpenRouter") } if provider == "OpenRouter" && reasoning != false
+      payload[:stream] = true if provider == "Local"
       payload[:max_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end

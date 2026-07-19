@@ -231,6 +231,80 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_local_chat_streams_openai_compatible_text_and_tool_calls_without_authentication
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump({
+        "provider" => "local",
+        "local_model" => "qwen2.5-coder:7b",
+        "local_base_url" => "http://127.0.0.1:11434/v1",
+        "local_context_window" => 32_768
+      }))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+      stream = [
+        "data: #{JSON.dump("choices" => [{ "delta" => { "content" => "hello " } }])}\n\n",
+        "data: #{JSON.dump("choices" => [{ "delta" => { "tool_calls" => [{ "index" => 0, "id" => "call_1", "function" => { "name" => "read_" } }] } }])}\n\n",
+        "data: #{JSON.dump("choices" => [{ "delta" => { "tool_calls" => [{ "index" => 0, "function" => { "name" => "file", "arguments" => JSON.dump("path" => "README.md") } }] } }], "usage" => { "prompt_tokens" => 3, "completion_tokens" => 2 })}\n\n",
+        "data: [DONE]\n\n"
+      ]
+      response = fake_net_response(200, stream.join)
+      response.define_singleton_method(:read_body) { |&block| stream.each { |chunk| block.call(chunk) }; stream.join }
+
+      with_fake_http([response]) do |http|
+        deltas = []
+        message = client.chat([{ role: "user", content: "hello" }], on_assistant_delta: deltas.method(:<<))
+
+        assert_equal "hello ", message["content"]
+        assert_equal "read_file", message.dig("tool_calls", 0, "function", "name")
+        assert_equal "{\"path\":\"README.md\"}", message.dig("tool_calls", 0, "function", "arguments")
+        assert_equal 5, message.dig("usage", "total_tokens")
+        assert_equal ["hello "], deltas
+        assert_equal "Local", message["provider"]
+        assert_equal "qwen2.5-coder:7b", message["model"]
+        assert_equal URI("http://127.0.0.1:11434/v1/chat/completions"), http.requests.first.uri
+        assert_nil http.requests.first["Authorization"]
+        payload = JSON.parse(http.requests.first.body)
+        assert_equal true, payload["stream"]
+        assert_equal "qwen2.5-coder:7b", payload["model"]
+      end
+    end
+  end
+
+  def test_local_available_models_and_context_window_use_configured_server
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump({
+        "provider" => "local",
+        "local_model" => "configured-model",
+        "local_base_url" => "http://127.0.0.1:1234/v1",
+        "local_context_window" => 16_384
+      }))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+      body = JSON.dump("data" => [{ "id" => "loaded-model" }])
+
+      with_fake_http([fake_net_response(200, body)]) do |http|
+        models = client.available_models
+
+        assert_includes_model models, { provider: "Local", id: "loaded-model", current: false, contextWindow: 16_384 }
+        assert_includes_model models, { provider: "Local", id: "configured-model", current: true, contextWindow: 16_384 }
+        assert_equal URI("http://127.0.0.1:1234/v1/models"), http.requests.first.uri
+        assert_equal 16_384, client.current_context_window
+      end
+    end
+  end
+
+  def test_local_chat_rejects_invalid_endpoint
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "local", "local_model" => "model", "local_base_url" => "file:///tmp/model"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: path)
+
+      error = assert_raises(RuntimeError) { client.chat([{ role: "user", content: "hello" }]) }
+
+      assert_equal "Invalid local model URL: file:///tmp/model", error.message
+    end
+  end
+
   def test_openrouter_available_models_use_cached_model_ids_when_available
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")

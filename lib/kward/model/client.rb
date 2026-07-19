@@ -29,6 +29,11 @@ module Kward
     OPENROUTER_URL = URI("https://openrouter.ai/api/v1/chat/completions")
     CODEX_URL = URI("https://chatgpt.com/backend-api/codex/responses")
     ANTHROPIC_URL = URI("https://api.anthropic.com/v1/messages")
+    LOCAL_BASE_URLS = {
+      "ollama" => "http://127.0.0.1:11434/v1",
+      "lm_studio" => "http://127.0.0.1:1234/v1",
+      "llama_cpp" => "http://127.0.0.1:8080/v1"
+    }.freeze
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
     OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouter_api_key to your Kward config."
     COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
@@ -94,18 +99,19 @@ module Kward
       @telemetry_logger = telemetry_logger
       @copilot_models = nil
       @openrouter_models = nil
+      @local_models = nil
     end
 
     def chat(messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil)
       cancellation&.raise_if_cancelled!
       requested_provider = provider
       url, token, resolved_provider, account_id = credentials(provider: requested_provider)
-      if token.to_s.empty? && !requested_provider.to_s.empty?
+      if token.to_s.empty? && authentication_required?(resolved_provider) && !requested_provider.to_s.empty?
         url, token, resolved_provider, account_id = credentials
         model = nil
         reasoning = nil
       end
-      raise auth_error_for(resolved_provider) if token.nil? || token.empty?
+      raise auth_error_for(resolved_provider) if authentication_required?(resolved_provider) && (token.nil? || token.empty?)
 
       current_model = model_for(resolved_provider, override_model: model)
       current_model = resolved_copilot_chat_model(current_model) if resolved_provider == "Copilot" && model.nil?
@@ -180,7 +186,10 @@ module Kward
 
     # Returns the known context window for a provider/model pair.
     def context_window(provider, model)
-      context_window_for(ModelInfo.provider_label(provider), model)
+      provider = ModelInfo.provider_label(provider)
+      return local_context_window if provider == "Local"
+
+      context_window_for(provider, model)
     end
 
     # Returns model choices suitable for settings UIs.
@@ -226,6 +235,14 @@ module Kward
         models << model_entry("Anthropic", anthropic_model, current: provider == "Anthropic") unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
       end
 
+      if provider_logged_in?("Local")
+        local_model = model_for("Local")
+        local_model_choices.each do |id|
+          models << model_entry("Local", id, current: provider == "Local" && local_model == id)
+        end
+        models << model_entry("Local", local_model, current: provider == "Local") unless local_model.to_s.empty? || local_model_choices.include?(local_model)
+      end
+
       # Sort models by provider, then alphabetically by id
       models.sort_by { |model| [model[:provider], model[:id]] }
     end
@@ -247,6 +264,7 @@ module Kward
       @config = load_config
       @copilot_models = nil
       @openrouter_models = nil
+      @local_models = nil
     end
 
     private
@@ -295,6 +313,15 @@ module Kward
           request_body: request_body,
           current_model: current_model,
           on_reasoning_delta: on_reasoning_delta,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
+      when "Local"
+        chat_local_provider(
+          url: url,
+          token: token,
+          request_body: request_body,
+          current_model: current_model,
           on_assistant_delta: on_assistant_delta,
           cancellation: cancellation
         )
@@ -360,6 +387,31 @@ module Kward
       end
       cancellation&.raise_if_cancelled!
       attach_response_metadata(message, provider: "Anthropic", model: current_model)
+    end
+
+    def chat_local_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
+      request["Authorization"] = "Bearer #{token}" unless token.to_s.empty?
+      request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
+      request.body = request_body
+
+      message = nil
+      Net::HTTP.start(url.hostname, url.port, use_ssl: url.scheme == "https", read_timeout: stream_idle_timeout_seconds) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise RequestError.new(provider: "Local", code: response.code, body: redact(body, token))
+          end
+
+          message = parse_openai_chat_sse_stream(response, on_assistant_delta: on_assistant_delta, cancellation: cancellation, provider_label: "Local")
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      attach_response_metadata(message, provider: "Local", model: current_model)
     end
 
     def chat_openrouter_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
@@ -504,7 +556,28 @@ module Kward
     end
 
     def context_window_for(provider, id)
+      return local_context_window if provider == "Local"
+
       ModelInfo.context_window(provider, id, openrouter_models: openrouter_cached_model_entries)
+    end
+
+    def local_model_choices
+      return @local_models if @local_models
+
+      url = local_models_url
+      request = Http.apply_user_agent(Net::HTTP::Get.new(url))
+      request["Authorization"] = "Bearer #{local_api_key}" unless local_api_key.to_s.empty?
+      request["Accept"] = "application/json"
+      response = Net::HTTP.start(url.hostname, url.port, use_ssl: url.scheme == "https", read_timeout: stream_idle_timeout_seconds) { |http| http.request(request) }
+      return @local_models = [] unless response.is_a?(Net::HTTPSuccess)
+
+      body = JSON.parse(response.body)
+      entries = body["data"] || body["models"] || []
+      @local_models = Array(entries).filter_map do |entry|
+        entry.is_a?(Hash) ? entry["id"] || entry[:id] || entry["model"] || entry[:model] : entry
+      end.map(&:to_s).map(&:strip).reject(&:empty?).uniq
+    rescue StandardError
+      @local_models = []
     end
 
     def openrouter_model_choices
@@ -627,7 +700,11 @@ module Kward
     end
 
     def parse_openai_chat_sse(body, on_assistant_delta: nil)
-      ModelStreamParser.parse_openai_chat_sse(body, on_assistant_delta: on_assistant_delta, usage_normalizer: method(:normalized_usage))
+      ModelStreamParser.parse_openai_chat_sse(body, on_assistant_delta: on_assistant_delta, usage_normalizer: method(:normalized_usage), provider_label: "Copilot")
+    end
+
+    def parse_openai_chat_sse_stream(response, on_assistant_delta: nil, cancellation: nil, provider_label: "OpenAI-compatible provider")
+      ModelStreamParser.parse_openai_chat_sse_stream(response, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: method(:normalized_usage), provider_label: provider_label)
     end
 
     def anthropic_headers
@@ -776,6 +853,10 @@ module Kward
 
     def credentials(provider: nil)
       provider = provider.to_s.empty? ? ModelInfo.provider_label(configured_provider) : ModelInfo.provider_label(provider)
+      if provider == "Local"
+        return [local_chat_url, local_api_key, provider, nil]
+      end
+
       if provider == "Copilot"
         return [copilot_chat_url, github_access_token, provider, nil]
       end
@@ -806,8 +887,14 @@ module Kward
       ModelInfo.reasoning_effort(config: @config, provider: provider)
     end
 
+    def authentication_required?(provider)
+      provider != "Local"
+    end
+
     def provider_logged_in?(provider)
       case provider
+      when "Local"
+        local_configured?
       when "Codex"
         openai_configured?
       when "OpenRouter"
@@ -827,6 +914,53 @@ module Kward
       !@openai_access_token.to_s.empty? || @oauth.access_token.to_s != ""
     rescue StandardError
       false
+    end
+
+    def local_configured?
+      configured_provider == "local" || !local_model.to_s.empty? || !config_value("local_base_url").to_s.empty? || !ENV["KWARD_LOCAL_BASE_URL"].to_s.empty?
+    end
+
+    def local_model
+      ENV["KWARD_LOCAL_MODEL"] || config_value("local_model")
+    end
+
+    def local_context_window
+      value = ENV["KWARD_LOCAL_CONTEXT_WINDOW"] || config_value("local_context_window")
+      positive_integer(value)
+    end
+
+    def local_api_key
+      ENV["KWARD_LOCAL_API_KEY"] || config_value("local_api_key")
+    end
+
+    def local_backend
+      presence(ENV["KWARD_LOCAL_BACKEND"].to_s.strip) || presence(config_value("local_backend").to_s.strip) || "ollama"
+    end
+
+    def local_base_url
+      configured = presence(ENV["KWARD_LOCAL_BASE_URL"].to_s.strip) || presence(config_value("local_base_url").to_s.strip)
+      return configured if configured
+
+      LOCAL_BASE_URLS.fetch(local_backend) { raise "Unknown local model backend: #{local_backend}" }
+    end
+
+    def local_chat_url
+      local_url("chat/completions")
+    end
+
+    def local_models_url
+      local_url("models")
+    end
+
+    def local_url(path)
+      base = URI.parse(local_base_url)
+      unless base.is_a?(URI::HTTP) && base.host && !base.host.empty? && base.user.nil? && base.password.nil? && base.query.nil? && base.fragment.nil?
+        raise "Invalid local model URL: #{local_base_url}"
+      end
+
+      URI("#{base.to_s.sub(%r{/+\z}, "")}/#{path}")
+    rescue URI::InvalidURIError
+      raise "Invalid local model URL: #{local_base_url}"
     end
 
     def openrouter_api_key
@@ -869,6 +1003,8 @@ module Kward
     end
 
     def redact(text, token)
+      return text.to_s if token.to_s.empty?
+
       text.to_s.gsub(token.to_s, "[REDACTED]")
     end
 

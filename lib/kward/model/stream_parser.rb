@@ -13,36 +13,68 @@ module Kward
   module ModelStreamParser
     module_function
 
-    def parse_openai_chat_sse(body, on_assistant_delta: nil, usage_normalizer: nil)
-      content = +""
-      tool_calls = []
-      usage = nil
+    def parse_openai_chat_sse(body, on_assistant_delta: nil, usage_normalizer: nil, provider_label: "OpenAI-compatible provider")
+      state = openai_chat_sse_state
       body.split(/\r?\n\r?\n/).each do |block|
-        data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
-        next if data.empty? || data == "[DONE]"
-
-        event = JSON.parse(data)
-        usage ||= usage_normalizer&.call(event["usage"])
-        choice = Array(event["choices"]).first || {}
-        delta = choice["delta"] || {}
-        if delta["content"]
-          text = delta["content"].to_s
-          content << text
-          on_assistant_delta&.call(text)
-        end
-        Array(delta["tool_calls"]).each do |tool_call|
-          merge_streaming_tool_call(tool_calls, tool_call)
-        end
-        message = choice["message"] || {}
-        content << message["content"].to_s if content.empty? && message["content"]
-        Array(message["tool_calls"]).each { |tool_call| merge_streaming_tool_call(tool_calls, tool_call) }
+        process_openai_chat_sse_block(block, state, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer)
       end
-      result = { "role" => "assistant", "content" => content }
-      result["tool_calls"] = finalized_streaming_tool_calls(tool_calls) unless tool_calls.empty?
-      result["usage"] = usage if usage
-      result
+      openai_chat_sse_message(state)
     rescue JSON::ParserError => e
-      raise "Copilot returned invalid SSE JSON: #{e.message}"
+      raise "#{provider_label} returned invalid SSE JSON: #{e.message}"
+    end
+
+    # Incrementally parses a Chat Completions SSE HTTP response body. Local
+    # OpenAI-compatible servers stream this shape, so emit assistant deltas as
+    # complete SSE blocks arrive rather than waiting for connection close.
+    def parse_openai_chat_sse_stream(response, on_assistant_delta: nil, cancellation: nil, usage_normalizer: nil, provider_label: "OpenAI-compatible provider")
+      state = openai_chat_sse_state
+      buffer = +""
+
+      response.read_body do |chunk|
+        cancellation&.raise_if_cancelled!
+        buffer << chunk
+        while (index = buffer.index(/\r?\n\r?\n/))
+          delimiter = Regexp.last_match[0]
+          block = buffer[0...index]
+          buffer = buffer[(index + delimiter.length)..] || +""
+          process_openai_chat_sse_block(block, state, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer)
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      process_openai_chat_sse_block(buffer, state, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer) unless buffer.empty?
+      openai_chat_sse_message(state)
+    rescue JSON::ParserError => e
+      raise "#{provider_label} returned invalid SSE JSON: #{e.message}"
+    end
+
+    def openai_chat_sse_state
+      { content: +"", tool_calls: [], usage: nil }
+    end
+
+    def process_openai_chat_sse_block(block, state, on_assistant_delta: nil, usage_normalizer: nil)
+      data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
+      return if data.empty? || data == "[DONE]"
+
+      event = JSON.parse(data)
+      state[:usage] ||= usage_normalizer&.call(event["usage"])
+      choice = Array(event["choices"]).first || {}
+      delta = choice["delta"] || {}
+      if delta["content"]
+        text = delta["content"].to_s
+        state[:content] << text
+        on_assistant_delta&.call(text)
+      end
+      Array(delta["tool_calls"]).each { |tool_call| merge_streaming_tool_call(state[:tool_calls], tool_call) }
+      message = choice["message"] || {}
+      state[:content] << message["content"].to_s if state[:content].empty? && message["content"]
+      Array(message["tool_calls"]).each { |tool_call| merge_streaming_tool_call(state[:tool_calls], tool_call) }
+    end
+
+    def openai_chat_sse_message(state)
+      result = { "role" => "assistant", "content" => state[:content] }
+      result["tool_calls"] = finalized_streaming_tool_calls(state[:tool_calls]) unless state[:tool_calls].empty?
+      result["usage"] = state[:usage] if state[:usage]
+      result
     end
 
     def parse_codex_sse(body, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
