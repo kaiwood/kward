@@ -31,6 +31,7 @@ module Kward
       end
 
       def reload_plugins(conversation)
+        @prompt_templates = nil
         @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
         @prompt.update_slash_commands(slash_command_entries) if @prompt.respond_to?(:update_slash_commands)
         conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)

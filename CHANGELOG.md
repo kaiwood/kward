@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Prevented `/reload` from retaining stale prompt templates, so new and edited prompt files refresh slash-command completion and expansion.
 - Prevented session-picker rename input from filtering the visible session list.
 
 ## [0.79.0] - 2026-07-19

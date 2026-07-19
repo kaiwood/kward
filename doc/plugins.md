@@ -58,7 +58,7 @@ Start Kward and run:
 /hello World
 ```
 
-When developing plugins, use `/reload` inside Kward to reload all plugin files without restarting. This picks up changes to existing plugins and registers new ones, then rebuilds the system message.
+When developing plugins or prompt templates, use `/reload` inside Kward to reload configured prompt files and all plugin files without restarting. This picks up prompt edits, changes to existing plugins, and new plugin registrations, then refreshes slash-command completion and rebuilds the system message.
 
 ## Add a slash command
 

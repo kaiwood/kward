@@ -3779,6 +3779,37 @@ edit this prompt"
     end
   end
 
+  def test_reload_plugins_refreshes_prompt_templates_and_completion
+    Dir.mktmpdir do |home|
+      Dir.mktmpdir do |config_dir|
+        config_path = File.join(config_dir, "config.json")
+        prompts_dir = File.join(config_dir, "prompts")
+        File.write(config_path, JSON.dump({}))
+        FileUtils.mkdir_p(prompts_dir)
+        File.write(File.join(prompts_dir, "plan.md"), "Plan v1: $ARGUMENTS\n")
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => config_path) do
+          prompt = FakePrompt.new([])
+          slash_command_updates = []
+          prompt.define_singleton_method(:update_slash_commands) { |commands| slash_command_updates << commands }
+          cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+          conversation = Kward::Conversation.new(system_message: nil, workspace_root: config_dir)
+
+          assert_equal ["plan"], cli.send(:prompt_templates).map(&:command)
+          File.write(File.join(prompts_dir, "plan.md"), "Plan v2: $ARGUMENTS\n")
+          File.write(File.join(prompts_dir, "review.md"), "Review: $ARGUMENTS\n")
+
+          cli.send(:reload_plugins, conversation)
+
+          prompt_names = slash_command_updates.last.map { |entry| entry[:name] }
+          assert_includes prompt_names, "review"
+          assert_equal "Plan v2: task\n", cli.send(:expand_prompt_template, "/plan task")
+          assert_equal "Review: task\n", cli.send(:expand_prompt_template, "/review task")
+        end
+      end
+    end
+  end
+
   def test_interactive_plugin_slash_command_runs_without_calling_client
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")
