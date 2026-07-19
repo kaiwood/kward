@@ -328,6 +328,22 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_current_workspace_root_uses_active_tab_conversation_root
+    Dir.mktmpdir do |origin|
+      Dir.mktmpdir do |worktree|
+        conversation = Kward::Conversation.new(system_message: nil, workspace_root: worktree)
+        agent = Struct.new(:conversation).new(conversation)
+        tab = Kward::CLI::Tabs::TabRuntime.new(agent: agent)
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new)
+        cli.instance_variable_set(:@tabs, [tab])
+        cli.instance_variable_set(:@active_tab_index, 0)
+        cli.instance_variable_set(:@active_session, Struct.new(:cwd).new(origin))
+
+        assert_equal File.realpath(worktree), cli.send(:current_workspace_root)
+      end
+    end
+  end
+
   def test_plugin_tab_allows_normal_messages
     Dir.mktmpdir do |home|
       Dir.mktmpdir do |config_dir|

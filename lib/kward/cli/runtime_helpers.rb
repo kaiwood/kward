@@ -401,6 +401,8 @@ module Kward
       end
 
       def current_workspace_root
+        conversation = active_tab&.agent&.conversation if respond_to?(:active_tab, true)
+        return conversation.workspace_root if conversation&.respond_to?(:workspace_root)
         return @active_session.cwd.to_s unless @active_session&.cwd.to_s.empty?
         return @working_directory if @working_directory
 
