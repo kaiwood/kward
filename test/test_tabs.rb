@@ -371,6 +371,30 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_worktree_agent_writes_to_the_bound_root
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+
+        result = tab.agent.tool_registry.dispatch(
+          tool_call("write_file", { "path" => "agent.txt", "content" => "worktree only\n" }),
+          tab.agent.conversation
+        )
+
+        assert_includes result, "Wrote"
+        assert_equal "worktree only\n", File.read(File.join(binding.path, "agent.txt"))
+        refute File.exist?(File.join(root, "agent.txt"))
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_toggle_off_keeps_dirty_worktree_changes
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|

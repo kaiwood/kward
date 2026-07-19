@@ -147,8 +147,8 @@ module Kward
           end
           validate_worktree_binding!(worktree)
           root = worktree_root_for(worktree, fallback: session_store.cwd)
-          session, conversation = restore_tab_session(session_store, descriptor.fetch("session_path"), workspace_root: root)
-          agent = build_tab_agent(conversation, session)
+          session, conversation = restore_tab_session(session_store, descriptor.fetch("session_path"), workspace_root: root, strict: worktree&.active? == true)
+          agent = build_tab_agent(conversation, session, worktree: worktree)
           return build_tab(session, agent, driver: SessionTabDriver.new(session: session, agent: agent, worktree: worktree), label: label)
         end
 
@@ -185,9 +185,9 @@ module Kward
         runtime_output("Could not open plugin tab #{name.inspect}: #{e.message}")
       end
 
-      def restore_tab_session(session_store, path, workspace_root: session_store.cwd)
+      def restore_tab_session(session_store, path, workspace_root: session_store.cwd, strict: false)
         if File.file?(path)
-          session, conversation = session_store.load(path, workspace: configured_workspace(root: workspace_root), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+          session, conversation = session_store.load(path, workspace: configured_workspace(root: workspace_root, strict: strict), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
           return [track_session(session), conversation]
         end
 
@@ -197,18 +197,20 @@ module Kward
         [session, conversation]
       end
 
-      def build_tab_agent(conversation, _session)
+      def build_tab_agent(conversation, _session, worktree: nil)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
-        workspace = configured_workspace(root: conversation.workspace_root)
+        strict = worktree&.active? == true
+        workspace = configured_workspace(root: conversation.workspace_root, strict: strict)
         prompt = TabQuestionPrompt.new(self)
-        hook_manager = lifecycle_hook_manager(conversation)
-        hook_context = lifecycle_hook_context(conversation)
+        hook_manager = strict ? nil : lifecycle_hook_manager(conversation)
+        hook_context = strict ? nil : lifecycle_hook_context(conversation)
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: prompt,
           tool_approval: tab_tool_approval_callback(prompt),
           hook_manager: hook_manager,
-          hook_context: hook_context
+          hook_context: hook_context,
+          mcp_clients: strict ? [] : nil
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry

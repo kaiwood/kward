@@ -43,12 +43,12 @@ module Kward
 
         session, conversation = @session_store.load(
           tab.session.path,
-          workspace: configured_workspace(root: root),
+          workspace: configured_workspace(root: root, strict: worktree&.active? == true),
           provider: current_model_provider,
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )
-        agent = build_tab_agent(conversation, session)
+        agent = build_tab_agent(conversation, session, worktree: worktree)
         tab.session = track_session(session)
         tab.agent = agent
         tab.driver = SessionTabDriver.new(session: tab.session, agent: agent, worktree: worktree)
@@ -100,7 +100,7 @@ module Kward
         return activate_existing_worktree(tab, binding) if binding
 
         attach_new_worktree(tab)
-      rescue GitWorktreeManager::Error => e
+      rescue GitWorktreeManager::Error, Sandbox::UnavailableError => e
         runtime_output("Worktree error: #{e.message}")
       end
 

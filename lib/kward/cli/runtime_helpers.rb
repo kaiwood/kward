@@ -317,8 +317,8 @@ module Kward
         @pending_inputs&.first.is_a?(Hash) && @pending_inputs.first[:tab_action]
       end
 
-      def configured_workspace(root: current_workspace_root)
-        WorkspaceFactory.build(root: root, guardrails: workspace_guardrails_enabled?, config: safely_read_config.to_h)
+      def configured_workspace(root: current_workspace_root, strict: false)
+        WorkspaceFactory.build(root: root, guardrails: workspace_guardrails_enabled?, config: safely_read_config.to_h, strict: strict)
       end
 
       def workspace_guardrails_enabled?
