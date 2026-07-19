@@ -7,7 +7,7 @@ This guide explains the trust boundaries and gives you a safe way to start work 
 ## The short version
 
 - Kward and its trusted host-process extensions run with your operating-system permissions.
-- File tools stay inside the active workspace by default. Model-requested shell commands can also use an opt-in OS-enforced command sandbox.
+- File tools stay inside the active workspace by default. Worktree-backed tabs force workspace guardrails and an OS-enforced sandbox for model-requested shell commands when the platform supports it.
 - Existing files must be read before Kward's file tools can edit or overwrite them.
 - Plugins, MCP servers, command hooks, and HTTP hooks should be configured only from sources and endpoints you trust.
 - Project skills and workspace hooks are disabled until you opt in or trust them.
@@ -61,7 +61,15 @@ These protections reduce accidental edits. They do not contain the whole process
 - Plugins, command hooks, and MCP servers are local processes with the same general operating-system access.
 - Read-before-edit applies to Kward's file tools, not to arbitrary shell commands or extension code.
 
-You can disable the file boundary with `tools.workspace_guardrails: false`, but doing so broadens file-tool access and is rarely needed. See [Workspace tools](workspace-tools.md) for exact limits and [Configuration](configuration.md#Tool_workspace_guardrails) for the setting.
+You can disable the file boundary with `tools.workspace_guardrails: false`, but worktree-backed tabs do not honor that weakening: they always keep file guardrails enabled. See [Workspace tools](workspace-tools.md) for exact limits and [Configuration](configuration.md#Tool_workspace_guardrails) for the setting.
+
+## Worktree tab boundaries
+
+A worktree-backed tab uses its linked worktree as the active workspace and requires an OS-enforced `workspace_write` command sandbox. If the platform cannot provide filesystem enforcement, Kward refuses to activate the worktree rather than running model-requested shell commands unrestricted.
+
+The strict worktree agent disables configured MCP clients and lifecycle hooks for that tab because those extensions run outside the command-worker sandbox. The interactive `/shell`, `!command`, and `/pty` features remain host-process features and are not covered by the worktree boundary. Use them only when you intentionally want to run a user-directed command outside the model command sandbox.
+
+Git worktrees share repository metadata. Kward keeps Git metadata protection enabled for model-requested commands, so the interactive `/git` flow is the safe way to review, stage, and commit the worktree branch.
 
 ## Tool approvals and policy hooks
 

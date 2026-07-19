@@ -63,6 +63,25 @@ Changes apply to newly created sessions and tabs. Existing turns keep the
 workspace and command runner they started with, so start a new session or tab
 after changing the mode.
 
+## Worktree tabs
+
+An active worktree-backed tab uses a strict `workspace_write` policy for its
+model-requested command workers, regardless of the global `sandbox.mode` or
+`tools.workspace_guardrails` settings. The writable root is exactly the linked
+worktree and no configured additional writable roots are carried into the tab.
+The configured child-network setting is preserved.
+
+If the current platform cannot provide filesystem enforcement, Kward refuses to
+activate the worktree instead of falling back to an unrestricted command
+worker. The strict agent also disables configured MCP clients and lifecycle
+hooks because they run in the Kward host process rather than inside the command
+sandbox.
+
+This does not contain the interactive `/shell`, `!command`, or `/pty` features;
+those are user-directed host-process operations. Git metadata protection also
+remains enabled, so model-requested commands cannot stage or commit by default.
+Use the interactive `/git` flow to review and commit the worktree branch.
+
 ## Platform support
 
 | Platform | Backend | Status |

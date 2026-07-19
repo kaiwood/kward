@@ -33,6 +33,33 @@ Close the current tab:
 
 The tab bar appears at the bottom of the composer. The active tab is framed, and each tab label starts with its number.
 
+## Worktree tabs
+
+A normal session tab can be toggled into a linked Git worktree after you have researched a task and decide that implementation should be isolated:
+
+```text
+/tab worktree
+```
+
+When enabled, Kward keeps the same tab and transcript but rebuilds its agent against a new worktree. The tab label includes the worktree branch. The worktree is created from `HEAD`, so Kward warns when the original workspace is dirty and leaves those existing changes in the original checkout; it does not copy them automatically.
+
+Toggle the tab again to return to the original workspace. The worktree and branch are kept, including any changes made there:
+
+```text
+/tab worktree
+```
+
+Inspect or remove the binding explicitly:
+
+```text
+/tab worktree status
+/tab worktree remove
+```
+
+Removal refuses a dirty worktree and keeps its branch. A worktree that is missing or no longer points at the recorded branch is restored as unavailable rather than silently falling back to the original workspace.
+
+Worktree tabs are available for normal session tabs, not plugin-owned tabs. Kward's file tools and model-requested shell workers use the active worktree root and strict workspace guardrails. The interactive `/shell`, `!command`, and `/pty` features remain user-controlled and are not contained by the model command sandbox; use them only when that is intentional. Git metadata protection remains enabled, so use the interactive `/git` flow when you want to review and commit changes.
+
 ## Common workflow
 
 A typical multi-tab flow looks like this:
@@ -61,6 +88,9 @@ Tabs keep the conversations separate, so context from one tab does not automatic
 | `/tab close` | Close the current tab |
 | `/tab name <label>` | Rename the current tab |
 | `/tab rename <label>` | Same as `/tab name` |
+| `/tab worktree` | Toggle the current session tab into or out of its linked Git worktree |
+| `/tab worktree status` | Show the current tab's worktree binding and Git status |
+| `/tab worktree remove` | Remove a clean linked worktree and keep its branch |
 | `/tab move left` | Move the current tab one slot left |
 | `/tab move right` | Move the current tab one slot right |
 | `/tab move <number>` | Move the current tab to a numbered position |

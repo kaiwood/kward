@@ -114,6 +114,7 @@ class TestRPCServer < KwardTestCase
     assert_equal true, capabilities["sessions"]["tree"]["labels"]
     assert_equal true, capabilities["sessions"]["tree"]["navigate"]
     assert_equal false, capabilities["sessions"]["updates"]["supported"]
+    assert_equal({ "supported" => false, "reason" => "interactiveTuiOnly" }, capabilities["sessions"]["worktrees"])
     assert_equal "async", capabilities["turns"]["mode"]
     assert_equal 1, capabilities["turns"]["perSessionConcurrency"]
     assert_equal "unsupported", capabilities["turns"]["busyInput"]["steer"]

@@ -429,7 +429,8 @@ module Kward
             compact: { supported: true, method: SESSION_METHODS[5], notification: SESSION_EVENT_NOTIFICATION, events: ["compactionStart", "compactionEnd"] },
             import: { supported: false },
             tree: { supported: true, method: SESSION_METHODS[8], labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "kward-tree-items-v1" },
-            updates: { supported: false, notification: SESSION_UPDATED_NOTIFICATION }
+            updates: { supported: false, notification: SESSION_UPDATED_NOTIFICATION },
+            worktrees: { supported: false, reason: "interactiveTuiOnly" }
           },
           pluginChats: {
             supported: @plugin_chat_manager.supported_types.any?,

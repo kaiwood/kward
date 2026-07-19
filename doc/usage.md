@@ -135,6 +135,9 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/tab close` | close the active tab. |
 | `/tab new` | open a new tab. |
 | `/tab name <label>` | rename the active tab label. |
+| `/tab worktree` | toggle the active session tab into or out of a linked Git worktree. |
+| `/tab worktree status` | inspect the active tab's worktree binding and changes. |
+| `/tab worktree remove` | remove a clean linked worktree while keeping its branch. |
 | `/session` | open the saved sessions picker or continue a previous session by path. |
 | `/resume` | alias for `/session`. |
 | `/session name <name>` | name or clear the current session. |

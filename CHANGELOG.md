@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added toggleable Git worktree bindings for normal interactive session tabs. `/tab worktree` can move a tab into a strict linked-worktree workspace after research, preserve its transcript, warn about dirty origin changes, and keep the branch available when detached.
+
 ### Fixed
 
 - Prevented `/reload` from retaining stale prompt templates, so new and edited prompt files refresh slash-command completion and expansion.
