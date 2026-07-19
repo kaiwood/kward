@@ -417,6 +417,33 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_sandbox_slash_command_reports_and_updates_global_policy
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump({ "sandbox" => { "mode" => "off", "network" => "deny" } }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        conversation = Kward::Conversation.new(workspace_root: dir)
+        agent = Struct.new(:conversation, :tool_registry).new(conversation, Kward::ToolRegistry.new)
+
+        handled, = cli.send(:handle_local_slash_command, "/sandbox status", agent, nil)
+        assert_equal true, handled
+        assert_includes prompt.output.join, "Command sandbox"
+        assert_includes prompt.output.join, "Mode: off"
+
+        handled, = cli.send(:handle_local_slash_command, "/sandbox workspace_write", agent, nil)
+        assert_equal true, handled
+        assert_equal "workspace_write", JSON.parse(File.read(config_path)).dig("sandbox", "mode")
+
+        handled, = cli.send(:handle_local_slash_command, "/sandbox network allow", agent, nil)
+        assert_equal true, handled
+        assert_equal "allow", JSON.parse(File.read(config_path)).dig("sandbox", "network")
+      end
+    end
+  end
+
   def test_hooks_slash_command_lists_configured_hooks
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

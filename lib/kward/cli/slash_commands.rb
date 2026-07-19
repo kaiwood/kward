@@ -15,6 +15,9 @@ module Kward
         when "stats"
           run_busy_local_command_and_requeue { print_stats(argument) }
           [true, nil]
+        when "sandbox"
+          run_busy_local_command_and_requeue { handle_sandbox_command(argument, interactive_workspace_root(agent)) }
+          [true, nil]
         when "memory"
           activity = memory_summarize_command?(argument) ? "summarizing" : "loading"
           run_busy_local_command_and_requeue(activity: activity) { handle_memory_command(argument, agent) }
@@ -112,6 +115,48 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def handle_sandbox_command(argument, workspace_root)
+        action, value = argument.to_s.strip.split(/\s+/, 2)
+        case action
+        when nil, "", "status"
+          print_sandbox_status(workspace_root)
+        when *Sandbox::Policy::MODES
+          ConfigFiles.update_nested_config("sandbox", { "mode" => action })
+          runtime_output("Command sandbox mode set to #{action}. New sessions and tabs use the updated policy.")
+        when "network"
+          network = value.to_s
+          unless Sandbox::Policy::NETWORK_MODES.include?(network)
+            runtime_output("Usage: /sandbox network allow|deny")
+            return
+          end
+
+          ConfigFiles.update_nested_config("sandbox", { "network" => network })
+          runtime_output("Command sandbox child network set to #{network}. New sessions and tabs use the updated policy.")
+        else
+          runtime_output("Usage: /sandbox [status|off|read_only|workspace_write|network allow|network deny]")
+        end
+      rescue ArgumentError => error
+        runtime_output("Sandbox configuration error: #{error.message}")
+      end
+
+      def print_sandbox_status(workspace_root)
+        config = ConfigFiles.read_config
+        policy = ConfigFiles.sandbox_policy(workspace_root, config)
+        runner = Sandbox::RunnerFactory.build(policy)
+        capabilities = runner.capabilities
+        lines = [
+          "Command sandbox",
+          "Mode: #{policy.mode}",
+          "Child network: #{policy.network}",
+          "Backend: #{capabilities.backend}",
+          "Filesystem enforcement: #{capabilities.filesystem_enforced? ? "active" : "inactive"}",
+          "Child-network enforcement: #{capabilities.child_network_enforced? ? "active" : "inactive"}",
+          "Scope: model-requested run_shell_command workers only"
+        ]
+        lines << "Reason: #{capabilities.reason}" unless capabilities.reason.to_s.empty?
+        runtime_output(lines.join("\n"))
       end
 
       def open_or_resume_session(session_store, argument)
