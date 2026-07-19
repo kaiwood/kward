@@ -1,5 +1,6 @@
 require_relative "sandbox/policy"
 require_relative "sandbox/capabilities"
+require_relative "sandbox/environment"
 require_relative "sandbox/command_runner"
 require_relative "sandbox/passthrough_runner"
 require_relative "sandbox/unavailable_runner"

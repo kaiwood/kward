@@ -18,7 +18,7 @@ module Kward
       @terminate_on_output_limit = terminate_on_output_limit
     end
 
-    def run(*command, env: {}, cwd: Dir.pwd, cancellation: nil, &block)
+    def run(*command, env: {}, cwd: Dir.pwd, cancellation: nil, unsetenv_others: false, &block)
       cancellation&.raise_if_cancelled!
       stdout_buffer = +""
       stderr_buffer = +""
@@ -27,7 +27,7 @@ module Kward
       timed_out = false
       queue = Queue.new
 
-      Open3.popen3(env.to_h, *command, chdir: cwd.to_s, pgroup: true) do |stdin, stdout, stderr, wait_thread|
+      Open3.popen3(env.to_h, *command, chdir: cwd.to_s, pgroup: true, unsetenv_others: unsetenv_others) do |stdin, stdout, stderr, wait_thread|
         stdin.close
         readers = [
           read_stream(stdout, :stdout, queue),

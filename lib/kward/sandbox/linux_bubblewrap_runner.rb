@@ -1,6 +1,7 @@
 require "fileutils"
 require "tmpdir"
 require_relative "command_runner"
+require_relative "environment"
 
 # Namespace for operating-system command sandboxing.
 module Kward
@@ -36,11 +37,7 @@ module Kward
 
       def run(command, cwd:, timeout_seconds:, max_output_bytes:, cancellation: nil, &block)
         temporary_root = Dir.mktmpdir("kward-sandbox")
-        environment = {
-          "TMPDIR" => temporary_root,
-          "TMP" => temporary_root,
-          "TEMP" => temporary_root
-        }
+        environment = Environment.command_worker(temporary_root)
 
         LocalCommandRunner.new(
           timeout_seconds: timeout_seconds,
@@ -50,6 +47,7 @@ module Kward
           env: environment,
           cwd: cwd,
           cancellation: cancellation,
+          unsetenv_others: true,
           &block
         )
       ensure

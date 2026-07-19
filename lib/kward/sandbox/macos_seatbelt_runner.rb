@@ -1,6 +1,7 @@
 require "fileutils"
 require "tmpdir"
 require_relative "command_runner"
+require_relative "environment"
 
 # Namespace for operating-system command sandboxing.
 module Kward
@@ -10,6 +11,7 @@ module Kward
     # outside the command worker boundary.
     class MacOSSeatbeltRunner < CommandRunner
       EXECUTABLE = "/usr/bin/sandbox-exec".freeze
+      PROTECTED_READ_DIRECTORIES = %w[.aws .gnupg .kward .ssh .config/gcloud .config/gh].freeze
 
       def self.capabilities(platform: RUBY_PLATFORM)
         available = platform.to_s.include?("darwin") && File.executable?(EXECUTABLE)
@@ -32,11 +34,7 @@ module Kward
 
       def run(command, cwd:, timeout_seconds:, max_output_bytes:, cancellation: nil, &block)
         temporary_root = Dir.mktmpdir("kward-sandbox")
-        environment = {
-          "TMPDIR" => temporary_root,
-          "TMP" => temporary_root,
-          "TEMP" => temporary_root
-        }
+        environment = Environment.command_worker(temporary_root)
 
         LocalCommandRunner.new(
           timeout_seconds: timeout_seconds,
@@ -46,6 +44,7 @@ module Kward
           env: environment,
           cwd: cwd,
           cancellation: cancellation,
+          unsetenv_others: true,
           &block
         )
       ensure
@@ -76,8 +75,17 @@ module Kward
         ]
         rules << "(allow network*)" if policy.child_network_allowed?
         rules.concat(writable_roots.map { |path| "(allow file-write* (subpath #{seatbelt_string(path)}))" })
+        rules.concat(protected_read_roots.map { |path| "(deny file-read* (subpath #{seatbelt_string(path)}))" })
         rules << "(deny file-write* (subpath #{seatbelt_string(File.join(policy.workspace_root, ".git"))}))" if policy.protect_git_metadata?
         rules.join("\n")
+      end
+
+      def protected_read_roots
+        home = ENV.fetch("HOME", Dir.home)
+        PROTECTED_READ_DIRECTORIES.map do |path|
+          root = File.join(home, path)
+          File.exist?(root) ? File.realpath(root) : root
+        end
       end
 
       def seatbelt_string(value)

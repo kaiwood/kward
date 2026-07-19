@@ -58,6 +58,52 @@ class TestMacOSSeatbeltRunner < KwardTestCase
     server&.close
   end
 
+  def test_sandboxed_command_cannot_read_kward_credentials_directory
+    skip "macOS only" unless RUBY_PLATFORM.include?("darwin")
+
+    secret_dir = File.join(ENV.fetch("HOME"), ".kward")
+    secret_path = File.join(secret_dir, "seatbelt-secret-#{Process.pid}")
+    FileUtils.mkdir_p(secret_dir)
+    File.write(secret_path, "secret\n")
+
+    Dir.mktmpdir do |dir|
+      policy = Kward::Sandbox::Policy.new(mode: "workspace_write", workspace_root: dir)
+      runner = Kward::Sandbox::MacOSSeatbeltRunner.new(policy: policy)
+
+      result = runner.run(
+        "cat #{Shellwords.escape(secret_path)}",
+        cwd: dir,
+        timeout_seconds: 10,
+        max_output_bytes: 10_000
+      )
+
+      refute_equal 0, result.exit_status
+      refute_includes result.stdout, "secret"
+    end
+  ensure
+    FileUtils.rm_f(secret_path) if secret_path
+  end
+
+  def test_sandboxed_command_does_not_inherit_sensitive_environment
+    skip "macOS only" unless RUBY_PLATFORM.include?("darwin")
+
+    Dir.mktmpdir do |dir|
+      policy = Kward::Sandbox::Policy.new(mode: "workspace_write", workspace_root: dir)
+      runner = Kward::Sandbox::MacOSSeatbeltRunner.new(policy: policy)
+
+      with_env("KWARD_SANDBOX_TEST_SECRET" => "do-not-inherit") do
+        result = runner.run(
+          "test -z \"$KWARD_SANDBOX_TEST_SECRET\" && test \"$HOME\" = \"$TMPDIR\"",
+          cwd: dir,
+          timeout_seconds: 10,
+          max_output_bytes: 10_000
+        )
+
+        assert_equal 0, result.exit_status
+      end
+    end
+  end
+
   def test_read_only_profile_blocks_workspace_writes
     skip "macOS only" unless RUBY_PLATFORM.include?("darwin")
 
