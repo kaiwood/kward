@@ -1,5 +1,6 @@
 require "pathname"
 require_relative "local_command_runner"
+require_relative "sandbox"
 require_relative "session_diff"
 
 require_relative "path_guard"
@@ -27,13 +28,14 @@ module Kward
     EXPECTED_FILE_ERRORS = [SecurityError, Errno::ENOENT, Errno::EACCES, Errno::EPERM, Errno::EISDIR, Errno::ENOTDIR].freeze
 
     # Creates an object for workspace filesystem and shell operations.
-    def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES, guardrails: true)
+    def initialize(root: Dir.pwd, max_file_bytes: MAX_FILE_BYTES, max_read_output_bytes: MAX_READ_OUTPUT_BYTES, max_read_output_lines: MAX_READ_OUTPUT_LINES, max_command_output_bytes: MAX_COMMAND_OUTPUT_BYTES, guardrails: true, command_runner: nil)
       @root = Pathname.new(root).realpath
       @guardrails = guardrails
       @max_file_bytes = max_file_bytes
       @max_read_output_bytes = max_read_output_bytes
       @max_read_output_lines = max_read_output_lines
       @max_command_output_bytes = max_command_output_bytes
+      @command_runner = command_runner
     end
 
     # @return [Pathname] canonical workspace root used as the base for file and shell tools
@@ -162,7 +164,13 @@ module Kward
       timeout_seconds = DEFAULT_COMMAND_TIMEOUT_SECONDS if timeout_seconds <= 0
       cancellation&.raise_if_cancelled!
 
-      result = LocalCommandRunner.new(timeout_seconds: timeout_seconds, max_output_bytes: @max_command_output_bytes).run(command, cwd: @root.to_s, cancellation: cancellation)
+      result = command_runner.run(
+        command,
+        cwd: @root.to_s,
+        timeout_seconds: timeout_seconds,
+        max_output_bytes: @max_command_output_bytes,
+        cancellation: cancellation
+      )
       return "Error: command timed out after #{timeout_seconds} seconds" if result.timed_out
 
       output = +"Exit status: #{result.exit_status}\n"
@@ -170,7 +178,7 @@ module Kward
       output << "\nSTDERR:\n#{result.stderr}" unless result.stderr.empty?
       output << "\n... truncated to #{@max_command_output_bytes} bytes" if result.truncated
       truncate_output(output)
-    rescue Errno::ENOENT, ArgumentError => e
+    rescue Errno::ENOENT, ArgumentError, Sandbox::UnavailableError => e
       "Error: #{e.message}"
     end
 
@@ -180,6 +188,13 @@ module Kward
     end
 
     private
+
+    def command_runner
+      @command_runner ||= Sandbox::PassthroughRunner.new(
+        policy: Sandbox::Policy.new(workspace_root: @root),
+        capabilities: Sandbox::RunnerFactory.off_capabilities
+      )
+    end
 
     def workspace_path(path)
       target = Pathname.new(path.to_s)
