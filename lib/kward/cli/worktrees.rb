@@ -92,6 +92,7 @@ module Kward
 
       def toggle_active_tab_worktree
         tab = active_tab
+        return runtime_output("There is no active tab.") unless tab
         return runtime_output("Worktrees are available only for normal session tabs.") if plugin_tab?(tab)
         return runtime_output("Tab #{active_tab_number} is running and cannot change workspaces yet.") if tab&.running? || tab&.local_busy? || tab&.shell
 
@@ -146,6 +147,7 @@ module Kward
       end
 
       def detach_active_worktree(tab, binding)
+        validate_worktree_binding!(binding)
         status = git_worktree_manager.status(binding.path)
         if status.dirty? && !confirm_worktree_action(<<~MESSAGE)
           #{binding.path} has #{status.entries.length} local change(s).
@@ -186,9 +188,9 @@ module Kward
           "Base: #{binding.base_revision}"
         ]
         begin
-          validate_worktree_binding!(binding) if binding.active?
-          root = worktree_root_for(binding, fallback: binding.origin_root)
-          status = git_worktree_manager.status(root)
+          info = git_worktree_manager.inspect(repository_root: binding.repository_root, path: binding.path)
+          raise GitWorktreeManager::Error, "Worktree branch changed: expected #{binding.branch}, found #{info.branch || "detached HEAD"}" unless info.branch == binding.branch
+          status = git_worktree_manager.status(binding.path)
           lines << "Changes: #{status.clean? ? "clean" : "#{status.entries.length} local change(s)"}"
         rescue GitWorktreeManager::Error => e
           lines << "State: unavailable (#{e.message})"
@@ -202,6 +204,7 @@ module Kward
         return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
         return runtime_output("Tab #{active_tab_number} is running and cannot remove its worktree yet.") if tab.running? || tab.local_busy? || tab.shell
 
+        git_worktree_manager.inspect(repository_root: binding.repository_root, path: binding.path)
         status = git_worktree_manager.status(binding.path)
         return runtime_output("Worktree has local changes; detach it or clean it before removing it.") if status.dirty?
 

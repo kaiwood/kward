@@ -418,6 +418,30 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_worktree_status_reports_the_bound_worktree
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "status.txt"), "changed\n")
+
+        cli.send(:handle_tab_command, "worktree status", store)
+
+        output = strip_ansi(prompt.output.join("\n"))
+        assert_includes output, "Worktree: active"
+        assert_includes output, "Branch: #{binding.branch}"
+        assert_includes output, "Changes: 1 local change(s)"
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_remove_returns_to_origin_and_keeps_branch
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|
