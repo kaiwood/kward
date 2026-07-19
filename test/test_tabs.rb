@@ -416,6 +416,67 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_restore_tabs_loads_an_active_worktree_root
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        parent = Dir.mktmpdir("kward-restore-worktree")
+        path = File.join(parent, "linked")
+        manager = Kward::GitWorktreeManager.new
+        binding = manager.create(repository_root: root, origin_root: root, path: path, branch: "kward/restore")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        session = store.create
+        conversation = Kward::Conversation.new(workspace_root: root)
+        session.attach(conversation)
+        conversation.append_user("remember this research")
+        Kward::TabStore.new(config_dir: config_dir, cwd: root).save(
+          tabs: [{ "kind" => "session", "session_path" => session.path, "label" => "Work", "worktree" => binding.descriptor }],
+          active_index: 0
+        )
+
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+
+        assert_equal File.realpath(path), tab.agent.conversation.workspace_root
+        assert_equal "kward/restore", tab.driver.worktree.branch
+        assert_equal "remember this research", tab.agent.conversation.messages.first.fetch("content")
+      ensure
+        manager.remove(repository_root: root, path: path, force: true) if manager && path && File.directory?(path)
+        FileUtils.remove_entry(parent) if parent && Dir.exist?(parent)
+      end
+    end
+  end
+
+  def test_restore_tabs_keeps_missing_worktree_unavailable
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        parent = Dir.mktmpdir("kward-missing-worktree")
+        path = File.join(parent, "linked")
+        manager = Kward::GitWorktreeManager.new
+        binding = manager.create(repository_root: root, origin_root: root, path: path, branch: "kward/missing")
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        session = store.create
+        conversation = Kward::Conversation.new(workspace_root: root)
+        session.attach(conversation)
+        Kward::TabStore.new(config_dir: config_dir, cwd: root).save(
+          tabs: [{ "kind" => "session", "session_path" => session.path, "label" => "Missing", "worktree" => binding.descriptor }],
+          active_index: 0
+        )
+        manager.remove(repository_root: root, path: path)
+
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+
+        assert_nil tab.agent
+        assert_includes tab.driver.messages.first.fetch(:content), "Worktree unavailable"
+      ensure
+        manager.remove(repository_root: root, path: path, force: true) if manager && path && File.directory?(path)
+        FileUtils.remove_entry(parent) if parent && Dir.exist?(parent)
+      end
+    end
+  end
+
   def test_plugin_tab_allows_normal_messages
     Dir.mktmpdir do |home|
       Dir.mktmpdir do |config_dir|
