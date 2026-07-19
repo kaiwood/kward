@@ -23,6 +23,8 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/main.rb` - executable entrypoint.
 - `lib/kward/cli.rb` - command-line flow and interactive chat orchestration.
 - `lib/kward/tab_driver.rb` - session and plugin tab-driver boundary used by interactive tabs.
+- `lib/kward/git_worktree_manager.rb` - Git worktree discovery, creation, validation, and removal mechanics.
+- `lib/kward/cli/worktrees.rb` - interactive session-tab worktree binding and workspace re-rooting orchestration.
 - `lib/kward/agent.rb` - agent loop and tool execution flow.
 - `lib/kward/model/` - model provider HTTP client and stream parsing behavior.
 - `lib/kward/auth/` - OAuth providers and auth credential file helpers.
@@ -79,6 +81,7 @@ ruby lib/main.rb "Explain this project"
 - When changing prompt/skill behavior, update `doc/extensibility.md`, `doc/skills.md`, CLI/RPC/Pan exposure, compaction behavior when activated instructions are durable, and prompt-related tests as needed. Skill capture sends the complete selected persisted session branch to the active model provider, must stay personal-skill-only, and requires editable review before an explicit save.
 - Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
 - Plugin-owned tabs register through `plugin.tab_type`, open through `/tab open <name>`, and own their storage and turn behavior. Keep their drivers independent of workspace sessions, agents, prompts, and tools; the interactive tab host owns composer, rendering, streaming, cancellation, and layouts. Plugin tabs opt into RPC explicitly with `rpc: true`; `PluginChatManager` owns optional RPC subscriptions, turn events, attachments, replay, and cancellation without creating workspace sessions.
+- Normal session tabs may persist a Git worktree binding in their tab descriptor. Active worktree tabs rebuild their conversation and agent against the linked root, force workspace guardrails and strict model-command sandboxing, and keep MCP clients and lifecycle hooks disabled for that strict agent. RPC reports worktree bindings as interactive-TUI-only until an equivalent session API exists.
 
 ## Feature exposure rule
 
