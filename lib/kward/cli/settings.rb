@@ -88,7 +88,7 @@ module Kward
       def configure_model_settings(conversation)
         initial_index = 0
         loop do
-          selected, selected_index = select_settings_menu_item("Model & Reasoning", ["Provider", "Default model", "Reasoning effort", "Back"], initial_index)
+          selected, selected_index = select_settings_menu_item("Model & Reasoning", ["Provider", "Default model", "Local server preset", "Reasoning effort", "Back"], initial_index)
           break unless selected
 
           initial_index = selected_index if selected_index
@@ -97,6 +97,8 @@ module Kward
             configure_provider(conversation)
           when /\Adefault model/
             configure_model(conversation)
+          when /\Alocal server preset/
+            configure_local_server_preset(conversation)
           when /\Areasoning effort/
             configure_reasoning(conversation)
           else
@@ -134,6 +136,34 @@ module Kward
         return "Local" if text.start_with?("local")
 
         nil
+      end
+
+      def configure_local_server_preset(conversation)
+        choices = [
+          "Ollama (http://127.0.0.1:11434/v1)",
+          "LM Studio (http://127.0.0.1:1234/v1)",
+          "llama.cpp (http://127.0.0.1:8080/v1)",
+          "Custom endpoint (edit config)",
+          "Back"
+        ]
+        selected = @prompt.select("Local server preset", choices, title: "Settings")
+        return unless selected
+
+        backend, url = case selected.to_s
+                       when /\AOllama/ then ["ollama", "http://127.0.0.1:11434/v1"]
+                       when /\ALM Studio/ then ["lm_studio", "http://127.0.0.1:1234/v1"]
+                       when /\Allama\.cpp/ then ["llama_cpp", "http://127.0.0.1:8080/v1"]
+                       when /\ACustom endpoint/
+                         runtime_output("Set local_base_url in #{ConfigFiles.config_path}.")
+                         return
+                       else
+                         return
+                       end
+
+        ConfigFiles.update_config("local_backend" => backend, "local_base_url" => url)
+        reload_client_config
+        refresh_conversation_runtime(conversation)
+        @prompt.redraw if @prompt.respond_to?(:redraw)
       end
 
       def configure_account_settings

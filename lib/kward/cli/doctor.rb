@@ -25,6 +25,7 @@ module Kward
           doctor_directory_check("Session directory", SessionStore.new(cwd: current_workspace_root).session_dir, create: true),
           doctor_workspace_check,
           doctor_model_check,
+          doctor_local_endpoint_check(config),
           doctor_auth_check(config),
           doctor_pan_check(config_result),
           { status: :ok, label: "Color", message: @color_enabled ? "enabled" : "disabled" }
@@ -87,6 +88,24 @@ module Kward
         { status: :warning, label: "Model", message: "not configured" }
       rescue StandardError => e
         { status: :warning, label: "Model", message: e.message }
+      end
+
+      def doctor_local_endpoint_check(config)
+        provider = ENV["KWARD_PROVIDER"].to_s.strip
+        provider = config["provider"].to_s.strip if provider.empty?
+        return { status: :ok, label: "Local endpoint", message: "not selected" } unless provider.casecmp?("local")
+
+        backend = ENV["KWARD_LOCAL_BACKEND"].to_s.strip
+        backend = config["local_backend"].to_s.strip if backend.empty?
+        defaults = Kward::Client::LOCAL_BASE_URLS
+        url = ENV["KWARD_LOCAL_BASE_URL"].to_s.strip
+        url = config["local_base_url"].to_s.strip if url.empty?
+        url = defaults.fetch(backend.empty? ? "ollama" : backend, defaults.fetch("ollama")) if url.empty?
+        uri = URI.parse(url)
+        loopback = ["127.0.0.1", "::1", "localhost"].include?(uri.host)
+        { status: loopback ? :ok : :warning, label: "Local endpoint", message: "#{url}#{loopback ? " (loopback)" : " (non-loopback)"}" }
+      rescue URI::InvalidURIError
+        { status: :error, label: "Local endpoint", message: "invalid URL: #{url}" }
       end
 
       def doctor_auth_check(config)
