@@ -737,6 +737,8 @@ module Kward
       def tab_labels
         @tabs.each_with_index.map do |tab, index|
           label = tab.label.to_s.empty? ? default_tab_label(index) : tab.label.to_s
+          binding = worktree_binding_for(tab)
+          label = "#{label} · #{binding.branch}" if binding&.active?
           { name: label, color: tab_label_color(tab) }
         end
       end
