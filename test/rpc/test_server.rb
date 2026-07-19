@@ -667,6 +667,56 @@ class TestRPCServer < KwardTestCase
     end
   end
 
+  def test_runtime_reload_does_not_warn_for_plugin_constants
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |home|
+        config_path = File.join(config_dir, "config.json")
+        plugins_dir = File.join(home, ".kward", "plugins")
+        plugin_path = File.join(plugins_dir, "constant.rb")
+        FileUtils.mkdir_p(plugins_dir)
+        File.write(plugin_path, <<~'RUBY')
+          module RPCPluginReloadConstantRegression
+            VALUE = "v1"
+          end
+
+          Kward.plugin do |plugin|
+            plugin.command "constant-version" do |_args, ctx|
+              ctx.say(RPCPluginReloadConstantRegression::VALUE)
+            end
+          end
+        RUBY
+
+        with_env("HOME" => home, "KWARD_CONFIG_PATH" => config_path) do
+          server = Kward::RPC::Server.new(input: StringIO.new, output: StringIO.new, error_output: StringIO.new, client: FakeClient.new([]))
+          manager = server.instance_variable_get(:@session_manager)
+          session = manager.create_session(workspace_root: Dir.pwd)
+
+          File.write(plugin_path, <<~'RUBY')
+            module RPCPluginReloadConstantRegression
+              VALUE = "v2"
+            end
+
+            Kward.plugin do |plugin|
+              plugin.command "constant-version" do |_args, ctx|
+                ctx.say(RPCPluginReloadConstantRegression::VALUE)
+              end
+            end
+          RUBY
+
+          _stdout, stderr = capture_io do
+            reload = server.send(:runtime_reload, "sessionId" => session[:id])
+            result = server.send(:commands_run, "sessionId" => session[:id], "name" => "constant-version")
+
+            assert_equal({ ok: true, message: "Resources reloaded." }, reload)
+            assert_equal ["v2"], result[:output]
+          end
+
+          refute_includes stderr, "already initialized constant RPCPluginReloadConstantRegression::VALUE"
+        end
+      end
+    end
+  end
+
   def test_runtime_reload_reloads_plugins_for_active_sessions
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |home|

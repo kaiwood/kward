@@ -401,7 +401,7 @@ module Kward
       previous_path = self.class.loading_path
       self.class.loading_registry = self
       self.class.loading_path = path
-      Kernel.load(path)
+      Kernel.load(path, true)
       @paths << path
     rescue StandardError => e
       warn "Warning: skipping Kward plugin #{path}: #{e.message}"
