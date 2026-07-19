@@ -27,6 +27,9 @@ jobs:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true
 
+      - name: Install sandbox test dependency
+        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
+
       - name: Check syntax
         run: find lib test -name '*.rb' -print0 | xargs -0 ruby -c
 
@@ -34,4 +37,6 @@ jobs:
         run: bundle exec ruby -w -Ilib -e 'require "kward"'
 
       - name: Run tests
+        env:
+          KWARD_RUN_BUBBLEWRAP_TESTS: "1"
         run: bundle exec rake test

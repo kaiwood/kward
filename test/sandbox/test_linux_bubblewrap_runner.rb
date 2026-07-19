@@ -1,3 +1,5 @@
+require "shellwords"
+require "socket"
 require_relative "../test_helper"
 require_relative "../../lib/kward/sandbox/policy"
 require_relative "../../lib/kward/sandbox/capabilities"
@@ -29,6 +31,55 @@ class TestLinuxBubblewrapRunner < KwardTestCase
       assert_includes argv.each_cons(3).to_a, ["--ro-bind", File.realpath(git_dir), File.realpath(git_dir)]
       assert_equal ["--", "/bin/sh", "-lc", "echo hello"], argv.last(4)
     end
+  end
+
+  def test_workspace_write_enforces_filesystem_boundary
+    skip "Bubblewrap integration tests are disabled" unless ENV["KWARD_RUN_BUBBLEWRAP_TESTS"] == "1"
+    skip "Linux only" unless RUBY_PLATFORM.include?("linux")
+
+    Dir.mktmpdir do |parent|
+      workspace = File.join(parent, "workspace")
+      outside_path = File.join(parent, "outside.txt")
+      FileUtils.mkdir_p(workspace)
+      policy = Kward::Sandbox::Policy.new(mode: "workspace_write", workspace_root: workspace)
+      runner = Kward::Sandbox::LinuxBubblewrapRunner.new(policy: policy)
+
+      result = runner.run(
+        "echo inside > #{Shellwords.escape(File.join(workspace, "inside.txt"))}; " \
+        "echo blocked > #{Shellwords.escape(outside_path)}",
+        cwd: workspace,
+        timeout_seconds: 10,
+        max_output_bytes: 10_000
+      )
+
+      assert_equal 1, result.exit_status
+      assert_equal "inside\n", File.read(File.join(workspace, "inside.txt"))
+      refute File.exist?(outside_path)
+    end
+  end
+
+  def test_denied_child_network_cannot_connect_to_loopback
+    skip "Bubblewrap integration tests are disabled" unless ENV["KWARD_RUN_BUBBLEWRAP_TESTS"] == "1"
+    skip "Linux only" unless RUBY_PLATFORM.include?("linux")
+
+    server = TCPServer.new("127.0.0.1", 0)
+    Dir.mktmpdir do |workspace|
+      policy = Kward::Sandbox::Policy.new(mode: "workspace_write", network: "deny", workspace_root: workspace)
+      runner = Kward::Sandbox::LinuxBubblewrapRunner.new(policy: policy)
+      ruby = Shellwords.escape(RbConfig.ruby)
+      source = Shellwords.escape(%Q{TCPSocket.new(\"127.0.0.1\", #{server.addr[1]})})
+
+      result = runner.run(
+        "#{ruby} -rsocket -e #{source}",
+        cwd: workspace,
+        timeout_seconds: 10,
+        max_output_bytes: 10_000
+      )
+
+      refute_equal 0, result.exit_status
+    end
+  ensure
+    server&.close
   end
 
   def test_read_only_does_not_bind_workspace_writable
