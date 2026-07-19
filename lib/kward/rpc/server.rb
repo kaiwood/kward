@@ -5,7 +5,7 @@ require_relative "../memory/manager"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../tools/registry"
-require_relative "../workspace"
+require_relative "../workspace_factory"
 require_relative "../telemetry/logger"
 require_relative "../telemetry/stats"
 require_relative "auth_manager"
@@ -801,7 +801,7 @@ module Kward
       end
 
       def configured_workspace(root = Dir.pwd)
-        Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
+        WorkspaceFactory.build(root: root, guardrails: workspace_guardrails_enabled?, config: @config_manager.read(redacted: false))
       end
 
       def workspace_guardrails_enabled?

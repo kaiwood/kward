@@ -318,7 +318,7 @@ module Kward
       end
 
       def configured_workspace(root: current_workspace_root)
-        Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
+        WorkspaceFactory.build(root: root, guardrails: workspace_guardrails_enabled?, config: safely_read_config.to_h)
       end
 
       def workspace_guardrails_enabled?

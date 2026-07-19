@@ -25,7 +25,7 @@ require_relative "../steering"
 require_relative "../tools/tool_call"
 require_relative "../tools/registry"
 require_relative "../transcript_export"
-require_relative "../workspace"
+require_relative "../workspace_factory"
 require_relative "attachment_normalizer"
 require_relative "config_manager"
 require_relative "memory_methods"
@@ -1020,7 +1020,7 @@ module Kward
       end
 
       def configured_workspace(root)
-        Workspace.new(root: root, guardrails: workspace_guardrails_enabled?)
+        WorkspaceFactory.build(root: root, guardrails: workspace_guardrails_enabled?, config: @config_manager.read(redacted: false))
       end
 
       def workspace_guardrails_enabled?

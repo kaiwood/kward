@@ -17,7 +17,7 @@ require_relative "../session_trash"
 require_relative "../tools/tool_call"
 require_relative "../tools/registry"
 require_relative "../version"
-require_relative "../workspace"
+require_relative "../workspace_factory"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -33,7 +33,11 @@ module Kward
       @client = client
       @output = output
       @udp_socket_class = udp_socket_class
-      @workspace = Workspace.new(root: working_directory)
+      @workspace = WorkspaceFactory.build(
+        root: working_directory,
+        guardrails: ConfigFiles.workspace_guardrails_enabled?(config),
+        config: config
+      )
       @full_config = config
       @config = pan_config(config)
       @host = @config.fetch("host", DEFAULT_HOST).to_s
