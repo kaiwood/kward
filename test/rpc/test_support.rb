@@ -202,6 +202,7 @@ module KwardRPCTestSupport
       case config["provider"]
       when "copilot" then "Copilot"
       when "openrouter" then "OpenRouter"
+      when "local" then "Local"
       else super
       end
     end
@@ -212,6 +213,8 @@ module KwardRPCTestSupport
         config["copilot_model"] || super
       when "OpenRouter"
         config["openrouter_model"] || super
+      when "Local"
+        config["local_model"] || super
       else
         config["openai_model"] || super
       end

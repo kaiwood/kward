@@ -93,10 +93,12 @@ module Kward
         openai_auth = OpenAIOAuth.default_auth_path
         github_auth = GithubOAuth.default_auth_path
         has_openrouter = !config.to_h["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?
+        local_provider = @client.respond_to?(:current_provider) && @client.current_provider == "Local"
         paths = []
         paths << "OpenAI OAuth" if File.exist?(openai_auth)
         paths << "GitHub OAuth" if File.exist?(github_auth)
         paths << "OpenRouter API key" if has_openrouter
+        paths << "Local endpoint (no authentication required)" if local_provider
         return { status: :ok, label: "Auth", message: paths.join(", ") } if paths.any?
 
         { status: :warning, label: "Auth", message: "no saved credentials found; run `kward login`" }

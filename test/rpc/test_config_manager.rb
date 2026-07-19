@@ -55,6 +55,23 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
+  def test_model_rpc_set_switches_to_selected_local_model
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "models/set", params: { provider: "Local", model: "qwen2.5-coder:7b" } },
+        { jsonrpc: "2.0", id: 2, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal "Local", messages[0]["result"]["provider"]
+      assert_equal "qwen2.5-coder:7b", messages[0]["result"]["id"]
+      config = JSON.parse(File.read(config_path))
+      assert_equal "local", config["provider"]
+      assert_equal "qwen2.5-coder:7b", config["local_model"]
+    end
+  end
+
   def test_model_rpc_set_accepts_lowercase_provider_id
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

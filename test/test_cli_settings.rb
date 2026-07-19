@@ -44,6 +44,13 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_provider_choices_include_local
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+    assert_includes cli.send(:provider_choices), "Local"
+    assert_equal "Local", cli.send(:selected_provider, "Local")
+  end
+
   def test_model_slash_command_reports_unavailable_without_tui_prompt
     prompt = FakePrompt.new(["/model", "/exit"])
     client = RecordingClient.new([])

@@ -118,7 +118,7 @@ module Kward
 
       def provider_choices
         current = current_model_provider
-        ["Codex", "Anthropic", "OpenRouter", "Copilot"].map do |provider|
+        ["Codex", "Anthropic", "OpenRouter", "Copilot", "Local"].map do |provider|
           label = provider.dup
           label += " (current)" if provider == current
           label
@@ -131,6 +131,7 @@ module Kward
         return "Anthropic" if text.start_with?("anthropic") || text.start_with?("claude")
         return "OpenRouter" if text.start_with?("openrouter")
         return "Copilot" if text.start_with?("copilot")
+        return "Local" if text.start_with?("local")
 
         nil
       end
@@ -569,9 +570,18 @@ module Kward
 
       def show_active_instructions_summary(conversation)
         label = ConfigFiles.active_persona_label(workspace_root: current_workspace_root, model: current_model_id, config: safely_read_config.to_h)
+        config = safely_read_config.to_h
+        replacement_path = ConfigFiles.system_prompt_file_path(config)
         lines = ["Active persona: #{label || "none"}"]
-        lines << "Global PRINCIPLES.md: #{ConfigFiles.agents_prompt ? "present" : "absent"}"
-        lines << "Workspace AGENTS.md: #{ConfigFiles.workspace_agents_prompt(current_workspace_root) ? "present" : "absent"}"
+        if replacement_path
+          lines << "System prompt: replacement (#{replacement_path})"
+          lines << "Global PRINCIPLES.md: ignored by replacement"
+          lines << "Workspace AGENTS.md: ignored by replacement"
+        else
+          lines << "System prompt: Kward default"
+          lines << "Global PRINCIPLES.md: #{ConfigFiles.include_config_principles?(config) ? (ConfigFiles.agents_prompt ? "present" : "absent") : "disabled"}"
+          lines << "Workspace AGENTS.md: #{ConfigFiles.workspace_agents_prompt(current_workspace_root) ? "present" : "absent"}"
+        end
         lines << "Messages: #{conversation.messages.length}" if conversation&.respond_to?(:messages)
         runtime_output(lines.join("\n"))
       end
