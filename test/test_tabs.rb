@@ -388,6 +388,13 @@ class TestTabs < KwardTestCase
 
         assert_includes result, "Wrote"
         assert_equal "worktree only\n", File.read(File.join(binding.path, "agent.txt"))
+
+        shell_result = tab.agent.tool_registry.dispatch(
+          tool_call("run_shell_command", { "command" => "pwd" }),
+          tab.agent.conversation
+        )
+
+        assert_includes shell_result, File.realpath(binding.path)
         refute File.exist?(File.join(root, "agent.txt"))
       ensure
         remove_test_worktree(binding)
