@@ -103,7 +103,7 @@ module Kward
         @active_session = track_session(session_store.create)
         reset_session_diff
         cleanup_replaced_session(previous_session)
-        conversation = new_conversation(workspace_root: session_store.cwd)
+        conversation = new_conversation(workspace_root: current_workspace_root)
         @active_session.attach(conversation)
         run_lifecycle_hook("session_create", conversation: conversation, payload: { action: "create" })
         update_assistant_prompt(conversation)

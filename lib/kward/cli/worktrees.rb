@@ -22,6 +22,18 @@ module Kward
         binding.active? ? binding.path : binding.origin_root
       end
 
+      def reconcile_worktree_binding(tab, conversation)
+        binding = worktree_binding_for(tab)
+        return nil unless binding
+        return binding unless binding.active?
+
+        binding.active = false unless File.realpath(conversation.workspace_root) == File.realpath(binding.path)
+        binding
+      rescue Errno::ENOENT, Errno::ENOTDIR
+        binding.active = false
+        binding
+      end
+
       def validate_worktree_binding!(binding)
         return unless binding
 

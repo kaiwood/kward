@@ -418,6 +418,28 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_new_session_stays_in_an_active_worktree
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+
+        replacement = cli.send(:start_new_session, store)
+        cli.send(:replace_active_tab_agent, replacement)
+
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+        assert_same binding, tab.driver.worktree
+        assert binding.active?
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_status_reports_the_bound_worktree
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|

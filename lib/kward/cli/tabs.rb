@@ -385,8 +385,9 @@ module Kward
         return agent unless tab
 
         tab.session = @active_session
-        tab.agent = build_tab_agent(agent.conversation, tab.session)
-        tab.driver = SessionTabDriver.new(session: tab.session, agent: tab.agent)
+        worktree = reconcile_worktree_binding(tab, agent.conversation)
+        tab.agent = build_tab_agent(agent.conversation, tab.session, worktree: worktree)
+        tab.driver = SessionTabDriver.new(session: tab.session, agent: tab.agent, worktree: worktree)
         assign_tab_question_prompt(tab.agent, tab)
         tab.diff = @session_diff || (tab.session&.path ? SessionDiff.from_session_file(tab.session.path) : SessionDiff.new)
         tab.snapshot = nil
