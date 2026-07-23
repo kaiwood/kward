@@ -100,10 +100,11 @@ module Kward
             streaming_behavior: streaming_behavior
           )
           handle = result.is_a?(TurnHandle) ? result : TurnHandle.new(**result.transform_keys(&:to_sym))
-          Turn.new(@host, handle)
+          Turn.new(@host, handle, @actor)
         end
 
         def transcript
+          @host.authorize!(:read_transcript, actor: @actor, session_id: @id)
           @host.gateway.transport_transcript(session_id: @id)
         end
 
@@ -130,8 +131,9 @@ module Kward
       class Turn
         attr_reader :id, :session_id
 
-        def initialize(host, handle)
+        def initialize(host, handle, actor)
           @host = host
+          @actor = actor
           @id = handle.id.to_s.freeze
           @session_id = handle.session_id.to_s.freeze
         end
@@ -151,6 +153,7 @@ module Kward
         end
 
         def cancel
+          @host.authorize!(:cancel_turn, actor: @actor, session_id: @session_id, turn_id: @id)
           @host.gateway.cancel_transport_turn(turn_id: @id)
         end
       end

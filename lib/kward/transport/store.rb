@@ -39,8 +39,9 @@ module Kward
       def delete(key)
         key = validate_key(key, "storage key")
         @mutex.synchronize do
+          present = @values.key?(key)
           value = @values.delete(key)
-          persist if value
+          persist if present
           copy(value)
         end
       end

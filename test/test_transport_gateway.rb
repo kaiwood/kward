@@ -19,6 +19,15 @@ class TestTransportGateway < KwardTestCase
     end
   end
 
+  def test_rejects_conversations_from_another_transport
+    gateway = Kward::Transport::Gateway.new(session_manager: FakeSessionManager.new, transport_id: "test")
+    conversation = Kward::Transport.conversation_key(transport_id: "other", external_id: "chat")
+
+    assert_raises(ArgumentError) do
+      gateway.resolve_transport_session(transport_id: "test", conversation: conversation, actor: Kward::Transport.actor(id: "user"))
+    end
+  end
+
   def test_normalizes_transport_attachments_for_session_manager
     manager = FakeSessionManager.new
     gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")

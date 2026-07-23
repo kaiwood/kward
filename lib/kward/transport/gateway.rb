@@ -28,6 +28,9 @@ module Kward
 
       def resolve_transport_session(transport_id:, conversation:, actor:, workspace_root: nil, name: nil)
         raise ArgumentError, "transport id does not match gateway" unless transport_id.to_s == @transport_id
+        if conversation.respond_to?(:transport_id) && conversation.transport_id.to_s != @transport_id
+          raise ArgumentError, "conversation transport does not match gateway"
+        end
 
         binding_key = binding_key_for(conversation)
         binding = @storage.get(binding_key)

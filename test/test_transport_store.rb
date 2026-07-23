@@ -15,6 +15,15 @@ class TestTransportStore < KwardTestCase
     end
   end
 
+  def test_delete_persists_false_values
+    Dir.mktmpdir do |root|
+      store = Kward::Transport::Store.new("test", root: root)
+      store.put("flag", false)
+      assert_equal false, store.delete("flag")
+      assert_nil Kward::Transport::Store.new("test", root: root).get("flag")
+    end
+  end
+
   def test_claim_is_durable_and_rejects_duplicates
     Dir.mktmpdir do |root|
       store = Kward::Transport::Store.new("test", root: root)
