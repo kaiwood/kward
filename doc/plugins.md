@@ -21,7 +21,7 @@ Plugins run inside the Kward process with your user permissions. Install only pl
 | Repository rules | `AGENTS.md` |
 | Local Ruby code or integration | plugin |
 
-See [Extensibility](extensibility.md) for the full overview of Kward's extension points and prompt assembly order.
+See [Extensibility](extensibility.md) for the full overview of Kward's extension points and prompt assembly order. See [Transports](transports.md) for external messaging and event integrations.
 
 ## Where plugins live
 
