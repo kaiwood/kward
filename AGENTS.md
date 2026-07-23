@@ -31,6 +31,8 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/tools/registry.rb` - tool dispatch and schema exposure.
 - `lib/kward/tools/` - individual tool implementations, one file per tool.
 - `lib/kward/mcp/` - local MCP client transports and configured server clients.
+- `lib/kward/transport.rb` and `lib/kward/transport/` - frontend-neutral transport contracts, host, session gateway, persistent state, lifecycle manager, and foreground runtime.
+- `lib/kward/cli/transports.rb` - transport listing, status, and foreground-run commands.
 - `lib/kward/rpc/` - experimental JSON-RPC backend.
 - `lib/kward/prompts.rb` - system prompt and skill catalog prompt assembly.
 - `lib/kward/config_files.rb` - config path handling.
@@ -81,6 +83,7 @@ ruby lib/main.rb "Explain this project"
 - When changing prompt/skill behavior, update `doc/extensibility.md`, `doc/skills.md`, CLI/RPC/Pan exposure, compaction behavior when activated instructions are durable, and prompt-related tests as needed. Skill capture sends the complete selected persisted session branch to the active model provider, must stay personal-skill-only, and requires editable review before an explicit save.
 - Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
 - Plugin-owned tabs register through `plugin.tab_type`, open through `/tab open <name>`, and own their storage and turn behavior. Keep their drivers independent of workspace sessions, agents, prompts, and tools; the interactive tab host owns composer, rendering, streaming, cancellation, and layouts. Plugin tabs opt into RPC explicitly with `rpc: true`; `PluginChatManager` owns optional RPC subscriptions, turn events, attachments, replay, and cancellation without creating workspace sessions.
+- External transports register through `plugin.transport`, use `Transport::Host` for normal Kward sessions and interactions, persist namespaced state under the config directory, and implement explicit `start`/`stop` lifecycle methods. Transport plugins are trusted local code; remote identities still require host policy checks.
 - Normal session tabs may persist a Git worktree binding in their tab descriptor. Active worktree tabs rebuild their conversation and agent against the linked root, force workspace guardrails and strict model-command sandboxing, and keep MCP clients and lifecycle hooks disabled for that strict agent. RPC reports worktree bindings as interactive-TUI-only until an equivalent session API exists.
 
 ## Feature exposure rule
