@@ -22,6 +22,22 @@ class TestTransportHost < KwardTestCase
     assert_equal :cancelled, turn.cancel
   end
 
+  def test_policy_can_reject_external_session_access
+    policy = Class.new do
+      def authorize(**)
+        false
+      end
+    end.new
+    host = Kward::Transport::Host.new(transport_id: "test", gateway: FakeTransportGateway.new, policy: policy)
+
+    assert_raises(Kward::Transport::Host::PolicyDenied) do
+      host.sessions.resolve(
+        conversation: Kward::Transport.conversation_key(transport_id: "test", external_id: "chat"),
+        actor: Kward::Transport.actor(id: "user")
+      )
+    end
+  end
+
   def test_host_requires_a_gateway_for_session_access
     host = Kward::Transport::Host.new(transport_id: "test")
 

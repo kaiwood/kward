@@ -6,6 +6,7 @@ module Kward
     # Public dependencies made available to a running transport adapter.
     class Host
       class UnavailableGateway < StandardError; end
+      class PolicyDenied < StandardError; end
 
       SessionHandle = Data.define(:id, :workspace_root, :name)
       TurnHandle = Data.define(:id, :session_id)
@@ -38,6 +39,12 @@ module Kward
         raise UnavailableGateway, "transport host has no session gateway"
       end
 
+      def authorize!(action, **attributes)
+        return true if policy.authorize(action: action, transport_id: @transport_id, **attributes) == true
+
+        raise PolicyDenied, "Transport policy denied #{action}"
+      end
+
       def shutdown
         @gateway&.shutdown
         nil
@@ -50,6 +57,7 @@ module Kward
         end
 
         def resolve(conversation:, actor:, workspace_root: nil, name: nil)
+          @host.authorize!(:resolve_session, conversation: conversation, actor: actor, workspace_root: workspace_root)
           result = @host.gateway.resolve_transport_session(
             transport_id: @host.transport_id,
             conversation: conversation,
@@ -57,7 +65,7 @@ module Kward
             workspace_root: workspace_root,
             name: name
           )
-          Session.new(@host, normalize_handle(result))
+          Session.new(@host, normalize_handle(result), actor)
         end
 
         private
@@ -74,14 +82,16 @@ module Kward
       class Session
         attr_reader :id, :workspace_root, :name
 
-        def initialize(host, handle)
+        def initialize(host, handle, actor)
           @host = host
+          @actor = actor
           @id = handle.id.to_s.freeze
           @workspace_root = handle.workspace_root.to_s.freeze
           @name = handle.name&.to_s&.freeze
         end
 
         def start_turn(input, attachments: [], options: {}, streaming_behavior: nil)
+          @host.authorize!(:start_turn, actor: @actor, session_id: @id, input: input.to_s)
           result = @host.gateway.start_transport_turn(
             session_id: @id,
             input: input.to_s,
@@ -98,6 +108,7 @@ module Kward
         end
 
         def answer_interaction(request_id:, answer:)
+          @host.authorize!(:answer_interaction, actor: @actor, session_id: @id, request_id: request_id)
           @host.gateway.answer_transport_interaction(session_id: @id, request_id: request_id, answer: answer)
         end
       end
