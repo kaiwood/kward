@@ -31,6 +31,7 @@ require_relative "plugin_registry"
 require_relative "prompts/commands"
 require_relative "model/retry_message"
 require_relative "rpc/server"
+require_relative "transport/runtime"
 require_relative "session_diff"
 require_relative "session_store"
 require_relative "session_naming"
@@ -68,6 +69,7 @@ require_relative "cli/plugins"
 require_relative "cli/git"
 require_relative "cli/interactive_turn"
 require_relative "cli/tool_summaries"
+require_relative "cli/transports"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -102,6 +104,7 @@ module Kward
     include CLI::GitCommands
     include CLI::InteractiveTurn
     include CLI::ToolSummaries
+    include CLI::Transports
 
     def initialize(argv: ARGV, stdin: STDIN, prompt: TTY::Prompt.new, client: nil, session_store: nil, context_usage: ContextUsage.new)
       @argv = argv
@@ -244,6 +247,16 @@ module Kward
 
         ensure_client!
         print_sysprompt(@argv[1..] || [])
+        return
+      end
+
+      if @argv.first == "transport"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("transport")
+          return
+        end
+
+        handle_transport_command(@argv[1..] || [])
         return
       end
 

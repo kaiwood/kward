@@ -59,6 +59,7 @@ module Kward
             #{command.call("kward openrouter refresh")}           Refresh cached OpenRouter models
             #{command.call("kward pan")}                          Start Pan mode web UI
             #{command.call("kward rpc")}                          Start the JSON-RPC backend
+            #{command.call("kward transport")}                    Manage transport plugins
 
           #{heading.call("Commands")}
             #{command.call("help")}                               Show this help
@@ -74,6 +75,7 @@ module Kward
             #{command.call("openrouter refresh|list")}             Refresh or list cached OpenRouter models
             #{command.call("pan")}                                Start Pan mode web UI
             #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
+            #{command.call("transport list|status|run")}            Manage transport plugins
 
           #{heading.call("Options")}
             #{option.call("--working-directory=PATH")}             Run Kward from PATH
@@ -163,6 +165,11 @@ module Kward
             usage: "kward rpc",
             description: "Start the JSON-RPC backend for trusted local UI clients.",
             examples: ["kward rpc", "kward --working-directory ~/code/project rpc"]
+          },
+          "transport" => {
+            usage: "kward transport list|status [NAME]|run NAME",
+            description: "Inspect or run trusted external transport plugins.",
+            examples: ["kward transport list", "kward transport status", "kward transport run telegram"]
           }
         }
       end

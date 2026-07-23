@@ -139,7 +139,10 @@ module Kward
         )
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @shutdown = false
+        @shutdown_complete = false
       end
+
+      attr_reader :session_manager
 
       # Reads framed JSON-RPC messages until shutdown or EOF.
       #
@@ -158,9 +161,17 @@ module Kward
           end
         end
       ensure
+        shutdown
+      end
+
+      def shutdown
+        return if @shutdown_complete
+
+        @shutdown = true
         @transport_manager.shutdown
         @plugin_chat_manager.shutdown
         @session_manager.shutdown_sessions
+        @shutdown_complete = true
       end
 
       # Sends a redacted JSON-RPC notification to the client.
