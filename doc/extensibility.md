@@ -14,6 +14,7 @@ Start simple. Most users only need `PRINCIPLES.md`, workspace `AGENTS.md`, and m
 | Task-specific reusable instructions | skills |
 | Different tone or role | [personas](personas.md) |
 | Local Ruby behavior or integrations | plugins |
+| External messaging or event integration | transport plugins |
 | Deterministic runtime policy or automation | lifecycle hooks |
 
 Install the starter pack for a useful starting point:
@@ -114,7 +115,9 @@ Hooks are deterministic automation and policy. They are not model instructions.
 
 Use plugins when text instructions are not enough and you need Ruby code to run locally.
 
-Plugins can add slash commands, prompt context, footer UI, transcript observers, and RPC-visible commands.
+Plugins can add slash commands, prompt context, footer UI, transcript observers, RPC-visible commands, and external transports. Transport plugins connect external conversations to normal Kward sessions; they are distinct from plugin-owned tabs.
+
+Use `kward transport list` and `kward transport status` to inspect registered transports. Run a foreground transport with `kward transport run NAME`.
 
 Plugin files live in:
 

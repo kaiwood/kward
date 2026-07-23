@@ -46,6 +46,32 @@ Add trusted local Model Context Protocol servers under `mcpServers`:
 
 See [MCP servers](mcp.md) for setup, supported fields, and security notes.
 
+### Transport plugins
+
+Transport plugin settings live under `transports` and are scoped by the
+transport's stable ID:
+
+```json
+{
+  "transports": {
+    "com.example.telegram": {
+      "workspace": "/Users/me/src/project",
+      "allowed_users": ["user:42"]
+    }
+  }
+}
+```
+
+Transport plugins are trusted local Ruby code. Keep credentials in environment
+variables or another private secret mechanism provided by the plugin rather
+than committing them to `config.json`. Transport state, including external
+conversation bindings and idempotency keys, is stored privately under the
+transport's namespace in `~/.kward/transports/`.
+
+Run `kward transport list` to inspect registrations, `kward transport status`
+to inspect runtime state, and `kward transport run NAME` to run a transport in
+the foreground.
+
 ### Project skills
 
 Kward loads user-level skills but skips project-level skills by default. Enable them only for repositories you trust, either through `/settings` → Tools & Search → Trust project skills or with:
