@@ -88,9 +88,15 @@ module Kward
         true
       end
 
-      def restart(name_or_id, config: {})
+      def restart(name_or_id, config: nil)
         stop(name_or_id)
         start(name_or_id, config: config)
+      end
+
+      def reload(registry)
+        shutdown
+        @mutex.synchronize { @registry = registry }
+        list
       end
 
       def shutdown
@@ -127,9 +133,18 @@ module Kward
         descriptor(type).merge(
           state: entry&.state || "stopped",
           error: entry&.error,
+          health: health_for(entry),
           started_at: entry&.started_at,
           stopped_at: entry&.stopped_at
         )
+      end
+
+      def health_for(entry)
+        return nil unless entry&.adapter&.respond_to?(:health)
+
+        entry.adapter.health
+      rescue StandardError => e
+        { state: "error", message: e.message }
       end
 
       def log_error(type, error)

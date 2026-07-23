@@ -22,6 +22,7 @@ class TestTransportManager < KwardTestCase
 
       manager.start("fake", config: { "token" => "secret" })
       assert_equal "running", manager.status("com.example.fake")[:state]
+      assert_equal :healthy, manager.status("fake")[:health]
       assert_equal [:build, { "token" => "secret" }], lifecycle[0]
       assert_equal :start, lifecycle[1]
 
@@ -30,6 +31,16 @@ class TestTransportManager < KwardTestCase
       assert_equal "stopped", manager.status("fake")[:state]
       assert_equal :stop, lifecycle.last
     end
+  end
+
+  def test_reload_replaces_registered_transport_types
+    first = Kward::PluginRegistry.new
+    first.evaluate { |plugin| plugin.transport("one", id: "com.example.one") { Class.new { def start; end; def stop; end }.new } }
+    second = Kward::PluginRegistry.new
+    second.evaluate { |plugin| plugin.transport("two", id: "com.example.two") { Class.new { def start; end; def stop; end }.new } }
+
+    manager = Kward::Transport::Manager.new(registry: first)
+    assert_equal ["com.example.two"], manager.reload(second).map { |entry| entry[:id] }
   end
 
   def test_failed_start_is_recorded_and_re_raised
