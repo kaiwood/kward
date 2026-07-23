@@ -140,3 +140,5 @@ module Kward
     private_class_method :frozen_copy
   end
 end
+
+require_relative "transport/store"
