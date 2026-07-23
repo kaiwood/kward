@@ -22,6 +22,19 @@ class TestTransportHost < KwardTestCase
     assert_equal :cancelled, turn.cancel
   end
 
+  def test_secret_reads_config_and_transport_specific_environment_fallback
+    with_env(
+      "KWARD_TRANSPORT_COM_EXAMPLE_TEST_TOKEN" => "environment-secret",
+      "EXPLICIT_SECRET" => "explicit-secret"
+    ) do
+      host = Kward::Transport::Host.new(transport_id: "com.example.test", config: { "configured" => "config-secret" })
+
+      assert_equal "config-secret", host.secret("configured")
+      assert_equal "environment-secret", host.secret("token")
+      assert_equal "explicit-secret", host.secret("token", env: "EXPLICIT_SECRET")
+    end
+  end
+
   def test_policy_can_reject_external_session_access
     policy = Class.new do
       def authorize(**)

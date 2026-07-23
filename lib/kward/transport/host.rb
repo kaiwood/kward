@@ -45,6 +45,18 @@ module Kward
         raise PolicyDenied, "Transport policy denied #{action}"
       end
 
+      # Reads a transport secret from private config or an explicit environment
+      # variable without exposing it through status or logging helpers.
+      def secret(key, env: nil)
+        key = key.to_s
+        raise ArgumentError, "secret key is required" if key.empty?
+
+        value = config[key]
+        value = ENV.fetch(env.to_s) if value.nil? && env
+        value = ENV[default_secret_env_name(key)] if value.nil?
+        value.to_s unless value.nil?
+      end
+
       def shutdown
         @gateway&.shutdown
         nil
@@ -166,6 +178,10 @@ module Kward
       end
 
       private
+
+      def default_secret_env_name(key)
+        "KWARD_TRANSPORT_#{@transport_id.gsub(/[^A-Za-z0-9]/, "_").upcase}_#{key.gsub(/[^A-Za-z0-9]/, "_").upcase}"
+      end
 
       def freeze_copy(value)
         DeepCopy.freeze(DeepCopy.dup(value))

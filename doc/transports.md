@@ -97,6 +97,11 @@ workspace selection, tools, approvals, concurrency, and quotas.
 Untrusted external input must never select an arbitrary local workspace path.
 Credentials must not appear in prompts, transcripts, RPC responses, or logs.
 
+The host provides `host.secret(name, env: nil)` for transport credentials. It
+checks the transport's private configuration first, then an explicit
+environment variable, then `KWARD_TRANSPORT_<TRANSPORT_ID>_<NAME>`. Secret
+values are not included in transport status output.
+
 ## Lifecycle
 
 Transport instances have an explicit lifecycle:
