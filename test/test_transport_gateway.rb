@@ -19,6 +19,17 @@ class TestTransportGateway < KwardTestCase
     end
   end
 
+  def test_normalizes_transport_attachments_for_session_manager
+    manager = FakeSessionManager.new
+    gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")
+    attachment = Kward::Transport.attachment(mime_type: "image/png", data: "png-bytes", name: "image.png")
+
+    gateway.start_transport_turn(session_id: "session-1", input: "look", attachments: [attachment])
+
+    assert_equal "cG5nLWJ5dGVz", manager.started_turn[:attachments].first[:data]
+    assert_equal "image/png", manager.started_turn[:attachments].first[:mimeType]
+  end
+
   def test_forwards_runtime_interaction_requests
     manager = FakeSessionManager.new
     gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")
@@ -53,7 +64,10 @@ class TestTransportGateway < KwardTestCase
       @resumed = []
       @event_reads = 0
       @event_listener = nil
+      @started_turn = nil
     end
+
+    attr_reader :started_turn
 
     def subscribe_events(&listener)
       @event_listener = listener
@@ -71,6 +85,11 @@ class TestTransportGateway < KwardTestCase
     def resume_session(path:, workspace_root:, include_transcript:)
       @resumed << [path, workspace_root, include_transcript]
       { id: "rpc-2", path: path, workspaceRoot: workspace_root, name: "Resumed" }
+    end
+
+    def start_turn(**attributes)
+      @started_turn = attributes
+      { id: "turn-1", sessionId: attributes[:session_id] }
     end
 
     def turn_events(turn_id:, after_sequence:)

@@ -1,3 +1,4 @@
+require "base64"
 require "digest"
 require "thread"
 require_relative "../deep_copy"
@@ -43,7 +44,7 @@ module Kward
         payload = @session_manager.start_turn(
           session_id: session_id,
           input: input,
-          attachments: attachments,
+          attachments: normalize_attachments(attachments),
           options: options,
           streaming_behavior: streaming_behavior
         )
@@ -189,6 +190,20 @@ module Kward
           rescue StandardError
             nil
           end
+        end
+      end
+
+      def normalize_attachments(attachments)
+        Array(attachments).map do |attachment|
+          raise ArgumentError, "transport attachment must be a Transport::Attachment" unless attachment.is_a?(Attachment)
+          raise ArgumentError, "transport attachment URLs are not supported by the session gateway" if attachment.url
+
+          {
+            type: "image",
+            data: Base64.strict_encode64(attachment.data),
+            mimeType: attachment.mime_type,
+            name: attachment.name
+          }.compact
         end
       end
 
