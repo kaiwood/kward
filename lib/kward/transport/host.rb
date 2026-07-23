@@ -38,6 +38,11 @@ module Kward
         raise UnavailableGateway, "transport host has no session gateway"
       end
 
+      def shutdown
+        @gateway&.shutdown
+        nil
+      end
+
       # Resolves an external conversation to a normal Kward session.
       class Sessions
         def initialize(host)

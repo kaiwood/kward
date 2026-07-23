@@ -3,6 +3,19 @@ require_relative "test_support"
 class TestRPCServer < KwardTestCase
   include KwardRPCTestSupport
 
+  def test_initialize_reports_transport_capabilities_and_transport_listing
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      { jsonrpc: "2.0", id: 2, method: "transports/list" },
+      { jsonrpc: "2.0", id: 3, method: "shutdown" }
+    ])
+
+    capabilities = messages[0]["result"]["capabilities"]["transports"]
+    assert_equal true, capabilities["supported"]
+    assert_equal ["transports/list", "transports/status"], capabilities["methods"]
+    assert_equal({ "transports" => [] }, messages[1]["result"])
+  end
+
   def test_initialize_reports_native_steering_when_client_supports_it
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },

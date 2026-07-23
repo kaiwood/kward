@@ -3,6 +3,7 @@ require_relative "../model/client"
 require_relative "../config_files"
 require_relative "../memory/manager"
 require_relative "../plugin_registry"
+require_relative "../transport"
 require_relative "../prompts/commands"
 require_relative "../tools/registry"
 require_relative "../workspace_factory"
@@ -80,6 +81,7 @@ module Kward
       LIFECYCLE_HOOK_METHODS = ["hooks/logs"].freeze
       UI_METHODS = ["ui/answerQuestion"].freeze
       TOOL_APPROVAL_METHODS = ["tool/answerApproval"].freeze
+      TRANSPORT_METHODS = ["transports/list", "transports/status"].freeze
       SESSION_EVENT_NOTIFICATION = "session/event"
       SESSION_UPDATED_NOTIFICATION = "session/updated"
       TURN_EVENT_NOTIFICATION = "turn/event"
@@ -124,6 +126,12 @@ module Kward
         @client = client
         @config_manager = ConfigManager.new
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
+        @transport_manager = Kward::Transport::Manager.new(
+          registry: @session_manager.plugin_registry,
+          gateway: lambda { |transport_id|
+            Kward::Transport::Gateway.new(session_manager: @session_manager, transport_id: transport_id)
+          }
+        )
         @plugin_chat_manager = PluginChatManager.new(
           server: self,
           client: client,
@@ -150,6 +158,7 @@ module Kward
           end
         end
       ensure
+        @transport_manager.shutdown
         @plugin_chat_manager.shutdown
         @session_manager.shutdown_sessions
       end
@@ -229,6 +238,10 @@ module Kward
           @session_manager.tool_schemas(session_id: params["sessionId"])
         when MCP_METHODS[0]
           MCPStatus.new(config_manager: @config_manager).to_h
+        when TRANSPORT_METHODS[0]
+          { transports: @transport_manager.list }
+        when TRANSPORT_METHODS[1]
+          params["name"] ? @transport_manager.status(params["name"]) : { transports: @transport_manager.status }
         when PROMPT_METHODS[0]
           prompts_list
         when PROMPT_METHODS[1]
@@ -431,6 +444,12 @@ module Kward
             tree: { supported: true, method: SESSION_METHODS[8], labels: true, labelTimestamps: true, navigate: true, summarize: true, shape: "kward-tree-items-v1" },
             updates: { supported: false, notification: SESSION_UPDATED_NOTIFICATION },
             worktrees: { supported: false, reason: "interactiveTuiOnly" }
+          },
+          transports: {
+            supported: true,
+            methods: TRANSPORT_METHODS,
+            startMode: "cliOnly",
+            entries: @transport_manager.list
           },
           pluginChats: {
             supported: @plugin_chat_manager.supported_types.any?,

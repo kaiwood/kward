@@ -34,9 +34,10 @@ module Kward
           raise "Transport #{type.id} is already running" if running_entry?(type.id)
         end
 
+        gateway = @gateway.respond_to?(:call) ? @gateway.call(type.id) : @gateway
         host = Host.new(
           transport_id: type.id,
-          gateway: @gateway,
+          gateway: gateway,
           config: config,
           storage: @config_root && Store.new(type.id, root: @config_root),
           policy: @policy,
@@ -76,6 +77,7 @@ module Kward
         begin
           entry.adapter.stop
         ensure
+          entry.host.shutdown
           @mutex.synchronize do
             entry.state = "stopped"
             entry.stopped_at = Time.now.utc
@@ -113,7 +115,7 @@ module Kward
         {
           id: type.id,
           name: type.name,
-          capabilities: type.capabilities,
+          capabilities: type.capabilities.to_h,
           path: type.path
         }
       end
