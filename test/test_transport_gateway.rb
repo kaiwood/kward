@@ -19,6 +19,19 @@ class TestTransportGateway < KwardTestCase
     end
   end
 
+  def test_forwards_runtime_interaction_requests
+    manager = FakeSessionManager.new
+    gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")
+    requests = []
+    gateway.subscribe_transport_interactions { |request| requests << request }
+
+    manager.emit("ui/question", sessionId: "session-1", questionRequestId: "question-1", questions: [{ question: "Continue?" }])
+
+    assert_equal "question-1", requests.first.id
+    assert_equal "question", requests.first.kind
+    assert_equal "Continue?", requests.first.prompt
+  end
+
   def test_subscribes_to_normalized_turn_events_until_completion
     manager = FakeSessionManager.new
     Dir.mktmpdir do |root|
@@ -39,6 +52,15 @@ class TestTransportGateway < KwardTestCase
       @created = []
       @resumed = []
       @event_reads = 0
+      @event_listener = nil
+    end
+
+    def subscribe_events(&listener)
+      @event_listener = listener
+    end
+
+    def emit(method, payload)
+      @event_listener.call(method, payload)
     end
 
     def create_session(workspace_root:, name: nil)

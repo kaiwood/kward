@@ -19,12 +19,17 @@ module Kward
         @policy = policy || AllowAllPolicy.new
         @logger = logger || Logger.new($stderr)
         @sessions = Sessions.new(self)
+        @interactions = Interactions.new(self)
       end
 
       attr_reader :transport_id, :config, :storage, :policy, :logger
 
       def sessions
         @sessions
+      end
+
+      def interactions
+        @interactions
       end
 
       def gateway
@@ -89,6 +94,19 @@ module Kward
 
         def answer_interaction(request_id:, answer:)
           @host.gateway.answer_transport_interaction(session_id: @id, request_id: request_id, answer: answer)
+        end
+      end
+
+      # Subscribes to questions and tool approval requests for this transport.
+      class Interactions
+        def initialize(host)
+          @host = host
+        end
+
+        def subscribe(&block)
+          raise ArgumentError, "interaction subscription requires a block" unless block
+
+          @host.gateway.subscribe_transport_interactions(&block)
         end
       end
 

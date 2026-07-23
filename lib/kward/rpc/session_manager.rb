@@ -88,7 +88,7 @@ module Kward
         @session_metrics = SessionMetrics.new(context_usage: context_usage)
         @session_trash = session_trash
         @worker_stop_timeout = worker_stop_timeout
-        @event_listener = event_listener
+        @event_listeners = event_listener ? [event_listener] : []
         @sessions = {}
         @turns = {}
         @mutex = Mutex.new
@@ -197,6 +197,17 @@ module Kward
                      build_tool_registry(Dir.pwd, nil)
                    end
         { tools: registry.schemas }
+      end
+
+      # Subscribes to frontend-neutral runtime notifications.
+      #
+      # Subscribers are isolated from session execution: an exception is logged
+      # and does not interrupt the RPC notification or active turn.
+      def subscribe_events(&listener)
+        raise ArgumentError, "event subscription requires a block" unless listener
+
+        @mutex.synchronize { @event_listeners << listener }
+        listener
       end
 
       # Returns the plugin registry shared by RPC sessions and plugin chats.
@@ -639,12 +650,13 @@ module Kward
 
       def notify(method, payload)
         @server.notify(method, payload)
-        return unless @event_listener
-
-        begin
-          @event_listener.call(method, payload)
-        rescue StandardError => e
-          @server.log_error(e) if @server.respond_to?(:log_error)
+        listeners = @mutex.synchronize { @event_listeners.dup }
+        listeners.each do |listener|
+          begin
+            listener.call(method, payload)
+          rescue StandardError => e
+            @server.log_error(e) if @server.respond_to?(:log_error)
+          end
         end
       end
 

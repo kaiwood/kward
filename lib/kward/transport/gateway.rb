@@ -20,7 +20,9 @@ module Kward
         @storage = storage || Store.new(@transport_id)
         @poll_interval = poll_interval
         @subscriptions = []
+        @interaction_subscribers = []
         @mutex = Mutex.new
+        @session_manager.subscribe_events { |method, payload| handle_runtime_event(method, payload) } if @session_manager.respond_to?(:subscribe_events)
       end
 
       def resolve_transport_session(transport_id:, conversation:, actor:, workspace_root: nil, name: nil)
@@ -82,6 +84,13 @@ module Kward
         end
       end
 
+      def subscribe_transport_interactions(&block)
+        raise ArgumentError, "interaction subscription requires a block" unless block
+
+        @mutex.synchronize { @interaction_subscribers << block }
+        block
+      end
+
       def subscribe_transport_turn(turn_id:, after: nil)
         cursor = after.to_i
         thread = Thread.new do
@@ -107,6 +116,7 @@ module Kward
         subscriptions = @mutex.synchronize do
           current = @subscriptions
           @subscriptions = []
+          @interaction_subscribers = []
           current
         end
         subscriptions.each(&:kill)
@@ -145,6 +155,41 @@ module Kward
         external_id = conversation.respond_to?(:external_id) ? conversation.external_id : conversation.to_s
         digest = Digest::SHA256.hexdigest("#{@transport_id}\0#{external_id}")
         "binding:#{digest}"
+      end
+
+      def handle_runtime_event(method, payload)
+        request = case method
+                  when "ui/question"
+                    questions = Array(payload[:questions] || payload["questions"])
+                    Transport.interaction_request(
+                      id: payload[:questionRequestId] || payload["questionRequestId"],
+                      session_id: payload[:sessionId] || payload["sessionId"],
+                      turn_id: payload[:turnId] || payload["turnId"] || "unknown",
+                      kind: :question,
+                      prompt: questions.map { |question| question[:question] || question["question"] }.join("\\n"),
+                      choices: questions
+                    )
+                  when "tool/approvalRequested"
+                    Transport.interaction_request(
+                      id: payload[:approvalRequestId] || payload["approvalRequestId"],
+                      session_id: payload[:sessionId] || payload["sessionId"],
+                      turn_id: payload[:turnId] || payload["turnId"] || "unknown",
+                      kind: :tool_approval,
+                      prompt: "Allow #{payload[:toolName] || payload["toolName"]}?",
+                      choices: [{ id: "approve", label: "Approve" }, { id: "deny", label: "Deny" }],
+                      metadata: { tool_call_id: payload[:toolCallId] || payload["toolCallId"], args: payload[:args] || payload["args"] }
+                    )
+                  end
+        return unless request
+
+        subscribers = @mutex.synchronize { @interaction_subscribers.dup }
+        subscribers.each do |subscriber|
+          begin
+            subscriber.call(request)
+          rescue StandardError
+            nil
+          end
+        end
       end
 
       def normalize_event(event)
