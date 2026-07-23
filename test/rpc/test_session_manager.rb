@@ -3,6 +3,23 @@ require_relative "test_support"
 class TestRPCSessionManager < KwardTestCase
   include KwardRPCTestSupport
 
+  def test_event_listener_receives_runtime_notifications_without_changing_rpc_server_output
+    notifications = []
+    server = RecordingServer.new
+    manager = Kward::RPC::SessionManager.new(
+      server: server,
+      client: FakeClient.new([]),
+      event_listener: lambda { |method, payload| notifications << [method, payload] }
+    )
+    session = manager.create_session(workspace_root: Dir.pwd)
+    manager.send(:emit_session_event, manager.send(:fetch_session, session[:id]), "transportTest", { value: 1 })
+
+    assert_equal ["session/event"], server.notifications.map { |notification| notification[:method] }.grep("session/event")
+    transport_notifications = notifications.select { |method, _payload| method == "session/event" }
+    assert_equal ["session/event"], transport_notifications.map(&:first)
+    assert_equal "transportTest", transport_notifications.first.last[:type]
+  end
+
   def test_delete_session_removes_persisted_session_file
     Dir.mktmpdir do |config_dir|
       workspace_root = File.realpath(Dir.mktmpdir)

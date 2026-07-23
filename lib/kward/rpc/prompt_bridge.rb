@@ -8,8 +8,12 @@ module Kward
   module RPC
     # RPC prompt bridge for structured user questions.
     class PromptBridge
-      def initialize(server:, session_id:)
-        @server = server
+      def initialize(server: nil, session_id:, notify: nil)
+        @notify = notify || lambda do |method, payload|
+          raise ArgumentError, "PromptBridge requires a server or notify callback" unless server
+
+          server.notify(method, payload)
+        end
         @session_id = session_id
         @mutex = Mutex.new
         @condition = ConditionVariable.new
@@ -22,7 +26,7 @@ module Kward
         @mutex.synchronize { @pending_requests[request_id] = true }
         cancellation&.on_cancel { cancel_request(request_id) }
         unless cancellation&.cancelled?
-          @server.notify("tool/approvalRequested", {
+          @notify.call("tool/approvalRequested", {
             sessionId: @session_id,
             approvalRequestId: request_id,
             toolCallId: tool_call_id,
@@ -49,7 +53,7 @@ module Kward
         @mutex.synchronize { @pending_requests[request_id] = true }
         cancellation&.on_cancel { cancel_request(request_id) }
         unless cancellation&.cancelled?
-          @server.notify("ui/question", {
+          @notify.call("ui/question", {
             sessionId: @session_id,
             questionRequestId: request_id,
             questions: questions

@@ -77,7 +77,8 @@ module Kward
         config_manager: ConfigManager.new(config_path: File.join(config_dir, "config.json")),
         context_usage: ContextUsage.new,
         session_trash: SessionTrash.new,
-        worker_stop_timeout: WORKER_STOP_TIMEOUT
+        worker_stop_timeout: WORKER_STOP_TIMEOUT,
+        event_listener: nil
       )
         @server = server
         @client = client
@@ -87,6 +88,7 @@ module Kward
         @session_metrics = SessionMetrics.new(context_usage: context_usage)
         @session_trash = session_trash
         @worker_stop_timeout = worker_stop_timeout
+        @event_listener = event_listener
         @sessions = {}
         @turns = {}
         @mutex = Mutex.new
@@ -429,7 +431,7 @@ module Kward
           turn.cancel_requested = true
           [turn.status == "queued", append_turn_event_locked(turn, "turnCancelRequested", {})]
         end
-        @server.notify("turn/event", event)
+        notify("turn/event", event)
         turn.cancellation&.cancel!
         finish_turn(turn, "canceled") if queued
         turn_payload(turn)
@@ -634,6 +636,17 @@ module Kward
       end
 
       private
+
+      def notify(method, payload)
+        @server.notify(method, payload)
+        return unless @event_listener
+
+        begin
+          @event_listener.call(method, payload)
+        rescue StandardError => e
+          @server.log_error(e) if @server.respond_to?(:log_error)
+        end
+      end
 
       def new_conversation(workspace_root: Dir.pwd)
         Conversation.new(
@@ -969,7 +982,7 @@ module Kward
       def build_rpc_session(store, session, conversation, workspace_root)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
-        prompt = PromptBridge.new(server: @server, session_id: id)
+        prompt = PromptBridge.new(notify: method(:notify), session_id: id)
         hook_context = lifecycle_hook_context(conversation: conversation, session: session, workspace_root: workspace_root)
         hook_manager = lifecycle_hook_manager(workspace_root)
         tool_registry = build_tool_registry(workspace_root, prompt, hook_manager: hook_manager, hook_context: hook_context)
@@ -1020,7 +1033,7 @@ module Kward
       end
 
       def emit_lifecycle_hook_event(event, result)
-        @server.notify("hook/event", {
+        notify("hook/event", {
           event: {
             id: event.id,
             name: event.name,
@@ -1048,7 +1061,7 @@ module Kward
           args: "",
           session: session,
           workspace_root: workspace_root,
-          say_callback: lambda { |message| @server.notify("hook/message", { message: message.to_s }) }
+          say_callback: lambda { |message| notify("hook/message", { message: message.to_s }) }
         )
       end
 
@@ -1203,7 +1216,7 @@ module Kward
         end
         return unless started
 
-        @server.notify("turn/event", event)
+        notify("turn/event", event)
 
         if turn.cancel_requested
           finish_turn(turn, "canceled")
@@ -1372,7 +1385,7 @@ module Kward
         end
         return unless event
 
-        @server.notify("turn/event", event)
+        notify("turn/event", event)
         rpc_session = @mutex.synchronize { @sessions[turn.session_id] }
         emit_footer_update(rpc_session) if rpc_session
       end
@@ -1391,19 +1404,19 @@ module Kward
         return if rpc_session.last_footer_text == text
 
         rpc_session.last_footer_text = text
-        @server.notify("ui/footer", { sessionId: rpc_session.id, text: text })
+        notify("ui/footer", { sessionId: rpc_session.id, text: text })
       end
 
       def clear_footer_update(rpc_session)
         return if rpc_session.last_footer_text.to_s.empty?
 
         rpc_session.last_footer_text = ""
-        @server.notify("ui/footer", { sessionId: rpc_session.id, text: "" })
+        notify("ui/footer", { sessionId: rpc_session.id, text: "" })
       end
 
       def emit_turn_event(turn, type, payload)
         event = turn.mutex.synchronize { append_turn_event_locked(turn, type, payload) }
-        @server.notify("turn/event", event)
+        notify("turn/event", event)
         event
       end
 
@@ -1423,7 +1436,7 @@ module Kward
       end
 
       def emit_session_event(rpc_session, type, payload)
-        @server.notify("session/event", {
+        notify("session/event", {
           timestamp: now,
           sessionId: rpc_session.id,
           type: type,
