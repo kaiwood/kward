@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a general transport plugin API with normalized messages and events, persistent transport state, policy checks, managed lifecycle, foreground CLI commands, and RPC capability/status reporting.
 - Added toggleable Git worktree bindings for normal interactive session tabs. `/tab worktree` can move a tab into a strict linked-worktree workspace after research, preserve its transcript, warn about dirty origin changes, and keep the branch available when detached.
 
 ### Fixed
