@@ -145,3 +145,4 @@ end
 require_relative "transport/store"
 require_relative "transport/host"
 require_relative "transport/manager"
+require_relative "transport/gateway"
