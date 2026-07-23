@@ -1,3 +1,4 @@
+require "logger"
 require_relative "deep_copy"
 
 # Namespace for frontend-neutral external transport contracts.
@@ -142,3 +143,4 @@ module Kward
 end
 
 require_relative "transport/store"
+require_relative "transport/host"
