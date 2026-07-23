@@ -22,7 +22,8 @@ module Kward
           gateway: lambda { |transport_id|
             Gateway.new(session_manager: @server.session_manager, transport_id: transport_id)
           },
-          config_root: ConfigFiles.config_dir
+          config_root: ConfigFiles.config_dir,
+          config_provider: ->(transport_id) { ConfigFiles.transport_config(transport_id) }
         )
       end
 

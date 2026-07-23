@@ -130,7 +130,8 @@ module Kward
           registry: @session_manager.plugin_registry,
           gateway: lambda { |transport_id|
             Kward::Transport::Gateway.new(session_manager: @session_manager, transport_id: transport_id)
-          }
+          },
+          config_provider: ->(transport_id) { ConfigFiles.transport_config(transport_id) }
         )
         @plugin_chat_manager = PluginChatManager.new(
           server: self,

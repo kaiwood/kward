@@ -79,6 +79,16 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_transport_config_is_scoped_and_copied
+    config = { "transports" => { "com.example.test" => { "token" => "secret" } } }
+
+    values = Kward::ConfigFiles.transport_config("com.example.test", config)
+    values["token"] = "changed"
+
+    assert_equal({ "token" => "secret" }, Kward::ConfigFiles.transport_config("com.example.test", config))
+    assert_equal({}, Kward::ConfigFiles.transport_config("missing", config))
+  end
+
   def test_ensure_default_config_does_not_modify_existing_config
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

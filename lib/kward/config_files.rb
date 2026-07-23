@@ -156,6 +156,7 @@ module Kward
           "include_principles" => true
         },
         "mcpServers" => {},
+        "transports" => {},
         "tools" => {
           "workspace_guardrails" => true
         },
@@ -542,6 +543,15 @@ module Kward
     def web_search_config(config = read_config)
       value = config["web_search"]
       value.is_a?(Hash) ? value : {}
+    end
+
+    # Returns the private configuration namespace for one transport.
+    def transport_config(transport_id, config = read_config)
+      transports = config["transports"]
+      return {} unless transports.is_a?(Hash)
+
+      values = transports[transport_id.to_s]
+      values.is_a?(Hash) ? DeepCopy.dup(values) : {}
     end
 
     # Returns configured MCP stdio servers, or an empty config when absent.

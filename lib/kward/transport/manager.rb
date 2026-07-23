@@ -8,10 +8,11 @@ module Kward
     class Manager
       Entry = Struct.new(:type, :host, :adapter, :state, :error, :started_at, :stopped_at, keyword_init: true)
 
-      def initialize(registry:, gateway: nil, config_root: nil, policy: nil, logger: nil)
+      def initialize(registry:, gateway: nil, config_root: nil, config_provider: nil, policy: nil, logger: nil)
         @registry = registry
         @gateway = gateway
         @config_root = config_root
+        @config_provider = config_provider
         @policy = policy
         @logger = logger || Logger.new($stderr)
         @entries = {}
@@ -28,12 +29,13 @@ module Kward
         list.map { |type| status_for(type) }
       end
 
-      def start(name_or_id, config: {})
+      def start(name_or_id, config: nil)
         type = resolve_type(name_or_id)
         @mutex.synchronize do
           raise "Transport #{type.id} is already running" if running_entry?(type.id)
         end
 
+        config ||= @config_provider&.call(type.id) || {}
         gateway = @gateway.respond_to?(:call) ? @gateway.call(type.id) : @gateway
         host = Host.new(
           transport_id: type.id,
