@@ -1,6 +1,7 @@
 require_relative "config_files"
 require_relative "deep_copy"
 require_relative "hooks"
+require_relative "transport"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -37,6 +38,10 @@ module Kward
     # Registered plugin-owned tab runtime. Its factory receives a
     # `PluginTabHost` and its persisted descriptor, then returns a driver.
     TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :transcript_events, :path, :handler, keyword_init: true)
+
+    # Registered external transport. The factory receives a transport host and
+    # configuration when the transport is started, not while plugins load.
+    TransportType = Struct.new(:id, :name, :capabilities, :path, :handler, keyword_init: true)
 
     # Read-only event passed to plugin transcript observers.
     TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
@@ -285,6 +290,20 @@ module Kward
       def tab_type(name, id:, title: nil, singleton: nil, rpc: false, transcript_events: false, &block)
         @registry.register_tab_type(name, id: id, title: title, singleton: singleton, rpc: rpc, transcript_events: transcript_events, path: @path, &block)
       end
+
+      # Registers an external messaging or event transport. The factory is
+      # called when the transport runtime starts.
+      #
+      # @param name [String] human-readable transport name
+      # @param id [String] stable transport identifier
+      # @param capabilities [Hash, Transport::Capabilities] supported features
+      # @yieldparam host [Object] transport host
+      # @yieldparam config [Object] transport configuration
+      # @return [void]
+      # @api public
+      def transport(name, id:, capabilities: nil, &block)
+        @registry.register_transport(name, id: id, capabilities: capabilities, path: @path, &block)
+      end
     end
 
     # Mutable singleton guard used while loading trusted plugin files.
@@ -305,6 +324,8 @@ module Kward
       @interactive_commands = {}
       @tab_types = {}
       @tab_types_by_id = {}
+      @transports = {}
+      @transports_by_id = {}
       @footer = nil
       @footer_path = nil
       @transcript_event_handlers = []
@@ -345,6 +366,18 @@ module Kward
 
     def tab_type_for_id(id)
       @tab_types_by_id[id.to_s]
+    end
+
+    def transports
+      @transports.values
+    end
+
+    def transport_for(name)
+      @transports[name.to_s]
+    end
+
+    def transport_for_id(id)
+      @transports_by_id[id.to_s]
     end
 
     def footer_renderer
@@ -481,6 +514,24 @@ module Kward
       @tab_types_by_id[id] = tab_type
     end
 
+    def register_transport(name, id:, capabilities: nil, path: nil, &handler)
+      name = name.to_s
+      id = id.to_s
+      raise "Plugin transport name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin transport id is required" if id.empty?
+      raise "Plugin transport #{name} requires a handler" unless handler
+
+      if @transports.key?(name) || @transports_by_id.key?(id)
+        warn "Warning: skipping duplicate Kward plugin transport #{id}: #{path}"
+        return nil
+      end
+
+      capabilities = normalize_transport_capabilities(capabilities)
+      transport = TransportType.new(id: id, name: name, capabilities: capabilities, path: path, handler: handler)
+      @transports[name] = transport
+      @transports_by_id[id] = transport
+    end
+
     def register_footer(path: nil, &renderer)
       raise "Plugin footer requires a renderer" unless renderer
 
@@ -519,6 +570,14 @@ module Kward
     end
 
     private
+
+    def normalize_transport_capabilities(capabilities)
+      return Transport.capabilities if capabilities.nil?
+      return capabilities if capabilities.is_a?(Transport::Capabilities)
+      raise ArgumentError, "Plugin transport capabilities must be a hash or Transport::Capabilities" unless capabilities.is_a?(Hash)
+
+      Transport.capabilities(**capabilities.transform_keys(&:to_sym))
+    end
 
     def transcript_event_for(event)
       case event.class.name

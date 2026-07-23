@@ -94,6 +94,48 @@ class TestPluginRegistry < KwardTestCase
     assert_includes warnings, "duplicate Kward plugin command /demo"
   end
 
+  def test_registers_transport_with_normalized_capabilities
+    registry = Kward::PluginRegistry.new
+    handler = proc { |_host, _config| :transport }
+
+    registry.evaluate do |plugin|
+      plugin.transport "demo", id: "com.example.demo", capabilities: { inbound: [:text], streaming: :aggregate }, &handler
+    end
+
+    transport = registry.transport_for("demo")
+    assert_equal "com.example.demo", transport.id
+    assert_equal [:text], transport.capabilities.inbound
+    assert_equal :aggregate, transport.capabilities.streaming
+    assert_same handler, transport.handler
+    assert_same transport, registry.transport_for_id("com.example.demo")
+  end
+
+  def test_skips_duplicate_transport_names_and_ids
+    registry = Kward::PluginRegistry.new
+
+    _stderr, warnings = capture_io do
+      registry.evaluate do |plugin|
+        plugin.transport("demo", id: "com.example.demo") { nil }
+        plugin.transport("demo", id: "com.example.other") { nil }
+        plugin.transport("other", id: "com.example.demo") { nil }
+      end
+    end
+
+    assert_equal 1, registry.transports.length
+    assert_includes warnings, "duplicate Kward plugin transport"
+  end
+
+  def test_rejects_invalid_transport_registration
+    registry = Kward::PluginRegistry.new
+
+    assert_raises(RuntimeError) do
+      registry.evaluate { |plugin| plugin.transport("bad name", id: "com.example.bad") { nil } }
+    end
+    assert_raises(RuntimeError) do
+      registry.evaluate { |plugin| plugin.transport("missing-handler", id: "com.example.missing") }
+    end
+  end
+
   def test_plugin_can_register_lifecycle_hook
     registry = Kward::PluginRegistry.new
     received = []
