@@ -57,10 +57,38 @@ First check that Kward discovers the plugin:
 kward transport list
 ```
 
-Then run the foreground transport:
+Then run the personal-assistant transport in the foreground:
 
 ```bash
 kward transport run com.kward.telegram
+```
+
+The plugin also registers `com.kward.telegram.isolated`. It uses the generic
+`isolated_chat` execution profile: no tools, no plugin commands, no memory, no
+attachments, and no approval interactions. Configure that transport with a
+separate empty workspace:
+
+```json
+{
+  "transports": {
+    "com.kward.telegram.isolated": {
+      "workspace": "/var/lib/kward-chat/workspace",
+      "allowed_user_ids": [123456789],
+      "allowed_chat_ids": [123456789],
+      "poll_timeout_seconds": 25
+    }
+  }
+}
+```
+
+For stronger separation, run it with a dedicated home and config directory
+that contain only this plugin:
+
+```bash
+HOME=/var/lib/kward-chat \
+KWARD_CONFIG_PATH=/var/lib/kward-chat/.kward/config.json \
+TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+kward transport run com.kward.telegram.isolated
 ```
 
 The process removes any existing Telegram webhook, validates the bot token,
@@ -78,8 +106,10 @@ The initial adapter supports:
 - normal Kward session persistence,
 - idempotent Telegram update claims,
 - final responses split at Telegram's message length limit,
-- tool approval buttons, and
-- single-question choice buttons.
+- tool approval buttons and single-question choice buttons for the personal
+  transport.
+
+The isolated transport intentionally has no tool or interaction capabilities.
 
 It intentionally does not yet support groups, media uploads, webhooks,
 streaming message edits, inline mode, or multiple independent workspace
