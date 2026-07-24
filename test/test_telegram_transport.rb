@@ -1,0 +1,197 @@
+require "stringio"
+require_relative "test_helper"
+require_relative "../examples/plugins/telegram_transport"
+
+class TestTelegramTransport < KwardTestCase
+  def test_processes_an_authorized_message_once_and_replies_with_final_answer
+    host = FakeTelegramHost.new
+    api = FakeTelegramApi.new
+    transport = build_transport(host, api)
+
+    transport.send(:handle_update, message_update(text: "hello", update_id: 1))
+    transport.send(:handle_update, message_update(text: "hello again", update_id: 1))
+
+    assert_equal ["hello"], host.sessions.inputs
+    assert_equal ["answer"], api.sent_messages.map { |message| message[:text] }
+    assert_equal 1, api.sent_messages.first[:reply_to_message_id]
+    assert_equal 1, api.calls.count { |method, _| method == :send_message }
+  end
+
+  def test_rejects_messages_outside_both_allowlists
+    host = FakeTelegramHost.new
+    api = FakeTelegramApi.new
+    transport = build_transport(host, api)
+
+    transport.send(:handle_update, message_update(user_id: 99, chat_id: 42, update_id: 2))
+    transport.send(:handle_update, message_update(user_id: 7, chat_id: 99, update_id: 3))
+
+    assert_empty host.sessions.inputs
+    assert_empty api.sent_messages
+  end
+
+  def test_splits_long_answers_for_telegram
+    host = FakeTelegramHost.new(answer: "a" * 4097)
+    api = FakeTelegramApi.new
+    transport = build_transport(host, api)
+
+    transport.send(:handle_update, message_update(update_id: 4))
+
+    assert_equal [4096, 1], api.sent_messages.map { |message| message[:text].length }
+  end
+
+  def test_start_validates_bot_and_stop_ends_polling_thread
+    host = FakeTelegramHost.new
+    api = FakeTelegramApi.new
+    transport = build_transport(host, api, sleeper: ->(_seconds) { Thread.pass })
+
+    transport.start
+    wait_until { api.calls.any? { |method, _| method == :get_updates } }
+    assert_equal "running", transport.health[:state]
+    transport.stop
+
+    assert_equal "stopped", transport.health[:state]
+    assert_equal %i[delete_webhook get_me], api.calls.first(2).map(&:first)
+  end
+
+  private
+
+  def build_transport(host, api, sleeper: ->(_seconds) {})
+    Kward::Telegram::Transport.new(
+      host: host,
+      config: {
+        "bot_token" => "test-token",
+        "workspace" => "/tmp/fixed-workspace",
+        "allowed_user_ids" => [7],
+        "allowed_chat_ids" => [42],
+        "poll_timeout_seconds" => 0
+      },
+      api: api,
+      sleeper: sleeper
+    )
+  end
+
+  def message_update(text: "hello", user_id: 7, chat_id: 42, update_id:)
+    {
+      "update_id" => update_id,
+      "message" => {
+        "message_id" => 1,
+        "text" => text,
+        "from" => { "id" => user_id, "username" => "captain" },
+        "chat" => { "id" => chat_id }
+      }
+    }
+  end
+
+  def wait_until(timeout: 1)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    sleep 0.001 until yield || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+    assert yield, "condition was not met before timeout"
+  end
+
+  class FakeTelegramApi
+    attr_reader :calls, :sent_messages
+
+    def initialize
+      @calls = []
+      @sent_messages = []
+    end
+
+    def delete_webhook(**options)
+      @calls << [:delete_webhook, options]
+      true
+    end
+
+    def get_me
+      @calls << [:get_me, {}]
+      { "id" => 1 }
+    end
+
+    def get_updates(**options)
+      @calls << [:get_updates, options]
+      []
+    end
+
+    def send_message(**message)
+      @calls << [:send_message, message]
+      @sent_messages << message
+      { "message_id" => @sent_messages.length }
+    end
+  end
+
+  class FakeTelegramHost
+    attr_reader :storage, :sessions, :logger, :transport_id
+
+    def initialize(answer: "answer")
+      @storage = Kward::Transport::Store.new("com.kward.telegram", root: Dir.mktmpdir)
+      @sessions = FakeTelegramSessions.new(answer: answer)
+      @logger = Logger.new(StringIO.new)
+      @transport_id = "com.kward.telegram"
+      @interaction_handler = nil
+    end
+
+    def secret(name, env: nil)
+      name == "bot_token" ? "test-token" : nil
+    end
+
+    def interactions
+      self
+    end
+
+    def subscribe(&block)
+      @interaction_handler = block
+    end
+
+    def authorize!(_action, **_attributes)
+      true
+    end
+  end
+
+  class FakeTelegramSessions
+    attr_reader :inputs
+
+    def initialize(answer:)
+      @answer = answer
+      @inputs = []
+    end
+
+    def resolve(**_attributes)
+      FakeTelegramSession.new(@inputs, @answer)
+    end
+  end
+
+  class FakeTelegramSession
+    def initialize(inputs, answer)
+      @inputs = inputs
+      @answer = answer
+    end
+
+    def id
+      "session-1"
+    end
+
+    def start_turn(input, **_options)
+      @inputs << input
+      FakeTelegramTurn.new(@answer)
+    end
+  end
+
+  class FakeTelegramTurn
+    def initialize(answer)
+      @answer = answer
+    end
+
+    def id
+      "turn-1"
+    end
+
+    def subscribe(&block)
+      block.call(Kward::Transport.turn_event(
+        type: "answer",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        payload: { content: @answer }
+      ))
+    end
+  end
+end
