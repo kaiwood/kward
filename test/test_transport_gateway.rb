@@ -89,11 +89,12 @@ class TestTransportGateway < KwardTestCase
 
       assert_equal ["assistant_message", "turnFinished"], events.map(&:type)
       assert_equal [1, 2], events.map(&:sequence)
+      assert_operator manager.status_reads, :>, 0
     end
   end
 
   class FakeSessionManager
-    attr_reader :created, :resumed
+    attr_reader :created, :resumed, :status_reads
 
     def initialize
       @created = []
@@ -101,6 +102,7 @@ class TestTransportGateway < KwardTestCase
       @event_reads = 0
       @event_listener = nil
       @started_turn = nil
+      @status_reads = 0
     end
 
     attr_reader :started_turn
@@ -138,6 +140,7 @@ class TestTransportGateway < KwardTestCase
     end
 
     def turn_status(turn_id:)
+      @status_reads += 1
       { status: @event_reads.zero? ? "running" : "completed" }
     end
   end

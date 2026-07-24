@@ -105,7 +105,7 @@ module Kward
               cursor = event.sequence
               yield event
             end
-            status = transport_turn_status(turn_id)
+            status = transport_turn_status(turn_id: turn_id)
             break if TERMINAL_STATUSES.include?(status[:status].to_s)
 
             sleep @poll_interval
