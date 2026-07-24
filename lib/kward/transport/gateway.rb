@@ -43,12 +43,12 @@ module Kward
         session_handle(session)
       end
 
-      def start_transport_turn(session_id:, input:, attachments: [], options: {}, streaming_behavior: nil)
+      def start_transport_turn(session_id:, input:, attachments: [], options: {}, streaming_behavior: nil, execution_profile: nil)
         payload = @session_manager.start_turn(
           session_id: session_id,
           input: input,
-          attachments: normalize_attachments(attachments),
-          options: options,
+          attachments: normalize_attachments(attachments, execution_profile: execution_profile),
+          options: profile_options(options, execution_profile),
           streaming_behavior: streaming_behavior
         )
         { id: payload.fetch(:id), session_id: payload.fetch(:sessionId) }
@@ -196,7 +196,30 @@ module Kward
         end
       end
 
-      def normalize_attachments(attachments)
+      def profile_options(options, profile)
+        return options unless profile
+
+        options = options.dup
+        case profile.tool_mode
+        when :none
+          options.delete("disabledTools")
+          options.delete(:disabled_tools)
+          options["allowedTools"] = []
+        when :allowlist
+          options.delete("disabledTools")
+          options.delete(:disabled_tools)
+          options["allowedTools"] = profile.allowed_tools
+        end
+        options["approvalMode"] = "none" if profile.approval_mode == :deny
+        options["approvalMode"] = "ask" if profile.approval_mode == :ask
+        options
+      end
+
+      def normalize_attachments(attachments, execution_profile: nil)
+        if execution_profile && !execution_profile.attachments && !Array(attachments).empty?
+          raise ArgumentError, "transport execution profile does not allow attachments"
+        end
+
         Array(attachments).map do |attachment|
           raise ArgumentError, "transport attachment must be a Transport::Attachment" unless attachment.is_a?(Attachment)
           raise ArgumentError, "transport attachment URLs are not supported by the session gateway" if attachment.url

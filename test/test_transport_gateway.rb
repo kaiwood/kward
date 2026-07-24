@@ -39,6 +39,33 @@ class TestTransportGateway < KwardTestCase
     assert_equal "image/png", manager.started_turn[:attachments].first[:mimeType]
   end
 
+  def test_applies_execution_profile_to_turn_options
+    manager = FakeSessionManager.new
+    gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", tool_mode: :none, approval_mode: :deny, attachments: false)
+
+    gateway.start_transport_turn(
+      session_id: "session-1",
+      input: "hello",
+      options: { "disabledTools" => ["read"] },
+      execution_profile: profile
+    )
+
+    assert_equal [], manager.started_turn[:options]["allowedTools"]
+    refute manager.started_turn[:options].key?("disabledTools")
+    assert_equal "none", manager.started_turn[:options]["approvalMode"]
+  end
+
+  def test_rejects_attachments_disallowed_by_execution_profile
+    gateway = Kward::Transport::Gateway.new(session_manager: FakeSessionManager.new, transport_id: "test")
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", tool_mode: :none, attachments: false)
+    attachment = Kward::Transport.attachment(mime_type: "image/png", data: "png")
+
+    assert_raises(ArgumentError) do
+      gateway.start_transport_turn(session_id: "session-1", input: "hello", attachments: [attachment], execution_profile: profile)
+    end
+  end
+
   def test_forwards_runtime_interaction_requests
     manager = FakeSessionManager.new
     gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")

@@ -74,6 +74,7 @@ module Kward
         end
 
         def resolve(conversation:, actor:, workspace_root: nil, name: nil)
+          workspace_root = fixed_workspace_root(workspace_root)
           @host.authorize!(:resolve_session, conversation: conversation, actor: actor, workspace_root: workspace_root)
           result = @host.gateway.resolve_transport_session(
             transport_id: @host.transport_id,
@@ -86,6 +87,15 @@ module Kward
         end
 
         private
+
+        def fixed_workspace_root(workspace_root)
+          return workspace_root unless @host.execution_profile&.workspace_mode == :fixed
+
+          configured = @host.config["workspace"] || @host.config[:workspace]
+          raise ArgumentError, "fixed execution profile requires a configured workspace" if configured.to_s.empty?
+
+          configured.to_s
+        end
 
         def normalize_handle(result)
           return result if result.is_a?(SessionHandle)
