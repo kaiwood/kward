@@ -35,6 +35,17 @@ class TestTransportHost < KwardTestCase
     assert_equal profile, gateway.calls.find { |call| call.first == :start }[1][:execution_profile]
   end
 
+  def test_deny_profile_rejects_interaction_answers
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", approval_mode: :deny)
+    host = Kward::Transport::Host.new(transport_id: "test", gateway: FakeTransportGateway.new, execution_profile: profile)
+    conversation = Kward::Transport.conversation_key(transport_id: "test", external_id: "chat")
+    session = host.sessions.resolve(conversation: conversation, actor: Kward::Transport.actor(id: "user"))
+
+    assert_raises(Kward::Transport::Host::PolicyDenied) do
+      session.answer_interaction(request_id: "request", answer: true)
+    end
+  end
+
   def test_fixed_profile_ignores_requested_workspace
     profile = Kward::Transport.execution_profile(id: "isolated_chat", workspace_mode: :fixed)
     gateway = FakeTransportGateway.new

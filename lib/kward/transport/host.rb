@@ -138,6 +138,10 @@ module Kward
         end
 
         def answer_interaction(request_id:, answer:)
+          if @host.execution_profile&.approval_mode == :deny
+            raise PolicyDenied, "Transport execution profile does not allow interactions"
+          end
+
           @host.authorize!(:answer_interaction, actor: @actor, session_id: @id, request_id: request_id)
           @host.gateway.answer_transport_interaction(session_id: @id, request_id: request_id, answer: answer)
         end
