@@ -49,7 +49,8 @@ module Kward
           input: input,
           attachments: normalize_attachments(attachments, execution_profile: execution_profile),
           options: profile_options(options, execution_profile),
-          streaming_behavior: streaming_behavior
+          streaming_behavior: streaming_behavior,
+          execution_profile: execution_profile
         )
         { id: payload.fetch(:id), session_id: payload.fetch(:sessionId) }
       end

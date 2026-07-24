@@ -67,7 +67,7 @@ module Kward
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :mutex, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :execution_profile, :mutex, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
       def initialize(
@@ -399,12 +399,20 @@ module Kward
       # queue a follow-up, or steer the running turn when the active provider
       # supports native steering. The returned turn id is used for status,
       # cancellation, and event replay.
-      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [], options: {}, context: nil)
+      def start_turn(session_id:, input:, streaming_behavior: nil, attachments: [], options: {}, context: nil, execution_profile: nil)
         rpc_session = fetch_session(session_id)
-        normalized_options = normalize_turn_options(options)
+        execution_profile = validate_execution_profile(execution_profile)
+        normalized_options = enforce_execution_profile_options(normalize_turn_options(options), execution_profile)
         normalized_context = TurnContext.normalize(context)
         normalized_attachments = normalize_attachments(attachments)
-        plugin_command, plugin_arguments = plugin_command_turn(input, normalized_attachments)
+        if execution_profile && !execution_profile.attachments && !normalized_attachments.empty?
+          raise ArgumentError, "transport execution profile does not allow attachments"
+        end
+        plugin_command, plugin_arguments = if execution_profile && !execution_profile.plugin_commands
+                                              [nil, ""]
+                                            else
+                                              plugin_command_turn(input, normalized_attachments)
+                                            end
         display_input = input.to_s if input.is_a?(String)
         content = plugin_command ? input.to_s : user_turn_content(turn_input_with_context(expand_prompt_input(input), normalized_context), normalized_attachments)
         streaming_behavior = validate_streaming_behavior(default_streaming_behavior(rpc_session, streaming_behavior), rpc_session: rpc_session)
@@ -427,6 +435,7 @@ module Kward
           plugin_arguments: plugin_arguments,
           options: normalized_options,
           tool_registry: scoped_tool_registry(rpc_session, normalized_options),
+          execution_profile: execution_profile,
           mutex: Mutex.new
         )
         @mutex.synchronize { @turns[turn.id] = turn }
@@ -881,6 +890,30 @@ module Kward
         PromptCommands.expand(input) || input
       end
 
+      def validate_execution_profile(profile)
+        return nil if profile.nil?
+        return profile if profile.is_a?(Kward::Transport::ExecutionProfile)
+
+        raise ArgumentError, "execution_profile must be a Transport::ExecutionProfile"
+      end
+
+      def enforce_execution_profile_options(options, profile)
+        return options unless profile
+
+        options = options.dup
+        case profile.tool_mode
+        when :none
+          options.delete(:disabled_tools)
+          options[:allowed_tools] = []
+        when :allowlist
+          options.delete(:disabled_tools)
+          options[:allowed_tools] = profile.allowed_tools
+        end
+        options[:approval_mode] = "none" if profile.approval_mode == :deny
+        options[:approval_mode] = "ask" if profile.approval_mode == :ask
+        options
+      end
+
       def plugin_command_turn(input, attachments)
         return [nil, ""] unless input.is_a?(String)
         return [nil, ""] unless attachments.empty?
@@ -1214,6 +1247,10 @@ module Kward
       # This method is intentionally the only place that calls `Agent#ask` for RPC
       # turns. Keep event translation near this boundary so CLI rendering and RPC
       # protocol details do not leak into `Agent`.
+      def memory_disabled?(turn)
+        turn.execution_profile&.memory == :none
+      end
+
       def run_turn(rpc_session, turn)
         previous_turn_id = Thread.current[:kward_rpc_turn_id]
         Thread.current[:kward_rpc_turn_id] = turn.id
@@ -1239,15 +1276,17 @@ module Kward
           run_plugin_turn(rpc_session, turn)
         else
           auto_name_session(rpc_session, turn.display_input || turn.input)
-          prepare_memory_context(rpc_session.conversation, turn.input)
+          prepare_memory_context(rpc_session.conversation, turn.input) unless memory_disabled?(turn)
           rpc_session.agent.ask(turn.input, display_input: turn_display_input(turn), cancellation: turn.cancellation, steering: turn.steering, options: turn.options || {}, tool_registry: turn.tool_registry) do |event|
             next if turn.cancel_requested
 
             notify_plugin_transcript_event(rpc_session, event)
             handle_agent_event(turn, event)
           end
-          persist_memory_state(rpc_session)
-          auto_summarize_memory(rpc_session) unless turn.cancel_requested
+          unless memory_disabled?(turn)
+            persist_memory_state(rpc_session)
+            auto_summarize_memory(rpc_session) unless turn.cancel_requested
+          end
           finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
         end
       rescue Cancellation::CancelledError
