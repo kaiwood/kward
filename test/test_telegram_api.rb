@@ -16,6 +16,17 @@ class TestTelegramApi < KwardTestCase
     assert_equal %w[message callback_query], JSON.parse(calls[0][1]["allowed_updates"])
   end
 
+  def test_answers_callback_queries
+    calls = []
+    api = Kward::Telegram::BotApi.new(token: "token", requester: lambda do |method, params|
+      calls << [method, params]
+      { "ok" => true, "result" => true }
+    end)
+
+    assert api.answer_callback_query(callback_query_id: "callback-1", text: "Done", show_alert: true)
+    assert_equal ["answerCallbackQuery", { "callback_query_id" => "callback-1", "show_alert" => true, "text" => "Done" }], calls.first
+  end
+
   def test_send_message_serializes_reply_parameters_and_buttons
     calls = []
     api = Kward::Telegram::BotApi.new(token: "123:secret", requester: lambda do |method, params|

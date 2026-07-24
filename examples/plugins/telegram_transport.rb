@@ -56,7 +56,7 @@ module Kward
         @state_mutex.synchronize do
           {
             state: @thread&.alive? ? "running" : "stopped",
-            error: @last_error&.message
+            error: @last_error
           }
         end
       end
@@ -120,7 +120,7 @@ module Kward
           workspace_root: @workspace,
           name: "Telegram chat #{chat_id}"
         )
-        remember_session(session, conversation, chat_id)
+        remember_session(session, conversation, chat_id, actor)
 
         turn = session.start_turn(text, streaming_behavior: :aggregate)
         @host.storage.put("telegram:turn:#{turn.id}", {
@@ -153,17 +153,105 @@ module Kward
         record_error(error)
       end
 
-      def handle_callback(_callback)
-        # Interactive approvals and questions are added after the text-only
-        # transport path is proven. Callback updates are intentionally ignored
-        # rather than treated as user messages.
+      def handle_interaction(request)
+        session = @host.storage.get("telegram:session:#{request.session_id}")
+        return unless session
+
+        record = {
+          "chat_id" => session.fetch("chat_id"),
+          "session_id" => request.session_id,
+          "external_id" => session.fetch("external_id"),
+          "actor_id" => session.fetch("actor_id"),
+          "actor_name" => session["actor_name"],
+          "kind" => request.kind.to_s
+        }
+        buttons = case request.kind.to_s
+                  when "tool_approval"
+                    record["answers"] = { "approve" => true, "deny" => false }
+                    [[
+                      { "text" => "Approve", "callback_data" => callback_data(request.id, "approve") },
+                      { "text" => "Deny", "callback_data" => callback_data(request.id, "deny") }
+                    ]]
+                  when "question"
+                    question, options = question_options(request)
+                    return if options.empty?
+
+                    record["question"] = question
+                    record["answers"] = options.each_with_index.to_h { |option, index| [index.to_s, option] }
+                    [options.each_with_index.map do |option, index|
+                      { "text" => option, "callback_data" => callback_data(request.id, index.to_s) }
+                    end]
+                  else
+                    return
+                  end
+
+        @host.storage.put("telegram:interaction:#{request.id}", record)
+        @api.send_message(
+          chat_id: record.fetch("chat_id"),
+          text: request.prompt,
+          reply_markup: { "inline_keyboard" => buttons }
+        )
+      rescue StandardError => error
+        record_error(error)
       end
 
-      def remember_session(session, conversation, chat_id)
+      def handle_callback(callback)
+        data = callback["data"].to_s
+        match = /\Akward:([^:]+):([^:]+)\z/.match(data)
+        return unless match
+
+        request_id, choice = match.captures
+        chat_id = Integer(callback.fetch("message").fetch("chat").fetch("id"))
+        user_id = Integer(callback.fetch("from").fetch("id"))
+        return unless allowed?(user_id, chat_id)
+
+        record = @host.storage.get("telegram:interaction:#{request_id}")
+        return unless record && record.fetch("chat_id") == chat_id
+        return unless record.fetch("actor_id") == "telegram:user:#{user_id}"
+        return if @host.storage.get("telegram:answered:#{request_id}")
+
+        conversation = Kward::Transport.conversation_key(
+          transport_id: @host.transport_id,
+          external_id: record.fetch("external_id")
+        )
+        actor = Kward::Transport.actor(
+          id: record.fetch("actor_id"),
+          display_name: record["actor_name"],
+          metadata: { provider: "telegram", user_id: user_id, chat_id: chat_id }
+        )
+        session = @host.sessions.resolve(
+          conversation: conversation,
+          actor: actor,
+          workspace_root: @workspace
+        )
+        answer = record.fetch("answers").fetch(choice)
+        answer = [{ question: record.fetch("question"), answer: answer }] if record.fetch("kind") == "question"
+        session.answer_interaction(request_id: request_id, answer: answer)
+        @host.storage.put("telegram:answered:#{request_id}", true)
+        @api.answer_callback_query(callback_query_id: callback.fetch("id"))
+      rescue StandardError => error
+        record_error(error)
+      end
+
+      def remember_session(session, conversation, chat_id, actor)
         @host.storage.put("telegram:session:#{session.id}", {
           "chat_id" => chat_id,
-          "external_id" => conversation.external_id
+          "external_id" => conversation.external_id,
+          "actor_id" => actor.id,
+          "actor_name" => actor.display_name
         })
+      end
+
+      def question_options(request)
+        question = request.choices.first || {}
+        options = Array(question[:options] || question["options"]).map do |option|
+          (option[:label] || option["label"]).to_s
+        end.reject(&:empty?)
+        [question[:question] || question["question"] || request.prompt, options]
+      end
+
+      def callback_data(request_id, choice)
+        "kward:#{request_id}:#{choice}"
       end
 
       def split_message(text)
@@ -183,8 +271,10 @@ module Kward
       end
 
       def record_error(error)
-        @state_mutex.synchronize { @last_error = error }
-        @host.logger.error("Telegram transport error: #{error.class}: #{error.message}")
+        message = error.message.to_s.gsub(@token.to_s, "[REDACTED]")
+        summary = "#{error.class}: #{message}"
+        @state_mutex.synchronize { @last_error = summary }
+        @host.logger.error("Telegram transport error: #{summary}")
       rescue StandardError
         nil
       end

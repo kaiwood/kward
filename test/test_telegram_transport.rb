@@ -39,6 +39,40 @@ class TestTelegramTransport < KwardTestCase
     assert_equal [4096, 1], api.sent_messages.map { |message| message[:text].length }
   end
 
+  def test_routes_tool_approval_callbacks_back_to_the_kward_session
+    host = FakeTelegramHost.new
+    api = FakeTelegramApi.new
+    transport = build_transport(host, api, sleeper: ->(_seconds) { Thread.pass })
+    transport.start
+    wait_until { host.interaction_handler }
+    transport.send(:handle_update, message_update(update_id: 5))
+
+    request = Kward::Transport.interaction_request(
+      id: "request-1",
+      session_id: "session-1",
+      turn_id: "turn-1",
+      kind: "tool_approval",
+      prompt: "Allow the tool?"
+    )
+    host.interaction_handler.call(request)
+    callback_data = api.sent_messages.last[:reply_markup]["inline_keyboard"][0][0]["callback_data"]
+
+    transport.send(:handle_update, {
+      "update_id" => 6,
+      "callback_query" => {
+        "id" => "callback-1",
+        "data" => callback_data,
+        "from" => { "id" => 7 },
+        "message" => { "chat" => { "id" => 42 } }
+      }
+    })
+
+    assert_equal [["request-1", true]], host.sessions.answers
+    assert_equal "callback-1", api.callback_answers.first[:callback_query_id]
+  ensure
+    transport&.stop
+  end
+
   def test_start_validates_bot_and_stop_ends_polling_thread
     host = FakeTelegramHost.new
     api = FakeTelegramApi.new
@@ -89,11 +123,12 @@ class TestTelegramTransport < KwardTestCase
   end
 
   class FakeTelegramApi
-    attr_reader :calls, :sent_messages
+    attr_reader :calls, :sent_messages, :callback_answers
 
     def initialize
       @calls = []
       @sent_messages = []
+      @callback_answers = []
     end
 
     def delete_webhook(**options)
@@ -111,6 +146,11 @@ class TestTelegramTransport < KwardTestCase
       []
     end
 
+    def answer_callback_query(**message)
+      @callback_answers << message
+      true
+    end
+
     def send_message(**message)
       @calls << [:send_message, message]
       @sent_messages << message
@@ -119,7 +159,7 @@ class TestTelegramTransport < KwardTestCase
   end
 
   class FakeTelegramHost
-    attr_reader :storage, :sessions, :logger, :transport_id
+    attr_reader :storage, :sessions, :logger, :transport_id, :interaction_handler
 
     def initialize(answer: "answer")
       @storage = Kward::Transport::Store.new("com.kward.telegram", root: Dir.mktmpdir)
@@ -149,19 +189,23 @@ class TestTelegramTransport < KwardTestCase
   class FakeTelegramSessions
     attr_reader :inputs
 
+    attr_reader :answers
+
     def initialize(answer:)
       @answer = answer
       @inputs = []
+      @answers = []
     end
 
     def resolve(**_attributes)
-      FakeTelegramSession.new(@inputs, @answer)
+      FakeTelegramSession.new(@inputs, @answers, @answer)
     end
   end
 
   class FakeTelegramSession
-    def initialize(inputs, answer)
+    def initialize(inputs, answers, answer)
       @inputs = inputs
+      @answers = answers
       @answer = answer
     end
 
@@ -172,6 +216,10 @@ class TestTelegramTransport < KwardTestCase
     def start_turn(input, **_options)
       @inputs << input
       FakeTelegramTurn.new(@answer)
+    end
+
+    def answer_interaction(request_id:, answer:)
+      @answers << [request_id, answer]
     end
   end
 

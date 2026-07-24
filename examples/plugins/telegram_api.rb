@@ -57,6 +57,15 @@ module Kward
         Array(call("getUpdates", params))
       end
 
+      def answer_callback_query(callback_query_id:, text: nil, show_alert: false)
+        params = {
+          "callback_query_id" => callback_query_id.to_s,
+          "show_alert" => !!show_alert
+        }
+        params["text"] = text.to_s unless text.nil?
+        call("answerCallbackQuery", params)
+      end
+
       def send_message(chat_id:, text:, reply_to_message_id: nil, reply_markup: nil)
         text = text.to_s
         raise ArgumentError, "Telegram message text is required" if text.empty?
