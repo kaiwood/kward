@@ -31,6 +31,23 @@ module Kward
       :metadata
     )
     Capabilities = Data.define(:inbound, :outbound, :streaming, :limits)
+    ExecutionProfile = Data.define(
+      :id,
+      :tool_mode,
+      :allowed_tools,
+      :disabled_tools,
+      :plugin_commands,
+      :approval_mode,
+      :memory,
+      :attachments,
+      :workspace_mode,
+      :prompt_context
+    )
+
+    TOOL_MODES = %i[all none allowlist].freeze
+    APPROVAL_MODES = %i[default ask deny].freeze
+    MEMORY_MODES = %i[default none].freeze
+    WORKSPACE_MODES = %i[session fixed].freeze
 
     module_function
 
@@ -102,6 +119,45 @@ module Kward
         choices: frozen_copy(Array(choices)),
         expires_at: expires_at,
         metadata: frozen_copy(metadata)
+      )
+    end
+
+    def execution_profile(
+      id:,
+      tool_mode: :all,
+      allowed_tools: nil,
+      disabled_tools: nil,
+      plugin_commands: true,
+      approval_mode: :default,
+      memory: :default,
+      attachments: true,
+      workspace_mode: :session,
+      prompt_context: nil
+    )
+      id = required_string(id, "execution profile id")
+      tool_mode = tool_mode.to_sym
+      approval_mode = approval_mode.to_sym
+      memory = memory.to_sym
+      workspace_mode = workspace_mode.to_sym
+      raise ArgumentError, "unsupported tool mode: #{tool_mode}" unless TOOL_MODES.include?(tool_mode)
+      raise ArgumentError, "unsupported approval mode: #{approval_mode}" unless APPROVAL_MODES.include?(approval_mode)
+      raise ArgumentError, "unsupported memory mode: #{memory}" unless MEMORY_MODES.include?(memory)
+      raise ArgumentError, "unsupported workspace mode: #{workspace_mode}" unless WORKSPACE_MODES.include?(workspace_mode)
+      raise ArgumentError, "allowlist tool mode requires allowed_tools" if tool_mode == :allowlist && Array(allowed_tools).empty?
+      raise ArgumentError, "none tool mode cannot define allowed_tools" if tool_mode == :none && allowed_tools
+      raise ArgumentError, "allowed_tools and disabled_tools cannot both be set" if allowed_tools && disabled_tools
+
+      ExecutionProfile.new(
+        id: id,
+        tool_mode: tool_mode,
+        allowed_tools: frozen_symbols(allowed_tools),
+        disabled_tools: frozen_symbols(disabled_tools),
+        plugin_commands: !!plugin_commands,
+        approval_mode: approval_mode,
+        memory: memory,
+        attachments: !!attachments,
+        workspace_mode: workspace_mode,
+        prompt_context: prompt_context.nil? ? nil : prompt_context.to_s.freeze
       )
     end
 
