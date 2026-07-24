@@ -22,6 +22,19 @@ class TestTransportHost < KwardTestCase
     assert_equal :cancelled, turn.cancel
   end
 
+  def test_host_carries_execution_profile_into_turn_gateway
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", tool_mode: :none, plugin_commands: false)
+    gateway = FakeTransportGateway.new
+    host = Kward::Transport::Host.new(transport_id: "test", gateway: gateway, execution_profile: profile)
+    conversation = Kward::Transport.conversation_key(transport_id: "test", external_id: "chat:1")
+    actor = Kward::Transport.actor(id: "user:1")
+
+    host.sessions.resolve(conversation: conversation, actor: actor).start_turn("Hello")
+
+    assert_equal profile, host.execution_profile
+    assert_equal profile, gateway.calls.find { |call| call.first == :start }[1][:execution_profile]
+  end
+
   def test_secret_reads_config_and_transport_specific_environment_fallback
     with_env(
       "KWARD_TRANSPORT_COM_EXAMPLE_TEST_TOKEN" => "environment-secret",

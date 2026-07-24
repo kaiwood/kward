@@ -12,18 +12,23 @@ module Kward
       TurnHandle = Data.define(:id, :session_id)
 
       # Creates a host for one registered transport instance.
-      def initialize(transport_id:, gateway: nil, config: {}, storage: nil, policy: nil, logger: nil)
+      def initialize(transport_id:, gateway: nil, config: {}, storage: nil, policy: nil, logger: nil, execution_profile: nil)
+        unless execution_profile.nil? || execution_profile.is_a?(ExecutionProfile)
+          raise ArgumentError, "execution_profile must be a Transport::ExecutionProfile"
+        end
+
         @transport_id = transport_id.to_s.freeze
         @gateway = gateway
         @config = freeze_copy(config)
         @storage = storage || Store.new(@transport_id)
         @policy = policy || AllowAllPolicy.new
+        @execution_profile = execution_profile
         @logger = logger || Logger.new($stderr)
         @sessions = Sessions.new(self)
         @interactions = Interactions.new(self)
       end
 
-      attr_reader :transport_id, :config, :storage, :policy, :logger
+      attr_reader :transport_id, :config, :storage, :policy, :execution_profile, :logger
 
       def sessions
         @sessions
@@ -109,7 +114,8 @@ module Kward
             input: input.to_s,
             attachments: attachments,
             options: options,
-            streaming_behavior: streaming_behavior
+            streaming_behavior: streaming_behavior,
+            execution_profile: @host.execution_profile
           )
           handle = result.is_a?(TurnHandle) ? result : TurnHandle.new(**result.transform_keys(&:to_sym))
           Turn.new(@host, handle, @actor)
