@@ -99,15 +99,17 @@ class TestPluginRegistry < KwardTestCase
   def test_registers_transport_with_normalized_capabilities
     registry = Kward::PluginRegistry.new
     handler = proc { |_host, _config| :transport }
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", tool_mode: :none)
 
     registry.evaluate do |plugin|
-      plugin.transport "demo", id: "com.example.demo", capabilities: { inbound: [:text], streaming: :aggregate }, &handler
+      plugin.transport "demo", id: "com.example.demo", capabilities: { inbound: [:text], streaming: :aggregate }, execution_profile: profile, &handler
     end
 
     transport = registry.transport_for("demo")
     assert_equal "com.example.demo", transport.id
     assert_equal [:text], transport.capabilities.inbound
     assert_equal :aggregate, transport.capabilities.streaming
+    assert_equal profile, transport.execution_profile
     assert_same handler, transport.handler
     assert_same transport, registry.transport_for_id("com.example.demo")
   end

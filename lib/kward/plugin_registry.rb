@@ -41,7 +41,7 @@ module Kward
 
     # Registered external transport. The factory receives a transport host and
     # configuration when the transport is started, not while plugins load.
-    TransportType = Struct.new(:id, :name, :capabilities, :path, :handler, keyword_init: true)
+    TransportType = Struct.new(:id, :name, :capabilities, :execution_profile, :path, :handler, keyword_init: true)
 
     # Read-only event passed to plugin transcript observers.
     TranscriptEvent = Struct.new(:type, :payload, keyword_init: true) do
@@ -301,8 +301,8 @@ module Kward
       # @yieldparam config [Object] transport configuration
       # @return [void]
       # @api public
-      def transport(name, id:, capabilities: nil, &block)
-        @registry.register_transport(name, id: id, capabilities: capabilities, path: @path, &block)
+      def transport(name, id:, capabilities: nil, execution_profile: nil, &block)
+        @registry.register_transport(name, id: id, capabilities: capabilities, execution_profile: execution_profile, path: @path, &block)
       end
     end
 
@@ -514,7 +514,7 @@ module Kward
       @tab_types_by_id[id] = tab_type
     end
 
-    def register_transport(name, id:, capabilities: nil, path: nil, &handler)
+    def register_transport(name, id:, capabilities: nil, execution_profile: nil, path: nil, &handler)
       name = name.to_s
       id = id.to_s
       raise "Plugin transport name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
@@ -527,7 +527,8 @@ module Kward
       end
 
       capabilities = normalize_transport_capabilities(capabilities)
-      transport = TransportType.new(id: id, name: name, capabilities: capabilities, path: path, handler: handler)
+      execution_profile = normalize_execution_profile(execution_profile)
+      transport = TransportType.new(id: id, name: name, capabilities: capabilities, execution_profile: execution_profile, path: path, handler: handler)
       @transports[name] = transport
       @transports_by_id[id] = transport
     end
@@ -570,6 +571,12 @@ module Kward
     end
 
     private
+
+    def normalize_execution_profile(profile)
+      return nil if profile.nil?
+      return profile if profile.is_a?(Transport::ExecutionProfile)
+      raise ArgumentError, "Plugin transport execution_profile must be a Transport::ExecutionProfile"
+    end
 
     def normalize_transport_capabilities(capabilities)
       return Transport.capabilities if capabilities.nil?

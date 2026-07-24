@@ -43,7 +43,8 @@ module Kward
           config: config,
           storage: @config_root && Store.new(type.id, root: @config_root),
           policy: @policy,
-          logger: @logger
+          logger: @logger,
+          execution_profile: type.execution_profile
         )
         adapter = type.handler.call(host, host.config)
         unless adapter.respond_to?(:start) && adapter.respond_to?(:stop)
