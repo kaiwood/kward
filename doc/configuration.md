@@ -54,9 +54,11 @@ transport's stable ID:
 ```json
 {
   "transports": {
-    "com.example.telegram": {
+    "com.kward.telegram": {
       "workspace": "/Users/me/src/project",
-      "allowed_users": ["user:42"]
+      "allowed_user_ids": [123456789],
+      "allowed_chat_ids": [123456789],
+      "poll_timeout_seconds": 25
     }
   }
 }
@@ -70,7 +72,8 @@ transport's namespace in `~/.kward/transports/`.
 
 Run `kward transport list` to inspect registrations, `kward transport status`
 to inspect runtime state, and `kward transport run NAME` to run a transport in
-the foreground.
+the foreground. See [Telegram transport](telegram.md) for the first-party
+long-polling adapter and setup instructions.
 
 ### Project skills
 

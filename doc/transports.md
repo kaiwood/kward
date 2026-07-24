@@ -16,6 +16,10 @@ A transport should use the public transport host API rather than creating an
 keeps the same session and tool behavior available to the CLI, RPC clients,
 and external transports.
 
+The first-party Telegram example is documented in
+[Telegram transport](telegram.md). It uses long polling and is started
+explicitly rather than with the normal interactive CLI.
+
 Transport plugins are distinct from plugin-owned tabs:
 
 - A plugin tab owns an independent chat runtime and storage.
