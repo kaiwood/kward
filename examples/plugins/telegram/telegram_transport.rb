@@ -122,7 +122,7 @@ module Kward
         )
         remember_session(session, conversation, chat_id, actor)
 
-        turn = session.start_turn(text, streaming_behavior: :aggregate)
+        turn = session.start_turn(text)
         @host.storage.put("telegram:turn:#{turn.id}", {
           "chat_id" => chat_id,
           "session_id" => session.id,

@@ -12,6 +12,7 @@ class TestTelegramTransport < KwardTestCase
     transport.send(:handle_update, message_update(text: "hello again", update_id: 1))
 
     assert_equal ["hello"], host.sessions.inputs
+    assert_equal [{}], host.sessions.turn_options
     assert_equal ["answer"], api.sent_messages.map { |message| message[:text] }
     assert_equal 1, api.sent_messages.first[:reply_to_message_id]
     assert_equal 1, api.calls.count { |method, _| method == :send_message }
@@ -187,24 +188,26 @@ class TestTelegramTransport < KwardTestCase
   end
 
   class FakeTelegramSessions
-    attr_reader :inputs
+    attr_reader :inputs, :turn_options
 
     attr_reader :answers
 
     def initialize(answer:)
       @answer = answer
       @inputs = []
+      @turn_options = []
       @answers = []
     end
 
     def resolve(**_attributes)
-      FakeTelegramSession.new(@inputs, @answers, @answer)
+      FakeTelegramSession.new(@inputs, @turn_options, @answers, @answer)
     end
   end
 
   class FakeTelegramSession
-    def initialize(inputs, answers, answer)
+    def initialize(inputs, turn_options, answers, answer)
       @inputs = inputs
+      @turn_options = turn_options
       @answers = answers
       @answer = answer
     end
@@ -213,8 +216,9 @@ class TestTelegramTransport < KwardTestCase
       "session-1"
     end
 
-    def start_turn(input, **_options)
+    def start_turn(input, **options)
       @inputs << input
+      @turn_options << options
       FakeTelegramTurn.new(@answer)
     end
 
