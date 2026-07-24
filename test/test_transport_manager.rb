@@ -35,6 +35,31 @@ class TestTransportManager < KwardTestCase
     end
   end
 
+  def test_workspace_override_replaces_configured_workspace
+    registry = Kward::PluginRegistry.new
+    received_config = nil
+    registry.evaluate do |plugin|
+      plugin.transport("fake", id: "com.example.fake") do |_host, config|
+        received_config = config
+        Class.new do
+          def start; end
+          def stop; end
+        end.new
+      end
+    end
+
+    manager = Kward::Transport::Manager.new(
+      registry: registry,
+      config_provider: ->(_id) { { "workspace" => "/configured", "poll_timeout_seconds" => 25 } }
+    )
+    manager.start("fake", workspace_root: "/override")
+
+    assert_equal "/override", received_config["workspace"]
+    assert_equal 25, received_config["poll_timeout_seconds"]
+  ensure
+    manager&.shutdown
+  end
+
   def test_reload_replaces_registered_transport_types
     first = Kward::PluginRegistry.new
     first.evaluate { |plugin| plugin.transport("one", id: "com.example.one") { Class.new { def start; end; def stop; end }.new } }

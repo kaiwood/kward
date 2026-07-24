@@ -167,9 +167,9 @@ module Kward
             examples: ["kward rpc", "kward --working-directory ~/code/project rpc"]
           },
           "transport" => {
-            usage: "kward transport list|status [NAME]|run NAME",
+            usage: "kward transport list|status [NAME]|run NAME [WORKSPACE]",
             description: "Inspect or run trusted external transport plugins.",
-            examples: ["kward transport list", "kward transport status", "kward transport run telegram"]
+            examples: ["kward transport list", "kward transport status", "kward transport run telegram", "kward transport run telegram ~/code/project"]
           }
         }
       end

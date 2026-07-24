@@ -12,6 +12,10 @@ All notable changes to Kward will be documented in this file.
 - Added generic transport execution profiles and an isolated Telegram chat transport with no tools, plugin commands, memory, attachments, or interactions.
 - Added toggleable Git worktree bindings for normal interactive session tabs. `/tab worktree` can move a tab into a strict linked-worktree workspace after research, preserve its transcript, warn about dirty origin changes, and keep the branch available when detached.
 
+### Changed
+
+- Added workspace overrides for foreground transports via `kward transport run NAME WORKSPACE` and the global `--working-directory` option.
+
 ### Fixed
 
 - Refreshed composer diff and context usage status immediately when switching session tabs.

@@ -29,13 +29,14 @@ module Kward
         list.map { |type| status_for(type) }
       end
 
-      def start(name_or_id, config: nil)
+      def start(name_or_id, config: nil, workspace_root: nil)
         type = resolve_type(name_or_id)
         @mutex.synchronize do
           raise "Transport #{type.id} is already running" if running_entry?(type.id)
         end
 
         config ||= @config_provider&.call(type.id) || {}
+        config = config.merge("workspace" => workspace_root.to_s) if workspace_root
         gateway = @gateway.respond_to?(:call) ? @gateway.call(type.id) : @gateway
         host = Host.new(
           transport_id: type.id,

@@ -63,6 +63,14 @@ Then run the personal-assistant transport in the foreground:
 kward transport run com.kward.telegram
 ```
 
+To override the workspace configured for this process:
+
+```bash
+kward transport run com.kward.telegram /Users/me/src/project
+# or:
+kward --working-directory /Users/me/src/project transport run com.kward.telegram
+```
+
 The plugin also registers `com.kward.telegram.isolated`. It uses the generic
 `isolated_chat` execution profile: no tools, no plugin commands, no memory, no
 attachments, and no approval interactions. Configure that transport with a

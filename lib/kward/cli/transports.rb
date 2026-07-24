@@ -21,9 +21,10 @@ module Kward
             print_transport_entries(entries)
           end
         when "run"
-          raise ArgumentError, command_usage("transport") unless arguments.length == 2
+          raise ArgumentError, command_usage("transport") unless (2..3).cover?(arguments.length)
 
-          run_transport(arguments[1])
+          workspace_root = arguments[2] ? expanded_working_directory(arguments[2]) : @working_directory
+          run_transport(arguments[1], workspace_root: workspace_root)
         else
           raise ArgumentError, command_usage("transport")
         end
@@ -35,9 +36,9 @@ module Kward
         end
       end
 
-      def run_transport(name)
+      def run_transport(name, workspace_root: nil)
         runtime = Transport::Runtime.new(client: ensure_client!)
-        runtime.manager.start(name)
+        runtime.manager.start(name, workspace_root: workspace_root)
         @prompt.say("Transport #{name} is running. Press Ctrl-C to stop.")
         wait_for_transport_shutdown
       ensure
