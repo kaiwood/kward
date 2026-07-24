@@ -18,6 +18,26 @@ class TestTelegramTransport < KwardTestCase
     assert_equal 1, api.calls.count { |method, _| method == :send_message }
   end
 
+  def test_delivers_assistant_message_event_content
+    host = FakeTelegramHost.new
+    api = FakeTelegramApi.new
+    transport = build_transport(host, api)
+    host.storage.put("telegram:turn:turn-1", {
+      "chat_id" => 42,
+      "reply_to_message_id" => 1
+    })
+
+    transport.send(:handle_turn_event, Kward::Transport.turn_event(
+      type: "assistantMessage",
+      session_id: "session-1",
+      turn_id: "turn-1",
+      sequence: 1,
+      payload: { message: { "content" => "answer" } }
+    ))
+
+    assert_equal ["answer"], api.sent_messages.map { |message| message[:text] }
+  end
+
   def test_rejects_messages_outside_both_allowlists
     host = FakeTelegramHost.new
     api = FakeTelegramApi.new

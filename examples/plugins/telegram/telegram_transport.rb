@@ -139,6 +139,10 @@ module Kward
         return if @host.storage.get("telegram:delivered:#{event.turn_id}")
 
         content = event.payload[:content] || event.payload["content"]
+        if content.to_s.empty? && %w[assistantMessage assistant_message].include?(event.type.to_s)
+          message = event.payload[:message] || event.payload["message"]
+          content = message[:content] || message["content"] if message.is_a?(Hash)
+        end
         return if content.to_s.empty?
 
         split_message(content.to_s).each do |part|
