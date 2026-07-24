@@ -731,9 +731,11 @@ class TestTabs < KwardTestCase
       cli.send(:handle_tab_action, { tab_action: :new }, store)
       assert_equal 1, cli.instance_variable_get(:@active_tab_index)
 
+      refresh_count = prompt.refresh_composer_status_count
       cli.send(:handle_tab_action, { tab_action: :previous }, store)
       assert_equal 0, cli.instance_variable_get(:@active_tab_index)
       assert_equal 0, prompt.tabs_updates.last[:active_index]
+      assert_equal refresh_count + 1, prompt.refresh_composer_status_count
     end
   end
 
