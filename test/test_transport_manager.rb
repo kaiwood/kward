@@ -5,8 +5,9 @@ class TestTransportManager < KwardTestCase
   def test_starts_stops_and_reports_registered_transport
     registry = Kward::PluginRegistry.new
     lifecycle = []
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", tool_mode: :none, plugin_commands: false)
     registry.evaluate do |plugin|
-      plugin.transport("fake", id: "com.example.fake", capabilities: { outbound: [:text] }) do |_host, config|
+      plugin.transport("fake", id: "com.example.fake", capabilities: { outbound: [:text] }, execution_profile: profile) do |_host, config|
         lifecycle << [:build, config]
         Class.new do
           define_method(:start) { lifecycle << :start }
@@ -19,6 +20,7 @@ class TestTransportManager < KwardTestCase
     Dir.mktmpdir do |root|
       manager = Kward::Transport::Manager.new(registry: registry, config_root: root)
       assert_equal "stopped", manager.status("fake")[:state]
+      assert_equal "isolated_chat", manager.status("fake")[:execution_profile][:id]
 
       manager.start("fake", config: { "token" => "secret" })
       assert_equal "running", manager.status("com.example.fake")[:state]

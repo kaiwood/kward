@@ -125,6 +125,7 @@ module Kward
           id: type.id,
           name: type.name,
           capabilities: type.capabilities.to_h,
+          execution_profile: profile_payload(type.execution_profile),
           path: type.path
         }
       end
@@ -138,6 +139,22 @@ module Kward
           started_at: entry&.started_at,
           stopped_at: entry&.stopped_at
         )
+      end
+
+      def profile_payload(profile)
+        return nil unless profile
+
+        {
+          id: profile.id,
+          tool_mode: profile.tool_mode,
+          allowed_tools: profile.allowed_tools,
+          disabled_tools: profile.disabled_tools,
+          plugin_commands: profile.plugin_commands,
+          approval_mode: profile.approval_mode,
+          memory: profile.memory,
+          attachments: profile.attachments,
+          workspace_mode: profile.workspace_mode
+        }
       end
 
       def health_for(entry)
