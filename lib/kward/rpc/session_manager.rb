@@ -229,7 +229,8 @@ module Kward
       def clone_session(session_id:)
         source = fetch_session(session_id)
         session, conversation = source.store.create_independent_from_conversation(source.conversation, parent_session: source.session)
-        rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
+        conversation.update_execution_profile_context!(source.execution_profile.prompt_context) if source.execution_profile
+        rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root, execution_profile: source.execution_profile)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
         emit_footer_update(rpc_session)
@@ -288,7 +289,8 @@ module Kward
           parent_session: source.session
         )
 
-        rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root)
+        conversation.update_execution_profile_context!(source.execution_profile.prompt_context) if source.execution_profile
+        rpc_session = build_rpc_session(source.store, session, conversation, source.workspace_root, execution_profile: source.execution_profile)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
         {
@@ -818,6 +820,7 @@ module Kward
           reasoning_effort: current_reasoning_effort
         )
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
+        conversation.update_execution_profile_context!(rpc_session.execution_profile.prompt_context) if rpc_session.execution_profile
         rpc_session.session = session
         rpc_session.conversation = conversation
         rebuild_session_tools(rpc_session)
