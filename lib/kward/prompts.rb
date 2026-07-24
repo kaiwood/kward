@@ -22,25 +22,26 @@ module Kward
     # @param plugin_context [String, nil] trusted plugin-provided instructions
     # @return [Hash] role/content system message
     # @api public
-    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
+    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil)
       {
         role: "system",
-        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context).compact.join("\n\n")
+        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context, execution_profile_context: execution_profile_context).compact.join("\n\n")
       }
     end
 
-    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
-      prompt_sections(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context).map { |section| section[:content] }
+    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil)
+      prompt_sections(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context, execution_profile_context: execution_profile_context).map { |section| section[:content] }
     end
 
     # Returns labeled prompt sections for inspection by CLI and RPC frontends.
     #
     # @return [Array<Hash>] section hashes with label, content, and optional source
     # @api public
-    def prompt_sections(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil)
+    def prompt_sections(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil)
       return replacement_prompt_sections if ConfigFiles.replacement_system_prompt?
 
       sections = [prompt_section("Built-in system prompt", base_prompt)]
+      sections << prompt_section("Execution profile", execution_profile_context) unless execution_profile_context.to_s.empty?
       sections << prompt_section(config_agents_prompt_label, config_agents_prompt, source: config_agents_prompt_source)
       sections << prompt_section("Memory context", memory_context) unless memory_context.to_s.empty?
       if include_workspace_personality

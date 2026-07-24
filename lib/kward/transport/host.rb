@@ -81,7 +81,8 @@ module Kward
             conversation: conversation,
             actor: actor,
             workspace_root: workspace_root,
-            name: name
+            name: name,
+            execution_profile: @host.execution_profile
           )
           Session.new(@host, normalize_handle(result), actor)
         end

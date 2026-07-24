@@ -26,7 +26,7 @@ module Kward
         @session_manager.subscribe_events { |method, payload| handle_runtime_event(method, payload) } if @session_manager.respond_to?(:subscribe_events)
       end
 
-      def resolve_transport_session(transport_id:, conversation:, actor:, workspace_root: nil, name: nil)
+      def resolve_transport_session(transport_id:, conversation:, actor:, workspace_root: nil, name: nil, execution_profile: nil)
         raise ArgumentError, "transport id does not match gateway" unless transport_id.to_s == @transport_id
         if conversation.respond_to?(:transport_id) && conversation.transport_id.to_s != @transport_id
           raise ArgumentError, "conversation transport does not match gateway"
@@ -35,9 +35,9 @@ module Kward
         binding_key = binding_key_for(conversation)
         binding = @storage.get(binding_key)
         session = if binding
-                     resume_bound_session(binding)
+                     resume_bound_session(binding, execution_profile: execution_profile)
                    else
-                     @session_manager.create_session(workspace_root: workspace_root || Dir.pwd, name: name)
+                     @session_manager.create_session(workspace_root: workspace_root || Dir.pwd, name: name, **execution_profile_arguments(execution_profile))
                    end
         persist_binding(binding_key, session)
         session_handle(session)
@@ -131,14 +131,19 @@ module Kward
 
       private
 
-      def resume_bound_session(binding)
+      def resume_bound_session(binding, execution_profile: nil)
         @session_manager.resume_session(
           path: binding.fetch("path"),
           workspace_root: binding.fetch("workspace_root"),
-          include_transcript: false
+          include_transcript: false,
+          **execution_profile_arguments(execution_profile)
         )
       rescue StandardError
-        @session_manager.create_session(workspace_root: binding.fetch("workspace_root"))
+        @session_manager.create_session(workspace_root: binding.fetch("workspace_root"), **execution_profile_arguments(execution_profile))
+      end
+
+      def execution_profile_arguments(profile)
+        profile ? { execution_profile: profile } : {}
       end
 
       def persist_binding(key, session)

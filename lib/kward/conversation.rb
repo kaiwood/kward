@@ -58,32 +58,33 @@ module Kward
     # @return [PluginRegistry, nil] registry used to collect plugin prompt context
     attr_accessor :plugin_registry
     # @return [String, nil] plugin prompt context used in the current system prompt
-    attr_reader :last_plugin_prompt_context
+    attr_reader :last_plugin_prompt_context, :execution_profile_context
     # @return [Hash] original large tool outputs retained outside model context
     attr_reader :tool_output_artifacts
     # @return [ContextBudgetMeter] runtime context savings for this conversation
     attr_reader :context_budget_meter
 
-    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil)
+    def initialize(system_message: DEFAULT_SYSTEM_MESSAGE, messages: [], read_paths: [], on_append: nil, on_compact: nil, on_tool_execution: nil, on_runtime_update: nil, workspace_root: Dir.pwd, compaction_system_message: DEFAULT_SYSTEM_MESSAGE, provider: nil, model: nil, reasoning_effort: nil, memory_context: nil, session_memories: [], last_memory_retrieval: nil, plugin_registry: nil, execution_profile_context: nil)
       @workspace_root = ConfigFiles.canonical_workspace_root(workspace_root)
       @provider = provider
       @model = model
       @reasoning_effort = reasoning_effort
       @plugin_registry = plugin_registry
+      @execution_profile_context = execution_profile_context.to_s.empty? ? nil : execution_profile_context.to_s.freeze
       @messages = []
       restored_system_message, transcript_messages = split_system_message(messages)
       if system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        if restored_system_message
+        if restored_system_message && @execution_profile_context.to_s.empty?
           system_message = restored_system_message
         else
           @last_plugin_prompt_context = plugin_prompt_context
-          system_message = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: memory_context, plugin_context: @last_plugin_prompt_context)
+          system_message = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: memory_context, plugin_context: @last_plugin_prompt_context, execution_profile_context: @execution_profile_context)
         end
       end
       @system_message = system_message
       @system_message_enabled = !@system_message.nil?
       if compaction_system_message.equal?(DEFAULT_SYSTEM_MESSAGE)
-        compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time) : nil
+        compaction_system_message = @system_message_enabled ? Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, execution_profile_context: @execution_profile_context) : nil
       end
       @compaction_system_message = compaction_system_message
       @workspace_agents_mtime = workspace_agents_mtime
@@ -187,13 +188,18 @@ module Kward
       return nil unless @system_message_enabled
 
       @last_plugin_prompt_context = plugin_prompt_context
-      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: @memory_context, plugin_context: @last_plugin_prompt_context)
+      replacement = Prompts.system_message(workspace_root: @workspace_root, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, memory_context: @memory_context, plugin_context: @last_plugin_prompt_context, execution_profile_context: @execution_profile_context)
       @system_message = replacement
       @on_system_message_change&.call(replacement)
-      @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time)
+      @compaction_system_message = Prompts.system_message(workspace_root: @workspace_root, include_workspace_personality: false, model: @model, reasoning_effort: @reasoning_effort, now: prompt_time, execution_profile_context: @execution_profile_context)
       @workspace_agents_mtime = workspace_agents_mtime
       @system_prompt_sources_fingerprint = ConfigFiles.system_prompt_sources_fingerprint
       replacement
+    end
+
+    def update_execution_profile_context!(context)
+      @execution_profile_context = context.to_s.empty? ? nil : context.to_s.freeze
+      refresh_system_message!
     end
 
     def update_runtime_context!(provider: nil, model:, reasoning_effort:, refresh: true)

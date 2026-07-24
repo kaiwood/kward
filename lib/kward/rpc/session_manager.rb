@@ -66,7 +66,7 @@ module Kward
       WORKER_STOP_TIMEOUT = 2.0
       WORKER_STOP = Object.new.freeze
 
-      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
+      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :execution_profile, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :execution_profile, :mutex, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
@@ -99,26 +99,28 @@ module Kward
       # Returns the normalized session payload expected by RPC clients. The RPC
       # session id is separate from the persisted session id so one persisted file
       # can be closed and reopened by different client connections.
-      def create_session(workspace_root: Dir.pwd, name: nil, resume_last: false)
+      def create_session(workspace_root: Dir.pwd, name: nil, resume_last: false, execution_profile: nil)
+        execution_profile = validate_execution_profile(execution_profile)
         workspace_root = validate_workspace_root(workspace_root)
         store = SessionStore.new(config_dir: @config_dir, cwd: workspace_root)
         if resume_last && session_auto_resume_enabled? && name.to_s.strip.empty?
           path = store.remembered_last_session_path
-          return resume_session(path: path, workspace_root: workspace_root, include_transcript: true) if path
+          return resume_session(path: path, workspace_root: workspace_root, include_transcript: true, execution_profile: execution_profile) if path
         end
 
-        conversation = new_conversation(workspace_root: workspace_root)
+        conversation = new_conversation(workspace_root: workspace_root, execution_profile: execution_profile)
         session = store.create(provider: conversation.provider, model: conversation.model, reasoning_effort: conversation.reasoning_effort)
         session.rename(name) unless name.to_s.strip.empty?
         session.attach(conversation)
-        rpc_session = build_rpc_session(store, session, conversation, workspace_root)
+        rpc_session = build_rpc_session(store, session, conversation, workspace_root, execution_profile: execution_profile)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
         emit_footer_update(rpc_session)
         session_payload(rpc_session)
       end
 
-      def resume_session(path:, workspace_root: nil, include_transcript: false)
+      def resume_session(path:, workspace_root: nil, include_transcript: false, execution_profile: nil)
+        execution_profile = validate_execution_profile(execution_profile)
         root = validate_workspace_root(workspace_root || Dir.pwd)
         store = SessionStore.new(config_dir: @config_dir, cwd: root)
         location = store.session_location(path)
@@ -131,7 +133,8 @@ module Kward
           model: current_model_id,
           reasoning_effort: current_reasoning_effort
         )
-        rpc_session = build_rpc_session(store, session, conversation, root)
+        conversation.update_execution_profile_context!(execution_profile.prompt_context) if execution_profile
+        rpc_session = build_rpc_session(store, session, conversation, root, execution_profile: execution_profile)
         remember_session(rpc_session)
         cleanup_other_unused_sessions(rpc_session)
         emit_footer_update(rpc_session)
@@ -669,9 +672,10 @@ module Kward
         end
       end
 
-      def new_conversation(workspace_root: Dir.pwd)
+      def new_conversation(workspace_root: Dir.pwd, execution_profile: nil)
         Conversation.new(
           workspace_root: workspace_root,
+          execution_profile_context: execution_profile&.prompt_context,
           provider: (@client.current_provider if @client.respond_to?(:current_provider)),
           model: (@client.current_model if @client.respond_to?(:current_model)),
           reasoning_effort: (@client.current_reasoning_effort if @client.respond_to?(:current_reasoning_effort)),
@@ -1024,7 +1028,7 @@ module Kward
       # This is the RPC counterpart to the CLI interactive setup: attach plugin
       # context, create a prompt bridge for UI questions/footer output, advertise
       # tools with the workspace guardrail policy, and build the shared `Agent`.
-      def build_rpc_session(store, session, conversation, workspace_root)
+      def build_rpc_session(store, session, conversation, workspace_root, execution_profile: nil)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(notify: method(:notify), session_id: id)
@@ -1046,6 +1050,7 @@ module Kward
           conversation: conversation,
           agent: agent,
           tool_registry: tool_registry,
+          execution_profile: execution_profile,
           prompt: prompt,
           plugin_output: [],
           queue: Queue.new,
