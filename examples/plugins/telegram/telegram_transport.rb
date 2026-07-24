@@ -132,7 +132,7 @@ module Kward
       end
 
       def handle_turn_event(event)
-        return unless %w[answer assistantMessage].include?(event.type)
+        return unless %w[answer assistantMessage assistant_message].include?(event.type.to_s)
 
         turn = @host.storage.get("telegram:turn:#{event.turn_id}")
         return unless turn

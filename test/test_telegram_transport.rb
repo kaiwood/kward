@@ -28,7 +28,7 @@ class TestTelegramTransport < KwardTestCase
     })
 
     transport.send(:handle_turn_event, Kward::Transport.turn_event(
-      type: "assistantMessage",
+      type: "assistant_message",
       session_id: "session-1",
       turn_id: "turn-1",
       sequence: 1,
