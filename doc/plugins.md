@@ -25,11 +25,16 @@ See [Extensibility](extensibility.md) for the full overview of Kward's extension
 
 ## Where plugins live
 
-Kward loads top-level Ruby files from:
+Kward loads trusted Ruby plugin entrypoints from:
 
 ```text
 ~/.kward/plugins/*.rb
+~/.kward/plugins/*/plugin.rb
 ```
+
+The second form is a package layout for plugins with multiple implementation
+files. Only `plugin.rb` is loaded automatically; sibling files are loaded by
+that entrypoint with `require_relative`.
 
 Plugins are not loaded from the current workspace or a custom `KWARD_CONFIG_PATH` directory. This prevents a project checkout from silently adding executable Ruby code to Kward.
 

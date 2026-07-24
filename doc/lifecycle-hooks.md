@@ -34,7 +34,8 @@ When multiple hooks match one event, they run by ascending `order`. A `deny` sto
 
 ## Ruby plugin hooks
 
-Register hooks from trusted plugin files in `~/.kward/plugins/*.rb`:
+Register hooks from trusted plugin files in `~/.kward/plugins/*.rb` or a
+package entrypoint at `~/.kward/plugins/*/plugin.rb`:
 
 ```ruby
 Kward.plugin do |plugin|
@@ -363,7 +364,7 @@ Unknown selector keys match same-named payload fields.
 
 ## Security notes
 
-- Plugin hooks are trusted Ruby code loaded only from `~/.kward/plugins/*.rb`.
+- Plugin hooks are trusted Ruby code loaded only from `~/.kward/plugins/*.rb` or package entrypoints at `~/.kward/plugins/*/plugin.rb`.
 - Command hooks run local commands with your user permissions.
 - Workspace hook files are loaded only after `/hooks trust`, and trust is invalidated when `.kward/hooks.json` changes.
 - Hook payloads are intentionally bounded and metadata-oriented; avoid logging raw event JSON if your hook receives prompt or command data.

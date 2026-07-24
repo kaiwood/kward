@@ -9,14 +9,15 @@ workspace and Kward tools may safely run.
 
 ## Install the plugin
 
-Copy both implementation files into the user plugin directory:
+Copy the packaged plugin into the user plugin directory:
 
 ```bash
 mkdir -p ~/.kward/plugins
-cp examples/plugins/telegram.rb ~/.kward/plugins/
-cp examples/plugins/telegram_api.rb ~/.kward/plugins/
-cp examples/plugins/telegram_transport.rb ~/.kward/plugins/
+cp -R examples/plugins/telegram ~/.kward/plugins/
 ```
+
+The package entrypoint is `~/.kward/plugins/telegram/plugin.rb`; its sibling
+implementation files are loaded relative to that entrypoint.
 
 The plugin does not connect to Telegram while Kward is loading plugins. It is
 started explicitly with `kward transport run com.kward.telegram`.

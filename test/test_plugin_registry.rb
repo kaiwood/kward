@@ -37,7 +37,7 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
-  def test_plugin_paths_are_home_only_top_level_files
+  def test_plugin_paths_are_home_only_files_and_package_entrypoints
     Dir.mktmpdir do |home|
       plugins = File.join(home, ".kward", "plugins")
       nested = File.join(plugins, "nested")
@@ -47,9 +47,11 @@ class TestPluginRegistry < KwardTestCase
       File.write(beta, "# beta\n")
       File.write(alpha, "# alpha\n")
       File.write(File.join(nested, "ignored.rb"), "# ignored\n")
+      package = File.join(nested, "plugin.rb")
+      File.write(package, "# package\n")
 
       with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
-        assert_equal [alpha, beta], Kward::ConfigFiles.plugin_paths
+        assert_equal [alpha, beta, package], Kward::ConfigFiles.plugin_paths
       end
     end
   end

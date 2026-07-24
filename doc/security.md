@@ -109,7 +109,11 @@ Project hooks in `.kward/hooks.json` run only after `/hooks trust`. Trust is tie
 
 ### Plugins
 
-Ruby plugins in `~/.kward/plugins/*.rb` run inside the Kward process with your permissions. They can read files and environment variables, write files, run commands, and make network requests. Kward intentionally does not load plugins from a workspace directory.
+Ruby plugins in `~/.kward/plugins/*.rb` or package entrypoints at
+`~/.kward/plugins/*/plugin.rb` run inside the Kward process with your permissions.
+They can read files and environment variables, write files, run commands, and
+make network requests. Kward intentionally does not load plugins from a
+workspace directory.
 
 ### MCP servers
 

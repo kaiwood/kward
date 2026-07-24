@@ -907,7 +907,7 @@ module Kward
       File.expand_path("~/.kward/plugins")
     end
 
-    # Finds trusted top-level plugin files.
+    # Finds trusted plugin files and package entrypoints.
     #
     # Plugins are intentionally loaded only from `~/.kward/plugins`, not from a
     # workspace or custom `KWARD_CONFIG_PATH` directory.
@@ -917,7 +917,9 @@ module Kward
       plugins_root = plugin_dir
       return [] unless Dir.exist?(plugins_root)
 
-      Dir.glob(File.join(plugins_root, "*.rb")).sort
+      paths = Dir.glob(File.join(plugins_root, "*.rb"))
+      paths.concat(Dir.glob(File.join(plugins_root, "*", "plugin.rb")))
+      paths.sort
     rescue StandardError => e
       warn "Warning: skipping Kward plugins in #{plugins_root}: #{e.message}"
       []

@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../examples/plugins/telegram_api"
+require_relative "../examples/plugins/telegram/telegram_api"
 
 class TestTelegramApi < KwardTestCase
   def test_get_updates_serializes_polling_parameters

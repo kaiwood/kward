@@ -1,6 +1,6 @@
 require "stringio"
 require_relative "test_helper"
-require_relative "../examples/plugins/telegram_transport"
+require_relative "../examples/plugins/telegram/telegram_transport"
 
 class TestTelegramTransport < KwardTestCase
   def test_processes_an_authorized_message_once_and_replies_with_final_answer

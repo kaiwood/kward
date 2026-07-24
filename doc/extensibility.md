@@ -123,6 +123,7 @@ Plugin files live in:
 
 ```text
 ~/.kward/plugins/*.rb
+~/.kward/plugins/*/plugin.rb
 ```
 
 Plugins are trusted local Ruby code. Install only plugins you trust. See [Plugins](plugins.md).
