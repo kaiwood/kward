@@ -101,10 +101,14 @@ module Kward
       def fetch_chat(chat_id)
         return @runtime.chat(chat_id) if @runtime.chat(chat_id)
 
-        type = supported_types.find { |entry| entry.id == chat_id.to_s }
+        chat_id = chat_id.to_s
+        type = supported_types.find { |entry| chat_id == entry.id || chat_id.start_with?("#{entry.id}:") }
         raise ArgumentError, "Unknown plugin chat: #{chat_id}" unless type
 
-        @runtime.open(type_id: type.id, surface: :rpc, scope_key: "owner")
+        chat = @runtime.open(type_id: type.id, surface: :rpc, scope_key: "owner")
+        raise ArgumentError, "Unknown plugin chat: #{chat_id}" unless chat.id == chat_id
+
+        chat
       end
 
       def notify_event(event)

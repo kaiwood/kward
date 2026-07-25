@@ -124,6 +124,27 @@ class TestRPCPluginChatManager < KwardTestCase
     manager&.shutdown
   end
 
+  def test_reopens_scoped_rpc_chat_after_manager_reconstruction
+    manager = nil
+    replacement = nil
+    Dir.mktmpdir do |home|
+      write_plugin(home, singleton: nil)
+      with_env("HOME" => home) do
+        manager = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
+        opened = manager.open(type_id: "test.chat")
+        refute_equal "test.chat", opened[:id]
+        manager.shutdown
+
+        replacement = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
+        transcript = replacement.transcript(chat_id: opened[:id])
+        assert_equal opened[:id], transcript[:chat][:id]
+      end
+    end
+  ensure
+    manager&.shutdown
+    replacement&.shutdown
+  end
+
   def test_exposes_opted_in_plugin_chat_and_streams_only_after_subscription
     manager = nil
     Dir.mktmpdir do |home|
@@ -158,7 +179,7 @@ class TestRPCPluginChatManager < KwardTestCase
 
   private
 
-  def write_plugin(home, driver: "Driver", transcript_events: false, observe_events: false)
+  def write_plugin(home, driver: "Driver", singleton: :global, transcript_events: false, observe_events: false)
     plugins = File.join(home, ".kward", "plugins")
     FileUtils.mkdir_p(plugins)
     self.class.plugin_events = []
@@ -174,7 +195,7 @@ class TestRPCPluginChatManager < KwardTestCase
     end
     File.write(File.join(plugins, "chat.rb"), <<~RUBY)
       Kward.plugin do |plugin|
-        plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: :global, rpc: true, transcript_events: #{transcript_events} do |_host, descriptor|
+        plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: #{singleton.inspect}, rpc: true, transcript_events: #{transcript_events} do |_host, descriptor|
           TestRPCPluginChatManager::#{driver}.new(descriptor)
         end#{observer}
       end
