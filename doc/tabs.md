@@ -41,7 +41,7 @@ A normal session tab can be activated in a linked Git worktree after you have re
 /tab worktree
 ```
 
-When enabled, Kward keeps the same tab and transcript but rebuilds its agent against a new worktree. The tab label includes the worktree branch. The worktree is created from `HEAD`, so Kward warns when the original workspace is dirty and leaves those existing changes in the original checkout; it does not copy them automatically.
+When enabled, Kward keeps the same tab and transcript but rebuilds its agent against a new worktree. The tab label includes the worktree branch. The worktree is created from `HEAD`, so Kward warns when the original workspace is dirty and leaves those existing changes in the original checkout; it does not copy them automatically. `/tab worktree activate` is an explicit alias for the same action.
 
 Running `/tab worktree` again leaves an active worktree unchanged. To return the tab to its original workspace while keeping the linked worktree and branch, detach it explicitly:
 
@@ -92,6 +92,7 @@ Tabs keep the conversations separate, so context from one tab does not automatic
 | `/tab name <label>` | Rename the current tab |
 | `/tab rename <label>` | Same as `/tab name` |
 | `/tab worktree` | Create or activate the current session tab's linked Git worktree |
+| `/tab worktree activate` | Explicitly create or activate the current session tab's linked Git worktree |
 | `/tab worktree detach` | Return to the original workspace while keeping the linked worktree and branch |
 | `/tab worktree status` | Show the current tab's worktree binding and Git status |
 | `/tab worktree merge` | Merge the current worktree branch into the branch checked out in its original workspace |
