@@ -97,8 +97,12 @@ module Kward
           print_active_worktree_status
         when "remove"
           remove_active_worktree
+        when "merge"
+          merge_active_worktree
+        when "merge abort"
+          abort_active_worktree_merge
         else
-          runtime_output("Usage: /tab worktree [status|remove]")
+          runtime_output("Usage: /tab worktree [status|remove|merge|merge abort]")
         end
       end
 
@@ -208,6 +212,68 @@ module Kward
           lines << "State: unavailable (#{e.message})"
         end
         runtime_output(lines.join("\n"))
+      end
+
+      def merge_active_worktree
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+        return runtime_output("Tab #{active_tab_number} is running and cannot merge its worktree yet.") if tab.running? || tab.local_busy? || tab.shell
+        return runtime_output("Activate the worktree before merging it.") unless binding.active?
+
+        validate_worktree_binding!(binding)
+        source_status = git_worktree_manager.status(binding.path)
+        return runtime_output("Worktree has local changes; commit or clean it before merging.") if source_status.dirty?
+
+        target_status = git_worktree_manager.status(binding.origin_root)
+        return runtime_output("Original workspace has local changes; clean it before merging.") if target_status.dirty?
+
+        target_branch = git_worktree_manager.current_branch(binding.origin_root)
+        return runtime_output("Original workspace is in detached HEAD state; select a target branch before merging.") if target_branch.empty?
+        return runtime_output("Worktree already uses the target branch #{target_branch}.") if target_branch == binding.branch
+
+        target_revision = git_worktree_manager.current_revision(binding.origin_root)
+        source_revision = git_worktree_manager.current_revision(binding.path)
+        return unless confirm_worktree_action(<<~MESSAGE)
+          Merge #{binding.branch} into #{target_branch}?
+
+          Source: #{binding.branch} (#{source_revision})
+          Target: #{target_branch} (#{target_revision})
+          Original workspace: #{binding.origin_root}
+
+          The merge runs directly in the original workspace.
+        MESSAGE
+
+        unless git_worktree_manager.current_revision(binding.origin_root) == target_revision && git_worktree_manager.status(binding.origin_root).clean?
+          return runtime_output("Original workspace changed before the merge could begin; review it and try again.")
+        end
+
+        result = git_worktree_manager.merge(
+          repository_root: binding.repository_root,
+          target_path: binding.origin_root,
+          source_branch: binding.branch
+        )
+        if result.merged?
+          runtime_output("Merged #{binding.branch} into #{target_branch}.")
+        else
+          runtime_output("Merge conflicts in #{result.conflicts.join(", ")}. Resolve them in #{binding.origin_root} or run /tab worktree merge abort.")
+        end
+      rescue GitWorktreeManager::Error => e
+        runtime_output("Worktree error: #{e.message}")
+      end
+
+      def abort_active_worktree_merge
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+        return runtime_output("Tab #{active_tab_number} is running and cannot abort its merge yet.") if tab.running? || tab.local_busy? || tab.shell
+        return runtime_output("No merge is in progress in the original workspace.") unless git_worktree_manager.merge_in_progress?(binding.origin_root)
+        return unless confirm_worktree_action("Abort the merge in #{binding.origin_root}?")
+
+        git_worktree_manager.abort_merge(binding.origin_root)
+        runtime_output("Aborted the merge in #{binding.origin_root}.")
+      rescue GitWorktreeManager::Error => e
+        runtime_output("Worktree error: #{e.message}")
       end
 
       def remove_active_worktree

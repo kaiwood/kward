@@ -484,6 +484,54 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_worktree_merge_merges_committed_changes_into_the_original_branch
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new([], confirmations: [true])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "merged.txt"), "merged\n")
+        git_in_test(binding.path, "add", "merged.txt")
+        git_in_test(binding.path, "commit", "-m", "add merged file")
+
+        cli.send(:handle_tab_command, "worktree merge", store)
+
+        assert_equal "merged\n", File.read(File.join(root, "merged.txt"))
+        assert_includes prompt.output.join("\n"), "Merged #{binding.branch} into"
+        assert binding.active?
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
+  def test_worktree_merge_requires_clean_worktrees
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "uncommitted.txt"), "nope\n")
+
+        cli.send(:handle_tab_command, "worktree merge", store)
+
+        assert_includes prompt.output.join("\n"), "Worktree has local changes"
+        refute File.exist?(File.join(root, "uncommitted.txt"))
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_remove_returns_to_origin_and_keeps_branch
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|
