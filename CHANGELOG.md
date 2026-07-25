@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a Stardate footer plugin example for the interactive CLI.
 - Added a general transport plugin API with normalized messages and events, persistent transport state, policy checks, managed lifecycle, foreground CLI commands, and RPC capability/status reporting.
 - Added a first-party Telegram long-polling transport example with fixed-workspace routing, numeric allowlists, idempotent updates, message chunking, and interactive approval/question buttons.
 - Added packaged plugin entrypoints under `~/.kward/plugins/*/plugin.rb` for multi-file trusted plugins.
