@@ -20,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 - Updated current documentation to describe Copilot and the JSON-RPC backend as supported features rather than experimental ones.
 - Clarified the distinct roles of workspace guardrails, tool permissions, and command sandboxing.
+- Reorganized the README documentation index and clarified generated Ruby API support boundaries.
 - Moved the local-model setup guide to the generated documentation Integrate navigation.
 - Added the Telegram transport deployment guide to the generated documentation navigation.
 - Replaced implicit `/tab worktree` detachment with explicit `/tab worktree detach`; running `/tab worktree` again now leaves an active worktree enabled.

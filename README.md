@@ -69,18 +69,21 @@ See [Authentication](doc/authentication.md) for more details about sign-in optio
 
 ## Documentation
 
-Start here:
+New to Kward:
 
 - [Getting started](doc/getting-started.md): first run, authentication choices, and basic commands.
 - [Usage](doc/usage.md): interactive chat, slash commands, sessions, tools, images, and Pan mode.
 - [Configuration](doc/configuration.md): config files, providers, models, web search, logging, and color output.
 - [Authentication](doc/authentication.md): OpenAI OAuth, Anthropic OAuth, OpenRouter API keys, and Copilot/GitHub setup.
+
+Work safely:
+
 - [Security and trust](doc/security.md): local permissions, external data flow, trusted extensions, and safe work in unfamiliar repositories.
 - [Permissions](doc/permissions.md): opt-in tool approval, write scopes, policy rules, and current limits.
 - [Command sandboxing](doc/sandboxing.md): opt-in OS-enforced boundaries for model-requested shell commands.
 - [Troubleshooting](doc/troubleshooting.md): environment-specific install and runtime issues.
 
-Feature guides:
+Everyday workflows:
 
 - [Sessions](doc/session-management.md): resume, clone, fork, rewind, compact, and navigate saved work.
 - [Interactive composer](doc/composer.md): use multiline input, completion, history, files, reasoning shortcuts, busy input, and images.
@@ -97,13 +100,16 @@ Feature guides:
 - [Pan mode](doc/pan.md): use the mobile-friendly browser interface on a trusted local network.
 - [Local models](doc/local-models.md): connect Ollama, LM Studio, or llama.cpp and use a minimal replacement prompt.
 
-Advanced:
+Extend and integrate:
 
 - [Extensibility](doc/extensibility.md): choose between `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and other extension points.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
 - [Lifecycle hooks](doc/lifecycle-hooks.md): deterministic runtime hooks for policy, approvals, automation, and command-hook integrations.
 - [RPC protocol](doc/rpc.md): JSON-RPC backend mode for trusted local UI clients.
 - [Releasing](doc/releasing.md): release checklist for RubyGems publishing.
+
+Reference guides:
+
 - [Agent tools](doc/agent-tools.md): overview of model-callable tools, token-saving behavior, and tool categories.
 - [Workspace tools](doc/workspace-tools.md): local file, edit, and shell command tools.
 - [Context budgeting](doc/context-budgeting.md): focused context gathering, budgeted reads, output compaction, and token-saving history.
@@ -111,9 +117,9 @@ Advanced:
 - [Code search](doc/code-search.md): package lookup, GitHub repository cache, and external source reading for the code search agent tool.
 - [Context tools](doc/context-tools.md): skills, compacted output retrieval, and structured clarification questions.
 
-API reference:
+Generated Ruby API:
 
-- [API reference](doc/api.md): generated Ruby API entry points, indexes, and public API expectations.
+- [API reference](doc/api.md): generated Ruby API entry points, indexes, and supported API expectations.
 
 ## Development
 

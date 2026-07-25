@@ -1,8 +1,8 @@
 # API reference
 
-Kward's generated Ruby API documentation is mainly for contributors, plugin authors, tool authors, and people building RPC or editor integrations.
+Kward's generated Ruby API documentation is for contributors, plugin authors, tool authors, and people building RPC or editor integrations.
 
-If you use Kward from the terminal, start with the [user guides](file.README.html#Documentation) instead. The API reference exposes many internal classes because it is generated from the source tree; not every documented class is a stable extension API.
+If you use Kward from the terminal, start with the [user guides](file.README.html#Documentation). The generated reference documents source-tree classes, including internal implementation details. The supported interfaces are the behaviors documented in the guides, the Plugin DSL, and the JSON-RPC methods documented in the [RPC protocol](rpc.md).
 
 ## Start here
 
@@ -84,7 +84,7 @@ The generated comments focus on these supported extension boundaries rather than
 
 ## Public API expectations
 
-Kward is still evolving. The generated reference is useful for understanding the codebase, but it should not be read as a promise that every class, method, or constructor is public and stable.
+The generated reference is useful for understanding the codebase, but it does not make every class, method, or constructor a supported public API.
 
 Prefer the documented guides for supported extension behavior. Use generated class and method pages when you need implementation detail, are contributing to Kward itself, or are coordinating a frontend integration with the current codebase.
 
