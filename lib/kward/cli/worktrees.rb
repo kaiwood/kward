@@ -304,9 +304,21 @@ module Kward
       end
 
       def confirm_worktree_action(message)
+        prompt = message.to_s.strip
+        if @prompt.respond_to?(:ask_user_question)
+          answer = @prompt.ask_user_question([{
+            header: "Confirm worktree action",
+            question: prompt,
+            options: [
+              { label: "Continue", description: "Proceed with this Git operation." },
+              { label: "Cancel", description: "Leave the workspace unchanged." }
+            ]
+          }])
+          return answer&.first&.fetch(:answer, nil) == "Continue"
+        end
+
         return false unless @prompt.respond_to?(:yes?)
 
-        prompt = message.to_s.strip
         runtime_output(prompt) if prompt.include?("\n")
         @prompt.yes?(prompt.include?("\n") ? "Continue?" : prompt, default: false)
       end

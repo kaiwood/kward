@@ -96,6 +96,15 @@ class TestTabs < KwardTestCase
     end
   end
 
+  class OverlayConfirmationPrompt < TabPrompt
+    attr_reader :questions
+
+    def ask_user_question(questions)
+      @questions = questions
+      [{ question: questions.first[:question], answer: "Continue", custom: false }]
+    end
+  end
+
   class PluginTabDriver
     attr_reader :descriptor, :messages, :submissions
 
@@ -349,6 +358,16 @@ class TestTabs < KwardTestCase
         assert_equal File.realpath(worktree), cli.send(:current_workspace_root)
       end
     end
+  end
+
+  def test_worktree_confirmation_uses_the_composer_question_overlay
+    prompt = OverlayConfirmationPrompt.new
+    cli = Kward::CLI.new(argv: [], prompt: prompt)
+
+    assert cli.send(:confirm_worktree_action, "Merge source into target?\n\nSource: abc")
+    assert_equal "Confirm worktree action", prompt.questions.first[:header]
+    assert_equal "Merge source into target?\n\nSource: abc", prompt.questions.first[:question]
+    assert_equal ["Continue", "Cancel"], prompt.questions.first[:options].map { |option| option[:label] }
   end
 
   def test_worktree_toggle_warns_for_dirty_origin_and_preserves_transcript
