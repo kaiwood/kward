@@ -16,6 +16,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Replaced implicit `/tab worktree` detachment with explicit `/tab worktree detach`; running `/tab worktree` again now leaves an active worktree enabled.
 - Added workspace overrides for foreground transports via `kward transport run NAME WORKSPACE` and the global `--working-directory` option.
 
 ### Fixed

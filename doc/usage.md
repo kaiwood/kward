@@ -135,7 +135,8 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/tab close` | close the active tab. |
 | `/tab new` | open a new tab. |
 | `/tab name <label>` | rename the active tab label. |
-| `/tab worktree` | toggle the active session tab into or out of a linked Git worktree. |
+| `/tab worktree` | create or activate the active session tab's linked Git worktree. |
+| `/tab worktree detach` | return to the original workspace while keeping the linked worktree and branch. |
 | `/tab worktree status` | inspect the active tab's worktree binding and changes. |
 | `/tab worktree merge` | merge a clean worktree branch into the branch checked out in its original workspace. |
 | `/tab worktree merge abort` | abort a conflicted worktree merge in the original workspace. |
