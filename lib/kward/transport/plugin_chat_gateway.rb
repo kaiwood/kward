@@ -20,6 +20,8 @@ module Kward
 
       def resolve_transport_chat(transport_id:, type_id:, conversation:, actor:, scope_key:, descriptor: {}, workspace_root: nil)
         validate_transport_id!(transport_id)
+        validate_conversation!(conversation)
+        validate_actor!(actor)
         chat = @runtime.open(
           type_id: type_id,
           surface: :transport,
@@ -116,6 +118,21 @@ module Kward
         return if transport_id.to_s == @transport_id
 
         raise ArgumentError, "transport id does not match plugin chat gateway"
+      end
+
+      def validate_conversation!(conversation)
+        unless conversation.is_a?(ConversationKey)
+          raise ArgumentError, "conversation must be a Transport::ConversationKey"
+        end
+        return if conversation.transport_id == @transport_id
+
+        raise ArgumentError, "conversation transport does not match plugin chat gateway"
+      end
+
+      def validate_actor!(actor)
+        return if actor.is_a?(Actor)
+
+        raise ArgumentError, "actor must be a Transport::Actor"
       end
 
       def fetch_chat(chat_id)
