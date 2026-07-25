@@ -14,7 +14,11 @@ module Kward
 
       def initialize(server:, client: Client.new, plugin_registry_provider: nil)
         @server = server
-        @runtime = PluginChatRuntime.new(client: client, plugin_registry_provider: plugin_registry_provider)
+        @runtime = PluginChatRuntime.new(
+          client: client,
+          plugin_registry_provider: plugin_registry_provider,
+          message_normalizer: ->(message) { TranscriptNormalizer.new([message]).normalize.first }
+        )
         @subscriptions = {}
         @mutex = Mutex.new
         @runtime.subscribe_events { |event| notify_event(event) }

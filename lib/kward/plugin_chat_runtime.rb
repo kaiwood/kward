@@ -6,7 +6,6 @@ require_relative "events"
 require_relative "image_attachments"
 require_relative "message_access"
 require_relative "plugin_registry"
-require_relative "rpc/transcript_normalizer"
 require_relative "tab_driver"
 require_relative "tools/tool_call"
 
@@ -50,9 +49,10 @@ module Kward
       keyword_init: true
     )
 
-    def initialize(client:, plugin_registry_provider: nil)
+    def initialize(client:, plugin_registry_provider: nil, message_normalizer: nil)
       @client = client
       @plugin_registry_provider = plugin_registry_provider
+      @message_normalizer = message_normalizer
       @chats = {}
       @turns = {}
       @event_listeners = []
@@ -278,7 +278,7 @@ module Kward
       when Events::ReasoningDelta then ["reasoningDelta", { delta: event.delta }]
       when Events::ReasoningBoundary then ["reasoningBoundary", {}]
       when Events::AssistantDelta then ["assistantDelta", { delta: event.delta }]
-      when Events::AssistantMessage then ["assistantMessage", { message: RPC::TranscriptNormalizer.new([event.message]).normalize.first }]
+      when Events::AssistantMessage then ["assistantMessage", { message: normalized_assistant_message(event.message) }]
       when Events::Retry then ["modelRetry", retry_event_payload(event)]
       when Events::ToolCall then ["toolCall", tool_call_payload(event.tool_call)]
       when Events::ToolResult then ["toolResult", tool_result_payload(event.tool_call, event.content)]
@@ -292,6 +292,10 @@ module Kward
 
       context = PluginRegistry::Context.new(conversation: chat.driver, workspace_root: chat.workspace_root)
       plugin_registry.notify_transcript_event(event, context)
+    end
+
+    def normalized_assistant_message(message)
+      @message_normalizer ? @message_normalizer.call(message) : message
     end
 
     def retry_event_payload(event)
