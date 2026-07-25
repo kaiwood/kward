@@ -52,6 +52,7 @@ module KwardDocsNavigation
     "doc/context-tools.md" => "file.context-tools.html",
     "doc/rpc.md" => "file.rpc.html",
     "doc/transports.md" => "file.transports.html",
+    "doc/telegram.md" => "file.telegram.html",
     "doc/releasing.md" => "file.releasing.html"
   }.freeze
 

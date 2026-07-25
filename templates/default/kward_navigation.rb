@@ -54,6 +54,7 @@ module KwardDocsNavigationData
         ["MCP servers", "file.mcp.html"],
         ["RPC protocol", "file.rpc.html"],
         ["Transports", "file.transports.html"],
+        ["Telegram transport", "file.telegram.html"],
         ["Releasing", "file.releasing.html"]
       ]
     ],
