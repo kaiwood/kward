@@ -271,7 +271,7 @@ class TestPluginRegistry < KwardTestCase
   def test_registers_plugin_tab_type
     registry = Kward::PluginRegistry.new
     registry.evaluate do |plugin|
-      plugin.tab_type "example", id: "example.chat", title: "Example", singleton: :global, transcript_events: true do |host, descriptor|
+      plugin.tab_type "example", id: "example.chat", title: "Example", singleton: :global, transport: true, transcript_events: true do |host, descriptor|
         [host, descriptor]
       end
     end
@@ -281,6 +281,8 @@ class TestPluginRegistry < KwardTestCase
     assert_equal "Example", tab_type.title
     assert_equal :global, tab_type.singleton
     refute tab_type.rpc
+    assert tab_type.transport
+    assert_equal [tab_type], registry.transport_tab_types
     assert tab_type.transcript_events
     assert_same tab_type, registry.tab_type_for_id("example.chat")
   end
