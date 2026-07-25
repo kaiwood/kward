@@ -192,6 +192,13 @@ module Kward
       File.join(cache_dir, "openrouter_models.json")
     end
 
+    def model_catalog_cache_path(provider_id)
+      provider = provider_id.to_s.gsub(/[^a-z0-9_-]/i, "_")
+      raise ArgumentError, "Provider id must be a non-empty string" if provider.empty?
+
+      File.join(cache_dir, "models", "#{provider}.json")
+    end
+
     def update_check_cache_path
       File.join(cache_dir, "update_check.json")
     end
