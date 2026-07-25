@@ -186,7 +186,12 @@ module Kward
         private
 
         def workspace_root
-          return @host.config["workspace"] || @host.config[:workspace] if @host.execution_profile&.workspace_mode == :fixed
+          if @host.execution_profile&.workspace_mode == :fixed
+            configured = @host.config["workspace"] || @host.config[:workspace]
+            raise ArgumentError, "fixed execution profile requires a configured workspace" if configured.to_s.empty?
+
+            return configured.to_s
+          end
 
           @host.config["workspace"] || @host.config[:workspace] || Dir.pwd
         end

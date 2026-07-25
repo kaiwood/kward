@@ -65,6 +65,24 @@ class TestTransportHost < KwardTestCase
     assert_equal "/fixed/workspace", gateway.calls.find { |call| call.first == :resolve }[1][:workspace_root]
   end
 
+  def test_fixed_plugin_chat_profile_requires_a_configured_workspace
+    profile = Kward::Transport.execution_profile(id: "isolated_chat", workspace_mode: :fixed)
+    host = Kward::Transport::Host.new(
+      transport_id: "test",
+      plugin_chat_gateway: Object.new,
+      execution_profile: profile
+    )
+
+    error = assert_raises(ArgumentError) do
+      host.plugin_chats.resolve(
+        type_id: "example.bot",
+        conversation: Kward::Transport.conversation_key(transport_id: "test", external_id: "chat"),
+        actor: Kward::Transport.actor(id: "user")
+      )
+    end
+    assert_equal "fixed execution profile requires a configured workspace", error.message
+  end
+
   def test_secret_reads_config_and_transport_specific_environment_fallback
     with_env(
       "KWARD_TRANSPORT_COM_EXAMPLE_TEST_TOKEN" => "environment-secret",
