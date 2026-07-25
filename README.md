@@ -20,11 +20,13 @@ Kward is built around that reality.
 
 It starts as a capable coding assistant, but is designed to grow into your own development environment. As your workflow evolves, Kward evolves with it through trusted local extensions rather than forcing you into a fixed product experience.
 
+Kward is intentionally designed to stay out of your way. By default it favors fast, local workflows over constant confirmations, while still providing optional permission policies, command sandboxing, workspace boundaries, and approval flows when your workflow or environment requires additional safety.
+
 With Kward you can:
 
 - Explore unfamiliar codebases while preserving discoveries across sessions.
 - Investigate bugs, review changes, and validate fixes without losing context.
-- Make and verify edits with workspace boundaries, read-before-edit guardrails, optional approvals, and command sandboxing.
+- Make and verify edits with workspace boundaries, read-before-edit guardrails, optional approvals, command sandboxing, and configurable permission policies.
 - Organize parallel work through sessions, tabs, branches, and linked Git worktrees.
 - Capture your team's conventions through `PRINCIPLES.md`, `AGENTS.md`, skills, prompt templates, and optional memory.
 - Extend the environment itself through plugins, lifecycle hooks, MCP servers, transports, and JSON-RPC integrations.
