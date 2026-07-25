@@ -1,23 +1,35 @@
 # Kward
 
-Kward is a personal developer workspace that lives in your terminal. It brings together persistent conversations, project-aware tools, local automation, and trusted integrations so you can understand a codebase, make changes, investigate problems, and carry work forward across sessions.
+Kward is an Agentic Development Environment (ADE) that lives in your terminal.
 
-Use Kward from the terminal, a local browser interface, or a trusted JSON-RPC client. It can work with your files and Git state, run local commands, research external sources, manage session history, and adapt to your workflows through project instructions, skills, memory, personas, hooks, plugins, MCP servers, and transports.
+Instead of treating AI as a single chat window, Kward provides a persistent development workspace where agents, tools, conversations, and project context work together. It combines project-aware AI, local automation, trusted integrations, and long-lived sessions into an environment that grows with your workflow instead of restarting from scratch every time.
+
+Use Kward from the terminal, a local browser interface, or a trusted JSON-RPC client. It can inspect and edit files, understand Git history, run local commands, research external sources, manage persistent sessions, and adapt to your way of working through project instructions, skills, memory, personas, hooks, plugins, MCP servers, and transports.
 
 Kward supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscriptions, OpenRouter, Copilot, and OpenAI-compatible local servers such as Ollama, LM Studio, and llama.cpp.
 
-## Why use Kward?
+## Why Kward?
 
-Kward is for development work that has context, history, and consequences—not isolated one-off prompts.
+Most AI coding tools optimize for individual conversations.
 
-It gives you one place to:
+Real software development does not.
 
-- Explore an unfamiliar project and preserve what you learned.
-- Investigate bugs, review changes, and run focused local checks.
+Projects span days or months. They involve research, implementation, debugging, experiments, reviews, branches, documentation, and decisions that should not disappear when a chat reaches its context limit.
+
+Kward is built around that reality.
+
+It starts as a capable coding assistant, but is designed to grow into your own development environment. As your workflow evolves, Kward evolves with it through trusted local extensions rather than forcing you into a fixed product experience.
+
+With Kward you can:
+
+- Explore unfamiliar codebases while preserving discoveries across sessions.
+- Investigate bugs, review changes, and validate fixes without losing context.
 - Make and verify edits with workspace boundaries, read-before-edit guardrails, optional approvals, and command sandboxing.
-- Split work across sessions, branches, tabs, and linked Git worktrees.
-- Carry your own working conventions through `PRINCIPLES.md`, `AGENTS.md`, skills, prompt templates, and optional memory.
-- Extend trusted local workflows with plugins, lifecycle hooks, MCP servers, external transports, and JSON-RPC clients.
+- Organize parallel work through sessions, tabs, branches, and linked Git worktrees.
+- Capture your team's conventions through `PRINCIPLES.md`, `AGENTS.md`, skills, prompt templates, and optional memory.
+- Extend the environment itself through plugins, lifecycle hooks, MCP servers, transports, and JSON-RPC integrations.
+
+Whether you simply want a coding assistant or a fully customized AI-powered development environment, Kward scales from a single terminal session to an extensible platform without changing the way you work.
 
 ## Install
 
