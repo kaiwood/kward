@@ -41,6 +41,7 @@ module KwardDocsNavigation
     "doc/memory.md" => "file.memory.html",
     "doc/personas.md" => "file.personas.html",
     "doc/skills.md" => "file.skills.html",
+    "doc/local-models.md" => "file.local-models.html",
     "doc/extensibility.md" => "file.extensibility.html",
     "doc/plugins.md" => "file.plugins.html",
     "doc/lifecycle-hooks.md" => "file.lifecycle-hooks.html",

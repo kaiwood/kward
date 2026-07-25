@@ -22,8 +22,7 @@ module KwardDocsNavigationData
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"],
         ["Skills", "file.skills.html"],
-        ["Pan mode", "file.pan.html"],
-        ["Local models", "file.local-models.html"]
+        ["Pan mode", "file.pan.html"]
       ]
     ],
     [
@@ -52,6 +51,7 @@ module KwardDocsNavigationData
       "Integrate",
       [
         ["MCP servers", "file.mcp.html"],
+        ["Local models", "file.local-models.html"],
         ["RPC protocol", "file.rpc.html"],
         ["Transports", "file.transports.html"],
         ["Telegram transport", "file.telegram.html"],
