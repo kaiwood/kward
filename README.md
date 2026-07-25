@@ -1,29 +1,23 @@
 # Kward
 
-Kward is an extendable Ruby CLI coding agent. It can chat with you about a project, inspect and edit files, run local shell commands, search the web, look up public source code, save local sessions, and load trusted Ruby plugins for custom workflows.
+Kward is a personal developer workspace that lives in your terminal. It brings together persistent conversations, project-aware tools, local automation, and trusted integrations so you can understand a codebase, make changes, investigate problems, and carry work forward across sessions.
 
-It supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscriptions, OpenRouter, Copilot, and OpenAI-compatible local servers such as Ollama, LM Studio, and llama.cpp.
+Use Kward from the terminal, a local browser interface, or a trusted JSON-RPC client. It can work with your files and Git state, run local commands, research external sources, manage session history, and adapt to your workflows through project instructions, skills, memory, personas, hooks, plugins, MCP servers, and transports.
+
+Kward supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscriptions, OpenRouter, Copilot, and OpenAI-compatible local servers such as Ollama, LM Studio, and llama.cpp.
 
 ## Why use Kward?
 
-Kward is designed for working with real projects, not isolated prompts.
+Kward is for development work that has context, history, and consequences—not isolated one-off prompts.
 
-Typical workflows include:
+It gives you one place to:
 
-- Understanding an unfamiliar codebase
-- Investigating bugs
-- Reviewing changes
-- Refactoring code
-- Automating repetitive development tasks
-- Building custom agent workflows through plugins
-
-Examples:
-
-```bash
-kward "Explain this project"
-kward "Review this diff"
-kward "Find performance problems in this codebase"
-```
+- Explore an unfamiliar project and preserve what you learned.
+- Investigate bugs, review changes, and run focused local checks.
+- Make and verify edits with workspace boundaries, read-before-edit guardrails, optional approvals, and command sandboxing.
+- Split work across sessions, branches, tabs, and linked Git worktrees.
+- Carry your own working conventions through `PRINCIPLES.md`, `AGENTS.md`, skills, prompt templates, and optional memory.
+- Extend trusted local workflows with plugins, lifecycle hooks, MCP servers, external transports, and JSON-RPC clients.
 
 ## Install
 

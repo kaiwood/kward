@@ -23,6 +23,7 @@ All notable changes to Kward will be documented in this file.
 - Reorganized the README documentation index and clarified generated Ruby API support boundaries.
 - Added task-oriented navigation to the RPC and configuration references.
 - Standardized MCP support and limitation wording across the user and RPC guides.
+- Reframed the README introduction around Kward as a persistent developer workspace.
 - Moved the local-model setup guide to the generated documentation Integrate navigation.
 - Added the Telegram transport deployment guide to the generated documentation navigation.
 - Replaced implicit `/tab worktree` detachment with explicit `/tab worktree detach`; running `/tab worktree` again now leaves an active worktree enabled.
