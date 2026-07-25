@@ -244,8 +244,9 @@ During a turn, Kward can inspect and change the workspace with tools for:
 
 Important guardrails:
 
-- Existing files must be read before Kward can edit or overwrite them.
+- Workspace guardrails limit file tools to the active workspace; existing files must be read before Kward can edit or overwrite them. They do not constrain shell commands. See [Workspace tools](workspace-tools.md).
 - File reads and edits are bounded to avoid loading very large files by accident.
+- The permission policy can decide whether a model-requested tool starts. The command sandbox is a separate, opt-in operating-system boundary for model-requested shell commands. See [Permissions](permissions.md) and [Command sandboxing](sandboxing.md).
 - Shell commands run from the workspace and should be treated like commands you run yourself.
 
 ## Images

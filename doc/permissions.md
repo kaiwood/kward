@@ -1,8 +1,8 @@
 # Permissions
 
-Kward's permission policy lets you put a human decision between a model-requested tool call and its side effect. It is useful when you want the agent to inspect a project freely, but want to confirm edits, commands, web requests, or MCP calls as they arise.
+Kward's permission policy decides whether a model-requested tool can start. It lets you put a human decision between a tool call and its side effect when you want the agent to inspect a project freely but confirm edits, commands, web requests, or MCP calls as they arise.
 
-Permissions are **off by default**. Enabling them does not sandbox Kward or its subprocesses: an allowed shell command still runs with your operating-system user permissions unless you separately enable [command sandboxing](sandboxing.md) for model-requested shell commands.
+Permissions are **off by default**. They are not an operating-system sandbox: an allowed shell command still runs with your operating-system user permissions unless you separately enable [command sandboxing](sandboxing.md) for model-requested shell commands.
 
 ## Start with approval mode
 

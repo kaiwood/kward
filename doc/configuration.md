@@ -608,7 +608,7 @@ Workspace guardrails are enabled by default. File tools such as `read_file`, `wr
 }
 ```
 
-This is not a sandbox setting. File guardrails constrain Kward file tools, not arbitrary shell commands. See [Command sandboxing](sandboxing.md) to apply an opt-in operating-system boundary to model-requested `run_shell_command` workers.
+Workspace guardrails limit Kward file tools; they are not an operating-system sandbox and do not constrain arbitrary shell commands. See [Command sandboxing](sandboxing.md) to apply an opt-in operating-system boundary to model-requested `run_shell_command` workers.
 
 ## Command sandboxing
 
@@ -627,7 +627,7 @@ When Kward cannot enforce a requested non-off mode, it denies the command rather
 
 ## Permissions
 
-Permissions are off by default. When enabled, Kward evaluates model-requested tools before execution. This is a permission policy, not an operating-system sandbox: permitted shell commands still run with your user account's access.
+Permissions are off by default. When enabled, the permission policy decides whether a model-requested tool can start. It is not an operating-system sandbox: permitted shell commands still run with your user account's access.
 
 ```json
 {

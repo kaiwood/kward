@@ -12,7 +12,7 @@ Kward normally chooses these tools itself. You do not need to know their exact n
 
 ## Guardrails
 
-Workspace tools use the active workspace as their boundary. File paths are workspace-relative by default, and file tools are guarded so Kward does not edit arbitrary unread files. Guardrails can be disabled with the `tools.workspace_guardrails` setting — see [Configuration](configuration.md). When disabled, file tools can access paths outside the workspace. These guardrails do not affect shell commands; model-requested commands can instead use the separate, opt-in [command sandbox](sandboxing.md).
+Workspace guardrails limit Kward file tools to the active workspace. File paths are workspace-relative by default, and existing files must be read before Kward can change them. Guardrails can be disabled with the `tools.workspace_guardrails` setting — see [Configuration](configuration.md). When disabled, file tools can access paths outside the workspace. Guardrails are not an operating-system sandbox and do not constrain shell commands; model-requested commands can instead use the separate, opt-in [command sandbox](sandboxing.md).
 
 Important behavior:
 
