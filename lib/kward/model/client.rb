@@ -368,10 +368,14 @@ module Kward
 
     def chat_anthropic_provider(url:, token:, request_body:, current_model:, on_reasoning_delta:, on_assistant_delta:, cancellation:)
       request = Http.apply_user_agent(Net::HTTP::Post.new(url))
-      request["Authorization"] = "Bearer #{token}"
+      if anthropic_api_key
+        request["x-api-key"] = token
+      else
+        request["Authorization"] = "Bearer #{token}"
+      end
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
-      anthropic_headers.each { |key, value| request[key] = value }
+      anthropic_headers(api_key: !anthropic_api_key.nil?).each { |key, value| request[key] = value }
       request.body = request_body
 
       message = nil
@@ -711,13 +715,15 @@ module Kward
       ModelStreamParser.parse_openai_chat_sse_stream(response, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: method(:normalized_usage), provider_label: provider_label)
     end
 
-    def anthropic_headers
-      {
-        "anthropic-version" => "2023-06-01",
+    def anthropic_headers(api_key: false)
+      headers = { "anthropic-version" => "2023-06-01" }
+      return headers if api_key
+
+      headers.merge(
         "anthropic-beta" => "claude-code-20250219,oauth-2025-04-20",
         "anthropic-dangerous-direct-browser-access" => "true",
         "x-app" => "cli"
-      }
+      )
     end
 
     def copilot_headers(messages)
@@ -982,7 +988,11 @@ module Kward
     end
 
     def anthropic_access_token
-      @anthropic_oauth.access_token
+      anthropic_api_key || @anthropic_oauth.access_token
+    end
+
+    def anthropic_api_key
+      @api_key_store.fetch("anthropic")
     end
 
     def copilot_chat_url
