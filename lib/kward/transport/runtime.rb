@@ -3,6 +3,7 @@ require_relative "../config_files"
 require_relative "../rpc/server"
 require_relative "gateway"
 require_relative "manager"
+require_relative "plugin_chat_gateway"
 
 module Kward
   module Transport
@@ -21,6 +22,9 @@ module Kward
           registry: @server.session_manager.plugin_registry,
           gateway: lambda { |transport_id|
             Gateway.new(session_manager: @server.session_manager, transport_id: transport_id)
+          },
+          plugin_chat_gateway: lambda { |transport_id|
+            PluginChatGateway.new(runtime: @server.plugin_chat_manager.runtime, transport_id: transport_id)
           },
           config_root: ConfigFiles.config_dir,
           config_provider: ->(transport_id) { ConfigFiles.transport_config(transport_id) }

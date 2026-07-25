@@ -8,9 +8,10 @@ module Kward
     class Manager
       Entry = Struct.new(:type, :host, :adapter, :state, :error, :started_at, :stopped_at, keyword_init: true)
 
-      def initialize(registry:, gateway: nil, config_root: nil, config_provider: nil, policy: nil, logger: nil)
+      def initialize(registry:, gateway: nil, plugin_chat_gateway: nil, config_root: nil, config_provider: nil, policy: nil, logger: nil)
         @registry = registry
         @gateway = gateway
+        @plugin_chat_gateway = plugin_chat_gateway
         @config_root = config_root
         @config_provider = config_provider
         @policy = policy
@@ -38,9 +39,11 @@ module Kward
         config ||= @config_provider&.call(type.id) || {}
         config = config.merge("workspace" => workspace_root.to_s) if workspace_root
         gateway = @gateway.respond_to?(:call) ? @gateway.call(type.id) : @gateway
+        plugin_chat_gateway = @plugin_chat_gateway.respond_to?(:call) ? @plugin_chat_gateway.call(type.id) : @plugin_chat_gateway
         host = Host.new(
           transport_id: type.id,
           gateway: gateway,
+          plugin_chat_gateway: plugin_chat_gateway,
           config: config,
           storage: @config_root && Store.new(type.id, root: @config_root),
           policy: @policy,

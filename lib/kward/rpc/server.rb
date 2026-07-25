@@ -16,6 +16,7 @@ require_relative "redactor"
 require_relative "session_manager"
 require_relative "plugin_chat_manager"
 require_relative "transport"
+require_relative "../transport/plugin_chat_gateway"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -126,24 +127,27 @@ module Kward
         @client = client
         @config_manager = ConfigManager.new
         @session_manager = SessionManager.new(server: self, client: client, config_manager: @config_manager)
+        @plugin_chat_manager = PluginChatManager.new(
+          server: self,
+          client: client,
+          plugin_registry_provider: -> { @session_manager.plugin_registry }
+        )
         @transport_manager = Kward::Transport::Manager.new(
           registry: @session_manager.plugin_registry,
           gateway: lambda { |transport_id|
             Kward::Transport::Gateway.new(session_manager: @session_manager, transport_id: transport_id)
           },
+          plugin_chat_gateway: lambda { |transport_id|
+            Kward::Transport::PluginChatGateway.new(runtime: @plugin_chat_manager.runtime, transport_id: transport_id)
+          },
           config_provider: ->(transport_id) { ConfigFiles.transport_config(transport_id) }
-        )
-        @plugin_chat_manager = PluginChatManager.new(
-          server: self,
-          client: client,
-          plugin_registry_provider: -> { @session_manager.plugin_registry }
         )
         @auth_manager = AuthManager.new(server: self, config_manager: @config_manager)
         @shutdown = false
         @shutdown_complete = false
       end
 
-      attr_reader :session_manager
+      attr_reader :session_manager, :plugin_chat_manager
 
       # Reads framed JSON-RPC messages until shutdown or EOF.
       #
