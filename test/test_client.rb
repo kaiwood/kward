@@ -333,14 +333,16 @@ class TestClient < KwardTestCase
       tools = [{ function: { name: "read_file", description: "Read a file", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } } }]
       messages = [{ role: "system", content: "Be concise." }, { role: "user", content: "Hello" }]
 
-      with_fake_http([fake_net_response(200, gemini_fixture("text.json"))]) do |http|
-        message = client.chat(messages, tools: tools, max_tokens: 321)
+      with_fake_http([fake_net_response(200, gemini_fixture("text.sse"))]) do |http|
+        deltas = []
+        message = client.chat(messages, tools: tools, max_tokens: 321, on_assistant_delta: ->(delta) { deltas << delta })
 
         assert_equal "Hello from Gemini.", message["content"]
+        assert_equal ["Hello ", "from Gemini."], deltas
         assert_equal "Google Gemini", message["provider"]
         assert_equal({ "input_tokens" => 7, "output_tokens" => 4, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 11, "estimated" => false }, message["usage"])
         request = http.requests.first
-        assert_equal URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"), request.uri
+        assert_equal URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse"), request.uri
         assert_equal "gemini-fixture-key", request["x-goog-api-key"]
         assert_nil request["Authorization"]
         payload = JSON.parse(request.body)
@@ -354,15 +356,66 @@ class TestClient < KwardTestCase
 
   def test_gemini_native_api_converts_function_calls_to_kward_tools
     with_gemini_client do |client|
-      with_fake_http([fake_net_response(200, gemini_fixture("function_call.json"))]) do
+      with_fake_http([fake_net_response(200, gemini_fixture("function_calls.sse"))]) do
         message = client.chat([{ role: "user", content: "Read README" }])
 
-        assert_equal "I’ll inspect it.", message["content"]
-        call = message.fetch("tool_calls").first
-        assert_equal "call_gemini_1", call["id"]
-        assert_equal "read_file", call.dig("function", "name")
-        assert_equal({ "path" => "README.md" }, JSON.parse(call.dig("function", "arguments")))
+        assert_equal "", message["content"]
+        assert_equal 2, message.fetch("tool_calls").length
+        read_call, list_call = message.fetch("tool_calls")
+        assert_equal "call_read", read_call["id"]
+        assert_equal "read_file", read_call.dig("function", "name")
+        assert_equal({ "path" => "README.md" }, JSON.parse(read_call.dig("function", "arguments")))
+        assert_equal "list_directory", list_call.dig("function", "name")
+        assert_equal({ "path" => "test" }, JSON.parse(list_call.dig("function", "arguments")))
       end
+    end
+  end
+
+  def test_gemini_payload_converts_tool_results_back_to_function_responses
+    with_gemini_client do |client|
+      messages = [
+        assistant_tool_call("read_file", path: "README.md"),
+        { "role" => "toolResult", "toolCallId" => "call_read_file", "toolName" => "read_file", "content" => JSON.dump("content" => "README contents") }
+      ]
+
+      payload = client.send(:gemini_payload, messages, [])
+
+      assert_equal "read_file", payload.dig(:contents, 0, :parts, 0, :functionCall, :name)
+      response = payload.dig(:contents, 1, :parts, 0, :functionResponse)
+      assert_equal "read_file", response[:name]
+      assert_equal({ "content" => "README contents" }, response[:response])
+    end
+  end
+
+  def test_gemini_stream_reports_malformed_events
+    with_gemini_client do |client|
+      with_fake_http([fake_net_response(200, gemini_fixture("malformed.sse"))]) do
+        error = assert_raises(RuntimeError) { client.chat([{ role: "user", content: "Hello" }]) }
+
+        assert_includes error.message, "Google Gemini returned invalid SSE JSON"
+        refute_includes error.message, "gemini-fixture-key"
+      end
+    end
+  end
+
+  def test_gemini_stream_cancels_between_events
+    with_gemini_client do |client|
+      cancellation = Kward::Cancellation.new
+      deltas = []
+      with_fake_http([fake_net_response(200, gemini_fixture("text.sse"))]) do
+        assert_raises(Kward::Cancellation::CancelledError) do
+          client.chat(
+            [{ role: "user", content: "Hello" }],
+            cancellation: cancellation,
+            on_assistant_delta: lambda do |delta|
+              deltas << delta
+              cancellation.cancel!
+            end
+          )
+        end
+      end
+
+      assert_equal ["Hello "], deltas
     end
   end
 

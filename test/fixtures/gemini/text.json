@@ -1,1 +1,0 @@
-{"candidates":[{"content":{"role":"model","parts":[{"text":"Hello from Gemini."}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":4,"totalTokenCount":11}}

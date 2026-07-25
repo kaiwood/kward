@@ -135,6 +135,71 @@ module Kward
       raise "Anthropic returned invalid SSE JSON: #{e.message}"
     end
 
+    def parse_gemini_sse_stream(response, on_assistant_delta: nil, cancellation: nil, usage_normalizer: nil)
+      state = { content: +"", calls: {}, usage: nil }
+      buffer = +""
+      response.read_body do |chunk|
+        cancellation&.raise_if_cancelled!
+        buffer << chunk
+        while (index = buffer.index(/\r?\n\r?\n/))
+          delimiter = Regexp.last_match[0]
+          block = buffer[0...index]
+          buffer = buffer[(index + delimiter.length)..] || +""
+          process_gemini_sse_block(block, state, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: usage_normalizer)
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      process_gemini_sse_block(buffer, state, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: usage_normalizer) unless buffer.empty?
+      gemini_sse_message(state)
+    rescue JSON::ParserError => e
+      raise "Google Gemini returned invalid SSE JSON: #{e.message}"
+    end
+
+    def process_gemini_sse_block(block, state, on_assistant_delta:, cancellation:, usage_normalizer:)
+      data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
+      return if data.empty? || data == "[DONE]"
+
+      cancellation&.raise_if_cancelled!
+      event = JSON.parse(data)
+      Array(event["candidates"]).each_with_index do |candidate, candidate_index|
+        Array(candidate.dig("content", "parts")).each_with_index do |part, part_index|
+          text = part["text"].to_s
+          unless text.empty?
+            state[:content] << text
+            on_assistant_delta&.call(text)
+          end
+          merge_gemini_function_call(state[:calls], part["functionCall"], candidate_index: candidate_index, part_index: part_index)
+        end
+      end
+      state[:usage] = usage_normalizer&.call(event["usageMetadata"]) || state[:usage]
+    end
+
+    def merge_gemini_function_call(calls, function_call, candidate_index:, part_index:)
+      return unless function_call.is_a?(Hash)
+
+      key = function_call["id"] || "#{candidate_index}:#{part_index}:#{function_call["name"]}"
+      call = calls[key] ||= { "id" => function_call["id"] || "call_gemini_#{candidate_index}_#{part_index}", "name" => function_call["name"].to_s, "args" => {}, "args_buffer" => +"" }
+      call["name"] = function_call["name"].to_s unless function_call["name"].to_s.empty?
+      args = function_call["args"]
+      if args.is_a?(Hash)
+        call["args"].merge!(args)
+      elsif !args.nil?
+        call["args_buffer"] << args.to_s
+      end
+    end
+
+    def gemini_sse_message(state)
+      message = { "role" => "assistant", "content" => state[:content] }
+      unless state[:calls].empty?
+        message["tool_calls"] = state[:calls].values.map do |call|
+          arguments = call["args_buffer"].empty? ? JSON.dump(call["args"]) : call["args_buffer"]
+          { "id" => call["id"], "type" => "function", "function" => { "name" => call["name"], "arguments" => arguments } }
+        end
+      end
+      message["usage"] = state[:usage] if state[:usage]
+      message
+    end
+
     def anthropic_sse_state
       { content: +"", reasoning_summary: +"", blocks: {}, tool_calls: [], usage: nil }
     end

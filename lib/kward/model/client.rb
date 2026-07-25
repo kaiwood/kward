@@ -388,51 +388,29 @@ module Kward
 
     def chat_gemini_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
       model = current_model.to_s.delete_prefix("models/")
-      request_url = URI("#{url.to_s.sub(%r{/+\z}, "")}/models/#{URI.encode_www_form_component(model)}:generateContent")
+      request_url = URI("#{url.to_s.sub(%r{/+\z}, "")}/models/#{URI.encode_www_form_component(model)}:streamGenerateContent?alt=sse")
       request = Http.apply_user_agent(Net::HTTP::Post.new(request_url))
       request["x-goog-api-key"] = token
       request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
       request.body = request_body
 
-      response = Net::HTTP.start(request_url.hostname, request_url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
+      message = nil
+      Net::HTTP.start(request_url.hostname, request_url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
         cancellation&.on_cancel { close_http(http) }
         cancellation&.raise_if_cancelled!
-        http.request(request)
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise RequestError.new(provider: "Google Gemini", code: response.code, body: redact(body, token))
+          end
+
+          message = ModelStreamParser.parse_gemini_sse_stream(response, on_assistant_delta: on_assistant_delta, cancellation: cancellation, usage_normalizer: method(:gemini_usage))
+        end
       end
       cancellation&.raise_if_cancelled!
-      unless response.is_a?(Net::HTTPSuccess)
-        raise RequestError.new(provider: "Google Gemini", code: response.code, body: redact(response.body, token))
-      end
-
-      body = JSON.parse(response.body)
-      message = gemini_response_message(body)
-      on_assistant_delta&.call(message["content"]) unless message["content"].to_s.empty?
-      attach_response_metadata(message, provider: "Google Gemini", model: current_model, usage: gemini_usage(body["usageMetadata"]))
-    rescue JSON::ParserError => e
-      raise "Google Gemini returned invalid JSON: #{e.message}"
-    end
-
-    def gemini_response_message(body)
-      parts = body.dig("candidates", 0, "content", "parts")
-      raise "Google Gemini response did not include a candidate" unless parts.is_a?(Array)
-
-      content = parts.filter_map { |part| part["text"] }.join
-      tool_calls = parts.each_with_index.filter_map do |part, index|
-        function_call = part["functionCall"]
-        next unless function_call.is_a?(Hash)
-
-        {
-          "id" => function_call["id"] || "call_gemini_#{index}",
-          "type" => "function",
-          "function" => {
-            "name" => function_call["name"].to_s,
-            "arguments" => JSON.dump(function_call["args"] || {})
-          }
-        }
-      end
-      message = { "role" => "assistant", "content" => content }
-      message["tool_calls"] = tool_calls unless tool_calls.empty?
-      message
+      attach_response_metadata(message, provider: "Google Gemini", model: current_model)
     end
 
     def gemini_usage(usage)

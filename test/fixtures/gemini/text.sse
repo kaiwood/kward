@@ -1,0 +1,3 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"Hello "}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"text":"from Gemini."}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":4,"totalTokenCount":11}}

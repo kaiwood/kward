@@ -1,0 +1,5 @@
+data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"call_read","name":"read_file","args":"{\"path\":"}}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"call_read","name":"read_file","args":"\"README.md\"}"}}]}}]}
+
+data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"call_list","name":"list_directory","args":{"path":"test"}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":6,"totalTokenCount":15}}
