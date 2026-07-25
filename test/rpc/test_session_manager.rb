@@ -848,10 +848,10 @@ class TestRPCSessionManager < KwardTestCase
       after = manager.fork_messages(session_id: session[:id])[:messages]
 
       assert_equal 2, before.length
-      assert before.all? { |message| message[:entryId].to_s.match?(/\A[0-9a-f]{8}\z/) }
+      assert before.all? { |message| message[:entryId].to_s.match?(/\A[0-9a-f]{32}\z/) }
       assert_equal "first prompt with spaces", before.first[:text]
       assert_equal before.map { |message| message[:entryId] }, after.first(2).map { |message| message[:entryId] }
-      assert after.last[:entryId].to_s.match?(/\A[0-9a-f]{8}\z/)
+      assert after.last[:entryId].to_s.match?(/\A[0-9a-f]{32}\z/)
     end
   end
 

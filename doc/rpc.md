@@ -184,7 +184,7 @@ Returns:
 ```json
 {
   "summary": "Compaction summary",
-  "firstKeptEntryId": "a13f8c42",
+  "firstKeptEntryId": "a13f8c42b7d94e10c5f8a3b6d2e9f401",
   "tokensBefore": 1234,
   "details": {
     "read_files": [],
@@ -206,7 +206,7 @@ Returns forkable user-message entries for the active session:
 ```json
 {
   "messages": [
-    { "entryId": "a13f8c42", "text": "User message text" }
+    { "entryId": "a13f8c42b7d94e10c5f8a3b6d2e9f401", "text": "User message text" }
   ]
 }
 ```

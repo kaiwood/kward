@@ -791,7 +791,7 @@ module Kward
     end
 
     def next_entry_id(_path)
-      SecureRandom.hex(4)
+      SecureRandom.hex(16)
     end
 
     def message_entry_id(message)
