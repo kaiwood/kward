@@ -62,7 +62,7 @@ module Kward
       attr_accessor :leaf_id
 
       # Creates an object for JSONL session persistence.
-      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil, leaf_id: nil, modified_at: nil)
+      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil, leaf_id: nil, modified_at: nil, system_prompt_hash: nil)
         @store = store
         @id = id
         @path = path
@@ -73,6 +73,7 @@ module Kward
         @parent_id = parent_id
         @parent_path = parent_path
         @leaf_id = leaf_id
+        @system_prompt_hash = system_prompt_hash
       end
 
       # Installs persistence callbacks on `conversation`.
@@ -115,7 +116,12 @@ module Kward
 
       # Persists the current system prompt as audit metadata when it changes.
       def append_system_prompt_snapshot(system_message, reason: "changed")
-        @store.append_system_prompt_snapshot(@path, system_message, reason: reason)
+        @system_prompt_hash = @store.append_system_prompt_snapshot(
+          @path,
+          system_message,
+          reason: reason,
+          latest_hash: @system_prompt_hash
+        )
       end
 
       # Persists the session memory snapshot used when the session is restored.
@@ -326,7 +332,8 @@ module Kward
         parent_id: header["parentId"],
         parent_path: header["parentPath"],
         leaf_id: leaf_id,
-        modified_at: session_modified_at(records, fallback: created_at)
+        modified_at: session_modified_at(records, fallback: created_at),
+        system_prompt_hash: latest_system_prompt_hash(records)
       )
       session.attach(conversation)
       [session, conversation]
@@ -493,18 +500,22 @@ module Kward
       end
     end
 
-    def append_system_prompt_snapshot(path, system_message, reason: "changed")
+    def append_system_prompt_snapshot(path, system_message, reason: "changed", latest_hash: nil)
       content = MessageAccess.content(system_message).to_s
-      return if content.empty?
-      return if latest_system_prompt_hash(records_from_file(path)) == system_prompt_hash(content)
+      return latest_hash if content.empty?
+
+      hash = system_prompt_hash(content)
+      latest_hash ||= latest_system_prompt_hash(records_from_file(path))
+      return latest_hash if latest_hash == hash
 
       append_record(path, {
         type: "system_prompt",
         timestamp: Time.now.utc.iso8601(3),
         reason: reason.to_s,
-        hash: system_prompt_hash(content),
+        hash: hash,
         content: content
       })
+      hash
     end
 
     def self.safe_cwd(cwd)

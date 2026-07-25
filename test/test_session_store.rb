@@ -1,6 +1,17 @@
 require_relative "test_helper"
 
 class TestSessionStore < KwardTestCase
+  class CountingSessionStore < Kward::SessionStore
+    attr_accessor :record_reads
+
+    private
+
+    def records_from_file(path)
+      @record_reads = @record_reads.to_i + 1
+      super
+    end
+  end
+
   def test_session_store_restores_read_paths_and_skips_bad_jsonl
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|
@@ -40,6 +51,19 @@ class TestSessionStore < KwardTestCase
       assert snapshots.all? { |record| record["hash"].start_with?("sha256:") }
       assert_equal ["attach", "changed"], snapshots.map { |record| record["reason"] }
       assert_empty jsonl_records(session.path).select { |record| record["type"] == "message" && record.dig("message", "role") == "system" }
+    end
+  end
+
+  def test_loading_session_reuses_system_prompt_hash_without_rereading_jsonl
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      session.attach(Kward::Conversation.new)
+
+      loaded_store = CountingSessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      loaded_store.load(session.path)
+
+      assert_equal 1, loaded_store.record_reads
     end
   end
 
