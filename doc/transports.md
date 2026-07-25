@@ -1,12 +1,13 @@
 # Transports
 
-A transport lets people use a normal Kward session through another service,
-such as Telegram, Slack, Discord, email, or HTTP. It receives messages from the
-service and sends Kward's responses back.
+A transport lets people use Kward through another service, such as Telegram,
+Slack, Discord, email, or HTTP. It receives messages from the service and sends
+Kward's responses back.
 
-The transport handles service-specific details such as identities and message
-formatting. Kward continues to handle sessions, agents, tools, saved state,
-approvals, and workspace policy.
+A transport can target either a normal Kward session or an explicitly
+transport-capable plugin-owned chat. The transport handles service-specific
+details such as identities and message formatting. The target continues to
+own sessions, transcripts, tools, memory, and policy.
 
 Start with the first-party [Telegram transport](telegram.md) to see a complete
 example. It uses long polling and starts explicitly rather than with the normal
@@ -22,7 +23,9 @@ external services.
 Transport plugins are different from plugin-owned tabs:
 
 - A plugin tab runs its own chat and stores its own data.
-- A transport connects an external conversation to a normal Kward session.
+- A normal-session transport connects an external conversation to a Kward session.
+- A plugin-chat transport connects an external conversation to an explicitly
+  opted-in plugin chat and preserves that plugin's storage and model behavior.
 
 Transports run as trusted local Ruby code. Install only transports you trust.
 
@@ -59,13 +62,52 @@ Inbound platform messages are normalized before they reach Kward. A normalized
 message contains an external transport ID, conversation ID, actor identity,
 message ID, text, attachments, reply context, and an idempotency key.
 
-The transport resolves the external conversation to a Kward session, submits a
-turn, and subscribes to normalized turn events. The transport decides whether
-to stream, edit, aggregate, or otherwise render those events for its platform.
+The transport resolves the external conversation to a Kward session or an
+opted-in plugin chat, submits a turn, and subscribes to normalized turn events.
+The transport decides whether to stream, edit, aggregate, or otherwise render
+those events for its platform.
 
 A delivery failure must not fail the underlying model turn. The transport is
 responsible for retrying or reporting delivery failures, while the transcript
 and final turn status remain authoritative.
+
+### Targeting a plugin-owned chat
+
+A plugin must explicitly opt into external targeting:
+
+```ruby
+plugin.tab_type(
+  "example-bot",
+  id: "com.example.bot",
+  rpc: true,
+  transport: true
+) do |host, descriptor|
+  ExampleBot::Chat.new(client: host.client, descriptor: descriptor)
+end
+```
+
+A transport resolves it through the host instead of opening a workspace session:
+
+```ruby
+chat = host.plugin_chats.resolve(
+  type_id: "com.example.bot",
+  conversation: conversation,
+  actor: actor,
+  scope_key: "conversation:#{conversation.external_id}"
+)
+
+turn = chat.start_turn(message.text)
+turn.subscribe { |event| render_event(event) }
+```
+
+Plugin-chat drivers may accept a `context:` keyword on `submit`. Transport turns
+provide the authenticated actor there. Existing drivers that do not accept the
+keyword continue to work, but cannot use actor-specific context.
+
+Plugin-chat transport IDs, turn events, transcript storage, and authorization
+remain separate from normal workspace sessions. A plugin's `singleton: :global`
+setting also means that all transport conversations share that one plugin
+runtime, so use scoped plugin drivers when participants must be isolated.
 
 ## Interactions
 
@@ -128,10 +170,12 @@ Kward::Transport.execution_profile(
 )
 ```
 
-For strong separation, run the restricted transport as a separate process
-with a dedicated `HOME`, config directory, plugin directory, session store,
-and empty workspace. Do not rely on a system prompt as the only isolation
-boundary.
+Execution profiles apply to normal session targets. A plugin-owned chat's
+custom tools, memory, persona, and transcript policy remain the plugin's
+responsibility; an `isolated_chat` profile does not automatically disable them.
+For strong separation, run the restricted transport as a separate process with
+a dedicated `HOME`, config directory, plugin directory, session store, and empty
+workspace. Do not rely on a system prompt as the only isolation boundary.
 
 ## Lifecycle
 

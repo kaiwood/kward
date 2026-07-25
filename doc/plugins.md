@@ -224,6 +224,7 @@ The observer context exposes the plugin tab's `messages` through
 - `messages` — renderable transcript messages;
 - `submit(input, display_input:, cancellation:, steering:)` — a turn method
   that returns the final response and yields stream events;
+- optionally `submit(..., context:)` — trusted actor context for transport turns;
 - `descriptor` — the durable tab descriptor;
 - `supports_steering?` and `assistant_label`.
 
@@ -238,6 +239,22 @@ plugin.tab_type "example", id: "com.example.chat", rpc: true do |host, descripto
   ExampleChat.new(client: host.client, descriptor: descriptor)
 end
 ```
+
+Set `transport: true` separately when an external transport may target the
+plugin chat. Do not use `rpc: true` as an implicit external-access permission:
+
+```ruby
+plugin.tab_type "example", id: "com.example.chat", rpc: true, transport: true do |host, descriptor|
+  ExampleChat.new(client: host.client, descriptor: descriptor)
+end
+```
+
+Transport-created plugin chats receive a descriptor containing a stable scoped
+key, transport identity, external conversation, and actor metadata. Use the
+scope to select separate transcript and memory roots. The driver may accept a
+`context:` keyword on `submit` to receive the authenticated actor for each
+turn; access decisions must still be enforced by the transport and plugin code,
+not by model instructions.
 
 RPC clients discover opted-in types through `initialize.capabilities.pluginChats`, open a chat with `pluginChats/open`, and must explicitly subscribe before receiving live `pluginChat/event` notifications. See [RPC](rpc.md) for the protocol. Plugin tabs remain CLI-only unless they opt in.
 
