@@ -331,6 +331,7 @@ module Kward
         chat_openrouter_provider(
           url: url,
           token: token,
+          provider: provider,
           request_body: request_body,
           current_model: current_model,
           on_assistant_delta: on_assistant_delta,
@@ -416,7 +417,7 @@ module Kward
       attach_response_metadata(message, provider: "Local", model: current_model)
     end
 
-    def chat_openrouter_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
+    def chat_openrouter_provider(url:, token:, provider: "OpenRouter", request_body:, current_model:, on_assistant_delta:, cancellation:)
       request = Http.apply_user_agent(Net::HTTP::Post.new(url))
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"
@@ -430,14 +431,15 @@ module Kward
       cancellation&.raise_if_cancelled!
 
       unless response.is_a?(Net::HTTPSuccess)
-        raise RequestError.new(provider: "OpenRouter", code: response.code, body: response.body)
+        body = provider == "OpenRouter" ? response.body : redact(response.body, token)
+        raise RequestError.new(provider: provider, code: response.code, body: body)
       end
 
       body = JSON.parse(response.body)
       message = body.fetch("choices").first.fetch("message")
       cancellation&.raise_if_cancelled!
       on_assistant_delta&.call(message.fetch("content", ""))
-      attach_response_metadata(message, provider: "OpenRouter", model: current_model, usage: normalized_usage(body["usage"]))
+      attach_response_metadata(message, provider: provider, model: current_model, usage: normalized_usage(body["usage"]))
     end
 
     def auth_error_for(provider)
@@ -871,6 +873,11 @@ module Kward
         return [OPENROUTER_URL, openrouter_api_key, provider, nil]
       end
 
+      if (catalog_provider = ProviderCatalog.find_by_name(provider)) && catalog_provider.protocol == "openai_chat"
+        runtime = ProviderCatalog.runtime(catalog_provider.id)
+        return [URI(runtime.chat_url), @api_key_store.fetch(catalog_provider.id), provider, nil]
+      end
+
       openai_token = @openai_access_token || @oauth.access_token
       if openai_token
         [CODEX_URL, openai_token, "Codex", @oauth.respond_to?(:account_id) ? @oauth.account_id : nil]
@@ -906,7 +913,8 @@ module Kward
       when "Anthropic"
         !anthropic_access_token.to_s.empty?
       else
-        false
+        catalog_provider = ProviderCatalog.find_by_name(provider)
+        catalog_provider&.protocol == "openai_chat" && !@api_key_store.fetch(catalog_provider.id).to_s.empty?
       end
     rescue StandardError
       false

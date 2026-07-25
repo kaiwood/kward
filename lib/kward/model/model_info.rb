@@ -1,4 +1,5 @@
 require_relative "../config_files"
+require_relative "provider_catalog"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -127,6 +128,12 @@ module Kward
     def model_for(provider, config:, override_model: nil, env: ENV)
       return override_model if override_model
 
+      catalog_provider = ProviderCatalog.find_by_name(provider) || ProviderCatalog.find(provider.to_s.downcase)
+      if catalog_provider && !["anthropic", "openrouter", "copilot"].include?(catalog_provider.id)
+        runtime = ProviderCatalog.runtime(catalog_provider.id)
+        return env["#{catalog_provider.id.upcase}_MODEL"] || ConfigFiles.config_value(config, runtime.model_config_key, "model")
+      end
+
       case provider
       when "Local"
         env["KWARD_LOCAL_MODEL"] || ConfigFiles.config_value(config, "local_model")
@@ -191,6 +198,9 @@ module Kward
     end
 
     def provider_label(provider)
+      catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
+      return catalog_provider.name if catalog_provider && !["openai", "copilot"].include?(catalog_provider.id)
+
       case provider.to_s.downcase
       when "openrouter" then "OpenRouter"
       when "copilot" then "Copilot"
@@ -202,6 +212,9 @@ module Kward
     end
 
     def provider_config_value(provider)
+      catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
+      return ProviderCatalog.runtime(catalog_provider.id).id if catalog_provider && catalog_provider.id != "openai"
+
       case provider.to_s.downcase
       when "openrouter" then "openrouter"
       when "copilot" then "copilot"
@@ -212,6 +225,9 @@ module Kward
     end
 
     def config_key_for_provider(provider)
+      catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
+      return ProviderCatalog.runtime(catalog_provider.id).model_config_key if catalog_provider && catalog_provider.id != "openai"
+
       case provider.to_s.downcase
       when "openrouter" then "openrouter_model"
       when "copilot" then "copilot_model"
@@ -222,6 +238,9 @@ module Kward
     end
 
     def reasoning_config_key_for_provider(provider)
+      catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
+      return ProviderCatalog.runtime(catalog_provider.id).reasoning_config_key if catalog_provider && catalog_provider.id != "openai"
+
       case provider.to_s.downcase
       when "openrouter" then "openrouter_reasoning_effort"
       when "copilot" then "copilot_reasoning_effort"

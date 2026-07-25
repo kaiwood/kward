@@ -88,6 +88,15 @@ class TestModelInfo < KwardTestCase
     assert_equal "local_reasoning_effort", Kward::ModelInfo.reasoning_config_key_for_provider("local")
   end
 
+  def test_catalog_provider_uses_its_own_model_configuration
+    config = { "groq_model" => "llama-test" }
+
+    assert_equal "Groq", Kward::ModelInfo.provider_label("groq")
+    assert_equal "groq", Kward::ModelInfo.provider_config_value("Groq")
+    assert_equal "groq_model", Kward::ModelInfo.config_key_for_provider("Groq")
+    assert_equal "llama-test", Kward::ModelInfo.model_for("Groq", config: config, env: {})
+  end
+
   def test_local_model_and_provider_metadata
     config = { "local_model" => "qwen2.5-coder:7b" }
 
