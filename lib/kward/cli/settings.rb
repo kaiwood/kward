@@ -743,9 +743,13 @@ module Kward
         end
 
         models ||= normalized_available_models(conversation)
-        choices = model_choices(models, conversation)
+        choices = model_choices(models, conversation) + ["Refresh model list"]
         selected = @prompt.select("Default model", choices, title: "Models", custom: true)
         return unless selected
+        if selected.to_s == "Refresh model list"
+          @client.refresh_available_models if @client.respond_to?(:refresh_available_models)
+          return configure_model(conversation)
+        end
 
         provider, model = selected_model(selected, models)
         raise "Model must be a non-empty string" if model.to_s.strip.empty?

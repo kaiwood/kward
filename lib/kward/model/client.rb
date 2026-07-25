@@ -260,6 +260,17 @@ module Kward
       models.sort_by { |model| [model[:provider], model[:id]] }
     end
 
+    # Refreshes cached choices for the active API-key provider.
+    def refresh_available_models
+      provider = current_provider
+      catalog_provider = ProviderCatalog.find_by_name(provider)
+      return available_models unless catalog_provider&.api_key?
+      return available_models unless ProviderCatalog.runtime(catalog_provider.id).automatic_model_discovery?
+
+      ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).refresh
+      available_models
+    end
+
     # Projects messages/tools into the provider-specific context shape without sending it.
     def current_context_parts(messages, tools, provider: current_provider, model: nil)
       build_context_parts(ModelInfo.provider_label(provider), messages, tools, model: model)
