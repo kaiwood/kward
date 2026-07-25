@@ -31,7 +31,7 @@ module Kward
       end
 
       def open(type_id:)
-        chat = @runtime.open(type_id: type_id, surface: :rpc, scope_key: "rpc")
+        chat = @runtime.open(type_id: type_id, surface: :rpc, scope_key: "owner")
         payload = chat_payload(chat)
         return payload if chat.driver.respond_to?(:transcript_page)
 
@@ -104,7 +104,7 @@ module Kward
         type = supported_types.find { |entry| entry.id == chat_id.to_s }
         raise ArgumentError, "Unknown plugin chat: #{chat_id}" unless type
 
-        @runtime.open(type_id: type.id, surface: :rpc, scope_key: "rpc")
+        @runtime.open(type_id: type.id, surface: :rpc, scope_key: "owner")
       end
 
       def notify_event(event)
