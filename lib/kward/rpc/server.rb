@@ -60,7 +60,7 @@ module Kward
       ].freeze
       TURN_METHODS = ["turns/start", "turns/cancel", "turns/status", "turns/events", "turns/list", "turns/listActive"].freeze
       PLUGIN_CHAT_METHODS = ["pluginChats/list", "pluginChats/open", "pluginChats/transcript", "pluginChats/subscribe", "pluginChats/unsubscribe", "pluginChats/turns/start", "pluginChats/turns/cancel", "pluginChats/turns/status", "pluginChats/turns/events", "pluginChats/turns/list", "pluginChats/turns/listActive"].freeze
-      MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set"].freeze
+      MODEL_METHODS = ["models/list", "models/current", "models/set", "reasoning/set", "models/refresh"].freeze
       RUNTIME_METHODS = ["runtime/state", "runtime/stats"].freeze
       RUNTIME_SETTING_METHODS = ["runtime/updateSetting", "runtime/reload"].freeze
       AUTH_METHODS = [
@@ -266,6 +266,8 @@ module Kward
           models_set(params)
         when MODEL_METHODS[3]
           reasoning_set(params)
+        when MODEL_METHODS[4]
+          models_refresh(params)
         when RUNTIME_METHODS[0]
           @session_manager.runtime_state(session_id: params.fetch("sessionId"))
         when RUNTIME_METHODS[1]
@@ -525,7 +527,7 @@ module Kward
             methods: MODEL_METHODS,
             fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
             scopedModels: false,
-            openRouterRefresh: { supported: false, reason: "cliOnlyCacheRefresh" }
+            refresh: { supported: true, method: MODEL_METHODS[4], providerParameter: true }
           },
           runtime: {
             supported: true,
@@ -554,11 +556,19 @@ module Kward
           },
           auth: {
             supported: true,
-            providerFormat: "kward-auth-v1",
+            providerFormat: "kward-auth-v2",
             methods: AUTH_METHODS,
-            oauthProviders: ["openai", "anthropic", "github"],
-            unsupportedOAuthProviders: { github: "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet." },
-            apiKeyProviders: ["openrouter"],
+            providerCatalog: true,
+            authenticationMethods: ["api_key", "oauth"],
+            oauthProviders: ["openai", "anthropic"],
+            unsupportedOAuthProviders: {
+              copilot: "OAuth login is available only in the interactive CLI.",
+              openrouter: "No official stable third-party OAuth flow is available.",
+              xai: "No official stable third-party OAuth flow is available."
+            },
+            apiKeyProviders: ProviderCatalog.api_key_providers.map(&:id),
+            privateCredentialStorage: true,
+            sanitizedStatus: true,
             logout: true
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
@@ -807,15 +817,19 @@ module Kward
       end
 
       def auth_login_with_api_key(params)
-        result = @auth_manager.login_with_api_key(provider_id: params.fetch("providerId"), api_key: params.fetch("apiKey"))
+        result = @auth_manager.login_with_api_key(provider_id: params.fetch("providerId"), api_key: params.fetch("apiKey"), configuration: params["configuration"])
         @session_manager.refresh_client_config
         result
       end
 
       def auth_logout_provider(params)
-        result = @auth_manager.logout_provider(provider_id: params.fetch("providerId"))
+        result = @auth_manager.logout_provider(provider_id: params.fetch("providerId"), auth_method: params["authMethod"])
         @session_manager.refresh_client_config
         result
+      end
+
+      def models_refresh(params)
+        { models: @session_manager.refresh_models(provider: params["provider"]) }
       end
 
       def models_current

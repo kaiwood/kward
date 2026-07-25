@@ -239,6 +239,33 @@ class TestRPCConfigManager < KwardTestCase
     assert_equal "[REDACTED]", redacted["authorization"]
   end
 
+  def test_models_refresh_forwards_provider_and_returns_sanitized_models
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      client = ReloadableFakeClient.new([], config_path)
+      refreshed = []
+      client.define_singleton_method(:refresh_available_models) do |provider: nil|
+        refreshed << provider
+        [{ provider: "Groq", id: "refreshed-model", current: false }]
+      end
+      client.define_singleton_method(:available_models) do
+        [{ provider: "Groq", id: "refreshed-model", current: false }]
+      end
+
+      messages = run_rpc([
+        { jsonrpc: "2.0", id: 1, method: "models/refresh", params: { provider: "Groq" } },
+        { jsonrpc: "2.0", id: 2, method: "models/set", params: { provider: "Groq", model: "refreshed-model" } },
+        { jsonrpc: "2.0", id: 3, method: "shutdown" }
+      ], client: client, env: { "KWARD_CONFIG_PATH" => config_path })
+
+      assert_equal ["Groq"], refreshed
+      assert messages[0]["result"]["models"].any? { |model| model["provider"] == "Groq" && model["id"] == "refreshed-model" }
+      config = JSON.parse(File.read(config_path))
+      assert_equal "groq", config["provider"]
+      assert_equal "refreshed-model", config["groq_model"]
+    end
+  end
+
   def test_runtime_update_setting_and_reload
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

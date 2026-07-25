@@ -153,7 +153,7 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["models"]["methods"], "models/set"
     refute_includes capabilities["models"]["methods"], "openrouter/catalog"
     assert_equal false, capabilities["models"]["scopedModels"]
-    assert_equal({ "supported" => false, "reason" => "cliOnlyCacheRefresh" }, capabilities["models"]["openRouterRefresh"])
+    assert_equal({ "supported" => true, "method" => "models/refresh", "providerParameter" => true }, capabilities["models"]["refresh"])
     assert_equal true, capabilities["runtime"]["supported"]
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]
@@ -172,10 +172,12 @@ class TestRPCServer < KwardTestCase
     assert_equal ["runtime/updateSetting", "runtime/reload"], capabilities["runtimeSettings"]["methods"]
     assert_equal ["defaultModel", "defaultThinkingLevel"], capabilities["runtimeSettings"]["settings"]
     assert_equal true, capabilities["auth"]["supported"]
-    assert_equal "kward-auth-v1", capabilities["auth"]["providerFormat"]
-    assert_equal ["openai", "anthropic", "github"], capabilities["auth"]["oauthProviders"]
-    assert_equal "CLI-only GitHub login for Copilot scaffolding; RPC login is not implemented yet.", capabilities["auth"].dig("unsupportedOAuthProviders", "github")
-    assert_equal ["openrouter"], capabilities["auth"]["apiKeyProviders"]
+    assert_equal "kward-auth-v2", capabilities["auth"]["providerFormat"]
+    assert_equal ["openai", "anthropic"], capabilities["auth"]["oauthProviders"]
+    assert_equal "OAuth login is available only in the interactive CLI.", capabilities["auth"].dig("unsupportedOAuthProviders", "copilot")
+    assert_equal Kward::ProviderCatalog.api_key_providers.map(&:id), capabilities["auth"]["apiKeyProviders"]
+    assert_equal true, capabilities["auth"]["privateCredentialStorage"]
+    assert_equal true, capabilities["auth"]["sanitizedStatus"]
     assert_equal true, capabilities["auth"]["logout"]
     assert_includes capabilities["auth"]["methods"], "auth/providers"
     assert_includes capabilities["auth"]["methods"], "auth/loginWithApiKey"

@@ -37,7 +37,7 @@ module Kward
 
       def secret_key?(key)
         text = key.to_s
-        return false if text == "apiKeyProviders"
+        return false if ["apiKeyProviders", "privateCredentialStorage", "storedCredentialType"].include?(text)
 
         text.match?(SECRET_KEYS)
       end

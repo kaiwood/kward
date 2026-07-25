@@ -269,7 +269,7 @@ module Kward
     # Refreshes cached choices for an API-key provider.
     def refresh_available_models(provider: nil)
       provider ||= current_provider
-      catalog_provider = ProviderCatalog.find_by_name(provider)
+      catalog_provider = ProviderCatalog.find_by_name(provider) || ProviderCatalog.find(provider.to_s.downcase)
       return available_models unless catalog_provider&.api_key?
       return available_models unless ProviderCatalog.runtime(catalog_provider.id).automatic_model_discovery?
 

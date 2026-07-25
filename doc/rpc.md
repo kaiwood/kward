@@ -695,7 +695,15 @@ Returns `{ "memories": [] }`.
 
 ### `models/list`
 
-Returns known model entries from the current client/config backend. OpenRouter entries come from the local OpenRouter model cache when present; otherwise Kward falls back to defaults/currently configured options. Refresh the cache with the CLI-only `kward openrouter refresh` command. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`.
+Returns known model entries from configured provider catalogs, including cached and curated fallbacks. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`.
+
+### `models/refresh`
+
+Params:
+
+- `provider`: optional configured provider name. Defaults to the active provider.
+
+Refreshes that provider's live model catalog when discovery is supported and returns the complete sanitized model list. Providers without live discovery retain configured or curated choices.
 
 ### `models/current`
 

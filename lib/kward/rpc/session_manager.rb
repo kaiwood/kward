@@ -545,6 +545,11 @@ module Kward
         normalized
       end
 
+      def refresh_models(provider: nil)
+        @client.refresh_available_models(provider: provider) if @client.respond_to?(:refresh_available_models)
+        available_models
+      end
+
       def current_model
         provider = @client.respond_to?(:current_provider) ? @client.current_provider : nil
         model = @client.respond_to?(:current_model) ? @client.current_model : nil

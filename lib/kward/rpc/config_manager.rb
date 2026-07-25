@@ -1,6 +1,9 @@
 require_relative "../auth/openai_oauth"
+require_relative "../auth/api_key_store"
 require_relative "../config_files"
 require_relative "../model/model_info"
+require_relative "../model/provider_catalog"
+require_relative "../model/azure_openai_config"
 require_relative "redactor"
 
 # Namespace for the Kward CLI agent runtime.
@@ -9,8 +12,9 @@ module Kward
   module RPC
     # RPC configuration manager for reading and updating user config.
     class ConfigManager
-      def initialize(config_path: OpenAIOAuth.default_config_path)
+      def initialize(config_path: OpenAIOAuth.default_config_path, api_key_store: nil)
         @config_path = File.expand_path(config_path)
+        @api_key_store = api_key_store || APIKeyStore.new(path: File.join(File.dirname(@config_path), "api_keys.json"), config_path: @config_path)
       end
 
       attr_reader :config_path
@@ -39,12 +43,35 @@ module Kward
       end
 
       def set_api_key(provider_id, api_key)
-        provider_id = provider_id.to_s
-        api_key = api_key.to_s.strip
-        raise "API key must be a non-empty string" if api_key.empty?
-        raise "Unsupported API key provider: #{provider_id}" unless provider_id == "openrouter"
+        provider = ProviderCatalog.fetch(provider_id)
+        raise "#{provider.name} does not accept an API key" unless provider.api_key?
 
-        update("openrouter_api_key" => api_key)
+        @api_key_store.store(provider.id, api_key)
+      end
+
+      def api_key_status(provider_id)
+        provider = ProviderCatalog.fetch(provider_id)
+        configured = @api_key_store.configured?(provider.id)
+        stored = @api_key_store.stored?(provider.id)
+        {
+          configured: configured,
+          stored: stored,
+          source: configured ? (environment_api_key?(provider) ? "environment" : "stored") : nil,
+          canLogout: stored
+        }.compact
+      end
+
+      def delete_api_key(provider_id)
+        @api_key_store.delete(provider_id)
+      end
+
+      def configure_azure_openai(values)
+        setup = AzureOpenAIConfig.new(
+          endpoint: values["endpoint"] || values[:endpoint],
+          deployment: values["deployment"] || values[:deployment],
+          api_version: values["apiVersion"] || values[:apiVersion] || values["api_version"] || values[:api_version]
+        )
+        update(setup.to_config)
       end
 
       def delete_key(key)
@@ -60,6 +87,10 @@ module Kward
       end
 
       private
+
+      def environment_api_key?(provider)
+        provider.api_key_env.any? { |name| !ENV[name].to_s.strip.empty? }
+      end
 
       def load_config
         ConfigFiles.read_config(@config_path)

@@ -4,6 +4,7 @@ require_relative "../auth/anthropic_oauth"
 require_relative "../auth/github_oauth"
 require_relative "../auth/openai_oauth"
 require_relative "../model/client"
+require_relative "../model/provider_catalog"
 require_relative "config_manager"
 
 # Namespace for the Kward CLI agent runtime.
@@ -25,45 +26,44 @@ module Kward
       end
 
       def status
-        oauth = @oauth_factory.call
-        config = stored_config
+        provider_status = providers.fetch(:providers)
         {
-          openaiOAuth: oauth.logged_in?,
-          openaiAccountId: oauth.respond_to?(:account_id) ? oauth.account_id : nil,
-          openrouterApiKey: !ENV["OPENROUTER_API_KEY"].to_s.empty? || !config["openrouter_api_key"].to_s.empty?,
+          providers: provider_status,
+          openaiOAuth: oauth_status("openai")[:configured],
+          openrouterApiKey: @config_manager.api_key_status("openrouter")[:configured],
           openaiAccessToken: !ENV["OPENAI_ACCESS_TOKEN"].to_s.empty?,
-          anthropicOAuth: @anthropic_oauth_factory.call.logged_in?,
-          githubOAuth: @github_oauth_factory.call.logged_in?
+          anthropicOAuth: oauth_status("anthropic")[:configured],
+          githubOAuth: oauth_status("copilot")[:configured]
         }
       rescue StandardError => e
-        { openaiOAuth: false, error: e.message }
+        { providers: [], openaiOAuth: false, error: e.message }
       end
 
       def providers
-        { providers: [openai_provider, anthropic_provider, openrouter_provider, github_provider] }
+        { providers: ProviderCatalog.all.map { |provider| provider_payload(provider) } }
       end
 
-      def login_with_api_key(provider_id:, api_key:)
-        provider_id = provider_id.to_s
-        @config_manager.set_api_key(provider_id, api_key)
-        { providerId: provider_id, message: "Saved API key for #{provider_name(provider_id)}." }
+      def login_with_api_key(provider_id:, api_key:, configuration: nil)
+        raise ArgumentError, "API key must be a non-empty string" if api_key.to_s.strip.empty?
+
+        provider = ProviderCatalog.fetch(provider_id)
+        @config_manager.configure_azure_openai(configuration || {}) if provider.id == "azure_openai"
+        @config_manager.set_api_key(provider.id, api_key)
+        { providerId: provider.id, authMethod: "api_key", configured: true, message: "Saved API key for #{provider.name}." }
       end
 
-      def logout_provider(provider_id:)
-        provider_id = provider_id.to_s
-        case provider_id
-        when "openai"
-          logout_openai
-          { providerId: provider_id, message: "Logged out of OpenAI." }
-        when "anthropic"
-          logout_anthropic
-          { providerId: provider_id, message: "Logged out of Anthropic." }
-        when "openrouter"
-          @config_manager.delete_key("openrouter_api_key")
-          { providerId: provider_id, message: "Logged out of OpenRouter." }
-        else
-          raise "Unsupported auth provider: #{provider_id}"
+      def logout_provider(provider_id:, auth_method: nil)
+        provider = ProviderCatalog.fetch(provider_id)
+        auth_method = auth_method.to_s unless auth_method.nil?
+        removed = false
+        if provider.api_key? && (auth_method.nil? || auth_method == "api_key")
+          removed = @config_manager.delete_api_key(provider.id) || removed
         end
+        if provider.oauth? && (auth_method.nil? || auth_method == "oauth")
+          removed = logout_oauth_provider(provider.id) || removed
+        end
+
+        { providerId: provider.id, authMethod: auth_method, removed: removed, message: "Logged out of #{provider.name}." }.compact
       end
 
       def login_with_oauth(provider_id:, timeout_seconds: 120)
@@ -73,8 +73,10 @@ module Kward
           start_oauth_login(provider_id: "openai", oauth: @oauth_factory.call, timeout_seconds: timeout_seconds)
         when "anthropic"
           start_oauth_login(provider_id: "anthropic", oauth: @anthropic_oauth_factory.call, timeout_seconds: timeout_seconds)
-        when "github"
-          raise "GitHub OAuth is supported in the CLI with `ruby lib/main.rb login github`, but RPC browser login is not implemented yet."
+        when "github", "copilot"
+          raise "GitHub Copilot OAuth is unavailable over RPC; use the interactive CLI login."
+        when "openrouter", "xai"
+          raise "#{ProviderCatalog.fetch(provider_id).name} OAuth is unavailable because no official stable third-party flow is supported."
         else
           raise "Unsupported OAuth provider: #{provider_id}"
         end
@@ -121,144 +123,97 @@ module Kward
 
       private
 
-      def fetch_login(login_id)
-        @mutex.synchronize { @logins[login_id.to_s] } || raise("Unknown login: #{login_id}")
-      end
-
-      def stored_config
-        @config_manager.read(redacted: false)
-      rescue StandardError
-        {}
-      end
-
-      def openai_provider
-        oauth = @oauth_factory.call
-        env_configured = !ENV["OPENAI_ACCESS_TOKEN"].to_s.empty?
-        stored_configured = oauth.logged_in?
-        provider = {
-          id: "openai",
-          name: "OpenAI",
-          authType: "oauth",
-          configured: env_configured || stored_configured,
-          storedCredentialType: "oauth",
-          canLogout: stored_configured,
-          usesCallbackServer: true
-        }
-        provider[:source] = env_configured ? "environment" : "stored" if provider[:configured]
-        provider[:label] = provider[:configured] ? "Signed in" : "Not signed in"
-        provider
-      rescue StandardError
+      def provider_payload(provider)
+        methods = []
+        if provider.api_key?
+          status = @config_manager.api_key_status(provider.id)
+          methods << {
+            id: "api_key",
+            supported: true,
+            configured: status[:configured],
+            source: status[:source],
+            canLogout: status[:canLogout]
+          }.compact
+        end
+        methods << oauth_method_payload(provider) if provider.oauth?
+        configured_methods = methods.select { |method| method[:configured] }
+        preferred = methods.find { |method| method[:id] == "oauth" } || methods.first
         {
-          id: "openai",
-          name: "OpenAI",
-          authType: "oauth",
-          configured: !ENV["OPENAI_ACCESS_TOKEN"].to_s.empty?,
-          source: (!ENV["OPENAI_ACCESS_TOKEN"].to_s.empty? ? "environment" : nil),
-          label: (!ENV["OPENAI_ACCESS_TOKEN"].to_s.empty? ? "Signed in" : "Not signed in"),
-          storedCredentialType: "oauth",
-          canLogout: false,
-          usesCallbackServer: true
+          id: provider.id,
+          runtimeId: ProviderCatalog.runtime(provider.id).id,
+          name: provider.name,
+          authType: preferred&.fetch(:id, nil),
+          authMethods: methods,
+          configured: !configured_methods.empty?,
+          source: configured_methods.find { |method| method[:source] == "environment" }&.fetch(:source, nil) || configured_methods.first&.fetch(:source, nil),
+          canLogout: configured_methods.any? { |method| method[:canLogout] },
+          usesCallbackServer: methods.any? { |method| method[:usesCallbackServer] },
+          label: configured_methods.empty? ? "Not configured" : "Configured"
         }.compact
       end
 
-      def anthropic_provider
-        oauth = @anthropic_oauth_factory.call
-        stored_configured = oauth.logged_in?
-        provider = {
-          id: "anthropic",
-          name: "Anthropic",
-          authType: "oauth",
-          configured: stored_configured,
-          storedCredentialType: "oauth",
-          canLogout: stored_configured,
-          usesCallbackServer: true
-        }
-        provider[:source] = "stored" if provider[:configured]
-        provider[:label] = provider[:configured] ? "Signed in" : "Not signed in"
-        provider
-      rescue StandardError
+      def oauth_method_payload(provider)
+        status = oauth_status(provider.id)
+        supported = ["openai", "anthropic"].include?(provider.id)
+        reason = unless supported
+                   if ["openrouter", "xai"].include?(provider.id)
+                     "No official stable third-party OAuth flow is available."
+                   else
+                     "OAuth login is available only in the interactive CLI."
+                   end
+                 end
         {
-          id: "anthropic",
-          name: "Anthropic",
-          authType: "oauth",
-          configured: false,
-          label: "Not signed in",
-          storedCredentialType: "oauth",
-          canLogout: false,
-          usesCallbackServer: true
-        }
+          id: "oauth",
+          name: provider.oauth_name,
+          supported: supported,
+          configured: status[:configured],
+          source: status[:source],
+          canLogout: status[:canLogout],
+          usesCallbackServer: supported,
+          reason: reason
+        }.compact
       end
 
-      def openrouter_provider
-        config = stored_config
-        env_configured = !ENV["OPENROUTER_API_KEY"].to_s.empty?
-        stored_configured = !config["openrouter_api_key"].to_s.empty?
-        provider = {
-          id: "openrouter",
-          name: "OpenRouter",
-          authType: "api_key",
-          configured: env_configured || stored_configured,
-          canLogout: stored_configured
-        }
-        provider[:source] = env_configured ? "environment" : "stored" if provider[:configured]
-        provider[:storedCredentialType] = "api_key" if stored_configured
-        provider[:label] = provider[:configured] ? "API key configured" : "API key not configured"
-        provider
-      end
-
-      def github_provider
-        oauth = @github_oauth_factory.call
-        env_configured = !ENV["COPILOT_GITHUB_TOKEN"].to_s.empty?
-        stored_configured = oauth.logged_in? && !env_configured
-        provider = {
-          id: "github",
-          name: "GitHub",
-          authType: "oauth",
-          configured: env_configured || stored_configured,
-          storedCredentialType: "oauth",
-          canLogout: false,
-          usesCallbackServer: false,
-          supported: false,
-          reason: "GitHub OAuth is available in the CLI for Copilot scaffolding; RPC login is not implemented yet."
-        }
-        provider[:source] = env_configured ? "environment" : "stored" if provider[:configured]
-        provider[:label] = provider[:configured] ? "Signed in" : "Not signed in"
-        provider
-      rescue StandardError
-        {
-          id: "github",
-          name: "GitHub",
-          authType: "oauth",
-          configured: false,
-          label: "Not signed in",
-          storedCredentialType: "oauth",
-          canLogout: false,
-          usesCallbackServer: false,
-          supported: false,
-          reason: "GitHub OAuth status unavailable."
-        }
-      end
-
-      def provider_name(provider_id)
+      def oauth_status(provider_id)
         case provider_id
-        when "openrouter" then "OpenRouter"
-        when "openai" then "OpenAI"
-        when "anthropic" then "Anthropic"
-        when "github" then "GitHub"
-        else provider_id
+        when "openai"
+          oauth_credential_status(@oauth_factory.call, env_name: "OPENAI_ACCESS_TOKEN")
+        when "anthropic"
+          oauth_credential_status(@anthropic_oauth_factory.call)
+        when "copilot"
+          oauth_credential_status(@github_oauth_factory.call, env_name: "COPILOT_GITHUB_TOKEN", can_logout: false)
+        else
+          { configured: false, canLogout: false }
         end
+      rescue StandardError
+        { configured: false, canLogout: false }
       end
 
-      def logout_openai
-        oauth = @oauth_factory.call
-        path = oauth.auth_path if oauth.respond_to?(:auth_path)
-        File.delete(path) if path && File.exist?(path)
+      def oauth_credential_status(oauth, env_name: nil, can_logout: true)
+        environment = env_name && !ENV[env_name].to_s.empty?
+        stored = oauth.logged_in?
+        {
+          configured: environment || stored,
+          source: environment ? "environment" : (stored ? "stored" : nil),
+          canLogout: can_logout && stored
+        }.compact
       end
 
-      def logout_anthropic
-        oauth = @anthropic_oauth_factory.call
+      def logout_oauth_provider(provider_id)
+        oauth = case provider_id
+                when "openai" then @oauth_factory.call
+                when "anthropic" then @anthropic_oauth_factory.call
+                else return false
+                end
         path = oauth.auth_path if oauth.respond_to?(:auth_path)
-        File.delete(path) if path && File.exist?(path)
+        return false unless path && File.exist?(path)
+
+        File.delete(path)
+        true
+      end
+
+      def fetch_login(login_id)
+        @mutex.synchronize { @logins[login_id.to_s] } || raise("Unknown login: #{login_id}")
       end
 
       def wait_for_callback(login, timeout_seconds:)
