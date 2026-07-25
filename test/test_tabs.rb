@@ -439,7 +439,29 @@ class TestTabs < KwardTestCase
     end
   end
 
-  def test_worktree_toggle_off_keeps_dirty_worktree_changes
+  def test_worktree_command_keeps_an_active_worktree_enabled
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+
+        cli.send(:handle_tab_command, "worktree", store)
+
+        assert binding.active?
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+        assert_includes prompt.output.join("\n"), "already using #{binding.branch}"
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
+  def test_worktree_detach_keeps_dirty_worktree_changes
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|
         store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
@@ -451,7 +473,7 @@ class TestTabs < KwardTestCase
         binding = tab.driver.worktree
         File.write(File.join(binding.path, "worktree.txt"), "keep me\n")
 
-        cli.send(:handle_tab_command, "worktree", store)
+        cli.send(:handle_tab_command, "worktree detach", store)
 
         refute binding.active?
         assert_nil tab.agent.conversation.execution_profile_context

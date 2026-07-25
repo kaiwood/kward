@@ -91,8 +91,10 @@ module Kward
 
       def handle_worktree_command(argument)
         case argument.to_s.strip
-        when "", "toggle"
-          toggle_active_tab_worktree
+        when "", "activate"
+          activate_active_tab_worktree
+        when "detach"
+          detach_current_worktree
         when "status"
           print_active_worktree_status
         when "remove"
@@ -102,21 +104,33 @@ module Kward
         when "merge abort"
           abort_active_worktree_merge
         else
-          runtime_output("Usage: /tab worktree [status|remove|merge|merge abort]")
+          runtime_output("Usage: /tab worktree [activate|detach|status|merge|merge abort|remove]")
         end
       end
 
-      def toggle_active_tab_worktree
+      def activate_active_tab_worktree
         tab = active_tab
         return runtime_output("There is no active tab.") unless tab
         return runtime_output("Worktrees are available only for normal session tabs.") if plugin_tab?(tab)
         return runtime_output("Tab #{active_tab_number} is running and cannot change workspaces yet.") if tab&.running? || tab&.local_busy? || tab&.shell
 
         binding = worktree_binding_for(tab)
-        return detach_active_worktree(tab, binding) if binding&.active?
+        return runtime_output("Tab #{active_tab_number} is already using #{binding.branch} at #{binding.path}.") if binding&.active?
         return activate_existing_worktree(tab, binding) if binding
 
         attach_new_worktree(tab)
+      rescue GitWorktreeManager::Error, Sandbox::UnavailableError => e
+        runtime_output("Worktree error: #{e.message}")
+      end
+
+      def detach_current_worktree
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+        return runtime_output("Tab #{active_tab_number} is not using its linked worktree.") unless binding.active?
+        return runtime_output("Tab #{active_tab_number} is running and cannot change workspaces yet.") if tab.running? || tab.local_busy? || tab.shell
+
+        detach_active_worktree(tab, binding)
       rescue GitWorktreeManager::Error, Sandbox::UnavailableError => e
         runtime_output("Worktree error: #{e.message}")
       end
