@@ -16,6 +16,17 @@ class TestProviderCatalog < KwardTestCase
       Kward::ProviderCatalog.oauth_providers.filter_map(&:oauth_name).sort
   end
 
+  def test_runtime_metadata_owns_provider_endpoints_and_config_keys
+    runtime = Kward::ProviderCatalog.runtime("groq")
+
+    assert_equal "groq", runtime.id
+    assert_equal "groq_model", runtime.model_config_key
+    assert_equal "https://api.groq.com/openai/v1/chat/completions", runtime.chat_url
+    assert runtime.automatic_model_discovery?
+    assert_equal :configured, Kward::ProviderCatalog.runtime("azure_openai").model_discovery
+    assert_equal "openai_api", Kward::ProviderCatalog.runtime("openai").id
+  end
+
   def test_api_key_store_prefers_the_environment
     Dir.mktmpdir do |directory|
       store = Kward::APIKeyStore.new(path: File.join(directory, "api_keys.json"), env: { "GROQ_API_KEY" => "from-environment" })

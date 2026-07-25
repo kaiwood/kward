@@ -12,20 +12,6 @@ module Kward
   # Fetches, normalizes, and caches provider model lists without storing secrets.
   class ModelCatalog
     VERSION = 1
-    MODEL_URLS = {
-      "anthropic" => "https://api.anthropic.com/v1/models",
-      "cerebras" => "https://api.cerebras.ai/v1/models",
-      "deepseek" => "https://api.deepseek.com/models",
-      "fireworks" => "https://api.fireworks.ai/inference/v1/models",
-      "gemini" => "https://generativelanguage.googleapis.com/v1beta/models",
-      "groq" => "https://api.groq.com/openai/v1/models",
-      "mistral" => "https://api.mistral.ai/v1/models",
-      "nvidia" => "https://integrate.api.nvidia.com/v1/models",
-      "openai" => "https://api.openai.com/v1/models",
-      "together" => "https://api.together.xyz/v1/models",
-      "xai" => "https://api.x.ai/v1/models"
-    }.freeze
-
     attr_reader :path
 
     def initialize(provider_id:, api_key:, path: nil, requester: nil)
@@ -37,7 +23,7 @@ module Kward
 
     def refresh
       raise "No #{@provider.name} API key found" if @api_key.empty?
-      raise "#{@provider.name} does not support automatic model discovery" unless MODEL_URLS.key?(@provider.id)
+      raise "#{@provider.name} does not support automatic model discovery" unless runtime.automatic_model_discovery?
 
       data = cache_data(normalize(response_body))
       PrivateFile.write_json(path, data)
@@ -75,10 +61,14 @@ module Kward
     end
 
     def url
-      base = MODEL_URLS.fetch(@provider.id)
+      base = runtime.model_list_url
       return URI("#{base}?key=#{URI.encode_www_form_component(@api_key)}") if @provider.id == "gemini"
 
       URI(base)
+    end
+
+    def runtime
+      ProviderCatalog.runtime(@provider.id)
     end
 
     def headers

@@ -21,6 +21,39 @@ module Kward
       end
     end
 
+    Runtime = Struct.new(:id, :model_config_key, :reasoning_config_key, :chat_url, :model_list_url, :model_discovery, keyword_init: true) do
+      def automatic_model_discovery?
+        model_discovery == :live
+      end
+    end
+
+    CHAT_URLS = {
+      "anthropic" => "https://api.anthropic.com/v1/messages",
+      "cerebras" => "https://api.cerebras.ai/v1/chat/completions",
+      "deepseek" => "https://api.deepseek.com/chat/completions",
+      "fireworks" => "https://api.fireworks.ai/inference/v1/chat/completions",
+      "groq" => "https://api.groq.com/openai/v1/chat/completions",
+      "mistral" => "https://api.mistral.ai/v1/chat/completions",
+      "nvidia" => "https://integrate.api.nvidia.com/v1/chat/completions",
+      "openai" => "https://api.openai.com/v1/responses",
+      "openrouter" => "https://openrouter.ai/api/v1/chat/completions",
+      "together" => "https://api.together.xyz/v1/chat/completions",
+      "xai" => "https://api.x.ai/v1/chat/completions"
+    }.freeze
+    MODEL_LIST_URLS = {
+      "anthropic" => "https://api.anthropic.com/v1/models",
+      "cerebras" => "https://api.cerebras.ai/v1/models",
+      "deepseek" => "https://api.deepseek.com/models",
+      "fireworks" => "https://api.fireworks.ai/inference/v1/models",
+      "gemini" => "https://generativelanguage.googleapis.com/v1beta/models",
+      "groq" => "https://api.groq.com/openai/v1/models",
+      "mistral" => "https://api.mistral.ai/v1/models",
+      "nvidia" => "https://integrate.api.nvidia.com/v1/models",
+      "openai" => "https://api.openai.com/v1/models",
+      "together" => "https://api.together.xyz/v1/models",
+      "xai" => "https://api.x.ai/v1/models"
+    }.freeze
+
     DEFINITIONS = [
       Definition.new(id: "anthropic", name: "Anthropic", api_key_env: ["ANTHROPIC_API_KEY"], protocol: "anthropic_messages", oauth_name: "Anthropic Claude"),
       Definition.new(id: "azure_openai", name: "Azure OpenAI", api_key_env: ["AZURE_OPENAI_API_KEY"], protocol: "azure_openai", requires_setup: true),
@@ -54,6 +87,19 @@ module Kward
 
     def find_by_name(name)
       DEFINITIONS.find { |provider| provider.name.casecmp?(name.to_s) }
+    end
+
+    def runtime(id)
+      provider = fetch(id)
+      runtime_id = provider.id == "openai" ? "openai_api" : provider.id
+      Runtime.new(
+        id: runtime_id,
+        model_config_key: "#{runtime_id}_model",
+        reasoning_config_key: "#{runtime_id}_reasoning_effort",
+        chat_url: CHAT_URLS[provider.id],
+        model_list_url: MODEL_LIST_URLS[provider.id],
+        model_discovery: provider.id == "azure_openai" ? :configured : (MODEL_LIST_URLS.key?(provider.id) ? :live : :curated)
+      )
     end
 
     def api_key_providers
