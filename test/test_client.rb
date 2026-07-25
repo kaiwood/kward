@@ -162,6 +162,56 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_direct_openai_api_credentials_are_distinct_from_codex_oauth
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      key_path = File.join(dir, "api_keys.json")
+      File.write(config_path, JSON.dump("provider" => "openai_api", "openai_api_model" => "gpt-api-model", "openai_model" => "gpt-codex-model"))
+      store = Kward::APIKeyStore.new(path: key_path, config_path: config_path, env: { "OPENAI_API_KEY" => "environment-api-key" })
+      store.store("openai", "stored-api-key")
+      client = Kward::Client.new(api_key: nil, openai_access_token: "codex-oauth-token", oauth: FakeOAuth.new(nil), api_key_store: store, config_path: config_path)
+
+      url, token, provider, account_id = client.send(:credentials)
+
+      assert_equal URI("https://api.openai.com/v1/responses"), url
+      assert_equal "environment-api-key", token
+      assert_equal "OpenAI", provider
+      assert_nil account_id
+      assert_equal "gpt-api-model", client.current_model
+    end
+  end
+
+  def test_codex_and_direct_openai_credentials_can_coexist
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "codex", "openai_model" => "gpt-codex-model", "openai_api_model" => "gpt-api-model"))
+      store = Kward::APIKeyStore.new(path: File.join(dir, "api_keys.json"), config_path: config_path, env: { "OPENAI_API_KEY" => "api-key" })
+      client = Kward::Client.new(api_key: nil, openai_access_token: "codex-oauth-token", oauth: FakeOAuth.new(nil), api_key_store: store, config_path: config_path)
+
+      _url, token, provider, = client.send(:credentials)
+
+      assert_equal "codex-oauth-token", token
+      assert_equal "Codex", provider
+      assert_equal "gpt-codex-model", client.current_model
+      assert_equal "api-key", client.send(:credentials, provider: "OpenAI")[1]
+      assert_equal "gpt-api-model", client.send(:model_for, "OpenAI")
+    end
+  end
+
+  def test_available_models_include_codex_and_direct_openai_when_both_are_configured
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "openai_api", "openai_api_model" => "gpt-api-model"))
+      store = Kward::APIKeyStore.new(path: File.join(dir, "api_keys.json"), config_path: config_path, env: { "OPENAI_API_KEY" => "api-key" })
+      client = Kward::Client.new(api_key: nil, openai_access_token: "codex-oauth-token", oauth: FakeOAuth.new(nil), api_key_store: store, config_path: config_path)
+
+      models = client.available_models
+
+      assert models.any? { |model| model[:provider] == "Codex" }
+      assert_includes_model models, { provider: "OpenAI", id: "gpt-api-model", current: true, contextWindow: 128_000 }
+    end
+  end
+
   def test_available_models_include_only_logged_in_provider_picker_choices
     client = Kward::Client.new(
       api_key: "openrouter-token",

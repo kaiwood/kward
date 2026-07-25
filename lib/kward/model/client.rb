@@ -37,7 +37,8 @@ module Kward
       "llama_cpp" => "http://127.0.0.1:8080/v1"
     }.freeze
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
-    OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or add openrouter_api_key to your Kward config."
+    OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or sign in with an API key."
+    OPENAI_API_AUTH_ERROR = "No OpenAI API key found. Set OPENAI_API_KEY or sign in with an API key."
     COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
     ANTHROPIC_AUTH_ERROR = "No Anthropic OAuth login found. Run `ruby lib/main.rb login anthropic`."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
@@ -109,7 +110,7 @@ module Kward
       cancellation&.raise_if_cancelled!
       requested_provider = provider
       url, token, resolved_provider, account_id = credentials(provider: requested_provider)
-      if token.to_s.empty? && authentication_required?(resolved_provider) && !requested_provider.to_s.empty?
+      if token.to_s.empty? && authentication_required?(resolved_provider) && !requested_provider.to_s.empty? && resolved_provider != "OpenAI"
         url, token, resolved_provider, account_id = credentials
         model = nil
         reasoning = nil
@@ -239,13 +240,16 @@ module Kward
       end
 
       ProviderCatalog.api_key_providers.each do |catalog_provider|
-        next unless catalog_provider.protocol == "openai_chat" && catalog_provider.id != "openrouter"
+        next unless ["openai_chat", "openai_responses"].include?(catalog_provider.protocol)
+        next if catalog_provider.id == "openrouter"
         next unless provider_logged_in?(catalog_provider.name)
 
         selected_model = model_for(catalog_provider.name)
-        ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).models.each do |entry|
+        provider_models = ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).models
+        provider_models.each do |entry|
           models << model_entry(catalog_provider.name, entry.fetch("id"), current: provider == catalog_provider.name && selected_model == entry.fetch("id"))
         end
+        models << model_entry(catalog_provider.name, selected_model, current: provider == catalog_provider.name) unless selected_model.to_s.empty? || provider_models.any? { |entry| entry.fetch("id") == selected_model }
       end
 
       if provider_logged_in?("Local")
@@ -470,6 +474,8 @@ module Kward
 
     def auth_error_for(provider)
       case provider
+      when "OpenAI"
+        OPENAI_API_AUTH_ERROR
       when "OpenRouter"
         OPENROUTER_AUTH_ERROR
       when "Copilot"
@@ -901,6 +907,11 @@ module Kward
         return [OPENROUTER_URL, openrouter_api_key, provider, nil]
       end
 
+      if provider == "OpenAI"
+        runtime = ProviderCatalog.runtime("openai")
+        return [URI(runtime.chat_url), @api_key_store.fetch("openai"), provider, nil]
+      end
+
       if (catalog_provider = ProviderCatalog.find_by_name(provider)) && catalog_provider.protocol == "openai_chat"
         runtime = ProviderCatalog.runtime(catalog_provider.id)
         return [URI(runtime.chat_url), @api_key_store.fetch(catalog_provider.id), provider, nil]
@@ -942,7 +953,7 @@ module Kward
         !anthropic_access_token.to_s.empty?
       else
         catalog_provider = ProviderCatalog.find_by_name(provider)
-        catalog_provider&.protocol == "openai_chat" && !@api_key_store.fetch(catalog_provider.id).to_s.empty?
+        catalog_provider&.api_key? && !@api_key_store.fetch(catalog_provider.id).to_s.empty?
       end
     rescue StandardError
       false

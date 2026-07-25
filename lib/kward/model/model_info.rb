@@ -128,6 +128,11 @@ module Kward
     def model_for(provider, config:, override_model: nil, env: ENV)
       return override_model if override_model
 
+      if provider_label(provider) == "OpenAI"
+        runtime = ProviderCatalog.runtime("openai")
+        return env["OPENAI_API_MODEL"] || ConfigFiles.config_value(config, runtime.model_config_key) || DEFAULT_OPENAI_MODEL
+      end
+
       catalog_provider = ProviderCatalog.find_by_name(provider) || ProviderCatalog.find(provider.to_s.downcase)
       if catalog_provider && !["anthropic", "openrouter", "copilot"].include?(catalog_provider.id)
         runtime = ProviderCatalog.runtime(catalog_provider.id)
@@ -183,6 +188,11 @@ module Kward
     end
 
     def reasoning_effort(config:, env: ENV, provider: nil)
+      if provider_label(provider) == "OpenAI"
+        runtime = ProviderCatalog.runtime("openai")
+        return env["OPENAI_API_REASONING_EFFORT"] || ConfigFiles.config_value(config, runtime.reasoning_config_key) || DEFAULT_REASONING_EFFORT
+      end
+
       case provider.to_s
       when "Local"
         nil
@@ -198,6 +208,8 @@ module Kward
     end
 
     def provider_label(provider)
+      return "OpenAI" if provider.to_s == "OpenAI" || provider.to_s.downcase == "openai_api"
+
       catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
       return catalog_provider.name if catalog_provider && !["openai", "copilot"].include?(catalog_provider.id)
 
@@ -212,6 +224,8 @@ module Kward
     end
 
     def provider_config_value(provider)
+      return ProviderCatalog.runtime("openai").id if provider_label(provider) == "OpenAI"
+
       catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
       return ProviderCatalog.runtime(catalog_provider.id).id if catalog_provider && catalog_provider.id != "openai"
 
@@ -225,6 +239,8 @@ module Kward
     end
 
     def config_key_for_provider(provider)
+      return ProviderCatalog.runtime("openai").model_config_key if provider_label(provider) == "OpenAI"
+
       catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
       return ProviderCatalog.runtime(catalog_provider.id).model_config_key if catalog_provider && catalog_provider.id != "openai"
 
@@ -238,6 +254,8 @@ module Kward
     end
 
     def reasoning_config_key_for_provider(provider)
+      return ProviderCatalog.runtime("openai").reasoning_config_key if provider_label(provider) == "OpenAI"
+
       catalog_provider = ProviderCatalog.find(provider.to_s.downcase) || ProviderCatalog.find_by_name(provider)
       return ProviderCatalog.runtime(catalog_provider.id).reasoning_config_key if catalog_provider && catalog_provider.id != "openai"
 
@@ -263,6 +281,10 @@ module Kward
 
     def context_window(provider, id, openrouter_models: nil)
       case provider
+      when "OpenAI"
+        pattern_context_window(OPENAI_CONTEXT_WINDOWS, id) ||
+          conservative_context_window(id) ||
+          conservative_unknown_context_window(id)
       when "Codex"
         pattern_context_window(CODEX_CONTEXT_WINDOWS, id) ||
           openrouter_inferred_context_window(provider, id, openrouter_models: openrouter_models) ||
