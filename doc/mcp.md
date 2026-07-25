@@ -66,7 +66,7 @@ Example with an environment variable and custom timeout:
 
 ## Notes and limitations
 
-- Kward currently supports local stdio MCP servers.
-- Kward currently exposes MCP tools. MCP resources, prompts, sampling, and Streamable HTTP are not implemented yet.
-- MCP tool results are returned to the model as text. Structured content is included as JSON. Image, audio, and resource results are summarized as placeholders for now.
+- Kward supports local stdio MCP servers and exposes their tools to the model.
+- It does not support MCP resources, prompts, sampling, or Streamable HTTP.
+- MCP tool results are returned to the model as text. Structured content is included as JSON. Image, audio, and resource results are summarized as placeholders.
 - MCP servers can expose sensitive local application state. Only configure servers you trust, especially browser automation servers that can read page content or screenshots.
