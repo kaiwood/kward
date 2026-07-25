@@ -304,7 +304,11 @@ module Kward
       end
 
       def confirm_worktree_action(message)
-        @prompt.respond_to?(:yes?) && @prompt.yes?(message, default: false)
+        return false unless @prompt.respond_to?(:yes?)
+
+        prompt = message.to_s.strip
+        runtime_output(prompt) if prompt.include?("\n")
+        @prompt.yes?(prompt.include?("\n") ? "Continue?" : prompt, default: false)
       end
 
       def generated_worktree_branch(tab)

@@ -3,7 +3,7 @@ require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
-    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates
+    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages
 
     def initialize(inputs = [], confirmations: [])
       super(inputs, confirmations: confirmations)
@@ -14,6 +14,12 @@ class TestTabs < KwardTestCase
       @busy_finished = 0
       @banner_count = 0
       @slash_command_updates = []
+      @confirmation_messages = []
+    end
+
+    def yes?(message, default: false)
+      @confirmation_messages << message
+      super
     end
 
     def update_slash_commands(entries)
@@ -502,6 +508,8 @@ class TestTabs < KwardTestCase
 
         assert_equal "merged\n", File.read(File.join(root, "merged.txt"))
         assert_includes prompt.output.join("\n"), "Merged #{binding.branch} into"
+        assert_includes prompt.output.join("\n"), "Source: #{binding.branch}"
+        assert_equal "Continue?", prompt.confirmation_messages.last
         assert binding.active?
         assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
       ensure
