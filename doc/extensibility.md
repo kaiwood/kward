@@ -69,35 +69,9 @@ By default, Kward adds a compact instruction telling the model that `AGENTS.md` 
 
 ## Prompt templates
 
-Use prompt templates when you repeatedly type the same kind of request.
+Use prompt templates when you repeatedly type the same kind of request. Each Markdown file in `~/.kward/prompts/` becomes a slash command; its filename is the command name and `$ARGUMENTS` expands the text after the command.
 
-Create:
-
-```text
-~/.kward/prompts/review.md
-```
-
-Example:
-
-```markdown
----
-description: Review a change for correctness.
-argument-hint: <focus>
----
-
-Review the current diff for correctness, tests, and maintainability.
-Focus on: $ARGUMENTS
-```
-
-Then run inside Kward:
-
-```text
-/review auth edge cases
-```
-
-The `description` frontmatter field appears in the slash command list and completion overlay so you can find the template by purpose. `argument-hint` is shown as a usage hint. The `$ARGUMENTS` placeholder in the body is replaced with whatever you type after the command.
-
-Prompt templates are best for reusable text. They do not run local code.
+See [Prompt templates](prompt-templates.md) to create one, understand naming and reload behavior, and learn about the `/plan`, `/investigate`, `/research`, and `/codebase-review` templates installed by `kward init`.
 
 ## Skills
 

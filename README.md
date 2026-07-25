@@ -92,13 +92,14 @@ Feature guides:
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.
 - [Personas](doc/personas.md): configure Kward's tone and role by default, workspace, model, reasoning effort, time, and weekday.
 - [Skills](doc/skills.md): add reusable instructions that load only for matching tasks.
+- [Prompt templates](doc/prompt-templates.md): create reusable slash prompts and use the starter templates installed by `kward init`.
 - [MCP servers](doc/mcp.md): connect trusted local Model Context Protocol tool servers.
 - [Pan mode](doc/pan.md): use the mobile-friendly browser interface on a trusted local network.
 - [Local models](doc/local-models.md): connect Ollama, LM Studio, or llama.cpp and use a minimal replacement prompt.
 
 Advanced:
 
-- [Extensibility](doc/extensibility.md): `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and extension choices.
+- [Extensibility](doc/extensibility.md): choose between `PRINCIPLES.md`, workspace `AGENTS.md`, skills, prompt templates, and other extension points.
 - [Plugins](doc/plugins.md): trusted Ruby plugins for commands, footer UI, prompt context, transcript events, and RPC clients.
 - [Lifecycle hooks](doc/lifecycle-hooks.md): deterministic runtime hooks for policy, approvals, automation, and command-hook integrations.
 - [RPC protocol](doc/rpc.md): JSON-RPC backend mode for trusted local UI clients.

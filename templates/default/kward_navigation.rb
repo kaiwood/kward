@@ -5,6 +5,7 @@ module KwardDocsNavigationData
     [
       "Start here",
       [
+        ["Overview", "file.README.html"],
         ["Getting started", "file.getting-started.html"],
         ["Usage", "file.usage.html"],
         ["Configuration", "file.configuration.html"],
@@ -22,6 +23,7 @@ module KwardDocsNavigationData
         ["Memory", "file.memory.html"],
         ["Personas", "file.personas.html"],
         ["Skills", "file.skills.html"],
+        ["Prompt templates", "file.prompt-templates.html"],
         ["Pan mode", "file.pan.html"]
       ]
     ],
