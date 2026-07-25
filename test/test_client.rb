@@ -69,6 +69,25 @@ class TestClient < KwardTestCase
     end
   end
 
+  def azure_openai_fixture(name)
+    File.read(File.join(__dir__, "fixtures", "azure_openai", name))
+  end
+
+  def with_azure_openai_client
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "provider" => "azure_openai",
+        "azure_openai_endpoint" => "https://example.openai.azure.com/",
+        "azure_openai_model" => "production-gpt-5",
+        "azure_openai_api_version" => "2025-04-01-preview"
+      ))
+      store = Kward::APIKeyStore.new(path: File.join(dir, "api_keys.json"), config_path: config_path, env: { "AZURE_OPENAI_API_KEY" => "azure-fixture-key" })
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), api_key_store: store, config_path: config_path)
+      yield client
+    end
+  end
+
   def test_client_requires_openai_oauth_login_or_openrouter
     client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
@@ -319,6 +338,75 @@ class TestClient < KwardTestCase
       cancellation = Kward::Cancellation.new
       cancellation.cancel!
 
+      with_fake_http([]) do |http|
+        assert_raises(Kward::Cancellation::CancelledError) do
+          client.chat([{ role: "user", content: "Hello" }], cancellation: cancellation)
+        end
+        assert_empty http.requests
+      end
+    end
+  end
+
+  def test_azure_openai_streams_text_from_the_deployment_url
+    with_azure_openai_client do |client|
+      deltas = []
+      with_fake_http([fake_net_response(200, azure_openai_fixture("text.sse"))]) do |http|
+        message = client.chat([{ role: "user", content: "Hello" }], max_tokens: 123, on_assistant_delta: ->(delta) { deltas << delta })
+
+        assert_equal "Hello from Azure.", message["content"]
+        assert_equal ["Hello ", "from Azure."], deltas
+        assert_equal "Azure OpenAI", message["provider"]
+        assert_equal({ "input_tokens" => 12, "output_tokens" => 3, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 15, "estimated" => false }, message["usage"])
+        request = http.requests.first
+        assert_equal URI("https://example.openai.azure.com/openai/deployments/production-gpt-5/chat/completions?api-version=2025-04-01-preview"), request.uri
+        assert_equal "azure-fixture-key", request["api-key"]
+        assert_nil request["Authorization"]
+        payload = JSON.parse(request.body)
+        assert_equal true, payload["stream"]
+        assert_equal true, payload.dig("stream_options", "include_usage")
+        assert_equal 123, payload["max_tokens"]
+      end
+    end
+  end
+
+  def test_azure_openai_assembles_streamed_tool_calls
+    with_azure_openai_client do |client|
+      with_fake_http([fake_net_response(200, azure_openai_fixture("tools.sse"))]) do
+        message = client.chat([{ role: "user", content: "Read it" }])
+
+        call = message.fetch("tool_calls").first
+        assert_equal "call_azure", call["id"]
+        assert_equal "read_file", call.dig("function", "name")
+        assert_equal({ "path" => "README.md" }, JSON.parse(call.dig("function", "arguments")))
+      end
+    end
+  end
+
+  def test_azure_openai_retries_transient_errors_and_redacts_keys
+    with_azure_openai_client do |client|
+      disable_sleep(client)
+      retries = []
+      with_fake_http([fake_net_response(429, "rate limited"), fake_net_response(200, azure_openai_fixture("text.sse"))]) do |http|
+        message = client.chat([{ role: "user", content: "Hello" }], on_retry: ->(event) { retries << event })
+
+        assert_equal "Hello from Azure.", message["content"]
+        assert_equal 2, http.requests.length
+        assert_equal "Azure OpenAI", retries.first[:provider]
+      end
+
+      with_fake_http([fake_net_response(401, azure_openai_fixture("error.json"))]) do
+        error = assert_raises(Kward::Client::RequestError) { client.chat([{ role: "user", content: "Hello" }]) }
+
+        assert_includes error.message, "[REDACTED]"
+        refute_includes error.message, "azure-fixture-key"
+      end
+    end
+  end
+
+  def test_azure_openai_honors_cancellation
+    with_azure_openai_client do |client|
+      cancellation = Kward::Cancellation.new
+      cancellation.cancel!
       with_fake_http([]) do |http|
         assert_raises(Kward::Cancellation::CancelledError) do
           client.chat([{ role: "user", content: "Hello" }], cancellation: cancellation)

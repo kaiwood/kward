@@ -15,6 +15,10 @@ module Kward
 
     attr_reader :endpoint, :deployment, :api_version
 
+    def chat_completions_url
+      URI("#{endpoint}/openai/deployments/#{deployment}/chat/completions?api-version=#{api_version}")
+    end
+
     def to_config
       {
         "azure_openai_endpoint" => endpoint,

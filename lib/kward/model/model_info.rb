@@ -281,6 +281,9 @@ module Kward
 
     def context_window(provider, id, openrouter_models: nil)
       case provider
+      when "Azure OpenAI"
+        pattern_context_window(OPENAI_CONTEXT_WINDOWS, id) ||
+          conservative_unknown_context_window(id)
       when "Google Gemini"
         pattern_context_window(GEMINI_CONTEXT_WINDOWS, id.to_s.delete_prefix("models/")) ||
           conservative_unknown_context_window(id)

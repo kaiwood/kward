@@ -10,6 +10,7 @@ require_relative "../config_files"
 require_relative "../http"
 require_relative "../openrouter_model_cache"
 require_relative "context_overflow"
+require_relative "azure_openai_config"
 require_relative "copilot_models"
 require_relative "model_info"
 require_relative "sources"
@@ -39,6 +40,7 @@ module Kward
     AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
     OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or sign in with an API key."
     OPENAI_API_AUTH_ERROR = "No OpenAI API key found. Set OPENAI_API_KEY or sign in with an API key."
+    AZURE_OPENAI_AUTH_ERROR = "No Azure OpenAI API key found. Set AZURE_OPENAI_API_KEY or sign in with an API key."
     COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
     ANTHROPIC_AUTH_ERROR = "No Anthropic OAuth login found. Run `ruby lib/main.rb login anthropic`."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
@@ -308,6 +310,14 @@ module Kward
 
     def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:, max_tokens:)
       case provider
+      when "Azure OpenAI"
+        chat_azure_openai_provider(
+          token: token,
+          request_body: request_body,
+          current_model: current_model,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
       when "Google Gemini"
         chat_gemini_provider(
           url: url,
@@ -384,6 +394,32 @@ module Kward
           cancellation: cancellation
         )
       end
+    end
+
+    def chat_azure_openai_provider(token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
+      request_url = azure_openai_config(deployment: current_model).chat_completions_url
+      request = Http.apply_user_agent(Net::HTTP::Post.new(request_url))
+      request["api-key"] = token
+      request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
+      request.body = request_body
+
+      message = nil
+      Net::HTTP.start(request_url.hostname, request_url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise RequestError.new(provider: "Azure OpenAI", code: response.code, body: redact(body, token))
+          end
+
+          message = parse_openai_chat_sse_stream(response, on_assistant_delta: on_assistant_delta, cancellation: cancellation, provider_label: "Azure OpenAI")
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      attach_response_metadata(message, provider: "Azure OpenAI", model: current_model)
     end
 
     def chat_gemini_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
@@ -557,6 +593,8 @@ module Kward
 
     def auth_error_for(provider)
       case provider
+      when "Azure OpenAI"
+        AZURE_OPENAI_AUTH_ERROR
       when "OpenAI"
         OPENAI_API_AUTH_ERROR
       when "OpenRouter"
@@ -650,7 +688,9 @@ module Kward
     def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       reasoning = false unless ModelInfo.reasoning_supported?(provider, model)
 
-      if provider == "Google Gemini"
+      if provider == "Azure OpenAI"
+        request_payload(provider, messages, tools, max_tokens: max_tokens, model: model, reasoning: false).merge(stream: true, stream_options: { include_usage: true })
+      elsif provider == "Google Gemini"
         gemini_payload(messages, tools, max_tokens: max_tokens, model: model)
       elsif provider == "OpenAI"
         openai_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
@@ -1008,6 +1048,10 @@ module Kward
         return [URI(runtime.chat_url), @api_key_store.fetch("gemini"), provider, nil]
       end
 
+      if provider == "Azure OpenAI"
+        return [azure_openai_config.chat_completions_url, @api_key_store.fetch("azure_openai"), provider, nil]
+      end
+
       if (catalog_provider = ProviderCatalog.find_by_name(provider)) && catalog_provider.protocol == "openai_chat"
         runtime = ProviderCatalog.runtime(catalog_provider.id)
         return [URI(runtime.chat_url), @api_key_store.fetch(catalog_provider.id), provider, nil]
@@ -1126,6 +1170,14 @@ module Kward
 
     def copilot_chat_url
       URI("#{@github_oauth.base_url}/chat/completions")
+    end
+
+    def azure_openai_config(deployment: nil)
+      AzureOpenAIConfig.new(
+        endpoint: config_value("azure_openai_endpoint"),
+        deployment: deployment || config_value("azure_openai_model"),
+        api_version: config_value("azure_openai_api_version")
+      )
     end
 
     def configured_provider
