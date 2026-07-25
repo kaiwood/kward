@@ -12,6 +12,7 @@ require_relative "../openrouter_model_cache"
 require_relative "context_overflow"
 require_relative "copilot_models"
 require_relative "model_info"
+require_relative "sources"
 require_relative "payloads"
 require_relative "../telemetry/logger"
 require_relative "stream_parser"
@@ -235,6 +236,16 @@ module Kward
           model_entry("Anthropic", id, current: provider == "Anthropic" && anthropic_model == id)
         end
         models << model_entry("Anthropic", anthropic_model, current: provider == "Anthropic") unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
+      end
+
+      ProviderCatalog.api_key_providers.each do |catalog_provider|
+        next unless catalog_provider.protocol == "openai_chat" && catalog_provider.id != "openrouter"
+        next unless provider_logged_in?(catalog_provider.name)
+
+        selected_model = model_for(catalog_provider.name)
+        ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).models.each do |entry|
+          models << model_entry(catalog_provider.name, entry.fetch("id"), current: provider == catalog_provider.name && selected_model == entry.fetch("id"))
+        end
       end
 
       if provider_logged_in?("Local")
