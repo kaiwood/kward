@@ -75,8 +75,10 @@ module Kward
           start_oauth_login(provider_id: "anthropic", oauth: @anthropic_oauth_factory.call, timeout_seconds: timeout_seconds)
         when "github", "copilot"
           raise "GitHub Copilot OAuth is unavailable over RPC; use the interactive CLI login."
-        when "openrouter", "xai"
-          raise "#{ProviderCatalog.fetch(provider_id).name} OAuth is unavailable because no official stable third-party flow is supported."
+        when "openrouter"
+          raise "OpenRouter OAuth is unavailable because Kward has not implemented OpenRouter's official PKCE flow."
+        when "xai"
+          raise "xAI OAuth is unavailable because no official stable third-party flow is supported."
         else
           raise "Unsupported OAuth provider: #{provider_id}"
         end
@@ -156,7 +158,10 @@ module Kward
         status = oauth_status(provider.id)
         supported = ["openai", "anthropic"].include?(provider.id)
         reason = unless supported
-                   if ["openrouter", "xai"].include?(provider.id)
+                   case provider.id
+                   when "openrouter"
+                     "Official PKCE is documented, but Kward has not implemented it."
+                   when "xai"
                      "No official stable third-party OAuth flow is available."
                    else
                      "OAuth login is available only in the interactive CLI."

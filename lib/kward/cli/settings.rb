@@ -747,8 +747,10 @@ module Kward
 
         models ||= normalized_available_models(conversation)
         provider_filter = nil
+        show_all = false
         loop do
           visible_models = provider_filter ? models.select { |model| model[:provider] == provider_filter } : models
+          visible_models = visible_models.select { |model| default_selectable_model?(model) } unless show_all
           actions = ["Refresh model list", "Enter model ID manually", "Show all models", "Change provider"]
           selected = @prompt.select("Default model", model_choices(visible_models, conversation) + actions, title: "Models", custom: true)
           return unless selected
@@ -765,9 +767,13 @@ module Kward
             return
           when "Show all models"
             provider_filter = nil
+            show_all = true
           when "Change provider"
             selected_provider_name = selected_provider(@prompt.select("Provider", provider_choices, title: "Models"))
-            provider_filter = selected_provider_name if selected_provider_name
+            if selected_provider_name
+              provider_filter = selected_provider_name
+              show_all = false
+            end
           else
             provider, model = selected_model(selected, models)
             persist_model_selection(provider, model, conversation)
@@ -882,6 +888,17 @@ module Kward
           label
         end
         choices.empty? ? ["#{current_provider} #{current_model} (current)"] : choices.uniq
+      end
+
+      def default_selectable_model?(model)
+        return true if model[:current]
+
+        capabilities = Array(model[:supportedParameters]).map { |value| value.to_s.downcase }
+        return true if capabilities.empty?
+
+        capabilities.any? do |capability|
+          ["tools", "toolchoice", "functioncalling", "generatecontent", "streamgeneratecontent"].include?(capability.delete("_-"))
+        end
       end
 
       def selected_model(selected, models)

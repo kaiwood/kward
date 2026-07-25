@@ -68,11 +68,11 @@ Detailed capability fields include:
 - `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions.
 - `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
-- `models`: model/reasoning RPC methods, explicit OpenRouter catalog listing, exposed model fields, and no scoped model support.
+- `models`: provider-aware model listing, refresh, selection, exposed metadata fields, and no scoped model support.
 - `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
 - `lifecycleHooks`: supported lifecycle hook events, decisions, command/plugin/workspace/HTTP/async hook availability, audit log path, hook approval routing through tool approval, and hook notifications (`hook/event`, `hook/message`).
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
-- `auth`: Kward auth provider format, OpenAI and Anthropic OAuth, OpenRouter API-key login, GitHub/Copilot status reporting, and provider logout for stored credentials. GitHub OAuth login is CLI-only; RPC reports `supported: false` for the GitHub provider with a reason string.
+- `auth`: catalog-based providers, per-provider API-key/OAuth availability, private API-key storage, sanitized status, and provider/auth-method logout. OpenAI and Anthropic OAuth are supported; Copilot OAuth is CLI-only, OpenRouter PKCE is not implemented, and xAI has no supported stable third-party flow.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `skillCapture`: capture a reviewed personal `SKILL.md` from any saved session’s active branch through `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`.
@@ -714,7 +714,7 @@ Returns the current model entry with `provider`, `id`, `name`, `reasoning`, `rea
 Params:
 
 - `model`: model ID string.
-- `provider`: optional provider hint, currently `Codex` or `OpenRouter`; defaults to the active provider.
+- `provider`: optional provider name or catalog ID; defaults to the active provider.
 
 Updates the config-backed provider model and returns the current model payload.
 
@@ -814,30 +814,32 @@ Params:
 
 - `values`: object of config keys and values.
 
-Updates config, including secret values, and returns a redacted config object. The stored file contains the supplied values.
+Updates non-secret config and returns a redacted config object. Provider API-key fields are rejected; use `auth/loginWithApiKey` so keys go to private credential storage.
 
 ### `auth/status`
 
-Returns whether OpenAI OAuth, Anthropic OAuth, OpenAI access token env, and OpenRouter API key env/config are available.
+Returns sanitized status plus catalog provider entries. It reports configured/source booleans but never credential values.
 
 ### `auth/providers`
 
-Returns frontend-neutral provider cards for OpenAI OAuth, Anthropic OAuth, OpenRouter API-key auth, and GitHub/Copilot status. Provider cards report whether credentials are configured, whether they came from stored config or environment variables, and whether stored credentials can be removed.
+Returns every catalog provider with `runtimeId`, `configured`, `source`, `canLogout`, and `authMethods`. Each auth method reports `id` (`api_key` or `oauth`), `supported`, `configured`, optional `source`, callback support, and an explicit reason when unsupported.
 
 ### `auth/loginWithApiKey`
 
 Params:
 
-- `providerId`: currently `openrouter`.
-- `apiKey`: API key secret.
+- `providerId`: any catalog provider that accepts API keys;
+- `apiKey`: API key secret;
+- `configuration`: required for Azure OpenAI, with `endpoint`, `deployment`, and `apiVersion`.
 
-Stores the API key with `0600` file permissions, refreshes client config, and returns a redacted message payload. Secret values are not returned.
+Stores the key in private `<config-dir>/api_keys.json`, refreshes client config, and returns only provider/method/status metadata. Keys and raw sensitive provider responses are never returned.
 
 ### `auth/logoutProvider`
 
 Params:
 
-- `providerId`: `openai`, `anthropic`, or `openrouter`.
+- `providerId`: catalog provider ID;
+- `authMethod`: optional `api_key` or `oauth`; omitting it removes all stored methods Kward can remove for that provider.
 
 Removes stored credentials only. Environment variables remain active and are still reported by `auth/providers`.
 
@@ -848,7 +850,7 @@ Params:
 - `providerId`: currently `openai` or `anthropic`.
 - `timeoutSeconds`: optional callback wait timeout.
 
-Provider-scoped wrapper around the OpenAI or Anthropic OAuth flow. The result includes `providerId`, `loginId`, `authorizationUrl`, `redirectUri`, and `status`.
+Provider-scoped wrapper around the OpenAI or Anthropic OAuth flow. The result includes `providerId`, `loginId`, `authorizationUrl`, `redirectUri`, and `status`. Copilot is reported as CLI-only. OpenRouter's official PKCE flow is not yet implemented by Kward, and xAI has no supported stable third-party OAuth flow; both return explicit sanitized unsupported errors.
 
 ### `auth/startOpenAILogin`
 

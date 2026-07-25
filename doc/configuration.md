@@ -113,6 +113,7 @@ By default, Kward stores user data under `~/.kward`. Common files and directorie
 
 ```text
 ~/.kward/config.json
+~/.kward/api_keys.json
 ~/.kward/auth.json
 ~/.kward/anthropic_auth.json
 ~/.kward/github_auth.json
@@ -189,12 +190,14 @@ Set `provider` to choose the active backend:
 
 When `provider` is unset, Kward infers the backend from available credentials, defaulting to OpenAI/Codex when OAuth credentials are present. Set `provider` or `KWARD_PROVIDER` to select another backend explicitly.
 
-Supported values are:
+Common values are:
 
-- `codex` for the OpenAI/ChatGPT Codex backend.
-- `anthropic` for Anthropic Claude Pro/Max subscription support.
-- `openrouter` for OpenRouter.
-- `copilot` for Copilot provider support.
+- `codex` for the ChatGPT/Codex OAuth backend;
+- `openai_api` for direct OpenAI API access;
+- `anthropic`, `openrouter`, and `copilot` for those providers;
+- `gemini` for Google Gemini;
+- `azure_openai` for a configured Azure deployment;
+- `cerebras`, `deepseek`, `fireworks`, `groq`, `mistral`, `nvidia`, `together`, or `xai` for API-key providers;
 - `local` for an OpenAI-compatible Ollama, LM Studio, or llama.cpp server. See [Local models](local-models.md).
 
 Model settings:
@@ -203,7 +206,10 @@ Model settings:
 {
   "model": "gpt-5.6-sol",
   "openai_model": "gpt-5.6-sol",
+  "openai_api_model": "gpt-5.4-mini",
   "openrouter_model": "openai/gpt-5.6-sol",
+  "gemini_model": "gemini-2.5-flash",
+  "groq_model": "provider-model-id",
   "anthropic_model": "claude-sonnet-5",
   "copilot_model": "gpt-5-mini",
   "local_model": "qwen2.5-coder:7b",
@@ -216,7 +222,7 @@ Model settings:
 }
 ```
 
-`model` is a generic setting for the active provider. Provider-specific values such as `openai_model`, `anthropic_model`, `openrouter_model`, and `copilot_model` take precedence for their provider. `reasoning_effort` and `thinking_level` are generic reasoning settings. `thinking_level` is an alias for `reasoning_effort` honored by all providers. For each provider, Kward resolves reasoning in this order: the provider-specific key (for example `openai_reasoning_effort`), then the generic `reasoning_effort`, then `thinking_level`, then the default `medium`. `openai_reasoning_effort`, `anthropic_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
+`model` is a legacy generic fallback. Provider-specific values take precedence. Catalog providers use `<runtime-id>_model`; for example, direct OpenAI uses `openai_api_model`, Gemini uses `gemini_model`, and Groq uses `groq_model`. Codex keeps `openai_model`. `reasoning_effort` and `thinking_level` are generic reasoning settings. `thinking_level` is an alias for `reasoning_effort` honored by all providers. For each provider, Kward resolves reasoning in this order: the provider-specific key (for example `openai_reasoning_effort`), then the generic `reasoning_effort`, then `thinking_level`, then the default `medium`. `openai_reasoning_effort`, `anthropic_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
 
 Set `codex_show_raw_reasoning` to `true` to display raw Codex `reasoning_text` when the API does not provide reasoning summary text. It defaults to `false`; raw reasoning can include internal or unstable model output, so enable it only when you explicitly want to inspect that stream.
 
@@ -259,8 +265,9 @@ Use environment variables for one-off runs or local secrets that you do not want
 Provider and model:
 
 - `KWARD_PROVIDER`
-- `OPENAI_MODEL`
-- `OPENAI_REASONING_EFFORT`
+- `OPENAI_MODEL` and `OPENAI_REASONING_EFFORT` for Codex
+- `OPENAI_API_MODEL` and `OPENAI_API_REASONING_EFFORT` for direct OpenAI
+- `<PROVIDER>_MODEL` for catalog providers such as `GEMINI_MODEL`, `GROQ_MODEL`, and `XAI_MODEL`
 - `OPENROUTER_MODEL`
 - `OPENROUTER_REASONING_EFFORT`
 - `KWARD_LOCAL_BACKEND`
@@ -275,7 +282,11 @@ Provider and model:
 
 Credentials:
 
-- `OPENAI_ACCESS_TOKEN`
+- `OPENAI_ACCESS_TOKEN` for ChatGPT/Codex OAuth
+- `OPENAI_API_KEY` for direct OpenAI
+- `ANTHROPIC_API_KEY`
+- `AZURE_OPENAI_API_KEY`
+- `CEREBRAS_API_KEY`, `DEEPSEEK_API_KEY`, `FIREWORKS_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `NVIDIA_API_KEY` (or `NGC_API_KEY`), `TOGETHER_API_KEY`, and `XAI_API_KEY`
 - `OPENROUTER_API_KEY`
 - `COPILOT_GITHUB_TOKEN`
 - `GITHUB_TOKEN` or `GH_TOKEN` for authenticated GitHub API requests in `code_search`
@@ -292,16 +303,9 @@ Color and logging environment variables are covered below.
 
 The friendliest way to configure credentials is `/login` inside Kward, or `kward login` from your shell. See [Authentication](authentication.md) for the full provider flow.
 
-Credential settings can also live in config:
+API keys are not stored in `config.json`. `/login` writes them to the private `<config-dir>/api_keys.json` file; environment variables take precedence for one-off runs. `openrouter_api_key` is a legacy setting that Kward migrates to the private store.
 
-```json
-{
-  "openai_oauth_client_id": "your-client-id",
-  "openrouter_api_key": "sk-or-v1-..."
-}
-```
-
-Use environment variables for temporary or local-only secrets when possible. If multiple credentials are available, OpenAI OAuth is used by default unless `provider` or `KWARD_PROVIDER` selects another backend such as `anthropic`, `openrouter`, or `copilot`.
+Non-secret authentication setup, such as `openai_oauth_client_id` and Azure endpoint/deployment/API-version values, remains in config. If multiple credentials are available, set `provider`, use `/model`, or use `KWARD_PROVIDER` to choose explicitly.
 
 ## Overlay settings
 

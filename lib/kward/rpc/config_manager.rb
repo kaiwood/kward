@@ -25,6 +25,7 @@ module Kward
       end
 
       def update(values)
+        reject_provider_api_keys!(values)
         Redactor.redact(ConfigFiles.update_config(values, @config_path))
       end
 
@@ -87,6 +88,14 @@ module Kward
       end
 
       private
+
+      def reject_provider_api_keys!(values)
+        keys = values.respond_to?(:keys) ? values.keys.map(&:to_s) : []
+        private_keys = ProviderCatalog.api_key_providers.map { |provider| "#{provider.id}_api_key" }
+        return if (keys & private_keys).empty?
+
+        raise ArgumentError, "Provider API keys must be saved with auth/loginWithApiKey"
+      end
 
       def environment_api_key?(provider)
         provider.api_key_env.any? { |name| !ENV[name].to_s.strip.empty? }

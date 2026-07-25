@@ -60,9 +60,9 @@ kward "Explain this project"   # run one prompt and exit
 kward --working-directory ~/code/project "Explain this project"
 ```
 
-From inside Kward, `/login` opens the same provider picker.
+From inside Kward, `/login` lets you choose API-key or subscription authentication across supported providers. `/model` then switches providers, refreshes model catalogs, or accepts a manual model/deployment ID. Direct OpenAI API credentials and ChatGPT/Codex OAuth can coexist.
 
-See [Authentication](doc/authentication.md) for more details about sign-in options and provider credentials.
+See [Authentication](doc/authentication.md) for provider support, credential storage, and environment overrides.
 
 ## What Kward can do
 
@@ -82,7 +82,7 @@ New to Kward:
 - [Getting started](doc/getting-started.md): first run, authentication choices, and basic commands.
 - [Usage](doc/usage.md): interactive chat, slash commands, sessions, tools, images, and Pan mode.
 - [Configuration](doc/configuration.md): config files, providers, models, web search, logging, and color output.
-- [Authentication](doc/authentication.md): OpenAI OAuth, Anthropic OAuth, OpenRouter API keys, and Copilot/GitHub setup.
+- [Authentication](doc/authentication.md): multi-provider API keys, OpenAI/Anthropic subscription OAuth, Azure setup, model selection, and credential safety.
 
 Work safely:
 

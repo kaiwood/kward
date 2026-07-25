@@ -202,7 +202,7 @@ class TestRPCConfigManager < KwardTestCase
     end
   end
 
-  def test_config_update_redacts_secrets_in_response
+  def test_config_update_rejects_provider_api_keys
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")
       messages = run_rpc([
@@ -210,10 +210,10 @@ class TestRPCConfigManager < KwardTestCase
         { jsonrpc: "2.0", id: 2, method: "shutdown" }
       ], env: { "KWARD_CONFIG_PATH" => config_path })
 
-      config = messages[0]["result"]["config"]
-      assert_equal "[REDACTED]", config["openrouter_api_key"]
-      assert_equal "test-model", config["model"]
-      assert_equal "sk-secret123", JSON.parse(File.read(config_path))["openrouter_api_key"]
+      assert_equal(-32_602, messages[0]["error"]["code"])
+      assert_includes messages[0]["error"]["message"], "auth/loginWithApiKey"
+      refute_includes messages[0].to_s, "sk-secret123"
+      refute File.exist?(config_path)
     end
   end
 

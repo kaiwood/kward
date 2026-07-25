@@ -220,7 +220,8 @@ module Kward
         openrouter_model = model_for("OpenRouter")
         openrouter_choices = openrouter_model_choices
         models += openrouter_choices.map do |id|
-          model_entry("OpenRouter", id, current: provider == "OpenRouter" && openrouter_model == id)
+          metadata = openrouter_cached_model_entries.find { |entry| (entry["id"] || entry[:id]).to_s == id }
+          model_entry("OpenRouter", id, current: provider == "OpenRouter" && openrouter_model == id, metadata: metadata)
         end
       end
 
@@ -249,7 +250,7 @@ module Kward
         selected_model = model_for(catalog_provider.name)
         provider_models = ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).models
         provider_models.each do |entry|
-          models << model_entry(catalog_provider.name, entry.fetch("id"), current: provider == catalog_provider.name && selected_model == entry.fetch("id"))
+          models << model_entry(catalog_provider.name, entry.fetch("id"), current: provider == catalog_provider.name && selected_model == entry.fetch("id"), metadata: entry)
         end
         models << model_entry(catalog_provider.name, selected_model, current: provider == catalog_provider.name) unless selected_model.to_s.empty? || provider_models.any? { |entry| entry.fetch("id") == selected_model }
       end
@@ -709,12 +710,15 @@ module Kward
       model.to_s.match?(/\Agpt-5(?:\.|-|\z)/)
     end
 
-    def model_entry(provider, id, current: false)
+    def model_entry(provider, id, current: false, metadata: nil)
+      metadata ||= {}
       {
         provider: provider,
         id: id,
         current: current,
-        contextWindow: context_window_for(provider, id)
+        contextWindow: metadata["contextWindow"] || metadata[:contextWindow] || context_window_for(provider, id),
+        supportedParameters: metadata["supportedParameters"] || metadata[:supportedParameters],
+        source: metadata["source"] || metadata[:source]
       }.compact
     end
 

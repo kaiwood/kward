@@ -162,7 +162,8 @@ Kward keeps user data under `~/.kward` by default, or mostly beside `KWARD_CONFI
 
 | Data | Typical location | Notes |
 | --- | --- | --- |
-| Main config and OpenRouter key | `~/.kward/config.json` | Do not commit or share it. |
+| Main config | `~/.kward/config.json` | Non-secret provider/model setup; do not commit environment-specific configuration blindly. |
+| Provider API keys | `~/.kward/api_keys.json` | Separate private store, written with mode `0600` when possible; environment variables take precedence. |
 | OAuth credentials | `~/.kward/auth.json`, `anthropic_auth.json`, `github_auth.json` | Written with mode `0600` when possible. |
 | Sessions and tool results | `~/.kward/sessions/` | Conversation, file/tool output, and compaction history; files use mode `0600`. |
 | Prompt history | `~/.kward/history/` | Workspace-scoped submitted prompts; files use mode `0600`. |
@@ -172,6 +173,8 @@ Kward keeps user data under `~/.kward` by default, or mostly beside `KWARD_CONFI
 | Hook audit log and trust records | `~/.kward/logs/`, `~/.kward/trusted_workspace_hooks.json` | Audit records use redacted metadata rather than raw event values. |
 
 Private file modes help on normal Unix-like systems but do not protect data from your own account, privileged users, backups, malware, or a compromised machine. Session exports are written to the path you choose and should be protected separately.
+
+RPC authentication status and errors are sanitized, and API-key values are never returned. RPC is still a trusted-local interface: a client allowed to call `auth/loginWithApiKey`, `config/update`, or model/tool methods can change credentials and send workspace context to external providers. Do not expose the RPC process directly to untrusted users or networks.
 
 Use these commands to inspect or remove stored credentials and context:
 
@@ -191,7 +194,7 @@ See [Authentication](authentication.md), [Sessions](session-management.md), [Mem
 ## Practical habits
 
 - Keep secrets out of prompts, screenshots, shell output, plugin context, and hook messages.
-- Prefer temporary environment variables to storing short-lived API keys in config.
+- Prefer temporary environment variables for short-lived API keys; saved keys belong in Kward's private key store, never in prompts or project config.
 - Disable web search for private work that should not trigger external requests.
 - Keep memory off unless cross-session recall is useful and appropriate.
 - Review diffs and `git status` before committing agent changes.

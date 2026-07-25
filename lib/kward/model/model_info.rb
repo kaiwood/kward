@@ -474,6 +474,8 @@ module Kward
         reasoning: reasoning,
         reasoningEffort: reasoning_effort,
         contextWindow: model["contextWindow"] || model["context_window"] || context_window(provider, id),
+        supportedParameters: model["supportedParameters"] || model["supported_parameters"],
+        source: model["source"],
         current: boolean_value(model["current"], default: provider == current_provider && id == current_model)
       }.compact
     end

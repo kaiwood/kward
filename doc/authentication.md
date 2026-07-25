@@ -1,70 +1,90 @@
 # Authentication
 
-Kward needs access to a model provider before it can answer prompts. The fastest path is:
+Kward can keep credentials for several model providers at once. Authentication and model selection are separate: connect an account or API key first, then use `/model` to choose what runs.
 
-```bash
-kward login
-```
-
-Or inside interactive Kward:
+The easiest setup is inside interactive Kward:
 
 ```text
 /login
 ```
 
-`/login` opens a provider picker; `kward login` accepts the provider as an argument.
+Choose **API key** or **Subscription / OAuth**, then choose a provider. After login, open:
 
-Use the provider you already have access to. You can change the active model later with `/model`.
-
-## Choose a provider
-
-| Provider | Use it when... |
-| --- | --- |
-| OpenAI/ChatGPT | You want the default Codex backend with a ChatGPT account. |
-| Anthropic | You have Claude Pro/Max and want to use Claude through Kward. |
-| OpenRouter | You want to use an OpenRouter API key and choose from its model catalog. |
-| Copilot | You want to use Copilot through Kward. |
-
-If you are unsure, start with `kward login` and choose OpenAI.
-
-## Login commands
-
-```bash
-kward login              # OpenAI/ChatGPT OAuth
-kward login anthropic    # Anthropic Claude Pro/Max OAuth
-kward login openrouter   # OpenRouter API key
-kward login github       # GitHub OAuth for Copilot
+```text
+/model
 ```
 
-## OpenAI / ChatGPT
+## Supported authentication
+
+| Provider | API key | Subscription / OAuth |
+| --- | --- | --- |
+| OpenAI | Yes, direct OpenAI API | Yes, ChatGPT/Codex |
+| Anthropic | Yes, direct Anthropic API | Yes, Claude Pro/Max |
+| Azure OpenAI | Yes; endpoint, deployment, and API version are also required | No |
+| Google Gemini | Yes | No |
+| Cerebras, DeepSeek, Fireworks AI, Groq, Mistral, NVIDIA NIM, Together AI | Yes | No |
+| OpenRouter | Yes | Not yet in Kward |
+| xAI | Yes | No supported third-party flow |
+| GitHub Copilot | No API-key mode | Yes |
+
+Direct OpenAI API credentials and ChatGPT/Codex OAuth are independent. You can keep both and switch between **OpenAI** and **Codex** in `/model`.
+
+## API-key workflow
+
+From `/login`, choose **API key** and the provider. Kward validates providers with live model discovery before saving the key, then stores it in:
+
+```text
+~/.kward/api_keys.json
+```
+
+The file is private (`0600` when supported). It is separate from `config.json`, so normal config reads and RPC responses do not return keys.
+
+For providers that do not also offer subscription login, the shell command is convenient:
+
+```bash
+kward login groq
+kward login gemini
+kward login openrouter
+kward login azure_openai
+```
+
+Use the interactive `/login` method picker for direct OpenAI or Anthropic API keys because `kward login openai` and `kward login anthropic` retain their subscription-login behavior.
+
+Environment variables override a stored key for that provider:
+
+```bash
+OPENAI_API_KEY=... kward
+GEMINI_API_KEY=... kward
+GROQ_API_KEY=... kward
+```
+
+Other supported variables are listed in [Configuration](configuration.md#Environment_overrides).
+
+### Azure OpenAI
+
+Azure setup asks for three non-secret values after the key:
+
+- an HTTPS endpoint, such as `https://example.openai.azure.com`;
+- a deployment name;
+- an API version, such as `2025-04-01-preview`.
+
+Kward rejects endpoint credentials, query strings, fragments, and unsafe deployment/version characters. The deployment is the model shown in `/model`; Kward does not claim to discover Azure deployments from an inference key.
+
+## ChatGPT / Codex OAuth
 
 ```bash
 kward login
 ```
 
-This opens a browser login and saves credentials to:
+Credentials are saved to `~/.kward/auth.json`. This uses the ChatGPT/Codex backend, not `OPENAI_API_KEY` or the public OpenAI API endpoint.
 
-```text
-~/.kward/auth.json
-```
-
-Kward uses the ChatGPT/Codex backend, not the OpenAI Platform API key flow.
-
-If Kward asks for an OAuth client ID, add it to `~/.kward/config.json`:
-
-```json
-{
-  "openai_oauth_client_id": "your-client-id"
-}
-```
-
-Kward ships with a built-in client ID, so this is only needed if login fails or you want to use your own.
-
-For a single shell session without OAuth, you can set an access token directly:
+For one shell session, you can provide the Codex access token directly:
 
 ```bash
 OPENAI_ACCESS_TOKEN=... kward
 ```
+
+`OPENAI_ACCESS_TOKEN` continues to mean Codex OAuth. `OPENAI_API_KEY` means direct OpenAI API access; neither replaces the other.
 
 ## Anthropic Claude Pro/Max
 
@@ -72,110 +92,59 @@ OPENAI_ACCESS_TOKEN=... kward
 kward login anthropic
 ```
 
-This saves credentials to:
+OAuth credentials are saved to `~/.kward/anthropic_auth.json`. Kward refreshes the access token when a refresh token is available. Choose **API key** in `/login` instead when you want direct Anthropic API billing.
 
-```text
-~/.kward/anthropic_auth.json
-```
-
-Use this when you want Kward to use your Claude Pro/Max subscription. Kward refreshes the access token when a refresh token is available.
-
-## OpenRouter
-
-```bash
-kward login openrouter
-```
-
-This stores your API key in `~/.kward/config.json`.
-
-For a single shell session, you can avoid saving the key:
-
-```bash
-OPENROUTER_API_KEY=sk-or-v1-... kward
-```
-
-Choose OpenRouter when you want access to its model catalog or want provider/model selection through an API key.
-
-### Refresh the OpenRouter model cache
-
-Kward's `/model` picker can show OpenRouter models that are available to your API key. Refresh the local cache after logging in:
-
-```bash
-kward openrouter refresh
-```
-
-This fetches text-capable OpenRouter models for the configured key and writes them to:
-
-```text
-~/.kward/cache/openrouter_models.json
-```
-
-If `KWARD_CONFIG_PATH` points at a custom config file, the cache is written beside that config file under `cache/openrouter_models.json`.
-
-Inspect the cached model ids with:
-
-```bash
-kward openrouter list
-```
-
-Use this when:
-
-- you added or changed your OpenRouter API key,
-- OpenRouter added new models,
-- your model picker does not show the model you expect,
-- you want Kward to use current context-window metadata from OpenRouter.
-
-After refreshing, start Kward and choose the model with `/model`.
-
-## Copilot
+## GitHub Copilot
 
 ```bash
 kward login github
 ```
 
-This saves GitHub OAuth credentials to:
+Credentials are saved to `~/.kward/github_auth.json`. For one run, use `COPILOT_GITHUB_TOKEN`. General `GH_TOKEN` and `GITHUB_TOKEN` values are not treated as Copilot credentials.
 
-```text
-~/.kward/github_auth.json
-```
+## OpenRouter
 
-You can also use a token for one run:
+API-key login is supported, including model refresh:
 
 ```bash
-COPILOT_GITHUB_TOKEN=... kward
+kward login openrouter
+kward openrouter refresh
+kward openrouter list
 ```
 
-Kward uses direct HTTPS calls to the Copilot proxy API. It does not use the official Copilot CLI or SDK runtime.
+The cache lives at `<config-dir>/cache/openrouter_models.json`. `/model` can also refresh the active provider directly.
 
-## Choose the active model
+OpenRouter documents an official [OAuth PKCE flow](https://openrouter.ai/docs/guides/overview/auth/oauth), but Kward does not implement that flow yet. It remains unavailable in CLI and RPC capabilities rather than exposing an unverified partial login.
 
-Authentication makes providers available. The active model is selected separately.
+xAI's public inference documentation currently directs clients to API keys (see the [xAI quickstart](https://docs.x.ai/developers/quickstart)); Kward does not expose an xAI subscription OAuth flow.
 
-Inside Kward, use:
+## Model selection
 
-```text
-/model
+The provider-aware `/model` picker offers:
+
+- **Refresh model list**;
+- **Enter model ID manually**;
+- **Show all models**;
+- **Change provider**.
+
+By default, Kward hides entries when provider metadata proves they are not generation/tool models. It keeps entries whose metadata is incomplete. **Show all models** and manual IDs remain available for previews, private deployments, and incomplete catalogs.
+
+## Status and logout
+
+```bash
+kward auth status
+kward auth logout
 ```
 
-The model picker is the normal way to switch between configured providers and models. You can keep credentials for multiple providers and choose the model you want for the current work.
+Status reports only whether credentials exist and where they came from; it never prints credential values. CLI logout removes all saved OAuth and API-key credentials. Environment variables remain active until you unset them.
 
-For one-off shell runs, `KWARD_PROVIDER` and provider-specific model environment variables remain available. See [Configuration](configuration.md) for the full list.
+RPC clients can list catalog providers, inspect sanitized method availability, save/remove individual API keys, and remove a specific provider/auth method. See [RPC](rpc.md#Config_and_auth_methods).
 
-## Custom auth file locations
+## Custom locations
 
-Each auth file has an environment variable override, useful for isolated or multi-account setups. When unset, they default to the paths shown above under `~/.kward/`.
+- `KWARD_CONFIG_PATH` moves `config.json`, `api_keys.json`, caches, and most other Kward state to that file's directory.
+- `KWARD_AUTH_PATH` overrides ChatGPT/Codex OAuth storage.
+- `KWARD_ANTHROPIC_AUTH_PATH` overrides Anthropic OAuth storage.
+- `KWARD_GITHUB_AUTH_PATH` overrides GitHub Copilot OAuth storage.
 
-- `KWARD_AUTH_PATH` — OpenAI OAuth credentials (`auth.json`)
-- `KWARD_ANTHROPIC_AUTH_PATH` — Anthropic OAuth credentials (`anthropic_auth.json`)
-- `KWARD_GITHUB_AUTH_PATH` — GitHub OAuth credentials (`github_auth.json`)
-
-When `KWARD_CONFIG_PATH` points at a custom config file, the OpenRouter API key is stored in that file instead of `~/.kward/config.json`.
-
-## Security notes
-
-- Auth files are written with file mode `0600` when possible.
-- Do not commit `~/.kward/config.json` or auth files.
-- Prefer environment variables for temporary credentials.
-- `kward auth status` shows credential status without printing secrets.
-- `kward auth logout` removes **all** saved credentials at once: every OAuth file (OpenAI, Anthropic, GitHub) and the stored OpenRouter API key. There is no per-provider logout; to remove a single provider, delete its auth file by hand.
-- `kward doctor` reports which credentials are currently configured alongside other local checks.
+Never commit credential files. For temporary credentials, prefer environment variables and unset them when finished.

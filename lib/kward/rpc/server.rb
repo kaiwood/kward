@@ -563,7 +563,7 @@ module Kward
             oauthProviders: ["openai", "anthropic"],
             unsupportedOAuthProviders: {
               copilot: "OAuth login is available only in the interactive CLI.",
-              openrouter: "No official stable third-party OAuth flow is available.",
+              openrouter: "Official PKCE is documented, but Kward has not implemented it.",
               xai: "No official stable third-party OAuth flow is available."
             },
             apiKeyProviders: ProviderCatalog.api_key_providers.map(&:id),

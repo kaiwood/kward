@@ -170,6 +170,33 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_model_picker_filters_proven_non_generation_models_until_show_all
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new([], ["Show all models", "Google Gemini embedding-model"])
+      client = FakeClient.new([])
+      client.define_singleton_method(:available_models) do
+        [
+          { provider: "Google Gemini", id: "tool-model", supportedParameters: ["generateContent"], current: false },
+          { provider: "Google Gemini", id: "embedding-model", supportedParameters: ["embedContent"], current: false },
+          { provider: "Google Gemini", id: "unknown-metadata-model", supportedParameters: [], current: false }
+        ]
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      conversation = Kward::Conversation.new(system_message: nil, provider: "Google Gemini", model: "tool-model")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:configure_model, conversation)
+      end
+
+      assert_includes prompt.select_choices.first, "Google Gemini tool-model"
+      assert_includes prompt.select_choices.first, "Google Gemini unknown-metadata-model"
+      refute_includes prompt.select_choices.first, "Google Gemini embedding-model"
+      assert_includes prompt.select_choices.last, "Google Gemini embedding-model"
+      assert_equal "embedding-model", JSON.parse(File.read(config_path))["gemini_model"]
+    end
+  end
+
   def test_model_picker_can_show_all_after_filtering_by_configured_provider
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

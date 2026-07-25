@@ -6,6 +6,9 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added catalog-based API-key login and model selection for OpenAI, Anthropic, Azure OpenAI, Gemini, Cerebras, DeepSeek, Fireworks AI, Groq, Mistral, NVIDIA NIM, OpenRouter, Together AI, and xAI, with private credential storage and live/cached/curated model catalogs.
+- Added native streaming runtimes for the OpenAI Responses API, Google Gemini, and Azure OpenAI, including tool calls, usage metadata, retries, cancellation, and secret redaction.
+- Added RPC parity for provider/auth-method discovery, sanitized credential status, API-key login/logout, model refresh, and provider/model selection.
 - Added a prompt-template guide, including template creation, slash-command expansion, and the starter templates installed by `kward init`.
 - Added a Stardate footer plugin example for the interactive CLI.
 - Added a general transport plugin API with normalized messages and events, persistent transport state, policy checks, managed lifecycle, foreground CLI commands, and RPC capability/status reporting.
@@ -18,6 +21,9 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Made `/model` provider-aware with refresh, manual model IDs, capability-filtered defaults, Show all, and provider switching while preserving Codex, Copilot, OpenRouter, and local models.
+- Kept direct OpenAI API credentials (`openai_api`) separate from ChatGPT/Codex OAuth so both can be configured at once.
+- Azure OpenAI setup now validates HTTPS endpoints, deployment names, and API versions, and treats the configured deployment as the selectable model.
 - Updated current documentation to describe Copilot and the JSON-RPC backend as supported features rather than experimental ones.
 - Clarified the distinct roles of workspace guardrails, tool permissions, and command sandboxing.
 - Reorganized the README documentation index and clarified generated Ruby API support boundaries.
