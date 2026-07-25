@@ -822,7 +822,7 @@ Returns sanitized status plus catalog provider entries. It reports configured/so
 
 ### `auth/providers`
 
-Returns every catalog provider with `runtimeId`, `configured`, `source`, `canLogout`, and `authMethods`. Each auth method reports `id` (`api_key` or `oauth`), `supported`, `configured`, optional `source`, callback support, and an explicit reason when unsupported.
+Returns every catalog provider with `runtimeId`, `configured`, `source`, `canLogout`, and `authMethods`. Each auth method reports `id` (`api_key` or `oauth`), `supported`, `configured`, optional `source`, callback support, and an explicit reason when unsupported. Clients should discover this response dynamically; [Model providers](providers.md) is the corresponding human-readable reference.
 
 ### `auth/loginWithApiKey`
 

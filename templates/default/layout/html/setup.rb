@@ -29,6 +29,7 @@ module KwardDocsNavigation
     "doc/usage.md" => "file.usage.html",
     "doc/configuration.md" => "file.configuration.html",
     "doc/authentication.md" => "file.authentication.html",
+    "doc/providers.md" => "file.providers.html",
     "doc/permissions.md" => "file.permissions.html",
     "doc/sandboxing.md" => "file.sandboxing.html",
     "doc/troubleshooting.md" => "file.troubleshooting.html",

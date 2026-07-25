@@ -1,6 +1,6 @@
 # Local models
 
-Kward can connect to a local model server that provides OpenAI-compatible Chat Completions. This is useful when you want offline development, control over model selection, or a smaller prompt for a local coding model.
+Kward can connect to a local model server that provides OpenAI-compatible Chat Completions. This is useful when you want offline development, control over model selection, or a smaller prompt for a local coding model. For comparison with hosted backends, see [Model providers](providers.md#Choosing_between_similar_providers).
 
 Kward connects to an already-running server. It does not install runtimes, download models, choose GPU settings, or load models for you.
 

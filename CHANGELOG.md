@@ -9,6 +9,7 @@ All notable changes to Kward will be documented in this file.
 - Added catalog-based API-key login and model selection for OpenAI, Anthropic, Azure OpenAI, Gemini, Cerebras, DeepSeek, Fireworks AI, Groq, Mistral, NVIDIA NIM, OpenRouter, Together AI, and xAI, with private credential storage and live/cached/curated model catalogs.
 - Added native streaming runtimes for the OpenAI Responses API, Google Gemini, and Azure OpenAI, including tool calls, usage metadata, retries, cancellation, and secret redaction.
 - Added RPC parity for provider/auth-method discovery, sanitized credential status, API-key login/logout, model refresh, and provider/model selection.
+- Added a dedicated model-provider guide with the canonical provider list, runtime IDs, authentication, model configuration, discovery behavior, and limitations.
 - Added a prompt-template guide, including template creation, slash-command expansion, and the starter templates installed by `kward init`.
 - Added a Stardate footer plugin example for the interactive CLI.
 - Added a general transport plugin API with normalized messages and events, persistent transport state, policy checks, managed lifecycle, foreground CLI commands, and RPC capability/status reporting.

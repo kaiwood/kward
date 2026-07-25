@@ -22,7 +22,7 @@ Use the interactive controls for ordinary changes. Edit `config.json` when you n
 | Configure personas | `/settings` → Personalization; see [Personas](personas.md) |
 | Add MCP servers, lifecycle hooks, or environment-specific paths | Edit `config.json` directly |
 
-For the complete reference, jump to [providers and models](#Provider_and_model_settings), [terminal interface settings](#Overlay_settings), [sessions and memory](#Session_settings), [web search](#Web_search), [workspace safety](#Tool_workspace_guardrails), or [logging](#Logging_and_stats).
+For the complete reference, jump to [provider and model settings](#Provider_and_model_settings), [terminal interface settings](#Overlay_settings), [sessions and memory](#Session_settings), [web search](#Web_search), [workspace safety](#Tool_workspace_guardrails), or [logging](#Logging_and_stats). Use [Model providers](providers.md) for the canonical provider matrix and practical selection guidance.
 
 Here is a minimal direct provider configuration:
 
@@ -179,6 +179,8 @@ aliases:
 `aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Built-in `ekwsh` commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `clear`, `pty`, and `exit` take precedence over aliases. Run `alias` inside `ekwsh` to list configured aliases. Aliases are also included in command-name Tab completion.
 
 ## Provider and model settings
+
+The [Model providers](providers.md) guide lists every provider ID, model key, credential variable, catalog source, and request API. This section explains the underlying config pattern.
 
 Set `provider` to choose the active backend:
 

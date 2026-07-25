@@ -117,8 +117,8 @@ Slash commands run local actions in the current session. Most do not send a prom
 
 | Command | Use it when you want to... |
 | --- | --- |
-| `/login` | sign in or save provider credentials. |
-| `/model` | choose the active model. |
+| `/login` | choose an authentication method and connect a model provider. |
+| `/model` | refresh models, switch providers, choose a model, or enter a manual ID. |
 | `/reasoning` | choose reasoning effort. |
 | `/git` | review uncommitted changes, stage files, and commit. |
 | `/diff` | open the file changes recorded in the current session. |

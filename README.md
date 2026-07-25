@@ -6,7 +6,7 @@ Instead of treating AI as a single chat window, Kward provides a persistent deve
 
 Use Kward from the terminal, a local browser interface, or a trusted JSON-RPC client. It can inspect and edit files, understand Git history, run local commands, research external sources, manage persistent sessions, and adapt to your way of working through project instructions, skills, memory, personas, hooks, plugins, MCP servers, and transports.
 
-Kward supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscriptions, OpenRouter, Copilot, and OpenAI-compatible local servers such as Ollama, LM Studio, and llama.cpp.
+Kward supports ChatGPT/Codex and Claude subscription login, direct OpenAI, Anthropic, Gemini, and Azure runtimes, a catalog of OpenAI-compatible API-key providers, GitHub Copilot, OpenRouter, and local servers such as Ollama, LM Studio, and llama.cpp.
 
 ## Why Kward?
 
@@ -62,7 +62,7 @@ kward --working-directory ~/code/project "Explain this project"
 
 From inside Kward, `/login` lets you choose API-key or subscription authentication across supported providers. `/model` then switches providers, refreshes model catalogs, or accepts a manual model/deployment ID. Direct OpenAI API credentials and ChatGPT/Codex OAuth can coexist.
 
-See [Authentication](doc/authentication.md) for provider support, credential storage, and environment overrides.
+See [Model providers](doc/providers.md) to choose a backend and [Authentication](doc/authentication.md) for credential storage and login flows.
 
 ## What Kward can do
 
@@ -82,7 +82,8 @@ New to Kward:
 - [Getting started](doc/getting-started.md): first run, authentication choices, and basic commands.
 - [Usage](doc/usage.md): interactive chat, slash commands, sessions, tools, images, and Pan mode.
 - [Configuration](doc/configuration.md): config files, providers, models, web search, logging, and color output.
-- [Authentication](doc/authentication.md): multi-provider API keys, OpenAI/Anthropic subscription OAuth, Azure setup, model selection, and credential safety.
+- [Authentication](doc/authentication.md): multi-provider API keys, OpenAI/Anthropic subscription OAuth, Azure setup, and credential safety.
+- [Model providers](doc/providers.md): the canonical provider list, runtime IDs, model keys, environment variables, discovery behavior, and limitations.
 
 Work safely:
 

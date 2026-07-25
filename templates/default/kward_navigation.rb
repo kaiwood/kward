@@ -10,6 +10,7 @@ module KwardDocsNavigationData
         ["Usage", "file.usage.html"],
         ["Configuration", "file.configuration.html"],
         ["Authentication", "file.authentication.html"],
+        ["Model providers", "file.providers.html"],
         ["Security and trust", "file.security.html"],
         ["Troubleshooting", "file.troubleshooting.html"]
       ]

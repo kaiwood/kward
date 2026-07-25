@@ -57,7 +57,7 @@ Or from inside an interactive session:
 /login
 ```
 
-Kward supports OpenAI/ChatGPT, Anthropic Claude Pro/Max, OpenRouter, and Copilot credentials. See [Authentication](authentication.md) when you need a specific provider.
+Kward supports subscription login, direct native APIs, OpenAI-compatible API-key providers, Copilot, OpenRouter, and local model servers. See [Model providers](providers.md) to choose one, then [Authentication](authentication.md) for its login flow.
 
 Confirm your credentials are saved:
 
@@ -65,7 +65,7 @@ Confirm your credentials are saved:
 kward auth status
 ```
 
-If your provider offers multiple models, choose one inside Kward with `/model`.
+Choose a model inside Kward with `/model`. The picker can refresh provider catalogs, switch providers, show all returned entries, or accept a manual model/deployment ID.
 
 ## Start an interactive chat
 

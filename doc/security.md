@@ -134,7 +134,7 @@ To answer a turn, Kward sends the assembled conversation context to the active m
 - images you attach,
 - summaries produced during compaction.
 
-Provider retention and training policies are controlled by the provider and your account or organization. Do not give Kward content you are not permitted to send to that provider.
+Provider retention and training policies are controlled by the provider and your account or organization. Do not give Kward content you are not permitted to send to that provider. Review [Model providers](providers.md) before switching endpoints, especially when moving between direct, routed, cloud, and local runtimes.
 
 ### Web tools
 
