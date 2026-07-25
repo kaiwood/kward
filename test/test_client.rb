@@ -55,6 +55,20 @@ class TestClient < KwardTestCase
     end
   end
 
+  def gemini_fixture(name)
+    File.read(File.join(__dir__, "fixtures", "gemini", name))
+  end
+
+  def with_gemini_client
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "gemini", "gemini_model" => "gemini-2.5-flash"))
+      store = Kward::APIKeyStore.new(path: File.join(dir, "api_keys.json"), config_path: config_path, env: { "GEMINI_API_KEY" => "gemini-fixture-key" })
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), api_key_store: store, config_path: config_path)
+      yield client
+    end
+  end
+
   def test_client_requires_openai_oauth_login_or_openrouter
     client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
@@ -310,6 +324,44 @@ class TestClient < KwardTestCase
           client.chat([{ role: "user", content: "Hello" }], cancellation: cancellation)
         end
         assert_empty http.requests
+      end
+    end
+  end
+
+  def test_gemini_native_api_converts_messages_tools_and_text_response
+    with_gemini_client do |client|
+      tools = [{ function: { name: "read_file", description: "Read a file", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } } }]
+      messages = [{ role: "system", content: "Be concise." }, { role: "user", content: "Hello" }]
+
+      with_fake_http([fake_net_response(200, gemini_fixture("text.json"))]) do |http|
+        message = client.chat(messages, tools: tools, max_tokens: 321)
+
+        assert_equal "Hello from Gemini.", message["content"]
+        assert_equal "Google Gemini", message["provider"]
+        assert_equal({ "input_tokens" => 7, "output_tokens" => 4, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 11, "estimated" => false }, message["usage"])
+        request = http.requests.first
+        assert_equal URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"), request.uri
+        assert_equal "gemini-fixture-key", request["x-goog-api-key"]
+        assert_nil request["Authorization"]
+        payload = JSON.parse(request.body)
+        assert_equal "Be concise.", payload.dig("systemInstruction", "parts", 0, "text")
+        assert_equal "Hello", payload.dig("contents", 0, "parts", 0, "text")
+        assert_equal "read_file", payload.dig("tools", 0, "functionDeclarations", 0, "name")
+        assert_equal 321, payload.dig("generationConfig", "maxOutputTokens")
+      end
+    end
+  end
+
+  def test_gemini_native_api_converts_function_calls_to_kward_tools
+    with_gemini_client do |client|
+      with_fake_http([fake_net_response(200, gemini_fixture("function_call.json"))]) do
+        message = client.chat([{ role: "user", content: "Read README" }])
+
+        assert_equal "I’ll inspect it.", message["content"]
+        call = message.fetch("tool_calls").first
+        assert_equal "call_gemini_1", call["id"]
+        assert_equal "read_file", call.dig("function", "name")
+        assert_equal({ "path" => "README.md" }, JSON.parse(call.dig("function", "arguments")))
       end
     end
   end

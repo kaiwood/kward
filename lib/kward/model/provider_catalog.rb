@@ -32,6 +32,7 @@ module Kward
       "cerebras" => "https://api.cerebras.ai/v1/chat/completions",
       "deepseek" => "https://api.deepseek.com/chat/completions",
       "fireworks" => "https://api.fireworks.ai/inference/v1/chat/completions",
+      "gemini" => "https://generativelanguage.googleapis.com/v1beta",
       "groq" => "https://api.groq.com/openai/v1/chat/completions",
       "mistral" => "https://api.mistral.ai/v1/chat/completions",
       "nvidia" => "https://integrate.api.nvidia.com/v1/chat/completions",

@@ -240,7 +240,7 @@ module Kward
       end
 
       ProviderCatalog.api_key_providers.each do |catalog_provider|
-        next unless ["openai_chat", "openai_responses"].include?(catalog_provider.protocol)
+        next unless ["openai_chat", "openai_responses", "gemini"].include?(catalog_provider.protocol)
         next if catalog_provider.id == "openrouter"
         next unless provider_logged_in?(catalog_provider.name)
 
@@ -308,6 +308,15 @@ module Kward
 
     def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:, max_tokens:)
       case provider
+      when "Google Gemini"
+        chat_gemini_provider(
+          url: url,
+          token: token,
+          request_body: request_body,
+          current_model: current_model,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
       when "OpenAI"
         chat_openai_responses_provider(
           url: url,
@@ -375,6 +384,66 @@ module Kward
           cancellation: cancellation
         )
       end
+    end
+
+    def chat_gemini_provider(url:, token:, request_body:, current_model:, on_assistant_delta:, cancellation:)
+      model = current_model.to_s.delete_prefix("models/")
+      request_url = URI("#{url.to_s.sub(%r{/+\z}, "")}/models/#{URI.encode_www_form_component(model)}:generateContent")
+      request = Http.apply_user_agent(Net::HTTP::Post.new(request_url))
+      request["x-goog-api-key"] = token
+      request["Content-Type"] = "application/json"
+      request.body = request_body
+
+      response = Net::HTTP.start(request_url.hostname, request_url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request)
+      end
+      cancellation&.raise_if_cancelled!
+      unless response.is_a?(Net::HTTPSuccess)
+        raise RequestError.new(provider: "Google Gemini", code: response.code, body: redact(response.body, token))
+      end
+
+      body = JSON.parse(response.body)
+      message = gemini_response_message(body)
+      on_assistant_delta&.call(message["content"]) unless message["content"].to_s.empty?
+      attach_response_metadata(message, provider: "Google Gemini", model: current_model, usage: gemini_usage(body["usageMetadata"]))
+    rescue JSON::ParserError => e
+      raise "Google Gemini returned invalid JSON: #{e.message}"
+    end
+
+    def gemini_response_message(body)
+      parts = body.dig("candidates", 0, "content", "parts")
+      raise "Google Gemini response did not include a candidate" unless parts.is_a?(Array)
+
+      content = parts.filter_map { |part| part["text"] }.join
+      tool_calls = parts.each_with_index.filter_map do |part, index|
+        function_call = part["functionCall"]
+        next unless function_call.is_a?(Hash)
+
+        {
+          "id" => function_call["id"] || "call_gemini_#{index}",
+          "type" => "function",
+          "function" => {
+            "name" => function_call["name"].to_s,
+            "arguments" => JSON.dump(function_call["args"] || {})
+          }
+        }
+      end
+      message = { "role" => "assistant", "content" => content }
+      message["tool_calls"] = tool_calls unless tool_calls.empty?
+      message
+    end
+
+    def gemini_usage(usage)
+      return nil unless usage.is_a?(Hash)
+
+      normalized_usage(
+        "input_tokens" => usage["promptTokenCount"],
+        "output_tokens" => usage["candidatesTokenCount"],
+        "cache_read_tokens" => usage["cachedContentTokenCount"],
+        "total_tokens" => usage["totalTokenCount"]
+      )
     end
 
     def chat_openai_responses_provider(url:, token:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:)
@@ -603,7 +672,9 @@ module Kward
     def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       reasoning = false unless ModelInfo.reasoning_supported?(provider, model)
 
-      if provider == "OpenAI"
+      if provider == "Google Gemini"
+        gemini_payload(messages, tools, max_tokens: max_tokens, model: model)
+      elsif provider == "OpenAI"
         openai_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       elsif provider == "Codex"
         codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
@@ -952,6 +1023,11 @@ module Kward
       if provider == "OpenAI"
         runtime = ProviderCatalog.runtime("openai")
         return [URI(runtime.chat_url), @api_key_store.fetch("openai"), provider, nil]
+      end
+
+      if provider == "Google Gemini"
+        runtime = ProviderCatalog.runtime("gemini")
+        return [URI(runtime.chat_url), @api_key_store.fetch("gemini"), provider, nil]
       end
 
       if (catalog_provider = ProviderCatalog.find_by_name(provider)) && catalog_provider.protocol == "openai_chat"

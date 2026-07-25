@@ -114,6 +114,55 @@ module Kward
       payload
     end
 
+    def gemini_payload(messages, tools, max_tokens: nil, model: nil)
+      system_parts = messages.filter_map do |message|
+        plain_content(MessageAccess.content(message)).to_s if MessageAccess.role(message).to_s == "system"
+      end.reject(&:empty?).map { |text| { text: text } }
+      payload = {
+        contents: messages.filter_map { |message| gemini_message(message) },
+        tools: tools.empty? ? nil : [{ functionDeclarations: tools.map { |tool| gemini_tool_schema(tool) } }]
+      }.compact
+      payload[:systemInstruction] = { parts: system_parts } unless system_parts.empty?
+      payload[:generationConfig] = { maxOutputTokens: max_tokens.to_i } if max_tokens.to_i.positive?
+      payload
+    end
+
+    def gemini_message(message)
+      role = MessageAccess.role(message).to_s
+      content = MessageAccess.content(message)
+      case role
+      when "system"
+        nil
+      when "assistant", "compactionSummary"
+        parts = []
+        text = role == "compactionSummary" ? MessageAccess.summary(message) || content.to_s : plain_content(content).to_s
+        parts << { text: text } unless text.empty?
+        MessageAccess.tool_calls(message).each do |tool_call|
+          function = ToolCall.function(tool_call)
+          parts << { functionCall: { name: ToolCall.value(function, :name), args: parse_tool_arguments(ToolCall.value(function, :arguments)) } }
+        end
+        { role: "model", parts: parts }
+      when "tool", "toolResult"
+        name = MessageAccess.tool_name(message) || MessageAccess.tool_call_id(message) || "tool"
+        response = JSON.parse(plain_content(content).to_s)
+        response = { "result" => response } unless response.is_a?(Hash)
+        { role: "user", parts: [{ functionResponse: { name: name, response: response } }] }
+      else
+        { role: "user", parts: [{ text: plain_content(content).to_s }] }
+      end
+    rescue JSON::ParserError
+      { role: "user", parts: [{ functionResponse: { name: name, response: { result: plain_content(content).to_s } } }] }
+    end
+
+    def gemini_tool_schema(tool)
+      function = ToolCall.function(tool)
+      {
+        name: ToolCall.value(function, :name),
+        description: ToolCall.value(function, :description) || "",
+        parameters: ToolCall.value(function, :parameters) || {}
+      }
+    end
+
     def codex_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       responses_payload("Codex", messages, tools, model: model, reasoning: reasoning)
     end
