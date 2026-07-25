@@ -16,6 +16,7 @@ class TestPermissionsPolicy < KwardTestCase
 
     assert policy.decision_for("read_file", { path: "README.md" }).allowed?
     assert policy.decision_for("write_file", { path: "lib/kward.rb" }).approval_required?
+    assert policy.decision_for("git_commit", { message: "ship it", paths: ["lib/kward.rb"] }).approval_required?
     assert policy.decision_for("run_shell_command", { command: "bundle exec rake" }).approval_required?
     assert policy.decision_for("fetch_content", { url: "https://example.com" }).approval_required?
   end
@@ -37,6 +38,8 @@ class TestPermissionsPolicy < KwardTestCase
 
     assert policy.decision_for("edit_file", { path: "lib/kward/workspace.rb" }).allowed?
     assert policy.decision_for("write_file", { path: "test/test_workspace.rb" }).allowed?
+    assert policy.decision_for("git_commit", { message: "ship it", paths: ["test/test_workspace.rb"] }).allowed?
+    assert policy.decision_for("git_commit", { message: "ship it", paths: ["README.md"] }).denied?
     assert policy.decision_for("write_file", { path: "README.md" }).denied?
   end
 
@@ -46,6 +49,7 @@ class TestPermissionsPolicy < KwardTestCase
 
       assert policy.decision_for("read_file", { path: "README.md" }).allowed?
       assert policy.decision_for("write_file", { path: "README.md" }).denied?
+      assert policy.decision_for("git_commit", { message: "ship it", paths: ["README.md"] }).denied?
       assert policy.decision_for("run_shell_command", { command: "echo hello" }).denied?
     end
   end

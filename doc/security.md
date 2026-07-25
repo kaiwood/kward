@@ -69,7 +69,7 @@ A worktree-backed tab uses its linked worktree as the active workspace and requi
 
 The strict worktree agent disables configured MCP clients and lifecycle hooks for that tab because those extensions run outside the command-worker sandbox. The interactive `/shell`, `!command`, and `/pty` features remain host-process features and are not covered by the worktree boundary. Use them only when you intentionally want to run a user-directed command outside the model command sandbox.
 
-Git worktrees share repository metadata. Kward keeps Git metadata protection enabled for model-requested commands, so the interactive `/git` flow is the safe way to review, stage, and commit the worktree branch.
+Git worktrees share repository metadata. Kward keeps Git metadata protection enabled for generic model-requested commands. Active worktree tabs provide a narrow host-side `git_commit` tool for explicit agent commits; the interactive `/git` flow remains the manual review, staging, and commit path.
 
 ## Tool approvals and policy hooks
 

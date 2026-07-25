@@ -78,9 +78,12 @@ hooks because they run in the Kward host process rather than inside the command
 sandbox.
 
 This does not contain the interactive `/shell`, `!command`, or `/pty` features;
-those are user-directed host-process operations. Git metadata protection also
-remains enabled, so model-requested commands cannot stage or commit by default.
-Use the interactive `/git` flow to review and commit the worktree branch.
+those are user-directed host-process operations. Generic model-requested shell
+commands still cannot write Git metadata. Active worktree tabs additionally
+expose a narrow `git_commit` tool for explicit agent-requested commits; it runs
+through the trusted host-side Git workflow rather than widening the shell
+sandbox. The interactive `/git` flow remains available for manual review and
+commit.
 
 ## Platform support
 

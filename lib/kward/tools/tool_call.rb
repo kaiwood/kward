@@ -24,6 +24,7 @@ module Kward
       "web_search" => "web_search",
       "fetch_content" => "fetch_content",
       "fetch_raw" => "fetch_raw",
+      "git_commit" => "git_commit",
       "read_skill" => "read_skill",
       "ask_user_question" => "ask_user_question"
     }.freeze

@@ -380,6 +380,9 @@ class TestTabs < KwardTestCase
         tab = cli.send(:active_tab)
         cli.send(:handle_tab_command, "worktree", store)
         binding = tab.driver.worktree
+        assert_includes tab.agent.conversation.execution_profile_context, "git_commit"
+        assert_includes tab.agent.conversation.system_message.fetch(:content), "Do not use `run_shell_command` for `git add` or `git commit`"
+        assert_includes tab.agent.tool_registry.schemas.map { |schema| schema.dig(:function, :name) }, "git_commit"
 
         result = tab.agent.tool_registry.dispatch(
           tool_call("write_file", { "path" => "agent.txt", "content" => "worktree only\n" }),
@@ -395,6 +398,15 @@ class TestTabs < KwardTestCase
         )
 
         assert_includes shell_result, File.realpath(binding.path)
+
+        commit_result = tab.agent.tool_registry.dispatch(
+          tool_call("git_commit", { "message" => "commit worktree change", "paths" => ["agent.txt"] }),
+          tab.agent.conversation
+        )
+
+        assert_includes commit_result, "Git commit succeeded"
+        assert_equal "commit worktree change", git_in_test(binding.path, "log", "-1", "--pretty=%s").strip
+        assert_empty git_in_test(binding.path, "status", "--short").strip
         refute File.exist?(File.join(root, "agent.txt"))
       ensure
         remove_test_worktree(binding)
@@ -417,6 +429,7 @@ class TestTabs < KwardTestCase
         cli.send(:handle_tab_command, "worktree", store)
 
         refute binding.active?
+        assert_nil tab.agent.conversation.execution_profile_context
         assert_equal File.realpath(root), tab.agent.conversation.workspace_root
         assert_equal "keep me\n", File.read(File.join(binding.path, "worktree.txt"))
       ensure

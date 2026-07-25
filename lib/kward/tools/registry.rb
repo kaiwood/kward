@@ -8,6 +8,7 @@ require_relative "context_for_task"
 require_relative "edit_file"
 require_relative "fetch_content"
 require_relative "fetch_raw"
+require_relative "git_commit"
 require_relative "list_directory"
 require_relative "mcp_tool"
 require_relative "read_file"
@@ -78,7 +79,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -96,6 +97,7 @@ module Kward
       @permission_policy = permission_policy || Permissions::Policy.from_config(ConfigFiles.read_config)
       @hook_manager = hook_manager
       @hook_context = hook_context
+      @git_committer = git_committer
       @mcp_clients = if mcp_clients
                        mcp_clients
                      elsif @allowed_tool_names
@@ -484,6 +486,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(*CORE_TOOL_NAMES)
+      tools << @tools["git_commit"] if @tools["git_commit"]
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
       tools << @tools["read_skill"] if skills_available?
@@ -492,7 +495,9 @@ module Kward
     end
 
     def all_tools
-      core_tools + [
+      tools = core_tools
+      tools << Tools::GitCommit.new(committer: @git_committer) if @git_committer
+      tools + [
         Tools::WebSearch.new(web_search: @web_search),
         Tools::FetchContent.new(web_fetch: @web_fetch),
         Tools::FetchRaw.new(web_fetch: @web_fetch),

@@ -107,6 +107,12 @@ This is just a lightweight status hint. Use `/git` when you want to review or co
 
 If the working tree is clean when you run `/git`, the overlay shows `No uncommitted changes.` and there is nothing to stage or commit.
 
+## Agent commits in worktree tabs
+
+When an active worktree tab receives an explicit request to commit, the agent can use the model-facing `git_commit` tool. It runs Git in the trusted host process so linked-worktree metadata can be updated without granting arbitrary shell commands write access to shared `.git` metadata.
+
+The tool requires a commit message and can receive an optional list of workspace-relative paths. If paths are omitted, all current changes in the active worktree are included. Generic `run_shell_command` Git commands remain sandboxed and cannot replace this operation. It is exposed only for active interactive worktree tabs; RPC sessions do not currently support worktree bindings.
+
 ## Notes and limitations
 
 - `/git` is available in the interactive terminal UI, not in one-shot prompts or the RPC backend.

@@ -8,6 +8,12 @@ module Kward
   class CLI
     # TUI session tab coordination and asynchronous turn execution.
     module Tabs
+      WORKTREE_AGENT_CONTEXT = <<~PROMPT.strip.freeze
+        This is an active Git worktree tab. The workspace is sandboxed separately from the host repository metadata.
+        When the user explicitly asks you to commit, use the advertised `git_commit` tool. Do not use `run_shell_command` for `git add` or `git commit`, because shared Git metadata is intentionally protected there.
+        `git_commit` requires a commit message and accepts optional workspace-relative paths; omit paths to include all current changes in this worktree. Do not create a commit unless the user requested one.
+      PROMPT
+
       TabRuntime = Struct.new(
         :session,
         :agent,
@@ -200,17 +206,22 @@ module Kward
       def build_tab_agent(conversation, _session, worktree: nil)
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         strict = worktree&.active? == true
+        update_worktree_agent_context(conversation, strict)
         workspace = configured_workspace(root: conversation.workspace_root, strict: strict)
         prompt = TabQuestionPrompt.new(self)
         hook_manager = strict ? nil : lifecycle_hook_manager(conversation)
         hook_context = strict ? nil : lifecycle_hook_context(conversation)
+        git_committer = if strict
+                          ->(message:, paths:) { git_commit_for_agent(workspace.root.to_s, message: message, paths: paths) }
+                        end
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: prompt,
           tool_approval: tab_tool_approval_callback(prompt),
           hook_manager: hook_manager,
           hook_context: hook_context,
-          mcp_clients: strict ? [] : nil
+          mcp_clients: strict ? [] : nil,
+          git_committer: git_committer
         )
         @footer_conversation = conversation
         @footer_tool_registry = tool_registry
@@ -223,6 +234,14 @@ module Kward
         )
         agent.instance_variable_set(:@tab_question_prompt, prompt)
         agent
+      end
+
+      def update_worktree_agent_context(conversation, strict)
+        desired = strict ? WORKTREE_AGENT_CONTEXT : nil
+        return if conversation.execution_profile_context == desired
+        return unless strict || conversation.execution_profile_context == WORKTREE_AGENT_CONTEXT
+
+        conversation.update_execution_profile_context!(desired)
       end
 
       def tab_tool_approval_callback(prompt)

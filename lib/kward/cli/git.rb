@@ -1,4 +1,5 @@
 require "open3"
+require "pathname"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -131,18 +132,38 @@ module Kward
         { path: path, staged: status[0] != " " && status[0] != "?", untracked: status == "??" }
       end
 
-      def git_commit(root, message)
-        before = git_lifecycle_hook("git_commit_before", root: root, payload: { message: message.to_s })
-        return { success: false, output: "Declined: #{before.decision.message || "git commit denied"}" } if before.denied? || before.approval_required?
+      def git_commit_for_agent(root, message:, paths: nil)
+        git_commit(root, message, paths: paths, stage_all: true, run_hooks: false)
+      end
 
-        return git_commit_staged(root, message) if git_staged_changes?(root)
+      def git_commit(root, message, paths: nil, stage_all: false, run_hooks: true)
+        if run_hooks
+          before = git_lifecycle_hook("git_commit_before", root: root, payload: { message: message.to_s })
+          return { success: false, output: "Declined: #{before.decision.message || "git commit denied"}" } if before.denied? || before.approval_required?
+        end
 
-        add_output, add_status = Open3.capture2e("git", "add", "--all", chdir: root.to_s)
+        return git_commit_staged(root, message, run_hooks: run_hooks) if !stage_all && paths.nil? && git_staged_changes?(root)
+
+        add_arguments = ["git", "add", "--all"]
+        add_arguments.concat(["--", *validated_git_commit_paths(root, paths)]) if paths
+        add_output, add_status = Open3.capture2e(*add_arguments, chdir: root.to_s)
         return { success: false, output: add_output } unless add_status.success?
 
-        git_commit_staged(root, message)
+        git_commit_staged(root, message, run_hooks: run_hooks)
       rescue StandardError => e
         { success: false, output: e.message }
+      end
+
+      def validated_git_commit_paths(root, paths)
+        Array(paths).map do |path|
+          value = path.to_s
+          expanded = File.expand_path(value, root.to_s)
+          unless !value.empty? && !Pathname.new(value).absolute? && (expanded == root.to_s || expanded.start_with?("#{root}/"))
+            raise ArgumentError, "Git commit path must be workspace-relative: #{value}"
+          end
+
+          value
+        end
       end
 
       def git_staged_changes?(root)
@@ -152,10 +173,12 @@ module Kward
         false
       end
 
-      def git_commit_staged(root, message)
+      def git_commit_staged(root, message, run_hooks: true)
         commit_output, commit_status = Open3.capture2e("git", "commit", "-m", message.to_s, chdir: root.to_s)
         result = { success: commit_status.success?, output: commit_output }
-        git_lifecycle_hook("git_commit_after", root: root, payload: { message: message.to_s, success: result[:success], output: result[:output] })
+        if run_hooks
+          git_lifecycle_hook("git_commit_after", root: root, payload: { message: message.to_s, success: result[:success], output: result[:output] })
+        end
         result
       rescue StandardError => e
         { success: false, output: e.message }

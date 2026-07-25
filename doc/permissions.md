@@ -91,7 +91,7 @@ With this configuration, the agent may edit `lib/` and `test/` without asking. A
 
 `write_scopes` narrows the policy's default workspace-write behavior; it does not broaden Kward's built-in workspace boundary. File tools still stay inside the active workspace by default, and existing files must still be read before Kward can edit them. See [Workspace tools](workspace-tools.md) for those guardrails.
 
-An empty `write_scopes` array permits no default workspace writes. Omit `write_scopes` if you want the `workspace-write` mode to cover the normal workspace file-tool boundary.
+An empty `write_scopes` array permits no default workspace writes. Omit `write_scopes` if you want the `workspace-write` mode to cover the normal workspace file-tool boundary. The active worktree `git_commit` tool is treated as a mutating tool: it asks for approval in the default `ask` mode and is denied by read-only or deny-by-default modes unless explicitly allowed.
 
 ## Rules and precedence
 

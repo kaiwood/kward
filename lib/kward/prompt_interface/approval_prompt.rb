@@ -37,6 +37,7 @@ module Kward
       def tool_approval_title(tool_name)
         case tool_name.to_s
         when "run_shell_command" then "Shell command"
+        when "git_commit" then "Git commit"
         when "write_file" then "Write file"
         when "edit_file" then "Edit file"
         when "fetch_content", "fetch_raw" then "Network request"
@@ -48,6 +49,7 @@ module Kward
       def tool_approval_details(tool_name, args)
         action = case tool_name.to_s
                  when "run_shell_command" then "run this shell command"
+                 when "git_commit" then "create this Git commit"
                  when "write_file" then "write this file"
                  when "edit_file" then "edit this file"
                  when "read_file", "read_skill" then "read these resources"

@@ -13,6 +13,7 @@ module Kward
       MODES = %w[ask read-only workspace-write deny-by-default].freeze
       NETWORK_TOOLS = %w[web_search fetch_content fetch_raw].freeze
       FILE_CHANGE_TOOLS = %w[write_file edit_file].freeze
+      MUTATING_TOOLS = (FILE_CHANGE_TOOLS + ["git_commit"]).freeze
 
       Decision = Struct.new(:action, :reason, keyword_init: true) do
         def allowed?
@@ -96,13 +97,15 @@ module Kward
       def request_for(tool_name, arguments, source:)
         name = tool_name.to_s
         args = arguments.to_h
-        {
+        request = {
           "tool" => name,
           "path" => args["path"] || args[:path],
           "host" => request_host(name, args),
           "command" => args["command"] || args[:command],
           "source" => source.to_s
         }.compact.transform_values(&:to_s)
+        request["paths"] = args["paths"] || args[:paths] if name == "git_commit"
+        request
       end
 
       def request_host(name, arguments)
@@ -135,11 +138,11 @@ module Kward
         return Decision.new(action: :deny, reason: "read-only mode") if @mode == "read-only" && risky?(request)
         return Decision.new(action: :deny, reason: "deny-by-default mode") if @mode == "deny-by-default" && risky?(request)
 
-        if file_change?(request) && outside_write_scopes?(request)
+        if mutating?(request) && outside_write_scopes?(request)
           return Decision.new(action: :deny, reason: "path outside write scopes")
         end
 
-        if @mode == "workspace-write" && file_change?(request)
+        if @mode == "workspace-write" && mutating?(request)
           return Decision.new(action: :allow, reason: "workspace write mode")
         end
 
@@ -152,16 +155,27 @@ module Kward
         FILE_CHANGE_TOOLS.include?(request.fetch("tool"))
       end
 
+      def mutating?(request)
+        MUTATING_TOOLS.include?(request.fetch("tool"))
+      end
+
       def network?(request)
         NETWORK_TOOLS.include?(request.fetch("tool")) || request["source"] == "mcp"
       end
 
       def risky?(request)
-        file_change?(request) || request.fetch("tool") == "run_shell_command" || network?(request)
+        mutating?(request) || request.fetch("tool") == "run_shell_command" || network?(request)
       end
 
       def outside_write_scopes?(request)
         return false if @write_scopes.nil?
+
+        if request.fetch("tool") == "git_commit"
+          paths = request["paths"]
+          return true unless paths.is_a?(Array) && !paths.empty?
+
+          return paths.any? { |path| !@write_scopes.any? { |scope| glob_match?(scope, path) } }
+        end
 
         path = request["path"]
         path.nil? || !@write_scopes.any? { |scope| glob_match?(scope, path) }
