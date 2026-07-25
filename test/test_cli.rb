@@ -419,6 +419,26 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_api_key_login_does_not_store_a_key_when_model_validation_fails
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      prompt = FakePrompt.new(["invalid-key"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      catalog = Object.new
+      catalog.define_singleton_method(:refresh) { raise "Groq model refresh failed: 401" }
+
+      cli.define_singleton_method(:model_catalog) { |provider_id:, api_key:| catalog }
+
+      with_env("KWARD_CONFIG_PATH" => path) do
+        error = assert_raises(RuntimeError) { cli.login(provider: "groq") }
+        assert_equal "Groq model refresh failed: 401", error.message
+      end
+
+      refute File.exist?(File.join(dir, "api_keys.json"))
+      refute_includes prompt.output.join, "invalid-key"
+    end
+  end
+
   def test_login_picker_sorts_api_key_providers_and_keeps_subscription_logins_separate
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
 

@@ -108,9 +108,21 @@ module Kward
         raise "#{provider.name} does not accept an API key" unless provider.api_key?
 
         api_key = @prompt.ask("#{provider.name} API key:").to_s.strip
+        models = refresh_provider_models(provider, api_key)
         path = api_key_store.store(provider.id, api_key)
         configure_provider_after_api_key_login(provider)
         @prompt.say("#{colored("Saved", :green, :bold)} #{provider.name} API key to #{path}")
+        @prompt.say("Loaded #{models.length} #{provider.name} model#{models.length == 1 ? "" : "s"}.") if models
+      end
+
+      def refresh_provider_models(provider, api_key)
+        return unless ProviderCatalog.runtime(provider.id).automatic_model_discovery?
+
+        model_catalog(provider_id: provider.id, api_key: api_key).refresh
+      end
+
+      def model_catalog(provider_id:, api_key:)
+        ModelCatalog.new(provider_id: provider_id, api_key: api_key)
       end
 
       def configure_provider_after_api_key_login(provider)
