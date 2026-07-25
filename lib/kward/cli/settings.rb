@@ -120,7 +120,10 @@ module Kward
 
       def provider_choices
         current = current_model_provider
-        ["Codex", "Anthropic", "OpenRouter", "Copilot", "Local"].map do |provider|
+        configured_api_key_providers = ProviderCatalog.api_key_providers.filter_map do |provider|
+          provider.name if api_key_store.configured?(provider.id)
+        end
+        (["Codex", "Anthropic", "OpenRouter", "Copilot", "Local"] + configured_api_key_providers).uniq.map do |provider|
           label = provider.dup
           label += " (current)" if provider == current
           label
@@ -135,7 +138,7 @@ module Kward
         return "Copilot" if text.start_with?("copilot")
         return "Local" if text.start_with?("local")
 
-        nil
+        ProviderCatalog.find_by_name(selected)&.name
       end
 
       def configure_local_server_preset(conversation)
