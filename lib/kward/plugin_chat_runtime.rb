@@ -37,6 +37,7 @@ module Kward
       :chat_id,
       :input,
       :display_input,
+      :context,
       :status,
       :cancellation,
       :created_at,
@@ -87,13 +88,14 @@ module Kward
       @mutex.synchronize { @chats[chat_id.to_s] }
     end
 
-    def start_turn(chat_id:, input:, display_input: nil)
+    def start_turn(chat_id:, input:, display_input: nil, context: nil)
       chat = fetch_chat(chat_id)
       turn = Turn.new(
         id: SecureRandom.uuid,
         chat_id: chat.id,
         input: input,
         display_input: display_input.nil? ? input.to_s : display_input.to_s,
+        context: context || {},
         status: "queued",
         cancellation: Cancellation.new,
         created_at: Time.now.utc.iso8601(3),
@@ -243,7 +245,14 @@ module Kward
       end
       chat.running_turn_id = turn.id
       emit_event(turn, "turnStarted", { status: "running" })
-      chat.driver.submit(turn.input, display_input: turn.display_input, cancellation: turn.cancellation) do |event|
+      submit_options = {
+        display_input: turn.display_input,
+        cancellation: turn.cancellation
+      }
+      if !turn.context.empty? && accepts_context?(chat.driver)
+        submit_options[:context] = turn.context
+      end
+      chat.driver.submit(turn.input, **submit_options) do |event|
         handle_driver_event(chat, turn, event)
       end
       finish_turn(turn, turn.cancellation.cancelled? ? "canceled" : "completed")
@@ -254,6 +263,12 @@ module Kward
       finish_turn(turn, "failed")
     ensure
       chat.running_turn_id = nil if chat.running_turn_id == turn.id
+    end
+
+    def accepts_context?(driver)
+      driver.method(:submit).parameters.any? do |kind, name|
+        kind == :keyrest || ((kind == :key || kind == :keyreq) && name == :context)
+      end
     end
 
     def handle_driver_event(chat, turn, event)

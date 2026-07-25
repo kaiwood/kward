@@ -226,6 +226,7 @@ module Kward
 
           result = @host.plugin_chat_gateway.start_transport_plugin_chat_turn(
             chat_id: @id,
+            actor: @actor,
             input: input,
             attachments: attachments,
             streaming_behavior: streaming_behavior,

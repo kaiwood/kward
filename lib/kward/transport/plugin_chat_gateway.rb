@@ -35,7 +35,7 @@ module Kward
         )
       end
 
-      def start_transport_plugin_chat_turn(chat_id:, input:, attachments: [], streaming_behavior: nil, execution_profile: nil)
+      def start_transport_plugin_chat_turn(chat_id:, actor:, input:, attachments: [], streaming_behavior: nil, execution_profile: nil)
         if execution_profile && !execution_profile.attachments && !Array(attachments).empty?
           raise ArgumentError, "transport execution profile does not allow attachments"
         end
@@ -46,7 +46,8 @@ module Kward
         turn = @runtime.start_turn(
           chat_id: chat_id,
           input: @runtime.input_with_attachments(input, normalize_attachments(attachments)),
-          display_input: input.to_s
+          display_input: input.to_s,
+          context: { actor: actor }
         )
         Host::PluginChatTurnHandle.new(id: turn.id, chat_id: turn.chat_id)
       end
