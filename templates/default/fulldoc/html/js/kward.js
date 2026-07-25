@@ -19,6 +19,7 @@ const guideLinks = {
   'doc/code-search.md': 'file.code-search.html',
   'doc/context-tools.md': 'file.context-tools.html',
   'doc/rpc.md': 'file.rpc.html',
+  'doc/transports.md': 'file.transports.html',
   'doc/releasing.md': 'file.releasing.html'
 }
 

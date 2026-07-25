@@ -53,6 +53,7 @@ module KwardDocsNavigationData
       [
         ["MCP servers", "file.mcp.html"],
         ["RPC protocol", "file.rpc.html"],
+        ["Transports", "file.transports.html"],
         ["Releasing", "file.releasing.html"]
       ]
     ],
