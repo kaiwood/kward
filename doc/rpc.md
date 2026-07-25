@@ -184,7 +184,7 @@ Returns:
 ```json
 {
   "summary": "Compaction summary",
-  "firstKeptEntryId": "message:2",
+  "firstKeptEntryId": "a13f8c42",
   "tokensBefore": 1234,
   "details": {
     "read_files": [],
@@ -206,12 +206,12 @@ Returns forkable user-message entries for the active session:
 ```json
 {
   "messages": [
-    { "entryId": "message:0", "text": "User message text" }
+    { "entryId": "a13f8c42", "text": "User message text" }
   ]
 }
 ```
 
-`entryId` values are stable message-index IDs within the linear session. `text` is compact display text.
+`entryId` values are opaque, stable persisted tree-entry IDs. Clients must use the IDs returned by Kward rather than constructing them. `text` is compact display text.
 
 ### `sessions/fork`
 
