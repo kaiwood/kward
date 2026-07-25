@@ -115,7 +115,17 @@ module Kward
     end
 
     def codex_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
-      parts = build_context_parts("Codex", messages, tools, model: model)
+      responses_payload("Codex", messages, tools, model: model, reasoning: reasoning)
+    end
+
+    def openai_responses_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
+      payload = responses_payload("OpenAI", messages, tools, model: model, reasoning: reasoning)
+      payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
+      payload
+    end
+
+    def responses_payload(provider, messages, tools, model:, reasoning:)
+      parts = build_context_parts(provider, messages, tools, model: model)
       payload = {
         model: parts[:model],
         instructions: parts[:instructions],
@@ -128,10 +138,10 @@ module Kward
         include: []
       }
       unless reasoning == false
-        effort = reasoning || reasoning_effort("Codex")
+        effort = reasoning || reasoning_effort(provider)
         payload[:reasoning] = { effort: effort, summary: "auto" }
         # TODO: Remove this Luna-specific Responses Lite workaround when Codex accepts Kward's own client identity.
-        payload[:reasoning][:context] = "all_turns" if parts[:model] == "gpt-5.6-luna"
+        payload[:reasoning][:context] = "all_turns" if provider == "Codex" && parts[:model] == "gpt-5.6-luna"
       end
       payload
     end
@@ -161,7 +171,7 @@ module Kward
           input: input,
           tools: tools.map { |tool| codex_tool_schema(tool) }
         }
-      elsif provider == "Codex"
+      elsif ["Codex", "OpenAI"].include?(provider)
         instructions, input = codex_messages(messages)
         {
           provider: provider,

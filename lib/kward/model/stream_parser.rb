@@ -77,15 +77,15 @@ module Kward
       result
     end
 
-    def parse_codex_sse(body, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
+    def parse_codex_sse(body, provider_label: "Codex", on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
       state = codex_sse_state(show_raw_reasoning: show_raw_reasoning)
       body.split(/\r?\n\r?\n/).each do |block|
-        process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
+        process_codex_sse_block(block, state, provider_label: provider_label, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
       end
       flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
       codex_sse_message(state)
     rescue JSON::ParserError => e
-      raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
+      raise "#{provider_label} returned invalid SSE JSON: #{e.message}"
     end
 
     # Incrementally parses a Codex/Responses SSE HTTP response body.
@@ -93,7 +93,7 @@ module Kward
     # Deltas are yielded as soon as complete SSE blocks arrive so interactive
     # frontends can render streamed assistant and reasoning text without waiting
     # for the provider to close the response.
-    def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
+    def parse_codex_sse_stream(response, provider_label: "Codex", on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil, show_raw_reasoning: false, usage_normalizer: nil, request_error_class: nil)
       state = codex_sse_state(show_raw_reasoning: show_raw_reasoning)
       buffer = +""
 
@@ -104,15 +104,15 @@ module Kward
           delimiter = Regexp.last_match[0]
           block = buffer[0...index]
           buffer = buffer[(index + delimiter.length)..] || +""
-          process_codex_sse_block(block, state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
+          process_codex_sse_block(block, state, provider_label: provider_label, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class)
         end
       end
       cancellation&.raise_if_cancelled!
-      process_codex_sse_block(buffer, state, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class) unless buffer.empty?
+      process_codex_sse_block(buffer, state, provider_label: provider_label, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, usage_normalizer: usage_normalizer, request_error_class: request_error_class) unless buffer.empty?
       flush_codex_reasoning_delta(state, on_reasoning_delta: on_reasoning_delta)
       codex_sse_message(state)
     rescue JSON::ParserError => e
-      raise "Codex OAuth returned invalid SSE JSON: #{e.message}"
+      raise "#{provider_label} returned invalid SSE JSON: #{e.message}"
     end
 
     def parse_anthropic_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil, usage_normalizer: nil, request_error_class: nil)
@@ -271,7 +271,7 @@ module Kward
       }
     end
 
-    def process_codex_sse_block(block, state, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
+    def process_codex_sse_block(block, state, provider_label: "Codex", on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, usage_normalizer: nil, request_error_class: nil)
       data = block.lines.filter_map { |line| line.start_with?("data:") ? line.delete_prefix("data:").strip : nil }.join("\n")
       return if data.empty? || data == "[DONE]"
 
@@ -309,11 +309,11 @@ module Kward
           end
         end
       when "response.failed", "response.incomplete"
-        raise codex_sse_error(event, request_error_class: request_error_class)
+        raise codex_sse_error(event, provider_label: provider_label, request_error_class: request_error_class)
       end
     end
 
-    def codex_sse_error(event, request_error_class: nil)
+    def codex_sse_error(event, provider_label: "Codex", request_error_class: nil)
       response = event["response"]
       error = event["error"] || (response["error"] if response.is_a?(Hash)) || {}
       message = if error.is_a?(Hash)
@@ -324,7 +324,7 @@ module Kward
       message = event["type"].to_s if message.empty?
       code = error.is_a?(Hash) && error["code"].to_s == "server_error" ? 500 : 400
       if request_error_class
-        request_error_class.new(provider: "Codex", code: code, body: "#{event["type"]}: #{message}")
+        request_error_class.new(provider: provider_label, code: code, body: "#{event["type"]}: #{message}")
       else
         "#{event["type"]}: #{message}"
       end
@@ -364,6 +364,10 @@ module Kward
         part["type"] ||= "output_text"
         text_key = part["type"] == "refusal" ? "refusal" : "text"
         part[text_key] = part[text_key].to_s + text
+        if codex_streamable_message_item?(item)
+          on_assistant_delta&.call(text)
+          state[:emitted_message_keys] << codex_item_key(item)
+        end
       end
       state[:raw_content] << text
     end
@@ -701,7 +705,8 @@ module Kward
     end
 
     def codex_streamable_message_item?(item)
-      codex_message_phase(item) == "final_answer"
+      phase = codex_message_phase(item)
+      phase.empty? || phase == "final_answer"
     end
 
     def codex_message_phase(item)

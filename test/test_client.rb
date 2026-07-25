@@ -41,6 +41,20 @@ class TestClient < KwardTestCase
     assert models.any? { |model| expected.all? { |key, value| model[key] == value } }, "Expected #{models.inspect} to include model matching #{expected.inspect}"
   end
 
+  def openai_fixture(name)
+    File.read(File.join(__dir__, "fixtures", "openai", name))
+  end
+
+  def with_openai_api_client(api_key: "fixture-secret")
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("provider" => "openai_api", "openai_api_model" => "gpt-5.4-mini"))
+      store = Kward::APIKeyStore.new(path: File.join(dir, "api_keys.json"), config_path: config_path, env: { "OPENAI_API_KEY" => api_key })
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), api_key_store: store, config_path: config_path)
+      yield client
+    end
+  end
+
   def test_client_requires_openai_oauth_login_or_openrouter
     client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 
@@ -209,6 +223,94 @@ class TestClient < KwardTestCase
 
       assert models.any? { |model| model[:provider] == "Codex" }
       assert_includes_model models, { provider: "OpenAI", id: "gpt-api-model", current: true, contextWindow: 128_000 }
+    end
+  end
+
+  def test_openai_responses_api_streams_text_and_normalizes_usage
+    with_openai_api_client do |client|
+      deltas = []
+      with_fake_http([fake_net_response(200, openai_fixture("text.sse"))]) do |http|
+        message = client.chat([{ role: "user", content: "Hello" }], max_tokens: 123, on_assistant_delta: ->(delta) { deltas << delta })
+
+        assert_equal "Hello captain.", message["content"]
+        assert_equal ["Hello ", "captain."], deltas
+        assert_equal({ "input_tokens" => 11, "output_tokens" => 4, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 15, "estimated" => false }, message["usage"])
+        assert_equal "OpenAI", message["provider"]
+        assert_equal URI("https://api.openai.com/v1/responses"), http.requests.first.uri
+        assert_equal "Bearer fixture-secret", http.requests.first["Authorization"]
+        payload = JSON.parse(http.requests.first.body)
+        assert_equal true, payload["stream"]
+        assert_equal false, payload["store"]
+        assert_equal 123, payload["max_output_tokens"]
+        assert_equal "Hello", payload.fetch("input").last.dig("content", 0, "text")
+      end
+    end
+  end
+
+  def test_openai_responses_api_assembles_tool_calls
+    with_openai_api_client do |client|
+      tools = [{ name: "read_file", description: "Read a file", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } }]
+      with_fake_http([fake_net_response(200, openai_fixture("tools.sse"))]) do
+        message = client.chat([{ role: "user", content: "Read it" }], tools: tools)
+
+        assert_equal "call_1", message.fetch("tool_calls").first["id"]
+        assert_equal "read_file", message.fetch("tool_calls").first.dig("function", "name")
+        assert_equal({ "path" => "README.md" }, JSON.parse(message.fetch("tool_calls").first.dig("function", "arguments")))
+      end
+    end
+  end
+
+  def test_openai_responses_api_does_not_retry_401_and_redacts_the_key
+    with_openai_api_client do |client|
+      with_fake_http([fake_net_response(401, openai_fixture("unauthorized.json"))]) do |http|
+        error = assert_raises(Kward::Client::RequestError) { client.chat([{ role: "user", content: "Hello" }]) }
+
+        assert_equal 1, http.requests.length
+        assert_includes error.message, "[REDACTED]"
+        refute_includes error.message, "fixture-secret"
+      end
+    end
+  end
+
+  def test_openai_responses_api_retries_429_and_5xx
+    [[429, "rate_limit.json"], [503, "server_error.json"]].each do |status, fixture|
+      with_openai_api_client do |client|
+        disable_sleep(client)
+        retries = []
+        responses = [fake_net_response(status, openai_fixture(fixture)), fake_net_response(200, openai_fixture("text.sse"))]
+        with_fake_http(responses) do |http|
+          message = client.chat([{ role: "user", content: "Hello" }], on_retry: ->(event) { retries << event })
+
+          assert_equal "Hello captain.", message["content"]
+          assert_equal 2, http.requests.length
+          assert_equal "OpenAI", retries.first[:provider]
+        end
+      end
+    end
+  end
+
+  def test_openai_responses_api_reports_malformed_streams
+    with_openai_api_client do |client|
+      with_fake_http([fake_net_response(200, openai_fixture("malformed.sse"))]) do
+        error = assert_raises(RuntimeError) { client.chat([{ role: "user", content: "Hello" }]) }
+
+        assert_includes error.message, "OpenAI returned invalid SSE JSON"
+        refute_includes error.message, "fixture-secret"
+      end
+    end
+  end
+
+  def test_openai_responses_api_honors_cancellation_before_request
+    with_openai_api_client do |client|
+      cancellation = Kward::Cancellation.new
+      cancellation.cancel!
+
+      with_fake_http([]) do |http|
+        assert_raises(Kward::Cancellation::CancelledError) do
+          client.chat([{ role: "user", content: "Hello" }], cancellation: cancellation)
+        end
+        assert_empty http.requests
+      end
     end
   end
 

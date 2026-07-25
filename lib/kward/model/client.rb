@@ -308,6 +308,17 @@ module Kward
 
     def chat_provider_request(provider:, url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:, max_tokens:)
       case provider
+      when "OpenAI"
+        chat_openai_responses_provider(
+          url: url,
+          token: token,
+          request_body: request_body,
+          current_model: current_model,
+          on_reasoning_delta: on_reasoning_delta,
+          on_reasoning_boundary: on_reasoning_boundary,
+          on_assistant_delta: on_assistant_delta,
+          cancellation: cancellation
+        )
       when "Codex"
         chat_codex_provider(
           url: url,
@@ -364,6 +375,31 @@ module Kward
           cancellation: cancellation
         )
       end
+    end
+
+    def chat_openai_responses_provider(url:, token:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:)
+      request = Http.apply_user_agent(Net::HTTP::Post.new(url))
+      request["Authorization"] = "Bearer #{token}"
+      request["Content-Type"] = "application/json"
+      request["Accept"] = "text/event-stream"
+      request.body = request_body
+
+      message = nil
+      Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
+        cancellation&.on_cancel { close_http(http) }
+        cancellation&.raise_if_cancelled!
+        http.request(request) do |response|
+          unless response.is_a?(Net::HTTPSuccess)
+            body = +""
+            response.read_body { |chunk| body << chunk }
+            raise RequestError.new(provider: "OpenAI", code: response.code, body: redact(body, token))
+          end
+
+          message = parse_responses_sse_stream(response, provider: "OpenAI", on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+        end
+      end
+      cancellation&.raise_if_cancelled!
+      attach_response_metadata(message, provider: "OpenAI", model: current_model)
     end
 
     def chat_codex_provider(url:, token:, account_id:, messages:, tools:, request_body:, current_model:, on_reasoning_delta:, on_reasoning_boundary:, on_assistant_delta:, cancellation:, max_tokens:)
@@ -567,7 +603,9 @@ module Kward
     def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       reasoning = false unless ModelInfo.reasoning_supported?(provider, model)
 
-      if provider == "Codex"
+      if provider == "OpenAI"
+        openai_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
+      elsif provider == "Codex"
         codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       elsif provider == "Anthropic"
         anthropic_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
@@ -821,7 +859,11 @@ module Kward
     end
 
     def parse_codex_sse_stream(response, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil)
-      ModelStreamParser.parse_codex_sse_stream(response, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, cancellation: cancellation, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
+      parse_responses_sse_stream(response, provider: "Codex", on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, cancellation: cancellation)
+    end
+
+    def parse_responses_sse_stream(response, provider:, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, cancellation: nil)
+      ModelStreamParser.parse_codex_sse_stream(response, provider_label: provider, on_reasoning_delta: on_reasoning_delta, on_reasoning_boundary: on_reasoning_boundary, on_assistant_delta: on_assistant_delta, cancellation: cancellation, show_raw_reasoning: codex_show_raw_reasoning?, usage_normalizer: method(:normalized_usage), request_error_class: RequestError)
     end
 
     def parse_anthropic_sse_stream(response, on_reasoning_delta: nil, on_assistant_delta: nil, cancellation: nil)
