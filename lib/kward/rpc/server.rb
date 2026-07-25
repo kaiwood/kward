@@ -475,7 +475,7 @@ module Kward
             notification: "pluginChat/event",
             subscriptions: { supported: true, methods: PLUGIN_CHAT_METHODS.values_at(3, 4), requiredForLiveEvents: true },
             attachments: { supported: true, method: PLUGIN_CHAT_METHODS[5], encoding: "base64", mimeTypes: SessionManager::RPC_IMAGE_MIME_TYPES, maxBytes: SessionManager::RPC_ATTACHMENT_MAX_BYTES },
-            types: @plugin_chat_manager.supported_types.map { |type| { id: type.id, name: type.name, title: type.title, singleton: type.singleton }.compact }
+            types: @plugin_chat_manager.supported_types.map { |type| { id: type.id, name: type.name, title: type.title, singleton: type.singleton, transport: type.transport == true ? true : nil }.compact }
           },
           turns: {
             mode: "async",
