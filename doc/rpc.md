@@ -6,7 +6,20 @@ Kward RPC is a JSON-RPC backend protocol for trusted local UI clients. It is ver
 
 This page is for people building UI clients or integrations. If you use Kward from the terminal, you can skip it.
 
-Prompt history search is a CLI terminal feature only. RPC clients own their composer/input UX and Kward does not currently expose prompt-history read, append, or search methods over RPC.
+## Build a client
+
+A typical client launches the server, sends `initialize`, creates or resumes a session, starts a turn, and renders `turn/event` notifications. Use these sections for the next step:
+
+| You need to... | Start here |
+| --- | --- |
+| Connect and negotiate capabilities | [Launch](#Launch), [Framing](#Framing), and [Initialization](#Initialization) |
+| Open, resume, branch, or export a conversation | [Session methods](#Session_methods) |
+| Send input and render a response | [Turn methods](#Turn_methods) and [Turn notifications](#Turn_notifications) |
+| Handle tool approval or structured questions | [Tool approval bridge](#Tool_approval_bridge) and [UI question bridge](#UI_question_bridge) |
+| Show model, runtime, auth, or configuration controls | [Runtime methods](#Runtime_methods), [Model methods](#Model_methods), and [Config and auth methods](#Config_and_auth_methods) |
+| Discover tools, MCP servers, prompts, skills, or plugins | [Tool and prompt methods](#Tool_and_prompt_methods) |
+
+Prompt history search is a CLI terminal feature only. RPC clients own their composer/input UX and Kward does not expose prompt-history read, append, or search methods over RPC.
 
 ## Launch
 

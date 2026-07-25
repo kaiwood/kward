@@ -6,7 +6,9 @@ On first start, Kward creates the file when it does not exist. The starter confi
 
 If `KWARD_CONFIG_PATH` is set, Kward uses that file and treats its directory as the config directory for prompts, skills, memory, logs, and caches.
 
-## Common changes
+## Choose a configuration path
+
+Use the interactive controls for ordinary changes. Edit `config.json` when you need a setting that is not exposed there or when you want to share a reproducible setup.
 
 | Goal | Recommended path |
 | --- | --- |
@@ -19,6 +21,8 @@ If `KWARD_CONFIG_PATH` is set, Kward uses that file and treats its directory as 
 | Tune compaction | `/settings` → Context & Compaction |
 | Configure personas | `/settings` → Personalization; see [Personas](personas.md) |
 | Add MCP servers, lifecycle hooks, or environment-specific paths | Edit `config.json` directly |
+
+For the complete reference, jump to [providers and models](#Provider_and_model_settings), [terminal interface settings](#Overlay_settings), [sessions and memory](#Session_settings), [web search](#Web_search), [workspace safety](#Tool_workspace_guardrails), or [logging](#Logging_and_stats).
 
 Here is a minimal direct provider configuration:
 
