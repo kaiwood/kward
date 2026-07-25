@@ -79,6 +79,16 @@ module Kward
       end
     end
 
+    MergeResult = Struct.new(:status, :output, :conflicts, keyword_init: true) do
+      def merged?
+        status == :merged
+      end
+
+      def conflicted?
+        status == :conflicted
+      end
+    end
+
     def repository_root(path)
       output = run_git(path, "rev-parse", "--show-toplevel")
       canonical_existing_path(output.strip)
@@ -93,6 +103,41 @@ module Kward
 
     def current_revision(path)
       run_git(path, "rev-parse", "HEAD").strip
+    end
+
+    def current_branch(path)
+      run_git(path, "branch", "--show-current").strip
+    end
+
+    def merge(repository_root:, target_path:, source_branch:)
+      repository_root = canonical_existing_path(repository_root)
+      target_path = canonical_existing_path(target_path)
+      source_branch = source_branch.to_s.strip
+      validate_merge!(repository_root, target_path, source_branch)
+
+      output, status = capture_git(target_path, "merge", "--no-edit", source_branch)
+      return MergeResult.new(status: :merged, output: output, conflicts: []) if status.success?
+
+      conflicts = unmerged_paths(target_path)
+      return MergeResult.new(status: :conflicted, output: output, conflicts: conflicts) if merge_in_progress?(target_path)
+
+      raise Error, git_error("merge", output)
+    end
+
+    def merge_in_progress?(path)
+      _output, status = capture_git(path, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+      status.success?
+    end
+
+    def unmerged_paths(path)
+      run_git(path, "diff", "--name-only", "--diff-filter=U").lines(chomp: true)
+    end
+
+    def abort_merge(path)
+      raise Error, "No merge is in progress." unless merge_in_progress?(path)
+
+      run_git(path, "merge", "--abort")
+      true
     end
 
     def create(repository_root:, origin_root:, path:, branch:, base: "HEAD")
@@ -142,6 +187,14 @@ module Kward
 
     private
 
+    def validate_merge!(repository_root, target_path, source_branch)
+      raise Error, "Merge target must be inside the repository: #{target_path}" unless PathGuard.inside?(target_path, repository_root)
+      raise Error, "Source branch is required" if source_branch.empty?
+      raise Error, "Invalid source branch: #{source_branch}" unless git_succeeds?(repository_root, "check-ref-format", "--branch", source_branch)
+      raise Error, "Source branch does not exist: #{source_branch}" unless valid_revision?(repository_root, source_branch)
+      raise Error, "A merge is already in progress: #{target_path}" if merge_in_progress?(target_path)
+    end
+
     def validate_creation!(repository_root, origin_root, path, branch, base)
       raise Error, "Worktree path must be outside the repository: #{path}" if PathGuard.inside?(path, repository_root)
       raise Error, "Worktree origin must be inside the repository: #{origin_root}" unless PathGuard.inside?(origin_root, repository_root)
@@ -188,14 +241,22 @@ module Kward
     end
 
     def run_git(root, *arguments)
-      output, status = Open3.capture2e("git", "-C", root.to_s, *arguments)
+      output, status = capture_git(root, *arguments)
       return output if status.success?
 
-      message = output.to_s.strip
-      message = "git #{arguments.join(" ")} failed" if message.empty?
-      raise Error, message
+      raise Error, git_error(arguments.join(" "), output)
+    end
+
+    def capture_git(root, *arguments)
+      Open3.capture2e("git", "-C", root.to_s, *arguments)
     rescue Errno::ENOENT => e
       raise Error, e.message
+    end
+
+    def git_error(command, output)
+      message = output.to_s.strip
+      message = "git #{command} failed" if message.empty?
+      message
     end
 
     def git_succeeds?(root, *arguments)
