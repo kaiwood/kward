@@ -650,7 +650,9 @@ module Kward
       end
 
       def session_modified_at(session)
-        File.exist?(session.path) ? File.mtime(session.path) : nil
+        return nil unless File.exist?(session.path)
+
+        session.respond_to?(:modified_at) ? session.modified_at : nil
       end
 
       def validate_workspace_root(root)

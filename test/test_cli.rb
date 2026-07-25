@@ -3109,8 +3109,16 @@ edit this prompt"
       clone.rename("clone session")
       clone_conversation.append_user("clone session")
       old_time = Time.now - 60
-      File.utime(old_time, old_time, source.path)
-      File.utime(Time.now, Time.now, clone.path)
+      set_last_activity_time = lambda do |path, timestamp|
+        lines = File.readlines(path, chomp: true)
+        index = lines.rindex { |line| JSON.parse(line)["type"] == "message" }
+        record = JSON.parse(lines[index])
+        record["timestamp"] = timestamp.utc.iso8601(3)
+        lines[index] = JSON.generate(record)
+        File.write(path, lines.join("\n") + "\n")
+      end
+      set_last_activity_time.call(source.path, old_time)
+      set_last_activity_time.call(clone.path, Time.now)
       prompt = FakeSessionSelectPrompt.new(["/resume", "/exit"], "clone session")
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
 

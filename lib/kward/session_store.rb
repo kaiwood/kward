@@ -29,6 +29,9 @@ module Kward
   class SessionStore
     VERSION = 2
     LAST_SESSION_FILENAME = "last_session.json"
+    NON_ACTIVITY_RECORD_TYPES = %w[session session_info system_prompt].freeze
+    RECORD_TYPE_PATTERN = /\A\{\s*"type"\s*:\s*"([^"]+)"/
+    RECORD_TIMESTAMP_PATTERN = /"timestamp"\s*:\s*"([^"]+)"/
 
     SessionInfo = Struct.new(:id, :path, :cwd, :created_at, :modified_at, :name, :first_message, :message_count, :provider, :model, :reasoning_effort, :parent_id, :parent_path, :depth, :is_last, :ancestor_continues, keyword_init: true)
 
@@ -47,6 +50,8 @@ module Kward
       attr_reader :cwd
       # @return [Time] creation timestamp used for sorting and filenames
       attr_reader :created_at
+      # @return [Time] timestamp of the latest persisted conversation activity
+      attr_reader :modified_at
       # @return [String, nil] source session id when this session was cloned or forked
       attr_reader :parent_id
       # @return [String, nil] source session path when this session was cloned or forked
@@ -57,12 +62,13 @@ module Kward
       attr_accessor :leaf_id
 
       # Creates an object for JSONL session persistence.
-      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil, leaf_id: nil)
+      def initialize(store:, id:, path:, cwd:, created_at:, name: nil, parent_id: nil, parent_path: nil, leaf_id: nil, modified_at: nil)
         @store = store
         @id = id
         @path = path
         @cwd = cwd
         @created_at = created_at
+        @modified_at = modified_at || created_at
         @name = name
         @parent_id = parent_id
         @parent_path = parent_path
@@ -89,6 +95,7 @@ module Kward
         record = @store.build_tree_record(@path, "message", @leaf_id, message: message)
         @leaf_id = record[:id]
         @store.append_record(@path, record)
+        mark_modified(record)
       end
 
       # Persists a compaction summary entry and makes it the active leaf.
@@ -96,11 +103,14 @@ module Kward
         record = @store.build_tree_record(@path, "compaction", @leaf_id, message: message)
         @leaf_id = record[:id]
         @store.append_record(@path, record)
+        mark_modified(record)
       end
 
       # Persists normalized tool execution metadata alongside transcript messages.
       def append_tool_execution(tool_call, content)
-        @store.append_record(@path, RPC::ToolEventNormalizer.new(tool_call, content: content).execution_record)
+        record = RPC::ToolEventNormalizer.new(tool_call, content: content).execution_record
+        @store.append_record(@path, record)
+        mark_modified(record)
       end
 
       # Persists the current system prompt as audit metadata when it changes.
@@ -110,12 +120,14 @@ module Kward
 
       # Persists the session memory snapshot used when the session is restored.
       def update_memory_state(session_memories:, last_retrieval: nil)
-        @store.append_record(@path, {
+        record = {
           type: "memory_state",
           timestamp: Time.now.utc.iso8601(3),
           sessionMemories: Array(session_memories),
           lastRetrieval: last_retrieval
-        })
+        }
+        @store.append_record(@path, record)
+        mark_modified(record)
       end
 
       # Persists a user-visible session name without rewriting earlier records.
@@ -131,7 +143,8 @@ module Kward
       # Moves the active leaf to an existing entry so future messages fork there.
       def branch(entry_id)
         @leaf_id = entry_id.to_s.empty? ? nil : entry_id.to_s
-        @store.append_leaf_change(@path, @leaf_id)
+        record = @store.append_leaf_change(@path, @leaf_id)
+        mark_modified(record)
       end
 
       # Clears the active leaf so the next append starts a fresh root branch.
@@ -141,7 +154,8 @@ module Kward
 
       # Persists a display label override for one tree entry.
       def append_label_change(entry_id, label)
-        @store.append_label_change(@path, entry_id, label)
+        record = @store.append_label_change(@path, entry_id, label)
+        mark_modified(record)
       end
 
       # Adds a branch-summary node under `parent_id` and selects it as the leaf.
@@ -149,6 +163,7 @@ module Kward
         record = @store.build_tree_record(@path, "branch_summary", parent_id, fromId: from_id, summary: summary, details: details || {})
         @leaf_id = record[:id]
         @store.append_record(@path, record)
+        mark_modified(record)
         record[:id]
       end
 
@@ -167,6 +182,15 @@ module Kward
       # Removes this session file when it is still empty and unnamed.
       def delete_if_unused
         @store.delete_unused_session(self)
+      end
+
+      private
+
+      def mark_modified(record)
+        timestamp = record[:timestamp] || record["timestamp"]
+        @modified_at = Time.iso8601(timestamp.to_s) || Time.now.utc
+      rescue ArgumentError
+        @modified_at = Time.now.utc
       end
     end
 
@@ -211,7 +235,7 @@ module Kward
       end
       File.chmod(0o600, path)
 
-      Session.new(store: self, id: id, path: path, cwd: @cwd, created_at: created_at, parent_id: parent_id, parent_path: parent_path, leaf_id: nil)
+      Session.new(store: self, id: id, path: path, cwd: @cwd, created_at: created_at, parent_id: parent_id, parent_path: parent_path, leaf_id: nil, modified_at: created_at)
     end
 
     def create_from_conversation(conversation, parent_session: nil)
@@ -291,16 +315,18 @@ module Kward
       )
       restore_tool_output_artifacts(records, conversation)
       conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"
+      created_at = parse_time(header["timestamp"]) || File.mtime(resolved_path)
       session = Session.new(
         store: self,
         id: header["id"],
         path: resolved_path,
         cwd: header["cwd"].to_s,
-        created_at: parse_time(header["timestamp"]) || File.mtime(resolved_path),
+        created_at: created_at,
         name: name,
         parent_id: header["parentId"],
         parent_path: header["parentPath"],
-        leaf_id: leaf_id
+        leaf_id: leaf_id,
+        modified_at: session_modified_at(records, fallback: created_at)
       )
       session.attach(conversation)
       [session, conversation]
@@ -391,21 +417,25 @@ module Kward
     end
 
     def append_leaf_change(path, leaf_id)
-      append_record(path, {
+      record = {
         type: "leaf",
         timestamp: Time.now.utc.iso8601(3),
         targetId: leaf_id
-      })
+      }
+      append_record(path, record)
+      record
     end
 
     def append_label_change(path, entry_id, label)
-      append_record(path, {
+      record = {
         type: "label",
         id: next_entry_id(path),
         timestamp: Time.now.utc.iso8601(3),
         targetId: entry_id.to_s,
         label: label.to_s.strip.empty? ? nil : label.to_s.strip
-      })
+      }
+      append_record(path, record)
+      record
     end
 
     # @return [Array<Hash>] nested session tree roots for the given session file
@@ -482,6 +512,16 @@ module Kward
     end
 
     private
+
+    def session_modified_at(records, fallback:)
+      records.reverse_each do |record|
+        next if NON_ACTIVITY_RECORD_TYPES.include?(record["type"].to_s)
+
+        timestamp = parse_time(record["timestamp"])
+        return timestamp if timestamp
+      end
+      fallback
+    end
 
     def latest_system_prompt_hash(records)
       records.reverse_each do |record|
@@ -797,7 +837,7 @@ module Kward
       keep_empty_paths = Array(keep_empty_path).filter_map do |path|
         File.expand_path(path) unless path.to_s.empty?
       end
-      paths = Dir.glob(File.join(session_dir, "*.jsonl")).sort_by { |path| session_file_mtime(path) }.reverse
+      paths = Dir.glob(File.join(session_dir, "*.jsonl")).sort_by { |path| session_file_activity_time(path) }.reverse
       sessions = []
 
       paths.each do |path|
@@ -824,8 +864,16 @@ module Kward
       false
     end
 
-    def session_file_mtime(path)
-      File.mtime(path)
+    def session_file_activity_time(path)
+      latest_timestamp = nil
+      File.foreach(path) do |line|
+        type = line[RECORD_TYPE_PATTERN, 1]
+        next if NON_ACTIVITY_RECORD_TYPES.include?(type.to_s)
+
+        timestamp = line[RECORD_TIMESTAMP_PATTERN, 1]
+        latest_timestamp = timestamp if timestamp
+      end
+      parse_time(latest_timestamp) || File.mtime(path)
     rescue StandardError
       Time.at(0)
     end
@@ -893,13 +941,14 @@ module Kward
       runtime = session_runtime(records, header)
       first_message = messages.find { |message| ["user", "compactionSummary"].include?(message_role(message)) }
       stats = File.stat(path)
+      created_at = parse_time(header["timestamp"]) || stats.mtime
 
       SessionInfo.new(
         id: header["id"],
         path: path,
         cwd: header["cwd"].to_s,
-        created_at: parse_time(header["timestamp"]) || stats.mtime,
-        modified_at: stats.mtime,
+        created_at: created_at,
+        modified_at: session_modified_at(records, fallback: stats.mtime),
         name: name,
         first_message: first_message ? message_text(first_message) : "",
         message_count: messages.count { |message| ["user", "assistant", "tool", "toolResult", "compactionSummary"].include?(message_role(message)) },

@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 - Refreshed composer diff and context usage status immediately when switching session tabs.
 - Prevented `/reload` from retaining stale prompt templates, so new and edited prompt files refresh slash-command completion and expansion.
 - Prevented session-picker rename input from filtering the visible session list.
+- Fixed session listing timestamps and ordering to ignore system-prompt and other metadata writes during session restoration.
 
 ## [0.79.0] - 2026-07-19
 

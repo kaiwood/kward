@@ -43,6 +43,47 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_recent_orders_sessions_by_activity_not_metadata_writes
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      old = store.create
+      newer = store.create
+      old_activity = Time.utc(2024, 1, 1, 12, 0, 0)
+      new_activity = Time.utc(2024, 1, 2, 12, 0, 0)
+
+      old_record = store.build_tree_record(old.path, "message", nil, message: { "role" => "user", "content" => "old" })
+      old_record[:timestamp] = old_activity.iso8601(3)
+      store.append_record(old.path, old_record)
+
+      new_record = store.build_tree_record(newer.path, "message", nil, message: { "role" => "user", "content" => "new" })
+      new_record[:timestamp] = new_activity.iso8601(3)
+      store.append_record(newer.path, new_record)
+      store.append_record(old.path, { "type" => "system_prompt", "timestamp" => (new_activity + 60).iso8601(3), "content" => "refreshed" })
+
+      recent = store.recent(limit: 2)
+
+      assert_equal [newer.id, old.id], recent.map(&:id)
+      assert_equal new_activity, recent.first.modified_at
+      assert_equal old_activity, recent.last.modified_at
+    end
+  end
+
+  def test_loaded_session_activity_ignores_prompt_snapshot_timestamp
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      activity_time = Time.utc(2024, 1, 1, 12, 0, 0)
+      record = store.build_tree_record(session.path, "message", nil, message: { "role" => "user", "content" => "old" })
+      record[:timestamp] = activity_time.iso8601(3)
+      store.append_record(session.path, record)
+      store.append_record(session.path, { "type" => "system_prompt", "timestamp" => (activity_time + 3600).iso8601(3), "content" => "refreshed" })
+
+      loaded, = store.load(session.path)
+
+      assert_equal activity_time, loaded.modified_at
+    end
+  end
+
   def test_session_store_skips_missing_restored_read_paths
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|
@@ -184,12 +225,12 @@ class TestSessionStore < KwardTestCase
   def test_limited_recent_only_builds_full_metadata_for_requested_sessions
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      base_time = Time.now
       sessions = 5.times.map do |index|
         session = store.create
-        conversation = Kward::Conversation.new(system_message: nil)
-        session.attach(conversation)
-        conversation.append_user("saved prompt #{index}")
-        File.utime(Time.now + index, Time.now + index, session.path)
+        record = store.build_tree_record(session.path, "message", nil, message: { "role" => "user", "content" => "saved prompt #{index}" })
+        record[:timestamp] = (base_time + index).iso8601(3)
+        store.append_record(session.path, record)
         session
       end
       abandoned = store.create
