@@ -81,14 +81,7 @@ module Kward
       end
 
       def persist
-        directory = File.dirname(@path)
-        FileUtils.mkdir_p(directory, mode: 0o700)
-        temporary_path = "#{@path}.#{$$}.#{Thread.current.object_id}.tmp"
-        PrivateFile.write_json(temporary_path, "values" => @values, "processed" => @processed)
-        File.rename(temporary_path, @path)
-        File.chmod(0o600, @path)
-      ensure
-        File.delete(temporary_path) if temporary_path && File.exist?(temporary_path)
+        PrivateFile.write_json(@path, "values" => @values, "processed" => @processed)
       end
 
       def validate_key(value, name)
