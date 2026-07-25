@@ -10,7 +10,7 @@ module Kward
   class GitWorktreeBinding
     FIELDS = %i[repository_root origin_root path branch base_revision active owned].freeze
 
-    attr_accessor(*FIELDS)
+    attr_accessor :repository_root, :origin_root, :path, :branch, :base_revision, :active, :owned
 
     def initialize(repository_root:, origin_root:, path:, branch:, base_revision:, active: true, owned: true)
       @repository_root = repository_root.to_s
