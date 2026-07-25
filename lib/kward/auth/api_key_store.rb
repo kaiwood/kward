@@ -54,6 +54,11 @@ module Kward
       !stored_key(provider_id).to_s.empty?
     end
 
+    def stored_value(provider_id)
+      ProviderCatalog.fetch(provider_id)
+      stored_key(provider_id)
+    end
+
     def migrate_openrouter_config_key!
       return false if stored?("openrouter")
 

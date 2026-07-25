@@ -2,6 +2,7 @@ require "json"
 require "net/http"
 require "uri"
 require_relative "../auth/anthropic_oauth"
+require_relative "../auth/api_key_store"
 require_relative "../auth/github_oauth"
 require_relative "../auth/openai_oauth"
 require_relative "../cancellation"
@@ -87,7 +88,7 @@ module Kward
     TRANSIENT_NETWORK_ERRORS = [IOError, EOFError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout].freeze
 
     # Creates an object for model provider requests.
-    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, github_oauth: GithubOAuth.new, anthropic_oauth: AnthropicOAuth.new, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
+    def initialize(api_key: ENV["OPENROUTER_API_KEY"], model: nil, openai_access_token: ENV["OPENAI_ACCESS_TOKEN"], oauth: OpenAIOAuth.new, github_oauth: GithubOAuth.new, anthropic_oauth: AnthropicOAuth.new, api_key_store: nil, config_path: OpenAIOAuth.default_config_path, telemetry_logger: TelemetryLogger.new(config_path: config_path))
       @openrouter_api_key = presence(api_key)
       @openai_access_token = presence(openai_access_token)
       @oauth = oauth
@@ -95,6 +96,7 @@ module Kward
       @anthropic_oauth = anthropic_oauth
       @model = model
       @config_path = File.expand_path(config_path)
+      @api_key_store = api_key_store || APIKeyStore.new(path: File.join(File.dirname(@config_path), "api_keys.json"), config_path: @config_path)
       @config = load_config
       @telemetry_logger = telemetry_logger
       @copilot_models = nil
@@ -964,7 +966,7 @@ module Kward
     end
 
     def openrouter_api_key
-      @openrouter_api_key || config_value("openrouter_api_key")
+      @openrouter_api_key || @api_key_store.stored_value("openrouter") || config_value("openrouter_api_key")
     end
 
     def github_access_token
