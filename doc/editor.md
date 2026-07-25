@@ -1,4 +1,8 @@
-# Integrated Editor
+# Integrated editor
+
+Kward includes a terminal editor with three modes: Modern, Emacs, and Vibe. It opens inside the chat composer, so you can jump into a file, make a change, save it, and return to the conversation without switching tools.
+
+The editor opens only files inside the current workspace, which keeps edits tied to the project where you started Kward.
 
 <quote>
 Three Modes for the Elven-kings under the sky,<br>
@@ -9,10 +13,6 @@ One Kward to find them,<br>
 One Kward to bring them all and in the transcript bind them<br>
 In the Land of Ruby where the agents lie.<br>
 </quote>
-
-Kward includes a terminal editor with 3 editing modes to choose from: Modern, Emacs and Vibe. It opens inside the chat composer, so you can jump into a file, make a change, save it, and return to the conversation without switching tools.
-
-The editor is scoped to the current workspace. It only opens files inside that directory, which helps keep edits tied to the project you started Kward in.
 
 ## Quick start
 

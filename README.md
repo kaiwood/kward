@@ -1,37 +1,16 @@
 # Kward
 
-Kward is an Agentic Development Environment (ADE) that lives in your terminal.
+Kward is a coding agent for your terminal. It can inspect and edit a project, run commands, research problems, and save your work in sessions you can resume later.
 
-Instead of treating AI as a single chat window, Kward provides a persistent development workspace where agents, tools, conversations, and project context work together. It combines project-aware AI, local automation, trusted integrations, and long-lived sessions into an environment that grows with your workflow instead of restarting from scratch every time.
-
-Use Kward from the terminal, a local browser interface, or a trusted JSON-RPC client. It can inspect and edit files, understand Git history, run local commands, research external sources, manage persistent sessions, and adapt to your way of working through project instructions, skills, memory, personas, hooks, plugins, MCP servers, and transports.
-
-Kward supports ChatGPT/Codex and Claude subscription login, direct OpenAI, Anthropic, Gemini, and Azure runtimes, a catalog of OpenAI-compatible API-key providers, GitHub Copilot, OpenRouter, and local servers such as Ollama, LM Studio, and llama.cpp.
+Use Kward from the terminal, its local browser interface, or a trusted JSON-RPC client. It works with ChatGPT/Codex and Claude subscriptions, hosted model APIs, GitHub Copilot, OpenRouter, and local servers such as Ollama, LM Studio, and llama.cpp.
 
 ## Why Kward?
 
-Most AI coding tools optimize for individual conversations.
+Software work rarely fits into one chat. A project can span days of research, implementation, debugging, review, and decisions worth keeping.
 
-Real software development does not.
+Kward treats that work as an ongoing workspace rather than a disposable conversation. You can resume earlier sessions, split work across tabs and Git worktrees, and keep project guidance close to the code. Optional permissions, command sandboxing, and workspace boundaries give you more control when a task needs it.
 
-Projects span days or months. They involve research, implementation, debugging, experiments, reviews, branches, documentation, and decisions that should not disappear when a chat reaches its context limit.
-
-Kward is built around that reality.
-
-It starts as a capable coding assistant, but is designed to grow into your own development environment. As your workflow evolves, Kward evolves with it through trusted local extensions rather than forcing you into a fixed product experience.
-
-Kward is intentionally designed to stay out of your way. By default it favors fast, local workflows over constant confirmations, while still providing optional permission policies, command sandboxing, workspace boundaries, and approval flows when your workflow or environment requires additional safety.
-
-With Kward you can:
-
-- Explore unfamiliar codebases while preserving discoveries across sessions.
-- Investigate bugs, review changes, and validate fixes without losing context.
-- Make and verify edits with workspace boundaries, read-before-edit guardrails, optional approvals, command sandboxing, and configurable permission policies.
-- Organize parallel work through sessions, tabs, branches, and linked Git worktrees.
-- Capture your team's conventions through `PRINCIPLES.md`, `AGENTS.md`, skills, prompt templates, and optional memory.
-- Extend the environment itself through plugins, lifecycle hooks, MCP servers, transports, and JSON-RPC integrations.
-
-Whether you simply want a coding assistant or a fully customized AI-powered development environment, Kward scales from a single terminal session to an extensible platform without changing the way you work.
+Start with a normal coding conversation. If your workflow grows, you can add memory, reusable prompts and skills, local plugins, lifecycle hooks, MCP servers, transports, or a custom RPC client.
 
 ## Install
 
@@ -64,16 +43,14 @@ From inside Kward, `/login` lets you choose API-key or subscription authenticati
 
 See [Model providers](doc/providers.md) to choose a backend and [Authentication](doc/authentication.md) for credential storage and login flows.
 
-## What Kward can do
+## Common ways to use Kward
 
-- Keep a multi-turn coding conversation in your terminal.
-- Read, write, and edit workspace files with read-before-write guardrails.
-- Run local shell commands from the workspace.
-- Search the live web and inspect cached public GitHub repositories.
-- Save, resume, clone, compact, and export sessions.
-- Extend the Agent with trusted Ruby plugins for custom commands, footer UI, prompt context, and transcript-event observers.
-- Use optional memory, personas, prompt templates, and skills.
-- Serve a JSON-RPC backend for trusted local UI clients.
+- Explore an unfamiliar codebase and keep useful discoveries for later sessions.
+- Investigate a bug, make a focused change, and run the related tests.
+- Review a diff, inspect the surrounding code, and commit from the terminal UI.
+- Work on several tasks at once with tabs, branches, and linked Git worktrees.
+- Teach Kward your project conventions with `AGENTS.md`, skills, prompt templates, and optional memory.
+- Add trusted local behavior through plugins, lifecycle hooks, MCP servers, transports, or JSON-RPC integrations.
 
 ## Documentation
 
@@ -83,7 +60,7 @@ New to Kward:
 - [Usage](doc/usage.md): interactive chat, slash commands, sessions, tools, images, and Pan mode.
 - [Configuration](doc/configuration.md): config files, providers, models, web search, logging, and color output.
 - [Authentication](doc/authentication.md): multi-provider API keys, OpenAI/Anthropic subscription OAuth, Azure setup, and credential safety.
-- [Model providers](doc/providers.md): the canonical provider list, runtime IDs, model keys, environment variables, discovery behavior, and limitations.
+- [Model providers](doc/providers.md): compare providers and find their runtime IDs, model keys, environment variables, discovery behavior, and limitations.
 
 Work safely:
 
@@ -98,7 +75,7 @@ Everyday workflows:
 - [Interactive composer](doc/composer.md): use multiline input, completion, history, files, reasoning shortcuts, busy input, and images.
 - [Tabs](doc/tabs.md): keep several conversations open and run work in another tab.
 - [Project files](doc/files.md): browse, search, mention, open, and edit workspace files.
-- [Integrated Editor](doc/editor.md): open files from the shell or composer, edit in-place, and choose editor keybindings.
+- [Integrated editor](doc/editor.md): open files from the shell or composer, edit in-place, and choose editor keybindings.
 - [Git](doc/git.md): review changes, use the diff viewer, stage files, and commit from the interactive TUI.
 - [Shell](doc/shell.md): use `/shell`, the embedded Kward shell with aliases, completion, and per-tab state.
 - [Memory](doc/memory.md): opt-in core, soft, and session memory.

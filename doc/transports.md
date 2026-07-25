@@ -1,31 +1,30 @@
 # Transports
 
-Transports are trusted local Ruby plugins that connect Kward sessions to an
-external messaging or event system. A transport may receive messages from
-Telegram, Slack, Discord, email, HTTP, or another service and deliver Kward
-responses back through that service.
+A transport lets people use a normal Kward session through another service,
+such as Telegram, Slack, Discord, email, or HTTP. It receives messages from the
+service and sends Kward's responses back.
 
-Transports are adapters. The transport owns the external protocol, identity
-mapping, and presentation. Kward owns sessions, agents, tools, persistence,
+The transport handles service-specific details such as identities and message
+formatting. Kward continues to handle sessions, agents, tools, saved state,
 approvals, and workspace policy.
 
-## Boundary
+Start with the first-party [Telegram transport](telegram.md) to see a complete
+example. It uses long polling and starts explicitly rather than with the normal
+interactive CLI.
+
+## How transports fit into Kward
 
 A transport should use the public transport host API rather than creating an
 `Agent`, opening a `SessionStore`, or calling the RPC server directly. This
-keeps the same session and tool behavior available to the CLI, RPC clients,
-and external transports.
+keeps session and tool behavior consistent across the CLI, RPC clients, and
+external services.
 
-The first-party Telegram example is documented in
-[Telegram transport](telegram.md). It uses long polling and is started
-explicitly rather than with the normal interactive CLI.
+Transport plugins are different from plugin-owned tabs:
 
-Transport plugins are distinct from plugin-owned tabs:
-
-- A plugin tab owns an independent chat runtime and storage.
+- A plugin tab runs its own chat and stores its own data.
 - A transport connects an external conversation to a normal Kward session.
 
-Plugins run as trusted local Ruby code. Install only plugins you trust.
+Transports run as trusted local Ruby code. Install only transports you trust.
 
 ## Registration
 

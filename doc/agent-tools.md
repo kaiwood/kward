@@ -2,14 +2,13 @@
 
 Agent tools are the model-callable operations Kward uses to inspect projects, change files, run commands, search outside sources, and ask for clarification. Most users do not call these tools directly. You ask for an outcome in natural language, and Kward decides which tools are needed.
 
-Tools are part of Kward's safety and context-management boundary:
+Tools also enforce important boundaries:
 
-- schemas describe what the model is allowed to call,
-- Ruby tool objects validate and execute those calls,
-- workspace tools stay inside the active workspace by default (see [Configuration](configuration.md) for the guardrail setting),
-- file-changing tools require the file to be read first,
-- large outputs are bounded or compacted before they enter model context,
-- full tool outputs are kept in the session record for later inspection.
+- Kward validates every tool call before running it.
+- Workspace tools stay inside the active workspace by default (see [Configuration](configuration.md) for the guardrail setting).
+- File-changing tools require the file to be read first.
+- Large outputs are bounded or compacted before they enter model context.
+- Full tool outputs remain available in the session record for later inspection.
 
 ## Tool categories
 
@@ -22,7 +21,7 @@ Tools are part of Kward's safety and context-management boundary:
 
 ## How tools save tokens
 
-Kward tries to keep tool context useful without flooding the model. The built-in prompt tells Kward to start with focused context tools and escalate from outlines/previews to exact ranges before full-file reads:
+Kward tries to gather enough evidence without flooding the conversation. It usually starts with focused context tools, then moves from outlines and previews to exact ranges or full files only when needed:
 
 - `read_file` reads bounded line ranges, supports continuation with `offset` and `limit`, and accepts explicit `preview`, `outline`, `range`, and `full` modes with optional per-call byte budgets.
 - `context_for_task` builds a task-shaped bundle from ranked files, outlines, and matching excerpts within a caller-supplied byte budget.
@@ -32,9 +31,9 @@ Kward tries to keep tool context useful without flooding the model. The built-in
 - Repeated identical tool output is replaced with a short reference instead of being sent again.
 - Compacted outputs are stored as artifacts that can be reopened with `retrieve_tool_output`, including after resuming a saved session that contains the original tool execution record.
 
-When a tool output exceeds 12 KB, Kward compacts it before sending it to the model. The compactor preserves the first 40 and last 40 lines, keeps lines matching error, test, or search-result patterns with 2 lines of surrounding context, and replaces omitted sections with `[... omitted lines ...]` markers. Shell command output is section-aware: STDOUT and STDERR sections are compacted separately. Compacted outputs include a header with the original and compacted byte counts and the artifact ID for retrieval. Error outputs under 8 KB are left intact so failure details stay visible.
+When output exceeds 12 KB, Kward keeps the most useful sections in context and stores the original output for later retrieval. The compacted result includes an artifact ID, so Kward can reopen an exact section without repeating the tool call. Error output under 8 KB stays intact so useful failure details are not lost.
 
-This lets the assistant reason from focused evidence while preserving access to original outputs when needed. For a fuller overview of Kward's context budgeting and token-saving work, see [Context budgeting](context-budgeting.md).
+See [Context budgeting](context-budgeting.md) for the full compaction strategy, limits, and token-saving workflow.
 
 ## How tools are exposed
 

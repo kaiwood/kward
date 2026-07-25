@@ -84,7 +84,7 @@ A typical workflow:
 5. Save and quit.
 6. Continue browsing files, or press `Esc` to return to chat.
 
-See [Integrated Editor](editor.md) for editor modes, save/quit keys, search, selection, and configuration.
+See [Integrated editor](editor.md) for editor modes, save/quit keys, search, selection, and configuration.
 
 ## Remembered state
 

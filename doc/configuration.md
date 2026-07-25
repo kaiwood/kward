@@ -22,7 +22,7 @@ Use the interactive controls for ordinary changes. Edit `config.json` when you n
 | Configure personas | `/settings` → Personalization; see [Personas](personas.md) |
 | Add MCP servers, lifecycle hooks, or environment-specific paths | Edit `config.json` directly |
 
-For the complete reference, jump to [provider and model settings](#Provider_and_model_settings), [terminal interface settings](#Overlay_settings), [sessions and memory](#Session_settings), [web search](#Web_search), [workspace safety](#Tool_workspace_guardrails), or [logging](#Logging_and_stats). Use [Model providers](providers.md) for the canonical provider matrix and practical selection guidance.
+For the complete reference, jump to [provider and model settings](#Provider_and_model_settings), [terminal interface settings](#Overlay_settings), [sessions and memory](#Session_settings), [web search](#Web_search), [workspace safety](#Tool_workspace_guardrails), or [logging](#Logging_and_stats). See [Model providers](providers.md) to compare providers and find their configuration names.
 
 Here is a minimal direct provider configuration:
 
@@ -395,9 +395,9 @@ The integrated Git and session diff viewers support unified and side-by-side lay
 
 `diff_view` can be `auto`, `unified`, or `side_by_side`. In `auto` mode, Kward uses side-by-side output when the terminal is at least 120 columns wide and unified output in narrower terminals. Change it with `/settings` → Interface → Diff view.
 
-The editor automatically highlights Ruby, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL files when terminal color is enabled. Unknown file types and color-disabled terminals render plain text.
+The editor includes syntax highlighting, automatic indentation, and matching-pair insertion for common languages. Unknown file types and color-disabled terminals use plain text. See [Integrated editor](editor.md#What_the_editor_supports) for the supported languages and detailed editing behavior.
 
-Auto-indent is enabled by default. Pressing Enter copies the current line indentation, detects the file's indentation unit when possible, and applies lightweight syntax-based indentation for recognized file types. For Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, Enter after a block opener inserts the matching closing keyword, and Ctrl+Enter can force that behavior from the middle of the line in terminals that report modified Enter keys. When auto-indent is enabled, typing obvious closing tokens such as `}`, Ruby/Lua `end`, and shell `fi`/`done`/`esac` re-indents the current line, and Backspace in leading indentation removes one detected indentation unit. To disable it:
+Auto-indent and matching-pair insertion are enabled by default. To disable either feature:
 
 ```json
 {
@@ -440,11 +440,15 @@ Editable editor buffers request a vertical bar cursor by default. Terminals that
 }
 ```
 
-Modern mode uses composer-style keys: `Ctrl+S` saves, `Ctrl+Q` quits, `Ctrl+F` searches, Shift+Arrow selects text, `Ctrl+C` copies, `Ctrl+X` cuts, `Ctrl+V` pastes the editor kill buffer, `Ctrl+A`/`Ctrl+E` move to the start/end of the line, `Ctrl+B` moves left, `Ctrl+K` kills to end of line, `Ctrl+U` kills to start of line, and `Alt+B`/`Alt+F` move by word.
+Choose the mode that matches how you already edit:
 
-Emacs mode uses Emacs-style non-modal keys: `Ctrl+X Ctrl+S` saves, `Ctrl+X Ctrl+C` quits, `Ctrl+S` searches forward, `Ctrl+R` searches backward, `Ctrl+Space` sets the mark, `Ctrl+W` kills the region or previous word, `Alt+W` copies the region, `Ctrl+K` kills to end of line, `Ctrl+Y` yanks, and `Alt+Y` cycles the per-buffer kill ring after a yank.
+| Mode | Best fit |
+| --- | --- |
+| `modern` | Familiar shortcuts such as `Ctrl+S` to save and `Ctrl+Q` to quit. |
+| `emacs` | Non-modal Emacs-style movement, selection, kill, and yank keys. |
+| `vibe` | A focused Vim-style experience with normal, insert, command, and visual modes. |
 
-Vibe mode opens files in normal mode and supports a compact Vim-style subset: normal/insert/command modes, character, line, and block visual modes, `h/j/k/l`, word and WORD movement, counts, `d`/`y`/`c` operators, line yanks and indentation, case operators, marks, macros, jump-list navigation, linewise paste, search, undo/redo, and common `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, substitution, and `:number` commands. Yanks also copy to the terminal clipboard when OSC 52 is supported.
+See [Integrated editor](editor.md#Choosing_an_editor_mode) for complete keymaps and mode-specific behavior.
 
 ## Session settings
 

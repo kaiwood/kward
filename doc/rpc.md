@@ -1,10 +1,10 @@
-# Kward RPC Protocol
+# Kward RPC protocol
 
 <div class="kward-no-toc"></div>
 
-Kward RPC is a JSON-RPC backend protocol for trusted local UI clients. It is versioned as protocol version `1`: new methods and fields may be added in compatible releases, and clients should ignore unknown fields. Removing or changing existing methods or field meanings requires a protocol version bump. Individual capability groups may still report unsupported status in `initialize.capabilities`.
+Use Kward RPC to build a trusted local interface around Kward's sessions, models, tools, and streaming turns. This page is for people building UI clients or integrations; if you use Kward only from the terminal, you can skip it.
 
-This page is for people building UI clients or integrations. If you use Kward from the terminal, you can skip it.
+The protocol uses JSON-RPC and is currently version `1`. Compatible releases may add methods and fields, so clients should ignore fields they do not recognize. Removing a method or changing the meaning of an existing field requires a protocol version bump. Individual capability groups may still report that they are unsupported in `initialize.capabilities`.
 
 ## Build a client
 
@@ -60,19 +60,19 @@ Result fields:
 - `experimental`: `false`.
 - `capabilities`: includes frontend-neutral capability groups.
 
-Detailed capability fields include:
+Read `capabilities` at runtime instead of assuming every feature is available. Its groups describe:
 
 - `transcript`: Kward transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
-- `sessions`: explicit RPC session mode, JSONL persistence, supported session methods, startup auto-resume capability/default, immediate transcript support for auto-resume, RPC list support, active live-session discovery, supported linear-session fork methods, supported compaction, supported tree navigation with labels and branch summarization, explicit unsupported import support, unsupported live session updates reported with `notification: "session/updated"`, and Git worktree bindings explicitly reported as interactive-TUI-only.
-- `turns`: async turn mode, per-session concurrency, active/recent turn listing, provider-gated native busy-input steering, queued follow-up input, best-effort cancellation, recent in-memory event replay behavior, per-turn options for model/reasoning/tool scope/tool approval, and structured client context for editor integrations.
+- `sessions`: explicit RPC session mode, JSONL persistence, and methods for listing, auto-resume, live-session discovery, linear forking, compaction, and labeled tree navigation with branch summaries. Import is unsupported. Live session updates are also unsupported but reserve the `session/updated` notification name. Git worktree bindings are reported as interactive-TUI-only.
+- `turns`: asynchronous turns, per-session concurrency, active and recent turn lists, busy-input steering when the provider supports it, queued follow-ups, best-effort cancellation, and recent in-memory event replay. Per-turn options cover model, reasoning, tool scope, and tool approval, with structured client context for editor integrations.
 - `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions.
-- `events`: `turn/event` notification details, assistant/reasoning event names, normalized tool metadata, tool update/result events, diff result support, configured workspace guardrail status, focused context and context-budget stats tool support, and explicit unsupported shell changed-file detection/session update flags.
+- `events`: the `turn/event` contract, assistant and reasoning events, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
-- `models`: provider-aware model listing, refresh, selection, exposed metadata fields, and no scoped model support.
-- `runtime`: supported state/stats methods with message-count stats and OpenAI/Codex context usage. Cumulative token and cost stats are not computed.
+- `models`: model listing, refresh, selection, and exposed metadata across providers. Scoped model selection is not supported.
+- `runtime`: runtime state, message-count statistics, and OpenAI/Codex context usage. Kward does not yet compute cumulative token or cost statistics.
 - `lifecycleHooks`: supported lifecycle hook events, decisions, command/plugin/workspace/HTTP/async hook availability, audit log path, hook approval routing through tool approval, and hook notifications (`hook/event`, `hook/message`).
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
-- `auth`: catalog-based providers, per-provider API-key/OAuth availability, private API-key storage, sanitized status, and provider/auth-method logout. OpenAI and Anthropic OAuth are supported; Copilot OAuth is CLI-only, OpenRouter PKCE is not implemented, and xAI has no supported stable third-party flow.
+- `auth`: available providers and authentication methods, private API-key storage, sanitized status, and logout. OpenAI and Anthropic OAuth are supported; Copilot OAuth is CLI-only, OpenRouter PKCE is not implemented, and xAI has no supported stable third-party flow.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `skillCapture`: capture a reviewed personal `SKILL.md` from any saved session’s active branch through `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`.
@@ -80,11 +80,11 @@ Detailed capability fields include:
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access.
-- `security`: trusted-local behavior with optional per-turn tool approval. By default there is no workspace mutation guard or tool approval and shell/file mutation can run. File-tool workspace guardrails are reported under `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`. `security.sandbox` reports the configured command-worker sandbox mode, enforcement backend, filesystem/network capability, and explicitly unsupported session pinning and one-time elevation. See [Command sandboxing](sandboxing.md) for its scope and limits.
+- `security`: trusted-local behavior and optional per-turn tool approval. By default, RPC turns have no workspace mutation guard or tool approval, so shell commands and file changes can run. Clients can inspect file-tool guardrails through `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`. `security.sandbox` reports the command sandbox mode, enforcement backend, and filesystem and network capabilities; session pinning and one-time elevation are unsupported. See [Command sandboxing](sandboxing.md) for the boundary and its limits.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
 - `starterPack`: explicitly unsupported (`supported: false`, reason `cliOnlyInstallCommand`). Use `kward init` from the shell.
 - `shell`: explicitly unsupported (`supported: false`, reason `interactiveTuiOnly`) because `/shell` is the local embedded TUI shell.
-- `logging`: local redacted telemetry logging support, the log directory, enabled categories, `methods: ["logging/stats", "logging/tokenCsv"]`, `usageCsv` sub-capability with bucket support, JSONL format, rotation (10 MB, manual retention), config key `logging`, env prefix `KWARD_LOGGING`, and redacted-metadata-only content.
+- `logging`: local redacted telemetry, its directory and enabled categories, `logging/stats` and `logging/tokenCsv`, bucketed `usageCsv` support, JSONL storage, and 10 MB rotation with manual retention. Logs contain redacted metadata only. Configuration uses the `logging` key and `KWARD_LOGGING` environment prefix.
 
 ### `shutdown`
 
@@ -133,7 +133,7 @@ Params:
 - `name`: optional session name.
 - `resumeLast`: optional boolean. Defaults to the configured `sessions.auto_resume` behavior when omitted by clients that use `sessions/create` for startup. `false` forces a fresh session.
 
-Creates a persisted Kward session and returns session metadata. The response includes `activePersonaLabel` so clients can render the correct avatar immediately. When `resumeLast` is enabled, no `name` is provided, and `sessions.auto_resume` is `true`, Kward resumes the remembered last session for the workspace instead of creating a fresh file; that auto-resume response also includes `resumed: true` and normalized `messages` so clients do not need to briefly render a fresh avatar while fetching transcript state.
+Creates a persisted Kward session and returns its metadata. The response includes `activePersonaLabel` so clients can render the correct avatar immediately. If `resumeLast` and `sessions.auto_resume` are both enabled and no `name` is provided, Kward resumes the last session remembered for the workspace. That response includes `resumed: true` and normalized `messages`, allowing clients to render the restored transcript immediately.
 
 ### `sessions/resume`
 
@@ -562,7 +562,7 @@ Refreshes config-backed runtime state and returns `{ "ok": true, "message": "Res
 
 ## Logging methods
 
-The `logging` capability reports local redacted telemetry logging support, the log directory, enabled categories, `methods: ["logging/stats", "logging/tokenCsv"]`, `usageCsv` sub-capability with bucket support, JSONL format with 10 MB rotation and manual retention, config key `logging`, env prefix `KWARD_LOGGING`, and redacted-metadata-only content. Logging methods require logging to be enabled by config or environment for at least one category.
+Check the `logging` capability to see whether local redacted telemetry is available. It reports the log directory, enabled categories, supported methods, bucketed CSV support, JSONL storage, and 10 MB rotation with manual retention. Logs contain redacted metadata only. Configure logging with the `logging` key or `KWARD_LOGGING` environment prefix, and enable at least one category before calling these methods.
 
 ### `logging/stats`
 
@@ -572,7 +572,7 @@ Params:
 
 Accepted units are minutes, hours, days, weeks, months, and years. Ranges use UTC calendar periods: `1 month` means the current calendar month so far, and `2 months` means the previous month plus the current month so far. Invalid ranges return an invalid-params error with usage text.
 
-Returns structured stats for enabled categories only, including the requested range, log directory, record counts by category/event, `usageStats` token totals, performance duration summaries, tool call summaries, and error counts by event/class/provider/code. Error messages are not included in the stats response.
+Returns statistics for enabled categories over the requested range. The response includes the log directory, record counts by category and event, `usageStats` token totals, performance durations, tool call summaries, and error counts by event, class, provider, and code. It does not include error messages.
 
 ### `logging/tokenCsv`
 

@@ -1,11 +1,11 @@
 # Telegram transport
 
-Kward includes a first-party example Telegram transport under
-`examples/plugins/`. It uses the Telegram Bot API's long-polling interface and
-connects private Telegram chats to normal Kward sessions.
+Use the first-party Telegram transport to talk to a normal Kward session from a
+private Telegram chat. The example lives under `examples/plugins/` and uses the
+Telegram Bot API's long-polling interface.
 
-This is trusted local Ruby code. Install it only on a machine where the bot's
-workspace and Kward tools may safely run.
+The transport runs as trusted local Ruby code. Install it only on a machine
+where the bot can safely access its configured workspace and Kward tools.
 
 ## Install the plugin
 
@@ -16,11 +16,10 @@ mkdir -p ~/.kward/plugins
 cp -R examples/plugins/telegram ~/.kward/plugins/
 ```
 
-The package entrypoint is `~/.kward/plugins/telegram/plugin.rb`; its sibling
-implementation files are loaded relative to that entrypoint.
+Kward loads the package through `~/.kward/plugins/telegram/plugin.rb`.
 
-The plugin does not connect to Telegram while Kward is loading plugins. It is
-started explicitly with `kward transport run com.kward.telegram`.
+Installing the plugin does not connect to Telegram. Start it explicitly with
+`kward transport run com.kward.telegram`.
 
 ## Configuration
 

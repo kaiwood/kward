@@ -29,7 +29,7 @@ The `code_search` tool can:
 4. search cached files,
 5. read bounded line ranges from cached files.
 
-Kward should use this when the best answer depends on how another project actually implemented something.
+Kward uses code search when the best answer depends on how another project actually implemented something.
 
 ## Supported ecosystems
 

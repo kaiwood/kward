@@ -64,7 +64,7 @@ Constraints:
 - Each option requires both `label` and `description`.
 - In terminal use, the picker also accepts custom typed answers beyond the provided options, so the user is not limited to the listed choices.
 
-This tool is advertised only when the active frontend supports structured questions. In terminal use, it lets Kward ask concise multiple-choice questions instead of guessing requirements. In RPC clients, the same question flow is bridged through UI events — see the [RPC question bridge](rpc.md) for notification and response details.
+The question picker is available only in frontends that support structured questions. In the terminal, it lets Kward ask a concise multiple-choice question instead of guessing. RPC clients receive the same flow through UI events; see the [RPC question bridge](rpc.md) for notification and response details.
 
 Good uses:
 
@@ -72,7 +72,7 @@ Good uses:
 - confirming an ambiguous scope,
 - selecting a provider, model, or behavior when no default is obvious.
 
-Kward should not use this tool for every small uncertainty. It is best when an answer materially changes the implementation or avoids a risky assumption.
+Structured questions are most useful when the answer would materially change the implementation or avoid a risky assumption—not for every small uncertainty.
 
 ## Availability
 

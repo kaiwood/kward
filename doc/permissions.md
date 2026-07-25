@@ -1,6 +1,6 @@
 # Permissions
 
-Kward's permission policy decides whether a model-requested tool can start. It lets you put a human decision between a tool call and its side effect when you want the agent to inspect a project freely but confirm edits, commands, web requests, or MCP calls as they arise.
+Turn on permissions when you want Kward to ask before it edits files, runs commands, accesses the web, or calls an MCP tool. In the usual `ask` mode, read-only work continues normally while you decide which side effects to allow.
 
 Permissions are **off by default**. They are not an operating-system sandbox: an allowed shell command still runs with your operating-system user permissions unless you separately enable [command sandboxing](sandboxing.md) for model-requested shell commands.
 
@@ -24,7 +24,16 @@ In `ask` mode, Kward allows ordinary read-only tools and asks before the agent:
 - searches or fetches content on the web,
 - calls an MCP tool.
 
-When approval is required in the interactive CLI, Kward opens a modal overlay. It shows the complete tool arguments, so an approval for `read_skill` includes the requested skill name and relative path, and an approval for a write includes its path and content. Choose **Allow once** to run that one call, **Allow this tool for this session** to allow later calls to the same tool in the current Kward session, or **Deny** to stop it. Pressing `Esc`, cancelling the overlay, or losing the approval bridge denies the call.
+When Kward needs approval in the interactive CLI, it shows the complete tool arguments in an overlay. For example, a write request includes the file path and content.
+
+Choose:
+
+- **Allow once** to run this call.
+- **Allow this tool for this session** to allow later calls to the same tool in the current session.
+- **Deny** to stop the call.
+- **Type something** to stop the call and tell Kward what to do instead.
+
+Pressing `Esc`, closing the overlay, or losing the frontend connection denies the call.
 
 ### Steer the agent with `Type something`
 

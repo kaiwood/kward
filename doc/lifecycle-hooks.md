@@ -1,8 +1,8 @@
 # Lifecycle hooks
 
-Lifecycle hooks are deterministic runtime callbacks around Kward's agent workflow. Use them when something must happen because of an event, not because the model remembered an instruction.
+Lifecycle hooks let you run a rule or action whenever something happens in Kward—for example, before a command runs, after a turn finishes, or when a tool needs approval. Use a hook when the action must happen reliably rather than depending on the model to remember an instruction.
 
-Hooks can observe events and return structured decisions to allow, deny, ask for approval, modify supported payloads, warn, retry, or defer. They are currently exposed through trusted Ruby plugins and through command hooks configured in `config.json`.
+A hook can observe an event, allow or deny an operation, ask for approval, adjust supported data, or trigger follow-up work. You can add hooks through trusted Ruby plugins or configure command hooks in `config.json`.
 
 Hooks run as local code with your user permissions. Do not install hooks you do not trust, and do not put secrets in hook output.
 

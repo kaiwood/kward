@@ -1,8 +1,12 @@
 # Releasing Kward
 
+## Before you begin
+
 Kward requires Ruby >= 3.4 (`spec.required_ruby_version` in `kward.gemspec`). If you develop with a newer Ruby, verify tests pass against the minimum supported version before releasing.
 
-Release steps before publishing:
+## Prepare the release
+
+Before publishing:
 
 1. Update `CHANGELOG.md` for the version. Move `[Unreleased]` entries under a new version heading.
 2. Update `Kward::VERSION` in `lib/kward/version.rb`.
@@ -41,7 +45,9 @@ Release steps before publishing:
 
 8. Install the built gem locally and smoke test the `kward` executable in a clean workspace.
 
-Commit the version bump and create a git tag:
+## Tag and publish
+
+Commit the version bump and create a Git tag:
 
 ```bash
 git commit -am "Bump to VERSION"
@@ -56,6 +62,8 @@ gem push kward-VERSION.gem
 ```
 
 RubyGems MFA is required for publishing. Prefer RubyGems trusted publishing for automated releases if CI publishing is added later, so long-lived API keys do not need to be stored in CI secrets.
+
+## If you need to yank a release
 
 If a published gem has a serious problem, you can yank it within 24 hours of pushing:
 

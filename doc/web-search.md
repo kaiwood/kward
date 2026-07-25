@@ -26,17 +26,17 @@ Kward has three web tools:
 2. `fetch_content` reads human-readable pages.
 3. `fetch_raw` reads machine-readable files such as JSON, YAML, XML, RSS, OpenAPI specs, or plain text.
 
-A good research flow is:
+For reliable results, ask Kward to find the source, read the important page, and include its URL:
 
 ```text
 Search for the official docs, fetch the relevant page, then answer with the source URL.
 ```
 
-Kward should search first, then fetch important pages before relying on them.
+Kward searches for likely sources first, then reads the important pages before relying on them.
 
 ## Network behavior
 
-Web tools are advertised to the model by default. Queries and fetched URLs are sent over the network to the selected provider or target host. See [Configuration](configuration.md) for the full `web_search` config reference including API key storage and the `provider` config setting.
+Web tools are available by default. Search queries and fetched URLs leave your machine and go to the selected search provider or target host. See [Configuration](configuration.md) for API key storage, provider selection, and the full `web_search` reference.
 
 In automatic mode, provider fallback is:
 

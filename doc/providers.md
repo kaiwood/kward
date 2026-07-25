@@ -1,6 +1,6 @@
 # Model providers
 
-Kward can keep several provider credentials at once and switch between them without changing your conversation workflow. Use this guide to decide which provider fits, find its configuration names, and understand which catalog/runtime behavior to expect.
+Kward can keep credentials for several model providers and switch between them without changing your conversation. Use this guide to compare authentication options, see where each provider's model list comes from, and find the names used in configuration.
 
 For login steps and credential storage, see [Authentication](authentication.md). For every config key and environment override, see [Configuration](configuration.md#Provider_and_model_settings).
 
@@ -13,7 +13,7 @@ Inside interactive Kward:
 /model
 ```
 
-`/login` connects a provider. `/model` chooses the active provider and model. The model picker can refresh catalogs, accept a manual model ID, show entries hidden by conservative capability filtering, or switch providers.
+`/login` connects a provider. `/model` chooses the active provider and model. The model picker can refresh the available models, accept a manual model ID, show models normally hidden by compatibility filters, or switch providers.
 
 For example, direct OpenAI API access and ChatGPT/Codex OAuth can coexist:
 
@@ -23,7 +23,7 @@ For example, direct OpenAI API access and ChatGPT/Codex OAuth can coexist:
 
 ## Provider overview
 
-The catalog/auth ID is used by RPC authentication methods and private API-key storage. The `provider` value selects the runtime in config. They are normally identical; direct OpenAI is intentionally `openai` for authentication and `openai_api` at runtime so it cannot be confused with Codex.
+Kward normally uses the same provider name for authentication and configuration. Direct OpenAI is the exception: authentication and private API-key storage use `openai`, while config uses `openai_api` so it cannot be confused with Codex. RPC clients also use the authentication ID.
 
 | Provider shown in Kward | Catalog/auth ID | `provider` value | Authentication | Model source | Request API |
 | --- | --- | --- | --- | --- | --- |

@@ -1,8 +1,8 @@
 # MCP servers
 
-Kward can connect to local [Model Context Protocol](https://modelcontextprotocol.io/) servers and expose their tools to the model alongside Kward's built-in workspace tools.
+Kward can connect to local [Model Context Protocol](https://modelcontextprotocol.io/) servers and use their tools alongside its built-in workspace tools.
 
-This is useful when another app ships an MCP server for something Kward should be able to inspect or control. For example, Safari Technology Preview includes a Safari MCP server that lets agents inspect pages, console output, network activity, screenshots, and other browser state.
+Use MCP when another app exposes something you want Kward to inspect or control. For example, Safari Technology Preview includes an MCP server for inspecting pages, console output, network activity, screenshots, and other browser state.
 
 ## Configure a local MCP server
 

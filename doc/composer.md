@@ -99,7 +99,7 @@ The `$` token must begin at the first character of the composer. Use Up/Down to 
 
 A successful `$path` open is saved in prompt history using the resolved workspace-relative path. It opens the editor instead of sending a model prompt.
 
-See [Integrated Editor](editor.md) for editing modes, save and quit keys, scratchpads, and conflict handling.
+See [Integrated editor](editor.md) for editing modes, save and quit keys, scratchpads, and conflict handling.
 
 ## Reuse prompt history
 

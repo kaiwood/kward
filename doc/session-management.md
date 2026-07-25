@@ -1,10 +1,8 @@
 # Sessions
 
-Sessions are Kward's way of keeping real work alive across time. An interactive chat is not just a scrollback buffer: it is saved as a session with messages, tool calls, tool results, compaction checkpoints, branches, and enough metadata for Kward to resume the work later.
+Kward saves each interactive chat as a session, so you can close the terminal and continue the work later. Sessions keep the conversation, tool activity, branches, and compaction history needed to restore the right context.
 
-Think of sessions as **context management**. They let you decide which conversation context Kward should use next.
-
-Think of rewinding and forking as **context time travel**. You can go back to an earlier prompt, try a different path, and keep both versions instead of losing the original work.
+Rewinding and forking are a kind of **context time travel**: go back to an earlier prompt, try another path, and keep both versions instead of losing the original work.
 
 ## Where sessions live
 

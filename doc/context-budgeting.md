@@ -1,8 +1,8 @@
 # Context budgeting and token savings
 
-Kward tries to keep the model's context focused. Instead of reading whole files and pasting every byte of command output back into the conversation, it gathers evidence in small steps, compacts noisy output, and keeps the original data available when needed.
+Kward handles context budgeting automatically. Instead of reading whole files and pasting every byte of command output into the conversation, it gathers evidence in small steps, compacts noisy output, and keeps the original data available when needed.
 
-This page summarizes the token-saving work in Kward: what existed before, what the newer focused-context tools add, and how those pieces fit together during normal agent work.
+This guide explains why Kward sometimes reads an outline or a small section before opening a whole file, how it handles large tool output, and how you can inspect the resulting token savings.
 
 ## Why this matters
 
@@ -14,9 +14,9 @@ Kward's goal is not to build a heavyweight semantic index. It is to stay lightwe
 find likely files -> inspect outlines/previews -> read exact ranges -> read full files only when needed
 ```
 
-## The current workflow
+## How Kward gathers context
 
-When Kward needs code context, it should usually start with one of these tools:
+When Kward needs code context, it usually starts with one of these tools:
 
 - `context_for_task` for a compact task-shaped bundle.
 - `summarize_file_structure` for a source outline of one file.
@@ -27,11 +27,11 @@ Then it can escalate only as needed:
 - `read_file` with `mode: "range"`, `offset`, and `limit` for exact sections.
 - `read_file` with `mode: "full"` only when focused context is not enough.
 
-The built-in system prompt tells Kward to follow that escalation path, so these tools are part of normal agent behavior rather than hidden manual features.
+This happens automatically during normal work; you do not need to choose the tools or modes yourself.
 
 ## Focused task context
 
-`context_for_task` is the highest-level context-budgeting tool. Give it a task and, optionally, focused paths and a byte budget. It returns a compact text bundle with:
+`context_for_task` gives Kward a focused starting point. It accepts a task and, optionally, a set of paths and a byte budget, then returns a compact bundle with:
 
 - ranked candidate files (by term-matching score),
 - source outlines for each file,

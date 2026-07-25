@@ -2,7 +2,7 @@
 
 Kward's generated Ruby API documentation is for contributors, plugin authors, tool authors, and people building RPC or editor integrations.
 
-If you use Kward from the terminal, start with the [user guides](file.README.html#Documentation). The generated reference documents source-tree classes, including internal implementation details. The supported interfaces are the behaviors documented in the guides, the Plugin DSL, and the JSON-RPC methods documented in the [RPC protocol](rpc.md).
+If you use Kward from the terminal, start with the [user guides](file.README.html#Documentation). This reference also includes internal classes and methods that may change. Treat the behavior described in the guides, the Plugin DSL, and the methods in the [RPC protocol](rpc.md) as Kward's supported public interfaces.
 
 ## Start here
 

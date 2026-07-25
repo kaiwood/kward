@@ -61,7 +61,7 @@ Useful keys in the diff viewer:
 
 After you close the viewer, Kward returns to the Git overlay with the file list refreshed.
 
-The diff viewer is read-only. It is meant for checking what changed, not editing. If you spot something you want to fix, close the viewer, return to chat, and ask Kward to make the change or open the file with the built-in editor using `$path/to/file`. See [Integrated Editor](editor.md) for editor workflows and keybindings.
+The diff viewer is read-only. It is meant for checking what changed, not editing. If you spot something you want to fix, close the viewer, return to chat, and ask Kward to make the change or open the file with the built-in editor using `$path/to/file`. See [Integrated editor](editor.md) for editor workflows and keybindings.
 
 ## Example workflow
 

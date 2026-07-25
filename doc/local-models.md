@@ -1,8 +1,8 @@
 # Local models
 
-Kward can connect to a local model server that provides OpenAI-compatible Chat Completions. This is useful when you want offline development, control over model selection, or a smaller prompt for a local coding model. For comparison with hosted backends, see [Model providers](providers.md#Choosing_between_similar_providers).
+If you already run Ollama, LM Studio, or llama.cpp, Kward can use it as a local model provider. This can be useful for offline work, tighter control over model selection, or a smaller prompt tuned for a local coding model. The server must provide OpenAI-compatible Chat Completions.
 
-Kward connects to an already-running server. It does not install runtimes, download models, choose GPU settings, or load models for you.
+Kward connects to an already-running server; it does not install a runtime, download or load models, or choose GPU settings. For a comparison with hosted providers, see [Model providers](providers.md#Choosing_between_similar_providers).
 
 ## Choose and start a runtime
 

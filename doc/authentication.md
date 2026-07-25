@@ -1,6 +1,6 @@
 # Authentication
 
-Kward can keep credentials for several model providers at once. Authentication and model selection are separate: connect an account or API key first, then use `/model` to choose what runs. See [Model providers](providers.md) for the canonical provider, runtime, model-key, and environment-variable reference.
+Kward can keep credentials for several model providers at once. First connect an account or API key, then use `/model` to choose the provider and model for your work. See [Model providers](providers.md) to compare providers and find their configuration names and environment variables.
 
 The easiest setup is inside interactive Kward:
 

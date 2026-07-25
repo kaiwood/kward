@@ -94,7 +94,7 @@ Arguments:
 - `path`: workspace-relative file path.
 - `content`: complete file content.
 
-Use full writes when replacing generated content or creating a new file. For small edits to existing files, Kward should usually prefer `edit_file`.
+Full writes are useful for generated content and new files. For a small change to an existing file, `edit_file` is usually the better fit.
 
 The result includes a unified diff of the changes, capped at 8 KB with a summary of additions and deletions when truncated.
 
