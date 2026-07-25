@@ -22,12 +22,15 @@ module Kward
 
       # Writes the auth status output for the terminal CLI flow.
       def print_auth_status
-        config = safely_read_config.to_h
+        store = api_key_store
+        store.migrate_openrouter_config_key!
         lines = ["#{colored("Auth Status", :green, :bold)}", ""]
         lines << auth_status_line("OpenAI OAuth", File.exist?(OpenAIOAuth.default_auth_path), OpenAIOAuth.default_auth_path)
         lines << auth_status_line("Anthropic OAuth", File.exist?(AnthropicOAuth.default_auth_path), AnthropicOAuth.default_auth_path)
         lines << auth_status_line("GitHub OAuth", File.exist?(GithubOAuth.default_auth_path), GithubOAuth.default_auth_path)
-        lines << auth_status_line("OpenRouter API key", !config["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?, ConfigFiles.config_path)
+        ProviderCatalog.api_key_providers.each do |provider|
+          lines << auth_status_line("#{provider.name} API key", store.configured?(provider.id), store.path)
+        end
         @prompt.say lines.join("\n")
       end
 
@@ -45,7 +48,11 @@ module Kward
           File.delete(path)
           removed << path
         end
-        removed << "OpenRouter API key" if OpenRouterAPIKey.new.logout
+        store = api_key_store
+        store.migrate_openrouter_config_key!
+        ProviderCatalog.api_key_providers.each do |provider|
+          removed << "#{provider.name} API key" if store.delete(provider.id)
+        end
 
         if removed.empty?
           @prompt.say "No saved credentials found."
@@ -54,27 +61,67 @@ module Kward
         end
       end
 
-      def login(provider: nil, oauth: nil)
-        provider = provider.to_s.downcase
-        if provider == "openrouter"
-          auth = oauth || OpenRouterAPIKey.new
-          path = auth.login(prompt: @prompt)
-          @prompt.say("#{colored("Saved", :green, :bold)} OpenRouter API key to #{path}")
+      def login(provider: nil, oauth: nil, auth_method: nil)
+        provider = normalized_login_provider(provider)
+        if api_key_login?(provider, auth_method)
+          login_with_api_key(provider)
           return
         end
 
         oauth ||= case provider
-                  when "github" then GithubOAuth.new
-                  when "anthropic", "claude" then AnthropicOAuth.new
+                  when "github", "copilot" then GithubOAuth.new
+                  when "anthropic" then AnthropicOAuth.new
                   else OpenAIOAuth.new
                   end
         path = oauth.login(prompt: @prompt)
         name = case provider
-               when "github" then "GitHub"
-               when "anthropic", "claude" then "Anthropic"
+               when "github", "copilot" then "GitHub"
+               when "anthropic" then "Anthropic"
                else "OpenAI"
                end
         @prompt.say("#{colored("Saved", :green, :bold)} #{name} OAuth login to #{path}")
+      end
+
+      private
+
+      def api_key_store
+        @api_key_store ||= APIKeyStore.new
+      end
+
+      def normalized_login_provider(provider)
+        value = provider.to_s.downcase
+        return "openai" if value.empty?
+        return "anthropic" if ["anthropic", "claude"].include?(value)
+        return "copilot" if ["github", "copilot"].include?(value)
+
+        ProviderCatalog.fetch(value).id
+      end
+
+      def api_key_login?(provider, auth_method)
+        return true if auth_method == :api_key || auth_method == "api_key"
+
+        ProviderCatalog.fetch(provider).api_key? && !["openai", "anthropic", "copilot"].include?(provider)
+      end
+
+      def login_with_api_key(provider_id)
+        provider = ProviderCatalog.fetch(provider_id)
+        raise "#{provider.name} does not accept an API key" unless provider.api_key?
+
+        api_key = @prompt.ask("#{provider.name} API key:").to_s.strip
+        path = api_key_store.store(provider.id, api_key)
+        configure_provider_after_api_key_login(provider)
+        @prompt.say("#{colored("Saved", :green, :bold)} #{provider.name} API key to #{path}")
+      end
+
+      def configure_provider_after_api_key_login(provider)
+        return unless provider.id == "azure_openai"
+
+        endpoint = @prompt.ask("Azure OpenAI endpoint:").to_s.strip
+        deployment = @prompt.ask("Azure OpenAI deployment name:").to_s.strip
+        raise "Azure OpenAI endpoint must be a non-empty string" if endpoint.empty?
+        raise "Azure OpenAI deployment name must be a non-empty string" if deployment.empty?
+
+        ConfigFiles.update_config("azure_openai_endpoint" => endpoint, "azure_openai_model" => deployment)
       end
 
     end

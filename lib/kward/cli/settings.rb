@@ -721,12 +721,15 @@ module Kward
           return
         end
 
-        selected = @prompt.select("OAuth provider", login_provider_choices, title: "Login")
+        method = selected_login_method(@prompt.select("How would you like to connect?", login_method_choices, title: "Login"))
+        return unless method
+
+        selected = @prompt.select(login_provider_prompt(method), login_provider_choices(method), title: "Login")
         provider = selected_login_provider(selected)
         return unless provider
 
         run_busy_local_command_and_requeue(activity: "running") do
-          login(provider: provider)
+          login(provider: provider, auth_method: method)
           reload_client_config
         end
       rescue StandardError => e
@@ -784,21 +787,36 @@ module Kward
         @prompt.respond_to?(:select)
       end
 
-      def login_provider_choices
-        ["OpenAI", "Anthropic", "OpenRouter", "GitHub"]
+      def login_method_choices
+        ["API key", "Subscription / OAuth"]
+      end
+
+      def selected_login_method(selected)
+        case selected.to_s.downcase
+        when /\Aapi key\z/ then :api_key
+        when /\Asubscription \/ oauth\z/ then :oauth
+        end
+      end
+
+      def login_provider_prompt(method)
+        method == :api_key ? "Add an API key" : "Sign in with a subscription"
+      end
+
+      def login_provider_choices(method)
+        if method == :api_key
+          ProviderCatalog.api_key_providers.map(&:name)
+        else
+          ["Anthropic Claude", "ChatGPT", "GitHub Copilot"]
+        end
       end
 
       def selected_login_provider(selected)
-        case selected.to_s.downcase
-        when /\Aopenai\b/
-          "openai"
-        when /\Aanthropic\b/, /\Aclaude\b/
-          "anthropic"
-        when /\Aopenrouter\b/
-          "openrouter"
-        when /\Agithub\b/
-          "github"
-        end
+        value = selected.to_s.downcase
+        return "openai" if value == "openai" || value == "chatgpt"
+        return "anthropic" if value == "anthropic" || value == "anthropic claude"
+        return "copilot" if value == "github copilot"
+
+        ProviderCatalog.find_by_name(selected)&.id
       end
 
       def model_overlay_available?

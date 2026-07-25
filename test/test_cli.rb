@@ -92,7 +92,7 @@ class TestCLI < KwardTestCase
       @login_providers = []
     end
 
-    def login(provider: nil, oauth: nil)
+    def login(provider: nil, oauth: nil, auth_method: nil)
       raise "OAuth timed out" if @fail_login
 
       @login_providers << provider
@@ -404,25 +404,27 @@ class TestCLI < KwardTestCase
     assert_includes prompt.output.join, "GitHub OAuth login to /tmp/github_auth.json"
   end
 
-  def test_login_openrouter_stores_api_key_in_config
+  def test_login_openrouter_stores_api_key_in_private_credential_file
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")
       prompt = FakePrompt.new(["sk-or-test"])
-      auth = Kward::OpenRouterAPIKey.new(config_path: path)
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
 
-      cli.login(provider: "openrouter", oauth: auth)
+      with_env("KWARD_CONFIG_PATH" => path) { cli.login(provider: "openrouter") }
 
-      assert_equal "sk-or-test", JSON.parse(File.read(path))["openrouter_api_key"]
-      assert_includes prompt.output.join, "OpenRouter API key to #{path}"
+      credentials_path = File.join(dir, "api_keys.json")
+      assert_equal "sk-or-test", JSON.parse(File.read(credentials_path))["openrouter"]
+      assert_includes prompt.output.join, "OpenRouter API key to #{credentials_path}"
       refute_includes prompt.output.join, "sk-or-test"
     end
   end
 
-  def test_login_picker_includes_openrouter
+  def test_login_picker_sorts_api_key_providers_and_keeps_subscription_logins_separate
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
 
-    assert_equal ["OpenAI", "Anthropic", "OpenRouter", "GitHub"], cli.send(:login_provider_choices)
+    assert_equal ["API key", "Subscription / OAuth"], cli.send(:login_method_choices)
+    assert_equal ["Anthropic", "Azure OpenAI", "Cerebras", "DeepSeek", "Fireworks AI", "Google Gemini", "Groq", "Mistral", "NVIDIA NIM", "OpenAI", "OpenRouter", "Together AI", "xAI"], cli.send(:login_provider_choices, :api_key)
+    assert_equal ["Anthropic Claude", "ChatGPT", "GitHub Copilot"], cli.send(:login_provider_choices, :oauth)
     assert_equal "openrouter", cli.send(:selected_login_provider, "OpenRouter")
   end
 
@@ -3558,7 +3560,7 @@ edit this prompt"
   end
 
   def test_login_slash_command_selects_openai_provider_without_calling_client
-    prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["OpenAI"])
+    prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["Subscription / OAuth", "ChatGPT"])
     client = RecordingClient.new([])
     agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
     cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
@@ -3566,13 +3568,13 @@ edit this prompt"
     cli.interactive_loop(agent: agent)
 
     assert_equal ["openai"], cli.login_providers
-    assert_equal ["OpenAI", "Anthropic", "OpenRouter", "GitHub"], prompt.select_choices.first
+    assert_equal ["API key", "Subscription / OAuth"], prompt.select_choices.first
     assert_equal "Login", prompt.select_titles.first
     assert_empty client.seen_messages
   end
 
   def test_login_slash_command_shows_running_spinner_after_provider_selection
-    prompt = BusySelectPrompt.new(["/login", "/exit"], selections: ["OpenAI"])
+    prompt = BusySelectPrompt.new(["/login", "/exit"], selections: ["Subscription / OAuth", "ChatGPT"])
     client = RecordingClient.new([])
     agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
     cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
@@ -3588,19 +3590,19 @@ edit this prompt"
   end
 
   def test_login_slash_command_selects_github_provider_without_calling_client
-    prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["GitHub"])
+    prompt = FakeSettingsPrompt.new(["/login", "/exit"], ["Subscription / OAuth", "GitHub Copilot"])
     client = RecordingClient.new([])
     agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
     cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
     cli.interactive_loop(agent: agent)
 
-    assert_equal ["github"], cli.login_providers
+    assert_equal ["copilot"], cli.login_providers
     assert_empty client.seen_messages
   end
 
   def test_login_slash_command_reports_failure_and_continues_session
-    prompt = FakeSettingsPrompt.new(["/login", "/status", "/exit"], ["OpenAI"])
+    prompt = FakeSettingsPrompt.new(["/login", "/status", "/exit"], ["Subscription / OAuth", "ChatGPT"])
     client = RecordingClient.new([])
     agent = Kward::Agent.new(client: client, tool_registry: Kward::ToolRegistry.new(prompt: prompt))
     cli = RecordingLoginCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, fail_login: true)

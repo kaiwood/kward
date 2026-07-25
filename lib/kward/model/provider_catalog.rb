@@ -52,6 +52,10 @@ module Kward
       DEFINITIONS.find { |provider| provider.id == id.to_s }
     end
 
+    def find_by_name(name)
+      DEFINITIONS.find { |provider| provider.name.casecmp?(name.to_s) }
+    end
+
     def api_key_providers
       DEFINITIONS.select(&:api_key?)
     end
