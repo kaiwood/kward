@@ -118,6 +118,21 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_read_config_rejects_valid_json_that_is_not_an_object
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, "[]")
+
+      error = assert_raises(Kward::ConfigFiles::ConfigError) do
+        Kward::ConfigFiles.read_config(config_path)
+      end
+
+      assert_equal config_path, error.path
+      assert_equal "JSON", error.format
+      assert_equal "top-level value must be an object", error.detail
+    end
+  end
+
   def test_skip_config_ignores_main_config_reads_and_writes
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

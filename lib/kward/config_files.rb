@@ -238,7 +238,10 @@ module Kward
       return {} if skip_config? && path == config_path
       return {} unless File.exist?(path)
 
-      JSON.parse(File.read(path))
+      config = JSON.parse(File.read(path))
+      return config if config.is_a?(Hash)
+
+      raise ConfigError.new(path: path, format: "JSON", detail: "top-level value must be an object")
     rescue JSON::ParserError => e
       raise ConfigError.new(path: path, format: "JSON", detail: e.message)
     end
