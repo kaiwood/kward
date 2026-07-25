@@ -240,7 +240,7 @@ module Kward
       end
 
       ProviderCatalog.api_key_providers.each do |catalog_provider|
-        next unless ["openai_chat", "openai_responses", "gemini"].include?(catalog_provider.protocol)
+        next unless ["openai_chat", "openai_responses", "gemini", "azure_openai"].include?(catalog_provider.protocol)
         next if catalog_provider.id == "openrouter"
         next unless provider_logged_in?(catalog_provider.name)
 

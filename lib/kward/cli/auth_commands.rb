@@ -108,9 +108,10 @@ module Kward
         raise "#{provider.name} does not accept an API key" unless provider.api_key?
 
         api_key = @prompt.ask("#{provider.name} API key:").to_s.strip
+        provider_config = provider_config_after_api_key_login(provider)
         models = refresh_provider_models(provider, api_key)
         path = api_key_store.store(provider.id, api_key)
-        configure_provider_after_api_key_login(provider)
+        ConfigFiles.update_config(provider_config) unless provider_config.empty?
         @prompt.say("#{colored("Saved", :green, :bold)} #{provider.name} API key to #{path}")
         @prompt.say("Loaded #{models.length} #{provider.name} model#{models.length == 1 ? "" : "s"}.") if models
       end
@@ -125,15 +126,14 @@ module Kward
         ModelCatalog.new(provider_id: provider_id, api_key: api_key)
       end
 
-      def configure_provider_after_api_key_login(provider)
-        return unless provider.id == "azure_openai"
+      def provider_config_after_api_key_login(provider)
+        return {} unless provider.id == "azure_openai"
 
-        endpoint = @prompt.ask("Azure OpenAI endpoint:").to_s.strip
-        deployment = @prompt.ask("Azure OpenAI deployment name:").to_s.strip
-        raise "Azure OpenAI endpoint must be a non-empty string" if endpoint.empty?
-        raise "Azure OpenAI deployment name must be a non-empty string" if deployment.empty?
-
-        ConfigFiles.update_config("azure_openai_endpoint" => endpoint, "azure_openai_model" => deployment)
+        AzureOpenAIConfig.new(
+          endpoint: @prompt.ask("Azure OpenAI endpoint:"),
+          deployment: @prompt.ask("Azure OpenAI deployment name:"),
+          api_version: @prompt.ask("Azure OpenAI API version:")
+        ).to_config
       end
 
     end
