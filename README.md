@@ -2,7 +2,7 @@
 
 Kward is an extendable Ruby CLI coding agent. It can chat with you about a project, inspect and edit files, run local shell commands, search the web, look up public source code, save local sessions, and load trusted Ruby plugins for custom workflows.
 
-It supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscription, OpenRouter, experimental Copilot provider support, and OpenAI-compatible local servers such as Ollama, LM Studio, and llama.cpp.
+It supports the OpenAI/ChatGPT Codex backend, Anthropic Claude Pro/Max subscriptions, OpenRouter, Copilot, and OpenAI-compatible local servers such as Ollama, LM Studio, and llama.cpp.
 
 ## Why use Kward?
 

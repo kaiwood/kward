@@ -23,7 +23,7 @@ Use the provider you already have access to. You can change the active model lat
 | OpenAI/ChatGPT | You want the default Codex backend with a ChatGPT account. |
 | Anthropic | You have Claude Pro/Max and want to use Claude through Kward. |
 | OpenRouter | You want to use an OpenRouter API key and choose from its model catalog. |
-| Copilot | You want to try experimental Copilot provider support. |
+| Copilot | You want to use Copilot through Kward. |
 
 If you are unsure, start with `kward login` and choose OpenAI.
 
@@ -33,7 +33,7 @@ If you are unsure, start with `kward login` and choose OpenAI.
 kward login              # OpenAI/ChatGPT OAuth
 kward login anthropic    # Anthropic Claude Pro/Max OAuth
 kward login openrouter   # OpenRouter API key
-kward login github       # GitHub OAuth for experimental Copilot support
+kward login github       # GitHub OAuth for Copilot
 ```
 
 ## OpenAI / ChatGPT
@@ -127,7 +127,7 @@ Use this when:
 
 After refreshing, start Kward and choose the model with `/model`.
 
-## Experimental Copilot support
+## Copilot
 
 ```bash
 kward login github
@@ -145,7 +145,7 @@ You can also use a token for one run:
 COPILOT_GITHUB_TOKEN=... kward
 ```
 
-Copilot support is experimental and uses direct HTTPS calls to the Copilot proxy API. It does not use the official Copilot CLI or SDK runtime.
+Kward uses direct HTTPS calls to the Copilot proxy API. It does not use the official Copilot CLI or SDK runtime.
 
 ## Choose the active model
 

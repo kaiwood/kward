@@ -48,7 +48,7 @@ Before enabling or running anything:
 6. Do not add repository-provided Ruby files to `~/.kward/plugins` unless you are willing to run them as your user.
 7. Ask Kward to explain proposed edits and commands before applying them when the impact is unclear.
 
-For especially sensitive work, use a disposable checkout, container, virtual machine, or restricted operating-system account. Enable [command sandboxing](sandboxing.md) for model-requested shell commands, but remember that its first release does not sandbox the Kward host process, plugins, MCP servers, hooks, or interactive shell features.
+For especially sensitive work, use a disposable checkout, container, virtual machine, or restricted operating-system account. Enable [command sandboxing](sandboxing.md) for model-requested shell commands, but remember that it does not sandbox the Kward host process, plugins, MCP servers, hooks, or interactive shell features.
 
 ## Workspace access is a guardrail, not a sandbox
 

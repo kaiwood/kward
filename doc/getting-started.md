@@ -57,7 +57,7 @@ Or from inside an interactive session:
 /login
 ```
 
-Kward supports OpenAI/ChatGPT, Anthropic Claude Pro/Max, OpenRouter, and experimental Copilot credentials. See [Authentication](authentication.md) when you need a specific provider.
+Kward supports OpenAI/ChatGPT, Anthropic Claude Pro/Max, OpenRouter, and Copilot credentials. See [Authentication](authentication.md) when you need a specific provider.
 
 Confirm your credentials are saved:
 

@@ -6,7 +6,7 @@ This is a living document. If significant changes to the codebase, architecture,
 
 ## Project overview
 
-Kward is an extendable Ruby CLI coding agent. It supports interactive and one-shot chat, local workspace tools, configurable prompts/skills, image attachments, web search, OpenAI OAuth/API-key authentication, session persistence, and an experimental JSON-RPC backend for UI clients.
+Kward is an extendable Ruby CLI coding agent. It supports interactive and one-shot chat, local workspace tools, configurable prompts/skills, image attachments, web search, OpenAI OAuth/API-key authentication, session persistence, and a JSON-RPC backend for UI clients.
 
 ## Working style
 
@@ -33,7 +33,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/mcp/` - local MCP client transports and configured server clients.
 - `lib/kward/transport.rb` and `lib/kward/transport/` - frontend-neutral transport contracts, host, session gateway, persistent state, lifecycle manager, and foreground runtime.
 - `lib/kward/cli/transports.rb` - transport listing, status, and foreground-run commands.
-- `lib/kward/rpc/` - experimental JSON-RPC backend.
+- `lib/kward/rpc/` - JSON-RPC backend.
 - `lib/kward/prompts.rb` - system prompt and skill catalog prompt assembly.
 - `lib/kward/config_files.rb` - config path handling.
 - `lib/kward/skills/` - Agent Skills discovery, parsing, validation, activation reads, and saved-session skill capture.

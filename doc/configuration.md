@@ -190,7 +190,7 @@ Supported values are:
 - `codex` for the OpenAI/ChatGPT Codex backend.
 - `anthropic` for Anthropic Claude Pro/Max subscription support.
 - `openrouter` for OpenRouter.
-- `copilot` for experimental Copilot provider support.
+- `copilot` for Copilot provider support.
 - `local` for an OpenAI-compatible Ollama, LM Studio, or llama.cpp server. See [Local models](local-models.md).
 
 Model settings:

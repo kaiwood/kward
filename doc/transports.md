@@ -146,8 +146,8 @@ health
 
 The transport manager owns startup, shutdown, failure isolation, and reload.
 A transport should not block the interactive CLI or model-turn workers on a
-network operation. A foreground transport runner is the simplest initial
-deployment; process supervision and companion processes can be added later.
+network operation. A foreground transport runner is the simplest deployment;
+process supervision and companion processes can be added later.
 
 Run a transport with its configured workspace:
 

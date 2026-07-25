@@ -106,7 +106,7 @@ restart-on-failure behavior.
 
 ## Current scope
 
-The initial adapter supports:
+The adapter supports:
 
 - private text messages,
 - one or more explicitly allowlisted numeric users and chats,
