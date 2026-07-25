@@ -106,6 +106,95 @@ class TestCLISettings < KwardTestCase
     end
   end
 
+  def test_model_picker_refreshes_in_place_and_uses_refreshed_models
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new([], ["Refresh model list", "Groq refreshed-model"])
+      client = FakeClient.new([])
+      client.define_singleton_method(:available_models) do
+        [{ provider: "Groq", id: "cached-model", current: false }]
+      end
+      refreshes = []
+      client.define_singleton_method(:refresh_available_models) do |provider: nil|
+        refreshes << provider
+        [{ provider: "Groq", id: "refreshed-model", current: false }]
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      conversation = Kward::Conversation.new(system_message: nil, provider: "Groq", model: "cached-model")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:configure_model, conversation)
+      end
+
+      assert_equal [nil], refreshes
+      assert_equal 2, prompt.select_messages.count("Default model")
+      assert_includes prompt.select_choices.last, "Groq refreshed-model"
+      assert_equal "groq", JSON.parse(File.read(config_path))["provider"]
+    end
+  end
+
+  def test_model_picker_displays_cached_and_curated_fallback_models
+    prompt = FakeSettingsPrompt.new([], [nil])
+    client = FakeClient.new([])
+    client.define_singleton_method(:available_models) do
+      [
+        { provider: "DeepSeek", id: "cached-model", current: false },
+        { provider: "DeepSeek", id: "deepseek-chat", current: false }
+      ]
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    conversation = Kward::Conversation.new(system_message: nil, provider: "DeepSeek", model: "cached-model")
+
+    cli.send(:configure_model, conversation)
+
+    assert_includes prompt.select_choices.first, "DeepSeek cached-model"
+    assert_includes prompt.select_choices.first, "DeepSeek deepseek-chat"
+  end
+
+  def test_model_picker_accepts_a_manual_id_for_the_chosen_provider
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new([], ["Change provider", "Groq", "Enter model ID manually", "private-preview-model"])
+      client = FakeClient.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      cli.define_singleton_method(:provider_choices) { ["Codex", "Groq"] }
+      conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "existing")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:configure_model, conversation)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "groq", config["provider"]
+      assert_equal "private-preview-model", config[Kward::ProviderCatalog.runtime("groq").model_config_key]
+    end
+  end
+
+  def test_model_picker_can_show_all_after_filtering_by_configured_provider
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new([], ["Change provider", "Groq", "Show all models", "OpenRouter openai/gpt-5.5"])
+      client = FakeClient.new([])
+      client.define_singleton_method(:available_models) do
+        [
+          { provider: "Groq", id: "llama", current: false },
+          { provider: "OpenRouter", id: "openai/gpt-5.5", current: false }
+        ]
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+      cli.define_singleton_method(:provider_choices) { ["Codex", "Groq"] }
+      conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "existing")
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:configure_model, conversation)
+      end
+
+      refute_includes prompt.select_choices[2], "OpenRouter openai/gpt-5.5"
+      assert_includes prompt.select_choices[3], "OpenRouter openai/gpt-5.5"
+      assert_equal "openrouter", JSON.parse(File.read(config_path))["provider"]
+    end
+  end
+
   def test_model_slash_command_persists_selected_provider_model
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

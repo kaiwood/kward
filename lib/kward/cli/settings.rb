@@ -746,21 +746,34 @@ module Kward
         end
 
         models ||= normalized_available_models(conversation)
-        choices = model_choices(models, conversation) + ["Refresh model list"]
-        selected = @prompt.select("Default model", choices, title: "Models", custom: true)
-        return unless selected
-        if selected.to_s == "Refresh model list"
-          @client.refresh_available_models if @client.respond_to?(:refresh_available_models)
-          return configure_model(conversation)
+        provider_filter = nil
+        loop do
+          visible_models = provider_filter ? models.select { |model| model[:provider] == provider_filter } : models
+          actions = ["Refresh model list", "Enter model ID manually", "Show all models", "Change provider"]
+          selected = @prompt.select("Default model", model_choices(visible_models, conversation) + actions, title: "Models", custom: true)
+          return unless selected
+
+          case selected.to_s
+          when "Refresh model list"
+            refreshed = @client.refresh_available_models(provider: provider_filter) if @client.respond_to?(:refresh_available_models)
+            models = normalized_available_models(conversation, models: refreshed)
+          when "Enter model ID manually"
+            provider = provider_filter || conversation&.provider || current_model_provider
+            model = @prompt.select("Model ID for #{provider}", [], title: "Models", custom: true)
+            return unless model
+            persist_model_selection(provider, model, conversation)
+            return
+          when "Show all models"
+            provider_filter = nil
+          when "Change provider"
+            selected_provider_name = selected_provider(@prompt.select("Provider", provider_choices, title: "Models"))
+            provider_filter = selected_provider_name if selected_provider_name
+          else
+            provider, model = selected_model(selected, models)
+            persist_model_selection(provider, model, conversation)
+            return
+          end
         end
-
-        provider, model = selected_model(selected, models)
-        raise "Model must be a non-empty string" if model.to_s.strip.empty?
-
-        ConfigFiles.update_config(ModelInfo.config_values_for_selection(provider, model))
-        reload_client_config
-        refresh_conversation_runtime(conversation)
-        @prompt.redraw if @prompt.respond_to?(:redraw)
       rescue StandardError => e
         runtime_output("Model error: #{e.message}")
       end
@@ -847,11 +860,11 @@ module Kward
         values.find { |value| choice.to_s.downcase.start_with?(value) }
       end
 
-      def normalized_available_models(conversation = current_footer_conversation)
+      def normalized_available_models(conversation = current_footer_conversation, models: nil)
         current_provider = conversation.provider || (@client.respond_to?(:current_provider) ? @client.current_provider : "Codex")
         current_model = conversation.model || (@client.respond_to?(:current_model) ? @client.current_model : nil)
         current_reasoning = conversation.reasoning_effort || (@client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : nil)
-        models = @client.respond_to?(:available_models) ? @client.available_models : []
+        models ||= @client.respond_to?(:available_models) ? @client.available_models : []
         ModelInfo.normalize_available(
           models,
           current_provider: current_provider,
@@ -877,11 +890,20 @@ module Kward
         return [known[:provider], known[:id]] if known
 
         provider, model = text.split(/\s+/, 2)
-        if ["Codex", "Anthropic", "OpenRouter", "Copilot"].include?(provider) && !model.to_s.strip.empty?
-          [provider, model.strip]
-        else
-          [current_model_provider, text]
-        end
+        known_provider = ["Codex", "Anthropic", "OpenRouter", "Copilot", "Local"].include?(provider) || ProviderCatalog.find_by_name(provider)
+        return [provider, model.strip] if known_provider && !model.to_s.strip.empty?
+
+        [current_model_provider, text]
+      end
+
+      def persist_model_selection(provider, model, conversation)
+        model = model.to_s.strip
+        raise "Model must be a non-empty string" if model.empty?
+
+        ConfigFiles.update_config(ModelInfo.config_values_for_selection(provider, model))
+        reload_client_config
+        refresh_conversation_runtime(conversation)
+        @prompt.redraw if @prompt.respond_to?(:redraw)
       end
 
       REASONING_CONFIG_DEBOUNCE_SECONDS = 0.5
