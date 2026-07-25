@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 - Added generic transport execution profiles and an isolated Telegram chat transport with no tools, plugin commands, memory, attachments, or interactions.
 - Added toggleable Git worktree bindings for normal interactive session tabs. `/tab worktree` can move a tab into a strict linked-worktree workspace after research, preserve its transcript, warn about dirty origin changes, and keep the branch available when detached.
 - Added the active worktree `git_commit` model tool, allowing explicitly requested agent commits through the trusted host-side Git workflow without widening the shell sandbox.
+- Added `/tab worktree merge` for explicitly merging a clean worktree branch into the branch checked out in its original workspace, plus `/tab worktree merge abort` for conflicted merges.
 
 ### Changed
 

@@ -532,6 +532,36 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_worktree_merge_reports_conflicts_and_can_abort
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new([], confirmations: [true, true])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "tracked.txt"), "worktree change\n")
+        git_in_test(binding.path, "add", "tracked.txt")
+        git_in_test(binding.path, "commit", "-m", "worktree change")
+        File.write(File.join(root, "tracked.txt"), "target change\n")
+        git_in_test(root, "add", "tracked.txt")
+        git_in_test(root, "commit", "-m", "target change")
+
+        cli.send(:handle_tab_command, "worktree merge", store)
+
+        assert_includes prompt.output.join("\n"), "Merge conflicts in tracked.txt"
+        assert Kward::GitWorktreeManager.new.merge_in_progress?(root)
+        cli.send(:handle_tab_command, "worktree merge abort", store)
+        refute Kward::GitWorktreeManager.new.merge_in_progress?(root)
+        assert_equal "target change\n", File.read(File.join(root, "tracked.txt"))
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_remove_returns_to_origin_and_keeps_branch
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|

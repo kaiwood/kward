@@ -49,12 +49,15 @@ Toggle the tab again to return to the original workspace. The worktree and branc
 /tab worktree
 ```
 
-Inspect or remove the binding explicitly:
+Inspect, merge, or remove the binding explicitly:
 
 ```text
 /tab worktree status
+/tab worktree merge
 /tab worktree remove
 ```
+
+`/tab worktree merge` merges the active worktree's clean, committed branch directly into the branch currently checked out in its original workspace. Kward shows the source and target revisions and requires confirmation. Both worktrees must be clean. If Git reports conflicts, Kward leaves the original workspace in its normal merge state; resolve the conflicts there or cancel them with `/tab worktree merge abort`.
 
 Removal refuses a dirty worktree and keeps its branch. A worktree that is missing or no longer points at the recorded branch is restored as unavailable rather than silently falling back to the original workspace.
 
@@ -90,6 +93,8 @@ Tabs keep the conversations separate, so context from one tab does not automatic
 | `/tab rename <label>` | Same as `/tab name` |
 | `/tab worktree` | Toggle the current session tab into or out of its linked Git worktree |
 | `/tab worktree status` | Show the current tab's worktree binding and Git status |
+| `/tab worktree merge` | Merge the current worktree branch into the branch checked out in its original workspace |
+| `/tab worktree merge abort` | Abort a conflicted worktree merge in the original workspace |
 | `/tab worktree remove` | Remove a clean linked worktree and keep its branch |
 | `/tab move left` | Move the current tab one slot left |
 | `/tab move right` | Move the current tab one slot right |
