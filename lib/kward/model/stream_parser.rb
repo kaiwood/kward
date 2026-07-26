@@ -298,7 +298,7 @@ module Kward
 
     def merge_streaming_tool_call(tool_calls, delta)
       index = (delta["index"] || tool_calls.length).to_i
-      tool_calls[index] ||= { "id" => nil, "type" => "function", "function" => { "name" => "", "arguments" => "" } }
+      tool_calls[index] ||= { "id" => nil, "type" => "function", "function" => { "name" => +"", "arguments" => +"" } }
       current = tool_calls[index]
       current["id"] = delta["id"] if delta["id"]
       current["type"] = delta["type"] if delta["type"]
