@@ -423,6 +423,7 @@ module Kward
         tab.shell = nil
         tab.stream_state = new_tab_stream_state(tab.driver)
         tab.markdown_chunks.clear
+        update_prompt_workspace_root(current_workspace_root)
         update_prompt_tabs
         persist_tabs
         tab.agent

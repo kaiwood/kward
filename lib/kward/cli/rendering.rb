@@ -273,7 +273,7 @@ module Kward
       def print_block_delta(label, delta)
         if prompt_interface?
           if @prompt.respond_to?(:write_stream_block)
-            @prompt.write_stream_block(label, delta)
+            @prompt.write_stream_block(label, delta, finish: false)
           else
             @prompt.start_stream_block(label)
             @prompt.write_delta(delta)

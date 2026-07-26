@@ -144,6 +144,20 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(output.string), "footer 2"
   end
 
+  def test_refresh_composer_status_refreshes_cached_footer
+    value = "first"
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, footer: -> { value })
+    prompt.start
+    value = "second"
+    output.truncate(0)
+    output.rewind
+
+    prompt.refresh_composer_status
+
+    assert_includes strip_ansi(output.string), "second"
+  end
+
   def test_prompt_interface_top_border_displays_model_and_reasoning
     output = StringIO.new
     status = lambda { "Codex gpt-5.5 · medium" }

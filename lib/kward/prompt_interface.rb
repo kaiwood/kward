@@ -882,6 +882,8 @@ module Kward
 
     def refresh_composer_status
       @mutex.synchronize do
+        @cached_footer_text = nil
+        @last_footer_refresh = nil
         @cached_composer_status_text = nil
         @last_composer_status_refresh = 0.0
         render_prompt_locked if @started && @asking

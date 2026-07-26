@@ -369,6 +369,26 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_replacing_active_agent_updates_prompt_workspace_root
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |origin|
+        Dir.mktmpdir do |replacement_root|
+          store = Kward::SessionStore.new(config_dir: config_dir, cwd: origin)
+          prompt = TabPrompt.new
+          cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+          cli.send(:setup_interactive_tabs, store, nil)
+          conversation = Kward::Conversation.new(workspace_root: replacement_root)
+          replacement = Struct.new(:conversation).new(conversation)
+
+          cli.send(:replace_active_tab_agent, replacement)
+
+          assert_equal File.realpath(replacement_root), prompt.workspace_roots.last[:root]
+          assert_equal File.realpath(replacement_root), prompt.workspace_roots.last[:history_root]
+        end
+      end
+    end
+  end
+
   def test_worktree_confirmation_uses_the_composer_question_overlay
     prompt = OverlayConfirmationPrompt.new
     cli = Kward::CLI.new(argv: [], prompt: prompt)
