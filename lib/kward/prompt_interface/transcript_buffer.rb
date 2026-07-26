@@ -4,10 +4,14 @@ module Kward
   class PromptInterface
     # Bounded in-memory transcript buffer used by the prompt interface.
     class TranscriptBuffer
+      TRIM_RATIO = 0.9
+      TRIM_BOUNDARY_SEARCH = 1_024
+
       attr_reader :text
 
       def initialize(limit:)
-        @limit = limit
+        @limit = [limit.to_i, 1].max
+        @trim_target = [(@limit * TRIM_RATIO).floor, 1].max
         @text = +""
         @display_rows_cache_width = nil
         @display_rows_cache = nil
@@ -42,7 +46,7 @@ module Kward
 
       def append(text)
         @text << ANSI.sanitize_transcript(text)
-        @text = @text[-@limit, @limit] if @text.length > @limit
+        trim_to_limit if @text.length > @limit
         invalidate_display_rows_cache
         @text
       end
@@ -76,6 +80,24 @@ module Kward
       def invalidate_display_rows_cache
         @display_rows_cache_width = nil
         @display_rows_cache = nil
+      end
+
+      private
+
+      def trim_to_limit
+        cutoff = @text.length - @trim_target
+        newline = @text.index("\n", cutoff)
+        cutoff = newline + 1 if newline && newline - cutoff <= TRIM_BOUNDARY_SEARCH
+        cutoff = safe_escape_boundary(cutoff)
+        @text = @text[cutoff..].to_s
+      end
+
+      def safe_escape_boundary(cutoff)
+        escape_start = @text.rindex("\e", cutoff)
+        return cutoff unless escape_start
+
+        escape = ANSI.escape_sequence_at(@text, escape_start)
+        escape && escape_start + escape.length > cutoff ? escape_start + escape.length : cutoff
       end
     end
   end

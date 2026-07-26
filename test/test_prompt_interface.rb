@@ -1485,6 +1485,38 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_transcript_buffer_trims_to_a_low_watermark
+    buffer = Kward::PromptInterface::TranscriptBuffer.new(limit: 100)
+    buffer.append("x" * 100)
+
+    buffer.append("y")
+
+    assert_equal 90, buffer.text.length
+    10.times do |index|
+      buffer.append("z")
+      assert_equal 91 + index, buffer.text.length
+    end
+    assert_operator buffer.text.length, :<=, 100
+  end
+
+  def test_transcript_buffer_prefers_a_nearby_newline_when_trimming
+    buffer = Kward::PromptInterface::TranscriptBuffer.new(limit: 20)
+
+    buffer.append("abc\n" + ("x" * 17))
+
+    assert_equal "x" * 17, buffer.text
+  end
+
+  def test_transcript_buffer_does_not_trim_inside_an_sgr_sequence
+    buffer = Kward::PromptInterface::TranscriptBuffer.new(limit: 20)
+
+    buffer.append("ab\e[31mred\e[0m" + ("x" * 7))
+
+    assert_equal "red\e[0m" + ("x" * 7), buffer.text
+    assert_equal "red" + ("x" * 7), Kward::ANSI.strip(buffer.text)
+    assert_operator buffer.text.length, :<=, 20
+  end
+
   def test_prompt_interface_reuses_transcript_display_rows_until_transcript_changes
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
