@@ -37,6 +37,7 @@ All notable changes to Kward will be documented in this file.
 - Added the Telegram transport deployment guide to the generated documentation navigation.
 - Replaced implicit `/tab worktree` detachment with explicit `/tab worktree detach`; running `/tab worktree` again now leaves an active worktree enabled.
 - Added workspace overrides for foreground transports via `kward transport run NAME WORKSPACE` and the global `--working-directory` option.
+- The `/files` project-browser now uses full terminal height if there are enough files to fill that space
 
 ### Fixed
 

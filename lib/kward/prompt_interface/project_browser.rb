@@ -327,7 +327,7 @@ module Kward
         if rows.empty?
           lines << overlay_text_line(project_browser_empty_message, :muted)
         else
-          visible = visible_project_browser_rows(rows, height: height)
+          visible = visible_project_browser_rows(rows, height: height, width: width)
           visible[:rows].each_with_index do |row, offset|
             index = visible[:start] + offset
             lines << overlay_choice_line(project_browser_row_text(row), selected: index == @project_browser_state[:selection_index])
@@ -544,14 +544,17 @@ module Kward
         @project_browser_state[:selection_index] = [[@project_browser_state[:selection_index], 0].max, rows.length - 1].min unless rows.empty?
       end
 
-      def visible_project_browser_rows(rows, height: screen_height)
-        max_rows = max_project_browser_rows(height)
+      def visible_project_browser_rows(rows, height: screen_height, width: screen_width)
+        max_rows = max_project_browser_rows(height, width: width)
         start = centered_list_window_start(@project_browser_state[:selection_index], rows.length, max_rows)
         { start: start, rows: rows[start, max_rows] || [] }
       end
 
-      def max_project_browser_rows(height)
-        [[height - 8, 4].max, 20].min
+      def max_project_browser_rows(height, width: screen_width)
+        composer_bottom_rows = @tabs.empty? ? 1 : tab_border_rows(width).length
+        footer_rows = footer_text.empty? ? 0 : 1
+        attachment_rows = attachment_badge_texts.length
+        [height - 7 - composer_bottom_rows - footer_rows - attachment_rows, 4].max
       end
 
       def default_project_browser_expanded_paths(paths)

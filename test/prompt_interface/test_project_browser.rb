@@ -115,6 +115,61 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_uses_available_height_for_long_lists
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        short_prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        short_prompt.instance_variable_set(:@file_mention_paths, ["a.rb", "b.rb", "c.rb"])
+        short_prompt.open_project_browser
+
+        assert_equal 7, short_prompt.send(:project_browser_rows, 80, height: 40).length
+
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, 25.times.map { |index| "file#{format("%02d", index)}.rb" })
+        prompt.open_project_browser
+
+        assert_equal 29, prompt.send(:project_browser_rows, 80, height: 40).length
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_scrolls_beyond_available_height
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, 40.times.map { |index| "file#{format("%02d", index)}.rb" })
+        prompt.open_project_browser
+        all_rows = prompt.send(:project_browser_visible_rows)
+
+        visible = prompt.send(:visible_project_browser_rows, all_rows, height: 20)
+        assert_equal 12, visible[:rows].length
+        assert_equal "file00.rb", visible[:rows].first[:path]
+
+        prompt.instance_variable_get(:@project_browser_state)[:selection_index] = 20
+        visible = prompt.send(:visible_project_browser_rows, all_rows, height: 20)
+
+        assert_equal "file14.rb", visible[:rows].first[:path]
+        assert_equal "file20.rb", visible[:rows][6][:path]
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_preserves_tab_rows_when_filling_height
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", footer: -> { "Stardate: 80031.6" })
+        prompt.instance_variable_set(:@file_mention_paths, 40.times.map { |index| "file#{format("%02d", index)}.rb" })
+        prompt.instance_variable_set(:@tabs, [{ name: "Main" }, { name: "Other" }])
+        prompt.open_project_browser
+
+        rows, = prompt.send(:composer_layout, 80, 20)
+
+        assert_equal 19, rows.length
+        assert_equal prompt.send(:tab_border_rows, 80), rows.last(3)
+      end
+    end
+  end
+
   def test_prompt_interface_project_browser_renders_nerd_font_icons_when_enabled
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", project_browser_icon_theme: "nerd-font")
 
