@@ -323,6 +323,8 @@ module Kward
           code.match?(/:\s*(?:[#].*)?\z/)
         when :html
           editor_html_line_opens_indent?(code)
+        when :erb
+          editor_erb_line_opens_indent?(code)
         when *C_LIKE_INDENT_LANGUAGES
           false
         else
@@ -362,6 +364,46 @@ module Kward
         return false if code.match?(/\/>\s*\z/)
 
         true
+      end
+
+      def editor_erb_line_opens_indent?(code)
+        segments, = editor_erb_segments(code.to_s, :template)
+        segments.any? do |kind, text|
+          case kind
+          when :ruby
+            editor_ruby_line_opens_indent?(text.strip)
+          when :template
+            editor_html_line_opens_indent?(text.strip)
+          else
+            false
+          end
+        end
+      end
+
+      def editor_erb_line_closer?(code)
+        segments, = editor_erb_segments(code.to_s, :template)
+        segments.any? do |kind, text|
+          case kind
+          when :ruby
+            text.strip.match?(/\Aend\z/)
+          when :template
+            text.strip.match?(/\A<\/[A-Za-z][\w:-]*>\z/)
+          else
+            false
+          end
+        end
+      end
+
+      def editor_matching_erb_indent(line_index = nil)
+        stack = []
+        editor_previous_code_lines(line_index).each do |line|
+          code = line[:code].strip
+          next if code.empty?
+
+          stack.pop if editor_erb_line_closer?(code)
+          stack << line[:indent] if editor_erb_line_opens_indent?(code)
+        end
+        stack.last || ""
       end
 
       def editor_closing_punctuation?(text)
@@ -424,6 +466,8 @@ module Kward
           code.match?(/\A[ \t]*(?:#{Regexp.union(SHELL_DEDENT_KEYWORDS)})\z/)
         when :html
           code.match?(/\A[ \t]*<\/[A-Za-z][\w:-]*>\z/)
+        when :erb
+          editor_erb_line_closer?(code)
         else
           false
         end
@@ -439,6 +483,8 @@ module Kward
           editor_matching_keyword_indent(nil, SHELL_DEDENT_KEYWORDS, line_index)
         when :html
           editor_matching_html_indent(line_index)
+        when :erb
+          editor_matching_erb_indent(line_index)
         end
       end
 

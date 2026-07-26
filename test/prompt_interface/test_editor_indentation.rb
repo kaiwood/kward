@@ -102,6 +102,22 @@ class TestPromptInterfaceEditorIndentation < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_auto_indent_understands_erb_blocks_and_tags
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "example.html.erb"), "<% if user %>\n  <div>")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "example.html.erb")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "<% if user %>\n  <div>\n    ", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_editor_endwise_handles_supported_languages
     examples = {
       "example.cr" => ["if condition", "end"],
