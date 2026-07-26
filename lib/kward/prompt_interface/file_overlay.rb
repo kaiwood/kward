@@ -133,11 +133,11 @@ module Kward
       end
 
       def git_project_file_paths
-        ProjectFiles.git_paths(Dir.pwd)
+        ProjectFiles.git_paths(prompt_workspace_root)
       end
 
       def scanned_project_file_paths
-        ProjectFiles.scanned_paths(Dir.pwd)
+        ProjectFiles.scanned_paths(prompt_workspace_root)
       end
 
       def selected_file_mention_path

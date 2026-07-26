@@ -39,8 +39,8 @@ module Kward
       end
 
       def history_file_open_command(path)
-        full_path = File.expand_path(path.to_s, Dir.pwd)
-        relative_path = Pathname.new(full_path).relative_path_from(Pathname.new(File.expand_path(Dir.pwd))).to_s
+        full_path = File.expand_path(path.to_s, prompt_workspace_root)
+        relative_path = Pathname.new(full_path).relative_path_from(Pathname.new(prompt_workspace_root)).to_s
         "$#{relative_path}"
       rescue ArgumentError
         "$#{path}"
@@ -71,9 +71,9 @@ module Kward
         true
       end
 
-      def open_editor(path, allow_new: false, base_dir: Dir.pwd, restrict_to_workspace: true)
-        full_path = File.expand_path(path.to_s, base_dir)
-        root = File.expand_path(Dir.pwd)
+      def open_editor(path, allow_new: false, base_dir: nil, restrict_to_workspace: true)
+        full_path = File.expand_path(path.to_s, base_dir || prompt_workspace_root)
+        root = prompt_workspace_root
         if restrict_to_workspace && !(full_path == root || full_path.start_with?("#{root}/"))
           @file_editor_open_status = "Cannot edit file outside workspace"
           return false
@@ -1301,8 +1301,8 @@ module Kward
       end
 
       def bind_editor_save_path(path)
-        full_path = File.expand_path(path.to_s.strip, Dir.pwd)
-        root = File.expand_path(Dir.pwd)
+        full_path = File.expand_path(path.to_s.strip, prompt_workspace_root)
+        root = prompt_workspace_root
         unless full_path == root || full_path.start_with?("#{root}/")
           @editor_state.status = "Cannot save outside workspace"
           return false

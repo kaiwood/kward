@@ -3,7 +3,7 @@ require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
-    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages
+    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots
 
     def initialize(inputs = [], confirmations: [])
       super(inputs, confirmations: confirmations)
@@ -15,6 +15,7 @@ class TestTabs < KwardTestCase
       @banner_count = 0
       @slash_command_updates = []
       @confirmation_messages = []
+      @workspace_roots = []
     end
 
     def yes?(message, default: false)
@@ -28,6 +29,10 @@ class TestTabs < KwardTestCase
 
     def update_tabs(labels:, active_index: 0)
       @tabs_updates << { labels: labels, active_index: active_index }
+    end
+
+    def update_workspace_root(root, prompt_history: nil)
+      @workspace_roots << { root: root, history_root: prompt_history&.cwd }
     end
 
     def tab_update_names
@@ -387,6 +392,8 @@ class TestTabs < KwardTestCase
         assert binding.active?
         assert_equal File.realpath(root), binding.origin_root
         assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+        assert_equal File.realpath(binding.path), prompt.workspace_roots.last[:root]
+        assert_equal File.realpath(binding.path), prompt.workspace_roots.last[:history_root]
         assert_equal "research first", tab.agent.conversation.messages.first.fetch("content")
         assert_equal "initial\n", File.read(File.join(binding.path, "tracked.txt"))
         assert_equal "origin changes\n", File.read(File.join(root, "tracked.txt"))

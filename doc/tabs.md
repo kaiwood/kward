@@ -61,7 +61,7 @@ Inspect, merge, or remove the binding explicitly:
 
 Removal refuses a dirty worktree and keeps its branch. A worktree that is missing or no longer points at the recorded branch is restored as unavailable rather than silently falling back to the original workspace.
 
-Worktree tabs are available for normal session tabs, not plugin-owned tabs. Kward's file tools and model-requested shell workers use the active worktree root and strict workspace guardrails. The interactive `/shell`, `!command`, and `/pty` features remain user-controlled and are not contained by the model command sandbox; use them only when that is intentional. Generic shell Git writes remain protected. When explicitly asked to commit, the agent can use the active tab's narrow `git_commit` tool; use the interactive `/git` flow when you want to review and commit changes yourself.
+Worktree tabs are available for normal session tabs, not plugin-owned tabs. Kward's file tools, `@`/`$` completion, `/files` browser, integrated editor, and model-requested shell workers use the active worktree root. Model operations retain strict workspace guardrails. The interactive `/shell`, `!command`, and `/pty` features remain user-controlled and are not contained by the model command sandbox; use them only when that is intentional. Generic shell Git writes remain protected. When explicitly asked to commit, the agent can use the active tab's narrow `git_commit` tool; use the interactive `/git` flow when you want to review and commit changes yourself.
 
 ## Common workflow
 

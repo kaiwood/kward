@@ -258,7 +258,7 @@ module Kward
 
       def editor_display_path
         path = @editor_state.path || @editor_state.display_path
-        Pathname.new(path).relative_path_from(Pathname.new(Dir.pwd)).to_s
+        Pathname.new(path).relative_path_from(Pathname.new(prompt_workspace_root)).to_s
       rescue StandardError
         @editor_state.display_path || @editor_state.path
       end

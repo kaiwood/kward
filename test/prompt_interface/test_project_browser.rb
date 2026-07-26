@@ -63,6 +63,29 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     assert_equal "lib/file199.rb", matches.last
   end
 
+  def test_prompt_interface_workspace_update_reroots_files_and_editor
+    Dir.mktmpdir do |origin|
+      Dir.mktmpdir do |worktree|
+        Dir.mktmpdir do |config_dir|
+          File.write(File.join(origin, "origin.txt"), "origin\n")
+          File.write(File.join(worktree, "worktree.txt"), "worktree\n")
+          prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: origin)
+          prompt.define_singleton_method(:git_project_file_paths) { [] }
+
+          assert_equal ["origin.txt"], prompt.send(:project_file_paths)
+
+          history = Kward::PromptHistory.new(config_dir: config_dir, cwd: worktree)
+          assert prompt.update_workspace_root(worktree, prompt_history: history)
+          assert_equal ["worktree.txt"], prompt.send(:project_file_paths)
+          assert_equal File.realpath(worktree), prompt.send(:project_browser_workspace_root)
+          assert prompt.send(:open_editor, "worktree.txt")
+          assert_equal File.expand_path(File.join(worktree, "worktree.txt")), prompt.instance_variable_get(:@editor_state).path
+          refute prompt.send(:open_editor, File.join(origin, "origin.txt"))
+        end
+      end
+    end
+  end
+
   def test_prompt_interface_project_browser_renders_nested_tree_and_opens_file
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib", "kward"))

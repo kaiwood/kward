@@ -27,6 +27,7 @@ module Kward
           banner_message: Kward::PromptInterface::BANNER_MESSAGE,
           tab_keybindings: ConfigFiles.composer_tab_keybindings,
           prompt_history: PromptHistory.new(cwd: current_workspace_root),
+          workspace_root: current_workspace_root,
           editor_mode: ConfigFiles.editor_mode,
           editor_mode_source: -> { ConfigFiles.editor_mode },
           editor_auto_indent: ConfigFiles.editor_auto_indent?,
@@ -65,6 +66,12 @@ module Kward
 
       def prompt_interface?
         @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
+      end
+
+      def update_prompt_workspace_root(root)
+        return unless @prompt.respond_to?(:update_workspace_root)
+
+        @prompt.update_workspace_root(root, prompt_history: PromptHistory.new(cwd: root))
       end
 
       # Writes the startup info screen output for the terminal CLI flow.

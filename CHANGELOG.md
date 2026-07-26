@@ -45,6 +45,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Kept `@`/`$` completion, `/files`, prompt history, and the integrated editor rooted in the active worktree tab instead of the original checkout.
 - Fixed HTML and ERB editor highlighting so tag names, attributes, values, and tag fragments retain consistent colors across embedded Ruby expressions.
 - Refreshed composer diff and context usage status immediately when switching session tabs.
 - Prevented `/reload` from retaining stale prompt templates, so new and edited prompt files refresh slash-command completion and expansion.

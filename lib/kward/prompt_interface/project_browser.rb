@@ -492,7 +492,7 @@ module Kward
       end
 
       def project_browser_workspace_root
-        ConfigFiles.canonical_workspace_root(Dir.pwd)
+        ConfigFiles.canonical_workspace_root(prompt_workspace_root)
       end
 
       def restored_project_browser_expanded_paths(paths, saved_state)

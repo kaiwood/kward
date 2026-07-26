@@ -280,8 +280,8 @@ module Kward
 
       def vibe_path_completion_candidates(prefix)
         directory_prefix, basename_prefix = vibe_split_path_completion_prefix(prefix)
-        search_directory = File.expand_path(directory_prefix.empty? ? "." : directory_prefix, Dir.pwd)
-        root = File.expand_path(Dir.pwd)
+        search_directory = File.expand_path(directory_prefix.empty? ? "." : directory_prefix, prompt_workspace_root)
+        root = prompt_workspace_root
         return [] unless search_directory == root || search_directory.start_with?("#{root}/")
         return [] unless File.directory?(search_directory)
 

@@ -457,6 +457,7 @@ module Kward
         end
         tab.unread = false
         restore_tab_composer_snapshot(tab.snapshot)
+        update_prompt_workspace_root(current_workspace_root)
         @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
         update_plugin_tab_slash_commands(tab)
         update_prompt_tabs

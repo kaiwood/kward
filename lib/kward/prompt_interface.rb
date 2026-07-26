@@ -128,12 +128,13 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, workspace_root: Dir.pwd, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
       @prompt_history = prompt_history
+      @workspace_root = File.expand_path(workspace_root.to_s.empty? ? Dir.pwd : workspace_root)
       @composer = ComposerState.new
       load_history(@prompt_history.values) if @prompt_history
       self.composer_input = @composer.input
@@ -340,10 +341,23 @@ module Kward
       @mutex.synchronize { editor_active? }
     end
 
-    def edit_file(path, base_dir: Dir.pwd, allow_new: true)
+    def update_workspace_root(root, prompt_history: nil)
+      @mutex.synchronize do
+        expanded_root = File.expand_path(root.to_s.empty? ? Dir.pwd : root)
+        return false if expanded_root == @workspace_root
+
+        @workspace_root = expanded_root
+        @prompt_history = prompt_history if prompt_history
+        load_history(@prompt_history.values) if @prompt_history
+        reset_workspace_file_state_locked
+        true
+      end
+    end
+
+    def edit_file(path, base_dir: nil, allow_new: true)
       start(render: false)
       opened = @mutex.synchronize do
-        open_editor(path, allow_new: allow_new, base_dir: base_dir, restrict_to_workspace: false).tap do
+        open_editor(path, allow_new: allow_new, base_dir: base_dir || prompt_workspace_root, restrict_to_workspace: false).tap do
           render_prompt_locked
         end
       end
@@ -878,6 +892,22 @@ module Kward
     end
 
     private
+
+    def prompt_workspace_root
+      @workspace_root
+    end
+
+    def reset_workspace_file_state_locked
+      @file_mention_paths = nil
+      @file_mention_path_entries_paths = nil
+      @file_mention_path_entries = nil
+      @project_browser_state = nil
+      @project_browser_tree_paths = nil
+      @project_browser_tree = nil
+      @file_overlay_dismissed_token = nil
+      @file_open_dismissed_token = nil
+      @file_editor_open_status = nil
+    end
 
     def modal_active_locked?
       @question_prompt_active || !@question_state.nil? || !@select_state.nil? || !@git_state.nil?
