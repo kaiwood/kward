@@ -97,6 +97,7 @@ module Kward
         @active_tab_index = 0
         @tab_store = session_store ? TabStore.new(config_dir: session_store.config_dir, cwd: session_store.cwd) : nil
         @tab_live_view = nil
+        @tab_live_view_token = nil
         @restored_tabs = false
         restored = restore_tabs(session_store) if session_store && agent.nil?
         return restored if restored
@@ -688,23 +689,31 @@ module Kward
         return unless prompt_interface?
 
         stop_tab_live_view
-        @tab_live_view_stop = false
-        @tab_live_view = Thread.new { run_tab_live_view(tab) }
+        token = Object.new
+        @tab_live_view_token = token
+        @tab_live_view = Thread.new { run_tab_live_view(tab, token) }
         @tab_live_view.report_on_exception = false
       end
 
       def stop_tab_live_view
-        @tab_live_view_stop = true
-        @tab_live_view&.join(0.2)
-        @tab_live_view = nil
+        thread = @tab_live_view
+        @tab_live_view_token = nil
+        thread&.join(0.2)
+        @tab_live_view = nil if @tab_live_view.equal?(thread)
       end
 
-      def run_tab_live_view(tab)
+      def run_tab_live_view(tab, token)
         renderer = tab_live_renderer(tab)
-        until @tab_live_view_stop
+        while @tab_live_view_token.equal?(token)
           events = tab.event_history[tab.seen_events..] || []
-          events.each { |event| renderer.call(event, tab.driver) }
-          tab.seen_events += events.length
+          events.each do |event|
+            break unless @tab_live_view_token.equal?(token)
+
+            renderer.call(event, tab.driver)
+            tab.seen_events += 1
+          end
+          break unless @tab_live_view_token.equal?(token)
+
           if tab.idle?
             renderer.call(:flush, tab.driver)
             break
@@ -712,7 +721,8 @@ module Kward
           sleep 0.05
         end
       ensure
-        @tab_live_view_stop = false if @tab_live_view == Thread.current
+        @tab_live_view_token = nil if @tab_live_view_token.equal?(token)
+        @tab_live_view = nil if @tab_live_view == Thread.current
       end
 
       def tab_live_renderer(tab)

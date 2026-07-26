@@ -45,6 +45,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Prevented a stopped tab live-view thread from resuming against a newly active tab after a slow render.
 - Kept `@`/`$` completion, `/files`, prompt history, and the integrated editor rooted in the active worktree tab instead of the original checkout.
 - Fixed HTML and ERB editor highlighting so tag names, attributes, values, and tag fragments retain consistent colors across embedded Ruby expressions.
 - Refreshed composer diff and context usage status immediately when switching session tabs.

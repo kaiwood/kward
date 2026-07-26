@@ -1013,6 +1013,40 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_replaced_tab_live_view_does_not_resume_after_a_slow_render
+    prompt = TabPrompt.new
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]))
+    first_tab = Kward::CLI::Tabs::TabRuntime.new(status: "running", event_history: [:first, :second], seen_events: 0)
+    second_tab = Kward::CLI::Tabs::TabRuntime.new(status: "ready", event_history: [], seen_events: 0)
+    started = Queue.new
+    release = Queue.new
+    rendered = []
+    cli.define_singleton_method(:tab_live_renderer) do |tab|
+      lambda do |event, _driver|
+        next unless tab.equal?(first_tab)
+
+        rendered << event
+        if event == :first
+          started << true
+          release.pop
+        end
+      end
+    end
+
+    cli.send(:start_tab_live_view, first_tab)
+    started.pop
+    first_thread = cli.instance_variable_get(:@tab_live_view)
+    cli.send(:start_tab_live_view, second_tab)
+    release << true
+    first_thread.join(1)
+
+    assert_equal [:first], rendered
+    assert_equal 1, first_tab.seen_events
+  ensure
+    release << true if defined?(release) && release.empty?
+    cli&.send(:stop_tab_live_view)
+  end
+
   def test_busy_tab_switches_while_original_turn_keeps_running
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
