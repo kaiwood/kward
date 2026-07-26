@@ -272,8 +272,12 @@ module Kward
       # Writes the block delta output for the terminal CLI flow.
       def print_block_delta(label, delta)
         if prompt_interface?
-          @prompt.start_stream_block(label)
-          @prompt.write_delta(delta)
+          if @prompt.respond_to?(:write_stream_block)
+            @prompt.write_stream_block(label, delta)
+          else
+            @prompt.start_stream_block(label)
+            @prompt.write_delta(delta)
+          end
         else
           start_stream_block(label)
           print delta

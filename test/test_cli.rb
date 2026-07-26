@@ -145,6 +145,19 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class CombinedStreamPrompt < BusyPrompt
+    attr_reader :stream_writes
+
+    def initialize(inputs)
+      super
+      @stream_writes = []
+    end
+
+    def write_stream_block(label, delta, finish: false)
+      @stream_writes << { label: label, delta: delta, finish: finish }
+    end
+  end
+
   class BusySelectPrompt < BusyPrompt
     attr_reader :select_messages, :select_choices, :select_titles, :select_initial_indices
 
@@ -1137,6 +1150,16 @@ class TestCLI < KwardTestCase
     thread&.kill if thread&.alive?
     writer&.close unless writer&.closed?
     input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_uses_combined_stream_writes_when_available
+    prompt = CombinedStreamPrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:print_block_delta, "Assistant", "hello")
+
+    assert_equal [{ label: "Assistant", delta: "hello", finish: false }], prompt.stream_writes
+    assert_empty prompt.events
   end
 
   def test_prompt_interface_interactive_turn_batches_streamed_deltas
