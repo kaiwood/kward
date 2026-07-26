@@ -76,11 +76,28 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     line = '<div class="user"><%= user.name if user %></div>'
     rendered = prompt.send(:editor_render_line, line, 0, 120)
 
-    assert_includes rendered, "\e[34m<div class=\"user\">\e[0m"
+    assert_includes rendered, "\e[34m<div\e[0m"
+    assert_includes rendered, "\e[36mclass\e[0m"
+    assert_includes rendered, "\e[32m\"user\"\e[0m"
+    assert_includes rendered, "\e[34m>\e[0m"
     assert_includes rendered, "\e[36m<%=\e[0m"
     assert_includes rendered, "\e[34mif\e[0m"
     assert_includes rendered, "\e[36m%>\e[0m"
-    assert_includes rendered, "\e[34m</div>\e[0m"
+    assert_includes rendered, "\e[34m</div\e[0m"
+    assert_equal line, strip_ansi(rendered)
+  end
+
+  def test_erb_highlighting_keeps_html_tag_colors_across_embedded_ruby
+    prompt = syntax_prompt(path: "show.html.erb")
+    line = '<html lang="<%= html_lang %>">'
+    rendered = prompt.send(:editor_render_line, line, 0, 120)
+
+    assert_includes rendered, "\e[34m<html\e[0m"
+    assert_includes rendered, "\e[36mlang\e[0m"
+    assert_equal 2, rendered.scan("\e[32m\"\e[0m").length
+    assert_includes rendered, "\e[34m>\e[0m"
+    assert_includes rendered, "\e[36m<%=\e[0m"
+    assert_includes rendered, "\e[36m%>\e[0m"
     assert_equal line, strip_ansi(rendered)
   end
 
@@ -106,8 +123,9 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_includes opening, "\e[34mif\e[0m"
     assert_includes body, "\e[32m\"Kai\"\e[0m"
     assert_includes closing, "\e[36m%>\e[0m"
-    assert_includes closing, "\e[34m<span>\e[0m"
-    assert_includes closing, "\e[34m</span>\e[0m"
+    assert_includes closing, "\e[34m<span\e[0m"
+    assert_includes closing, "\e[34m>\e[0m"
+    assert_includes closing, "\e[34m</span\e[0m"
     assert_equal "%><span>Welcome</span>", strip_ansi(closing)
   end
 
@@ -172,7 +190,7 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
       "data.json" => ["{ \"name\": \"Kward\", \"ok\": true }", "\e[36m\"name\"\e[0m", "\e[32m\"Kward\"\e[0m", "\e[34mtrue\e[0m"],
       "config.yml" => ["name: Kward # comment", "\e[36mname\e[0m", "\e[90m# comment\e[0m"],
       "script.sh" => ["if echo \"ok\" # comment", "\e[34mif\e[0m", "\e[32m\"ok\"\e[0m", "\e[90m# comment\e[0m"],
-      "index.html" => ["<a href=\"/\">Home</a>", "\e[34m<a href=\"/\">\e[0m", "\e[34m</a>\e[0m"],
+      "index.html" => ["<a href=\"/\">Home</a>", "\e[34m<a\e[0m", "\e[36mhref\e[0m", "\e[32m\"/\"\e[0m", "\e[34m>\e[0m", "\e[34m</a\e[0m"],
       "styles.css" => [".card { color: #fff; }", "\e[36m.card\e[0m", "\e[34mcolor\e[0m", "\e[35m#fff\e[0m"],
       "styles.scss" => ["$color: #fff; .card { color: $color; }", "\e[35m#fff\e[0m", "\e[36m.card\e[0m"],
       "main.py" => ["def call(): # comment", "\e[34mdef\e[0m", "\e[90m# comment\e[0m"],

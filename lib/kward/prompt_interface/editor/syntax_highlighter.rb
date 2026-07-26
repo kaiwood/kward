@@ -11,7 +11,7 @@ module Kward
       ].freeze
       RUBY_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|:[a-zA-Z_]\w*[!?=]?|\b\d+(?:\.\d+)?\b|\b[A-Z]\w*\b|\b(?:#{Regexp.union(RUBY_KEYWORDS)})\b)/.freeze
       MARKDOWN_PATTERN = /(`[^`\n]+`|!?\[[^\]\n]+\]\([^\)\n]+\)|(?:\*\*|__)[^\n]+?(?:\*\*|__)|(?:\*|_)[^\n]+?(?:\*|_))/.freeze
-      HTML_PATTERN = /(<!--.*?-->|<\/?[A-Za-z][^>]*>|\b[A-Za-z_:-]+(?=\=)|"[^"]*"|'[^']*')/.freeze
+      HTML_TAG_START_PATTERN = /<\/?[A-Za-z][\w:-]*/.freeze
       CSS_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|#[0-9a-fA-F]{3,8}\b|\.[A-Za-z_-][\w-]*|#[A-Za-z_-][\w-]*|\b\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw|s|ms)?\b|[A-Za-z_-][\w-]*(?=\s*:)|@[A-Za-z_-][\w-]*)/.freeze
       JSON_PATTERN = /("(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/.freeze
       YAML_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:true|false|null|yes|no|on|off)\b|\b\d+(?:\.\d+)?\b|[A-Za-z0-9_-]+(?=\s*:))/.freeze
@@ -184,6 +184,7 @@ module Kward
         segments, = editor_erb_segments(line.to_s, editor_erb_state_before_line(line_index))
         output = +""
         comment = +""
+        html_in_tag = false
 
         segments.each do |kind, text|
           if kind == :comment
@@ -195,14 +196,15 @@ module Kward
             output << colored(comment, :gray)
             comment.clear
           end
-          output << case kind
-                    when :template
-                      editor_highlight_html(text)
-                    when :ruby
-                      editor_highlight_ruby(text)
-                    when :delimiter
-                      colored(text, :cyan)
-                    end
+          case kind
+          when :template
+            highlighted, html_in_tag = editor_highlight_html_segment(text, in_tag: html_in_tag)
+            output << highlighted
+          when :ruby
+            output << editor_highlight_ruby(text)
+          when :delimiter
+            output << colored(text, :cyan)
+          end
         end
         output << colored(comment, :gray) unless comment.empty?
         output
@@ -450,17 +452,112 @@ module Kward
       end
 
       def editor_highlight_html(line)
-        line.to_s.gsub(HTML_PATTERN) do |token|
-          if token.start_with?("<!--")
-            colored(token, :gray)
-          elsif token.start_with?("<")
-            colored(token, :blue)
-          elsif token.start_with?("\"", "'")
-            colored(token, :green)
+        highlighted, = editor_highlight_html_segment(line.to_s)
+        highlighted
+      end
+
+      def editor_highlight_html_segment(text, in_tag: false)
+        output = +""
+        cursor = 0
+
+        while cursor < text.length
+          if in_tag
+            close_index = text.index(">", cursor)
+            if close_index
+              output << editor_highlight_html_tag_fragment(text[cursor..close_index].to_s)
+              cursor = close_index + 1
+              in_tag = false
+            else
+              output << editor_highlight_html_tag_fragment(text[cursor..].to_s)
+              break
+            end
+            next
+          end
+
+          comment_index = text.index("<!--", cursor)
+          tag = text.match(HTML_TAG_START_PATTERN, cursor)
+          next_match = [comment_index, tag&.begin(0)].compact.min
+          unless next_match
+            output << text[cursor..].to_s
+            break
+          end
+
+          output << text[cursor...next_match].to_s if next_match > cursor
+          if comment_index == next_match
+            close_index = text.index("-->", comment_index + 4)
+            end_index = close_index ? close_index + 3 : text.length
+            output << colored(text[comment_index...end_index].to_s, :gray)
+            cursor = end_index
           else
-            colored(token, :cyan)
+            close_index = text.index(">", tag.end(0))
+            end_index = close_index ? close_index + 1 : text.length
+            output << editor_highlight_html_tag_fragment(text[tag.begin(0)...end_index].to_s)
+            cursor = end_index
+            in_tag = close_index.nil?
           end
         end
+
+        [output, in_tag]
+      end
+
+      def editor_highlight_html_tag_fragment(tag)
+        output = +""
+        cursor = 0
+        head = tag.match(/\A<\/?[A-Za-z][\w:-]*/)
+        if head
+          output << colored(head[0], :blue)
+          cursor = head.end(0)
+        end
+
+        while cursor < tag.length
+          rest = tag[cursor..].to_s
+          if rest.start_with?(">", "/>")
+            output << colored(rest.start_with?("/>") ? "/>" : ">", :blue)
+            cursor += rest.start_with?("/>") ? 2 : 1
+          elsif rest.match?(/\A\s/)
+            whitespace = rest[/\A\s+/]
+            output << whitespace
+            cursor += whitespace.length
+          elsif rest.start_with?("\"", "'")
+            quote = rest[0]
+            close_index = rest.index(quote, 1)
+            if close_index
+              end_index = close_index + 1
+              output << colored(rest[0...end_index], :green)
+              cursor += end_index
+            elsif rest.end_with?(">") && rest.length > 1
+              output << colored(rest[0...-1], :green)
+              output << colored(">", :blue)
+              cursor += rest.length
+            else
+              output << colored(rest, :green)
+              cursor += rest.length
+            end
+          elsif (attribute = rest.match(/\A([A-Za-z_:][\w:.-]*)(\s*=\s*)/))
+            output << colored(attribute[1], :cyan)
+            output << attribute[2]
+            cursor += attribute[0].length
+            value = tag[cursor..].to_s
+            if value.start_with?("\"", "'")
+              quote = value[0]
+              close_index = value.index(quote, 1)
+              end_index = close_index ? close_index + 1 : value.length
+              output << colored(value[0...end_index], :green)
+              cursor += end_index
+            elsif (unquoted = value.match(/\A[^\s>]+/))
+              output << colored(unquoted[0], :green)
+              cursor += unquoted[0].length
+            end
+          elsif (attribute = rest.match(/\A[A-Za-z_:][\w:.-]*/))
+            output << colored(attribute[0], :cyan)
+            cursor += attribute[0].length
+          else
+            output << rest[0]
+            cursor += 1
+          end
+        end
+
+        output
       end
 
       def editor_highlight_css(line)
