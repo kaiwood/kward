@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Limited interactive plugin footer evaluation to its authoritative one-second refresh interval and reused the cached value between refreshes.
 - Made interactive plugin canvases publish only complete frames submitted with `ui.render`, skip unpublished ticks, and follow terminal width changes.
 - Avoided rebuilding and flushing the TUI composer when tab labels and selection have not changed.
 - Reduced interactive streaming overhead by writing each labeled TUI delta in one synchronized prompt transaction.

@@ -40,14 +40,30 @@ module Kward
 
       def tick_footer_locked
         return false unless @footer && @started && @asking
+        return false unless footer_refresh_due?
 
-        now = monotonic_now
-        elapsed = now - @last_footer_refresh
-        return false if elapsed < FOOTER_REFRESH_INTERVAL
+        previous_text = @cached_footer_text
+        refresh_footer_text_locked
+        previous_text != @cached_footer_text
+      end
 
-        steps = (elapsed / FOOTER_REFRESH_INTERVAL).floor
-        @last_footer_refresh += steps * FOOTER_REFRESH_INTERVAL
-        true
+      def cached_footer_text
+        return "" unless @footer
+
+        refresh_footer_text_locked if footer_refresh_due?
+        @cached_footer_text.to_s
+      end
+
+      def footer_refresh_due?
+        @last_footer_refresh.nil? || monotonic_now - @last_footer_refresh >= FOOTER_REFRESH_INTERVAL
+      end
+
+      def refresh_footer_text_locked
+        @cached_footer_text = @footer.call.to_s.gsub(/\s+/, " ").strip
+      rescue StandardError
+        @cached_footer_text = ""
+      ensure
+        @last_footer_refresh = monotonic_now
       end
 
       def cached_composer_status_text

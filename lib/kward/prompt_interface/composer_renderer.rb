@@ -230,11 +230,7 @@ module Kward
       end
 
       def footer_text
-        return "" unless @footer
-
-        @footer.call.to_s.gsub(/\s+/, " ").strip
-      rescue StandardError
-        ""
+        cached_footer_text
       end
 
       def attachment_badge_rows(content_width)

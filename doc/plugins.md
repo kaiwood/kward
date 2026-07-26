@@ -116,7 +116,7 @@ Kward.plugin do |plugin|
 end
 ```
 
-Only one footer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning.
+Only one footer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning. Kward evaluates the active footer at most once per second and reuses its last value between refreshes.
 
 ## Add an interactive command
 

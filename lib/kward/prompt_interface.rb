@@ -147,7 +147,8 @@ module Kward
       @steered_count = 0
       @spinner_frame_index = 0
       @last_spinner_tick = monotonic_now
-      @last_footer_refresh = monotonic_now
+      @last_footer_refresh = nil
+      @cached_footer_text = nil
       @last_composer_status_refresh = 0.0
       @cached_composer_status_text = nil
       @prompt_label = "You>"
