@@ -1,6 +1,21 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditor < KwardTestCase
+  def test_editor_buffer_caches_and_invalidates_line_geometry
+    buffer = Kward::PromptInterface::EditorBuffer.new("one\ntwo\n")
+
+    assert_equal [0, 3], buffer.line_and_column_for(3)
+    assert_equal [1, 0], buffer.line_and_column_for(4)
+    assert_equal 8, buffer.line_start_offset(2)
+    assert_equal 6, buffer.offset_for_line_and_column(1, 2)
+    assert_equal [4, 8], buffer.line_range(1)
+
+    buffer.insert(0, "zero\n")
+
+    assert_equal [1, 0], buffer.line_and_column_for(5)
+    assert_equal 9, buffer.line_start_offset(2)
+  end
+
   def test_prompt_interface_editor_sets_and_restores_bar_cursor_by_default
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "hello")
@@ -2107,6 +2122,23 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert_includes text, "\e[38;2;78;88;53m   1\e[0m\e[38;2;78;88;53m │ \e[0m"
       end
     end
+  end
+
+  def test_prompt_interface_editor_calculates_cursor_line_once_per_layout
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", editor_soft_wrap: false)
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: (1..100).map { |index| "line #{index}" }.join("\n"), editor_mode: "emacs")
+    editor.cursor = editor.buffer.length
+    cursor_position = editor.method(:cursor_line_and_column)
+    calls = 0
+    editor.define_singleton_method(:cursor_line_and_column) do
+      calls += 1
+      cursor_position.call
+    end
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:composer_layout, 80, 20)
+
+    assert_equal 1, calls
   end
 
   def test_prompt_interface_editor_line_numbers_are_absolute_after_scrolling

@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Reduced integrated-editor layout work by caching line starts and calculating the cursor line once per rendered frame.
 - Limited interactive plugin footer evaluation to its authoritative one-second refresh interval and reused the cached value between refreshes.
 - Made interactive plugin canvases publish only complete frames submitted with `ui.render`, skip unpublished ticks, and follow terminal width changes.
 - Avoided rebuilding and flushing the TUI composer when tab labels and selection have not changed.

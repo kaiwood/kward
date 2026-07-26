@@ -793,21 +793,15 @@ module Kward
       end
 
       def cursor_line_and_column_for(offset)
-        before_cursor = @buffer[0...offset].to_s
-        [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
+        @text_buffer.line_and_column_for(offset)
       end
 
       def line_start_offset(line_index)
-        values = lines
-        line_index = [[line_index.to_i, 0].max, values.length - 1].min
-        values.first(line_index).sum { |line| line.length + 1 }
+        @text_buffer.line_start_offset(line_index)
       end
 
       def line_range(line_index)
-        start_index = line_start_offset(line_index)
-        end_index = start_index + lines[line_index].to_s.length
-        end_index += 1 if end_index < @buffer.length
-        [start_index, end_index]
+        @text_buffer.line_range(line_index)
       end
 
       def word_range_at(offset)

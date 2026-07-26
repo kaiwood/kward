@@ -47,20 +47,22 @@ module Kward
       end
 
       def line_and_column_for(offset)
-        before_cursor = before(offset)
-        [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
+        offset = [[offset.to_i, 0].max, @text.length].min
+        next_line = line_start_offsets.bsearch_index { |line_offset| line_offset > offset }
+        line_index = next_line ? [next_line - 1, 0].max : lines.length - 1
+        [line_index, [offset - line_start_offsets[line_index], lines[line_index].length].min]
       end
 
       def offset_for_line_and_column(line_index, column)
         values = lines
         line_index = [[line_index.to_i, 0].max, values.length - 1].min
         column = [[column.to_i, 0].max, values[line_index].length].min
-        values.first(line_index).sum { |line| line.length + 1 } + column
+        line_start_offsets[line_index] + column
       end
 
       def line_start_offset(line_index)
         line_index = [[line_index.to_i, 0].max, lines.length - 1].min
-        lines.first(line_index).sum { |line| line.length + 1 }
+        line_start_offsets[line_index]
       end
 
       def line_range(line_index)
@@ -101,8 +103,20 @@ module Kward
 
       private
 
+      def line_start_offsets
+        @line_start_offsets ||= begin
+          values = lines
+          offsets = [0]
+          (values.length - 1).times do |index|
+            offsets << offsets.last + values[index].length + 1
+          end
+          offsets
+        end
+      end
+
       def invalidate_lines_cache
         @lines_cache = nil
+        @line_start_offsets = nil
       end
     end
   end

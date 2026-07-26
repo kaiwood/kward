@@ -34,7 +34,7 @@ module Kward
         rows = [editor_top_border(width)]
         rows.concat(visible_lines.each_with_index.map do |line, index|
           gutter = if index < actual_visible_count
-                     editor_line_number_gutter(@editor_state.viewport_row + index)
+                     editor_line_number_gutter(@editor_state.viewport_row + index, line_index)
                    else
                      editor_blank_line_number_gutter
                    end
@@ -59,7 +59,7 @@ module Kward
         rows = [editor_top_border(width)]
         rows.concat(visible_rows.map do |visual_row|
           if visual_row
-            gutter = visual_row[:continuation] ? editor_blank_line_number_gutter : editor_line_number_gutter(visual_row[:line_index])
+            gutter = visual_row[:continuation] ? editor_blank_line_number_gutter : editor_line_number_gutter(visual_row[:line_index], line_index)
             rendered_line = editor_render_line(visual_row[:line], visual_row[:line_index], text_width, column_offset: visual_row[:column_offset])
             box_content_row(gutter + rendered_line, content_width)
           else
@@ -230,17 +230,16 @@ module Kward
         (column.to_i / text_width) * text_width
       end
 
-      def editor_line_number_gutter(line_index)
-        number = editor_display_line_number(line_index).to_s.rjust(editor_line_number_gutter_width - 3)
-        number_color = line_index == @editor_state.cursor_line_and_column.first ? :white : :dark_forest_green
+      def editor_line_number_gutter(line_index, cursor_line)
+        number = editor_display_line_number(line_index, cursor_line).to_s.rjust(editor_line_number_gutter_width - 3)
+        number_color = line_index == cursor_line ? :white : :dark_forest_green
         colored(number, number_color) + colored(" │ ", :dark_forest_green)
       end
 
-      def editor_display_line_number(line_index)
+      def editor_display_line_number(line_index, cursor_line)
         return line_index + 1 unless current_editor_line_numbers == "relative"
         return line_index + 1 if @editor_state.readonly?
 
-        cursor_line, = @editor_state.cursor_line_and_column
         line_index == cursor_line ? line_index + 1 : (line_index - cursor_line).abs
       end
 
