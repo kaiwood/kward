@@ -180,35 +180,76 @@ module Kward
         editor_highlight_ruby_code(text[0...comment_index].to_s) + colored(text[comment_index..].to_s, :gray)
       end
 
-      def editor_highlight_erb(line, _line_index = nil)
-        text = line.to_s
+      def editor_highlight_erb(line, line_index = nil)
+        segments, = editor_erb_segments(line.to_s, editor_erb_state_before_line(line_index))
         output = +""
+        comment = +""
+
+        segments.each do |kind, text|
+          if kind == :comment
+            comment << text
+            next
+          end
+
+          unless comment.empty?
+            output << colored(comment, :gray)
+            comment.clear
+          end
+          output << case kind
+                    when :template
+                      editor_highlight_html(text)
+                    when :ruby
+                      editor_highlight_ruby(text)
+                    when :delimiter
+                      colored(text, :cyan)
+                    end
+        end
+        output << colored(comment, :gray) unless comment.empty?
+        output
+      end
+
+      def editor_erb_state_before_line(line_index)
+        return :template unless line_index && @editor_state
+
+        state = :template
+        @editor_state.lines.first(line_index.to_i).each do |line|
+          _, state = editor_erb_segments(line.to_s, state)
+        end
+        state
+      end
+
+      def editor_erb_segments(text, state)
+        segments = []
         cursor = 0
 
-        while (opening = text.match(ERB_OPEN_PATTERN, cursor))
-          output << editor_highlight_html(text[cursor...opening.begin(0)].to_s)
-          closing = text.match(ERB_CLOSE_PATTERN, opening.end(0))
-          unless closing
-            output << colored(text[opening.begin(0)...opening.end(0)].to_s, :cyan)
-            output << editor_highlight_ruby(text[opening.end(0)..].to_s)
-            return output
-          end
-
-          opening_text = text[opening.begin(0)...opening.end(0)].to_s
-          body = text[opening.end(0)...closing.begin(0)].to_s
-          closing_text = text[closing.begin(0)...closing.end(0)].to_s
-          if opening_text == "<%#"
-            output << colored(text[opening.begin(0)..closing.end(0)].to_s, :gray)
+        while cursor < text.length
+          if state == :template
+            opening = text.match(ERB_OPEN_PATTERN, cursor)
+            if opening
+              segments << [:template, text[cursor...opening.begin(0)].to_s] unless opening.begin(0) == cursor
+              opening_kind = opening[0] == "<%#" ? :comment : :delimiter
+              segments << [opening_kind, opening[0]]
+              state = opening_kind == :comment ? :comment : :ruby
+              cursor = opening.end(0)
+            else
+              segments << [:template, text[cursor..].to_s]
+              break
+            end
           else
-            output << colored(opening_text, :cyan)
-            output << editor_highlight_ruby(body)
-            output << colored(closing_text, :cyan)
+            closing = text.match(ERB_CLOSE_PATTERN, cursor)
+            if closing
+              segments << [state, text[cursor...closing.begin(0)].to_s] unless closing.begin(0) == cursor
+              segments << [state == :comment ? :comment : :delimiter, closing[0]]
+              state = :template
+              cursor = closing.end(0)
+            else
+              segments << [state, text[cursor..].to_s]
+              break
+            end
           end
-          cursor = closing.end(0)
         end
 
-        output << editor_highlight_html(text[cursor..].to_s)
-        output
+        [segments, state]
       end
 
       def editor_highlight_ruby_code(line)

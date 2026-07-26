@@ -94,6 +94,23 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal line, strip_ansi(rendered)
   end
 
+  def test_erb_highlighting_preserves_ruby_state_across_lines
+    content = "<% if user\n  name = \"Kai\"\n%><span>Welcome</span>"
+    prompt = syntax_prompt(path: "show.html.erb", content: content)
+
+    opening = prompt.send(:editor_render_line, "<% if user", 0, 120)
+    body = prompt.send(:editor_render_line, "  name = \"Kai\"", 1, 120)
+    closing = prompt.send(:editor_render_line, "%><span>Welcome</span>", 2, 120)
+
+    assert_includes opening, "\e[36m<%\e[0m"
+    assert_includes opening, "\e[34mif\e[0m"
+    assert_includes body, "\e[32m\"Kai\"\e[0m"
+    assert_includes closing, "\e[36m%>\e[0m"
+    assert_includes closing, "\e[34m<span>\e[0m"
+    assert_includes closing, "\e[34m</span>\e[0m"
+    assert_equal "%><span>Welcome</span>", strip_ansi(closing)
+  end
+
   def test_ruby_hash_comment_colors_full_comment_without_inner_highlighting
     prompt = syntax_prompt(path: "example.rb")
     rendered = prompt.send(:editor_render_line, "# Namespace for the Kward CLI agent runtime.", 0, 80)
