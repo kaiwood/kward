@@ -17,6 +17,8 @@ module Kward
       YAML_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:true|false|null|yes|no|on|off)\b|\b\d+(?:\.\d+)?\b|[A-Za-z0-9_-]+(?=\s*:))/.freeze
       SQL_PATTERN = /("(?:\\.|[^"\\])*"|'(?:''|[^'])*'|--.*|\b\d+(?:\.\d+)?\b|\b(?:SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|INSERT|INTO|UPDATE|DELETE|CREATE|ALTER|DROP|TABLE|VIEW|INDEX|VALUES|SET|AND|OR|NOT|NULL|IS|AS|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|DISTINCT|UNION|ALL|CASE|WHEN|THEN|ELSE|END|PRIMARY|KEY|FOREIGN|REFERENCES|DEFAULT|TRUE|FALSE)\b)/i.freeze
       GENERIC_STRING_NUMBER_PATTERN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b)/.freeze
+      ERB_OPEN_PATTERN = /<%[#=]?/.freeze
+      ERB_CLOSE_PATTERN = /-?%>/.freeze
 
       LANGUAGE_DEFINITIONS = {
         javascript: {
@@ -124,6 +126,8 @@ module Kward
           editor_highlight_yaml(line)
         when :html
           editor_highlight_html(line)
+        when :erb
+          editor_highlight_erb(line, line_index)
         when :css, :scss
           editor_highlight_css(line)
         when :sql
@@ -174,6 +178,37 @@ module Kward
         return editor_highlight_ruby_code(text) unless comment_index
 
         editor_highlight_ruby_code(text[0...comment_index].to_s) + colored(text[comment_index..].to_s, :gray)
+      end
+
+      def editor_highlight_erb(line, _line_index = nil)
+        text = line.to_s
+        output = +""
+        cursor = 0
+
+        while (opening = text.match(ERB_OPEN_PATTERN, cursor))
+          output << editor_highlight_html(text[cursor...opening.begin(0)].to_s)
+          closing = text.match(ERB_CLOSE_PATTERN, opening.end(0))
+          unless closing
+            output << colored(text[opening.begin(0)...opening.end(0)].to_s, :cyan)
+            output << editor_highlight_ruby(text[opening.end(0)..].to_s)
+            return output
+          end
+
+          opening_text = text[opening.begin(0)...opening.end(0)].to_s
+          body = text[opening.end(0)...closing.begin(0)].to_s
+          closing_text = text[closing.begin(0)...closing.end(0)].to_s
+          if opening_text == "<%#"
+            output << colored(text[opening.begin(0)..closing.end(0)].to_s, :gray)
+          else
+            output << colored(opening_text, :cyan)
+            output << editor_highlight_ruby(body)
+            output << colored(closing_text, :cyan)
+          end
+          cursor = closing.end(0)
+        end
+
+        output << editor_highlight_html(text[cursor..].to_s)
+        output
       end
 
       def editor_highlight_ruby_code(line)

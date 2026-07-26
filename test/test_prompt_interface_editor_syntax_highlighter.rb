@@ -71,6 +71,29 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal "def call = \"ok\"", strip_ansi(rendered)
   end
 
+  def test_erb_highlighting_combines_html_and_ruby
+    prompt = syntax_prompt(path: "show.html.erb")
+    line = '<div class="user"><%= user.name if user %></div>'
+    rendered = prompt.send(:editor_render_line, line, 0, 120)
+
+    assert_includes rendered, "\e[34m<div class=\"user\">\e[0m"
+    assert_includes rendered, "\e[36m<%=\e[0m"
+    assert_includes rendered, "\e[34mif\e[0m"
+    assert_includes rendered, "\e[36m%>\e[0m"
+    assert_includes rendered, "\e[34m</div>\e[0m"
+    assert_equal line, strip_ansi(rendered)
+  end
+
+  def test_erb_comment_tag_is_gray_without_inner_highlighting
+    prompt = syntax_prompt(path: "show.html.erb")
+    line = "<%# return Kward %>"
+    rendered = prompt.send(:editor_render_line, line, 0, 80)
+
+    assert_equal "\e[90m#{line}\e[0m", rendered
+    refute_includes rendered, "\e[34mreturn\e[0m"
+    assert_equal line, strip_ansi(rendered)
+  end
+
   def test_ruby_hash_comment_colors_full_comment_without_inner_highlighting
     prompt = syntax_prompt(path: "example.rb")
     rendered = prompt.send(:editor_render_line, "# Namespace for the Kward CLI agent runtime.", 0, 80)
