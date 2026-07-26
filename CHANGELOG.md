@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Avoided copying bounded transcript buffers into idle tab snapshots while preserving intentional full-conversation scrollback replay when those tabs are revisited.
 - Kept the TUI transcript buffer under its existing limit while trimming to a safe low watermark instead of copying the full buffer after every appended character.
 - Reduced integrated-editor layout work by caching line starts and calculating the cursor line once per rendered frame.
 - Limited interactive plugin footer evaluation to its authoritative one-second refresh interval and reused the cached value between refreshes.

@@ -433,11 +433,21 @@ module Kward
         return unless tab
 
         if @prompt.respond_to?(:tab_view_snapshot)
-          tab.snapshot = @prompt.tab_view_snapshot
+          tab.snapshot = tab_view_snapshot_for(tab)
         elsif @prompt.respond_to?(:composer_snapshot)
           tab.snapshot = @prompt.composer_snapshot
         end
         tab.diff = @session_diff
+      end
+
+      def tab_view_snapshot_for(tab)
+        snapshot_method = @prompt.method(:tab_view_snapshot)
+        supports_transcript_option = snapshot_method.parameters.any? do |type, name|
+          type == :keyrest || ([:key, :keyreq].include?(type) && name == :include_transcript)
+        end
+        return snapshot_method.call unless supports_transcript_option
+
+        snapshot_method.call(include_transcript: tab.running? || !tab.shell.nil?)
       end
 
       def activate_tab(index, render: true)

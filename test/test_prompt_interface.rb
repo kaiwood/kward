@@ -1580,6 +1580,19 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "╭ You "
   end
 
+  def test_prompt_interface_tab_view_snapshot_can_omit_transcript_state
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.say("idle tab")
+
+    snapshot = prompt.tab_view_snapshot(include_transcript: false)
+
+    assert snapshot.key?(:composer)
+    assert snapshot.key?(:editor_state)
+    refute snapshot.key?(:transcript_buffer)
+    refute snapshot.key?(:transcript_viewport_rows)
+    refute snapshot.key?(:stream_state)
+  end
+
   def test_prompt_interface_tab_view_snapshot_is_not_mutated_by_later_transcript_restore
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.say("first tab")

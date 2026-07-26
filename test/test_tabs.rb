@@ -3,7 +3,7 @@ require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
-    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots
+    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots, :snapshot_transcript_options
 
     def initialize(inputs = [], confirmations: [])
       super(inputs, confirmations: confirmations)
@@ -16,6 +16,7 @@ class TestTabs < KwardTestCase
       @slash_command_updates = []
       @confirmation_messages = []
       @workspace_roots = []
+      @snapshot_transcript_options = []
     end
 
     def yes?(message, default: false)
@@ -60,8 +61,11 @@ class TestTabs < KwardTestCase
       { composer: :composer, prompt_label: "You>" }
     end
 
-    def tab_view_snapshot
-      { composer: :composer, prompt_label: "You>", transcript: output.dup }
+    def tab_view_snapshot(include_transcript: true)
+      @snapshot_transcript_options << include_transcript
+      snapshot = { composer: :composer, prompt_label: "You>" }
+      snapshot[:transcript] = output.dup if include_transcript
+      snapshot
     end
 
     def restore_composer_snapshot(snapshot)
@@ -865,6 +869,44 @@ class TestTabs < KwardTestCase
       output = strip_ansi(prompt.output.join)
       assert_includes output, nested
       assert_nil first_tab.shell
+    end
+  end
+
+  def test_tab_snapshot_includes_transcript_only_for_live_views
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      tab = cli.send(:active_tab)
+
+      cli.send(:save_active_tab_state)
+      assert_equal false, prompt.snapshot_transcript_options.last
+      refute tab.snapshot.key?(:transcript)
+
+      tab.status = "running"
+      cli.send(:save_active_tab_state)
+      assert_equal true, prompt.snapshot_transcript_options.last
+      assert tab.snapshot.key?(:transcript)
+    end
+  end
+
+  def test_idle_tab_without_transcript_snapshot_replays_conversation
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      first_tab.agent.conversation.append_user("replay me")
+
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      refute first_tab.snapshot.key?(:transcript)
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+
+      assert_includes strip_ansi(prompt.output.join("\n")), "Transcript"
+      assert_includes strip_ansi(prompt.output.join("\n")), "replay me"
     end
   end
 

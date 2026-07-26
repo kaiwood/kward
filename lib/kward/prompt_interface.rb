@@ -645,16 +645,19 @@ module Kward
       end
     end
 
-    def tab_view_snapshot
+    def tab_view_snapshot(include_transcript: true)
       @mutex.synchronize do
-        {
+        snapshot = {
           composer: @composer.dup,
           prompt_label: @prompt_label.dup,
-          editor_state: @editor_state&.dup,
-          transcript_buffer: @transcript_buffer.dup,
-          transcript_viewport_rows: @transcript_viewport_rows,
-          stream_state: @stream_state.dup
+          editor_state: @editor_state&.dup
         }
+        if include_transcript
+          snapshot[:transcript_buffer] = @transcript_buffer.dup
+          snapshot[:transcript_viewport_rows] = @transcript_viewport_rows
+          snapshot[:stream_state] = @stream_state.dup
+        end
+        snapshot
       end
     end
 
