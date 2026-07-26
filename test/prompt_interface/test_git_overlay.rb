@@ -9,7 +9,7 @@ class TestPromptInterfaceGitOverlay < KwardTestCase
     rendered = strip_ansi(rows.join("\n"))
 
     assert_includes rendered, "Git"
-    assert_includes rendered, "↑/↓ select · Enter diff · s stage/unstage · Tab message · Esc cancel"
+    assert_includes rendered, "↑/↓/j/k select · Enter diff · s stage/unstage · Tab message · Esc cancel"
     assert_includes rendered, "›  M lib/file.rb"
     assert_includes rendered, "  ?? new.txt"
   end
@@ -134,6 +134,33 @@ class TestPromptInterfaceGitOverlay < KwardTestCase
 
     assert_equal true, prompt.send(:handle_git_key, "\e[A")
     assert_equal 0, prompt.instance_variable_get(:@git_state)[:selected_index]
+  end
+
+  def test_prompt_interface_git_j_and_k_move_selection
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M one.rb", "?? two.rb"], composing: false, selected_index: 0 })
+
+    assert_equal true, prompt.send(:handle_git_key, "j")
+    assert_equal 1, prompt.instance_variable_get(:@git_state)[:selected_index]
+
+    assert_equal true, prompt.send(:handle_git_key, "k")
+    assert_equal 0, prompt.instance_variable_get(:@git_state)[:selected_index]
+
+    assert_equal true, prompt.send(:handle_git_key, "\e[106u")
+    assert_equal 1, prompt.instance_variable_get(:@git_state)[:selected_index]
+
+    assert_equal true, prompt.send(:handle_git_key, "\e[107u")
+    assert_equal 0, prompt.instance_variable_get(:@git_state)[:selected_index]
+  end
+
+  def test_prompt_interface_git_j_and_k_insert_while_composing
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@git_state, { status_lines: [" M file"], composing: true, selected_index: 0 })
+
+    prompt.send(:handle_git_key, "j")
+    prompt.send(:handle_git_key, "k")
+
+    assert_equal "jk", prompt.send(:composer_input)
   end
 
   def test_prompt_interface_git_s_requests_toggle_for_selected_file

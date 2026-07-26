@@ -30,7 +30,7 @@ Use the overlay to review and shape the commit:
 
 | Key | Action |
 | --- | --- |
-| `↑` / `↓` | Move between changed files. |
+| `↑` / `↓` or `j` / `k` | Move between changed files. |
 | `Enter` | Open the selected file in the diff viewer. |
 | `s` | Stage or unstage the selected file. |
 | `Tab` | Switch to commit-message entry. |

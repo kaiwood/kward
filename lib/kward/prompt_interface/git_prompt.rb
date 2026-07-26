@@ -84,6 +84,8 @@ module Kward
         binding_result = handle_composer_key_binding(key) if git_composing?
         return binding_result unless binding_result == false || binding_result.nil?
 
+        return git_move_selection(1) if key == "j" && !git_composing?
+        return git_move_selection(-1) if key == "k" && !git_composing?
         return git_toggle_selected_file if key == "s" && !git_composing?
 
         insert_key(key) if git_composing?
@@ -111,8 +113,10 @@ module Kward
           delete_at_cursor if git_composing?
           nil
         else
-          if !git_composing? && code == "s".ord && (sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1")
-            return git_toggle_selected_file
+          unless git_composing?
+            return git_move_selection(1) if code == "j".ord
+            return git_move_selection(-1) if code == "k".ord
+            return git_toggle_selected_file if code == "s".ord && (sequence[:modifiers].to_s.empty? || sequence[:modifiers].to_s == "1")
           end
           return false unless git_composing?
 
@@ -265,7 +269,7 @@ module Kward
       def git_overlay_rows(width, height: screen_height)
         return [] unless @git_state
 
-        help = git_composing? ? "Type commit message · Enter commit · Tab overlay · Esc cancel" : "↑/↓ select · Enter diff · s stage/unstage · Tab message · Esc cancel"
+        help = git_composing? ? "Type commit message · Enter commit · Tab overlay · Esc cancel" : "↑/↓/j/k select · Enter diff · s stage/unstage · Tab message · Esc cancel"
         lines = [overlay_text_line(help, :muted), overlay_blank_line]
         status_lines = @git_state[:status_lines]
         status_lines = ["No uncommitted changes."] if status_lines.empty?
