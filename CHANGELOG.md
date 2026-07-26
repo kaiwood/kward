@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added HTML/Ruby syntax highlighting and common-block auto-indentation for `.erb` files in the integrated editor.
 - Added catalog-based API-key login and model selection for OpenAI, Anthropic, Azure OpenAI, Gemini, Cerebras, DeepSeek, Fireworks AI, Groq, Mistral, NVIDIA NIM, OpenRouter, Together AI, and xAI, with private credential storage and live/cached/curated model catalogs.
 - Added native streaming runtimes for the OpenAI Responses API, Google Gemini, and Azure OpenAI, including tool calls, usage metadata, retries, cancellation, and secret redaction.
 - Added RPC parity for provider/auth-method discovery, sanitized credential status, API-key login/logout, model refresh, and provider/model selection.
