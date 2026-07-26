@@ -624,9 +624,14 @@ module Kward
 
     def update_tabs(labels:, active_index: 0)
       @mutex.synchronize do
-        @tabs = Array(labels).map { |label| normalize_tab_label(label) }
-        @active_tab_index = active_index.to_i
+        normalized_labels = Array(labels).map { |label| normalize_tab_label(label) }
+        normalized_index = active_index.to_i
+        return false if @tabs == normalized_labels && @active_tab_index == normalized_index
+
+        @tabs = normalized_labels
+        @active_tab_index = normalized_index
         render_prompt_locked if @started && @asking
+        true
       end
     end
 

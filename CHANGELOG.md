@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Avoided rebuilding and flushing the TUI composer when tab labels and selection have not changed.
 - Reduced interactive streaming overhead by writing each labeled TUI delta in one synchronized prompt transaction.
 - Highlighted the current editor line number in white while keeping the rest of the line-number gutter green.
 - Made `/model` provider-aware with refresh, manual model IDs, capability-filtered defaults, Show all, and provider switching while preserving Codex, Copilot, OpenRouter, and local models.

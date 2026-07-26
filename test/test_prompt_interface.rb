@@ -245,6 +245,18 @@ class TestPromptInterface < KwardTestCase
     refute_includes rendered_rows.join("\n"), "[2]"
   end
 
+  def test_prompt_interface_does_not_render_unchanged_tabs
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.update_tabs(labels: [{ name: "Main", color: :yellow }], active_index: 0)
+    output.truncate(0)
+    output.rewind
+
+    refute prompt.update_tabs(labels: [{ name: "Main", color: :yellow }], active_index: 0)
+    assert_empty output.string
+  end
+
   def test_prompt_interface_renders_connected_tab_bar_for_first_tab
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(labels: %w[Main Tab Tab], active_index: 0)

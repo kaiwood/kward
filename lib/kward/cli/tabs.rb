@@ -676,12 +676,12 @@ module Kward
 
       def refresh_active_tab
         tab = active_tab
-        return unless tab
+        return unless tab&.thread && !tab.thread.alive? && tab.running?
 
-        if tab.thread && !tab.thread.alive? && tab.running?
-          tab.thread.join
-          tab.status = "ready" if tab.status == "running"
-        end
+        tab.thread.join
+        return unless tab.status == "running"
+
+        tab.status = "ready"
         update_prompt_tabs
       end
 

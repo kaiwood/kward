@@ -868,6 +868,20 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_refresh_active_tab_does_not_update_unchanged_labels
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      update_count = prompt.tabs_updates.length
+
+      cli.send(:refresh_active_tab)
+
+      assert_equal update_count, prompt.tabs_updates.length
+    end
+  end
+
   def test_idle_tab_switch_changes_active_tab
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
