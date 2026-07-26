@@ -160,7 +160,7 @@ module Kward
         end
 
         tab_type = plugin_registry.tab_type_for_id(descriptor["plugin_tab_type"])
-        driver = if tab_type
+        driver = if tab_type&.local
           host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
           tab_type.handler.call(host, descriptor)
         else
@@ -172,7 +172,7 @@ module Kward
 
       def open_plugin_tab(name, session_store)
         tab_type = plugin_registry.tab_type_for(name)
-        return runtime_output("Plugin tab #{name.inspect} is not available.") unless tab_type
+        return runtime_output("Plugin tab #{name.inspect} is not available.") unless tab_type&.local
 
         if tab_type.singleton == :global && (existing = @tabs.find { |tab| tab.driver.descriptor["plugin_tab_type"] == tab_type.id })
           return switch_tab(@tabs.index(existing))

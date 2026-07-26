@@ -282,9 +282,24 @@ class TestPluginRegistry < KwardTestCase
     assert_equal :global, tab_type.singleton
     refute tab_type.rpc
     assert tab_type.transport
+    assert tab_type.local
     assert_equal [tab_type], registry.transport_tab_types
     assert tab_type.transcript_events
     assert_same tab_type, registry.tab_type_for_id("example.chat")
+  end
+
+  def test_registers_transport_only_tab_type
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.tab_type "telegram", id: "com.example.telegram", local: false, transport: true do |host, descriptor|
+        [host, descriptor]
+      end
+    end
+
+    tab_type = registry.tab_type_for("telegram")
+    refute tab_type.local
+    assert tab_type.transport
+    assert_equal [tab_type], registry.transport_tab_types
   end
 
   def test_registers_interactive_command

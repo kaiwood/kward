@@ -252,6 +252,16 @@ plugin.tab_type "example", id: "com.example.chat", rpc: true, transport: true do
 end
 ```
 
+Set `local: false` for a transport-only plugin chat. It remains available to
+transports when `transport: true`, but `/tab open` and local tab restoration do
+not expose it:
+
+```ruby
+plugin.tab_type "telegram", id: "com.example.telegram", local: false, transport: true do |host, descriptor|
+  ExampleChat.new(client: host.client, descriptor: descriptor)
+end
+```
+
 Transport-created plugin chats receive a descriptor containing a stable scoped
 key, transport identity, external conversation, and actor metadata. Use the
 scope to select separate transcript and memory roots. The driver may accept a

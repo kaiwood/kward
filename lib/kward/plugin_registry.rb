@@ -37,7 +37,7 @@ module Kward
 
     # Registered plugin-owned tab runtime. Its factory receives a
     # `PluginTabHost` and its persisted descriptor, then returns a driver.
-    TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :transport, :transcript_events, :path, :handler, keyword_init: true)
+    TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :transport, :local, :transcript_events, :path, :handler, keyword_init: true)
 
     # Registered external transport. The factory receives a transport host and
     # configuration when the transport is started, not while plugins load.
@@ -274,8 +274,8 @@ module Kward
         @registry.register_interactive_command(name, rows: rows, fps: fps, description: description, argument_hint: argument_hint, path: @path, &block)
       end
 
-      # Registers a plugin-owned tab type for the interactive CLI. `id` is a
-      # durable identifier used in persisted tab layouts and must not change.
+      # Registers a plugin-owned chat type. `id` is a durable identifier used
+      # in persisted tab layouts and transport chat handles and must not change.
       # The factory receives a `PluginTabHost` and a descriptor hash.
       #
       # @param name [String] command name used by `/tab open <name>`
@@ -284,13 +284,14 @@ module Kward
       # @param singleton [Symbol] `:global` for one shared plugin runtime
       # @param rpc [Boolean] expose this chat through trusted local RPC
       # @param transport [Boolean] allow external transport adapters to target this chat
+      # @param local [Boolean] expose this chat as an interactive local tab
       # @param transcript_events [Boolean] allow global transcript observers to receive this tab's events
       # @yieldparam host [PluginTabHost] supported host dependencies
       # @yieldparam descriptor [Hash] persisted tab descriptor
       # @return [void]
       # @api public
-      def tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, transcript_events: false, &block)
-        @registry.register_tab_type(name, id: id, title: title, singleton: singleton, rpc: rpc, transport: transport, transcript_events: transcript_events, path: @path, &block)
+      def tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, local: true, transcript_events: false, &block)
+        @registry.register_tab_type(name, id: id, title: title, singleton: singleton, rpc: rpc, transport: transport, local: local, transcript_events: transcript_events, path: @path, &block)
       end
 
       # Registers an external messaging or event transport. The factory is
@@ -503,7 +504,7 @@ module Kward
       )
     end
 
-    def register_tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, transcript_events: false, path: nil, &handler)
+    def register_tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, local: true, transcript_events: false, path: nil, &handler)
       name = name.to_s
       id = id.to_s
       raise "Plugin tab type name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
@@ -515,7 +516,7 @@ module Kward
         return nil
       end
 
-      tab_type = TabType.new(id: id, name: name, title: title.to_s.empty? ? name.capitalize : title.to_s, singleton: singleton&.to_sym, rpc: rpc == true, transport: transport == true, transcript_events: transcript_events == true, path: path, handler: handler)
+      tab_type = TabType.new(id: id, name: name, title: title.to_s.empty? ? name.capitalize : title.to_s, singleton: singleton&.to_sym, rpc: rpc == true, transport: transport == true, local: local == true, transcript_events: transcript_events == true, path: path, handler: handler)
       @tab_types[name] = tab_type
       @tab_types_by_id[id] = tab_type
     end
