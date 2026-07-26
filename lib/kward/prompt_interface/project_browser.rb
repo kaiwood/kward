@@ -125,6 +125,10 @@ module Kward
             insert_selected_project_browser_mention
           elsif text == "/" && !project_browser_search_active?
             activate_project_browser_search
+          elsif text == "j" && !project_browser_search_active?
+            select_next_project_browser_row
+          elsif text == "k" && !project_browser_search_active?
+            select_previous_project_browser_row
           elsif project_browser_search_active?
             project_browser_append_search(text)
           else
@@ -148,6 +152,10 @@ module Kward
           toggle_project_browser_search
         when "/"
           activate_project_browser_search
+        when "j"
+          project_browser_search_active? ? project_browser_append_search(key) : select_next_project_browser_row
+        when "k"
+          project_browser_search_active? ? project_browser_append_search(key) : select_previous_project_browser_row
         else
           project_browser_append_search(key) if project_browser_search_active? && printable_key?(key)
         end

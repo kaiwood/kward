@@ -12,7 +12,7 @@ From an interactive Kward session, run:
 /files
 ```
 
-Kward opens the project file browser. Use the arrow keys to move through the tree, then press `Enter` on a file to open it in the integrated editor.
+Kward opens the project file browser. Use the arrow keys or `j`/`k` to move through the tree, then press `Enter` on a file to open it in the integrated editor.
 
 When you quit the editor, Kward returns to the file browser at the same position so you can keep browsing nearby files.
 
@@ -32,7 +32,7 @@ Outside Git, Kward scans the workspace directory and skips common noisy director
 
 | Key | Action |
 | --- | ------ |
-| `↑` / `↓` | Move the selection |
+| `↑` / `↓` or `j` / `k` | Move the selection down / up |
 | `Enter` | Open a file, or toggle a directory |
 | `←` | Collapse the selected directory, or jump to its parent |
 | `→` | Expand the selected directory |
@@ -55,7 +55,7 @@ For example:
 /agent
 ```
 
-Use `↑` and `↓` to choose a result, then press `Enter` to open it. Press `Esc` to return to the tree view.
+Use `↑` / `↓` or `j` / `k` to choose a result, then press `Enter` to open it. Press `Esc` to return to the tree view.
 
 ## Mention a file in chat
 

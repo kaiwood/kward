@@ -89,6 +89,32 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_j_and_k_move_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "a.rb"), "a\n")
+      File.write(File.join(dir, "b.rb"), "b\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["a.rb", "b.rb"])
+
+        prompt.open_project_browser
+        assert_equal "a.rb", prompt.send(:selected_project_browser_row)[:path]
+
+        prompt.send(:handle_key, "j")
+        assert_equal "b.rb", prompt.send(:selected_project_browser_row)[:path]
+
+        prompt.send(:handle_key, "k")
+        assert_equal "a.rb", prompt.send(:selected_project_browser_row)[:path]
+
+        prompt.send(:handle_key, "\e[106u")
+        assert_equal "b.rb", prompt.send(:selected_project_browser_row)[:path]
+
+        prompt.send(:handle_key, "\e[107u")
+        assert_equal "a.rb", prompt.send(:selected_project_browser_row)[:path]
+      end
+    end
+  end
+
   def test_prompt_interface_project_browser_renders_nerd_font_icons_when_enabled
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs", project_browser_icon_theme: "nerd-font")
 
