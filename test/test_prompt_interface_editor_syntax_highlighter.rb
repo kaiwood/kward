@@ -16,6 +16,12 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal :markdown, prompt.send(:editor_detect_syntax_language, "notes.markdown")
   end
 
+  def test_detects_erb_by_extension
+    prompt = syntax_prompt
+
+    assert_equal :erb, prompt.send(:editor_detect_syntax_language, "views/users/show.html.erb")
+  end
+
   def test_detects_additional_languages_by_extension
     prompt = syntax_prompt
 

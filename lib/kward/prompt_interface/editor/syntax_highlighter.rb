@@ -103,6 +103,7 @@ module Kward
       JSON_EXTENSIONS = %w[.json].freeze
       YAML_EXTENSIONS = %w[.yml .yaml].freeze
       HTML_EXTENSIONS = %w[.html .htm].freeze
+      ERB_EXTENSIONS = %w[.erb].freeze
       CSS_EXTENSIONS = %w[.css].freeze
       SCSS_EXTENSIONS = %w[.scss].freeze
       SQL_EXTENSIONS = %w[.sql].freeze
@@ -153,6 +154,7 @@ module Kward
         return :json if JSON_EXTENSIONS.include?(extension)
         return :yaml if YAML_EXTENSIONS.include?(extension)
         return :html if HTML_EXTENSIONS.include?(extension)
+        return :erb if ERB_EXTENSIONS.include?(extension)
         return :scss if SCSS_EXTENSIONS.include?(extension)
         return :css if CSS_EXTENSIONS.include?(extension)
         return :sql if SQL_EXTENSIONS.include?(extension)
