@@ -1574,7 +1574,7 @@ class TestPromptInterfaceEditor < KwardTestCase
         text = rows.join("\n")
 
         assert_includes strip_ansi(text), "   1 │ alpha"
-        assert_includes text, "\e[38;2;78;88;53m   1 │ \e[0m\e[7mal\e[27mpha"
+        assert_includes text, "\e[97m   1\e[0m\e[38;2;78;88;53m │ \e[0m\e[7mal\e[27mpha"
         refute_includes text, "\e[7m   1"
       end
     end
@@ -2086,6 +2086,25 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert_includes text, "│    1 │ one"
         assert_includes text, "│    2 │ two"
         assert_includes text, "│    3 │ "
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_highlights_the_current_line_number
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        assert prompt.send(:open_editor, "notes.txt")
+        prompt.instance_variable_set(:@color_enabled, true)
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(1, 0)
+
+        rows, = prompt.send(:composer_layout, 40, 10)
+        text = rows.join("\n")
+
+        assert_includes text, "\e[97m   2\e[0m\e[38;2;78;88;53m │ \e[0m"
+        assert_includes text, "\e[38;2;78;88;53m   1\e[0m\e[38;2;78;88;53m │ \e[0m"
       end
     end
   end

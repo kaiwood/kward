@@ -22,6 +22,7 @@ module Kward
       cyan: 36,
       gray: 90,
       grey: 90,
+      white: 97,
       primary_green: "38;2;138;160;106",
       bright_accent_green: "38;2;155;255;0",
       augen: "38;2;155;255;0",

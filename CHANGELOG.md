@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Highlighted the current editor line number in white while keeping the rest of the line-number gutter green.
 - Made `/model` provider-aware with refresh, manual model IDs, capability-filtered defaults, Show all, and provider switching while preserving Codex, Copilot, OpenRouter, and local models.
 - Kept direct OpenAI API credentials (`openai_api`) separate from ChatGPT/Codex OAuth so both can be configured at once.
 - Azure OpenAI setup now validates HTTPS endpoints, deployment names, and API versions, and treats the configured deployment as the selectable model.

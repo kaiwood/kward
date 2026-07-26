@@ -232,7 +232,8 @@ module Kward
 
       def editor_line_number_gutter(line_index)
         number = editor_display_line_number(line_index).to_s.rjust(editor_line_number_gutter_width - 3)
-        colored("#{number} │ ", :dark_forest_green)
+        number_color = line_index == @editor_state.cursor_line_and_column.first ? :white : :dark_forest_green
+        colored(number, number_color) + colored(" │ ", :dark_forest_green)
       end
 
       def editor_display_line_number(line_index)
