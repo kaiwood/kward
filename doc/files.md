@@ -34,8 +34,8 @@ Outside Git, Kward scans the workspace directory and skips common noisy director
 | --- | ------ |
 | `↑` / `↓` or `j` / `k` | Move the selection down / up |
 | `Enter` | Open a file, or toggle a directory |
-| `←` | Collapse the selected directory, or jump to its parent |
-| `→` | Expand the selected directory |
+| `←` or `h` | Collapse the selected directory, or jump to its parent |
+| `→` or `l` | Expand the selected directory |
 | `Tab` | Start or stop search |
 | `/` | Start search |
 | `Backspace` | Delete the last search character |

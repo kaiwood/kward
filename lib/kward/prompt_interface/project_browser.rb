@@ -129,6 +129,10 @@ module Kward
             select_next_project_browser_row
           elsif text == "k" && !project_browser_search_active?
             select_previous_project_browser_row
+          elsif text == "h" && !project_browser_search_active?
+            collapse_selected_project_browser_row
+          elsif text == "l" && !project_browser_search_active?
+            expand_selected_project_browser_row
           elsif project_browser_search_active?
             project_browser_append_search(text)
           else
@@ -156,6 +160,10 @@ module Kward
           project_browser_search_active? ? project_browser_append_search(key) : select_next_project_browser_row
         when "k"
           project_browser_search_active? ? project_browser_append_search(key) : select_previous_project_browser_row
+        when "h"
+          project_browser_search_active? ? project_browser_append_search(key) : collapse_selected_project_browser_row
+        when "l"
+          project_browser_search_active? ? project_browser_append_search(key) : expand_selected_project_browser_row
         else
           project_browser_append_search(key) if project_browser_search_active? && printable_key?(key)
         end

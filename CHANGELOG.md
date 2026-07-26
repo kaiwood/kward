@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 - Added the active worktree `git_commit` model tool, allowing explicitly requested agent commits through the trusted host-side Git workflow without widening the shell sandbox.
 - Added `/tab worktree merge` for explicitly merging a clean worktree branch into the branch checked out in its original workspace, plus `/tab worktree merge abort` for conflicted merges.
 - Added `j`/`k` keyboard navigation to the `/files` project browser.
+- Added `h`/`l` keyboard navigation for collapsing and expanding `/files` directories.
 
 ### Changed
 

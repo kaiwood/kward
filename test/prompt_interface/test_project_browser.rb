@@ -115,6 +115,30 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_h_and_l_collapse_and_expand_directories
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+        prompt.instance_variable_set(:@file_mention_paths, ["lib/a.rb", "lib/b.rb"])
+        prompt.open_project_browser
+
+        assert_equal ["lib", "lib/a.rb", "lib/b.rb"], prompt.send(:project_browser_visible_rows).map { |row| row[:path] }
+
+        prompt.send(:handle_key, "h")
+        assert_equal ["lib"], prompt.send(:project_browser_visible_rows).map { |row| row[:path] }
+
+        prompt.send(:handle_key, "l")
+        assert_equal ["lib", "lib/a.rb", "lib/b.rb"], prompt.send(:project_browser_visible_rows).map { |row| row[:path] }
+
+        prompt.send(:handle_key, "\e[104u")
+        assert_equal ["lib"], prompt.send(:project_browser_visible_rows).map { |row| row[:path] }
+
+        prompt.send(:handle_key, "\e[108u")
+        assert_equal ["lib", "lib/a.rb", "lib/b.rb"], prompt.send(:project_browser_visible_rows).map { |row| row[:path] }
+      end
+    end
+  end
+
   def test_prompt_interface_project_browser_uses_available_height_for_long_lists
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do
