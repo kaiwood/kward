@@ -114,6 +114,9 @@ module Kward
         @reserved_rows = 0
         @last_width = current_width
         @last_height = current_height
+        if interactive_active_locked?
+          @interactive_state[:controller].resize(width: interactive_canvas_width(current_width))
+        end
         redraw_screen_locked(width: current_width, height: current_height)
         true
       end

@@ -137,6 +137,7 @@ Kward.plugin do |plugin|
       x = (x + 1) % ui.width
       key = ui.poll_key
       return :exit if key == :ctrl_c || key == "q"
+      ui.render
     end
   end
 end
@@ -167,6 +168,8 @@ Keys are returned as symbols (`:left`, `:right`, `:up`, `:down`, `:return`,
 without a named mapping. Ctrl+C always exits the loop immediately.
 
 The tick callback runs at the configured frame rate (1–120 fps, default 30).
+Calls to `put` and `clear_frame` stage canvas changes; call `render` after the
+frame is complete to publish it. Kward skips ticks that do not publish a frame.
 Returning `:exit` from the tick callback ends the loop, same as calling
 `ui.exit`.
 

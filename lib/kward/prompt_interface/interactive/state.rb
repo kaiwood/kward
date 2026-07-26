@@ -7,8 +7,8 @@ module Kward
     module InteractiveState
       private
 
-      def interactive_canvas_width
-        [screen_width - 6, 1].max
+      def interactive_canvas_width(width = screen_width)
+        [width - 6, 1].max
       end
 
       def route_interactive_key(key)

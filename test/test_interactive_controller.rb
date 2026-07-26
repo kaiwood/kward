@@ -47,6 +47,18 @@ class TestInteractiveController < KwardTestCase
     assert controller.dirty?
   end
 
+  def test_canvas_changes_require_render_to_publish
+    controller = Kward::PromptInterface::InteractiveController.new(width: 4, height: 2, fps: 30)
+    controller.cells
+
+    controller.clear_frame
+    controller.put(0, 0, "X")
+
+    refute controller.dirty?
+    controller.render
+    assert controller.dirty?
+  end
+
   def test_poll_key_returns_queued_keys_in_order
     controller = Kward::PromptInterface::InteractiveController.new(width: 4, height: 2, fps: 30)
 

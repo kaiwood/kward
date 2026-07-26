@@ -45,7 +45,8 @@ module Kward
         @on_tick = block
       end
 
-      # Places a character at the given canvas position with optional color.
+      # Stages a character at the given canvas position with optional color.
+      # Call {#render} after completing the frame to publish it.
       #
       # @param row [Integer] zero-based row
       # @param col [Integer] zero-based column
@@ -59,15 +60,14 @@ module Kward
         return if col.negative? || col >= @width
 
         @cells[row][col] = { char: char.to_s[0] || " ", colors: colors.flatten }
-        @dirty = true
       end
 
-      # Clears all canvas cells to blank.
+      # Stages a reset of all canvas cells to blank. Call {#render} after
+      # completing the frame to publish it.
       #
       # @return [void]
       def clear_frame
         @cells = Array.new(@height) { Array.new(@width) { blank_cell } }
-        @dirty = true
       end
 
       # Marks the canvas as ready for Kward to render. Called after the plugin

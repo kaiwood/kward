@@ -1749,6 +1749,26 @@ class TestPromptInterface < KwardTestCase
     TTY::Screen.define_singleton_method(:height, original_height) if original_height
   end
 
+  def test_interactive_resize_updates_controller_width
+    output = StringIO.new
+    width = 40
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { width }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+
+    width = 60
+    prompt.send(:handle_resize_locked)
+
+    assert_equal 54, controller.width
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_finish_interactive_restores_composer_state
     output = StringIO.new
     original_width = TTY::Screen.method(:width)
@@ -1864,6 +1884,19 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:tick_interactive_locked)
 
     assert_equal 1, tick_count
+  end
+
+  def test_interactive_tick_requires_an_explicit_render
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.start
+    controller = prompt.start_interactive(title: "Test", rows: 3, fps: 30)
+    controller.on_tick { |ui| ui.put(0, 0, "X") }
+    prompt.send(:instance_variable_set, :@last_interactive_tick, 0)
+
+    refute prompt.send(:tick_interactive_locked)
+
+    controller.render
+    assert prompt.send(:tick_interactive_locked)
   end
 
   def test_interactive_tick_returns_exit_from_callback

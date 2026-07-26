@@ -55,6 +55,9 @@ module Kward
         controller = @interactive_state[:controller]
         return false if controller.exited?
 
+        return true if controller.dirty?
+        return false unless controller.tickable?
+
         now = monotonic_now
         interval = 1.0 / controller.fps
         elapsed = now - @last_interactive_tick
@@ -64,7 +67,7 @@ module Kward
         @last_interactive_tick += steps * interval
         result = controller.invoke_tick
         controller.exit if result == :exit
-        true
+        controller.dirty?
       end
     end
   end
