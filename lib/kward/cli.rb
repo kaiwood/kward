@@ -236,6 +236,16 @@ module Kward
         return
       end
 
+      if @argv.first == "skills"
+        if help_option_arguments?(@argv[1..] || [])
+          print_command_help("skills")
+          return
+        end
+
+        handle_project_skills_cli_command(@argv[1..] || [])
+        return
+      end
+
       if @argv.first == "edit"
         if help_option_arguments?(@argv[1..] || [])
           print_command_help("edit")

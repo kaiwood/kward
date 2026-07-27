@@ -54,6 +54,7 @@ module Kward
             #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
             #{command.call("kward doctor")}                       Check local Kward setup
             #{command.call("kward hooks doctor")}                 Inspect lifecycle hook setup
+            #{command.call("kward skills status")}                 Inspect project skill trust
             #{command.call("kward edit")} #{option.call("<filename>")}              Open a file in the integrated editor
             #{command.call("kward sysprompt")}                    Inspect the effective system prompt
             #{command.call("kward openrouter refresh")}           Refresh cached OpenRouter models
@@ -69,6 +70,7 @@ module Kward
             #{command.call("init")}                               Install starter prompts and PRINCIPLES.md
             #{command.call("doctor")}                             Check local Kward setup
             #{command.call("hooks list|events|logs|doctor|trust|untrust")} Inspect lifecycle hooks
+            #{command.call("skills status|trust|untrust|review")}  Manage project skill trust
             #{command.call("edit")} #{option.call("<filename>")}                  Open a file in the integrated editor
             #{command.call("sysprompt")} [--raw]                  Inspect the effective system prompt
             #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
@@ -135,6 +137,11 @@ module Kward
             usage: "kward hooks [list|events|logs|doctor|trust|untrust]",
             description: "Inspect lifecycle hooks, recent audit records, diagnostics, and workspace hook trust.",
             examples: ["kward hooks list", "kward hooks doctor", "kward hooks logs 50", "kward hooks trust"]
+          },
+          "skills" => {
+            usage: "kward skills [status|trust|untrust|review]",
+            description: "Inspect or manage project skill trust for the current workspace.",
+            examples: ["kward skills status", "kward skills review", "kward skills trust"]
           },
           "edit" => {
             usage: "kward edit <filename>",

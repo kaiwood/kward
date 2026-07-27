@@ -1647,6 +1647,9 @@ class TestCLI < KwardTestCase
         cli.send(:handle_project_skills_command, "untrust")
         assert_includes prompt.output.join, "trust removed"
         assert_empty cli.instance_variable_get(:@interactive_project_skill_paths)
+
+        cli.send(:handle_project_skills_cli_command, ["status"])
+        assert_includes prompt.output.join, "needs review"
       end
     end
   end

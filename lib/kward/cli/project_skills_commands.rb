@@ -3,6 +3,26 @@ module Kward
   class CLI
     # Handles explicit project skill trust management commands.
     module ProjectSkillsCommands
+      def handle_project_skills_cli_command(arguments)
+        argument = Array(arguments).join(" ").strip.downcase
+        _workspace_root, candidates, coordinator = project_skill_trust_coordinator
+        case argument
+        when "", "status"
+          lines = candidates.empty? ? ["No project skills found in the current workspace."] : candidates.map { |candidate| "#{relative_workspace_path(candidate.path)}: #{coordinator.decision(candidate) || "needs review"}" }
+          @prompt.say(lines.join("\n"))
+        when "trust"
+          coordinator.record!(candidates, "allow")
+          @prompt.say("Project skills trusted for the current skill snapshots.")
+        when "untrust"
+          coordinator.remove_workspace!
+          @prompt.say("Project skill trust removed for this workspace.")
+        when "review"
+          review_project_skills(candidates)
+        else
+          raise ArgumentError, "Usage: kward skills [status|trust|untrust|review]"
+        end
+      end
+
       def handle_project_skills_command(argument)
         case argument.to_s.strip.downcase
         when "", "status"
