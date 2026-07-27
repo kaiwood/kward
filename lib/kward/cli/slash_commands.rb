@@ -32,6 +32,9 @@ module Kward
             run_busy_local_command_and_requeue { activate_skill_command(argument, agent) }
           end
           [true, nil]
+        when "skills"
+          run_busy_local_command_and_requeue { handle_project_skills_command(argument) }
+          [true, nil]
         when "redraw"
           run_busy_local_command_and_requeue { @prompt.redraw if @prompt.respond_to?(:redraw) }
           [true, nil]

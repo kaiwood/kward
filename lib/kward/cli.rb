@@ -60,6 +60,7 @@ require_relative "cli/stats"
 require_relative "cli/openrouter_commands"
 require_relative "cli/runtime_helpers"
 require_relative "cli/project_skills"
+require_relative "cli/project_skills_commands"
 require_relative "cli/slash_commands"
 require_relative "cli/memory_commands"
 require_relative "cli/hook_commands"
@@ -96,6 +97,7 @@ module Kward
     include CLI::OpenRouterCommands
     include CLI::RuntimeHelpers
     include CLI::ProjectSkills
+    include CLI::ProjectSkillsCommands
     include CLI::SlashCommands
     include CLI::MemoryCommands
     include CLI::HookCommands

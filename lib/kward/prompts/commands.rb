@@ -36,6 +36,7 @@ module Kward
       { name: "sandbox", description: "Inspect or configure model command sandboxing.", argument_hint: "[status|off|read_only|workspace_write|network allow|network deny]" },
       { name: "hooks", description: "Inspect lifecycle hooks.", argument_hint: "[list|events|logs|doctor|trust|untrust]" },
       { name: "skill", description: "Activate a skill or capture one from a saved session.", argument_hint: "<name>|capture" },
+      { name: "skills", description: "Review project skill trust.", argument_hint: "[status|trust|untrust]" },
       { name: "memory", description: "Inspect and manage Kward memory.", argument_hint: "[enable|disable|auto-summary|core|add|list|forget|promote|relax|inspect|why|summarize]" }
     ].freeze
     BUILTIN_RESERVED_COMMAND_NAMES = BUILTIN_COMMANDS.map { |command| command[:name] }.freeze

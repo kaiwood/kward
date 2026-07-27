@@ -26,6 +26,10 @@ module Kward
         candidates.filter_map { |candidate| candidate.path if decision(candidate) == "allow" }
       end
 
+      def remove_workspace!
+        @trust_store.remove_workspace!(workspace_root: @workspace_root)
+      end
+
       def record!(candidates, decision)
         candidates.each do |candidate|
           @trust_store.set_decision!(
