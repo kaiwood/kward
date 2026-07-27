@@ -636,6 +636,29 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_project_skill_warnings_use_the_configured_sink
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(config_dir)
+      skill_dir = File.join(workspace, ".agents", "skills", "project-agent")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: project-agent\ndescription: Project skill.\n---\n")
+
+      warnings = []
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        _stdout, stderr = capture_io do
+          skills = Kward::ConfigFiles.skills(workspace_root: workspace, warning_sink: warnings.method(:<<))
+          assert_empty skills
+        end
+
+        assert_empty stderr
+        assert_equal ["Warning: skipping project Agent Skills in #{File.join(workspace, ".agents", "skills")}: project skills are not trusted"], warnings
+      end
+    end
+  end
+
   def test_skills_prefer_project_kward_then_project_agent_then_user_kward_then_user_agent
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

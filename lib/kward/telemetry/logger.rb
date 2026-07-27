@@ -20,13 +20,14 @@ module Kward
     DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
     # Creates an object for telemetry event logging.
-    def initialize(config_path: ConfigFiles.config_path, log_dir: nil, max_bytes: DEFAULT_MAX_BYTES, clock: Time, monotonic_clock: Process, error_output: $stderr)
+    def initialize(config_path: ConfigFiles.config_path, log_dir: nil, max_bytes: DEFAULT_MAX_BYTES, clock: Time, monotonic_clock: Process, error_output: $stderr, warning_sink: nil)
       @config_path = config_path
       @log_dir = log_dir
       @max_bytes = max_bytes.to_i.positive? ? max_bytes.to_i : DEFAULT_MAX_BYTES
       @clock = clock
       @monotonic_clock = monotonic_clock
       @error_output = error_output
+      @warning_sink = warning_sink
       @mutex = Mutex.new
       @warned = false
     end
@@ -192,7 +193,9 @@ module Kward
       return if @warned
 
       @warned = true
-      @error_output&.puts("Warning: telemetry logging failed: #{error.message}")
+      message = "Warning: telemetry logging failed: #{error.message}"
+      sink = @warning_sink || ConfigFiles.warning_sink
+      sink ? sink.call(message) : @error_output&.puts(message)
     rescue StandardError
       nil
     end

@@ -15,6 +15,8 @@ module Kward
         prompt_interface = load_prompt_interface
         return unless prompt_interface
 
+        @interactive_warning_sink_active = true
+        ConfigFiles.warning_sink = interactive_warning_sink
         @prompt = prompt_interface.new(
           slash_commands: slash_command_entries,
           overlay_settings: ConfigFiles.overlay_settings,
@@ -48,6 +50,28 @@ module Kward
         else
           @prompt.start
         end
+        flush_interactive_warnings
+      end
+
+      def interactive_warning_sink
+        @interactive_warning_sink ||= lambda do |message|
+          unless @interactive_warning_sink_active
+            warn message
+            next
+          end
+
+          if prompt_interface?
+            runtime_output(message)
+          else
+            (@pending_interactive_warnings ||= []) << message
+          end
+        end
+      end
+
+      def flush_interactive_warnings
+        warnings = @pending_interactive_warnings
+        @pending_interactive_warnings = []
+        Array(warnings).each { |message| runtime_output(message) }
       end
 
       def load_prompt_interface
@@ -66,6 +90,18 @@ module Kward
 
       def prompt_interface?
         @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
+      end
+
+      def emit_warning(message)
+        sink = ConfigFiles.warning_sink
+        sink ? sink.call(message) : warn(message)
+      end
+
+      def clear_interactive_warning_sink
+        ConfigFiles.warning_sink = nil
+        @interactive_warning_sink_active = false
+        @pending_interactive_warnings = nil
+        @interactive_warning_sink = nil
       end
 
       def update_prompt_workspace_root(root)
@@ -179,7 +215,7 @@ module Kward
           context = plugin_context(current_footer_conversation, "")
           renderer.call(context).to_s
         rescue StandardError => e
-          warn "Warning: Kward plugin footer error: #{e.message}"
+          emit_warning "Warning: Kward plugin footer error: #{e.message}"
           ""
         end
       end

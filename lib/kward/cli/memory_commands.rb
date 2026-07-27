@@ -104,7 +104,7 @@ module Kward
       def prepare_memory_context(conversation, input)
         Memory::TurnContext.apply(conversation: conversation, input: input)
       rescue StandardError => e
-        warn "Memory retrieval failed: #{e.message}"
+        emit_warning "Memory retrieval failed: #{e.message}"
         nil
       end
 
@@ -120,7 +120,7 @@ module Kward
 
         summarize_memory(conversation, manager: manager)
       rescue StandardError => e
-        warn "Memory auto-summary failed: #{e.message}"
+        emit_warning "Memory auto-summary failed: #{e.message}"
         nil
       end
 

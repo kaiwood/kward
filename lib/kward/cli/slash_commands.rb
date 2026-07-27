@@ -345,7 +345,7 @@ module Kward
         percent = ((reserve_tokens.to_f / context_window.to_i) * 100).round(1)
         "Auto-compaction reserve: #{reserve_tokens} tokens (#{percent}% of #{context_window})"
       rescue StandardError => e
-        warn "Auto-compaction status unavailable: #{e.message}"
+        emit_warning "Auto-compaction status unavailable: #{e.message}"
         nil
       end
 

@@ -14,7 +14,7 @@ module Kward
     class Registry
       SkillSource = Struct.new(:root, :label, :scope, :precedence, keyword_init: true)
 
-      def initialize(config_dir:, workspace_root:, project_skills_trusted:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:)
+      def initialize(config_dir:, workspace_root:, project_skills_trusted:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:, warning_sink: nil)
         @config_dir = config_dir
         @workspace_root = workspace_root
         @project_skills_trusted = project_skills_trusted
@@ -22,6 +22,7 @@ module Kward
         @max_file_bytes = max_file_bytes
         @markdown_parser = markdown_parser
         @inside_directory = inside_directory
+        @warning_sink = warning_sink
       end
 
       # Returns discovered, validated skills in precedence order.
@@ -36,7 +37,7 @@ module Kward
             next unless skill
 
             if seen[skill.name]
-              warn "Warning: skipping duplicate Kward skill #{skill.name.inspect}: #{path}"
+              emit_warning "Warning: skipping duplicate Kward skill #{skill.name.inspect}: #{path}"
               next
             end
 
@@ -45,7 +46,7 @@ module Kward
           end
         end
       rescue StandardError => e
-        warn "Warning: skipping Kward skills: #{e.message}"
+        emit_warning "Warning: skipping Kward skills: #{e.message}"
         []
       end
 
@@ -99,13 +100,13 @@ module Kward
       def scan_source(source)
         return [] unless Dir.exist?(source.root)
         if source.scope == :project && !@project_skills_trusted
-          warn "Warning: skipping #{source.label} in #{source.root}: project skills are not trusted"
+          emit_warning "Warning: skipping #{source.label} in #{source.root}: project skills are not trusted"
           return []
         end
 
         Dir.glob(File.join(source.root, "*", "SKILL.md")).sort
       rescue StandardError => e
-        warn "Warning: skipping #{source.label} in #{source.root}: #{e.message}"
+        emit_warning "Warning: skipping #{source.label} in #{source.root}: #{e.message}"
         []
       end
 
@@ -151,12 +152,12 @@ module Kward
         return warn_skip(path, "missing description") if description.empty?
         return warn_skip(path, "description exceeds 1024 characters") if description.length > 1024
 
-        warn "Warning: Kward skill #{path}: name does not match parent directory" if name != File.basename(File.dirname(path))
-        warn "Warning: Kward skill #{path}: name exceeds 64 characters" if name.length > 64
-        warn "Warning: Kward skill #{path}: name contains invalid characters" unless valid_name?(name)
+        emit_warning "Warning: Kward skill #{path}: name does not match parent directory" if name != File.basename(File.dirname(path))
+        emit_warning "Warning: Kward skill #{path}: name exceeds 64 characters" if name.length > 64
+        emit_warning "Warning: Kward skill #{path}: name contains invalid characters" unless valid_name?(name)
 
         compatibility = optional_text(frontmatter["compatibility"])
-        warn "Warning: Kward skill #{path}: compatibility exceeds 500 characters" if compatibility && compatibility.length > 500
+        emit_warning "Warning: Kward skill #{path}: compatibility exceeds 500 characters" if compatibility && compatibility.length > 500
 
         @skill_class.new(
           name: name,
@@ -169,7 +170,7 @@ module Kward
           allowed_tools: optional_text(frontmatter["allowed-tools"])
         )
       rescue StandardError => e
-        warn "Warning: skipping Kward skill #{path}: #{e.message}"
+        emit_warning "Warning: skipping Kward skill #{path}: #{e.message}"
         nil
       end
 
@@ -183,8 +184,12 @@ module Kward
       end
 
       def warn_skip(path, reason)
-        warn "Warning: skipping Kward skill #{path}: #{reason}"
+        emit_warning "Warning: skipping Kward skill #{path}: #{reason}"
         nil
+      end
+
+      def emit_warning(message)
+        @warning_sink ? @warning_sink.call(message) : warn(message)
       end
     end
   end

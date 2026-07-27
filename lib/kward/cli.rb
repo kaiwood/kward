@@ -333,6 +333,7 @@ module Kward
       @prompt.edit_file(path, base_dir: Dir.pwd, allow_new: true)
     ensure
       @prompt.close if @prompt.respond_to?(:close) && prompt_interface?
+      clear_interactive_warning_sink if respond_to?(:clear_interactive_warning_sink, true)
     end
 
     def run_prompt_or_interactive
@@ -546,6 +547,7 @@ module Kward
         stop_tabs if respond_to?(:stop_tabs, true)
         @prompt.close if prompt_interface?
       ensure
+        clear_interactive_warning_sink if respond_to?(:clear_interactive_warning_sink, true)
         cleanup_unused_sessions
         remember_active_session(session_store)
       end

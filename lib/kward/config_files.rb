@@ -66,11 +66,20 @@ module Kward
     end
 
     @skip_config = false
+    @warning_sink = nil
 
     module_function
 
     def skip_config=(value)
       @skip_config = value
+    end
+
+    def warning_sink=(sink)
+      @warning_sink = sink
+    end
+
+    def warning_sink
+      @warning_sink
     end
 
     def skip_config?
@@ -791,13 +800,13 @@ module Kward
 
       size = File.size(path)
       if size > MAX_PROMPT_FILE_BYTES
-        warn "Warning: skipping #{label} #{path}: file too large (#{size} bytes; limit is #{MAX_PROMPT_FILE_BYTES} bytes)"
+        emit_warning "Warning: skipping #{label} #{path}: file too large (#{size} bytes; limit is #{MAX_PROMPT_FILE_BYTES} bytes)"
         return nil
       end
 
       File.read(path)
     rescue StandardError => e
-      warn "Warning: skipping #{label} #{path}: #{e.message}"
+      emit_warning "Warning: skipping #{label} #{path}: #{e.message}"
       nil
     end
 
@@ -908,8 +917,8 @@ module Kward
     # Lists configured skills discovered under the config directory.
     #
     # @return [Array<Skill>] skill metadata available to the model
-    def skills(workspace_root: Dir.pwd)
-      skills_registry(workspace_root: workspace_root).skills
+    def skills(workspace_root: Dir.pwd, warning_sink: nil)
+      skills_registry(workspace_root: workspace_root, warning_sink: warning_sink).skills
     end
 
     # @return [String] trusted user plugin directory
@@ -923,7 +932,7 @@ module Kward
     # workspace or custom `KWARD_CONFIG_PATH` directory.
     #
     # @return [Array<String>] sorted plugin file paths
-    def plugin_paths
+    def plugin_paths(warning_sink: nil)
       plugins_root = plugin_dir
       return [] unless Dir.exist?(plugins_root)
 
@@ -931,7 +940,7 @@ module Kward
       paths.concat(Dir.glob(File.join(plugins_root, "*", "plugin.rb")))
       paths.sort
     rescue StandardError => e
-      warn "Warning: skipping Kward plugins in #{plugins_root}: #{e.message}"
+      emit_warning("Warning: skipping Kward plugins in #{plugins_root}: #{e.message}", warning_sink: warning_sink)
       []
     end
 
@@ -952,7 +961,7 @@ module Kward
       skills_registry(workspace_root: workspace_root).read_skill_file(name, relative_path)
     end
 
-    def skills_registry(workspace_root: Dir.pwd)
+    def skills_registry(workspace_root: Dir.pwd, warning_sink: nil)
       Skills::Registry.new(
         config_dir: config_dir,
         workspace_root: workspace_root,
@@ -960,7 +969,8 @@ module Kward
         skill_class: Skill,
         max_file_bytes: MAX_SKILL_FILE_BYTES,
         markdown_parser: ->(path) { Frontmatter.markdown_parts(path, lenient: true) },
-        inside_directory: method(:inside_directory?)
+        inside_directory: method(:inside_directory?),
+        warning_sink: warning_sink || @warning_sink
       )
     end
 
@@ -968,8 +978,14 @@ module Kward
       Prompts::Templates.new(
         config_dir: config_dir,
         template_class: PromptTemplate,
-        markdown_parser: ->(path) { Frontmatter.markdown_parts(path) }
+        markdown_parser: ->(path) { Frontmatter.markdown_parts(path) },
+        warning_sink: @warning_sink
       )
+    end
+
+    def emit_warning(message, warning_sink: nil)
+      sink = warning_sink || @warning_sink
+      sink ? sink.call(message) : warn(message)
     end
 
     def inside_directory?(path, base)

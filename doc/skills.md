@@ -92,6 +92,8 @@ Or set it manually:
 }
 ```
 
+In the interactive TUI, skipped or malformed skill diagnostics are shown as synchronized `Runtime>` messages so they do not interrupt screen rendering. Other interactive warnings use the same channel; non-interactive commands continue to report diagnostics on stderr.
+
 ## How Kward uses skills
 
 Kward uses progressive loading:

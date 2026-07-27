@@ -313,16 +313,19 @@ module Kward
     class << self
       attr_accessor :loading_registry, :loading_path
 
-      def load(paths: ConfigFiles.plugin_paths, reserved_commands: [])
-        registry = new(reserved_commands: reserved_commands)
+      def load(paths: nil, reserved_commands: [], warning_sink: nil)
+        warning_sink ||= ConfigFiles.warning_sink
+        paths ||= ConfigFiles.plugin_paths(warning_sink: warning_sink)
+        registry = new(reserved_commands: reserved_commands, warning_sink: warning_sink)
         paths.each { |path| registry.load_file(path) }
         registry
       end
     end
 
     # Creates an object for trusted plugin loading and dispatch.
-    def initialize(reserved_commands: [])
+    def initialize(reserved_commands: [], warning_sink: nil)
       @reserved_commands = reserved_commands.map(&:to_s)
+      @warning_sink = warning_sink
       @commands = {}
       @interactive_commands = {}
       @tab_types = {}
@@ -419,7 +422,7 @@ module Kward
         rendered = entry[:renderer].call(context)
         parts << rendered.to_s unless rendered.to_s.empty?
       rescue StandardError => e
-        warn "Warning: Kward plugin prompt context error in #{entry[:path]}: #{e.message}"
+        emit_warning "Warning: Kward plugin prompt context error in #{entry[:path]}: #{e.message}"
       end
       parts.empty? ? nil : parts.join("\n\n")
     end
@@ -431,7 +434,7 @@ module Kward
       @transcript_event_handlers.each do |entry|
         entry[:handler].call(transcript_event, context)
       rescue StandardError => e
-        warn "Warning: Kward plugin transcript event error in #{entry[:path]}: #{e.message}"
+        emit_warning "Warning: Kward plugin transcript event error in #{entry[:path]}: #{e.message}"
       end
       nil
     end
@@ -444,7 +447,7 @@ module Kward
       Kernel.load(path, true)
       @paths << path
     rescue StandardError => e
-      warn "Warning: skipping Kward plugin #{path}: #{e.message}"
+      emit_warning "Warning: skipping Kward plugin #{path}: #{e.message}"
     ensure
       self.class.loading_registry = previous_registry
       self.class.loading_path = previous_path
@@ -462,11 +465,11 @@ module Kward
       raise "Plugin command /#{name} requires a handler" unless handler
 
       if @reserved_commands.include?(name)
-        warn "Warning: skipping Kward plugin command /#{name}: reserved command"
+        emit_warning "Warning: skipping Kward plugin command /#{name}: reserved command"
         return nil
       end
       if @commands.key?(name)
-        warn "Warning: skipping duplicate Kward plugin command /#{name}: #{path}"
+        emit_warning "Warning: skipping duplicate Kward plugin command /#{name}: #{path}"
         return nil
       end
 
@@ -485,11 +488,11 @@ module Kward
       raise "Interactive command /#{name} requires a handler" unless handler
 
       if @reserved_commands.include?(name) || @commands.key?(name)
-        warn "Warning: skipping Kward interactive command /#{name}: reserved command"
+        emit_warning "Warning: skipping Kward interactive command /#{name}: reserved command"
         return nil
       end
       if @interactive_commands.key?(name)
-        warn "Warning: skipping duplicate Kward interactive command /#{name}: #{path}"
+        emit_warning "Warning: skipping duplicate Kward interactive command /#{name}: #{path}"
         return nil
       end
 
@@ -512,7 +515,7 @@ module Kward
       raise "Plugin tab type #{name} requires a handler" unless handler
 
       if @tab_types.key?(name) || @tab_types_by_id.key?(id)
-        warn "Warning: skipping duplicate Kward plugin tab type #{id}: #{path}"
+        emit_warning "Warning: skipping duplicate Kward plugin tab type #{id}: #{path}"
         return nil
       end
 
@@ -529,7 +532,7 @@ module Kward
       raise "Plugin transport #{name} requires a handler" unless handler
 
       if @transports.key?(name) || @transports_by_id.key?(id)
-        warn "Warning: skipping duplicate Kward plugin transport #{id}: #{path}"
+        emit_warning "Warning: skipping duplicate Kward plugin transport #{id}: #{path}"
         return nil
       end
 
@@ -543,9 +546,13 @@ module Kward
     def register_footer(path: nil, &renderer)
       raise "Plugin footer requires a renderer" unless renderer
 
-      warn "Warning: replacing Kward plugin footer from #{@footer_path}: #{path}" if @footer
+      emit_warning "Warning: replacing Kward plugin footer from #{@footer_path}: #{path}" if @footer
       @footer = renderer
       @footer_path = path
+    end
+
+    def emit_warning(message)
+      @warning_sink ? @warning_sink.call(message) : warn(message)
     end
 
     def register_transcript_event(path: nil, &handler)

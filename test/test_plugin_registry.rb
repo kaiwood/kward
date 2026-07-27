@@ -96,6 +96,23 @@ class TestPluginRegistry < KwardTestCase
     assert_includes warnings, "duplicate Kward plugin command /demo"
   end
 
+  def test_warnings_use_the_configured_sink
+    warnings = []
+    registry = Kward::PluginRegistry.new(reserved_commands: ["status"], warning_sink: warnings.method(:<<))
+
+    _stdout, stderr = capture_io do
+      registry.evaluate do |plugin|
+        plugin.command("status") { |_args, _ctx| }
+        plugin.command("demo") { |_args, _ctx| }
+        plugin.command("demo") { |_args, _ctx| }
+      end
+    end
+
+    assert_empty stderr
+    assert_includes warnings, "Warning: skipping Kward plugin command /status: reserved command"
+    assert warnings.any? { |warning| warning.start_with?("Warning: skipping duplicate Kward plugin command /demo") }
+  end
+
   def test_registers_transport_with_normalized_capabilities
     registry = Kward::PluginRegistry.new
     handler = proc { |_host, _config| :transport }

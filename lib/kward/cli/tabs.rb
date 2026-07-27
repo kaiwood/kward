@@ -230,6 +230,7 @@ module Kward
           client: @client,
           tool_registry: tool_registry,
           conversation: conversation,
+          warning_sink: ConfigFiles.warning_sink,
           hook_manager: hook_manager,
           hook_context: hook_context
         )

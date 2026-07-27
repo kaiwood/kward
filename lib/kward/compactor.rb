@@ -734,9 +734,10 @@ module Kward
     AUTO_COMPACTION_EXTRA_GUARD_FLOOR = 12_000
 
     # Creates an object for conversation compaction.
-    def initialize(conversation:, client:, tool_result_summarizer: nil, settings: nil, summarizer: nil)
+    def initialize(conversation:, client:, tool_result_summarizer: nil, settings: nil, summarizer: nil, warning_sink: nil)
       @conversation = conversation
       @client = client
+      @warning_sink = warning_sink
       @settings = settings || Compaction::Settings.from_config
       @prompt_builder = Compaction::PromptBuilder.new(
         serializer: Compaction::ConversationSerializer.new(tool_result_summarizer: tool_result_summarizer)
@@ -791,7 +792,7 @@ module Kward
     rescue Compaction::NothingToCompact, Compaction::AlreadyCompacted
       nil
     rescue StandardError => e
-      warn "Auto-compaction failed: #{e.message}"
+      emit_warning "Auto-compaction failed: #{e.message}"
       nil
     end
 
@@ -813,6 +814,10 @@ module Kward
     end
 
     private
+
+    def emit_warning(message)
+      @warning_sink ? @warning_sink.call(message) : warn(message)
+    end
 
     def prepare
       @conversation.refresh_system_message_if_workspace_agents_changed!

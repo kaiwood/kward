@@ -28,11 +28,12 @@ module Kward
   # lowest layer that owns the behavior, and use `Agent` only for cross-step turn
   # coordination.
   class Agent
-    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: TelemetryLogger.new, hook_manager: nil, hook_context: nil)
+    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: nil, warning_sink: nil, hook_manager: nil, hook_context: nil)
       @client = client
       @tool_registry = tool_registry
       @conversation = conversation
-      @telemetry_logger = telemetry_logger
+      @warning_sink = warning_sink
+      @telemetry_logger = telemetry_logger || TelemetryLogger.new(warning_sink: warning_sink)
       @hook_manager = hook_manager
       @hook_context = hook_context
     end
@@ -191,9 +192,9 @@ module Kward
 
     def auto_compact_if_needed
       context_window = @client.current_context_window if @client.respond_to?(:current_context_window)
-      Compactor.new(conversation: @conversation, client: @client).auto_compact_if_needed(context_window: context_window)
+      Compactor.new(conversation: @conversation, client: @client, warning_sink: @warning_sink).auto_compact_if_needed(context_window: context_window)
     rescue StandardError => e
-      warn "Auto-compaction failed: #{e.message}"
+      emit_warning "Auto-compaction failed: #{e.message}"
       nil
     end
 
@@ -201,12 +202,16 @@ module Kward
       settings = Compaction::Settings.from_config
       return nil unless settings.enabled
 
-      Compactor.new(conversation: @conversation, client: @client, settings: settings).compact(
+      Compactor.new(conversation: @conversation, client: @client, settings: settings, warning_sink: @warning_sink).compact(
         custom_instructions: "The previous model request exceeded the context window. Preserve the current task state and critical details needed to retry."
       )
     rescue Compaction::NothingToCompact, Compaction::AlreadyCompacted, StandardError => compaction_error
-      warn "Context overflow recovery failed: #{compaction_error.message}; original error: #{error.message}"
+      emit_warning "Context overflow recovery failed: #{compaction_error.message}; original error: #{error.message}"
       nil
+    end
+
+    def emit_warning(message)
+      @warning_sink ? @warning_sink.call(message) : warn(message)
     end
 
     def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil)

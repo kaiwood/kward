@@ -36,6 +36,28 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class WarningPromptInterface < FakePrompt
+    def initialize(**_options)
+      super([])
+    end
+
+    def start
+      @started = true
+    end
+
+    def start_stream_block(*)
+    end
+
+    def write_delta(*)
+    end
+  end
+
+  class WarningPromptInterfaceCLI < Kward::CLI
+    def load_prompt_interface
+      WarningPromptInterface
+    end
+  end
+
   class CountingConversation < Kward::Conversation
     attr_reader :refresh_count
 
@@ -1541,6 +1563,31 @@ class TestCLI < KwardTestCase
       refute_includes output, "Ruby CLI Agent"
       refute_includes output, "Session:"
       refute_includes output, "Ask a question and press Enter"
+    end
+  end
+
+  def test_interactive_warnings_are_rendered_as_runtime_output
+    Dir.mktmpdir do |dir|
+      workspace = File.join(dir, "workspace")
+      config_path = File.join(dir, "config.json")
+      skill_dir = File.join(workspace, ".agents", "skills", "project-agent")
+      FileUtils.mkdir_p(skill_dir)
+      File.write(config_path, JSON.dump({}))
+      File.write(File.join(skill_dir, "SKILL.md"), "---\nname: project-agent\ndescription: Project skill.\n---\n")
+
+      cli = nil
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        Dir.chdir(workspace) do
+          cli = WarningPromptInterfaceCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TTY::Prompt.new)
+          _stdout, stderr = capture_io { cli.send(:setup_interactive_prompt) }
+          output = cli.instance_variable_get(:@prompt).output.join("\n")
+
+          assert_includes output, "Runtime> Warning: skipping project Agent Skills"
+          assert_empty stderr
+        end
+      end
+    ensure
+      cli&.send(:clear_interactive_warning_sink)
     end
   end
 

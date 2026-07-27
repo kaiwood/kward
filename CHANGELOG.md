@@ -2,6 +2,12 @@
 
 All notable changes to Kward will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Routed interactive configuration, plugin, skill, compaction, memory, and logging warnings through synchronized `Runtime>` output so diagnostics cannot corrupt the terminal layout.
+
 ## [0.80.0] - 2026-07-27
 
 ### Added

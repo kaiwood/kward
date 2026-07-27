@@ -4,10 +4,11 @@ module Kward
   module Prompts
     # Parsed prompt template loaded from disk.
     class Templates
-      def initialize(config_dir:, template_class:, markdown_parser:)
+      def initialize(config_dir:, template_class:, markdown_parser:, warning_sink: nil)
         @config_dir = config_dir
         @template_class = template_class
         @markdown_parser = markdown_parser
+        @warning_sink = warning_sink
       end
 
       def prompt_templates(reserved_commands: [])
@@ -21,11 +22,11 @@ module Kward
           next unless template
 
           if reserved.include?(template.command)
-            warn "Warning: skipping Kward prompt command /#{template.command}: reserved command"
+            emit_warning "Warning: skipping Kward prompt command /#{template.command}: reserved command"
             next
           end
           if seen[template.command]
-            warn "Warning: skipping duplicate Kward prompt command /#{template.command}: #{path}"
+            emit_warning "Warning: skipping duplicate Kward prompt command /#{template.command}: #{path}"
             next
           end
 
@@ -33,7 +34,7 @@ module Kward
           template
         end
       rescue StandardError => e
-        warn "Warning: skipping Kward prompt templates in #{prompts_root}: #{e.message}"
+        emit_warning "Warning: skipping Kward prompt templates in #{prompts_root}: #{e.message}"
         []
       end
 
@@ -42,7 +43,7 @@ module Kward
       def parse_prompt_template(path)
         command = File.basename(path, ".md")
         unless command.match?(/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/)
-          warn "Warning: skipping Kward prompt template #{path}: invalid command name"
+          emit_warning "Warning: skipping Kward prompt template #{path}: invalid command name"
           return nil
         end
 
@@ -55,8 +56,12 @@ module Kward
           path: path
         )
       rescue StandardError => e
-        warn "Warning: skipping Kward prompt template #{path}: #{e.message}"
+        emit_warning "Warning: skipping Kward prompt template #{path}: #{e.message}"
         nil
+      end
+
+      def emit_warning(message)
+        @warning_sink ? @warning_sink.call(message) : warn(message)
       end
     end
   end
