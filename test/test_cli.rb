@@ -1698,9 +1698,12 @@ class TestCLI < KwardTestCase
           prompt_output = cli.instance_variable_get(:@prompt).output
           assert_empty prompt_output
 
+          Kward::ConfigFiles.emit_warning("Warning: queued startup diagnostic")
+          assert_empty prompt_output
+
           cli.send(:enable_interactive_warnings)
           output = prompt_output.join("\n")
-          assert_includes output, "Runtime> Warning: skipping project Agent Skills"
+          assert_includes output, "Runtime> Warning: queued startup diagnostic"
           assert_empty stderr
         end
       end

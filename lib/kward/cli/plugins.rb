@@ -122,7 +122,7 @@ module Kward
             argument_hint: template.argument_hint
           }
         end
-        skill_entries = ConfigFiles.skills.map do |skill|
+        skill_entries = ConfigFiles.skills(workspace_root: current_workspace_root, project_skill_paths: @interactive_project_skill_paths || []).map do |skill|
           {
             name: "skill:#{skill.name}",
             description: skill.description,

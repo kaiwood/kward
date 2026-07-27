@@ -19,16 +19,16 @@ module Kward
 
         if ConfigFiles.project_skills_trusted?
           @interactive_project_skill_paths = candidates.map(&:path)
-          return
-        end
+        else
+          pending = coordinator.pending(candidates)
+          unless pending.empty?
+            decision = prompt_for_project_skill_trust(pending)
+            coordinator.record!(pending, decision)
+          end
 
-        pending = coordinator.pending(candidates)
-        unless pending.empty?
-          decision = prompt_for_project_skill_trust(pending)
-          coordinator.record!(pending, decision)
+          @interactive_project_skill_paths = coordinator.allowed_paths(candidates)
         end
-
-        @interactive_project_skill_paths = coordinator.allowed_paths(candidates)
+        @prompt.update_slash_commands(slash_command_entries) if @prompt.respond_to?(:update_slash_commands)
       end
 
       def prompt_for_project_skill_trust(candidates)
