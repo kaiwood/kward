@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added workspace-scoped, digest-aware project skill trust decisions with interactive Allow, Deny, and Review prompts plus `/skills` and `kward skills` management commands.
+
 ### Fixed
 
 - Deferred interactive warning output until startup transcript replay completes, keeping Runtime diagnostics visible instead of immediately overwriting them with the replayed transcript.

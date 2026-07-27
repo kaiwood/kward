@@ -95,13 +95,9 @@ A repository-level `AGENTS.md` is guidance for the model, not executable code. K
 
 ### Project skills
 
-Project skills under `.kward/skills/` and `.agents/skills/` are skipped by default. Enable them only after reviewing their `SKILL.md` instructions and supporting files:
+Project skills under `.kward/skills/` and `.agents/skills/` require an explicit trust decision. In the interactive TUI, Kward asks for `Allow`, `Deny`, or `Review` when a new or changed skill appears. Review shows bounded `SKILL.md` content and lists referenced resources without executing them. Decisions are stored per canonical workspace and skill digest in `~/.kward/trusted_project_skills.json`, so changes require another review.
 
-```text
-/settings → Tools & Search → Trust project skills
-```
-
-This setting trusts project skills generally; it is not a per-repository digest. A skill's `allowed-tools` metadata does not grant permissions or constrain tools in Kward.
+Use `/skills status`, `/skills trust`, `/skills untrust`, or the non-interactive `kward skills` command to manage the records. The legacy `skills.trust_project` setting remains a global override. A skill's `allowed-tools` metadata does not grant permissions or constrain tools in Kward.
 
 ### Workspace hooks
 

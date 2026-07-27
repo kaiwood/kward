@@ -81,7 +81,17 @@ long-polling adapter and setup instructions.
 
 ### Project skills
 
-Kward loads user-level skills but skips project-level skills by default. Enable them only for repositories you trust, either through `/settings` → Tools & Search → Trust project skills or with:
+Kward loads user-level skills automatically. Project-level skills require an explicit workspace trust decision. In the interactive TUI, Kward asks when a new or changed skill appears; use `/skills status`, `/skills trust`, `/skills untrust`, and `/new` to inspect, manage, and activate decisions.
+
+For non-interactive use:
+
+```bash
+kward --working-directory /path/to/project skills status
+kward --working-directory /path/to/project skills review
+kward --working-directory /path/to/project skills trust
+```
+
+Trust records are stored in `~/.kward/trusted_project_skills.json`. The legacy global override remains available:
 
 ```json
 {

@@ -70,19 +70,31 @@ Project-level skills live in the current workspace:
 
 The `.agents/skills` paths are the cross-client Agent Skills convention. Use them when you want skills to work across compatible agents.
 
-Project skills are skipped by default because repository-provided instructions may be untrusted. If you trust the repository, enable project skills from inside Kward:
+Project skills require an explicit trust decision because repository-provided instructions may be untrusted. In the interactive TUI, Kward asks when it finds a new or changed project skill:
 
 ```text
-/settings
+Allow / Deny / Review
 ```
 
-Then choose:
+`Review` displays the bounded `SKILL.md` contents and lists referenced resources without executing them. Trust decisions are scoped to the current workspace and skill snapshot. A changed skill or newly added skill requires another decision. Use `/new` after changing trust for the active agent to rebuild.
+
+You can inspect or manage the current workspace from the TUI:
 
 ```text
-Tools & Search → Trust project skills
+/skills status
+/skills trust
+/skills untrust
 ```
 
-Or set it manually:
+For non-interactive use, inspect or manage trust explicitly:
+
+```bash
+kward --working-directory /path/to/project skills status
+kward --working-directory /path/to/project skills review
+kward --working-directory /path/to/project skills trust
+```
+
+Trust records are stored in `~/.kward/trusted_project_skills.json`. The legacy global setting remains available:
 
 ```json
 {
