@@ -21,7 +21,7 @@ module Kward
         path = session_store.remembered_last_session_path if session_store.respond_to?(:remembered_last_session_path)
         return nil if path.to_s.empty?
 
-        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort, project_skill_paths: project_skill_paths_for(session_store.cwd) || [])
         reset_session_diff(@active_session.path)
         track_session(@active_session)
         @resumed_last_session = true
@@ -128,7 +128,7 @@ module Kward
 
       def load_session(session_store, path, message: nil)
         previous_session = @active_session
-        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        @active_session, conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort, project_skill_paths: project_skill_paths_for(session_store.cwd) || [])
         reset_session_diff(@active_session.path)
         track_session(@active_session)
         cleanup_replaced_session(previous_session)
@@ -397,7 +397,8 @@ module Kward
           workspace: configured_workspace(root: session_store.cwd),
           provider: current_model_provider,
           model: current_model_id,
-          reasoning_effort: current_reasoning_effort
+          reasoning_effort: current_reasoning_effort,
+          project_skill_paths: project_skill_paths_for(session_store.cwd) || []
         )
         reset_session_diff(@active_session.path)
         track_session(@active_session)
@@ -580,7 +581,7 @@ module Kward
       end
 
       def clone_session_file_from_path(session_store, path)
-        source_session, source_conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+        source_session, source_conversation = session_store.load(path, workspace: configured_workspace(root: session_store.cwd), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort, project_skill_paths: project_skill_paths_for(session_store.cwd) || [])
         clone, = session_store.create_independent_from_conversation(source_conversation, parent_session: source_session)
         clone.path
       end

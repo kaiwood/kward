@@ -297,7 +297,7 @@ module Kward
     # `workspace` is used both for the active root and to restore read-before-write
     # paths from successful read tool results. If a session moved workspaces, load
     # it through `session_location` first so the original cwd is respected.
-    def load(path, workspace: Workspace.new, provider: nil, model: nil, reasoning_effort: nil)
+    def load(path, workspace: Workspace.new, provider: nil, model: nil, reasoning_effort: nil, project_skill_paths: nil)
       resolved_path = resolve_session_path(path)
       records = records_from_file(resolved_path)
       header = session_header(records, resolved_path)
@@ -317,7 +317,8 @@ module Kward
         model: runtime["model"] || model,
         reasoning_effort: runtime["reasoningEffort"] || reasoning_effort,
         session_memories: memory_state["sessionMemories"],
-        last_memory_retrieval: memory_state["lastRetrieval"]
+        last_memory_retrieval: memory_state["lastRetrieval"],
+        project_skill_paths: project_skill_paths
       )
       restore_tool_output_artifacts(records, conversation)
       conversation.mark_last_entry_compaction! if latest_record_type(records) == "compaction"

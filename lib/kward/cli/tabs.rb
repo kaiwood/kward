@@ -194,7 +194,7 @@ module Kward
 
       def restore_tab_session(session_store, path, workspace_root: session_store.cwd, strict: false)
         if File.file?(path)
-          session, conversation = session_store.load(path, workspace: configured_workspace(root: workspace_root, strict: strict), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort)
+          session, conversation = session_store.load(path, workspace: configured_workspace(root: workspace_root, strict: strict), provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort, project_skill_paths: project_skill_paths_for(workspace_root) || [])
           return [track_session(session), conversation]
         end
 
@@ -215,9 +215,11 @@ module Kward
         git_committer = if strict
                           ->(message:, paths:) { git_commit_for_agent(workspace.root.to_s, message: message, paths: paths) }
                         end
+        project_skill_paths = project_skill_paths_for(conversation.workspace_root) || []
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: prompt,
+          skills: ConfigFiles.skills(workspace_root: conversation.workspace_root, project_skill_paths: project_skill_paths),
           tool_approval: tab_tool_approval_callback(prompt),
           hook_manager: hook_manager,
           hook_context: hook_context,
