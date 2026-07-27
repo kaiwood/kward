@@ -6,6 +6,11 @@ module Kward
       def handle_project_skills_cli_command(arguments)
         argument = Array(arguments).join(" ").strip.downcase
         _workspace_root, candidates, coordinator = project_skill_trust_coordinator
+        if candidates.empty? && argument != "untrust"
+          @prompt.say("No project skills found in the current workspace.")
+          return
+        end
+
         case argument
         when "", "status"
           lines = candidates.empty? ? ["No project skills found in the current workspace."] : candidates.map { |candidate| "#{relative_workspace_path(candidate.path)}: #{coordinator.decision(candidate) || "needs review"}" }
