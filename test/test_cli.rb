@@ -1583,6 +1583,8 @@ class TestCLI < KwardTestCase
       File.write(File.join(config_dir, "config.json"), JSON.dump({}))
       File.write(skill_path, "---\nname: project-agent\ndescription: Project workspace skill.\n---\n")
       prompt = FakeSettingsPrompt.new([], ["Allow"])
+      slash_command_updates = []
+      prompt.define_singleton_method(:update_slash_commands) { |commands| slash_command_updates << commands }
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt)
       cli.define_singleton_method(:prompt_interface?) { true }
       cli.define_singleton_method(:current_workspace_root) { workspace }
@@ -1591,6 +1593,7 @@ class TestCLI < KwardTestCase
         cli.send(:prepare_interactive_project_skills)
         conversation = cli.send(:new_conversation, workspace_root: workspace)
 
+        assert_empty slash_command_updates
         assert_equal [skill_path], cli.instance_variable_get(:@interactive_project_skill_paths)
         assert_includes conversation.system_message[:content], "project-agent: Project workspace skill."
         assert_equal "allow", Kward::Skills::TrustStore.new(config_dir: config_dir).decision(

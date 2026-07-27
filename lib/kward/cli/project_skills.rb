@@ -28,7 +28,6 @@ module Kward
 
           @interactive_project_skill_paths = coordinator.allowed_paths(candidates)
         end
-        @prompt.update_slash_commands(slash_command_entries) if @prompt.respond_to?(:update_slash_commands)
       end
 
       def prompt_for_project_skill_trust(candidates)
