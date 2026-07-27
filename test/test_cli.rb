@@ -1579,9 +1579,12 @@ class TestCLI < KwardTestCase
       with_env("KWARD_CONFIG_PATH" => config_path) do
         Dir.chdir(workspace) do
           cli = WarningPromptInterfaceCLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TTY::Prompt.new)
-          _stdout, stderr = capture_io { cli.send(:setup_interactive_prompt) }
-          output = cli.instance_variable_get(:@prompt).output.join("\n")
+          _stdout, stderr = capture_io { cli.send(:setup_interactive_prompt, defer_warnings: true) }
+          prompt_output = cli.instance_variable_get(:@prompt).output
+          assert_empty prompt_output
 
+          cli.send(:enable_interactive_warnings)
+          output = prompt_output.join("\n")
           assert_includes output, "Runtime> Warning: skipping project Agent Skills"
           assert_empty stderr
         end

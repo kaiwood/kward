@@ -8,7 +8,7 @@ module Kward
     module PromptInterfaceSupport
       private
 
-      def setup_interactive_prompt
+      def setup_interactive_prompt(defer_warnings: false)
         return unless @stdin.tty?
         return unless @prompt.is_a?(TTY::Prompt)
 
@@ -16,6 +16,7 @@ module Kward
         return unless prompt_interface
 
         @interactive_warning_sink_active = true
+        @interactive_warning_output_ready = !defer_warnings
         ConfigFiles.warning_sink = interactive_warning_sink
         @prompt = prompt_interface.new(
           slash_commands: slash_command_entries,
@@ -50,6 +51,11 @@ module Kward
         else
           @prompt.start
         end
+        flush_interactive_warnings if @interactive_warning_output_ready
+      end
+
+      def enable_interactive_warnings
+        @interactive_warning_output_ready = true
         flush_interactive_warnings
       end
 
@@ -60,7 +66,7 @@ module Kward
             next
           end
 
-          if prompt_interface?
+          if @interactive_warning_output_ready && prompt_interface?
             runtime_output(message)
           else
             (@pending_interactive_warnings ||= []) << message
@@ -100,6 +106,7 @@ module Kward
       def clear_interactive_warning_sink
         ConfigFiles.warning_sink = nil
         @interactive_warning_sink_active = false
+        @interactive_warning_output_ready = false
         @pending_interactive_warnings = nil
         @interactive_warning_sink = nil
       end

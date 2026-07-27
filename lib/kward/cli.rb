@@ -430,7 +430,7 @@ module Kward
     end
 
     def interactive_loop(agent: nil)
-      setup_interactive_prompt
+      setup_interactive_prompt(defer_warnings: true)
       session_store = interactive_session_store(agent)
       @resumed_last_session = false
       if session_store && @prompt.respond_to?(:update_tabs)
@@ -450,6 +450,7 @@ module Kward
 
       print_visual_banner unless @resumed_last_session || @restored_tabs
       render_resumed_last_session_transcript(agent.conversation) if @resumed_last_session
+      enable_interactive_warnings if respond_to?(:enable_interactive_warnings, true)
 
       @pending_inputs = []
 

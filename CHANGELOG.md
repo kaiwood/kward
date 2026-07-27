@@ -2,6 +2,12 @@
 
 All notable changes to Kward will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Deferred interactive warning output until startup transcript replay completes, keeping Runtime diagnostics visible instead of immediately overwriting them with the replayed transcript.
+
 ## [0.80.1] - 2026-07-27
 
 ### Fixed
