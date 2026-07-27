@@ -1595,6 +1595,33 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_project_skill_review_shows_bounded_skill_content_before_allowing
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      skill_dir = File.join(workspace, ".agents", "skills", "project-agent")
+      skill_path = File.join(skill_dir, "SKILL.md")
+      FileUtils.mkdir_p(File.join(skill_dir, "references"))
+      FileUtils.mkdir_p(config_dir)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      File.write(skill_path, "---\nname: project-agent\ndescription: Project workspace skill.\n---\nReview this instruction.\n")
+      File.write(File.join(skill_dir, "references", "notes.md"), "Supporting notes.\n")
+      prompt = FakeSettingsPrompt.new([], ["Review", "Allow"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt)
+      cli.define_singleton_method(:prompt_interface?) { true }
+      cli.define_singleton_method(:current_workspace_root) { workspace }
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        cli.send(:prepare_interactive_project_skills)
+
+        assert_equal [skill_path], cli.instance_variable_get(:@interactive_project_skill_paths)
+        output = prompt.output.join("\n")
+        assert_includes output, "Review this instruction."
+        assert_includes output, "references/notes.md"
+      end
+    end
+  end
+
   def test_interactive_warnings_are_rendered_as_runtime_output
     Dir.mktmpdir do |dir|
       workspace = File.join(dir, "workspace")

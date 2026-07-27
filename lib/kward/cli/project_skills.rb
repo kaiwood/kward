@@ -34,8 +34,49 @@ module Kward
       def prompt_for_project_skill_trust(candidates)
         paths = candidates.map { |candidate| "  #{relative_workspace_path(candidate.path)}" }
         message = (["Project skills found in #{current_workspace_root}:", *paths, "", "These files contain instructions that may influence the model."]).join("\n")
-        choice = @prompt.select(message, ["Allow", "Deny"], title: "Trust project skills")
-        choice.to_s.downcase == "allow" ? "allow" : "deny"
+        loop do
+          choice = @prompt.select(message, ["Allow", "Deny", "Review"], title: "Trust project skills")
+          case choice.to_s.downcase
+          when "review"
+            review_project_skills(candidates)
+          when "allow"
+            return "allow"
+          else
+            return "deny"
+          end
+        end
+      end
+
+      def review_project_skills(candidates)
+        candidates.each do |candidate|
+          content = read_project_skill_for_review(candidate.path)
+          resources = project_skill_resources(candidate.path)
+          details = [
+            "Project skill: #{relative_workspace_path(candidate.path)}",
+            resources.empty? ? nil : "Referenced resources:\n#{resources.map { |path| "  #{path}" }.join("\n")}",
+            "",
+            content
+          ].compact.join("\n")
+          @prompt.say("\n#{ANSI.strip(details)}\n")
+        end
+      end
+
+      def read_project_skill_for_review(path)
+        return "Unable to review: file is too large." if File.size(path) > ConfigFiles::MAX_SKILL_FILE_BYTES
+
+        ANSI.strip(File.read(path, ConfigFiles::MAX_SKILL_FILE_BYTES + 1))
+      rescue StandardError => e
+        "Unable to review: #{e.message}"
+      end
+
+      def project_skill_resources(path)
+        folder = File.dirname(path)
+        roots = %w[scripts references assets].map { |name| File.join(folder, name) }.select { |root| Dir.exist?(root) }
+        roots.flat_map { |root| Dir.glob(File.join(root, "**", "*")).select { |entry| File.file?(entry) } }.sort.first(200).map do |resource|
+          Pathname.new(resource).relative_path_from(Pathname.new(folder)).to_s
+        end
+      rescue StandardError
+        []
       end
 
       def project_skill_paths_for(workspace_root)
