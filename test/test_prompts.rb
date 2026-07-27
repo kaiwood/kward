@@ -606,6 +606,31 @@ class TestPrompts < KwardTestCase
     FileUtils.rm_rf(File.join(KWARD_TEST_HOME, ".agents", "skills", "user-agent"))
   end
 
+  def test_project_skill_candidates_are_discovered_without_activation
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(config_dir)
+      skill_path = File.join(workspace, ".agents", "skills", "project-agent", "SKILL.md")
+      FileUtils.mkdir_p(File.dirname(skill_path))
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      File.write(skill_path, "---\nname: project-agent\ndescription: Project workspace skill.\n---\n")
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        warnings = []
+        candidates = Kward::ConfigFiles.project_skill_candidates(workspace_root: workspace, warning_sink: warnings.method(:<<))
+
+        assert_equal [skill_path], candidates.map(&:path)
+        assert_equal Kward::Skills::TrustStore.digest_files([skill_path], root: workspace), candidates.first.digest
+        assert_empty warnings
+
+        skills = Kward::ConfigFiles.skills(workspace_root: workspace, project_skill_paths: [skill_path], warning_sink: warnings.method(:<<))
+        assert_equal ["project-agent"], skills.map(&:name)
+        assert_empty warnings
+      end
+    end
+  end
+
   def test_project_skills_are_skipped_until_trusted
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

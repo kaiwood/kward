@@ -917,8 +917,12 @@ module Kward
     # Lists configured skills discovered under the config directory.
     #
     # @return [Array<Skill>] skill metadata available to the model
-    def skills(workspace_root: Dir.pwd, warning_sink: nil)
-      skills_registry(workspace_root: workspace_root, warning_sink: warning_sink).skills
+    def skills(workspace_root: Dir.pwd, warning_sink: nil, project_skill_paths: nil)
+      skills_registry(workspace_root: workspace_root, warning_sink: warning_sink, project_skill_paths: project_skill_paths).skills
+    end
+
+    def project_skill_candidates(workspace_root: Dir.pwd, warning_sink: nil)
+      skills_registry(workspace_root: workspace_root, warning_sink: warning_sink).project_skill_candidates
     end
 
     # @return [String] trusted user plugin directory
@@ -961,7 +965,7 @@ module Kward
       skills_registry(workspace_root: workspace_root).read_skill_file(name, relative_path)
     end
 
-    def skills_registry(workspace_root: Dir.pwd, warning_sink: nil)
+    def skills_registry(workspace_root: Dir.pwd, warning_sink: nil, project_skill_paths: nil)
       Skills::Registry.new(
         config_dir: config_dir,
         workspace_root: workspace_root,
@@ -970,7 +974,8 @@ module Kward
         max_file_bytes: MAX_SKILL_FILE_BYTES,
         markdown_parser: ->(path) { Frontmatter.markdown_parts(path, lenient: true) },
         inside_directory: method(:inside_directory?),
-        warning_sink: warning_sink || @warning_sink
+        warning_sink: warning_sink || @warning_sink,
+        project_skill_paths: project_skill_paths
       )
     end
 

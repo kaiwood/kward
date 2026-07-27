@@ -1,4 +1,5 @@
 require "pathname"
+require_relative "trust_store"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -13,8 +14,9 @@ module Kward
     # @api public
     class Registry
       SkillSource = Struct.new(:root, :label, :scope, :precedence, keyword_init: true)
+      SkillCandidate = Struct.new(:path, :root, :label, :scope, :digest, keyword_init: true)
 
-      def initialize(config_dir:, workspace_root:, project_skills_trusted:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:, warning_sink: nil)
+      def initialize(config_dir:, workspace_root:, project_skills_trusted:, skill_class:, max_file_bytes:, markdown_parser:, inside_directory:, warning_sink: nil, project_skill_paths: nil)
         @config_dir = config_dir
         @workspace_root = workspace_root
         @project_skills_trusted = project_skills_trusted
@@ -23,6 +25,28 @@ module Kward
         @markdown_parser = markdown_parser
         @inside_directory = inside_directory
         @warning_sink = warning_sink
+        @project_skill_paths = project_skill_paths&.map { |path| File.expand_path(path) }
+      end
+
+      # Returns project skill files without activating their instructions.
+      #
+      # @return [Array<SkillCandidate>]
+      # @api public
+      def project_skill_candidates
+        skill_sources.select { |source| source.scope == :project }.flat_map do |source|
+          discover_source(source).filter_map do |path|
+            SkillCandidate.new(
+              path: path,
+              root: source.root,
+              label: source.label,
+              scope: source.scope,
+              digest: skill_digest(path)
+            )
+          rescue StandardError => e
+            emit_warning "Warning: skipping Kward skill #{path}: #{e.message}"
+            nil
+          end
+        end
       end
 
       # Returns discovered, validated skills in precedence order.
@@ -99,15 +123,31 @@ module Kward
 
       def scan_source(source)
         return [] unless Dir.exist?(source.root)
-        if source.scope == :project && !@project_skills_trusted
+        if source.scope == :project && @project_skill_paths.nil? && !@project_skills_trusted
           emit_warning "Warning: skipping #{source.label} in #{source.root}: project skills are not trusted"
           return []
         end
 
+        paths = discover_source(source)
+        return paths unless source.scope == :project && @project_skill_paths
+
+        paths.select { |path| @project_skill_paths.include?(File.expand_path(path)) }
+      end
+
+      def discover_source(source)
         Dir.glob(File.join(source.root, "*", "SKILL.md")).sort
       rescue StandardError => e
         emit_warning "Warning: skipping #{source.label} in #{source.root}: #{e.message}"
         []
+      end
+
+      def skill_digest(path)
+        TrustStore.digest_files(skill_files(path), root: @workspace_root)
+      end
+
+      def skill_files(path)
+        folder = File.dirname(path)
+        [path] + skill_resources(folder).map { |resource| File.join(folder, resource) }
       end
 
       def skill_content(skill, content)
