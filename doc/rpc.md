@@ -76,6 +76,7 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
 - `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
 - `skillCapture`: capture a reviewed personal `SKILL.md` from any saved session’s active branch through `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`.
+- `projectSkillTrust`: explicitly unsupported over RPC. RPC clients cannot answer the interactive Allow/Deny/Review decision, so project skills remain skipped unless the global `skills.trust_project` override is enabled.
 - `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. It does not support MCP resources, prompts, sampling, or Streamable HTTP.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
 - `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.

@@ -579,6 +579,7 @@ module Kward
           stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: [] },
           commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
           skillCapture: { supported: true, methods: SKILL_CAPTURE_METHODS, destination: "personal", source: "savedSessionActiveLeaf", reviewRequired: true, overwrite: "explicit", autoActivate: false },
+          projectSkillTrust: { supported: false, trustRequired: true, reason: "RPC has no interactive trust decision bridge; project skills remain skipped unless globally enabled." },
           mcp: {
             supported: true,
             transport: "stdio",
