@@ -216,6 +216,25 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     end
   end
 
+  def test_python_does_not_use_c_style_block_comment_state
+    prompt = syntax_prompt(path: "main.py", content: "value = 1 /* not a Python block comment\nreturn value")
+
+    rendered = prompt.send(:editor_render_line, "return value", 1, 80)
+
+    refute_includes rendered, "\e[90m"
+    assert_includes rendered, "\e[34mreturn\e[0m"
+  end
+
+  def test_generic_c_style_block_comment_state_is_cached_and_preserved
+    prompt = syntax_prompt(path: "main.c", content: "/* start\nreturn value;\n*/\nreturn value;")
+
+    first = prompt.send(:editor_render_line, "return value;", 1, 80)
+    second = prompt.send(:editor_render_line, "return value;", 3, 80)
+
+    assert_equal "\e[90mreturn value;\e[0m", first
+    assert_includes second, "\e[34mreturn\e[0m"
+  end
+
   def test_selection_overlays_syntax_highlighting
     prompt = syntax_prompt(path: "example.rb", content: "x def call")
     state = prompt.instance_variable_get(:@editor_state)

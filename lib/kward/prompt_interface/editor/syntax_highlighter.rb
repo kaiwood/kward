@@ -23,10 +23,12 @@ module Kward
       LANGUAGE_DEFINITIONS = {
         javascript: {
           extensions: %w[.js .jsx .mjs .cjs],
+          block_comment: true,
           keywords: %w[async await break case catch class const continue debugger default delete do else export extends false finally for from function if import in instanceof let new null of return static super switch this throw true try typeof undefined var void while with yield]
         },
         typescript: {
           extensions: %w[.ts .tsx],
+          block_comment: true,
           keywords: %w[abstract any as async await boolean break case catch class const constructor continue debugger declare default delete do else enum export extends false finally for from function if implements import in infer instanceof interface is keyof let module namespace never new null number object of private protected public readonly return static string super switch symbol this throw true try type typeof undefined unknown var void while with yield]
         },
         shell: {
@@ -62,34 +64,42 @@ module Kward
         },
         go: {
           extensions: %w[.go],
+          block_comment: true,
           keywords: %w[break case chan const continue default defer else fallthrough false for func go goto if import interface map nil package range return select struct switch true type var]
         },
         rust: {
           extensions: %w[.rs],
+          block_comment: true,
           keywords: %w[as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while]
         },
         java: {
           extensions: %w[.java],
+          block_comment: true,
           keywords: %w[abstract assert boolean break byte case catch char class const continue default do double else enum extends false final finally float for if implements import instanceof int interface long native new null package private protected public return short static strictfp super switch synchronized this throw throws transient true try void volatile while]
         },
         csharp: {
           extensions: %w[.cs],
+          block_comment: true,
           keywords: %w[abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual void volatile while var async await]
         },
         c: {
           extensions: %w[.c .h],
+          block_comment: true,
           keywords: %w[auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while]
         },
         cpp: {
           extensions: %w[.cc .cpp .cxx .hpp .hh .hxx],
+          block_comment: true,
           keywords: %w[alignas alignof and asm auto bool break case catch char char16_t char32_t class const constexpr const_cast continue decltype default delete do double dynamic_cast else enum explicit export extern false float for friend goto if inline int long mutable namespace new noexcept nullptr operator or private protected public register reinterpret_cast return short signed sizeof static static_assert static_cast struct switch template this throw true try typedef typeid typename union unsigned using virtual void volatile wchar_t while]
         },
         swift: {
           extensions: %w[.swift],
+          block_comment: true,
           keywords: %w[as associatedtype break case catch class continue default defer deinit do else enum extension false fileprivate for func guard if import in init inout internal is let nil open operator private protocol public repeat rethrows return self Self static struct subscript super switch throw throws true try typealias var where while]
         },
         kotlin: {
           extensions: %w[.kt .kts],
+          block_comment: true,
           keywords: %w[as break class continue do else false for fun if in interface is null object package return super this throw true try typealias typeof val var when while by catch constructor delegate dynamic field file finally get import init param property receiver set setparam where actual abstract annotation companion const crossinline data enum expect external final infix inline inner internal lateinit noinline open operator out override private protected public reified sealed suspend tailrec vararg]
         },
         lua: {
@@ -296,8 +306,7 @@ module Kward
         return line.to_s unless definition
 
         text = line.to_s
-        return colored(text, :gray) if editor_c_style_block_comment_line?(line_index)
-
+        return colored(text, :gray) if definition[:block_comment] && editor_c_style_block_comment_line?(line_index)
         marker = definition[:line_comment] || "//"
         comment_index = editor_comment_index(text, marker)
         return editor_highlight_generic_code(text, definition[:keywords]) unless comment_index
@@ -313,7 +322,8 @@ module Kward
       end
 
       def editor_generic_pattern(keywords)
-        /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Z]\w*\b|\b(?:#{Regexp.union(keywords)})\b)/
+        @editor_generic_patterns ||= {}
+        @editor_generic_patterns[keywords] ||= /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Z]\w*\b|\b(?:#{Regexp.union(keywords)})\b)/
       end
 
       def editor_highlight_generic_token(token, keywords)
@@ -333,16 +343,31 @@ module Kward
       def editor_c_style_block_comment_line?(line_index)
         return false unless line_index && @editor_state
 
-        in_comment = false
-        @editor_state.lines.first(line_index.to_i + 1).each_with_index do |line, index|
-          starts_block = editor_comment_index(line, "/*")
-          ends_block = in_comment && line.include?("*/")
-          return true if index == line_index && (in_comment || starts_block)
-
-          in_comment = true if starts_block && !line[starts_block..].to_s.include?("*/")
-          in_comment = false if ends_block
+        lines = @editor_state.lines
+        unless @editor_block_comment_lines.equal?(lines)
+          @editor_block_comment_lines = lines
+          @editor_block_comment_states = []
+          @editor_block_comment_in_comment = false
         end
-        false
+
+        target = line_index.to_i
+        return false if target.negative?
+        return @editor_block_comment_states[target] if target < @editor_block_comment_states.length
+
+        (@editor_block_comment_states.length..target).each do |index|
+          line = lines[index].to_s
+          starts_block = editor_comment_index(line, "/*")
+          ends_block = @editor_block_comment_in_comment && line.include?("*/")
+          @editor_block_comment_states << (@editor_block_comment_in_comment || !starts_block.nil?)
+
+          if starts_block && !line[starts_block..].to_s.include?("*/")
+            @editor_block_comment_in_comment = true
+          elsif ends_block
+            @editor_block_comment_in_comment = false
+          end
+        end
+
+        @editor_block_comment_states[target]
       end
 
       def editor_comment_index(line, marker)
