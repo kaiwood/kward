@@ -1566,6 +1566,35 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_project_skill_trust_is_resolved_before_building_the_conversation
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      skill_path = File.join(workspace, ".agents", "skills", "project-agent", "SKILL.md")
+      FileUtils.mkdir_p(File.dirname(skill_path))
+      FileUtils.mkdir_p(config_dir)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      File.write(skill_path, "---\nname: project-agent\ndescription: Project workspace skill.\n---\n")
+      prompt = FakeSettingsPrompt.new([], ["Allow"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt)
+      cli.define_singleton_method(:prompt_interface?) { true }
+      cli.define_singleton_method(:current_workspace_root) { workspace }
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        cli.send(:prepare_interactive_project_skills)
+        conversation = cli.send(:new_conversation, workspace_root: workspace)
+
+        assert_equal [skill_path], cli.instance_variable_get(:@interactive_project_skill_paths)
+        assert_includes conversation.system_message[:content], "project-agent: Project workspace skill."
+        assert_equal "allow", Kward::Skills::TrustStore.new(config_dir: config_dir).decision(
+          workspace_root: workspace,
+          skill_path: skill_path,
+          digest: Kward::Skills::TrustStore.digest_files([skill_path], root: workspace)
+        )
+      end
+    end
+  end
+
   def test_interactive_warnings_are_rendered_as_runtime_output
     Dir.mktmpdir do |dir|
       workspace = File.join(dir, "workspace")

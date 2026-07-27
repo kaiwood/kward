@@ -22,22 +22,22 @@ module Kward
     # @param plugin_context [String, nil] trusted plugin-provided instructions
     # @return [Hash] role/content system message
     # @api public
-    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil)
+    def system_message(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil, project_skill_paths: nil)
       {
         role: "system",
-        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context, execution_profile_context: execution_profile_context).compact.join("\n\n")
+        content: prompt_parts(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context, execution_profile_context: execution_profile_context, project_skill_paths: project_skill_paths).compact.join("\n\n")
       }
     end
 
-    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil)
-      prompt_sections(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context, execution_profile_context: execution_profile_context).map { |section| section[:content] }
+    def prompt_parts(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil, project_skill_paths: nil)
+      prompt_sections(workspace_root: workspace_root, include_workspace_personality: include_workspace_personality, model: model, reasoning_effort: reasoning_effort, now: now, memory_context: memory_context, plugin_context: plugin_context, execution_profile_context: execution_profile_context, project_skill_paths: project_skill_paths).map { |section| section[:content] }
     end
 
     # Returns labeled prompt sections for inspection by CLI and RPC frontends.
     #
     # @return [Array<Hash>] section hashes with label, content, and optional source
     # @api public
-    def prompt_sections(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil)
+    def prompt_sections(workspace_root: Dir.pwd, include_workspace_personality: true, model: nil, reasoning_effort: nil, now: Time.now, memory_context: nil, plugin_context: nil, execution_profile_context: nil, project_skill_paths: nil)
       return replacement_prompt_sections if ConfigFiles.replacement_system_prompt?
 
       sections = [prompt_section("Built-in system prompt", base_prompt)]
@@ -48,7 +48,7 @@ module Kward
         sections << prompt_section("Persona", persona_prompt(workspace_root, model: model, reasoning_effort: reasoning_effort, now: now))
         sections << prompt_section("Plugin context", plugin_context) unless plugin_context.to_s.empty?
       end
-      skills = ConfigFiles.skills(workspace_root: workspace_root)
+      skills = ConfigFiles.skills(workspace_root: workspace_root, project_skill_paths: project_skill_paths)
       sections << prompt_section("Configured skills", skills_prompt(skills), source: skills.empty? ? nil : File.join(ConfigFiles.config_dir, "skills"))
       sections << prompt_section(workspace_agents_context_label(workspace_root), workspace_agents_context(workspace_root), source: ConfigFiles.workspace_agents_file?(workspace_root) ? ConfigFiles.workspace_agents_path(workspace_root) : nil)
       sections.compact

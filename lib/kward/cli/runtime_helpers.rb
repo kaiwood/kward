@@ -7,7 +7,14 @@ module Kward
       private
 
       def new_conversation(workspace_root: current_workspace_root)
-        Conversation.new(workspace_root: workspace_root, provider: current_model_provider, model: current_model_id, reasoning_effort: current_reasoning_effort, plugin_registry: plugin_registry)
+        Conversation.new(
+          workspace_root: workspace_root,
+          provider: current_model_provider,
+          model: current_model_id,
+          reasoning_effort: current_reasoning_effort,
+          plugin_registry: plugin_registry,
+          project_skill_paths: project_skill_paths_for(workspace_root)
+        )
       end
 
       def update_assistant_prompt(conversation)
@@ -50,6 +57,7 @@ module Kward
         tool_registry = ToolRegistry.new(
           workspace: workspace,
           prompt: @prompt,
+          skills: ConfigFiles.skills(workspace_root: conversation.workspace_root, project_skill_paths: project_skill_paths_for(conversation.workspace_root)),
           tool_approval: interactive_tool_approval_callback,
           hook_manager: hook_manager,
           hook_context: hook_context

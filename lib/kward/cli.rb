@@ -59,6 +59,7 @@ require_relative "cli/sysprompt"
 require_relative "cli/stats"
 require_relative "cli/openrouter_commands"
 require_relative "cli/runtime_helpers"
+require_relative "cli/project_skills"
 require_relative "cli/slash_commands"
 require_relative "cli/memory_commands"
 require_relative "cli/hook_commands"
@@ -94,6 +95,7 @@ module Kward
     include CLI::Stats
     include CLI::OpenRouterCommands
     include CLI::RuntimeHelpers
+    include CLI::ProjectSkills
     include CLI::SlashCommands
     include CLI::MemoryCommands
     include CLI::HookCommands
@@ -431,6 +433,7 @@ module Kward
 
     def interactive_loop(agent: nil)
       setup_interactive_prompt(defer_warnings: true)
+      prepare_interactive_project_skills
       session_store = interactive_session_store(agent)
       @resumed_last_session = false
       if session_store && @prompt.respond_to?(:update_tabs)

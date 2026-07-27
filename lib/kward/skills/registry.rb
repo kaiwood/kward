@@ -25,7 +25,11 @@ module Kward
         @markdown_parser = markdown_parser
         @inside_directory = inside_directory
         @warning_sink = warning_sink
-        @project_skill_paths = project_skill_paths&.map { |path| File.expand_path(path) }
+        @project_skill_paths = project_skill_paths&.map do |path|
+          File.realpath(path)
+        rescue SystemCallError
+          File.expand_path(path)
+        end
       end
 
       # Returns project skill files without activating their instructions.
