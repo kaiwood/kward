@@ -135,7 +135,13 @@ module Kward
         paths = discover_source(source)
         return paths unless source.scope == :project && @project_skill_paths
 
-        paths.select { |path| @project_skill_paths.include?(File.expand_path(path)) }
+        paths.select { |path| @project_skill_paths.include?(canonical_path(path)) }
+      end
+
+      def canonical_path(path)
+        File.realpath(path)
+      rescue SystemCallError
+        File.expand_path(path)
       end
 
       def discover_source(source)
