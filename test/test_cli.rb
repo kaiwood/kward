@@ -16,6 +16,13 @@ class TestCLI < KwardTestCase
     cli.define_singleton_method(:composer_git_branch_text) { nil }
   end
 
+  def create_project_skill(workspace, name)
+    path = File.join(workspace, ".agents", "skills", name, "SKILL.md")
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, "---\nname: #{name}\ndescription: #{name} project skill.\n---\n")
+    path
+  end
+
   class RecordingPromptInterface < FakePrompt
     attr_reader :options, :started
 
@@ -1591,6 +1598,29 @@ class TestCLI < KwardTestCase
           skill_path: skill_path,
           digest: Kward::Skills::TrustStore.digest_files([skill_path], root: workspace)
         )
+      end
+    end
+  end
+
+  def test_project_skill_trust_rechecks_new_skills
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      workspace = File.join(dir, "workspace")
+      FileUtils.mkdir_p(config_dir)
+      File.write(File.join(config_dir, "config.json"), JSON.dump({}))
+      first_path = create_project_skill(workspace, "first")
+      prompt = FakeSettingsPrompt.new([], ["Allow", "Allow"])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt)
+      cli.define_singleton_method(:prompt_interface?) { true }
+      cli.define_singleton_method(:current_workspace_root) { workspace }
+
+      with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+        cli.send(:prepare_interactive_project_skills)
+        second_path = create_project_skill(workspace, "second")
+        cli.send(:prepare_interactive_project_skills)
+
+        assert_equal [first_path, second_path], cli.instance_variable_get(:@interactive_project_skill_paths).sort
+        assert_equal 2, prompt.select_choices.length
       end
     end
   end

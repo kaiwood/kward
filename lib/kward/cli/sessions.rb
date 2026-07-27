@@ -99,6 +99,7 @@ module Kward
       def start_new_session(session_store)
         return say_sessions_unavailable unless session_store
 
+        prepare_interactive_project_skills if respond_to?(:prepare_interactive_project_skills, true)
         previous_session = @active_session
         @active_session = track_session(session_store.create)
         reset_session_diff
