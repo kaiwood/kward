@@ -43,6 +43,7 @@ class TestSkillsTrustStore < KwardTestCase
   def test_invalid_decisions_and_outside_workspace_skills_are_rejected
     Dir.mktmpdir("kward-skills") do |directory|
       workspace = File.join(directory, "workspace")
+      FileUtils.mkdir_p(workspace)
       outside_skill = File.join(directory, "outside", "SKILL.md")
       FileUtils.mkdir_p(File.dirname(outside_skill))
       File.write(outside_skill, "name: outside\n")
@@ -53,6 +54,9 @@ class TestSkillsTrustStore < KwardTestCase
       end
       assert_raises(ArgumentError) do
         store.set_decision!(workspace_root: workspace, skill_path: outside_skill, digest: "digest", decision: "maybe")
+      end
+      assert_raises(ArgumentError) do
+        Kward::Skills::TrustStore.digest_files([outside_skill], root: workspace)
       end
     end
   end

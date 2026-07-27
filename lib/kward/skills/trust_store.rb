@@ -60,6 +60,8 @@ module Kward
         root = File.realpath(root) if root
         digest = Digest::SHA256.new
         paths.map { |path| File.realpath(path) }.sort.each do |path|
+          raise ArgumentError, "file is outside digest root" if root && !PathGuard.inside?(path, root)
+
           relative_path = root ? Pathname.new(path).relative_path_from(Pathname.new(root)).to_s : path
           digest.update(relative_path)
           digest.update("\0")
