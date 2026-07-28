@@ -19,6 +19,31 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_completion_provider_cycles_candidates_without_transcript_output
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("a\t\t\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    calls = 0
+    provider = lambda do |value, cursor|
+      calls += 1
+      Kward::Ekwsh::Completion.new(
+        range: (cursor - value.length)...cursor,
+        replacement: value,
+        candidates: ["alpha", "alpine"]
+      )
+    end
+
+    result = prompt.with_completion_provider(provider) { prompt.ask("You>") }
+
+    assert_equal "alpine", result
+    assert_equal 1, calls
+    refute_includes strip_ansi(output.string), "completions:"
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_normalizes_csi_u_key_events
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
 

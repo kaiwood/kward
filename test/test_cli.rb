@@ -1113,6 +1113,34 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_bang_completion_cycles_workspace_paths_without_transcript_output
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "examples"))
+      FileUtils.mkdir_p(File.join(dir, "exe"))
+      input, writer = IO.pipe
+      writer.write("!cat ./ex\t\t\r")
+      writer.close
+      output = StringIO.new
+      prompt = Kward::PromptInterface.new(input: input, output: output)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("PATH" => "") do
+        cli.send(:install_bang_completion_provider, agent)
+        assert_equal "!cat ./exe/", prompt.ask("You>")
+      ensure
+        cli.send(:clear_bang_completion_provider)
+      end
+
+      refute_includes strip_ansi(output.string), "completions:"
+    ensure
+      prompt&.close
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_bang_completion_preserves_marker_and_offsets_command_range
     Dir.mktmpdir do |dir|
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)

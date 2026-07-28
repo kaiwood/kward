@@ -578,6 +578,11 @@ module Kward
       def handle_completion_provider_key(key)
         return false unless key == "\t" && @completion_provider
 
+        if (cycle = matching_completion_cycle)
+          cycle_completion(cycle)
+          return true
+        end
+
         result = @completion_provider.call(composer_input, composer_cursor)
         return false if result == false
         return true unless result
@@ -586,30 +591,50 @@ module Kward
         true
       end
 
+      def matching_completion_cycle
+        cycle = @completion_cycle
+        return nil unless cycle
+        return cycle if cycle[:input] == composer_input && cycle[:cursor] == composer_cursor
+
+        @completion_cycle = nil
+        nil
+      end
+
+      def cycle_completion(cycle)
+        cycle[:index] = (cycle[:index] + 1) % cycle[:candidates].length
+        apply_completion_cycle_candidate(cycle)
+      end
+
       def apply_completion_result(result)
         range = result[:range] || result["range"] || result.range
         replacement = result[:replacement] || result["replacement"] || result.replacement
-        candidates = result[:candidates] || result["candidates"] || result.candidates
+        candidates = (result[:candidates] || result["candidates"] || result.candidates).to_a
         original = composer_input
         before = original[0...range.begin].to_s
         after = original[range.end..].to_s
+
+        if candidates.length > 1
+          @completion_cycle = {
+            candidates: candidates.map(&:to_s),
+            index: 0,
+            before: before,
+            after: after
+          }
+          apply_completion_cycle_candidate(@completion_cycle)
+          return
+        end
+
+        @completion_cycle = nil
         self.composer_input = "#{before}#{replacement}#{after}"
         self.composer_cursor = before.length + replacement.to_s.length
-        show_completion_candidates(candidates, replacement) if candidates.to_a.length > 1 && replacement.to_s == original[range]
       end
 
-      def show_completion_candidates(candidates, replacement)
-        lines = candidates.to_a.first(40)
-        text = ["completions:", *lines.map { |candidate| "  #{candidate}" }].join("\n")
-        write_completion_transcript_locked(text)
-      end
-
-      def write_completion_transcript_locked(text)
-        with_synchronized_output_locked do
-          clear_prompt_for_output_locked
-          write_transcript_text_locked("\n#{text}\n")
-          render_prompt_after_output_locked
-        end
+      def apply_completion_cycle_candidate(cycle)
+        replacement = cycle[:candidates][cycle[:index]]
+        self.composer_input = "#{cycle[:before]}#{replacement}#{cycle[:after]}"
+        self.composer_cursor = cycle[:before].length + replacement.length
+        cycle[:input] = composer_input
+        cycle[:cursor] = composer_cursor
       end
 
       def handle_tab_key_binding(key)

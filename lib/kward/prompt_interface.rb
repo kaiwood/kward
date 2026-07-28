@@ -162,6 +162,7 @@ module Kward
       @restoring_transcript = false
       @pending_keys = []
       @completion_provider = nil
+      @completion_cycle = nil
       @original_console_mode = nil
       @raw_mode_active = false
       @slash_commands = normalize_slash_commands(slash_commands)
@@ -331,6 +332,7 @@ module Kward
     def update_completion_provider(provider, slash_overlay: true)
       @mutex.synchronize do
         @completion_provider = provider
+        @completion_cycle = nil
         @slash_overlay_disabled = !slash_overlay
         render_prompt_locked if @started
       end
