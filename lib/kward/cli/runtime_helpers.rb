@@ -129,6 +129,29 @@ module Kward
         @bang_completion_shell = Ekwsh.new(cwd: root, env: ENV.to_h, aliases: {})
       end
 
+      def install_bang_completion_provider(agent)
+        return unless @prompt.respond_to?(:update_completion_provider)
+
+        @bang_completion_provider_installed = true
+        provider = lambda do |input, cursor|
+          current_agent = if respond_to?(:active_tab, true) && active_tab&.agent
+            active_tab.agent
+          else
+            agent
+          end
+          complete_bang_command(input, cursor, current_agent)
+        end
+        @prompt.update_completion_provider(provider)
+      end
+
+      def clear_bang_completion_provider
+        return unless @bang_completion_provider_installed
+        return unless @prompt.respond_to?(:update_completion_provider)
+
+        @prompt.update_completion_provider(nil)
+        @bang_completion_provider_installed = false
+      end
+
       def run_ekwsh(agent)
         unless @prompt.respond_to?(:ask)
           runtime_output("The embedded shell is only available in interactive mode.")

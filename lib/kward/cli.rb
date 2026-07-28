@@ -468,6 +468,7 @@ module Kward
       enable_interactive_warnings if respond_to?(:enable_interactive_warnings, true)
 
       @pending_inputs = []
+      install_bang_completion_provider(agent)
 
       loop do
         if @pending_inputs.empty? && active_tab&.shell
@@ -559,6 +560,7 @@ module Kward
       runtime_output("Goodbye.")
       active_tab&.agent&.conversation || agent&.conversation
     ensure
+      clear_bang_completion_provider
       begin
         stop_tabs if respond_to?(:stop_tabs, true)
         @prompt.close if prompt_interface?

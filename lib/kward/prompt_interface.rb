@@ -328,6 +328,14 @@ module Kward
       @slash_overlay_disabled = previous_slash_overlay_disabled
     end
 
+    def update_completion_provider(provider, slash_overlay: true)
+      @mutex.synchronize do
+        @completion_provider = provider
+        @slash_overlay_disabled = !slash_overlay
+        render_prompt_locked if @started
+      end
+    end
+
     def with_prompt_history(history)
       previous_history = @prompt_history
       @prompt_history = history
