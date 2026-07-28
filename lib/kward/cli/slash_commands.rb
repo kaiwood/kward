@@ -50,6 +50,9 @@ module Kward
         when "shell"
           run_ekwsh(agent)
           [true, nil]
+        when "capture"
+          run_captured_shell_command(argument, agent)
+          [true, nil]
         when "scratchpad"
           open_scratchpad_command(argument)
           [true, nil]

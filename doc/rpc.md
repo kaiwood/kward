@@ -84,7 +84,7 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `security`: trusted-local behavior and optional per-turn tool approval. By default, RPC turns have no workspace mutation guard or tool approval, so shell commands and file changes can run. Clients can inspect file-tool guardrails through `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`. `security.sandbox` reports the command sandbox mode, enforcement backend, and filesystem and network capabilities; session pinning and one-time elevation are unsupported. See [Command sandboxing](sandboxing.md) for the boundary and its limits.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
 - `starterPack`: explicitly unsupported (`supported: false`, reason `cliOnlyInstallCommand`). Use `kward init` from the shell.
-- `shell`: explicitly unsupported (`supported: false`, reason `interactiveTuiOnly`) because `/shell` is the local embedded TUI shell.
+- `shell`: explicitly unsupported (`supported: false`, reason `interactiveTuiOnly`) because `/shell`, `!command`, `/capture`, and PTY handoff require the local TUI. Model-requested `run_shell_command` tools remain bounded, captured, and noninteractive over RPC.
 - `logging`: local redacted telemetry, its directory and enabled categories, `logging/stats` and `logging/tokenCsv`, bucketed `usageCsv` support, JSONL storage, and 10 MB rotation with manual retention. Logs contain redacted metadata only. Configuration uses the `logging` key and `KWARD_LOGGING` environment prefix.
 
 ### `shutdown`

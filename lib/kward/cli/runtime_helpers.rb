@@ -97,10 +97,23 @@ module Kward
         run_user_interactive_pty_command(
           command,
           shell: Ekwsh::DEFAULT_SHELL,
-          env: interactive_pty_environment({}),
+          env: interactive_pty_environment({}, preserve_git_pager: true),
           cwd: interactive_workspace_root(agent)
         )
         true
+      end
+
+      def run_captured_shell_command(command, agent)
+        command = command.to_s.strip
+        if command.empty?
+          runtime_output("Usage: /capture <command>")
+          return
+        end
+
+        run_busy_local_command_and_requeue(activity: "running") do
+          result = Workspace.new(root: interactive_workspace_root(agent)).run_shell_command(command)
+          @prompt.say("\n#{colored("Shell>", :cyan, :bold)} #{command}\n#{result}\n")
+        end
       end
 
       def shell_command_input?(input)
@@ -227,9 +240,9 @@ module Kward
         end
       end
 
-      def interactive_pty_environment(configured_env)
+      def interactive_pty_environment(configured_env, preserve_git_pager: false)
         ENV.to_h.merge(configured_env.to_h.transform_keys(&:to_s).transform_values(&:to_s)).tap do |env|
-          env.delete("GIT_PAGER") if env["GIT_PAGER"] == "cat"
+          env.delete("GIT_PAGER") if !preserve_git_pager && env["GIT_PAGER"] == "cat"
           env["TERM"] = "xterm-256color" if env["TERM"].to_s.empty? || env["TERM"] == "dumb"
         end
       end

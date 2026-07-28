@@ -1033,7 +1033,7 @@ class TestCLI < KwardTestCase
   end
 
   def test_interactive_loop_requeues_ekwsh_tab_action
-    prompt = FakePrompt.new(["/shell", { tab_action: :next }, "/exit"])
+    prompt = FakePrompt.new([{ tab_action: :next }, "/exit"])
     conversation = Kward::Conversation.new(system_message: nil)
     agent = Object.new
     agent.define_singleton_method(:conversation) { conversation }
@@ -1235,14 +1235,85 @@ class TestCLI < KwardTestCase
         Kward::InteractivePtyRunner::Result.new(exit_status: 0)
       end
 
-      cli.interactive_loop(agent: agent)
+      with_env("GIT_PAGER" => "cat") do
+        cli.interactive_loop(agent: agent)
+      end
 
       assert_equal 1, calls.length
       assert_equal "/bin/sh", calls.first[:shell]
       assert_equal "pwd", calls.first[:command]
       assert_equal File.realpath(dir), calls.first[:cwd]
+      assert_equal "cat", calls.first[:env]["GIT_PAGER"]
       assert_equal "xterm-256color", calls.first[:env]["TERM"] if ENV["TERM"].to_s.empty? || ENV["TERM"] == "dumb"
     end
+  end
+
+  def test_interactive_loop_runs_captured_shell_command_without_model_turn
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["/capture echo hello", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.interactive_loop(agent: agent)
+
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "Shell> echo hello"
+      assert_includes output, "Exit status: 0"
+      assert_includes output, "STDOUT:\nhello"
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_runs_captured_shell_command_from_workspace_root
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["/capture pwd", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.interactive_loop(agent: agent)
+
+      assert_includes strip_ansi(prompt.output.join), "STDOUT:\n#{File.realpath(dir)}"
+    end
+  end
+
+  def test_captured_user_command_is_not_subject_to_model_command_sandbox
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      output_path = File.join(dir, "captured-user-command")
+      File.write(config_path, JSON.dump("sandbox" => { "mode" => "read_only" }))
+      prompt = FakePrompt.new(["/capture touch #{Shellwords.escape(output_path)}", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_path_exists output_path
+    end
+  end
+
+  def test_interactive_loop_reports_empty_capture_command
+    prompt = FakePrompt.new(["/capture", "/exit"])
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Object.new
+    agent.define_singleton_method(:conversation) { conversation }
+    agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.interactive_loop(agent: agent)
+
+    assert_includes prompt.output.join, "Usage: /capture <command>"
+    assert_empty conversation.messages
   end
 
   def test_interactive_loop_reports_empty_bang_shell_command

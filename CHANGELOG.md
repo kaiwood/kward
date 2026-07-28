@@ -6,16 +6,19 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `capture <command>` inside `/shell` and `/capture <command>` in the normal composer for bounded, sanitized, transcript-friendly command execution.
 - Added Tab completion for shell commands and paths when the normal interactive prompt input begins with `!`.
 - Added workspace-scoped, digest-aware project skill trust decisions with interactive Allow, Deny, and Review prompts plus `/skills` and `kward skills` management commands.
 
 ### Changed
 
+- Changed external `/shell` commands and one-shot `!command` input to use interactive PTY terminal handoff by default, while retaining `pty` and `/pty` for compatibility.
 - Changed shell and leading-`!` completion so repeated Tab presses cycle through candidates in the composer without printing a candidate list in the transcript.
 - Removed the `Tab` and `Shift+Tab` reasoning-effort shortcuts so the composer keeps its normal completion behavior.
 
 ### Fixed
 
+- Hardened interactive PTY cleanup, final-output draining, input EOF handling, resize propagation, and stopped-child recovery so terminal handoff reliably returns control to Kward.
 - Normalized binary-tagged UTF-8 shell output before transcript rendering, preventing interactive `!` commands such as `tree` from crashing the composer.
 - Deferred interactive warning output until startup transcript replay completes, keeping Runtime diagnostics visible instead of immediately overwriting them with the replayed transcript.
 

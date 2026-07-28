@@ -56,8 +56,9 @@ Kward's built-in file tools normally resolve paths inside the active workspace. 
 
 These protections reduce accidental edits. They do not contain the whole process:
 
-- With `sandbox.mode: off` (the default), `run_shell_command`, `!command`, `/shell`, and `/pty` run with your user permissions.
-- A non-off [command sandbox](sandboxing.md) restricts only model-requested `run_shell_command` workers and their descendants. It does not cover `!command`, `/shell`, or `/pty`.
+- With `sandbox.mode: off` (the default), `run_shell_command`, `!command`, `/capture`, `/shell`, and `/pty` run with your user permissions.
+- A non-off [command sandbox](sandboxing.md) restricts only model-requested `run_shell_command` workers and their descendants. It does not cover `!command`, `/capture`, `/shell`, or `/pty`.
+- External `/shell` commands, `!command`, and `/pty` forward child output directly to your terminal so interactive programs work. This bypasses transcript control-sequence sanitization; run only commands you trust with terminal access. `capture <command>` and `/capture <command>` sanitize their captured output.
 - Plugins, command hooks, and MCP servers are local processes with the same general operating-system access.
 - Read-before-edit applies to Kward's file tools, not to arbitrary shell commands or extension code.
 
@@ -67,7 +68,7 @@ You can disable the file boundary with `tools.workspace_guardrails: false`, but 
 
 A worktree-backed tab uses its linked worktree as the active workspace and requires an OS-enforced `workspace_write` command sandbox. If the platform cannot provide filesystem enforcement, Kward refuses to activate the worktree rather than running model-requested shell commands unrestricted.
 
-The strict worktree agent disables configured MCP clients and lifecycle hooks for that tab because those extensions run outside the command-worker sandbox. The interactive `/shell`, `!command`, and `/pty` features remain host-process features and are not covered by the worktree boundary. Use them only when you intentionally want to run a user-directed command outside the model command sandbox.
+The strict worktree agent disables configured MCP clients and lifecycle hooks for that tab because those extensions run outside the command-worker sandbox. The interactive `/shell`, `!command`, `/capture`, and `/pty` features remain host-process features and are not covered by the worktree boundary. Use them only when you intentionally want to run a user-directed command outside the model command sandbox.
 
 Git worktrees share repository metadata. Kward keeps Git metadata protection enabled for generic model-requested commands. Active worktree tabs provide a narrow host-side `git_commit` tool for explicit agent commits; the interactive `/git` flow remains the manual review, staging, and commit path.
 

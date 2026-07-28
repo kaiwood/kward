@@ -77,9 +77,9 @@ worker. The strict agent also disables configured MCP clients and lifecycle
 hooks because they run in the Kward host process rather than inside the command
 sandbox.
 
-This does not contain the interactive `/shell`, `!command`, or `/pty` features;
-those are user-directed host-process operations. Generic model-requested shell
-commands still cannot write Git metadata. Active worktree tabs additionally
+This does not contain the user-directed `/shell`, `!command`, `/capture`, or
+`/pty` features; those are user-directed host-process operations. Generic
+model-requested shell commands still cannot write Git metadata. Active worktree tabs additionally
 expose a narrow `git_commit` tool for explicit agent-requested commits; it runs
 through the trusted host-side Git workflow rather than widening the shell
 sandbox. The interactive `/git` flow remains available for manual review and
@@ -111,7 +111,7 @@ It does not sandbox:
 - the Kward Ruby host process;
 - model-provider, search-provider, or RPC traffic;
 - trusted Ruby plugins;
-- MCP servers, lifecycle hooks, `/shell`, `!command`, or `/pty`.
+- MCP servers, lifecycle hooks, `/shell`, `!command`, `/capture`, or `/pty`.
 
 Sandboxed command workers receive a minimal environment: Kward preserves only
 basic terminal, locale, and path variables, then supplies a private `HOME` and

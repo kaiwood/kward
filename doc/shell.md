@@ -2,7 +2,7 @@
 
 Use `/shell` when you want to run a sequence of local commands without leaving Kward's interactive TUI.
 
-`/shell` opens **ekwsh**, the embedded Kward shell. It is not a full terminal emulator. Kward keeps ownership of the composer, transcript, tab bar, and keybindings while each command runs through your normal shell one command at a time.
+`/shell` opens **ekwsh**, the embedded Kward shell. It is not a full terminal emulator. Kward manages persistent shell state and hands the terminal to each external command one at a time.
 
 This makes it good for:
 
@@ -12,7 +12,7 @@ This makes it good for:
 - using project aliases,
 - keeping command output visible beside the current Kward session.
 
-Use `/pty <command>` when you intentionally want to hand the terminal to a full-screen interactive command such as `less`.
+External commands receive an interactive PTY by default, so tools such as `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` when you want bounded, transcript-friendly output instead.
 
 ## Start shell mode
 
@@ -61,7 +61,7 @@ unset FOO
 
 `cd` changes only the embedded shell's current directory. It does not change Kward's workspace root or the process directory used by the rest of Kward.
 
-Shell output streams into the transcript area as commands run, but it is not added to the AI conversation history. Simple assignment-only commands such as `FOO=bar` persist into the embedded shell environment for later commands.
+Interactive command output streams directly to the terminal and is not added to the AI conversation history or durable Kward transcript. Kward records a short command and exit-status summary. `capture <command>` streams sanitized output into the transcript instead. Simple assignment-only commands such as `FOO=bar` persist into the embedded shell environment for later commands.
 
 Shell commands are persisted in a separate workspace-scoped shell history. They do not share the normal Kward prompt history used for chat prompts. The shell history limit is controlled by `history_limit` in `ekwsh.yml`.
 
@@ -77,6 +77,8 @@ Shell commands are persisted in a separate workspace-scoped shell history. They 
 | `unset KEY` | Remove an environment variable from later commands. |
 | `alias [name]` | List configured aliases, show specific configured aliases, or set `alias name=value`. |
 | `unalias name` / `unalias -a` | Remove configured aliases. |
+| `capture <command>` | Run with bounded, sanitized transcript capture instead of interactive terminal handoff. |
+| `pty <command>` | Compatibility spelling for explicit interactive terminal handoff. |
 | `clear` | Clear Kward's visible transcript. |
 | `exit` / `logout` | Leave shell mode. |
 
@@ -95,7 +97,7 @@ This means each tab can have its own:
 - visible shell transcript,
 - command prompt state.
 
-Kward's normal tab-switching shortcuts continue to work in shell mode. If you switch tabs while a shell command is running, Kward cancels that foreground command and requeues the tab action so the TUI can switch cleanly.
+Kward's normal tab-switching shortcuts work while the shell prompt or a captured command is active. During an interactive external command, the child owns all keyboard input, including keys that normally switch Kward tabs. Exit or interrupt the child before switching tabs.
 
 ## Tab completion
 
@@ -137,7 +139,7 @@ If there are multiple candidates, repeated Tab presses cycle through them in ord
 
 ## Colors and ANSI output
 
-`ekwsh` preserves safe ANSI SGR color/style sequences in command output, such as:
+Captured `ekwsh` output preserves safe ANSI SGR color/style sequences, such as:
 
 - colors,
 - bold,
@@ -146,7 +148,7 @@ If there are multiple candidates, repeated Tab presses cycle through them in ord
 - underline,
 - 256-color and truecolor SGR sequences.
 
-It strips terminal-control sequences that could corrupt Kward's TUI, such as cursor movement, clear-screen controls, OSC title changes, and alternate-screen controls.
+Captured output strips terminal-control sequences that could corrupt Kward's TUI, such as cursor movement, clear-screen controls, OSC title changes, and alternate-screen controls. Interactive commands write directly to the terminal without this sanitization so full-screen tools can work correctly; run only commands you trust with terminal access.
 
 When rbenv is available, `ekwsh` also prepends the rbenv shims and bin directories to PATH and sets `RBENV_ROOT` when it was missing. This lets commands such as `ruby`, `bundle`, and `./exe/kward` use the same Ruby selected by rbenv without requiring `rbenv init` support in `ekwsh`.
 
@@ -203,11 +205,11 @@ aliases:
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `shell` | `/bin/sh` | Absolute path to the POSIX-compatible shell used with `-c`. Invalid or relative paths fall back to `/bin/sh`. |
-| `timeout_seconds` | `300` | Maximum runtime for one command. |
-| `max_output_bytes` | `1048576` | Maximum captured output for one command. |
+| `timeout_seconds` | `300` | Maximum runtime for one `capture` command. |
+| `max_output_bytes` | `1048576` | Maximum output retained for one `capture` command. |
 | `history_limit` | `1000` | Maximum persisted shell history entries per workspace. |
 
-When a command exceeds `timeout_seconds`, `ekwsh` terminates it and reports the timeout. When command output exceeds `max_output_bytes`, `ekwsh` terminates the command, keeps bounded output, and reports the output limit. Press Ctrl+C while a command is running to terminate that command and return to the shell prompt without exiting Kward.
+When a captured command exceeds `timeout_seconds`, `ekwsh` terminates it and reports the timeout. When captured output exceeds `max_output_bytes`, `ekwsh` terminates the command, keeps bounded output, and reports the output limit. Interactive commands are unbounded; Ctrl-C is forwarded to the child. Press Ctrl-C during a captured command to cancel its Kward worker and return to the shell prompt.
 
 ### Environment variables
 
@@ -280,24 +282,33 @@ alias ll gs
 
 Aliases also appear in command-name Tab completion.
 
-## Interactive PTY passthrough
+## Interactive PTY commands
 
-Use `/pty <command>` for commands that need to own the terminal temporarily, such as pagers:
-
-```text
-/pty git log
-```
-
-Inside `/shell`, use the `pty` built-in so the command inherits the embedded shell's current directory and environment:
+External commands entered inside `/shell` own an interactive PTY by default:
 
 ```sh
-pty git log
-pty vim README.md
+git log
+vim README.md
+ruby
+ssh example.com
 ```
 
-Kward runs the command in a PTY, forwards your keyboard input to the process, and streams the process output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt and records only a short session summary in the transcript instead of raw full-screen terminal control output.
+Kward forwards your keyboard input to the process and streams its output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt and records only a short session summary in the transcript instead of raw full-screen terminal control output.
 
-`/pty` and shell `pty` are explicit on purpose. Normal `/shell` commands remain captured and transcript-friendly; `pty` is for commands where the child process should temporarily own the terminal.
+The older `/pty <command>` slash command and shell `pty <command>` built-in remain available for compatibility. Inside `/shell`, they inherit the embedded shell's current directory and environment just like an ordinary external command.
+
+## Captured commands
+
+Use `capture <command>` inside `/shell` when output should remain in Kward's transcript:
+
+```sh
+capture git status --short
+capture bundle exec ruby -Itest test/test_ekwsh.rb
+```
+
+Captured commands run under a minimal PTY so terminal-aware tools can detect TTY output and terminal width, but keyboard input is not forwarded. The configured timeout and output-size limit apply to captured commands. ANSI output is transcript-sanitized, and Ctrl-C cancels the captured worker through Kward.
+
+From the normal composer, `/capture <command>` provides the same bounded one-shot behavior using the active workspace root. Use `!command` for an interactive one-shot command.
 
 ## `/shell` versus `!command`
 
@@ -307,14 +318,14 @@ Kward has two ways to run local commands yourself:
 !git status --short
 ```
 
-runs one command directly from the normal composer. When `!` is the first character, press Tab to complete shell commands and paths:
+runs one command in an interactive PTY directly from the normal composer. When `!` is the first character, press Tab to complete shell commands and paths:
 
 ```text
 !git sta<Tab>
 !cat lib/kwa<Tab>
 ```
 
-This completion uses the active workspace root and command `PATH`. It does not use aliases or persistent state from `/shell`; the submitted `!command` behavior remains a one-shot command.
+This completion uses the active workspace root and command `PATH`. It does not use aliases or persistent state from `/shell`; the submitted `!command` behavior remains a one-shot command. Use `/capture <command>` instead when its output should be bounded and retained in Kward's transcript.
 
 ```text
 /shell
@@ -330,10 +341,12 @@ Use `!command` for one-offs. Use `/shell` when you expect to run several command
 
 Current limitations:
 
-- no job control,
+- interactive command output is visible in terminal scrollback but only the command and exit summary are durable in Kward's transcript,
+- interactive commands have no automatic timeout or output-size limit,
+- no job control; a stopped child is terminated so it cannot strand the terminal,
 - no persistent shell functions,
 - no shell startup file sourcing,
 - no native readline from your login shell,
-- normal `/shell` command output is transcript-sanitized rather than treated as a full terminal UI.
+- captured `/shell` command output is transcript-sanitized rather than treated as a full terminal UI.
 
-External `/shell` commands run under a minimal PTY so terminal-aware tools can detect TTY output and terminal width. Full-screen interactive programs should still use explicit `/pty <command>` passthrough.
+External `/shell` commands use interactive PTY passthrough. Kward does not emulate or retain their full-screen terminal state.

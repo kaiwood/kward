@@ -211,6 +211,6 @@ If rendering becomes corrupted after resize or after an external program writes 
 /redraw
 ```
 
-You can also press `Ctrl+L`; it rebuilds the durable current-tab view without deleting the conversation transcript, removing transient output such as one-shot `!command` results. If a shortcut never reaches Kward, prefer its slash-command equivalent or change `composer.tab_keybindings` in `/settings`.
+You can also press `Ctrl+L`; it rebuilds the durable current-tab view without deleting the conversation transcript, removing transient shell output. If a shortcut never reaches Kward, prefer its slash-command equivalent or change `composer.tab_keybindings` in `/settings`.
 
-For full-screen interactive programs such as Vim or `less`, use `/pty <command>` or `pty <command>` inside `/shell` so the program temporarily owns the terminal instead of fighting the composer.
+External commands inside `/shell` and one-shot `!command` input receive an interactive PTY by default, so full-screen programs such as Vim or `less` temporarily own the terminal. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer when output should remain in Kward's transcript instead.

@@ -66,7 +66,7 @@ Inside interactive mode, ask Kward to run a command:
 Run the focused test for the CLI status command.
 ```
 
-Or run a shell command yourself from the composer by prefixing it with `!`:
+Or run an interactive PTY command yourself from the composer by prefixing it with `!`:
 
 ```text
 !git status --short
@@ -78,7 +78,7 @@ For several commands, enter the embedded Kward shell:
 /shell
 ```
 
-`/shell` opens `ekwsh`, a Kward-native command mode that keeps the tab bar and transcript visible. It preserves state such as the current directory, environment variables, and aliases between commands. Use `pty git log` or `/pty git log` when you intentionally want to hand the terminal to an interactive tool such as `less` or `vim`. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
+`/shell` opens `ekwsh`, a Kward-native command mode that preserves state such as the current directory, environment variables, and aliases between commands. External commands receive an interactive PTY by default, so `git log`, `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer for bounded, transcript-friendly output. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
 
 ## Shell commands
 
@@ -123,8 +123,9 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/git` | review uncommitted changes, stage files, and commit. |
 | `/diff` | open the file changes recorded in the current session. |
 | `/files` | browse project files in a nested tree and open them in the editor. |
-| `/shell` | run workspace commands in the embedded Kward shell. |
-| `/pty <command>` | hand the terminal to an interactive command such as `git log`/`less` or `vim`. |
+| `/shell` | run stateful workspace commands with interactive PTY support. |
+| `/capture <command>` | run a bounded one-shot command and retain its output in the transcript. |
+| `/pty <command>` | explicitly hand the terminal to an interactive command; retained for compatibility with existing workflows. |
 | `/settings` | configure models, accounts, memory, interface, tools, context, personalization, and logging. |
 | `/status` | see session, model, and context status. |
 | `/new` | start a fresh session in the current tab. |

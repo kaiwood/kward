@@ -776,6 +776,23 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
+  def test_prompt_interface_terminal_handoff_restores_terminal_after_error
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    assert_raises(RuntimeError) do
+      prompt.with_terminal_handoff { raise "child failed" }
+    end
+
+    assert_includes output.string, "\e[<u"
+    assert_includes output.string, "\e[?2004l"
+    assert_includes output.string, "\e[>25u"
+    assert_includes output.string, "\e[?2004h"
+  end
+
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
