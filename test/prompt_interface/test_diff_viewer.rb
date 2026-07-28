@@ -67,4 +67,13 @@ class TestPromptInterfaceDiffViewer < KwardTestCase
     assert_equal Kward::DiffViewMode::UNIFIED, state.diff_view
     assert_equal ["@@ -1 +1 @@", "-old", "+new", ""], state.lines
   end
+
+  def test_open_diff_viewer_ctrl_q_closes_with_csi_u_input
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.send(:open_diff_viewer, "example.txt", "-old\n+new\n")
+
+    prompt.send(:handle_editor_key, "\e[113;5u")
+
+    refute prompt.send(:editor_active?)
+  end
 end

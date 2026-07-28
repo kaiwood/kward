@@ -827,6 +827,10 @@ module Kward
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
 
+        if ctrl_modifier?(modifier) && ctrl_code(code) == 113
+          return close_editor
+        end
+
         if ctrl_modifier?(modifier) && ctrl_code(code) == 102
           return editor_search_active? ? editor_search_append(key) : editor_search_begin
         end

@@ -20,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Bound CSI-u `Ctrl+Q` input to close the read-only `/git diff` viewer, matching the existing raw-key binding and ESC behavior.
 - Routed leading-`!` commands and aliases resolving to `kward edit <filename>` into the integrated editor instead of spawning a nested Kward process.
 - Preserved safe, line-oriented PTY output such as `ls` by redrawing it into the transient transcript when returning from `/shell`, `!command`, or `/pty`, while leaving full-screen and keyboard-driven sessions terminal-owned.
 - Removed legacy `pty` and `capture` mode markers from configured aliases expanded by `!command`, preventing valid aliases such as `glog: pty git log` from failing with status 127.
