@@ -153,8 +153,7 @@ class TestEkwsh < KwardTestCase
 
     assert_equal 0, result.exit_status
     assert_equal "printf hello", result.interactive_command
-    assert_includes result.output, "$ printf hello"
-    assert_includes result.output, "interactive PTY session started"
+    assert_equal "$ printf hello\n", result.output
   end
 
   def test_expands_configured_alias_once
@@ -372,8 +371,7 @@ class TestEkwsh < KwardTestCase
 
     assert_equal 0, result.exit_status
     assert_equal "git log --oneline", result.interactive_command
-    assert_includes result.output, "$ pty git log --oneline"
-    assert_includes result.output, "interactive PTY session started"
+    assert_equal "$ pty git log --oneline\n", result.output
   end
 
   def test_alias_can_expand_to_pty_builtin
@@ -383,8 +381,7 @@ class TestEkwsh < KwardTestCase
 
     assert_equal 0, result.exit_status
     assert_equal "git log --oneline", result.interactive_command
-    assert_includes result.output, "$ glog"
-    assert_includes result.output, "interactive PTY session started"
+    assert_equal "$ glog\n", result.output
   end
 
   def test_alias_can_expand_to_builtin

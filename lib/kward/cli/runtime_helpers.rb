@@ -100,7 +100,7 @@ module Kward
           shell: Ekwsh::DEFAULT_SHELL,
           env: interactive_pty_environment({}, preserve_git_pager: true),
           cwd: interactive_workspace_root(agent),
-          intro: "$ #{command}\n[interactive PTY session started]\n"
+          intro: "$ #{command}\n"
         )
         true
       end
@@ -222,11 +222,8 @@ module Kward
       end
 
       def run_user_interactive_pty_command(command, shell:, env:, cwd:, intro: nil)
-        intro ||= "$ #{command}\n[interactive PTY session started]\n"
-        @prompt.say(intro) if @prompt.respond_to?(:say)
-        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd)
-        @prompt.say("[interactive PTY session exited with status #{result.exit_status}]\n") if @prompt.respond_to?(:say)
-        result
+        @prompt.say(intro || "$ #{command}\n") if @prompt.respond_to?(:say)
+        run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd)
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
         nil

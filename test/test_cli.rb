@@ -933,8 +933,7 @@ class TestCLI < KwardTestCase
 
       output = strip_ansi(prompt.output.join)
       assert_includes output, "$ pty printf shell-pty-ok"
-      assert_includes output, "interactive PTY session started"
-      assert_includes output, "interactive PTY session exited with status 0"
+      refute_includes output, "interactive PTY session"
       assert_includes output, "Shell exited."
       assert_empty conversation.messages
     end
@@ -955,7 +954,7 @@ class TestCLI < KwardTestCase
       output = strip_ansi(prompt.output.join)
       assert_includes output, "$ printf pty-ok"
       assert_includes output, "pty-ok"
-      assert_includes output, "interactive PTY session exited with status 0"
+      refute_includes output, "interactive PTY session"
       assert_empty conversation.messages
     end
   end
@@ -1237,8 +1236,7 @@ class TestCLI < KwardTestCase
 
       output = strip_ansi(prompt.output.join)
       assert_includes output, "$ echo hello"
-      assert_includes output, "interactive PTY session started"
-      assert_includes output, "interactive PTY session exited with status 0"
+      refute_includes output, "interactive PTY session"
       assert_empty conversation.messages
     end
   end
@@ -1259,15 +1257,18 @@ class TestCLI < KwardTestCase
       calls = []
       cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |shell, command, env:, cwd:|
         calls << { shell: shell, command: command, env: env, cwd: cwd }
-        Kward::InteractivePtyRunner::Result.new(exit_status: 0)
+        Kward::InteractivePtyRunner::Result.new(exit_status: 141)
       end
 
       with_env("KWARD_CONFIG_PATH" => config_path) do
         cli.interactive_loop(agent: agent)
       end
 
+      output = strip_ansi(prompt.output.join)
       assert_equal ["git log --decorate --stat"], calls.map { |call| call[:command] }
-      assert_includes strip_ansi(prompt.output.join), "$ glog --stat"
+      assert_includes output, "$ glog --stat"
+      refute_includes output, "interactive PTY session"
+      refute_includes output, "141"
       assert_empty conversation.messages
     end
   end

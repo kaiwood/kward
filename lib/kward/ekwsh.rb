@@ -339,7 +339,7 @@ module Kward
     end
 
     def interactive_command_result(command, display_command: command)
-      Result.new(output: "#{command_echo(display_command)}[interactive PTY session started]\n", exit_status: 0, interactive_command: command)
+      Result.new(output: command_echo(display_command), exit_status: 0, interactive_command: command)
     end
 
     def shell_words(command)

@@ -61,7 +61,7 @@ unset FOO
 
 `cd` changes only the embedded shell's current directory. It does not change Kward's workspace root or the process directory used by the rest of Kward.
 
-Interactive command output streams directly to the terminal and is not added to the AI conversation history or durable Kward transcript. Kward records a short command and exit-status summary. `capture <command>` streams sanitized output into the transcript instead. Simple assignment-only commands such as `FOO=bar` persist into the embedded shell environment for later commands.
+Interactive command output streams directly to the terminal and is not added to the AI conversation history or durable Kward transcript. Kward records only the submitted command, without PTY lifecycle or exit-status messages. `capture <command>` streams sanitized output into the transcript instead. Simple assignment-only commands such as `FOO=bar` persist into the embedded shell environment for later commands.
 
 Shell commands are persisted in a separate workspace-scoped shell history. They do not share the normal Kward prompt history used for chat prompts. The shell history limit is controlled by `history_limit` in `ekwsh.yml`.
 
@@ -293,7 +293,7 @@ ruby
 ssh example.com
 ```
 
-Kward forwards your keyboard input to the process and streams its output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt and records only a short session summary in the transcript instead of raw full-screen terminal control output.
+Kward forwards your keyboard input to the process and streams its output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt without adding PTY lifecycle or exit-status messages to the transcript.
 
 The older `/pty <command>` slash command and shell `pty <command>` built-in remain available for compatibility. Inside `/shell`, they inherit the embedded shell's current directory and environment just like an ordinary external command.
 

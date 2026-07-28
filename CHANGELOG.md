@@ -14,6 +14,7 @@ All notable changes to Kward will be documented in this file.
 
 - Changed external `/shell` commands and one-shot `!command` input to use interactive PTY terminal handoff by default, while retaining `pty` and `/pty` for compatibility.
 - Made aliases configured in `ekwsh.yml` available to leading-`!` execution and command completion.
+- Removed interactive PTY start and exit-status messages while retaining the submitted command echo.
 - Changed shell and leading-`!` completion so repeated Tab presses cycle through candidates in the composer without printing a candidate list in the transcript.
 - Removed the `Tab` and `Shift+Tab` reasoning-effort shortcuts so the composer keeps its normal completion behavior.
 
