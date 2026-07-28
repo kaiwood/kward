@@ -128,7 +128,7 @@ module Kward
       end
     end
 
-    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, workspace_root: Dir.pwd, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil)
+    def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, workspace_root: Dir.pwd, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil, redraw_handler: nil)
       @input_io = input
       @output_io = output
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
@@ -163,6 +163,8 @@ module Kward
       @pending_keys = []
       @completion_provider = nil
       @completion_cycle = nil
+      @redraw_handler = redraw_handler
+      @transcript_redraw_requested = false
       @original_console_mode = nil
       @raw_mode_active = false
       @slash_commands = normalize_slash_commands(slash_commands)
@@ -469,6 +471,8 @@ module Kward
 
         sleep 0.02 if key.nil?
       end
+    ensure
+      perform_pending_transcript_redraw
     end
 
     def yes?(message, default: false)
@@ -821,6 +825,8 @@ module Kward
         render_prompt_locked unless [EXIT_INPUT, CANCEL_INPUT].include?(result) || prompt_action_result?(result)
         [EXIT_INPUT, CANCEL_INPUT].include?(result) ? result : result
       end
+    ensure
+      perform_pending_transcript_redraw
     end
 
     def update_assistant_label(label)
@@ -913,6 +919,20 @@ module Kward
     end
 
     private
+
+    def request_transcript_redraw
+      redraw_screen_locked
+      @transcript_redraw_requested = true
+    end
+
+    def perform_pending_transcript_redraw
+      requested = @mutex.synchronize do
+        pending = @transcript_redraw_requested
+        @transcript_redraw_requested = false
+        pending
+      end
+      @redraw_handler&.call if requested
+    end
 
     def prompt_workspace_root
       @workspace_root

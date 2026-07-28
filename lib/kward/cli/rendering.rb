@@ -10,6 +10,24 @@ module Kward
         render_transcript_messages(conversation.messages)
       end
 
+      def redraw_interactive_prompt
+        tab = active_tab if respond_to?(:active_tab, true)
+        if tab && (tab.running? || tab.shell)
+          @prompt.redraw if @prompt.respond_to?(:redraw)
+          return
+        end
+
+        conversation = tab&.agent&.conversation || @footer_conversation
+        unless conversation && @prompt.respond_to?(:restore_transcript)
+          @prompt.redraw if @prompt.respond_to?(:redraw)
+          return
+        end
+
+        restore_prompt_transcript do
+          tab ? render_transcript_messages(tab.driver.messages) : render_conversation_transcript(conversation)
+        end
+      end
+
       # Renders a transcript supplied by either a Kward conversation or a
       # plugin-owned tab driver.
       def render_transcript_messages(messages)

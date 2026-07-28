@@ -859,6 +859,29 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_ctrl_l_can_restore_durable_transcript_without_clearing_input
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("hello\x0C\r")
+    writer.close
+    prompt = nil
+    prompt = Kward::PromptInterface.new(
+      input: input,
+      output: output,
+      redraw_handler: lambda do
+        prompt.restore_transcript { prompt.say("durable transcript") }
+      end
+    )
+    prompt.say("transient output")
+
+    assert_equal "hello", prompt.ask("You>")
+    transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
+    assert_includes transcript, "durable transcript"
+    refute_includes transcript, "transient output"
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_handles_cursor_movement_keys
     input, writer = IO.pipe
     output = StringIO.new

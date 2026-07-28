@@ -1180,6 +1180,24 @@ class TestCLI < KwardTestCase
     assert_equal false, cli.send(:complete_bang_command, "pw", 2, Object.new)
   end
 
+  def test_redraw_interactive_prompt_restores_durable_conversation_transcript
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("durable input")
+    prompt.say("transient bang output")
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@footer_conversation, conversation)
+
+    cli.send(:redraw_interactive_prompt)
+
+    transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
+    assert_includes transcript, "durable input"
+    refute_includes transcript, "transient bang output"
+  ensure
+    prompt&.close
+  end
+
   def test_interactive_loop_runs_bang_shell_command_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!echo hello", "/exit"])

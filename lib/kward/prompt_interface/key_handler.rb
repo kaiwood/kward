@@ -78,7 +78,7 @@ module Kward
         when :ctrl_y
           yank_kill_buffer
         when :ctrl_l
-          redraw_screen_locked
+          request_transcript_redraw
         when :ctrl_r
           start_history_search
         when :left
@@ -441,7 +441,7 @@ module Kward
           when 107
             kill_line_after_cursor
           when 108
-            redraw_screen_locked
+            request_transcript_redraw
           when 114
             start_history_search
           when 117
@@ -710,7 +710,7 @@ module Kward
         when TerminalKeys::CTRL_K
           kill_line_after_cursor
         when TerminalKeys::CTRL_L
-          redraw_screen_locked
+          request_transcript_redraw
         when TerminalKeys::CTRL_U
           kill_line_before_cursor
         when TerminalKeys::CTRL_W
