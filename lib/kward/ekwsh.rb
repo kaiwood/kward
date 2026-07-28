@@ -13,7 +13,7 @@ module Kward
   class Ekwsh
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :interactive_command, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
-    BUILTINS = %w[alias cd pwd export unset unalias clear exit logout pty].freeze
+    BUILTINS = %w[alias capture cd pwd export unset unalias clear exit logout pty].freeze
     DEFAULT_SHELL = "/bin/sh"
     DEFAULT_TIMEOUT_SECONDS = 300
     DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
@@ -276,7 +276,7 @@ module Kward
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
     end
 
-    def builtin_result(command, display_command: command)
+    def builtin_result(command, display_command: command, cancellation: nil, &block)
       words = shell_words(command)
       return nil if words.empty?
       assignment_result = persist_assignments(display_command, words)
@@ -297,6 +297,8 @@ module Kward
         unset_variables(display_command, words)
       when "clear"
         Result.new(output: "", exit_status: 0, clear: true)
+      when "capture"
+        captured_command_result(command, display_command: display_command, cancellation: cancellation, &block)
       when "pty"
         interactive_pty_result(command, display_command: display_command)
       else
@@ -306,13 +308,26 @@ module Kward
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
     end
 
+    def captured_command_result(command, display_command:, cancellation: nil, &block)
+      captured_command = command.sub(/\A\s*capture(?:\s+|\z)/, "")
+      if captured_command.empty?
+        return Result.new(output: "#{command_echo(display_command)}Usage: capture <command>\n", exit_status: 2)
+      end
+
+      execute(captured_command, display_command: display_command, cancellation: cancellation, &block)
+    end
+
     def interactive_pty_result(command, display_command: command)
       interactive_command = command.sub(/\A\s*pty(?:\s+|\z)/, "")
       if interactive_command.empty?
         return Result.new(output: "#{command_echo(display_command)}Usage: pty <command>\n", exit_status: 2)
       end
 
-      Result.new(output: "#{command_echo(display_command)}[interactive PTY session started]\n", exit_status: 0, interactive_command: interactive_command)
+      interactive_command_result(interactive_command, display_command: display_command)
+    end
+
+    def interactive_command_result(command, display_command: command)
+      Result.new(output: "#{command_echo(display_command)}[interactive PTY session started]\n", exit_status: 0, interactive_command: command)
     end
 
     def shell_words(command)
@@ -377,13 +392,13 @@ module Kward
       exit_result = exit_result(expanded_command, display_command: command)
       return exit_result if exit_result
 
-      builtin_result = builtin_result(expanded_command, display_command: command)
+      builtin_result = builtin_result(expanded_command, display_command: command, cancellation: cancellation, &block)
       return builtin_result if builtin_result
 
       kward_result = kward_command_result(expanded_command, display_command: command)
       return kward_result if kward_result
 
-      execute(expanded_command, display_command: command, cancellation: cancellation, &block)
+      interactive_command_result(expanded_command, display_command: command)
     end
 
     def kward_command_result(command, display_command: command)

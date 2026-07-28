@@ -33,9 +33,9 @@ class TestEkwsh < KwardTestCase
       shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => ENV.fetch("PATH", "") })
 
       shell.run("export KWARD_EKWSH_TEST=ready")
-      exported = shell.run("printf %s $KWARD_EKWSH_TEST")
+      exported = shell.run("capture printf %s $KWARD_EKWSH_TEST")
       shell.run("unset KWARD_EKWSH_TEST")
-      unset = shell.run("printf %s ${KWARD_EKWSH_TEST:-missing}")
+      unset = shell.run("capture printf %s ${KWARD_EKWSH_TEST:-missing}")
 
       assert_includes exported.output, "ready"
       assert_includes unset.output, "missing"
@@ -45,7 +45,7 @@ class TestEkwsh < KwardTestCase
   def test_sets_safe_color_environment_without_forcing_color
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "TERM" => "dumb" })
 
-    result = shell.run("printf '%s %s %s %s %s' \"$CLICOLOR\" \"$CLICOLOR_FORCE\" \"$FORCE_COLOR\" \"$COLORTERM\" \"$TERM\"")
+    result = shell.run("capture printf '%s %s %s %s %s' \"$CLICOLOR\" \"$CLICOLOR_FORCE\" \"$FORCE_COLOR\" \"$COLORTERM\" \"$TERM\"")
 
     assert_includes result.output, "1   truecolor xterm-256color"
   end
@@ -53,7 +53,7 @@ class TestEkwsh < KwardTestCase
   def test_defaults_git_pager_to_cat
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
-    result = shell.run("printf %s \"$GIT_PAGER\"")
+    result = shell.run("capture printf %s \"$GIT_PAGER\"")
 
     assert_includes result.output, "cat"
   end
@@ -61,7 +61,7 @@ class TestEkwsh < KwardTestCase
   def test_preserves_configured_git_pager
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "GIT_PAGER" => "less" })
 
-    result = shell.run("printf %s \"$GIT_PAGER\"")
+    result = shell.run("capture printf %s \"$GIT_PAGER\"")
 
     assert_includes result.output, "less"
   end
@@ -69,7 +69,7 @@ class TestEkwsh < KwardTestCase
   def test_preserves_user_forced_color_environment
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "", "FORCE_COLOR" => "3", "CLICOLOR_FORCE" => "1" })
 
-    result = shell.run("printf '%s %s' \"$FORCE_COLOR\" \"$CLICOLOR_FORCE\"")
+    result = shell.run("capture printf '%s %s' \"$FORCE_COLOR\" \"$CLICOLOR_FORCE\"")
 
     assert_includes result.output, "3 1"
   end
@@ -77,7 +77,7 @@ class TestEkwsh < KwardTestCase
   def test_preserves_sgr_color_output_from_commands
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
-    result = shell.run("printf '\\033[31mred\\033[0m'")
+    result = shell.run("capture printf '\\033[31mred\\033[0m'")
 
     assert_includes result.output, "\e[31mred\e[0m"
   end
@@ -85,7 +85,7 @@ class TestEkwsh < KwardTestCase
   def test_strips_unsafe_terminal_control_output_from_commands
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
-    result = shell.run("printf '\\033[2Jbefore\\033]0;title\\007\\033[31mred\\033[0m\\033[?1049hafter'")
+    result = shell.run("capture printf '\\033[2Jbefore\\033]0;title\\007\\033[31mred\\033[0m\\033[?1049hafter'")
 
     assert_includes result.output, "before\e[31mred\e[0mafter"
     refute_includes result.output, "\e[2J"
@@ -104,7 +104,7 @@ class TestEkwsh < KwardTestCase
   def test_applies_configured_environment
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, configured_env: { "FORCE_COLOR" => "1" })
 
-    result = shell.run("printf %s \"$FORCE_COLOR\"")
+    result = shell.run("capture printf %s \"$FORCE_COLOR\"")
 
     assert_includes result.output, "1"
   end
@@ -115,7 +115,7 @@ class TestEkwsh < KwardTestCase
       FileUtils.mkdir_p(File.join(dir, "bin"))
       shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "/usr/bin", "RBENV_ROOT" => dir })
 
-      result = shell.run("printf '%s\n%s' \"$RBENV_ROOT\" \"$PATH\"")
+      result = shell.run("capture printf '%s\n%s' \"$RBENV_ROOT\" \"$PATH\"")
 
       assert_includes result.output, dir
       assert_includes result.output, "#{File.join(dir, "shims")}:#{File.join(dir, "bin")}:/usr/bin"
@@ -130,7 +130,7 @@ class TestEkwsh < KwardTestCase
       FileUtils.mkdir_p(bin)
       shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "#{shims}:/usr/bin", "RBENV_ROOT" => dir })
 
-      result = shell.run("printf %s \"$PATH\"")
+      result = shell.run("capture printf %s \"$PATH\"")
 
       assert_includes result.output, "#{shims}:#{bin}:/usr/bin"
     end
@@ -146,13 +146,24 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "$ ./exe/kward edit Gemfile"
   end
 
+  def test_external_command_requests_interactive_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    result = shell.run("printf hello")
+
+    assert_equal 0, result.exit_status
+    assert_equal "printf hello", result.interactive_command
+    assert_includes result.output, "$ printf hello"
+    assert_includes result.output, "interactive PTY session started"
+  end
+
   def test_expands_configured_alias_once
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "hi" => "printf hello" })
 
     result = shell.run("hi")
 
+    assert_equal "printf hello", result.interactive_command
     assert_includes result.output, "$ hi"
-    assert_includes result.output, "hello"
   end
 
   def test_builtin_wins_over_alias
@@ -300,6 +311,46 @@ class TestEkwsh < KwardTestCase
     end
   end
 
+  def test_capture_builtin_runs_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("capture printf captured")
+
+    assert_equal 0, result.exit_status
+    assert_nil result.interactive_command
+    assert_includes result.output, "$ capture printf captured"
+    assert_includes result.output, "captured"
+  end
+
+  def test_alias_can_expand_to_capture_builtin
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", aliases: { "check" => "capture printf captured" })
+
+    result = shell.run("check")
+
+    assert_equal 0, result.exit_status
+    assert_nil result.interactive_command
+    assert_includes result.output, "$ check"
+    assert_includes result.output, "captured"
+  end
+
+  def test_capture_builtin_requires_command
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+
+    result = shell.run("capture")
+
+    assert_equal 2, result.exit_status
+    assert_includes result.output, "Usage: capture <command>"
+  end
+
+  def test_capture_builtin_is_completed
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    completion = shell.complete("cap", 3)
+
+    assert_includes completion.candidates, "capture"
+    assert_equal "capture ", completion.replacement
+  end
+
   def test_pty_builtin_requests_interactive_command
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
@@ -366,7 +417,7 @@ class TestEkwsh < KwardTestCase
   def test_nonzero_command_reports_exit_status
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
-    result = shell.run("ruby -e 'exit 7'")
+    result = shell.run("capture ruby -e 'exit 7'")
 
     assert_equal 7, result.exit_status
     assert_includes result.output, "Exit status: 7"
@@ -376,7 +427,7 @@ class TestEkwsh < KwardTestCase
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     ruby = Shellwords.escape(RbConfig.ruby)
 
-    result = shell.run(%(#{ruby} -e 'print STDOUT.tty? ? "tty" : "pipe"'))
+    result = shell.run(%(capture #{ruby} -e 'print STDOUT.tty? ? "tty" : "pipe"'))
 
     assert_equal 0, result.exit_status
     assert_match(/\btty\b/, result.output)
@@ -386,7 +437,7 @@ class TestEkwsh < KwardTestCase
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     ruby = Shellwords.escape(RbConfig.ruby)
 
-    result = shell.run(%(#{ruby} -rio/console -e 'print IO.console.winsize[1]'))
+    result = shell.run(%(capture #{ruby} -rio/console -e 'print IO.console.winsize[1]'))
 
     assert_equal 0, result.exit_status
     assert_match(/\b\d+\b/, result.output)
@@ -396,7 +447,7 @@ class TestEkwsh < KwardTestCase
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     ruby = Shellwords.escape(RbConfig.ruby)
 
-    result = shell.run(%(#{ruby} -e 'STDOUT.write "one\\ntwo\\n"'))
+    result = shell.run(%(capture #{ruby} -e 'STDOUT.write "one\\ntwo\\n"'))
 
     assert_equal 0, result.exit_status
     assert_includes result.output, "one\ntwo\n"
@@ -407,11 +458,11 @@ class TestEkwsh < KwardTestCase
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     chunks = []
 
-    result = shell.run("printf one; printf two") { |chunk| chunks << chunk }
+    result = shell.run("capture printf one; printf two") { |chunk| chunks << chunk }
 
     assert result.streamed
     assert_equal result.output, chunks.join
-    assert_includes chunks.join, "$ printf one; printf two\none"
+    assert_includes chunks.join, "$ capture printf one; printf two\none"
     assert_includes chunks.join, "two\n"
   end
 
@@ -429,7 +480,7 @@ class TestEkwsh < KwardTestCase
   def test_command_timeout_reports_failure
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 1)
 
-    result = shell.run("ruby -e 'sleep 5'")
+    result = shell.run("capture ruby -e 'sleep 5'")
 
     assert_equal 1, result.exit_status
     assert_includes result.output, "ekwsh: command timed out after 1 seconds"
@@ -443,7 +494,7 @@ class TestEkwsh < KwardTestCase
     result = nil
 
     worker = Thread.new do
-      result = shell.run("ruby -e 'sleep 5'", cancellation: cancellation) { |chunk| chunks << chunk }
+      result = shell.run("capture ruby -e 'sleep 5'", cancellation: cancellation) { |chunk| chunks << chunk }
     end
     sleep 0.1
     cancellation.cancel!
@@ -473,7 +524,7 @@ class TestEkwsh < KwardTestCase
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 5)
 
-    result = Timeout.timeout(2) { cli.send(:run_ekwsh_command, shell, "ruby -e 'sleep 5'") }
+    result = Timeout.timeout(2) { cli.send(:run_ekwsh_command, shell, "capture ruby -e 'sleep 5'") }
 
     assert_equal 130, result.exit_status
     assert_includes prompt.streamed_chunks.join, "^C\nExit status: 130"
@@ -482,7 +533,7 @@ class TestEkwsh < KwardTestCase
   def test_command_output_limit_reports_failure
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", max_output_bytes: 3)
 
-    result = shell.run("printf abcdef")
+    result = shell.run("capture printf abcdef")
 
     assert_equal 1, result.exit_status
     assert_includes result.output, "abc"
@@ -509,7 +560,7 @@ class TestEkwsh < KwardTestCase
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
-    result = cli.send(:run_ekwsh_command, shell, "printf ok")
+    result = cli.send(:run_ekwsh_command, shell, "capture printf ok")
 
     assert result.streamed
     assert_includes prompt.streamed_chunks.join, "ok"
@@ -558,7 +609,7 @@ class TestEkwsh < KwardTestCase
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
     shell.run("export KWARD_EMPTY_TEST")
-    result = shell.run("printf '<%s>' \"$KWARD_EMPTY_TEST\"")
+    result = shell.run("capture printf '<%s>' \"$KWARD_EMPTY_TEST\"")
 
     assert_includes result.output, "<>"
   end
@@ -567,7 +618,7 @@ class TestEkwsh < KwardTestCase
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
     shell.run("KWARD_ASSIGN_TEST=ready")
-    result = shell.run("printf %s \"$KWARD_ASSIGN_TEST\"")
+    result = shell.run("capture printf %s \"$KWARD_ASSIGN_TEST\"")
 
     assert_includes result.output, "ready"
   end

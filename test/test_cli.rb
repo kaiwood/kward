@@ -991,14 +991,18 @@ class TestCLI < KwardTestCase
       agent.define_singleton_method(:conversation) { conversation }
       agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      calls = []
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |shell, command, env:, cwd:|
+        calls << { shell: shell, command: command, env: env, cwd: cwd }
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0)
+      end
 
       with_env("KWARD_CONFIG_PATH" => config_path) do
         cli.interactive_loop(agent: agent)
       end
 
-      output = strip_ansi(prompt.output.join)
-      assert_includes output, "configured"
-      assert_includes output, "alias-ok"
+      assert_equal ["printf %s $KWARD_EKWSH_CONFIG_TEST", "printf alias-ok"], calls.map { |call| call[:command] }
+      assert calls.all? { |call| call[:env]["KWARD_EKWSH_CONFIG_TEST"] == "configured" }
       assert_empty conversation.messages
     end
   end
@@ -1045,7 +1049,7 @@ class TestCLI < KwardTestCase
 
   def test_ekwsh_running_command_requeues_tab_action
     started_at = Time.now
-    prompt = FakePrompt.new(["ruby -e 'sleep 5'"])
+    prompt = FakePrompt.new(["capture ruby -e 'sleep 5'"])
     prompt.define_singleton_method(:begin_busy_input) { |_message, activity: "loading"| nil }
     prompt.define_singleton_method(:finish_busy_input) { nil }
     prompt.define_singleton_method(:write_transcript_delta) { |_chunk| nil }
