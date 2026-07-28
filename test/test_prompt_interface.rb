@@ -882,6 +882,38 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_ctrl_l_runs_redraw_handler_before_next_key
+    keys = Queue.new
+    %w[h e l l o].each { |key| keys << key }
+    keys << "\x0C"
+    redrawn = Queue.new
+    result = nil
+    output = StringIO.new
+    prompt = nil
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      redraw_handler: lambda do
+        prompt.restore_transcript { prompt.say("durable transcript") }
+        redrawn << true
+      end
+    )
+    prompt.say("transient output")
+    prompt.define_singleton_method(:read_key) { |nonblock: false| keys.pop }
+
+    thread = Thread.new { result = prompt.ask("You>") }
+    Timeout.timeout(1) { redrawn.pop }
+
+    transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
+    assert_includes transcript, "durable transcript"
+    refute_includes transcript, "transient output"
+    keys << "\r"
+    thread.join(1)
+    assert_equal "hello", result
+  ensure
+    thread&.kill if thread&.alive?
+  end
+
   def test_prompt_interface_handles_cursor_movement_keys
     input, writer = IO.pipe
     output = StringIO.new

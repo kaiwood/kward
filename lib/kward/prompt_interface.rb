@@ -466,6 +466,7 @@ module Kward
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
           end
         end
+        perform_pending_transcript_redraw
         return result if result.is_a?(String) || prompt_action_result?(result)
         return nil if result == EXIT_INPUT
 
