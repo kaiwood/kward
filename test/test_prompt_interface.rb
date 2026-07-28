@@ -781,7 +781,7 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
-  def test_prompt_interface_records_safe_terminal_output_before_redrawing
+  def test_prompt_interface_records_safe_terminal_output_without_redrawing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.start
@@ -789,11 +789,37 @@ class TestPromptInterface < KwardTestCase
     output.rewind
 
     prompt.say("$ ls\n")
+    output.truncate(0)
+    output.rewind
+    prompt.with_terminal_handoff do |_input, handoff_output|
+      handoff_output.print("Gemfile\r\nREADME.md\r\n")
+    end
+    output_before_record = output.string
+
     prompt.record_transient_terminal_output("Gemfile\nREADME.md\n")
 
     transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
     assert_includes transcript, "$ ls\nGemfile\nREADME.md\n"
-    assert_includes output.string, TTY::Cursor.clear_screen
+    assert_includes output.string, "Gemfile"
+    refute_includes output.string.delete_prefix(output_before_record), TTY::Cursor.clear_screen
+  end
+
+  def test_prompt_interface_can_preserve_a_frozen_composer_during_terminal_handoff
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.send(:composer_input=, "frozen draft")
+    prompt.redraw
+    output.truncate(0)
+    output.rewind
+
+    prompt.with_terminal_handoff(preserve_composer: true) do |_input, handoff_output|
+      handoff_output.print("Everything up-to-date\r\n")
+    end
+
+    assert_includes output.string, "Everything up-to-date"
+    assert_includes output.string, "frozen draft"
+    refute_includes output.string, TTY::Cursor.clear_screen
   end
 
   def test_prompt_interface_terminal_handoff_restores_terminal_after_error

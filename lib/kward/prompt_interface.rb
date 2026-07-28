@@ -592,13 +592,19 @@ module Kward
       end
     end
 
-    def with_terminal_handoff
+    def with_terminal_handoff(preserve_composer: false)
       start
       input = nil
       output = nil
       @mutex.synchronize do
-        clear_prompt_for_output_locked
-        restore_scroll_region_locked
+        if preserve_composer
+          handle_resize_locked
+          reserve_composer_region_locked
+          move_to_transcript_cursor_locked
+        else
+          clear_prompt_for_output_locked
+          restore_scroll_region_locked
+        end
         disable_editor_mouse_reporting(force: true)
         @output_io.print(BRACKETED_PASTE_RESTORE)
         @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
@@ -613,7 +619,8 @@ module Kward
       yield(input, output)
     ensure
       @mutex.synchronize do
-        make_room_for_composer_after_handoff_locked if @started && @asking
+        restore_scroll_region_locked if preserve_composer
+        make_room_for_composer_after_handoff_locked if !preserve_composer && @started && @asking
         enter_raw_mode_locked
         @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
         @output_io.print(BRACKETED_PASTE_ENABLE)
@@ -887,9 +894,7 @@ module Kward
         append_transcript_buffer(value)
         append_transcript_buffer("\n") unless value.end_with?("\n")
         @stream_state.finish_block
-        width, height = screen_size
-        remember_transcript_viewport_locked(height)
-        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
+        remember_transcript_viewport_locked
         @output_io.flush
       end
     end

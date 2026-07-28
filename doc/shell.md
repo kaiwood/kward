@@ -20,6 +20,8 @@ Prefix a command with `!` in the normal composer:
 
 The command runs from the active workspace root and temporarily owns the terminal. When it exits, Kward restores the composer. Safe, line-oriented output from commands such as `ls` is mirrored into the transient transcript view so a repaint cannot hide it. Shell output is never added to the AI conversation or sent to the model.
 
+The line-oriented Git commands `git fetch`, `git ls-remote`, `git push`, `git remote`, and `git status` keep the composer visible as a frozen display while they run. Keyboard input still belongs to the child process. Other commands use the full-terminal handoff so full-screen programs retain the complete terminal.
+
 Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
 
 Configured `ekwsh.yml` aliases also work after `!`:
@@ -99,7 +101,7 @@ ruby
 ssh example.com
 ```
 
-Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. It prints the submitted command but no PTY start message or exit-status summary. Safe, line-oriented output from commands that did not read keyboard input is kept in the transient transcript view; full-screen and genuinely interactive output stays terminal-owned.
+Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. It prints the submitted command but no PTY start message or exit-status summary. The line-oriented Git commands `git fetch`, `git ls-remote`, `git push`, `git remote`, and `git status` keep the shell prompt visible as a frozen display. Safe, line-oriented output from commands that did not read keyboard input is kept in the transient transcript view; full-screen and genuinely interactive output stays terminal-owned.
 
 Use `capture` inside `/shell` when you want ordinary, readable output in Kward's transcript area instead of direct terminal control:
 

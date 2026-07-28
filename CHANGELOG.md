@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Added a frozen composer display for line-oriented Git PTY commands while preserving the full-terminal handoff for full-screen programs.
 - Changed external `/shell` commands and one-shot `!command` input to use interactive PTY terminal handoff by default, while retaining `pty` and `/pty` for compatibility.
 - Made aliases configured in `ekwsh.yml` available to leading-`!` execution and command completion.
 - Removed interactive PTY start and exit-status messages while retaining the submitted command echo.

@@ -1284,6 +1284,27 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_loop_uses_frozen_composer_handoff_for_line_oriented_git_commands
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["!git push", "/exit"])
+      handoff_options = []
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, **options|
+        handoff_options << options
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+      end
+
+      cli.interactive_loop(agent: agent)
+
+      assert_equal [{ preserve_composer: true }], handoff_options
+      assert_empty conversation.messages
+    end
+  end
+
   def test_interactive_loop_records_line_oriented_bang_output
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!ls", "/exit"])
