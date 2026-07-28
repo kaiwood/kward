@@ -609,6 +609,7 @@ module Kward
       yield(input, output)
     ensure
       @mutex.synchronize do
+        make_room_for_composer_after_handoff_locked if @started && @asking
         enter_raw_mode_locked
         @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
         @output_io.print(BRACKETED_PASTE_ENABLE)

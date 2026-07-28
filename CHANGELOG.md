@@ -20,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Preserved fast interactive PTY output, such as `ls`, above the composer when returning from `/shell`, `!command`, or `/pty` terminal handoff.
 - Removed legacy `pty` and `capture` mode markers from configured aliases expanded by `!command`, preventing valid aliases such as `glog: pty git log` from failing with status 127.
 - Hardened interactive PTY cleanup, final-output draining, input EOF handling, resize propagation, and stopped-child recovery so terminal handoff reliably returns control to Kward.
 - Normalized binary-tagged UTF-8 shell output before transcript rendering, preventing interactive `!` commands such as `tree` from crashing the composer.

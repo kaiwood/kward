@@ -769,6 +769,7 @@ class TestPromptInterface < KwardTestCase
     assert_same prompt.instance_variable_get(:@input_io), yielded_input
     assert_same output, yielded_output
     assert_includes output.string, "child"
+    assert_match(/child(?:\r\n)+\e\[>25u/, output.string)
     assert_includes output.string, "\e[r"
     assert_includes output.string, "\e[<u"
     assert_includes output.string, "\e[?2004l"

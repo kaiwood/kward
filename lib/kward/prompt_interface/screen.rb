@@ -87,6 +87,11 @@ module Kward
         ensure_scroll_region_locked(rows.length, width: width, height: height)
       end
 
+      def make_room_for_composer_after_handoff_locked
+        rows, = composer_layout(screen_width, screen_height)
+        @output_io.print("\r\n" * rows.length)
+      end
+
       def ensure_scroll_region_locked(row_count, redraw_transcript: true, width: screen_width, height: screen_height)
         new_reserved_rows = [[row_count, 1].max, [height - 1, 1].max].min
         return if @reserved_rows == new_reserved_rows && @last_height == height
