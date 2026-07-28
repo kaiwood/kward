@@ -38,7 +38,7 @@ The composer supports familiar line-editing keys:
 | `Alt+D` | Delete the word after the cursor |
 | `Ctrl+U` / `Ctrl+K` | Kill from the cursor to the start or end of the line |
 | `Ctrl+Y` | Yank the most recently killed composer text |
-| `Ctrl+L` | Redraw the terminal UI |
+| `Ctrl+L` | Redraw the terminal UI and remove transient current-view output |
 | `Ctrl+D` | Delete at the cursor, or exit when the composer is empty |
 
 These are composer bindings. The integrated editor, shell, Git view, file browser, and plugin interfaces have their own keymaps.
@@ -211,6 +211,6 @@ If rendering becomes corrupted after resize or after an external program writes 
 /redraw
 ```
 
-You can also press `Ctrl+L`. If a shortcut never reaches Kward, prefer its slash-command equivalent or change `composer.tab_keybindings` in `/settings`.
+You can also press `Ctrl+L`; it rebuilds the durable current-tab view without deleting the conversation transcript, removing transient output such as one-shot `!command` results. If a shortcut never reaches Kward, prefer its slash-command equivalent or change `composer.tab_keybindings` in `/settings`.
 
 For full-screen interactive programs such as Vim or `less`, use `/pty <command>` or `pty <command>` inside `/shell` so the program temporarily owns the terminal instead of fighting the composer.
