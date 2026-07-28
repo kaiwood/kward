@@ -105,6 +105,30 @@ module Kward
         input.to_s.start_with?("!")
       end
 
+      def complete_bang_command(input, cursor, agent)
+        value = input.to_s
+        return false unless value.start_with?("!")
+        return nil if cursor.to_i <= 1
+
+        completion = bang_completion_shell(agent).complete(value[1..], cursor.to_i - 1)
+        return nil unless completion
+
+        Ekwsh::Completion.new(
+          range: (completion.range.begin + 1)...(completion.range.end + 1),
+          replacement: completion.replacement,
+          candidates: completion.candidates
+        )
+      end
+
+      def bang_completion_shell(agent)
+        root = File.expand_path(interactive_workspace_root(agent).to_s)
+        cache_key = [root, ENV.fetch("PATH", "")]
+        return @bang_completion_shell if @bang_completion_shell_key == cache_key
+
+        @bang_completion_shell_key = cache_key
+        @bang_completion_shell = Ekwsh.new(cwd: root, env: ENV.to_h, aliases: {})
+      end
+
       def run_ekwsh(agent)
         unless @prompt.respond_to?(:ask)
           runtime_output("The embedded shell is only available in interactive mode.")

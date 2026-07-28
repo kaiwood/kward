@@ -1090,6 +1090,45 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_bang_completion_preserves_marker_and_offsets_command_range
+    Dir.mktmpdir do |dir|
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+      completion = with_env("PATH" => "") do
+        cli.send(:complete_bang_command, "!pw", 3, agent)
+      end
+
+      assert_equal 1...3, completion.range
+      assert_equal "pwd ", completion.replacement
+      assert_includes completion.candidates, "pwd"
+    end
+  end
+
+  def test_bang_completion_resolves_paths_from_workspace_root_without_aliases
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "known.rb"), "")
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+      completion = cli.send(:complete_bang_command, "!cat lib/kno", 12, agent)
+
+      assert_equal 5...12, completion.range
+      assert_equal "lib/known.rb ", completion.replacement
+    end
+  end
+
+  def test_bang_completion_declines_input_without_leading_marker
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+    assert_equal false, cli.send(:complete_bang_command, "pw", 2, Object.new)
+  end
+
   def test_interactive_loop_runs_bang_shell_command_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!echo hello", "/exit"])
