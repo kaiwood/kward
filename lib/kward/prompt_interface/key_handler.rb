@@ -579,6 +579,7 @@ module Kward
         return false unless key == "\t" && @completion_provider
 
         result = @completion_provider.call(composer_input, composer_cursor)
+        return false if result == false
         return true unless result
 
         apply_completion_result(result)
