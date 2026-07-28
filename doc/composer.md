@@ -115,15 +115,12 @@ History survives restarts. It contains submitted prompt text and successful `$pa
 
 ## Change reasoning effort
 
-When no slash or file picker is open, Tab cycles forward through reasoning efforts supported by the current model. Shift+Tab cycles backward. The selection wraps and is persisted for later turns.
+The composer status line shows the current provider, model, and reasoning effort. Use `/reasoning` or `/model` to choose the reasoning effort explicitly.
 
-The composer status line shows the current provider, model, and reasoning effort. Use `/reasoning` or `/model` when you prefer the explicit picker.
-
-Tab is context-sensitive:
+Tab follows the normal completion behavior:
 
 - in slash or `@path` completion, it accepts the selected match,
 - in `$path` completion, it opens the selected file,
-- otherwise, it changes reasoning effort,
 - in other modal interfaces, it follows that interface's own controls.
 
 ## Work with tabs

@@ -72,7 +72,7 @@ Work safely:
 Everyday workflows:
 
 - [Sessions](doc/session-management.md): resume, clone, fork, rewind, compact, and navigate saved work.
-- [Interactive composer](doc/composer.md): use multiline input, completion, history, files, reasoning shortcuts, busy input, and images.
+- [Interactive composer](doc/composer.md): use multiline input, completion, history, files, reasoning selection, busy input, and images.
 - [Tabs](doc/tabs.md): keep several conversations open and run work in another tab.
 - [Project files](doc/files.md): browse, search, mention, open, and edit workspace files.
 - [Integrated editor](doc/editor.md): open files from the shell or composer, edit in-place, and choose editor keybindings.

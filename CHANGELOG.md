@@ -8,6 +8,10 @@ All notable changes to Kward will be documented in this file.
 
 - Added workspace-scoped, digest-aware project skill trust decisions with interactive Allow, Deny, and Review prompts plus `/skills` and `kward skills` management commands.
 
+### Changed
+
+- Removed the `Tab` and `Shift+Tab` reasoning-effort shortcuts so the composer keeps its normal completion behavior.
+
 ### Fixed
 
 - Normalized binary-tagged UTF-8 shell output before transcript rendering, preventing interactive `!` commands such as `tree` from crashing the composer.

@@ -168,7 +168,7 @@ Prompt templates, configured skills, and plugins can add more slash commands. Th
 
 ## Prompt history
 
-The [Interactive composer](composer.md) guide covers multiline editing, slash and file completion, reasoning shortcuts, busy input, cancellation, attachments, and terminal compatibility.
+The [Interactive composer](composer.md) guide covers multiline editing, slash and file completion, reasoning selection, busy input, cancellation, attachments, and terminal compatibility.
 
 In interactive mode, Kward keeps prompt history per workspace under `~/.kward/history/`. Press Up/Down to recall previous prompts across restarts.
 

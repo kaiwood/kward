@@ -44,9 +44,6 @@ module Kward
         completion_result = handle_completion_provider_key(key)
         return completion_result unless completion_result == false
 
-        reasoning_result = handle_reasoning_key_binding(key)
-        return reasoning_result unless reasoning_result == false
-
         tab_result = handle_tab_key_binding(key)
         return tab_result unless tab_result == false
 
@@ -212,9 +209,6 @@ module Kward
         return true if sequence == "\e" && (dismiss_file_overlay || dismiss_slash_overlay)
         return true if handle_shift_enter_key(sequence)
 
-        reasoning_result = handle_reasoning_key_binding(sequence)
-        return reasoning_result unless reasoning_result == false
-
         tab_result = handle_tab_key_binding(sequence)
         return tab_result unless tab_result == false
 
@@ -323,10 +317,10 @@ module Kward
           if ctrl_modifier?(modifier)
             shift_modifier?(modifier) ? { tab_action: :previous } : { tab_action: :next }
           elsif shift_modifier?(modifier)
-            handle_reasoning_key_binding(key) || handle_tab_completion_key
+            handle_tab_completion_key
           else
             completion_result = handle_completion_provider_key("\t")
-            completion_result == false ? handle_reasoning_key_binding("\t") || handle_tab_completion_key : completion_result
+            completion_result == false ? handle_tab_completion_key : completion_result
           end
         when 13
           if modifier == 2
@@ -580,7 +574,6 @@ module Kward
 
       CTRL_TAB_SEQUENCES = TerminalKeys::CTRL_TAB
       CTRL_SHIFT_TAB_SEQUENCES = TerminalKeys::CTRL_SHIFT_TAB
-      SHIFT_TAB_SEQUENCES = TerminalKeys::SHIFT_TAB
 
       def handle_completion_provider_key(key)
         return false unless key == "\t" && @completion_provider
@@ -615,25 +608,6 @@ module Kward
           clear_prompt_for_output_locked
           write_transcript_text_locked("\n#{text}\n")
           render_prompt_after_output_locked
-        end
-      end
-
-      def handle_reasoning_key_binding(key)
-        return false if @busy || @select_state || @question_state
-        return false if file_overlay_visible? || slash_overlay_visible?
-        return false if @slash_overlay_dismissed_input && @slash_overlay_dismissed_input == composer_input
-        mention_token = active_file_mention_token
-        open_token = active_file_open_token
-        return false if mention_token && @file_overlay_dismissed_token == mention_token
-        return false if open_token && @file_open_dismissed_token == open_token
-
-        case key
-        when "\t"
-          { reasoning_action: :next }
-        when *SHIFT_TAB_SEQUENCES
-          { reasoning_action: :previous }
-        else
-          false
         end
       end
 

@@ -365,7 +365,7 @@ The busy composer shows a short Ctrl+C cancellation hint by default. To hide it:
 
 This only hides the hint text; Ctrl+C still stops the current running response.
 
-In the normal composer prompt, `Tab` cycles forward through the current model's reasoning efforts and `Shift+Tab` cycles backward. The shortcuts wrap around and update the persisted reasoning setting; file and slash-command completion overlays keep their existing `Tab` completion behavior.
+In the normal composer prompt, choose reasoning effort with `/reasoning` or `/model`; `Tab` keeps its normal file and slash-command completion behavior.
 
 `tab_keybindings` controls how the composer handles tab navigation shortcuts:
 

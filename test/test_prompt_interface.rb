@@ -343,17 +343,22 @@ class TestPromptInterface < KwardTestCase
     assert_match(/1 Main.*2 Ops.*3 Done/, strip_ansi(tab_row))
   end
 
-  def test_prompt_interface_tab_cycles_reasoning_in_normal_prompt
+  def test_prompt_interface_tab_does_not_cycle_reasoning_in_normal_prompt
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
 
-    assert_equal({ reasoning_action: :next }, prompt.send(:handle_key, "\t"))
+    assert_nil prompt.send(:handle_key, "\t")
+    assert_equal "", prompt.send(:composer_input)
+    assert_nil prompt.send(:handle_key, "\e[9u")
+    assert_equal "", prompt.send(:composer_input)
   end
 
-  def test_prompt_interface_shift_tab_cycles_reasoning_backwards_in_normal_prompt
+  def test_prompt_interface_shift_tab_does_not_cycle_reasoning_in_normal_prompt
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
 
-    assert_equal({ reasoning_action: :previous }, prompt.send(:handle_key, "\e[Z"))
-    assert_equal({ reasoning_action: :previous }, prompt.send(:handle_key, "\e[9;2u"))
+    assert_nil prompt.send(:handle_key, "\e[Z")
+    assert_equal "", prompt.send(:composer_input)
+    assert_nil prompt.send(:handle_key, "\e[9;2u")
+    assert_equal "", prompt.send(:composer_input)
   end
 
   def test_prompt_interface_tab_keeps_slash_completion_when_overlay_visible
