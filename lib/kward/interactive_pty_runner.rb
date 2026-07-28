@@ -21,31 +21,23 @@ module Kward
     def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, output: $stdout)
       pid = nil
       status = nil
+      writer = nil
 
-      PTY.spawn(env.to_h, *command, chdir: cwd.to_s) do |reader, writer, child_pid|
+      PTY.spawn(env.to_h, *command, chdir: cwd.to_s) do |reader, child_writer, child_pid|
         pid = child_pid
+        writer = child_writer
         update_window_size(reader, pid)
         with_raw_input(input) do
           drain_initial_input(input, writer)
-          loop do
-            update_window_size(reader, pid)
-            readable = IO.select([reader, input], nil, nil, 0.02)&.first || []
-            forward_pty_output(reader, output) if readable.include?(reader)
-            forward_input(input, writer) if readable.include?(input)
-            if (finished_status = finished_status(pid))
-              status = finished_status
-              break
-            end
-          rescue Errno::EIO, IOError
-            break
-          end
+          status = forward_io(reader, writer, pid, input, output)
         end
         status ||= wait_for_status(pid)
-      ensure
-        writer&.close unless writer&.closed?
       end
 
       Result.new(exit_status: exit_status(status))
+    ensure
+      writer&.close unless writer&.closed?
+      terminate_and_reap(pid) if pid && status.nil?
     end
 
     private
@@ -53,8 +45,14 @@ module Kward
     def with_raw_input(input)
       return yield unless input.respond_to?(:raw)
 
-      input.raw { yield }
+      yielded = false
+      input.raw do
+        yielded = true
+        yield
+      end
     rescue Errno::ENOTTY
+      raise if yielded
+
       yield
     end
 
@@ -70,6 +68,28 @@ module Kward
       nil
     end
 
+    def forward_io(reader, writer, pid, input, output)
+      input_open = true
+      loop do
+        update_window_size(reader, pid)
+        readers = [reader]
+        readers << input if input_open
+        readable = IO.select(readers, nil, nil, 0.02)&.first || []
+        forward_pty_output(reader, output) if readable.include?(reader)
+        input_open = forward_input(input, writer) if input_open && readable.include?(input)
+
+        status = finished_status(pid)
+        next unless status
+
+        return finish_stopped_process(pid) if status.stopped?
+
+        drain_pty_output(reader, output)
+        return status
+      rescue Errno::EIO
+        return wait_for_status(pid)
+      end
+    end
+
     def forward_pty_output(reader, output)
       chunk = reader.read_nonblock(READ_SIZE, exception: false)
       return if chunk.nil? || chunk == :wait_readable
@@ -78,14 +98,31 @@ module Kward
       output.flush if output.respond_to?(:flush)
     end
 
+    def drain_pty_output(reader, output)
+      loop do
+        readable, = IO.select([reader], nil, nil, 0.02)
+        break unless readable
+
+        chunk = reader.read_nonblock(READ_SIZE, exception: false)
+        break if chunk.nil? || chunk == :wait_readable
+
+        output.write(chunk)
+      end
+      output.flush if output.respond_to?(:flush)
+    rescue Errno::EIO
+      nil
+    end
+
     def forward_input(input, writer)
       chunk = input.read_nonblock(READ_SIZE, exception: false)
-      return if chunk.nil? || chunk == :wait_readable
+      return false if chunk.nil?
+      return true if chunk == :wait_readable
 
       writer.write(chunk)
       writer.flush
+      true
     rescue Errno::EIO, Errno::EPIPE, IOError
-      nil
+      false
     end
 
     def update_window_size(reader, pid)
@@ -111,10 +148,16 @@ module Kward
     def finished_status(pid)
       return unless pid
 
-      finished_pid, status = Process.wait2(pid, Process::WNOHANG)
+      finished_pid, status = Process.wait2(pid, Process::WNOHANG | Process::WUNTRACED)
       status if finished_pid
     rescue Errno::ECHILD
       nil
+    end
+
+    def finish_stopped_process(pid)
+      signal_process("CONT", -pid) || signal_process("CONT", pid)
+      terminate_process_group(pid)
+      wait_for_status(pid)
     end
 
     def wait_for_status(pid)
@@ -132,6 +175,22 @@ module Kward
       return 128 + status.termsig if status.signaled?
 
       1
+    end
+
+    def terminate_and_reap(pid)
+      terminate_process_group(pid)
+      wait_for_status(pid)
+    end
+
+    def terminate_process_group(pid)
+      signal_process("TERM", -pid) || signal_process("TERM", pid)
+      deadline = Time.now + 0.2
+      while Time.now < deadline
+        return unless process_running?(pid)
+
+        sleep 0.02
+      end
+      signal_process("KILL", -pid) || signal_process("KILL", pid)
     end
 
     def process_running?(pid)
