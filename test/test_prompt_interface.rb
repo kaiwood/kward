@@ -1521,6 +1521,18 @@ class TestPromptInterface < KwardTestCase
     assert_equal "x" * 17, buffer.text
   end
 
+  def test_transcript_buffer_normalizes_binary_encoded_utf8_text
+    buffer = Kward::PromptInterface::TranscriptBuffer.new(limit: 100)
+    binary_text = +"├── item\n"
+    binary_text.force_encoding(Encoding::ASCII_8BIT)
+
+    buffer.append("previous ──\n")
+    buffer.append(binary_text)
+
+    assert_equal "previous ──\n├── item\n", buffer.text
+    assert_equal Encoding::UTF_8, buffer.text.encoding
+  end
+
   def test_transcript_buffer_does_not_trim_inside_an_sgr_sequence
     buffer = Kward::PromptInterface::TranscriptBuffer.new(limit: 20)
 

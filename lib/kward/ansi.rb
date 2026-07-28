@@ -67,13 +67,21 @@ module Kward
 
     # Drops unsafe terminal controls from transcript text while preserving SGR color.
     def sanitize_transcript(text)
-      scan_escape_tokens(text).each_with_object(+"") do |token, sanitized|
+      scan_escape_tokens(normalize_transcript_encoding(text)).each_with_object(+"") do |token, sanitized|
         if token[:escape]
           sanitized << token[:text] if token[:text].match?(SGR_PATTERN)
         else
           sanitized << token[:text]
         end
       end
+    end
+
+    def normalize_transcript_encoding(text)
+      string = text.to_s.dup
+      return string unless string.encoding == Encoding::ASCII_8BIT
+
+      string.force_encoding(Encoding::UTF_8)
+      string.valid_encoding? ? string : string.scrub
     end
 
     def wrap_visible(text, width)

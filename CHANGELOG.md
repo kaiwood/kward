@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Normalized binary-tagged UTF-8 shell output before transcript rendering, preventing interactive `!` commands such as `tree` from crashing the composer.
 - Deferred interactive warning output until startup transcript replay completes, keeping Runtime diagnostics visible instead of immediately overwriting them with the replayed transcript.
 
 ## [0.80.1] - 2026-07-27
