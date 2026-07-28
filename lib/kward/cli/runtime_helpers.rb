@@ -94,10 +94,12 @@ module Kward
           return true
         end
 
-        run_busy_local_command_and_requeue(activity: "running") do
-          result = configured_workspace(root: interactive_workspace_root(agent)).run_shell_command(command)
-          @prompt.say("\n#{colored("Shell>", :cyan, :bold)} #{command}\n#{result}\n")
-        end
+        run_user_interactive_pty_command(
+          command,
+          shell: Ekwsh::DEFAULT_SHELL,
+          env: interactive_pty_environment({}),
+          cwd: interactive_workspace_root(agent)
+        )
         true
       end
 
@@ -195,13 +197,23 @@ module Kward
         end
 
         config = ConfigFiles.read_ekwsh_config
-        env = interactive_pty_environment(config[:env])
-        cwd = interactive_workspace_root(agent)
-        @prompt.say("$ #{command}\n[interactive PTY session started]\n") if @prompt.respond_to?(:say)
-        result = run_interactive_pty_with_terminal_handoff(config[:shell], command, env: env, cwd: cwd)
+        run_user_interactive_pty_command(
+          command,
+          shell: config[:shell],
+          env: interactive_pty_environment(config[:env]),
+          cwd: interactive_workspace_root(agent)
+        )
+      end
+
+      def run_user_interactive_pty_command(command, shell:, env:, cwd:, intro: nil)
+        intro ||= "$ #{command}\n[interactive PTY session started]\n"
+        @prompt.say(intro) if @prompt.respond_to?(:say)
+        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd)
         @prompt.say("[interactive PTY session exited with status #{result.exit_status}]\n") if @prompt.respond_to?(:say)
+        result
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
+        nil
       end
 
       def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:)
@@ -304,14 +316,13 @@ module Kward
       end
 
       def run_ekwsh_interactive_pty_command(shell, result)
-        @prompt.say(result.output) unless result.output.to_s.empty?
-        pty_result = run_interactive_pty_with_terminal_handoff(
-          shell.command_shell,
+        run_user_interactive_pty_command(
           result.interactive_command,
+          shell: shell.command_shell,
           env: shell.child_env(interactive: true),
-          cwd: shell.cwd
+          cwd: shell.cwd,
+          intro: result.output
         )
-        @prompt.say("[interactive PTY session exited with status #{pty_result.exit_status}]\n") if @prompt.respond_to?(:say)
       end
 
       def run_ekwsh_command(shell, input)

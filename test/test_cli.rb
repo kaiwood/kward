@@ -1198,7 +1198,7 @@ class TestCLI < KwardTestCase
     prompt&.close
   end
 
-  def test_interactive_loop_runs_bang_shell_command_without_model_turn
+  def test_interactive_loop_runs_bang_shell_command_in_pty_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!echo hello", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
@@ -1210,9 +1210,9 @@ class TestCLI < KwardTestCase
       cli.interactive_loop(agent: agent)
 
       output = strip_ansi(prompt.output.join)
-      assert_includes output, "Shell> echo hello"
-      assert_includes output, "Exit status: 0"
-      assert_includes output, "STDOUT:\nhello"
+      assert_includes output, "$ echo hello"
+      assert_includes output, "interactive PTY session started"
+      assert_includes output, "interactive PTY session exited with status 0"
       assert_empty conversation.messages
     end
   end
@@ -1225,11 +1225,19 @@ class TestCLI < KwardTestCase
       agent.define_singleton_method(:conversation) { conversation }
       agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      calls = []
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |shell, command, env:, cwd:|
+        calls << { shell: shell, command: command, env: env, cwd: cwd }
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0)
+      end
 
       cli.interactive_loop(agent: agent)
 
-      output = strip_ansi(prompt.output.join)
-      assert_includes output, "STDOUT:\n#{File.realpath(dir)}"
+      assert_equal 1, calls.length
+      assert_equal "/bin/sh", calls.first[:shell]
+      assert_equal "pwd", calls.first[:command]
+      assert_equal File.realpath(dir), calls.first[:cwd]
+      assert_equal "xterm-256color", calls.first[:env]["TERM"] if ENV["TERM"].to_s.empty? || ENV["TERM"] == "dumb"
     end
   end
 
