@@ -894,7 +894,9 @@ module Kward
         append_transcript_buffer(value)
         append_transcript_buffer("\n") unless value.end_with?("\n")
         @stream_state.finish_block
-        remember_transcript_viewport_locked
+        width, height = screen_size
+        remember_transcript_viewport_locked(height)
+        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         @output_io.flush
       end
     end
