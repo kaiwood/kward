@@ -1,158 +1,236 @@
 # Embedded shell
 
-Use `/shell` when you want to run a sequence of local commands without leaving Kward's interactive TUI.
+Kward gives you a few convenient ways to run your own shell commands without leaving the interactive TUI:
 
-`/shell` opens **ekwsh**, the embedded Kward shell. It is not a full terminal emulator. Kward manages persistent shell state and hands the terminal to each external command one at a time.
+| What you want | Use |
+| --- | --- |
+| Run one command from the normal composer | `!command` |
+| Work through several commands with a persistent directory, environment, and aliases | `/shell` |
+| Keep bounded command output in the transcript view | `/capture <command>` or `capture <command>` inside `/shell` |
 
-This makes it good for:
+Ordinary `!command` input and external commands inside `/shell` receive an interactive PTY. Pagers, Vim, SSH, REPLs, password prompts, and other interactive tools therefore work without a `pty` prefix.
 
-- checking Git state,
-- running focused tests,
-- inspecting files with command-line tools,
-- using project aliases,
-- keeping command output visible beside the current Kward session.
+## Run a one-off command
 
-External commands receive an interactive PTY by default, so tools such as `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` when you want bounded, transcript-friendly output instead.
+Prefix a command with `!` in the normal composer:
 
-## Start shell mode
+```text
+!git status --short
+!bundle exec ruby -Itest test/test_cli.rb
+!less README.md
+```
 
-Inside interactive Kward:
+The command runs from the active workspace root and temporarily owns the terminal. When it exits, Kward restores the composer. Its output is for you only: it is not added to the AI conversation or sent to the model.
+
+Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
+
+Configured `ekwsh.yml` aliases also work after `!`:
+
+```yaml
+aliases:
+  glog: "git log --decorate --stat --graph"
+```
+
+```text
+!glog
+```
+
+Press Tab after `!` to complete configured aliases, executables from `PATH`, and paths from the active workspace:
+
+```text
+!git sta<Tab>
+!cat lib/kwa<Tab>
+```
+
+## Work in shell mode
+
+Enter the embedded shell when you expect to run several commands:
 
 ```text
 /shell
 ```
 
-The composer prompt changes to show the shell's current directory:
+The prompt changes to show the shell's current directory:
 
 ```text
 Shell ~/code/project $
 ```
 
-Type commands as you would in a normal shell:
-
-```sh
-git status --short
-bundle exec ruby -Itest test/test_ekwsh.rb
-cd lib/kward
-pwd
-```
-
-Leave shell mode with:
-
-```sh
-exit
-```
-
-or press Ctrl+D on an empty shell prompt.
-
-## How commands run
-
-`ekwsh` is POSIX-oriented and runs each command through `/bin/sh` using the shell's `-c` mode by default. You can configure another POSIX-compatible shell in `ekwsh.yml`. The shell is intentionally not started as a login shell so Kward-managed environment values, such as configured PATH entries, are not overwritten by login startup files.
-
-The current directory and exported environment are tracked by Kward between commands, so this works as expected:
+The directory and exported environment persist between commands:
 
 ```sh
 cd test
 pwd
-export FOO=bar
-printf '%s\n' "$FOO"
-unset FOO
+export RAILS_ENV=test
+bundle exec ruby -Itest test_example.rb
+unset RAILS_ENV
 ```
 
-`cd` changes only the embedded shell's current directory. It does not change Kward's workspace root or the process directory used by the rest of Kward.
+Simple assignment-only commands persist too:
 
-Interactive command output streams directly to the terminal and is not added to the AI conversation history or durable Kward transcript. Kward records only the submitted command, without PTY lifecycle or exit-status messages. `capture <command>` streams sanitized output into the transcript instead. Simple assignment-only commands such as `FOO=bar` persist into the embedded shell environment for later commands.
+```sh
+FOO=bar
+printf '%s\n' "$FOO"
+```
 
-Shell commands are persisted in a separate workspace-scoped shell history. They do not share the normal Kward prompt history used for chat prompts. The shell history limit is controlled by `history_limit` in `ekwsh.yml`.
+Leave shell mode with `exit`, `logout`, or Ctrl+D on an empty prompt.
 
-## Built-ins
+`cd` changes only the embedded shell's directory. It does not change Kward's workspace root or the directory used by the model's other tools.
 
-`ekwsh` handles a small set of built-ins itself:
+## Interactive and captured commands
 
-| Built-in | What it does |
-| --- | --- |
-| `cd [dir]` | Change the embedded shell directory. Supports `cd`, `cd -`, and normal relative paths. |
-| `pwd` | Print the embedded shell directory. |
-| `export KEY[=value]` | Set or mark an environment variable for later commands. `export` and `export -p` list variables. |
-| `unset KEY` | Remove an environment variable from later commands. |
-| `alias [name]` | List configured aliases, show specific configured aliases, or set `alias name=value`. |
-| `unalias name` / `unalias -a` | Remove configured aliases. |
-| `capture <command>` | Run with bounded, sanitized transcript capture instead of interactive terminal handoff. |
-| `pty <command>` | Compatibility spelling for explicit interactive terminal handoff. |
-| `clear` | Clear Kward's visible transcript. |
-| `exit` / `logout` | Leave shell mode. |
+External commands inside `/shell` are interactive by default:
 
-Built-ins take precedence over aliases and executables.
+```sh
+git log
+vim README.md
+ruby
+ssh example.com
+```
 
-## Tabs
+Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. It prints the submitted command but no PTY start message or exit-status summary.
 
-Shell mode is tracked per Kward tab.
+Use `capture` inside `/shell` when you want ordinary, readable output in Kward's transcript area instead of direct terminal control:
 
-If you enter `/shell` in one tab, switch to another tab, and later switch back, that tab is still in shell mode. Its shell state and transcript snapshot are restored until you leave shell mode in that tab.
+```sh
+capture git status --short
+capture bundle exec ruby -Itest test/test_ekwsh.rb
+```
 
-This means each tab can have its own:
+An `ekwsh` `capture` command:
 
-- shell current directory,
+- does not receive keyboard input,
+- uses the timeout and output-size limit from `ekwsh.yml`,
+- preserves safe color and styling,
+- strips controls that could corrupt Kward's TUI,
+- can be cancelled with Ctrl+C.
+
+From the normal composer, `/capture` provides a bounded, noninteractive one-shot command using the active workspace root:
+
+```text
+/capture git status --short
+```
+
+It captures stdout and stderr in the transcript view, but does not inherit `/shell` state or its configured runtime limits.
+
+Interactive commands are not automatically timed out or output-limited. Ctrl+C is forwarded to the child.
+
+The older `/pty <command>` slash command and `pty <command>` shell built-in remain available for compatibility, but ordinary interactive commands no longer need them.
+
+## Shell state, history, and tabs
+
+Each Kward tab owns its `/shell` state. Switching away and back restores that tab's:
+
+- current shell directory,
 - exported environment,
-- visible shell transcript,
-- command prompt state.
+- runtime aliases,
+- shell prompt and transcript view.
 
-Kward's normal tab-switching shortcuts work while the shell prompt or a captured command is active. During an interactive external command, the child owns all keyboard input, including keys that normally switch Kward tabs. Exit or interrupt the child before switching tabs.
+Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. Configure its size with `history_limit` in `ekwsh.yml`.
 
-## Tab completion
+Kward's tab shortcuts work at the shell prompt and while a captured command is running. During an interactive command, the child owns every key; exit or interrupt it before switching Kward tabs.
 
-Plain Tab completes shell input while in `ekwsh`.
+## Completion
 
-Completion includes:
+Press Tab in `/shell` to complete:
 
-- built-in command names,
-- configured aliases,
-- executable names from `$PATH`,
-- file paths from the shell's current directory.
+- built-in names,
+- configured and runtime aliases,
+- executables from `PATH`,
+- files and directories from the shell's current directory.
 
 Examples:
 
 ```sh
 pw<Tab>          # pwd
-ll<Tab>          # configured alias, if present
-cat lib/kw<Tab>  # path completion
-cd doc<Tab>      # directory-only completion for cd
+ll<Tab>          # configured alias
+cat lib/kw<Tab>  # path
+cd doc<Tab>      # directories only for cd
 ```
 
-Directory completions get a trailing slash. File and command completions get a trailing space when there is a single match.
-
-Paths with spaces are shell-escaped:
+Paths with spaces are escaped:
 
 ```sh
 cat my<Tab>
 # => cat my\ file.txt
 ```
 
-Quoted path tokens are completed in the same quoting style:
+Quoted paths stay quoted:
 
 ```sh
 cat "my<Tab>
 # => cat "my file.txt
 ```
 
-If there are multiple candidates, repeated Tab presses cycle through them in order and wrap back to the first candidate. Completion candidates stay in the composer and are not printed in the transcript. Command-name completion caches `$PATH` executables and refreshes when `PATH` changes through shell assignment, `export`, or `unset`.
+When several candidates match, repeated Tab presses cycle through them and wrap back to the first. Candidate lists stay in the composer instead of being printed in the transcript. The executable cache refreshes when `PATH` changes through assignment, `export`, or `unset`.
 
-## Colors and ANSI output
+## Built-ins
 
-Captured `ekwsh` output preserves safe ANSI SGR color/style sequences, such as:
+`ekwsh` handles a small set of commands itself so their state can persist:
 
-- colors,
-- bold,
-- dim,
-- italic,
-- underline,
-- 256-color and truecolor SGR sequences.
+| Built-in | What it does |
+| --- | --- |
+| `cd [dir]` | Change the shell directory. Supports `cd`, `cd -`, and relative paths. |
+| `pwd` | Print the shell directory. |
+| `export KEY[=value]` | Set an environment variable. `export` and `export -p` list variables. |
+| `unset KEY` | Remove an environment variable. |
+| `alias [name]` | List, inspect, or create aliases. |
+| `unalias name` / `unalias -a` | Remove aliases. |
+| `capture <command>` | Run with bounded, sanitized transcript output. |
+| `pty <command>` | Compatibility spelling for interactive terminal handoff. |
+| `clear` | Clear the visible transcript. |
+| `exit` / `logout` | Leave shell mode. |
 
-Captured output strips terminal-control sequences that could corrupt Kward's TUI, such as cursor movement, clear-screen controls, OSC title changes, and alternate-screen controls. Interactive commands write directly to the terminal without this sanitization so full-screen tools can work correctly; run only commands you trust with terminal access.
+Built-ins take precedence over aliases and executables.
 
-When rbenv is available, `ekwsh` also prepends the rbenv shims and bin directories to PATH and sets `RBENV_ROOT` when it was missing. This lets commands such as `ruby`, `bundle`, and `./exe/kward` use the same Ruby selected by rbenv without requiring `rbenv init` support in `ekwsh`.
+## Configure ekwsh
 
-By default, `ekwsh` sets conservative color-friendly environment values:
+Global shell configuration lives at:
+
+```text
+~/.kward/ekwsh.yml
+```
+
+When `KWARD_CONFIG_PATH` selects another main config file, Kward reads `ekwsh.yml` from the same directory.
+
+A practical configuration might look like this:
+
+```yaml
+shell: /bin/sh
+timeout_seconds: 300
+max_output_bytes: 1048576
+history_limit: 1000
+
+env:
+  FORCE_COLOR: "1"
+  BUNDLE_WITHOUT: "production"
+  RAILS_ENV: "test"
+
+aliases:
+  ll: "ls -la"
+  gs: "git status --short"
+  gd: "git diff --color=always"
+  glog: "git log --decorate --stat --graph"
+  be: "bundle exec"
+  t: "bundle exec ruby -Itest"
+```
+
+### Settings
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `shell` | `/bin/sh` | POSIX-compatible shell used with `-c`. It must be an absolute executable path. |
+| `timeout_seconds` | `300` | Maximum runtime for one captured command. |
+| `max_output_bytes` | `1048576` | Maximum output retained for one captured command. |
+| `history_limit` | `1000` | Maximum shell-history entries per workspace. |
+
+Invalid or relative `shell` paths fall back to `/bin/sh`. These timeout and output limits apply only to `capture` inside `/shell`, not interactive commands or the separate `/capture` slash command.
+
+### Environment
+
+Configured `env` values are applied when `/shell` starts. Keys must be valid environment-variable names; nil values and invalid keys are ignored, and other values are converted to strings.
+
+Kward also supplies conservative terminal defaults:
 
 ```sh
 CLICOLOR=1
@@ -160,97 +238,19 @@ COLORTERM=truecolor
 TERM=xterm-256color  # only when TERM is missing or dumb
 ```
 
-It does **not** force color by default. If a tool does not emit color because stdout is not a TTY, use a command-specific flag or configure forced color yourself:
+It does not force color. Set `FORCE_COLOR`, `CLICOLOR_FORCE`, or a command-specific option such as `--color=always` when needed.
 
-```sh
-git diff --color=always
-grep --color=always TODO lib/**/*.rb
-```
-
-## Global ekwsh config
-
-You can configure environment variables and aliases in:
-
-```text
-~/.kward/ekwsh.yml
-```
-
-If `KWARD_CONFIG_PATH` points to another config file, `ekwsh.yml` is read from that file's directory instead.
-
-Example:
-
-```yaml
-shell: /bin/sh
-# timeout_seconds: 300
-# max_output_bytes: 1048576
-# history_limit: 1000
-
-env:
-  FORCE_COLOR: "1"
-  CLICOLOR_FORCE: "1"
-  RAILS_ENV: "test"
-
-aliases:
-  ll: "ls -la"
-  gs: "git status --short"
-  gd: "git diff --color=always"
-  be: "bundle exec"
-  t: "bundle exec ruby -Itest"
-```
-
-### Runtime settings
-
-`ekwsh` accepts these top-level runtime settings:
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| `shell` | `/bin/sh` | Absolute path to the POSIX-compatible shell used with `-c`. Invalid or relative paths fall back to `/bin/sh`. |
-| `timeout_seconds` | `300` | Maximum runtime for one `capture` command. |
-| `max_output_bytes` | `1048576` | Maximum output retained for one `capture` command. |
-| `history_limit` | `1000` | Maximum persisted shell history entries per workspace. |
-
-When a captured command exceeds `timeout_seconds`, `ekwsh` terminates it and reports the timeout. When captured output exceeds `max_output_bytes`, `ekwsh` terminates the command, keeps bounded output, and reports the output limit. Interactive commands are unbounded; Ctrl-C is forwarded to the child. Press Ctrl-C during a captured command to cancel its Kward worker and return to the shell prompt.
-
-### Environment variables
-
-`env` values are applied when shell mode starts, after Kward's conservative color defaults.
-
-Keys must look like environment variable names:
-
-```text
-A_Z, digits after the first character, and underscores
-```
-
-Invalid keys are ignored. Values are converted to strings. Nil values are ignored.
-
-Configured env is useful for local preferences such as:
-
-```yaml
-env:
-  FORCE_COLOR: "1"
-  BUNDLE_WITHOUT: "production"
-  RAILS_ENV: "test"
-```
-
-For one shell session, you can also use the built-in `export` command:
-
-```sh
-export FORCE_COLOR=1
-```
+When rbenv is available, Kward adds its shims and bin directories to `PATH` and supplies `RBENV_ROOT` if it was missing. This lets `ruby`, `bundle`, and `./exe/kward` use the selected Ruby without sourcing shell startup files.
 
 ### Aliases
 
-Aliases expand the first word of a command once.
-
-With this config:
+Aliases replace the first command word once and append any remaining arguments:
 
 ```yaml
 aliases:
   ll: "ls -la"
   t: "bundle exec ruby -Itest"
 ```
-
-these commands run as:
 
 ```sh
 ll lib
@@ -260,93 +260,25 @@ t test/test_ekwsh.rb
 # runs: bundle exec ruby -Itest test/test_ekwsh.rb
 ```
 
-Aliases are intentionally simple:
+Configured aliases work inside `/shell` and after `!`. Aliases created with the `alias` built-in belong only to the current `/shell` session and are not shared with one-shot `!command` input.
 
-- only the first word is expanded,
-- aliases do not recursively expand,
-- built-ins win over alias names,
-- aliases are not shell functions,
-- aliases are global for now.
+For compatibility with older configs, Kward removes a leading `pty` or `capture` mode marker when a configured alias is invoked through `!`, because `!command` is always interactive.
 
-List configured aliases inside `ekwsh`:
+Aliases are intentionally simple: they do not expand recursively and are not shell functions. Use `alias` to list them, `alias name=value` to create a runtime alias, and `unalias` to remove one.
 
-```sh
-alias
-```
+## Terminal output and safety
 
-Show specific aliases:
+Interactive commands write directly to your terminal so full-screen tools can work. Their output is not sanitized and may contain terminal control sequences. Run only commands you trust with terminal access.
 
-```sh
-alias ll gs
-```
-
-Aliases also appear in command-name Tab completion inside `/shell` and after the normal composer's `!` prefix. Leading-`!` commands expand the same configured alias once, but do not share aliases created at runtime inside a `/shell` session. Because `!command` is always interactive, Kward removes a leading `capture` or legacy `pty` marker from an expanded alias before running it.
-
-## Interactive PTY commands
-
-External commands entered inside `/shell` own an interactive PTY by default:
-
-```sh
-git log
-vim README.md
-ruby
-ssh example.com
-```
-
-Kward forwards your keyboard input to the process and streams its output directly to the terminal. This lets tools such as `less` receive keys like Space, `/`, `n`, and `q` normally. When the command exits, Kward restores its prompt without adding PTY lifecycle or exit-status messages to the transcript.
-
-The older `/pty <command>` slash command and shell `pty <command>` built-in remain available for compatibility. Inside `/shell`, they inherit the embedded shell's current directory and environment just like an ordinary external command.
-
-## Captured commands
-
-Use `capture <command>` inside `/shell` when output should remain in Kward's transcript:
-
-```sh
-capture git status --short
-capture bundle exec ruby -Itest test/test_ekwsh.rb
-```
-
-Captured commands run under a minimal PTY so terminal-aware tools can detect TTY output and terminal width, but keyboard input is not forwarded. The configured timeout and output-size limit apply to captured commands. ANSI output is transcript-sanitized, and Ctrl-C cancels the captured worker through Kward.
-
-From the normal composer, `/capture <command>` provides the same bounded one-shot behavior using the active workspace root. Use `!command` for an interactive one-shot command.
-
-## `/shell` versus `!command`
-
-Kward has two ways to run local commands yourself:
-
-```text
-!git status --short
-```
-
-runs one command in an interactive PTY directly from the normal composer. When `!` is the first character, press Tab to complete shell commands and paths:
-
-```text
-!git sta<Tab>
-!cat lib/kwa<Tab>
-```
-
-This completion uses the active workspace root, command `PATH`, and aliases configured in `ekwsh.yml`. Configured aliases expand once for submitted `!command` input, including any trailing arguments. Runtime state from an open `/shell` session—such as its current directory, exported variables, or aliases created with the `alias` built-in—is not shared; `!command` remains a one-shot command. Use `/capture <command>` instead when its output should be bounded and retained in Kward's transcript.
-
-```text
-/shell
-```
-
-starts an embedded command mode for several commands with persistent shell state, aliases, completion, and per-tab shell context.
-
-Use `!command` for one-offs. Use `/shell` when you expect to run several commands in a row.
+Commands run with `capture` inside `/shell` preserve safe ANSI color and style sequences while removing cursor movement, clear-screen controls, title changes, alternate-screen controls, and similar sequences that could damage the TUI transcript.
 
 ## Limitations
 
-`ekwsh` is deliberately not a full interactive terminal.
+`ekwsh` manages shell-like state, but it is not a persistent login shell or terminal emulator:
 
-Current limitations:
-
-- interactive command output is visible in terminal scrollback but only the command and exit summary are durable in Kward's transcript,
-- interactive commands have no automatic timeout or output-size limit,
-- no job control; a stopped child is terminated so it cannot strand the terminal,
-- no persistent shell functions,
-- no shell startup file sourcing,
-- no native readline from your login shell,
-- captured `/shell` command output is transcript-sanitized rather than treated as a full terminal UI.
-
-External `/shell` commands use interactive PTY passthrough. Kward does not emulate or retain their full-screen terminal state.
+- each external command runs separately through the configured shell,
+- there is no job control; a stopped child is terminated rather than leaving the terminal stranded,
+- shell functions do not persist and shell startup files are not sourced,
+- there is no login-shell readline integration,
+- full-screen terminal state is not retained after an interactive command exits,
+- interactive output remains in terminal scrollback only; Kward writes the submitted command to the current TUI view but does not retain the child's screen contents in the conversation.
