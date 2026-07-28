@@ -97,7 +97,15 @@ module Kward
           return true
         end
 
-        expanded_command = bang_shell(agent).expand_alias(command, interactive: true)
+        shell = bang_shell(agent)
+        editor_result = shell.editor_command_result(command)
+        if editor_result
+          @prompt.say(editor_result.output) unless editor_result.output.to_s.empty?
+          open_ekwsh_editor(editor_result.open_editor_path, shell) if editor_result.open_editor_path
+          return true
+        end
+
+        expanded_command = shell.expand_alias(command, interactive: true)
         run_user_interactive_pty_command(
           expanded_command,
           shell: Ekwsh::DEFAULT_SHELL,

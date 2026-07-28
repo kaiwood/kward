@@ -33,6 +33,17 @@ aliases:
 !glog
 ```
 
+An alias that resolves to `kward edit <filename>` opens Kward's integrated editor in the current session instead of starting a nested Kward process:
+
+```yaml
+aliases:
+  vibe: "kward edit"
+```
+
+```text
+!vibe filename.txt
+```
+
 Press Tab after `!` to complete configured aliases, executables from `PATH`, and paths from the active workspace:
 
 ```text

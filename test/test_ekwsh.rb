@@ -146,6 +146,27 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "$ ./exe/kward edit Gemfile"
   end
 
+  def test_editor_command_result_expands_alias
+    shell = Kward::Ekwsh.new(
+      cwd: Dir.pwd,
+      shell: "/bin/sh",
+      env: { "PATH" => "" },
+      aliases: { "vibe" => "kward edit" }
+    )
+
+    result = shell.editor_command_result("vibe 'note one.md'")
+
+    assert_equal 0, result.exit_status
+    assert_equal File.expand_path("note one.md", Dir.pwd), result.open_editor_path
+    assert_includes result.output, "$ vibe 'note one.md'"
+  end
+
+  def test_editor_command_result_ignores_external_commands
+    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+
+    assert_nil shell.editor_command_result("printf hello")
+  end
+
   def test_external_command_requests_interactive_command
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 

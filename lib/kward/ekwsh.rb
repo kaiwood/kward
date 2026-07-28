@@ -84,6 +84,11 @@ module Kward
       command
     end
 
+    def editor_command_result(command, display_command: command)
+      expanded_command = expand_alias(command, interactive: true)
+      kward_command_result(expanded_command, display_command: display_command)
+    end
+
     private
 
     def configure_rbenv_environment

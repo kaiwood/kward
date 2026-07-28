@@ -1031,6 +1031,45 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_loop_opens_bang_ekwsh_kward_edit_alias_in_current_prompt
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, "{}")
+      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+        aliases:
+          vibe: kward edit
+      YAML
+      file_path = File.join(File.realpath(dir), "note one.md")
+      prompt = FakePrompt.new(["!vibe 'note one.md'", "/exit"])
+      opened = []
+      prompt.define_singleton_method(:edit_file) do |path, base_dir:, allow_new:|
+        opened << { path: path, base_dir: base_dir, allow_new: allow_new }
+        true
+      end
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      pty_calls = []
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |shell, command, env:, cwd:|
+        pty_calls << { shell: shell, command: command, env: env, cwd: cwd }
+        raise "editor alias should not start a PTY"
+      end
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal [{ path: file_path, base_dir: File.realpath(dir), allow_new: true }], opened
+      assert_empty pty_calls
+      output = strip_ansi(prompt.output.join)
+      assert_includes output, "$ vibe 'note one.md'"
+      refute_includes output, "Exit status:"
+      assert_empty conversation.messages
+    end
+  end
+
   def test_interactive_loop_requeues_ekwsh_tab_action
     prompt = FakePrompt.new([{ tab_action: :next }, "/exit"])
     conversation = Kward::Conversation.new(system_message: nil)
