@@ -1,12 +1,10 @@
 # Embedded shell
 
-Kward gives you a few convenient ways to run your own shell commands without leaving the interactive TUI:
+Kward lets you run your own shell commands without leaving the interactive TUI. Choose the workflow that matches what you are doing:
 
-| What you want | Use |
-| --- | --- |
-| Run one command from the normal composer | `!command` |
-| Work through several commands with a persistent directory, environment, and aliases | `/shell` |
-| Keep bounded command output in the transcript view | `/capture <command>` or `capture <command>` inside `/shell` |
+- **For one quick command, use `!command`.** It runs from the active workspace and returns you to the normal composer when it finishes.
+- **For a longer stretch of shell work, use `/shell`.** It keeps its directory, environment, aliases, and history between commands.
+- **For bounded output in the transcript view, use `/capture <command>`.** Inside `/shell`, use `capture <command>` for the same kind of readable output while keeping the shell's current state.
 
 Ordinary `!command` input and external commands inside `/shell` receive an interactive PTY. Pagers, Vim, SSH, REPLs, password prompts, and other interactive tools therefore work without a `pty` prefix.
 
