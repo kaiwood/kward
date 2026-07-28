@@ -280,7 +280,7 @@ Show specific aliases:
 alias ll gs
 ```
 
-Aliases also appear in command-name Tab completion inside `/shell` and after the normal composer's `!` prefix. Leading-`!` commands expand the same configured alias once, but do not share aliases created at runtime inside a `/shell` session.
+Aliases also appear in command-name Tab completion inside `/shell` and after the normal composer's `!` prefix. Leading-`!` commands expand the same configured alias once, but do not share aliases created at runtime inside a `/shell` session. Because `!command` is always interactive, Kward removes a leading `capture` or legacy `pty` marker from an expanded alias before running it.
 
 ## Interactive PTY commands
 

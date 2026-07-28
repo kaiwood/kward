@@ -167,10 +167,17 @@ class TestEkwsh < KwardTestCase
   end
 
   def test_exposes_alias_expansion_for_one_shot_commands
-    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "hi" => "printf hello" })
+    shell = Kward::Ekwsh.new(
+      cwd: Dir.pwd,
+      shell: "/bin/sh",
+      env: { "PATH" => "" },
+      aliases: { "hi" => "printf hello", "glog" => "pty git log", "check" => "capture git status" }
+    )
 
     assert_equal "printf hello captain", shell.expand_alias("hi captain")
-    assert_equal "printf untouched", shell.expand_alias("printf untouched")
+    assert_equal "git log --oneline", shell.expand_alias("glog --oneline", interactive: true)
+    assert_equal "git status --short", shell.expand_alias("check --short", interactive: true)
+    assert_equal "printf untouched", shell.expand_alias("printf untouched", interactive: true)
   end
 
   def test_builtin_wins_over_alias

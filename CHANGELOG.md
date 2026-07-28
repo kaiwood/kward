@@ -19,6 +19,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Removed legacy `pty` and `capture` mode markers from configured aliases expanded by `!command`, preventing valid aliases such as `glog: pty git log` from failing with status 127.
 - Hardened interactive PTY cleanup, final-output draining, input EOF handling, resize propagation, and stopped-child recovery so terminal handoff reliably returns control to Kward.
 - Normalized binary-tagged UTF-8 shell output before transcript rendering, preventing interactive `!` commands such as `tree` from crashing the composer.
 - Deferred interactive warning output until startup transcript replay completes, keeping Runtime diagnostics visible instead of immediately overwriting them with the replayed transcript.

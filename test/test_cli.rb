@@ -1243,14 +1243,14 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_loop_expands_configured_ekwsh_alias_for_bang_command
+  def test_interactive_loop_expands_legacy_pty_alias_for_bang_command
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
         aliases:
-          greet: printf hello
+          glog: pty git log --decorate
       YAML
-      prompt = FakePrompt.new(["!greet captain", "/exit"])
+      prompt = FakePrompt.new(["!glog --stat", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
       agent.define_singleton_method(:conversation) { conversation }
@@ -1266,8 +1266,8 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal ["printf hello captain"], calls.map { |call| call[:command] }
-      assert_includes strip_ansi(prompt.output.join), "$ greet captain"
+      assert_equal ["git log --decorate --stat"], calls.map { |call| call[:command] }
+      assert_includes strip_ansi(prompt.output.join), "$ glog --stat"
       assert_empty conversation.messages
     end
   end

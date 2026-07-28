@@ -72,13 +72,14 @@ module Kward
       Completion.new(range: token[:range], replacement: replacement, candidates: candidates)
     end
 
-    def expand_alias(command)
+    def expand_alias(command, interactive: false)
       words = shell_words(command)
       return command if words.empty? || BUILTINS.include?(words.first)
       return command unless @aliases[words.first]
 
       rest = command.sub(/\A\s*#{Regexp.escape(words.first)}\b\s*/, "")
-      [@aliases.fetch(words.first), rest].reject(&:empty?).join(" ")
+      expanded = [@aliases.fetch(words.first), rest].reject(&:empty?).join(" ")
+      interactive ? expanded.sub(/\A\s*(?:capture|pty)(?:\s+|\z)/, "") : expanded
     rescue ArgumentError
       command
     end
