@@ -1090,6 +1090,29 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_bang_completion_provider_completes_real_prompt_input
+    Dir.mktmpdir do |dir|
+      input, writer = IO.pipe
+      writer.write("!pw\t\r")
+      writer.close
+      prompt = Kward::PromptInterface.new(input: input, output: StringIO.new)
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("PATH" => "") do
+        cli.send(:install_bang_completion_provider, agent)
+        assert_equal "!pwd ", prompt.ask("You>")
+      ensure
+        cli.send(:clear_bang_completion_provider)
+      end
+    ensure
+      prompt&.close
+      input&.close unless input&.closed?
+    end
+  end
+
   def test_bang_completion_preserves_marker_and_offsets_command_range
     Dir.mktmpdir do |dir|
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
