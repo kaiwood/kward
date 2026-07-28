@@ -72,6 +72,17 @@ module Kward
       Completion.new(range: token[:range], replacement: replacement, candidates: candidates)
     end
 
+    def expand_alias(command)
+      words = shell_words(command)
+      return command if words.empty? || BUILTINS.include?(words.first)
+      return command unless @aliases[words.first]
+
+      rest = command.sub(/\A\s*#{Regexp.escape(words.first)}\b\s*/, "")
+      [@aliases.fetch(words.first), rest].reject(&:empty?).join(" ")
+    rescue ArgumentError
+      command
+    end
+
     private
 
     def configure_rbenv_environment
@@ -374,17 +385,6 @@ module Kward
 
     def self.valid_alias_name?(name)
       name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/) && !BUILTINS.include?(name.to_s)
-    end
-
-    def expand_alias(command)
-      words = shell_words(command)
-      return command if words.empty? || BUILTINS.include?(words.first)
-      return command unless @aliases[words.first]
-
-      rest = command.sub(/\A\s*#{Regexp.escape(words.first)}\b\s*/, "")
-      [@aliases.fetch(words.first), rest].reject(&:empty?).join(" ")
-    rescue ArgumentError
-      command
     end
 
     def run_expanded_command(command, cancellation: nil, &block)

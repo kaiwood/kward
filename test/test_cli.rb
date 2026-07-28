@@ -1162,6 +1162,28 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_bang_completion_includes_configured_ekwsh_aliases
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+        aliases:
+          greet: printf hello
+      YAML
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+      completion = with_env("KWARD_CONFIG_PATH" => config_path, "PATH" => "") do
+        cli.send(:complete_bang_command, "!gre", 4, agent)
+      end
+
+      assert_equal 1...4, completion.range
+      assert_equal "greet ", completion.replacement
+      assert_includes completion.candidates, "greet"
+    end
+  end
+
   def test_bang_completion_resolves_paths_from_workspace_root_without_aliases
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib"))
@@ -1217,6 +1239,35 @@ class TestCLI < KwardTestCase
       assert_includes output, "$ echo hello"
       assert_includes output, "interactive PTY session started"
       assert_includes output, "interactive PTY session exited with status 0"
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_expands_configured_ekwsh_alias_for_bang_command
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+        aliases:
+          greet: printf hello
+      YAML
+      prompt = FakePrompt.new(["!greet captain", "/exit"])
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      calls = []
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |shell, command, env:, cwd:|
+        calls << { shell: shell, command: command, env: env, cwd: cwd }
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0)
+      end
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.interactive_loop(agent: agent)
+      end
+
+      assert_equal ["printf hello captain"], calls.map { |call| call[:command] }
+      assert_includes strip_ansi(prompt.output.join), "$ greet captain"
       assert_empty conversation.messages
     end
   end

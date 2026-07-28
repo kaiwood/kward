@@ -186,7 +186,7 @@ aliases:
 
 `env` values are applied when shell mode starts, after Kward's conservative color defaults. Keys must look like environment variable names (`A_Z`, digits after the first character, and underscores); invalid keys are ignored. Values are converted to strings.
 
-`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Built-in `ekwsh` commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases. External commands receive an interactive PTY by default; prefix an alias value with `capture` when its output should use the configured timeout, output limit, and transcript sanitization. Run `alias` inside `ekwsh` to list configured aliases. Aliases are also included in command-name Tab completion.
+`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Configured aliases are available both inside `/shell` and after the normal composer's `!` prefix, including command-name Tab completion. Built-in `ekwsh` commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization; that shell-builtin spelling is not portable to `!command`, whose expanded aliases are always interactive. Run `alias` inside `ekwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current `/shell` session and are not available to `!command` input.
 
 ## Provider and model settings
 

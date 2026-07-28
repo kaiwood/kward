@@ -280,7 +280,7 @@ Show specific aliases:
 alias ll gs
 ```
 
-Aliases also appear in command-name Tab completion.
+Aliases also appear in command-name Tab completion inside `/shell` and after the normal composer's `!` prefix. Leading-`!` commands expand the same configured alias once, but do not share aliases created at runtime inside a `/shell` session.
 
 ## Interactive PTY commands
 
@@ -325,7 +325,7 @@ runs one command in an interactive PTY directly from the normal composer. When `
 !cat lib/kwa<Tab>
 ```
 
-This completion uses the active workspace root and command `PATH`. It does not use aliases or persistent state from `/shell`; the submitted `!command` behavior remains a one-shot command. Use `/capture <command>` instead when its output should be bounded and retained in Kward's transcript.
+This completion uses the active workspace root, command `PATH`, and aliases configured in `ekwsh.yml`. Configured aliases expand once for submitted `!command` input, including any trailing arguments. Runtime state from an open `/shell` session—such as its current directory, exported variables, or aliases created with the `alias` built-in—is not shared; `!command` remains a one-shot command. Use `/capture <command>` instead when its output should be bounded and retained in Kward's transcript.
 
 ```text
 /shell

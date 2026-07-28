@@ -94,11 +94,13 @@ module Kward
           return true
         end
 
+        expanded_command = bang_shell(agent).expand_alias(command)
         run_user_interactive_pty_command(
-          command,
+          expanded_command,
           shell: Ekwsh::DEFAULT_SHELL,
           env: interactive_pty_environment({}, preserve_git_pager: true),
-          cwd: interactive_workspace_root(agent)
+          cwd: interactive_workspace_root(agent),
+          intro: "$ #{command}\n[interactive PTY session started]\n"
         )
         true
       end
@@ -125,7 +127,7 @@ module Kward
         return false unless value.start_with?("!")
         return nil if cursor.to_i <= 1
 
-        completion = bang_completion_shell(agent).complete(value[1..], cursor.to_i - 1)
+        completion = bang_shell(agent).complete(value[1..], cursor.to_i - 1)
         return nil unless completion
 
         Ekwsh::Completion.new(
@@ -135,13 +137,14 @@ module Kward
         )
       end
 
-      def bang_completion_shell(agent)
+      def bang_shell(agent)
         root = File.expand_path(interactive_workspace_root(agent).to_s)
-        cache_key = [root, ENV.fetch("PATH", "")]
-        return @bang_completion_shell if @bang_completion_shell_key == cache_key
+        aliases = ConfigFiles.read_ekwsh_config[:aliases]
+        cache_key = [root, ENV.fetch("PATH", ""), aliases.sort]
+        return @bang_shell if @bang_shell_key == cache_key
 
-        @bang_completion_shell_key = cache_key
-        @bang_completion_shell = Ekwsh.new(cwd: root, env: ENV.to_h, aliases: {})
+        @bang_shell_key = cache_key
+        @bang_shell = Ekwsh.new(cwd: root, env: ENV.to_h, aliases: aliases)
       end
 
       def install_bang_completion_provider(agent)

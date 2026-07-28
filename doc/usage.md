@@ -66,7 +66,7 @@ Inside interactive mode, ask Kward to run a command:
 Run the focused test for the CLI status command.
 ```
 
-Or run an interactive PTY command yourself from the composer by prefixing it with `!`:
+Or run an interactive PTY command yourself from the composer by prefixing it with `!`. Aliases configured in `ekwsh.yml` are expanded here too:
 
 ```text
 !git status --short
