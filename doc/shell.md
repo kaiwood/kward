@@ -133,7 +133,7 @@ cat "my<Tab>
 # => cat "my file.txt
 ```
 
-If there are multiple candidates, Kward applies any common prefix. When there is no longer common prefix, it prints a compact candidate list in the transcript. Command-name completion caches `$PATH` executables and refreshes when `PATH` changes through shell assignment, `export`, or `unset`.
+If there are multiple candidates, repeated Tab presses cycle through them in order and wrap back to the first candidate. Completion candidates stay in the composer and are not printed in the transcript. Command-name completion caches `$PATH` executables and refreshes when `PATH` changes through shell assignment, `export`, or `unset`.
 
 ## Colors and ANSI output
 
