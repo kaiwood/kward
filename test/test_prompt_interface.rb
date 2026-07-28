@@ -777,6 +777,21 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
+  def test_prompt_interface_records_safe_terminal_output_before_redrawing
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.say("$ ls\n")
+    prompt.record_transient_terminal_output("Gemfile\nREADME.md\n")
+
+    transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
+    assert_includes transcript, "$ ls\nGemfile\nREADME.md\n"
+    assert_includes output.string, TTY::Cursor.clear_screen
+  end
+
   def test_prompt_interface_terminal_handoff_restores_terminal_after_error
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

@@ -873,6 +873,21 @@ module Kward
       end
     end
 
+    def record_transient_terminal_output(text)
+      value = text.to_s
+      return if value.empty?
+
+      @mutex.synchronize do
+        append_transcript_buffer(value)
+        append_transcript_buffer("\n") unless value.end_with?("\n")
+        @stream_state.finish_block
+        width, height = screen_size
+        remember_transcript_viewport_locked(height)
+        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
+        @output_io.flush
+      end
+    end
+
     def write_transcript_delta(delta)
       @mutex.synchronize do
         with_synchronized_output_locked do

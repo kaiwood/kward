@@ -4,6 +4,9 @@ module Kward
   class CLI
     # Shared runtime construction helpers for CLI conversations, workspaces, plugins, and sessions.
     module RuntimeHelpers
+      MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES = 1_048_576
+      UNSAFE_TRANSCRIPT_CONTROL_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.freeze
+
       private
 
       def new_conversation(workspace_root: current_workspace_root)
@@ -223,21 +226,49 @@ module Kward
 
       def run_user_interactive_pty_command(command, shell:, env:, cwd:, intro: nil)
         @prompt.say(intro || "$ #{command}\n") if @prompt.respond_to?(:say)
-        run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd)
+        output = +"".b
+        output_truncated = false
+        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |chunk|
+          remaining = MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES - output.bytesize
+          if chunk.bytesize > remaining
+            output << chunk.byteslice(0, remaining) if remaining.positive?
+            output_truncated = true
+          else
+            output << chunk
+          end
+        end
+        transcript_output = terminal_transcript_output(output, result, truncated: output_truncated)
+        if transcript_output && @prompt.respond_to?(:record_transient_terminal_output)
+          @prompt.record_transient_terminal_output(transcript_output)
+        end
+        result
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
         nil
       end
 
-      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:)
+      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &block)
         runner = InteractivePtyRunner.new
         if @prompt.respond_to?(:with_terminal_handoff)
           @prompt.with_terminal_handoff do |input, output|
-            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output)
+            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output, &block)
           end
         else
-          runner.run(shell, "-c", command, env: env, cwd: cwd)
+          runner.run(shell, "-c", command, env: env, cwd: cwd, &block)
         end
+      end
+
+      def terminal_transcript_output(output, result, truncated:)
+        return if truncated || result.input_forwarded
+
+        text = ANSI.normalize_transcript_encoding(output).gsub("\r\n", "\n")
+        return if text.empty? || text.include?("\r")
+
+        sanitized = ANSI.sanitize_transcript(text)
+        return unless sanitized == text
+        return if ANSI.strip_control_sequences(text).match?(UNSAFE_TRANSCRIPT_CONTROL_PATTERN)
+
+        sanitized
       end
 
       def interactive_pty_environment(configured_env, preserve_git_pager: false)

@@ -1241,6 +1241,50 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_loop_records_line_oriented_bang_output
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["!ls", "/exit"])
+      recorded_output = []
+      prompt.define_singleton_method(:record_transient_terminal_output) { |text| recorded_output << text }
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_output|
+        on_output.call("\e[36mGemfile\e[0m\r\nREADME.md\r\n")
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+      end
+
+      cli.interactive_loop(agent: agent)
+
+      assert_equal ["\e[36mGemfile\e[0m\nREADME.md\n"], recorded_output
+      assert_empty conversation.messages
+    end
+  end
+
+  def test_interactive_loop_does_not_record_full_screen_bang_output
+    Dir.mktmpdir do |dir|
+      prompt = FakePrompt.new(["!less README.md", "/exit"])
+      recorded_output = []
+      prompt.define_singleton_method(:record_transient_terminal_output) { |text| recorded_output << text }
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+      agent = Object.new
+      agent.define_singleton_method(:conversation) { conversation }
+      agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_output|
+        on_output.call("\e[?1049hfull screen\e[?1049l")
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: true)
+      end
+
+      cli.interactive_loop(agent: agent)
+
+      assert_empty recorded_output
+      assert_empty conversation.messages
+    end
+  end
+
   def test_interactive_loop_expands_legacy_pty_alias_for_bang_command
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")

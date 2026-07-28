@@ -18,7 +18,7 @@ Prefix a command with `!` in the normal composer:
 !less README.md
 ```
 
-The command runs from the active workspace root and temporarily owns the terminal. When it exits, Kward restores the composer. Its output is for you only: it is not added to the AI conversation or sent to the model.
+The command runs from the active workspace root and temporarily owns the terminal. When it exits, Kward restores the composer. Safe, line-oriented output from commands such as `ls` is mirrored into the transient transcript view so a repaint cannot hide it. Shell output is never added to the AI conversation or sent to the model.
 
 Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
 
@@ -86,7 +86,7 @@ ruby
 ssh example.com
 ```
 
-Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. It prints the submitted command but no PTY start message or exit-status summary.
+Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. It prints the submitted command but no PTY start message or exit-status summary. Safe, line-oriented output from commands that did not read keyboard input is kept in the transient transcript view; full-screen and genuinely interactive output stays terminal-owned.
 
 Use `capture` inside `/shell` when you want ordinary, readable output in Kward's transcript area instead of direct terminal control:
 
@@ -266,7 +266,7 @@ Aliases are intentionally simple: they do not expand recursively and are not she
 
 ## Terminal output and safety
 
-Interactive commands write directly to your terminal so full-screen tools can work. Their output is not sanitized and may contain terminal control sequences. Run only commands you trust with terminal access.
+Interactive commands write directly to your terminal so full-screen tools can work. When a command does not read keyboard input and emits only line-oriented text plus safe color sequences, Kward mirrors that output into the transient transcript view after the command exits. Other interactive output is not sanitized and may contain terminal control sequences, so run only commands you trust with terminal access.
 
 Commands run with `capture` inside `/shell` preserve safe ANSI color and style sequences while removing cursor movement, clear-screen controls, title changes, alternate-screen controls, and similar sequences that could damage the TUI transcript.
 
@@ -279,4 +279,4 @@ Commands run with `capture` inside `/shell` preserve safe ANSI color and style s
 - shell functions do not persist and shell startup files are not sourced,
 - there is no login-shell readline integration,
 - full-screen terminal state is not retained after an interactive command exits,
-- interactive output remains in terminal scrollback only; Kward writes the submitted command to the current TUI view but does not retain the child's screen contents in the conversation.
+- safe line-oriented output may remain in the transient TUI transcript, but full-screen terminal state is not retained and no shell output becomes part of the AI conversation.

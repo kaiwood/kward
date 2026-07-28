@@ -8,6 +8,7 @@ class TestInteractivePtyRunner < KwardTestCase
     output_reader, output_writer = IO.pipe
     runner = Kward::InteractivePtyRunner.new
     result = nil
+    captured_output = +""
     ruby = RbConfig.ruby
 
     input_reader.define_singleton_method(:raw) do |&block|
@@ -22,7 +23,7 @@ class TestInteractivePtyRunner < KwardTestCase
         "STDIN.raw { print STDIN.getc; STDOUT.flush }",
         input: input_reader,
         output: output_writer
-      )
+      ) { |chunk| captured_output << chunk }
     end
     wait_until(timeout: 1, message: "interactive PTY runner did not start") { input_reader.instance_variable_get(:@raw_started) }
     input_writer.write("q")
@@ -33,7 +34,9 @@ class TestInteractivePtyRunner < KwardTestCase
 
     refute worker.alive?, "expected interactive PTY command to finish"
     assert_equal 0, result.exit_status
+    assert result.input_forwarded
     assert_includes output, "q"
+    assert_includes captured_output, "q"
   ensure
     worker&.kill if worker&.alive?
     close_ios(input_reader, input_writer, output_reader, output_writer)
@@ -91,6 +94,7 @@ class TestInteractivePtyRunner < KwardTestCase
     output_writer.close
 
     assert_equal 0, result.exit_status
+    refute result.input_forwarded
     assert_includes output_reader.read, "done"
   ensure
     close_ios(input_reader, input_writer, output_reader, output_writer)

@@ -9,7 +9,7 @@ module Kward
   # This is intentionally low level: UI orchestration decides when terminal
   # ownership is handed to the child process and how the result is presented.
   class InteractivePtyRunner
-    Result = Struct.new(:exit_status, keyword_init: true)
+    Result = Struct.new(:exit_status, :input_forwarded, keyword_init: true)
 
     READ_SIZE = 4096
 
@@ -18,10 +18,11 @@ module Kward
       @window_size = nil
     end
 
-    def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, output: $stdout)
+    def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, output: $stdout, &block)
       pid = nil
       status = nil
       writer = nil
+      input_forwarded = false
 
       PTY.spawn(env.to_h, *command, chdir: cwd.to_s) do |reader, child_writer, child_pid|
         pid = child_pid
@@ -29,12 +30,12 @@ module Kward
         update_window_size(reader, pid)
         with_raw_input(input) do
           drain_initial_input(input, writer)
-          status = forward_io(reader, writer, pid, input, output)
+          status, input_forwarded = forward_io(reader, writer, pid, input, output, &block)
         end
         status ||= wait_for_status(pid)
       end
 
-      Result.new(exit_status: exit_status(status))
+      Result.new(exit_status: exit_status(status), input_forwarded: input_forwarded)
     ensure
       writer&.close unless writer&.closed?
       terminate_and_reap(pid) if pid && status.nil?
@@ -68,25 +69,29 @@ module Kward
       nil
     end
 
-    def forward_io(reader, writer, pid, input, output)
+    def forward_io(reader, writer, pid, input, output, &block)
       input_open = true
+      input_forwarded = false
       loop do
         update_window_size(reader, pid)
         readers = [reader]
         readers << input if input_open
         readable = IO.select(readers, nil, nil, 0.02)&.first || []
-        forward_pty_output(reader, output) if readable.include?(reader)
-        input_open = forward_input(input, writer) if input_open && readable.include?(input)
+        forward_pty_output(reader, output, &block) if readable.include?(reader)
+        if input_open && readable.include?(input)
+          input_open, forwarded = forward_input(input, writer)
+          input_forwarded ||= forwarded
+        end
 
         status = finished_status(pid)
         next unless status
 
-        return finish_stopped_process(pid) if status.stopped?
+        return [finish_stopped_process(pid), input_forwarded] if status.stopped?
 
-        drain_pty_output(reader, output)
-        return status
+        drain_pty_output(reader, output, &block)
+        return [status, input_forwarded]
       rescue Errno::EIO
-        return wait_for_status(pid)
+        return [wait_for_status(pid), input_forwarded]
       end
     end
 
@@ -96,6 +101,7 @@ module Kward
 
       output.write(chunk)
       output.flush if output.respond_to?(:flush)
+      yield chunk if block_given?
     end
 
     def drain_pty_output(reader, output)
@@ -107,6 +113,7 @@ module Kward
         break if chunk.nil? || chunk == :wait_readable
 
         output.write(chunk)
+        yield chunk if block_given?
       end
       output.flush if output.respond_to?(:flush)
     rescue Errno::EIO
@@ -115,14 +122,14 @@ module Kward
 
     def forward_input(input, writer)
       chunk = input.read_nonblock(READ_SIZE, exception: false)
-      return false if chunk.nil?
-      return true if chunk == :wait_readable
+      return [false, false] if chunk.nil?
+      return [true, false] if chunk == :wait_readable
 
       writer.write(chunk)
       writer.flush
-      true
+      [true, true]
     rescue Errno::EIO, Errno::EPIPE, IOError
-      false
+      [false, false]
     end
 
     def update_window_size(reader, pid)
