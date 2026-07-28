@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Tab completion for shell commands and paths when the normal interactive prompt input begins with `!`.
 - Added workspace-scoped, digest-aware project skill trust decisions with interactive Allow, Deny, and Review prompts plus `/skills` and `kward skills` management commands.
 
 ### Changed

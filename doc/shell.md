@@ -307,7 +307,14 @@ Kward has two ways to run local commands yourself:
 !git status --short
 ```
 
-runs one command directly from the normal composer.
+runs one command directly from the normal composer. When `!` is the first character, press Tab to complete shell commands and paths:
+
+```text
+!git sta<Tab>
+!cat lib/kwa<Tab>
+```
+
+This completion uses the active workspace root and command `PATH`. It does not use aliases or persistent state from `/shell`; the submitted `!command` behavior remains a one-shot command.
 
 ```text
 /shell
