@@ -1155,7 +1155,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_bang_completion_cycles_workspace_paths_without_transcript_output
+  def test_bang_completion_displays_and_cycles_workspace_paths
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "examples"))
       FileUtils.mkdir_p(File.join(dir, "exe"))
@@ -1176,7 +1176,11 @@ class TestCLI < KwardTestCase
         cli.send(:clear_bang_completion_provider)
       end
 
-      refute_includes strip_ansi(output.string), "completions:"
+      rendered_output = strip_ansi(output.string)
+      assert_includes rendered_output, "╭ Completions"
+      assert_includes rendered_output, "./examples/"
+      assert_includes rendered_output, "./exe/"
+      refute_includes rendered_output, "completions:"
     ensure
       prompt&.close
       input&.close unless input&.closed?

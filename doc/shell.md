@@ -51,6 +51,8 @@ Press Tab after `!` to complete configured aliases, executables from `PATH`, and
 !cat lib/kwa<Tab>
 ```
 
+The completion overlay lists matching commands and paths. Press Tab repeatedly to cycle through the listed candidates.
+
 ## Work in shell mode
 
 Enter the embedded shell when you expect to run several commands:

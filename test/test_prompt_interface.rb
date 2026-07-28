@@ -19,7 +19,7 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
-  def test_prompt_interface_completion_provider_cycles_candidates_without_transcript_output
+  def test_prompt_interface_completion_provider_displays_and_cycles_candidates
     input, writer = IO.pipe
     output = StringIO.new
     writer.write("a\t\t\r")
@@ -39,7 +39,11 @@ class TestPromptInterface < KwardTestCase
 
     assert_equal "alpine", result
     assert_equal 1, calls
-    refute_includes strip_ansi(output.string), "completions:"
+    rendered_output = strip_ansi(output.string)
+    assert_includes rendered_output, "╭ Completions"
+    assert_includes rendered_output, "alpha"
+    assert_includes rendered_output, "alpine"
+    refute_includes rendered_output, "completions:"
   ensure
     input&.close unless input&.closed?
   end

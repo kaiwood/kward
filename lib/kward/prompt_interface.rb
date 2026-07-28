@@ -163,6 +163,7 @@ module Kward
       @pending_keys = []
       @completion_provider = nil
       @completion_cycle = nil
+      @completion_overlay = nil
       @redraw_handler = redraw_handler
       @transcript_redraw_requested = false
       @original_console_mode = nil
@@ -335,6 +336,7 @@ module Kward
       @mutex.synchronize do
         @completion_provider = provider
         @completion_cycle = nil
+        @completion_overlay = nil
         @slash_overlay_disabled = !slash_overlay
         render_prompt_locked if @started
       end
@@ -447,6 +449,8 @@ module Kward
           reset_history_navigation
         end
         @pending_keys.clear
+        @completion_cycle = nil
+        @completion_overlay = nil
         @asking = true
         @busy = false
         @queued_count = 0
@@ -699,6 +703,8 @@ module Kward
 
     def restore_composer_snapshot_locked(snapshot)
       @composer = snapshot[:composer] || new_composer_state_with_history
+      @completion_cycle = nil
+      @completion_overlay = nil
       @prompt_label = snapshot[:prompt_label].to_s.empty? ? "You>" : snapshot[:prompt_label].to_s
       self.composer_input = @composer.input
       self.composer_cursor = @composer.cursor

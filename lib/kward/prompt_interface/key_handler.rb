@@ -36,6 +36,9 @@ module Kward
         return true if handle_mouse_reporting_key(key)
         return if handle_bracketed_paste_key(key)
 
+        completion_overlay_result = handle_completion_overlay_key(key)
+        return completion_overlay_result unless completion_overlay_result == false
+
         csi_result = handle_csi_u_key(key)
         return csi_result unless csi_result == false
         return if handle_shift_enter_key(key)
@@ -575,6 +578,31 @@ module Kward
       CTRL_TAB_SEQUENCES = TerminalKeys::CTRL_TAB
       CTRL_SHIFT_TAB_SEQUENCES = TerminalKeys::CTRL_SHIFT_TAB
 
+      def handle_completion_overlay_key(key)
+        return false unless @completion_overlay
+
+        return handle_completion_provider_key("\t") if completion_tab_key?(key)
+
+        dismiss_completion_overlay
+        false
+      end
+
+      def completion_tab_key?(key)
+        return true if key == "\t"
+
+        sequence = parse_csi_u_key(key)
+        return false unless sequence && sequence[:code] == 9
+
+        completion = !ctrl_modifier?(sequence[:modifier]) && !shift_modifier?(sequence[:modifier])
+        queue_pending_keys(sequence[:remaining]) if completion && sequence[:remaining] && !sequence[:remaining].empty?
+        completion
+      end
+
+      def dismiss_completion_overlay
+        @completion_overlay = nil
+        @completion_cycle = nil
+      end
+
       def handle_completion_provider_key(key)
         return false unless key == "\t" && @completion_provider
 
@@ -597,6 +625,7 @@ module Kward
         return cycle if cycle[:input] == composer_input && cycle[:cursor] == composer_cursor
 
         @completion_cycle = nil
+        @completion_overlay = nil
         nil
       end
 
@@ -621,6 +650,7 @@ module Kward
             after: after
           }
           apply_completion_cycle_candidate(@completion_cycle)
+          show_completion_overlay(candidates)
           return
         end
 
@@ -629,10 +659,15 @@ module Kward
         self.composer_cursor = before.length + replacement.to_s.length
       end
 
+      def show_completion_overlay(candidates)
+        @completion_overlay = { candidates: candidates.map(&:to_s), index: 0 }
+      end
+
       def apply_completion_cycle_candidate(cycle)
         replacement = cycle[:candidates][cycle[:index]]
         self.composer_input = "#{cycle[:before]}#{replacement}#{cycle[:after]}"
         self.composer_cursor = cycle[:before].length + replacement.length
+        @completion_overlay[:index] = cycle[:index] if @completion_overlay
         cycle[:input] = composer_input
         cycle[:cursor] = composer_cursor
       end

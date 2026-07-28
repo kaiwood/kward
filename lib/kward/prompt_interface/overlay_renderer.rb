@@ -11,10 +11,22 @@ module Kward
         return selection_overlay_rows(width, height: height) if @select_state
         return git_overlay_rows(width, height: height) if @git_state
         return project_browser_rows(width, height: height) if project_browser_visible?
+        return completion_overlay_rows(width, height: height) if @completion_overlay
         return history_search_overlay_rows(width, height: height) if history_search_active?
         return file_overlay_rows(width, height: height) if file_overlay_visible?
 
         slash_overlay_rows(width, height: height)
+      end
+
+      def completion_overlay_rows(width, height: screen_height)
+        candidates = @completion_overlay[:candidates]
+        max_rows = max_overlay_list_rows(height)
+        selected = @completion_overlay[:index].to_i
+        start = centered_list_window_start(selected, candidates.length, max_rows)
+        rows = (candidates[start, max_rows] || []).each_with_index.map do |candidate, offset|
+          overlay_choice_line(candidate, selected: start + offset == selected)
+        end
+        overlay_card_rows("Completions", rows, width)
       end
 
       def history_search_overlay_rows(width, height: screen_height)
