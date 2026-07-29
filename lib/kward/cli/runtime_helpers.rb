@@ -253,6 +253,7 @@ module Kward
             output << chunk
           end
         end
+        @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
         transcript_output = terminal_transcript_output(output, result, truncated: output_truncated)
         if transcript_output && @prompt.respond_to?(:record_transient_terminal_output)
           @prompt.record_transient_terminal_output(transcript_output)

@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Refreshed composer status immediately after reasoning selection and interactive PTY commands, so reasoning levels and Git branch state no longer remain stale until the next input.
 - Prevented composer flicker during interactive prompt, bang-command, and slash-command submission by deferring the submitted composer's repaint to the next command state.
 - Preserved the busy composer while writing normal-turn transcript output so user-submission rendering does not clear it.
 - Bound CSI-u `Ctrl+Q` input to close the read-only `/git diff` viewer, matching the existing raw-key binding and ESC behavior.

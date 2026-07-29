@@ -956,7 +956,7 @@ module Kward
           refresh_reasoning_status
         else
           refresh_conversation_runtime(conversation, reasoning_effort: effort)
-          @prompt.redraw if @prompt.respond_to?(:redraw)
+          refresh_reasoning_status
         end
       end
 

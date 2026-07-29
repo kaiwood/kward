@@ -370,7 +370,8 @@ class TestCLISettings < KwardTestCase
       assert_equal ["Reasoning"], prompt.select_titles
       assert_equal ["None", "Low", "Medium (current)", "High", "Extra High"], prompt.select_choices.first
       assert_empty prompt.output
-      assert_equal 1, prompt.redraw_count
+      assert_equal 1, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
     end
   end
 

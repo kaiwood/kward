@@ -1322,6 +1322,7 @@ class TestCLI < KwardTestCase
       cli.interactive_loop(agent: agent)
 
       assert_equal [{ preserve_composer: true }], handoff_options
+      assert_equal 1, prompt.refresh_composer_status_count
       assert_empty conversation.messages
     end
   end
