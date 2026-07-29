@@ -234,7 +234,12 @@ module Kward
       end
 
       def run_user_interactive_pty_command(command, shell:, env:, cwd:, intro: nil)
-        @prompt.say(intro || "$ #{command}\n") if @prompt.respond_to?(:say)
+        intro_message = intro || "$ #{command}\n"
+        if @prompt.respond_to?(:write_transcript)
+          @prompt.write_transcript(intro_message)
+        elsif @prompt.respond_to?(:say)
+          @prompt.say(intro_message)
+        end
         output = +"".b
         output_truncated = false
         handoff_options = {}

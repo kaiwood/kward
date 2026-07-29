@@ -261,9 +261,16 @@ module Kward
           return value
         end
 
-        clear_finished_input_locked(reset_history: true)
+        clear_submitted_input_locked
         @output_io.flush
         value
+      end
+
+      def clear_submitted_input_locked
+        self.composer_input = ""
+        self.composer_cursor = 0
+        @composer.clear_attachments
+        reset_history_search
       end
 
       def clear_finished_input_locked(reset_history: false)

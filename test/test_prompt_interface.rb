@@ -866,6 +866,23 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_defers_composer_repaint_after_nonempty_submission
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("hello\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    assert_equal "hello", prompt.ask("You>")
+    assert_includes strip_ansi(output.string), "hello"
+    refute_includes output.string, Kward::PromptInterface::SYNCHRONIZED_OUTPUT_ENABLE
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_empty_enter_keeps_composer_rendered
     input, writer = IO.pipe
     output = StringIO.new
