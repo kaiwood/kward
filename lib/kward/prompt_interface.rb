@@ -262,24 +262,11 @@ module Kward
     end
 
     def say(message)
-      @mutex.synchronize do
-        text = message.to_s
-        if @restoring_transcript
-          write_transcript_text_locked(text)
-          write_transcript_text_locked("\n") unless text.end_with?("\n")
-          @stream_state.finish_block
-          next
-        end
+      write_transcript_message(message, preserve_composer: false)
+    end
 
-        with_synchronized_output_locked do
-          clear_prompt_for_output_locked
-          write_transcript_text_locked(text)
-          write_transcript_text_locked("\n") unless text.end_with?("\n")
-          @stream_state.finish_block
-          render_prompt_after_output_locked
-        end
-        @output_io.flush
-      end
+    def write_transcript(message)
+      write_transcript_message(message, preserve_composer: true)
     end
 
     def say_visual(message)
@@ -949,6 +936,31 @@ module Kward
     end
 
     private
+
+    def write_transcript_message(message, preserve_composer:)
+      @mutex.synchronize do
+        text = message.to_s
+        if @restoring_transcript
+          write_transcript_text_locked(text)
+          write_transcript_text_locked("\n") unless text.end_with?("\n")
+          @stream_state.finish_block
+          next
+        end
+
+        with_synchronized_output_locked do
+          if preserve_composer
+            prepare_transcript_output_locked
+          else
+            clear_prompt_for_output_locked
+          end
+          write_transcript_text_locked(text)
+          write_transcript_text_locked("\n") unless text.end_with?("\n")
+          @stream_state.finish_block
+          preserve_composer ? restore_composer_cursor_locked : render_prompt_after_output_locked
+        end
+        @output_io.flush
+      end
+    end
 
     def request_transcript_redraw
       redraw_screen_locked

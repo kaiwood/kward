@@ -256,6 +256,11 @@ module Kward
       def submit_input
         value = submitted_input
         add_history(composer_input)
+        if !@busy && value.strip.empty?
+          @output_io.flush
+          return value
+        end
+
         clear_finished_input_locked(reset_history: true)
         @output_io.flush
         value

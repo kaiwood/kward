@@ -217,7 +217,7 @@ module Kward
       # Writes the user transcript output for the terminal CLI flow.
       def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
         visible_input = display_input.nil? ? input : display_input
-        @prompt.say("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
+        write_prompt_transcript("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
         print_attachment_badges(input, references: attachment_references)
         print_pasted_images(input, image_parts: image_parts)
       end
@@ -227,7 +227,15 @@ module Kward
         badges = references ? Array(references).map { |reference| attachment_badge_text(reference) } : composer_attachment_badges(input)
         return if badges.empty?
 
-        @prompt.say("#{badges.join("\n")}\n")
+        write_prompt_transcript("#{badges.join("\n")}\n")
+      end
+
+      def write_prompt_transcript(message)
+        if @prompt.respond_to?(:write_transcript)
+          @prompt.write_transcript(message)
+        else
+          @prompt.say(message)
+        end
       end
 
       def composer_attachment_badges(input, attachments = [])

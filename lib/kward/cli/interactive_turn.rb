@@ -8,7 +8,6 @@ module Kward
 
       def run_interactive_turn(agent, input, display_input: nil)
         prepare_memory_context(agent.conversation, input) if agent.respond_to?(:conversation)
-        print_user_transcript(input, display_input: display_input) if prompt_interface?
         return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
 
         queued_inputs = []
@@ -27,6 +26,7 @@ module Kward
         answer = nil
         error = nil
         @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+        print_user_transcript(input, display_input: display_input)
 
         worker = Thread.new do
           options = agent_display_options(display_input)

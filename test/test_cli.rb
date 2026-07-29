@@ -1542,6 +1542,22 @@ class TestCLI < KwardTestCase
     assert_empty prompt.events
   end
 
+  def test_prompt_interface_interactive_turn_enters_busy_state_before_printing_user_transcript
+    prompt = BusyPrompt.new([])
+    prompt.define_singleton_method(:say) do |message|
+      @events << [:say, message]
+      @output << message
+    end
+    agent = EventAgent.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    begin_index = prompt.events.index([:begin_busy_input, "You>", "streaming"])
+    say_index = prompt.events.index { |event| event.first == :say }
+    assert_operator begin_index, :<, say_index
+  end
+
   def test_prompt_interface_interactive_turn_batches_streamed_deltas
     prompt = BusyPrompt.new([])
     events = 10.times.map { |index| Kward::Events::AssistantDelta.new(delta: index.to_s) }

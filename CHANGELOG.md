@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Prevented composer flicker during normal interactive turn submission by preserving the busy composer while writing transcript output.
 - Bound CSI-u `Ctrl+Q` input to close the read-only `/git diff` viewer, matching the existing raw-key binding and ESC behavior.
 - Routed leading-`!` commands and aliases resolving to `kward edit <filename>` into the integrated editor instead of spawning a nested Kward process.
 - Preserved safe, line-oriented PTY output such as `ls` by redrawing it into the transient transcript when returning from `/shell`, `!command`, or `/pty`, while leaving full-screen and keyboard-driven sessions terminal-owned.

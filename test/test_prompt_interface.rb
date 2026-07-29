@@ -866,6 +866,42 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_empty_enter_keeps_composer_rendered
+    input, writer = IO.pipe
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+    writer.write("\r")
+    writer.close
+
+    assert_equal "", prompt.ask("You>")
+    refute_includes output.string, TTY::Cursor.clear_line
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_prompt_interface_empty_enter_keeps_due_footer_refresh_from_clearing_composer
+    input, writer = IO.pipe
+    output = StringIO.new
+    footer = "first"
+    prompt = Kward::PromptInterface.new(input: input, output: output, footer: -> { footer })
+    prompt.start
+    footer = "second"
+    prompt.instance_variable_set(:@last_footer_refresh, prompt.send(:monotonic_now) - Kward::PromptInterface::FOOTER_REFRESH_INTERVAL)
+    output.truncate(0)
+    output.rewind
+    writer.write("\r")
+    writer.close
+
+    assert_equal "", prompt.ask("You>")
+    assert_includes strip_ansi(output.string), "second"
+    refute_includes output.string, TTY::Cursor.clear_line
+  ensure
+    input&.close unless input&.closed?
+  end
+
   def test_prompt_interface_exits_on_ctrl_d_when_empty
     assert_nil ask_prompt_with_input("\x04")
   end
@@ -1476,6 +1512,23 @@ class TestPromptInterface < KwardTestCase
     prompt.write_transcript_delta(" output\n")
 
     assert_includes strip_ansi(output.string), "shell output"
+  ensure
+    prompt&.close
+  end
+
+  def test_prompt_interface_writes_transcript_without_redrawing_busy_composer
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.write_transcript("\nYou> hello\n")
+
+    assert_includes strip_ansi(output.string), "You> hello"
+    assert_includes output.string, Kward::PromptInterface::CURSOR_HIDE
+    refute_includes output.string, TTY::Cursor.clear_line
+    refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT
   ensure
     prompt&.close
   end
