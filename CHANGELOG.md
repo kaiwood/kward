@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Displayed packaged plugins with their folder name in the startup plugin list, such as `folder/plugin.rb`.
 - Added a frozen composer display for line-oriented Git PTY commands while preserving the full-terminal handoff for full-screen programs.
 - Changed external `/shell` commands and one-shot `!command` input to use interactive PTY terminal handoff by default, while retaining `pty` and `/pty` for compatibility.
 - Made aliases configured in `ekwsh.yml` available to leading-`!` execution and command completion.

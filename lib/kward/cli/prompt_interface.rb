@@ -166,8 +166,14 @@ module Kward
       end
 
       def startup_plugins_value
-        filenames = plugin_registry.paths.map { |path| File.basename(path) }
+        filenames = plugin_registry.paths.map { |path| startup_plugin_name(path) }
         filenames.empty? ? "none" : filenames.join(", ")
+      end
+
+      def startup_plugin_name(path)
+        plugin_root = ConfigFiles.plugin_dir
+        prefix = "#{plugin_root}#{File::SEPARATOR}"
+        path.start_with?(prefix) ? path.delete_prefix(prefix) : File.basename(path)
       end
 
       def startup_status_line(refresh_update_check: false)

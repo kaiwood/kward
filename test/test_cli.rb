@@ -2197,12 +2197,20 @@ class TestCLI < KwardTestCase
   end
 
   def test_startup_plugins_value_lists_loaded_plugin_filenames
-    registry = Kward::PluginRegistry.new
-    registry.instance_variable_set(:@paths, ["/tmp/plugins/alpha.rb", "/tmp/plugins/beta.rb"])
-    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
-    cli.instance_variable_set(:@plugin_registry, registry)
+    Dir.mktmpdir do |home|
+      plugin_root = File.join(home, ".kward", "plugins")
+      registry = Kward::PluginRegistry.new
+      registry.instance_variable_set(:@paths, [
+        File.join(plugin_root, "alpha.rb"),
+        File.join(plugin_root, "folder", "plugin.rb")
+      ])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+      cli.instance_variable_set(:@plugin_registry, registry)
 
-    assert_equal "alpha.rb, beta.rb", cli.send(:startup_plugins_value)
+      with_env("HOME" => home) do
+        assert_equal "alpha.rb, folder/plugin.rb", cli.send(:startup_plugins_value)
+      end
+    end
   end
 
   def test_startup_plugins_value_shows_none_without_loaded_plugins
