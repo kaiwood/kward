@@ -42,6 +42,28 @@ class TestInteractivePtyRunner < KwardTestCase
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 
+  def test_forwards_terminal_control_output_byte_for_byte
+    input_reader, input_writer = IO.pipe
+    output_reader, output_writer = IO.pipe
+    payload = "\e[1;1Hchild output\e[?1049hfull screen\e[?1049l"
+    captured_output = +""
+
+    result = Kward::InteractivePtyRunner.new.run(
+      RbConfig.ruby,
+      "-e",
+      "STDOUT.write(#{payload.inspect})",
+      input: input_reader,
+      output: output_writer
+    ) { |chunk| captured_output << chunk }
+    output_writer.close
+
+    assert_equal 0, result.exit_status
+    assert_equal payload, output_reader.read
+    assert_equal payload, captured_output
+  ensure
+    close_ios(input_reader, input_writer, output_reader, output_writer)
+  end
+
   def test_drains_output_emitted_immediately_before_exit
     input_reader, input_writer = IO.pipe
     output_reader, output_writer = IO.pipe

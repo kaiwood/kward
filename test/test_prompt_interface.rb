@@ -781,6 +781,26 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
+  def test_prompt_interface_characterizes_partial_reconstruction_after_handoff
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.say("known transcript\n")
+    prompt.send(:composer_input=, "draft")
+    prompt.redraw
+    output.truncate(0)
+    output.rewind
+    child_output = "\e[1;1Hchild output"
+
+    prompt.with_terminal_handoff do |_input, handoff_output|
+      handoff_output.print(child_output)
+    end
+
+    assert_order output.string, child_output, Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE, "draft"
+    refute_includes output.string, TTY::Cursor.clear_screen
+    refute_includes output.string, "known transcript"
+  end
+
   def test_prompt_interface_records_safe_terminal_output_before_redrawing
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
@@ -828,6 +848,7 @@ class TestPromptInterface < KwardTestCase
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.start
+    prompt.send(:set_editor_bar_cursor_locked)
     output.truncate(0)
     output.rewind
 
@@ -839,6 +860,10 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004l"
     assert_includes output.string, "\e[>25u"
     assert_includes output.string, "\e[?2004h"
+    assert_includes output.string, Kward::TerminalSequences::MOUSE_REPORTING_DISABLE
+    assert_includes output.string, Kward::TerminalSequences::CURSOR_SHOW
+    assert_includes output.string, Kward::TerminalSequences::CURSOR_SHAPE_DEFAULT
+    assert_includes output.string, Kward::TerminalSequences.restore_scroll_region
   end
 
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
@@ -1840,6 +1865,20 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, TTY::Cursor.clear_screen
     refute_includes output.string, "former transcript"
     assert_includes strip_ansi(output.string), "╭ You "
+  end
+
+  def test_prompt_interface_tab_snapshot_restores_safe_transient_shell_output
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.say("$ ls\n")
+    prompt.record_transient_terminal_output("Gemfile\nREADME.md\n")
+    snapshot = prompt.tab_view_snapshot
+
+    prompt.clear_transcript
+    prompt.restore_tab_view_snapshot(snapshot)
+
+    transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
+    assert_includes transcript, "$ ls\nGemfile\nREADME.md\n"
   end
 
   def test_prompt_interface_tab_view_snapshot_can_omit_transcript_state
