@@ -75,8 +75,8 @@ module Kward
         @editor_bar_cursor_active = true
       end
 
-      def restore_editor_cursor_shape_locked
-        return unless @editor_bar_cursor_active
+      def restore_editor_cursor_shape_locked(force: false)
+        return unless force || @editor_bar_cursor_active
 
         @output_io.print(CURSOR_SHAPE_DEFAULT)
         @editor_bar_cursor_active = false
@@ -85,11 +85,6 @@ module Kward
       def reserve_composer_region_locked(width: screen_width, height: screen_height)
         rows, = composer_layout(width, height)
         ensure_scroll_region_locked(rows.length, width: width, height: height)
-      end
-
-      def make_room_for_composer_after_handoff_locked
-        rows, = composer_layout(screen_width, screen_height)
-        @output_io.print("\r\n" * rows.length)
       end
 
       def ensure_scroll_region_locked(row_count, redraw_transcript: true, width: screen_width, height: screen_height)

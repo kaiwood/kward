@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Reconstructed the complete Kward screen after interactive PTY handoff, including failure paths, instead of relying on the child process cursor position.
+
 ## [0.81.0] - 2026-08-20
 
 ### Added

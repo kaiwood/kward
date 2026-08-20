@@ -606,13 +606,16 @@ module Kward
       yield(input, output)
     ensure
       @mutex.synchronize do
-        restore_scroll_region_locked if preserve_composer
-        make_room_for_composer_after_handoff_locked if !preserve_composer && @started && @asking
+        restore_scroll_region_locked
         enter_raw_mode_locked
         @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
         @output_io.print(BRACKETED_PASTE_ENABLE)
+        disable_editor_mouse_reporting(force: true)
+        restore_editor_cursor_shape_locked(force: true)
+        @cursor_visible = nil
         @last_composer_rows = []
-        render_prompt_locked if @started && @asking
+        width, height = screen_size
+        with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         @output_io.flush
       end
     end

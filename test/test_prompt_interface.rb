@@ -773,7 +773,7 @@ class TestPromptInterface < KwardTestCase
     assert_same prompt.instance_variable_get(:@input_io), yielded_input
     assert_same output, yielded_output
     assert_includes output.string, "child"
-    assert_match(/child(?:\r\n)+\e\[>25u/, output.string)
+    assert_order output.string, "child", Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE
     assert_includes output.string, "\e[r"
     assert_includes output.string, "\e[<u"
     assert_includes output.string, "\e[?2004l"
@@ -781,7 +781,7 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
-  def test_prompt_interface_characterizes_partial_reconstruction_after_handoff
+  def test_prompt_interface_reconstructs_screen_after_arbitrary_child_cursor_movement
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.start
@@ -796,9 +796,11 @@ class TestPromptInterface < KwardTestCase
       handoff_output.print(child_output)
     end
 
-    assert_order output.string, child_output, Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE, "draft"
-    refute_includes output.string, TTY::Cursor.clear_screen
-    refute_includes output.string, "known transcript"
+    recovery_output = output.string[output.string.index(child_output)..]
+    assert_order recovery_output, Kward::TerminalSequences.restore_scroll_region,
+      Kward::PromptInterface::KEYBOARD_PROTOCOL_ENABLE, TTY::Cursor.clear_screen,
+      "known transcript", "draft"
+    assert_includes output.string, child_output
   end
 
   def test_prompt_interface_records_safe_terminal_output_before_redrawing
@@ -841,29 +843,38 @@ class TestPromptInterface < KwardTestCase
 
     assert_includes output.string, "Everything up-to-date"
     assert_includes output.string, "frozen draft"
-    refute_includes output.string, TTY::Cursor.clear_screen
+    assert_includes output.string, TTY::Cursor.clear_screen
   end
 
-  def test_prompt_interface_terminal_handoff_restores_terminal_after_error
+  def test_prompt_interface_reconstructs_screen_after_handoff_error
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.start
+    prompt.say("known transcript\n")
+    prompt.send(:composer_input=, "draft")
+    prompt.redraw
     prompt.send(:set_editor_bar_cursor_locked)
     output.truncate(0)
     output.rewind
+    child_output = "\e[9;4Hchild failure"
 
     assert_raises(RuntimeError) do
-      prompt.with_terminal_handoff { raise "child failed" }
+      prompt.with_terminal_handoff do |_input, handoff_output|
+        handoff_output.print(child_output)
+        raise "child failed"
+      end
     end
 
-    assert_includes output.string, "\e[<u"
-    assert_includes output.string, "\e[?2004l"
-    assert_includes output.string, "\e[>25u"
-    assert_includes output.string, "\e[?2004h"
+    recovery_output = output.string[output.string.index(child_output)..]
+    assert_order recovery_output, Kward::TerminalSequences.restore_scroll_region,
+      Kward::PromptInterface::KEYBOARD_PROTOCOL_ENABLE, TTY::Cursor.clear_screen,
+      "known transcript", "draft"
+    assert_includes output.string, Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE
+    assert_includes output.string, Kward::TerminalSequences::BRACKETED_PASTE_RESTORE
+    assert_includes output.string, Kward::PromptInterface::BRACKETED_PASTE_ENABLE
     assert_includes output.string, Kward::TerminalSequences::MOUSE_REPORTING_DISABLE
     assert_includes output.string, Kward::TerminalSequences::CURSOR_SHOW
     assert_includes output.string, Kward::TerminalSequences::CURSOR_SHAPE_DEFAULT
-    assert_includes output.string, Kward::TerminalSequences.restore_scroll_region
   end
 
   def test_prompt_interface_renders_output_when_screen_has_extra_rows
