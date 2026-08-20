@@ -19,7 +19,7 @@ module Kward
           @stream_state.finish_block if finish
           restore_composer_cursor_locked unless @restoring_transcript
         end
-        @output_io.flush unless @restoring_transcript
+        flush_output_locked unless @restoring_transcript
       end
 
       def write_transcript_text_locked(text)
@@ -32,7 +32,7 @@ module Kward
         width, height = screen_size
         output_text = terminal_newlines(text.to_s)
         advance_pending_stream_wrap_locked(output_text, width: width, height: height)
-        @output_io.print(output_text)
+        print_output_locked(output_text)
         update_stream_position(output_text, width: width)
       end
 
@@ -58,7 +58,7 @@ module Kward
         return if rows.empty?
 
         move_to_screen(1, 1)
-        @output_io.print(terminal_newlines(rows.join("\n")))
+        print_output_locked(terminal_newlines(rows.join("\n")))
       end
 
       def transcript_viewport_rows(row_count, width)
@@ -98,7 +98,7 @@ module Kward
         return if output_text.empty? || output_text.start_with?("\r", "\n")
 
         move_to_screen(transcript_bottom_row(height), width)
-        @output_io.print("\r\n")
+        print_output_locked("\r\n")
         @stream_state.clear_pending_wrap
       end
 

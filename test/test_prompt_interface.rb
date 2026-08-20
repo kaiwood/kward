@@ -828,21 +828,46 @@ class TestPromptInterface < KwardTestCase
     assert_order redraw_output, TTY::Cursor.clear_screen, "$ ls", "Gemfile"
   end
 
-  def test_prompt_interface_can_preserve_a_frozen_composer_during_terminal_handoff
+  def test_prompt_interface_does_not_preserve_composer_during_terminal_handoff
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.start
-    prompt.send(:composer_input=, "frozen draft")
+    prompt.send(:composer_input=, "draft")
     prompt.redraw
     output.truncate(0)
     output.rewind
 
-    prompt.with_terminal_handoff(preserve_composer: true) do |_input, handoff_output|
+    prompt.with_terminal_handoff do |_input, handoff_output|
+      refute_includes output.string, "draft"
       handoff_output.print("Everything up-to-date\r\n")
     end
 
     assert_includes output.string, "Everything up-to-date"
-    assert_includes output.string, "frozen draft"
+    assert_includes output.string, "draft"
+    assert_includes output.string, TTY::Cursor.clear_screen
+  end
+
+  def test_prompt_interface_defers_physical_rendering_while_child_owns_terminal
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.with_terminal_handoff do |_input, handoff_output|
+      assert_equal :child, prompt.instance_variable_get(:@terminal_owner)
+      handoff_output.print("child output")
+      visible_output = output.string.dup
+
+      prompt.say("background transcript")
+      prompt.set_queued_count(1)
+
+      assert_equal visible_output, output.string
+    end
+
+    assert_equal :kward, prompt.instance_variable_get(:@terminal_owner)
+    assert_includes output.string, "background transcript"
+    assert_includes output.string, "child output"
     assert_includes output.string, TTY::Cursor.clear_screen
   end
 

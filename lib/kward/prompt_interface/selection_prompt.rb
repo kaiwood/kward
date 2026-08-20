@@ -324,7 +324,7 @@ module Kward
             @select_state[:selection_index] = result[:selection_index].to_i if result.key?(:selection_index)
           end
           render_prompt_locked
-          @output_io.flush
+          flush_output_locked
         end
         SELECT_CONTINUE
       end
@@ -342,7 +342,7 @@ module Kward
           @asking = true
           reset_spinner_locked
           render_prompt_locked
-          @output_io.flush
+          flush_output_locked
         end
       end
 
@@ -352,7 +352,7 @@ module Kward
           @busy_activity = "streaming"
           @select_state&.delete(:busy_activity)
           render_prompt_locked if @asking
-          @output_io.flush
+          flush_output_locked
         end
       end
 
@@ -362,7 +362,7 @@ module Kward
           spun = tick_spinner_locked
           footer_refreshed = tick_footer_locked
           render_prompt_locked if resized || spun || footer_refreshed
-          @output_io.flush if resized || spun || footer_refreshed
+          flush_output_locked if resized || spun || footer_refreshed
         end
       end
 
@@ -656,7 +656,7 @@ module Kward
           self.composer_cursor = 0
           @asking = true
           render_prompt_locked if render
-          @output_io.flush
+          flush_output_locked
         end
       end
 

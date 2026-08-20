@@ -240,8 +240,8 @@ module Kward
         end
 
         @editor_state.copy_for_kill_ring(range[0], range[1])
-        @output_io.print(TerminalSequences.osc52(@editor_state.kill_buffer))
-        @output_io.flush if @output_io.respond_to?(:flush)
+        print_output_locked(TerminalSequences.osc52(@editor_state.kill_buffer))
+        flush_output_locked if @output_io.respond_to?(:flush)
         @editor_state.clear_selection
         @editor_state.status = "Copied region"
         true

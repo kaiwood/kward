@@ -7,12 +7,12 @@ module Kward
       private
 
       def render_prompt_locked(synchronized: false)
-        return unless @started && @asking
+        return unless @started && @asking && !terminal_owned_by_child_locked?
 
         width, height = screen_size
         if width != @last_width || height != @last_height
           with_synchronized_output_locked { render_prompt_body_locked }
-          @output_io.flush
+          flush_output_locked
           return
         end
 
@@ -23,10 +23,12 @@ module Kward
         else
           render_prompt_layout_locked(rows, cursor_row, cursor_col, width, height)
         end
-        @output_io.flush
+        flush_output_locked
       end
 
       def render_prompt_body_locked
+        return if terminal_owned_by_child_locked?
+
         handle_resize_locked
         width, height = screen_size
         rows, cursor_row, cursor_col = composer_layout(width, height)
@@ -49,6 +51,8 @@ module Kward
       end
 
       def clear_prompt_locked
+        return if terminal_owned_by_child_locked?
+
         handle_resize_locked
         width, height = screen_size
         clear_composer_region_locked(height: height)
@@ -58,6 +62,8 @@ module Kward
       end
 
       def clear_prompt_for_output_locked
+        return if terminal_owned_by_child_locked?
+
         handle_resize_locked
         width, height = screen_size
         reserve_composer_region_locked(width: width, height: height) if @started && @asking
@@ -68,6 +74,8 @@ module Kward
       end
 
       def prepare_transcript_output_locked
+        return if terminal_owned_by_child_locked?
+
         handle_resize_locked
         width, height = screen_size
         hide_cursor_for_transcript_output_locked
@@ -76,7 +84,7 @@ module Kward
       end
 
       def restore_composer_cursor_locked
-        return unless @started && @asking
+        return unless @started && @asking && !terminal_owned_by_child_locked?
 
         width, height = screen_size
         _rows, cursor_row, cursor_col = composer_layout(width, height)
@@ -85,10 +93,10 @@ module Kward
       end
 
       def redraw_screen_locked(width: screen_width, height: screen_height)
-        return unless @started
+        return unless @started && !terminal_owned_by_child_locked?
 
         restore_scroll_region_locked
-        @output_io.print(TTY::Cursor.clear_screen)
+        print_output_locked(TTY::Cursor.clear_screen)
         move_to_screen(1, 1)
         @reserved_rows = 0
         @last_composer_rows = []

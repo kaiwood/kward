@@ -131,6 +131,8 @@ module Kward
     def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, workspace_root: Dir.pwd, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil, redraw_handler: nil)
       @input_io = input
       @output_io = output
+      # Logical state may change during a child handoff, but only the owner may render.
+      @terminal_owner = :kward
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
       @prompt_history = prompt_history
@@ -237,8 +239,8 @@ module Kward
         @started = true
         @asking = true
         disable_editor_mouse_reporting(force: true) unless editor_active?
-        @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
-        @output_io.print(BRACKETED_PASTE_ENABLE)
+        print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
+        print_output_locked(BRACKETED_PASTE_ENABLE)
         render_prompt_locked if render
       end
     end
@@ -250,12 +252,12 @@ module Kward
         clear_prompt_for_output_locked
         restore_scroll_region_locked
         disable_editor_mouse_reporting(force: true)
-        @output_io.print(BRACKETED_PASTE_RESTORE)
-        @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
+        print_output_locked(BRACKETED_PASTE_RESTORE)
+        print_output_locked(KEYBOARD_PROTOCOL_RESTORE)
         restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
-        @output_io.puts
-        @output_io.flush
+        puts_output_locked
+        flush_output_locked
         @started = false
         restore_console_mode_locked
       end
@@ -281,14 +283,14 @@ module Kward
           @stream_state.finish_block
           render_prompt_after_output_locked
         end
-        @output_io.flush
+        flush_output_locked
       end
     end
 
     def restore_transcript
       start(render: false) unless @started
       @mutex.synchronize do
-        @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
+        print_output_locked(SYNCHRONIZED_OUTPUT_ENABLE)
         clear_prompt_for_output_locked unless @rendered_rows.zero? && @last_composer_rows.empty?
         @transcript_buffer.clear
         @transcript_viewport_rows = 0
@@ -303,8 +305,8 @@ module Kward
         @restoring_transcript = false
         width, height = screen_size
         redraw_screen_locked(width: width, height: height)
-        @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE)
-        @output_io.flush
+        print_output_locked(SYNCHRONIZED_OUTPUT_DISABLE)
+        flush_output_locked
       end
     end
 
@@ -575,48 +577,44 @@ module Kward
         @interactive_state = nil
         restore_composer_snapshot_locked(snapshot)
         redraw_screen_locked if @started
-        @output_io.flush
+        flush_output_locked
       end
     end
 
-    def with_terminal_handoff(preserve_composer: false)
+    def with_terminal_handoff
       start
       input = nil
       output = nil
       @mutex.synchronize do
-        if preserve_composer
-          handle_resize_locked
-          reserve_composer_region_locked
-          move_to_transcript_cursor_locked
-        else
-          clear_prompt_for_output_locked
-          restore_scroll_region_locked
-        end
+        clear_prompt_for_output_locked
+        restore_scroll_region_locked
         disable_editor_mouse_reporting(force: true)
-        @output_io.print(BRACKETED_PASTE_RESTORE)
-        @output_io.print(KEYBOARD_PROTOCOL_RESTORE)
+        print_output_locked(BRACKETED_PASTE_RESTORE)
+        print_output_locked(KEYBOARD_PROTOCOL_RESTORE)
         restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
-        @output_io.flush
+        flush_output_locked
         restore_console_mode_locked
         input = @input_io
         output = @output_io
+        @terminal_owner = :child
       end
 
       yield(input, output)
     ensure
       @mutex.synchronize do
+        @terminal_owner = :kward
         restore_scroll_region_locked
         enter_raw_mode_locked
-        @output_io.print(KEYBOARD_PROTOCOL_ENABLE)
-        @output_io.print(BRACKETED_PASTE_ENABLE)
+        print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
+        print_output_locked(BRACKETED_PASTE_ENABLE)
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked(force: true)
         @cursor_visible = nil
         @last_composer_rows = []
         width, height = screen_size
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
-        @output_io.flush
+        flush_output_locked
       end
     end
 
@@ -854,7 +852,7 @@ module Kward
           @stream_state.finish_block
           restore_composer_cursor_locked
         end
-        @output_io.flush
+        flush_output_locked
       end
     end
 
@@ -887,7 +885,7 @@ module Kward
         width, height = screen_size
         remember_transcript_viewport_locked(height)
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
-        @output_io.flush
+        flush_output_locked
       end
     end
 
@@ -898,7 +896,7 @@ module Kward
           write_transcript_text_locked(delta.to_s)
           restore_composer_cursor_locked unless @restoring_transcript
         end
-        @output_io.flush unless @restoring_transcript
+        flush_output_locked unless @restoring_transcript
       end
     end
 
@@ -912,7 +910,7 @@ module Kward
       @mutex.synchronize do
         width, height = screen_size
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
-        @output_io.flush
+        flush_output_locked
       end
     end
 
@@ -934,7 +932,7 @@ module Kward
         @stream_state.reset
         width, height = screen_size
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
-        @output_io.flush
+        flush_output_locked
       end
     end
 
@@ -961,7 +959,7 @@ module Kward
           @stream_state.finish_block
           preserve_composer ? restore_composer_cursor_locked : render_prompt_after_output_locked
         end
-        @output_io.flush
+        flush_output_locked
       end
     end
 

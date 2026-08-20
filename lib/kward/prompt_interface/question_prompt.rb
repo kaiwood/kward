@@ -76,7 +76,7 @@ module Kward
           @steered_count = saved_state[:steered_count]
           @pending_keys = saved_state[:pending_keys]
           render_prompt_locked if @started && @asking
-          @output_io.flush
+          flush_output_locked
         end
       end
 

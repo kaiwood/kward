@@ -6,7 +6,6 @@ module Kward
     module RuntimeHelpers
       MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES = 1_048_576
       UNSAFE_TRANSCRIPT_CONTROL_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.freeze
-      FROZEN_COMPOSER_COMMANDS = /\Agit\s+(?:fetch|ls-remote|push|remote|status)(?:\s|\z)/.freeze
 
       private
 
@@ -242,9 +241,7 @@ module Kward
         end
         output = +"".b
         output_truncated = false
-        handoff_options = {}
-        handoff_options[:preserve_composer] = true if frozen_composer_command?(command)
-        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd, **handoff_options) do |chunk|
+        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |chunk|
           remaining = MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES - output.bytesize
           if chunk.bytesize > remaining
             output << chunk.byteslice(0, remaining) if remaining.positive?
@@ -264,25 +261,15 @@ module Kward
         nil
       end
 
-      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, preserve_composer: false, &block)
+      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &block)
         runner = InteractivePtyRunner.new
         if @prompt.respond_to?(:with_terminal_handoff)
-          if preserve_composer
-            @prompt.with_terminal_handoff(preserve_composer: true) do |input, output|
-              runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output, &block)
-            end
-          else
-            @prompt.with_terminal_handoff do |input, output|
-              runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output, &block)
-            end
+          @prompt.with_terminal_handoff do |input, output|
+            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output, &block)
           end
         else
           runner.run(shell, "-c", command, env: env, cwd: cwd, &block)
         end
-      end
-
-      def frozen_composer_command?(command)
-        FROZEN_COMPOSER_COMMANDS.match?(command.to_s.strip)
       end
 
       def terminal_transcript_output(output, result, truncated:)

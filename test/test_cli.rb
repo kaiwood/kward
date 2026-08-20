@@ -1305,7 +1305,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_loop_uses_frozen_composer_handoff_for_line_oriented_git_commands
+  def test_interactive_loop_uses_full_terminal_handoff_for_line_oriented_git_commands
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!git push", "/exit"])
       handoff_options = []
@@ -1321,7 +1321,7 @@ class TestCLI < KwardTestCase
 
       cli.interactive_loop(agent: agent)
 
-      assert_equal [{ preserve_composer: true }], handoff_options
+      assert_equal [{}], handoff_options
       assert_equal 1, prompt.refresh_composer_status_count
       assert_empty conversation.messages
     end

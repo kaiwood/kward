@@ -262,7 +262,7 @@ module Kward
           self.composer_cursor = 0
           @asking = true
           render_prompt_locked
-          @output_io.flush
+          flush_output_locked
         end
       end
 

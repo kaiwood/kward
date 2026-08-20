@@ -6,6 +6,28 @@ module Kward
     module Screen
       private
 
+      def terminal_owned_by_child_locked?
+        @terminal_owner == :child
+      end
+
+      def print_output_locked(*values)
+        return if terminal_owned_by_child_locked?
+
+        values.each { |value| @output_io.print(value) }
+      end
+
+      def puts_output_locked(*values)
+        return if terminal_owned_by_child_locked?
+
+        @output_io.puts(*values)
+      end
+
+      def flush_output_locked
+        return if terminal_owned_by_child_locked?
+
+        @output_io.flush
+      end
+
       def enter_raw_mode_locked
         return unless @input_io.respond_to?(:tty?) && @input_io.tty?
         return unless @input_io.respond_to?(:console_mode) && @input_io.respond_to?(:console_mode=)
@@ -31,19 +53,19 @@ module Kward
       end
 
       def with_synchronized_output_locked
-        if @restoring_transcript || @synchronized_output_depth.positive?
+        if @restoring_transcript || @synchronized_output_depth.positive? || terminal_owned_by_child_locked?
           yield
           return
         end
 
         synchronized = true
         @synchronized_output_depth += 1
-        @output_io.print(SYNCHRONIZED_OUTPUT_ENABLE)
+        print_output_locked(SYNCHRONIZED_OUTPUT_ENABLE)
         yield
       ensure
         if synchronized
           @synchronized_output_depth -= 1
-          @output_io.print(SYNCHRONIZED_OUTPUT_DISABLE) if @synchronized_output_depth.zero?
+          print_output_locked(SYNCHRONIZED_OUTPUT_DISABLE) if @synchronized_output_depth.zero?
         end
       end
 
@@ -64,21 +86,21 @@ module Kward
       def set_cursor_visible_locked(visible, force: false)
         return if !force && @cursor_visible == visible
 
-        @output_io.print(visible ? CURSOR_SHOW : CURSOR_HIDE)
+        print_output_locked(visible ? CURSOR_SHOW : CURSOR_HIDE)
         @cursor_visible = visible
       end
 
       def set_editor_bar_cursor_locked
         return if @editor_bar_cursor_active
 
-        @output_io.print(CURSOR_SHAPE_BAR)
+        print_output_locked(CURSOR_SHAPE_BAR)
         @editor_bar_cursor_active = true
       end
 
       def restore_editor_cursor_shape_locked(force: false)
         return unless force || @editor_bar_cursor_active
 
-        @output_io.print(CURSOR_SHAPE_DEFAULT)
+        print_output_locked(CURSOR_SHAPE_DEFAULT)
         @editor_bar_cursor_active = false
       end
 
@@ -95,13 +117,15 @@ module Kward
         old_top = [height - old_reserved_rows + 1, 1].max
         @reserved_rows = new_reserved_rows
         new_top = composer_top_row(height)
-        @output_io.print(TerminalSequences.scroll_region(1, transcript_bottom_row(height)))
+        print_output_locked(TerminalSequences.scroll_region(1, transcript_bottom_row(height)))
         clear_screen_rows_locked(old_top, new_top - 1) if new_top > old_top
         @last_composer_rows = []
         redraw_transcript_locked(width: width, height: height) if redraw_transcript && new_reserved_rows < old_reserved_rows
       end
 
       def handle_resize_locked
+        return false if terminal_owned_by_child_locked?
+
         current_width, current_height = screen_size
         return false if current_width == @last_width && current_height == @last_height
 
@@ -122,7 +146,7 @@ module Kward
       end
 
       def restore_scroll_region_locked
-        @output_io.print(TerminalSequences.restore_scroll_region)
+        print_output_locked(TerminalSequences.restore_scroll_region)
         @reserved_rows = 0
       end
 
@@ -138,15 +162,15 @@ module Kward
 
           move_to_screen(top + index, 1)
           if row
-            @output_io.print(row)
+            print_output_locked(row)
           else
-            @output_io.print(TTY::Cursor.clear_line)
+            print_output_locked(TTY::Cursor.clear_line)
           end
         end
 
         rows.length.upto(rows.length + rows_to_clear - 1) do |index|
           move_to_screen(top + index, 1)
-          @output_io.print(TTY::Cursor.clear_line)
+          print_output_locked(TTY::Cursor.clear_line)
         end
 
         @last_composer_rows = rows.dup
@@ -186,12 +210,12 @@ module Kward
       def clear_screen_rows_locked(top, bottom)
         top.upto(bottom) do |row|
           move_to_screen(row, 1)
-          @output_io.print(TTY::Cursor.clear_line)
+          print_output_locked(TTY::Cursor.clear_line)
         end
       end
 
       def move_to_screen(row, col)
-        @output_io.print(TerminalSequences.move_to(row, col))
+        print_output_locked(TerminalSequences.move_to(row, col))
       end
 
       def screen_size

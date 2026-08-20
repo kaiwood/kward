@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Made interactive PTY handoffs exclusive to the child for the duration of the command, removing the frozen-composer display and deferring Kward rendering until full screen reconstruction on return.
+
 ### Fixed
 
 - Reconstructed the complete Kward screen after interactive PTY handoff, including failure paths, instead of relying on the child process cursor position.

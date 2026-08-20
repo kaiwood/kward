@@ -992,8 +992,8 @@ module Kward
         return false if text.empty?
 
         @editor_state.push_kill(text)
-        @output_io.print(TerminalSequences.osc52(text))
-        @output_io.flush if @output_io.respond_to?(:flush)
+        print_output_locked(TerminalSequences.osc52(text))
+        flush_output_locked if @output_io.respond_to?(:flush)
         @editor_state.clear_selection
         @editor_state.status = "Copied selection"
         true
@@ -1103,16 +1103,16 @@ module Kward
       def enable_editor_mouse_reporting
         return if @editor_mouse_reporting_enabled
 
-        @output_io.print(TerminalSequences::MOUSE_REPORTING_ENABLE)
-        @output_io.flush if @output_io.respond_to?(:flush)
+        print_output_locked(TerminalSequences::MOUSE_REPORTING_ENABLE)
+        flush_output_locked if @output_io.respond_to?(:flush)
         @editor_mouse_reporting_enabled = true
       end
 
       def disable_editor_mouse_reporting(force: false)
         return unless force || @editor_mouse_reporting_enabled
 
-        @output_io.print(TerminalSequences::MOUSE_REPORTING_DISABLE)
-        @output_io.flush if @output_io.respond_to?(:flush)
+        print_output_locked(TerminalSequences::MOUSE_REPORTING_DISABLE)
+        flush_output_locked if @output_io.respond_to?(:flush)
         @editor_mouse_reporting_enabled = false
       end
 
