@@ -3,12 +3,30 @@ require_relative "test_helper"
 require_relative "../lib/kward/interactive_pty_runner"
 
 class TestInteractivePtyRunner < KwardTestCase
-  def test_forwards_input_to_child_and_output_to_caller
+  class RecordingSink
+    attr_reader :chunks
+
+    def initialize(output)
+      @output = output
+      @chunks = []
+    end
+
+    def write(chunk)
+      @chunks << chunk
+      @output.write(chunk)
+    end
+
+    def flush
+      @output.flush
+    end
+  end
+
+  def test_forwards_input_to_child_and_delivers_output_chunks_to_sink
     input_reader, input_writer = IO.pipe
     output_reader, output_writer = IO.pipe
+    sink = RecordingSink.new(output_writer)
     runner = Kward::InteractivePtyRunner.new
     result = nil
-    captured_output = +""
     ruby = RbConfig.ruby
 
     input_reader.define_singleton_method(:raw) do |&block|
@@ -22,8 +40,8 @@ class TestInteractivePtyRunner < KwardTestCase
         "-e",
         "STDIN.raw { print STDIN.getc; STDOUT.flush }",
         input: input_reader,
-        output: output_writer
-      ) { |chunk| captured_output << chunk }
+        sink: sink
+      )
     end
     wait_until(timeout: 1, message: "interactive PTY runner did not start") { input_reader.instance_variable_get(:@raw_started) }
     input_writer.write("q")
@@ -35,31 +53,31 @@ class TestInteractivePtyRunner < KwardTestCase
     refute worker.alive?, "expected interactive PTY command to finish"
     assert_equal 0, result.exit_status
     assert result.input_forwarded
+    assert_equal output, sink.chunks.join
     assert_includes output, "q"
-    assert_includes captured_output, "q"
   ensure
     worker&.kill if worker&.alive?
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 
-  def test_forwards_terminal_control_output_byte_for_byte
+  def test_forwards_terminal_control_output_byte_for_byte_in_sink_order
     input_reader, input_writer = IO.pipe
     output_reader, output_writer = IO.pipe
     payload = "\e[1;1Hchild output\e[?1049hfull screen\e[?1049l"
-    captured_output = +""
+    sink = RecordingSink.new(output_writer)
 
     result = Kward::InteractivePtyRunner.new.run(
       RbConfig.ruby,
       "-e",
       "STDOUT.write(#{payload.inspect})",
       input: input_reader,
-      output: output_writer
-    ) { |chunk| captured_output << chunk }
+      sink: sink
+    )
     output_writer.close
 
     assert_equal 0, result.exit_status
     assert_equal payload, output_reader.read
-    assert_equal payload, captured_output
+    assert_equal payload, sink.chunks.join
   ensure
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
@@ -74,12 +92,35 @@ class TestInteractivePtyRunner < KwardTestCase
       "-e",
       "STDOUT.write(#{expected.inspect})",
       input: input_reader,
-      output: output_writer
+      sink: Kward::PassthroughPtyOutputSink.new(output: output_writer)
     )
     output_writer.close
 
     assert_equal 0, result.exit_status
     assert_equal expected, output_reader.read
+  ensure
+    close_ios(input_reader, input_writer, output_reader, output_writer)
+  end
+
+  def test_bounded_capture_does_not_interrupt_passthrough
+    input_reader, input_writer = IO.pipe
+    output_reader, output_writer = IO.pipe
+    payload = "#{"x" * 31}\e[?1049h#{"y" * 10_000}-suffix"
+    sink = Kward::PassthroughPtyOutputSink.new(output: output_writer, max_capture_bytes: 32)
+
+    result = Kward::InteractivePtyRunner.new.run(
+      RbConfig.ruby,
+      "-e",
+      "STDOUT.write(#{payload.inspect})",
+      input: input_reader,
+      sink: sink
+    )
+    output_writer.close
+
+    assert_equal 0, result.exit_status
+    assert_equal payload, output_reader.read
+    assert_equal payload.byteslice(0, 32), sink.captured_output
+    assert sink.truncated?
   ensure
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
@@ -93,7 +134,7 @@ class TestInteractivePtyRunner < KwardTestCase
       "-e",
       "exit 23",
       input: input_reader,
-      output: output_writer
+      sink: Kward::PassthroughPtyOutputSink.new(output: output_writer)
     )
 
     assert_equal 23, result.exit_status
@@ -111,7 +152,7 @@ class TestInteractivePtyRunner < KwardTestCase
       "-e",
       "print 'done'",
       input: input_reader,
-      output: output_writer
+      sink: Kward::PassthroughPtyOutputSink.new(output: output_writer)
     )
     output_writer.close
 
@@ -134,7 +175,7 @@ class TestInteractivePtyRunner < KwardTestCase
       "-e",
       "sleep 0.08; print IO.console.winsize[1]",
       input: input_reader,
-      output: output_writer
+      sink: Kward::PassthroughPtyOutputSink.new(output: output_writer)
     )
     output_writer.close
 
@@ -153,7 +194,7 @@ class TestInteractivePtyRunner < KwardTestCase
       "-e",
       "Process.kill('STOP', Process.pid); sleep 10",
       input: input_reader,
-      output: output_writer
+      sink: Kward::PassthroughPtyOutputSink.new(output: output_writer)
     )
 
     refute_equal 0, result.exit_status
@@ -161,12 +202,12 @@ class TestInteractivePtyRunner < KwardTestCase
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 
-  def test_terminates_child_when_output_forwarding_fails
+  def test_terminates_and_reaps_child_when_sink_write_fails
     Dir.mktmpdir("interactive-pty") do |dir|
       pid_path = File.join(dir, "pid")
       input_reader, input_writer = IO.pipe
-      output = Object.new
-      output.define_singleton_method(:write) { |_chunk| raise IOError, "output failed" }
+      sink = Object.new
+      sink.define_singleton_method(:write) { |_chunk| raise IOError, "output failed" }
 
       error = assert_raises(IOError) do
         Kward::InteractivePtyRunner.new.run(
@@ -174,13 +215,14 @@ class TestInteractivePtyRunner < KwardTestCase
           "-e",
           "File.write(#{pid_path.inspect}, Process.pid.to_s); puts 'ready'; STDOUT.flush; sleep 10",
           input: input_reader,
-          output: output
+          sink: sink
         )
       end
       pid = File.read(pid_path).to_i
 
       assert_equal "output failed", error.message
       wait_until(timeout: 1, message: "interactive PTY child was not terminated") { !process_running?(pid) }
+      assert_raises(Errno::ECHILD) { Process.wait(pid, Process::WNOHANG) }
     ensure
       close_ios(input_reader, input_writer)
     end

@@ -2,10 +2,11 @@ require "io/console"
 require "pty"
 require "timeout"
 require_relative "local_pty_command_runner"
+require_relative "pty_output_sink"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
-  # Runs a command in a PTY while forwarding caller-owned input and output IOs.
+  # Runs a command in a PTY while forwarding caller-owned input and output sink.
   # This is intentionally low level: UI orchestration decides when terminal
   # ownership is handed to the child process and how the result is presented.
   class InteractivePtyRunner
@@ -18,7 +19,7 @@ module Kward
       @window_size = nil
     end
 
-    def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, output: $stdout, &block)
+    def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, sink:)
       pid = nil
       status = nil
       writer = nil
@@ -30,7 +31,7 @@ module Kward
         update_window_size(reader, pid)
         with_raw_input(input) do
           drain_initial_input(input, writer)
-          status, input_forwarded = forward_io(reader, writer, pid, input, output, &block)
+          status, input_forwarded = forward_io(reader, writer, pid, input, sink)
         end
         status ||= wait_for_status(pid)
       end
@@ -69,7 +70,7 @@ module Kward
       nil
     end
 
-    def forward_io(reader, writer, pid, input, output, &block)
+    def forward_io(reader, writer, pid, input, sink)
       input_open = true
       input_forwarded = false
       loop do
@@ -77,7 +78,7 @@ module Kward
         readers = [reader]
         readers << input if input_open
         readable = IO.select(readers, nil, nil, 0.02)&.first || []
-        forward_pty_output(reader, output, &block) if readable.include?(reader)
+        forward_pty_output(reader, sink) if readable.include?(reader)
         if input_open && readable.include?(input)
           input_open, forwarded = forward_input(input, writer)
           input_forwarded ||= forwarded
@@ -88,23 +89,22 @@ module Kward
 
         return [finish_stopped_process(pid), input_forwarded] if status.stopped?
 
-        drain_pty_output(reader, output, &block)
+        drain_pty_output(reader, sink)
         return [status, input_forwarded]
       rescue Errno::EIO
         return [wait_for_status(pid), input_forwarded]
       end
     end
 
-    def forward_pty_output(reader, output)
+    def forward_pty_output(reader, sink)
       chunk = reader.read_nonblock(READ_SIZE, exception: false)
       return if chunk.nil? || chunk == :wait_readable
 
-      output.write(chunk)
-      output.flush if output.respond_to?(:flush)
-      yield chunk if block_given?
+      sink.write(chunk)
+      sink.flush if sink.respond_to?(:flush)
     end
 
-    def drain_pty_output(reader, output)
+    def drain_pty_output(reader, sink)
       loop do
         readable, = IO.select([reader], nil, nil, 0.02)
         break unless readable
@@ -112,10 +112,9 @@ module Kward
         chunk = reader.read_nonblock(READ_SIZE, exception: false)
         break if chunk.nil? || chunk == :wait_readable
 
-        output.write(chunk)
-        yield chunk if block_given?
+        sink.write(chunk)
       end
-      output.flush if output.respond_to?(:flush)
+      sink.flush if sink.respond_to?(:flush)
     rescue Errno::EIO
       nil
     end

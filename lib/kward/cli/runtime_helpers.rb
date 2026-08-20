@@ -239,17 +239,12 @@ module Kward
         elsif @prompt.respond_to?(:say)
           @prompt.say(intro_message)
         end
-        output = +"".b
-        output_truncated = false
-        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |chunk|
-          remaining = MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES - output.bytesize
-          if chunk.bytesize > remaining
-            output << chunk.byteslice(0, remaining) if remaining.positive?
-            output_truncated = true
-          else
-            output << chunk
-          end
+        output_sink = nil
+        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |sink|
+          output_sink = sink
         end
+        output = output_sink&.captured_output || +"".b
+        output_truncated = output_sink&.truncated? || false
         @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
         transcript_output = terminal_transcript_output(output, result, truncated: output_truncated)
         if transcript_output && @prompt.respond_to?(:record_transient_terminal_output)
@@ -261,14 +256,22 @@ module Kward
         nil
       end
 
-      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &block)
+      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_sink)
         runner = InteractivePtyRunner.new
+        run_with_sink = lambda do |input, output|
+          sink = PassthroughPtyOutputSink.new(
+            output: output,
+            max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
+          )
+          result = runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink)
+          on_sink.call(sink) if on_sink
+          result
+        end
+
         if @prompt.respond_to?(:with_terminal_handoff)
-          @prompt.with_terminal_handoff do |input, output|
-            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, output: output, &block)
-          end
+          @prompt.with_terminal_handoff { |input, output| run_with_sink.call(input, output) }
         else
-          runner.run(shell, "-c", command, env: env, cwd: cwd, &block)
+          run_with_sink.call($stdin, $stdout)
         end
       end
 

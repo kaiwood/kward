@@ -1337,8 +1337,10 @@ class TestCLI < KwardTestCase
       agent.define_singleton_method(:conversation) { conversation }
       agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
-      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_output|
-        on_output.call("\e[36mGemfile\e[0m\r\nREADME.md\r\n")
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
+        sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
+        sink.write("\e[36mGemfile\e[0m\r\nREADME.md\r\n")
+        on_sink.call(sink)
         Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
       end
 
@@ -1359,8 +1361,10 @@ class TestCLI < KwardTestCase
       agent.define_singleton_method(:conversation) { conversation }
       agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
-      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_output|
-        on_output.call("\e[?1049hfull screen\e[?1049l")
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
+        sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
+        sink.write("\e[?1049hfull screen\e[?1049l")
+        on_sink.call(sink)
         Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: true)
       end
 
@@ -1383,9 +1387,11 @@ class TestCLI < KwardTestCase
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
       cursor_output = "\e[1;1Hcursor output\r\n"
       forwarded_output = +""
-      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_output|
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
         forwarded_output << cursor_output
-        on_output.call(cursor_output)
+        sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
+        sink.write(cursor_output)
+        on_sink.call(sink)
         Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
       end
 
