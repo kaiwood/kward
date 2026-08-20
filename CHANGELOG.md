@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.81.0] - 2026-08-20
+
 ### Added
 
 - Added `capture <command>` inside `/shell` and `/capture <command>` in the normal composer for bounded, sanitized, transcript-friendly command execution.
