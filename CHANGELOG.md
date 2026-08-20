@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Made interactive PTY handoffs exclusive to the child for the duration of the command, removing the frozen-composer display and deferring Kward rendering until full screen reconstruction on return.
+- Kept safe, normalized shell output as explicit tab-local transient state so completed `/shell` and `!command` output can be reconstructed after tab switches without entering session history or model context.
 
 ### Fixed
 

@@ -881,14 +881,107 @@ class TestTabs < KwardTestCase
       assert_equal 1, cli.instance_variable_get(:@active_tab_index)
       cli.send(:handle_tab_action, { tab_action: :previous }, store)
       assert_same first_tab, cli.send(:active_tab)
-      restored_shell_snapshot = prompt.restores.find { |snapshot| Array(snapshot[:transcript]).join.include?("$ cd nested") }
-      assert restored_shell_snapshot, "expected returning to a shell tab to restore its transcript snapshot"
+      refute prompt.restores.any? { |snapshot| snapshot[:transcript] }, "shell output should not be restored from a prompt snapshot"
+      assert_includes first_tab.transient_shell_entries.join, "$ cd nested"
 
       cli.send(:run_ekwsh_loop, first_tab.shell, tab: first_tab)
 
       output = strip_ansi(prompt.output.join)
       assert_includes output, nested
       assert_nil first_tab.shell
+    end
+  end
+
+  def test_one_shot_bang_output_is_explicit_tab_state_and_tab_local
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: dir)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
+        sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
+        sink.write("safe bang output\r\n")
+        on_sink.call(sink) if on_sink
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+      end
+
+      cli.send(:run_user_interactive_pty_command, "echo safe", shell: "/bin/sh", env: {}, cwd: dir)
+      assert_equal [], first_tab.agent.conversation.messages
+      assert File.file?(first_tab.session.path)
+      refute_includes File.read(first_tab.session.path), "safe bang output"
+      assert_includes first_tab.transient_shell_entries.join, "$ echo safe"
+      assert_includes first_tab.transient_shell_entries.join, "safe bang output\n"
+
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+
+      restored = strip_ansi(prompt.output.join)
+      assert_includes restored, "$ echo safe"
+      assert_includes restored, "safe bang output"
+      assert_empty cli.send(:active_tab).agent.conversation.messages
+
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :next }, store)
+      refute_includes strip_ansi(prompt.output.join), "safe bang output"
+    end
+  end
+
+  def test_pty_qualification_keeps_unsafe_output_out_of_tab_state
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: dir)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      outputs = {
+        "cursor" => ["\e[1;1HCURSOR_OUTPUT\r\n", false],
+        "fullscreen" => ["FULL_SCREEN_OUTPUT", true],
+        "truncated" => ["TRUNCATED_OUTPUT", false],
+        "input" => ["INPUT_FORWARDED_OUTPUT", true]
+      }
+      cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, command, env:, cwd:, &on_sink|
+        output, input_forwarded = outputs.fetch(command)
+        max_capture_bytes = command == "truncated" ? 4 : 1_048_576
+        sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: max_capture_bytes)
+        sink.write(output)
+        on_sink.call(sink) if on_sink
+        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: input_forwarded)
+      end
+
+      outputs.each_key do |command|
+        cli.send(:run_user_interactive_pty_command, command, shell: "/bin/sh", env: {}, cwd: dir)
+      end
+
+      entries = cli.send(:active_tab).transient_shell_entries.join
+      outputs.each_key do |command|
+        refute_includes entries, outputs.fetch(command).first.gsub(/\e\[[^A-Za-z]*[A-Za-z]/, "").strip
+      end
+    end
+  end
+
+  def test_ctrl_l_clears_tab_transient_shell_state
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: dir)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      tab = cli.send(:active_tab)
+      tab.append_transient_shell_entry("safe output\\n")
+
+      prompt.output.clear
+      cli.send(:redraw_interactive_prompt)
+
+      assert_empty tab.transient_shell_entries
+      refute_includes strip_ansi(prompt.output.join), "safe output"
+
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+      refute_includes strip_ansi(prompt.output.join), "safe output"
     end
   end
 

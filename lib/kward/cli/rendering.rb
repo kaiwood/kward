@@ -12,7 +12,13 @@ module Kward
 
       def redraw_interactive_prompt
         tab = active_tab if respond_to?(:active_tab, true)
-        if tab && (tab.running? || tab.shell)
+        clear_active_tab_transient_shell_output if tab && respond_to?(:clear_active_tab_transient_shell_output, true)
+        if tab&.shell
+          @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
+          render_tab(tab)
+          return
+        end
+        if tab&.running?
           @prompt.redraw if @prompt.respond_to?(:redraw)
           return
         end
@@ -25,6 +31,7 @@ module Kward
 
         restore_prompt_transcript do
           tab ? render_transcript_messages(tab.driver.messages) : render_conversation_transcript(conversation)
+          render_tab_transient_shell_entries(tab) if tab && respond_to?(:render_tab_transient_shell_entries, true)
         end
       end
 

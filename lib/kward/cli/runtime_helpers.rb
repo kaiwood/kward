@@ -100,6 +100,7 @@ module Kward
         shell = bang_shell(agent)
         editor_result = shell.editor_command_result(command)
         if editor_result
+          record_tab_transient_shell_output(editor_result.output, render: false)
           @prompt.say(editor_result.output) unless editor_result.output.to_s.empty?
           open_ekwsh_editor(editor_result.open_editor_path, shell) if editor_result.open_editor_path
           return true
@@ -234,6 +235,7 @@ module Kward
 
       def run_user_interactive_pty_command(command, shell:, env:, cwd:, intro: nil)
         intro_message = intro || "$ #{command}\n"
+        record_tab_transient_shell_output(intro_message, render: false)
         if @prompt.respond_to?(:write_transcript)
           @prompt.write_transcript(intro_message)
         elsif @prompt.respond_to?(:say)
@@ -247,9 +249,7 @@ module Kward
         output_truncated = output_sink&.truncated? || false
         @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
         transcript_output = terminal_transcript_output(output, result, truncated: output_truncated)
-        if transcript_output && @prompt.respond_to?(:record_transient_terminal_output)
-          @prompt.record_transient_terminal_output(transcript_output)
-        end
+        record_tab_transient_shell_output(transcript_output) if transcript_output
         result
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
@@ -319,8 +319,13 @@ module Kward
           break if input.nil?
 
           result = run_ekwsh_command(shell, input)
-          @prompt.clear_transcript if result.clear && @prompt.respond_to?(:clear_transcript)
-          @prompt.say(result.output) unless result.streamed || result.interactive_command || result.output.to_s.empty?
+          if result.clear
+            clear_active_tab_transient_shell_output
+            @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
+          else
+            record_tab_transient_shell_output(result.output, render: false) unless result.interactive_command
+            @prompt.say(result.output) unless result.streamed || result.interactive_command || result.output.to_s.empty?
+          end
           return :tab_action if pending_tab_action?
 
           if result.open_editor_path
@@ -431,6 +436,21 @@ module Kward
 
         queued_inputs.reverse_each { |pending_input| (@pending_inputs ||= []).unshift(pending_input) }
         result
+      end
+
+      def record_tab_transient_shell_output(text, render: true)
+        value = text.to_s
+        return if value.empty?
+
+        tab = active_tab if respond_to?(:active_tab, true)
+        tab&.append_transient_shell_entry(value)
+        if render && @prompt.respond_to?(:record_transient_terminal_output)
+          @prompt.record_transient_terminal_output(value)
+        end
+      end
+
+      def clear_active_tab_transient_shell_output
+        clear_active_tab_transient_shell_entries if respond_to?(:clear_active_tab_transient_shell_entries, true)
       end
 
       def drain_ekwsh_chunks(chunks)

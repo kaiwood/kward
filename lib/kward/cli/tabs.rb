@@ -35,10 +35,13 @@ module Kward
         :unread,
         :pending_question,
         :shell,
+        :transient_shell_entries,
         :error_reported,
         :local_busy_activity,
         keyword_init: true
       ) do
+        TRANSIENT_SHELL_OUTPUT_LIMIT = 200_000
+
         def running?
           %w[queued running waiting_for_question].include?(status.to_s)
         end
@@ -53,6 +56,41 @@ module Kward
 
         def record_event(event)
           event_history << event
+        end
+
+        def append_transient_shell_entry(text)
+          value = text.to_s
+          return if value.empty?
+
+          self.transient_shell_entries ||= []
+          transient_shell_entries << value
+          trim_transient_shell_entries
+        end
+
+        def clear_transient_shell_entries
+          self.transient_shell_entries = []
+        end
+
+        private
+
+        def trim_transient_shell_entries
+          combined = transient_shell_entries.join
+          return if combined.length <= TRANSIENT_SHELL_OUTPUT_LIMIT
+
+          target = (TRANSIENT_SHELL_OUTPUT_LIMIT * 0.9).floor
+          cutoff = combined.length - target
+          newline = combined.index("\n", cutoff)
+          cutoff = newline + 1 if newline
+          cutoff = transient_shell_escape_boundary(combined, cutoff)
+          self.transient_shell_entries = [combined[cutoff..].to_s]
+        end
+
+        def transient_shell_escape_boundary(text, cutoff)
+          escape_start = text.rindex("\e", cutoff)
+          return cutoff unless escape_start
+
+          escape = ANSI.escape_sequence_at(text, escape_start)
+          escape && escape_start + escape.length > cutoff ? escape_start + escape.length : cutoff
         end
       end
 
@@ -279,6 +317,7 @@ module Kward
           unread: false,
           pending_question: nil,
           shell: nil,
+          transient_shell_entries: [],
           error_reported: false,
           local_busy_activity: nil
         ).tap { |tab| assign_tab_question_prompt(agent, tab) }
@@ -424,6 +463,7 @@ module Kward
         tab.queued_inputs.clear
         tab.steering = nil
         tab.shell = nil
+        tab.clear_transient_shell_entries
         tab.stream_state = new_tab_stream_state(tab.driver)
         tab.markdown_chunks.clear
         update_prompt_workspace_root(current_workspace_root)
@@ -451,7 +491,7 @@ module Kward
         end
         return snapshot_method.call unless supports_transcript_option
 
-        snapshot_method.call(include_transcript: tab.running? || !tab.shell.nil?)
+        snapshot_method.call(include_transcript: tab.running?)
       end
 
       def activate_tab(index, render: true)
@@ -485,7 +525,7 @@ module Kward
       end
 
       def render_tab(tab)
-        if tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot) && (tab.running? || tab.shell)
+        if tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot) && tab.running?
           @prompt.restore_tab_view_snapshot(tab.snapshot)
           return
         end
@@ -497,8 +537,23 @@ module Kward
             render_transcript_messages(tab.driver.messages)
           end
           report_tab_runtime_error(tab) if %w[failed cancelled].include?(tab.status.to_s)
+          render_tab_transient_shell_entries(tab)
         end
         restore_tab_composer_snapshot(tab.snapshot)
+      end
+
+      def render_tab_transient_shell_entries(tab)
+        Array(tab.transient_shell_entries).each do |entry|
+          if @prompt.respond_to?(:say)
+            @prompt.say(entry)
+          elsif @prompt.respond_to?(:write_transcript)
+            @prompt.write_transcript(entry)
+          end
+        end
+      end
+
+      def clear_active_tab_transient_shell_entries
+        active_tab&.clear_transient_shell_entries
       end
 
       def restore_tab_composer_snapshot(snapshot)
