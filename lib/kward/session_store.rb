@@ -9,6 +9,7 @@ require_relative "message_access"
 require_relative "message_text"
 require_relative "private_file"
 require_relative "rpc/tool_event_normalizer"
+require_relative "session_catalog"
 require_relative "tools/tool_call"
 require_relative "workspace"
 
@@ -204,6 +205,7 @@ module Kward
     def initialize(config_dir: ConfigFiles.config_dir, cwd: Dir.pwd)
       @config_dir = config_dir
       @cwd = File.expand_path(cwd)
+      @session_catalog = SessionCatalog.new(session_dir: session_dir)
     end
 
     # @return [String] workspace directory this store lists and creates sessions for
@@ -399,6 +401,8 @@ module Kward
       return false unless unused_session_file?(path)
 
       File.delete(path)
+      @session_catalog.remove(path)
+      @session_catalog.flush
       true
     rescue StandardError
       false
@@ -849,21 +853,43 @@ module Kward
       keep_empty_paths = Array(keep_empty_path).filter_map do |path|
         File.expand_path(path) unless path.to_s.empty?
       end
-      paths = Dir.glob(File.join(session_dir, "*.jsonl")).sort_by { |path| session_file_activity_time(path) }.reverse
-      sessions = []
+      paths = Dir.glob(File.join(session_dir, "*.jsonl"))
+      @session_catalog.retain(paths)
+      return all_recent_sessions(paths, keep_empty_paths: keep_empty_paths) if limit.nil?
 
-      paths.each do |path|
-        if limit.nil? || sessions.length < limit
-          info = session_info(path)
+      candidates = paths.map do |path|
+        info = cataloged_session_info(path)
+        [path, info, info&.modified_at || session_file_activity_time(path)]
+      end
+      candidates.sort_by! { |_path, _info, modified_at| modified_at }.reverse!
+
+      sessions = []
+      candidates.each do |path, cataloged_info, _modified_at|
+        if sessions.length < limit
+          info = cataloged_info || cache_session_info(path)
           next unless info
           next if delete_empty_unnamed_session_info(info, keep_empty_paths: keep_empty_paths)
 
           sessions << info
+        elsif cataloged_info
+          delete_empty_unnamed_session_info(cataloged_info, keep_empty_paths: keep_empty_paths)
         else
           delete_empty_unnamed_session_path(path, keep_empty_paths: keep_empty_paths)
         end
       end
       sessions
+    ensure
+      @session_catalog.flush
+    end
+
+    def all_recent_sessions(paths, keep_empty_paths:)
+      paths.filter_map do |path|
+        info = cataloged_session_info(path) || cache_session_info(path)
+        next unless info
+        next if delete_empty_unnamed_session_info(info, keep_empty_paths: keep_empty_paths)
+
+        info
+      end.sort_by(&:modified_at).reverse
     end
 
     def delete_empty_unnamed_session_info(info, keep_empty_paths: [])
@@ -871,6 +897,7 @@ module Kward
       return true if keep_empty_paths.include?(File.expand_path(info.path))
 
       File.delete(info.path)
+      @session_catalog.remove(info.path)
       true
     rescue StandardError
       false
@@ -895,6 +922,7 @@ module Kward
       return true if keep_empty_paths.include?(File.expand_path(path))
 
       File.delete(path)
+      @session_catalog.remove(path)
       true
     rescue StandardError
       false
@@ -942,6 +970,67 @@ module Kward
         child_ancestor_continues = depth.zero? ? [] : ancestor_continues + [!is_last]
         walk_tree(by_parent, session.id, depth + 1, child_ancestor_continues, result)
       end
+    end
+
+    def cataloged_session_info(path)
+      summary = @session_catalog.fetch(path)
+      session_info_from_summary(path, summary) if summary
+    end
+
+    def cache_session_info(path)
+      fingerprint = @session_catalog.fingerprint(path)
+      info = session_info(path)
+      return nil unless info
+
+      current_fingerprint = @session_catalog.fingerprint(path)
+      if fingerprint == current_fingerprint
+        @session_catalog.write(path, session_info_summary(info), fingerprint: current_fingerprint)
+      end
+      info
+    rescue StandardError
+      nil
+    end
+
+    def session_info_summary(info)
+      {
+        "id" => info.id,
+        "cwd" => info.cwd,
+        "createdAt" => info.created_at.utc.iso8601(9),
+        "modifiedAt" => info.modified_at.utc.iso8601(9),
+        "name" => info.name,
+        "firstMessage" => info.first_message,
+        "messageCount" => info.message_count,
+        "provider" => info.provider,
+        "model" => info.model,
+        "reasoningEffort" => info.reasoning_effort,
+        "parentId" => info.parent_id,
+        "parentPath" => info.parent_path
+      }
+    end
+
+    def session_info_from_summary(path, summary)
+      created_at = parse_time(summary["createdAt"])
+      modified_at = parse_time(summary["modifiedAt"])
+      return nil if summary["id"].to_s.empty? || !created_at || !modified_at
+
+      SessionInfo.new(
+        id: summary["id"],
+        path: path,
+        cwd: summary["cwd"].to_s,
+        created_at: created_at,
+        modified_at: modified_at,
+        name: summary["name"],
+        first_message: summary["firstMessage"].to_s,
+        message_count: summary["messageCount"].to_i,
+        provider: summary["provider"],
+        model: summary["model"],
+        reasoning_effort: summary["reasoningEffort"],
+        parent_id: summary["parentId"],
+        parent_path: summary["parentPath"],
+        depth: 0,
+        is_last: true,
+        ancestor_continues: []
+      )
     end
 
     def session_info(path)

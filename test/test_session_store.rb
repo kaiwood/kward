@@ -246,6 +246,69 @@ class TestSessionStore < KwardTestCase
     end
   end
 
+  def test_recent_reuses_cataloged_metadata_for_unchanged_sessions
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      sessions = 2.times.map do |index|
+        session = store.create
+        conversation = Kward::Conversation.new(system_message: nil)
+        session.attach(conversation)
+        conversation.append_user("saved prompt #{index}")
+        session
+      end
+      cataloged_store = CountingSessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+
+      first = cataloged_store.recent(limit: nil)
+      reloaded_store = CountingSessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      second = reloaded_store.recent(limit: nil)
+
+      assert_equal 2, cataloged_store.record_reads
+      assert_equal 0, reloaded_store.record_reads.to_i
+      assert_equal sessions.map(&:id).sort, first.map(&:id).sort
+      assert_equal first.map(&:id), second.map(&:id)
+      assert_equal first.map(&:first_message), second.map(&:first_message)
+    end
+  end
+
+  def test_recent_rebuilds_stale_cataloged_metadata
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("saved prompt")
+      cataloged_store = CountingSessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+
+      assert_equal 1, cataloged_store.recent(limit: nil).first.message_count
+      conversation.append_assistant("saved response")
+      refreshed = cataloged_store.recent(limit: nil).first
+
+      assert_equal 2, cataloged_store.record_reads
+      assert_equal 2, refreshed.message_count
+    end
+  end
+
+  def test_recent_recovers_from_a_corrupt_catalog_entry
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      session = store.create
+      conversation = Kward::Conversation.new(system_message: nil)
+      session.attach(conversation)
+      conversation.append_user("saved prompt")
+      cataloged_store = CountingSessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      cataloged_store.recent(limit: nil)
+      catalog_path = Dir.glob(File.join(store.session_dir, ".index", "*.json")).fetch(0)
+      File.write(catalog_path, "not json")
+      recovered_store = CountingSessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+
+      recent = recovered_store.recent(limit: nil)
+
+      assert_equal 1, recovered_store.record_reads
+      assert_equal [session.id], recent.map(&:id)
+      assert_equal ["saved prompt"], recent.map(&:first_message)
+    end
+  end
+
   def test_limited_recent_only_builds_full_metadata_for_requested_sessions
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
