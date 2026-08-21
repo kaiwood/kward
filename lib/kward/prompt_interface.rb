@@ -874,7 +874,7 @@ module Kward
       end
     end
 
-    def record_transient_terminal_output(text)
+    def record_transient_terminal_output(text, render: true)
       value = text.to_s
       return if value.empty?
 
@@ -884,6 +884,8 @@ module Kward
         @stream_state.finish_block
         width, height = screen_size
         remember_transcript_viewport_locked(height)
+        next unless render
+
         with_synchronized_output_locked { redraw_screen_locked(width: width, height: height) }
         flush_output_locked
       end
@@ -964,7 +966,6 @@ module Kward
     end
 
     def request_transcript_redraw
-      redraw_screen_locked
       @transcript_redraw_requested = true
     end
 
@@ -974,7 +975,13 @@ module Kward
         @transcript_redraw_requested = false
         pending
       end
-      @redraw_handler&.call if requested
+      return unless requested
+
+      if @redraw_handler
+        @redraw_handler.call
+      else
+        redraw
+      end
     end
 
     def prompt_workspace_root

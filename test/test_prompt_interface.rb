@@ -815,17 +815,14 @@ class TestPromptInterface < KwardTestCase
     output.rewind
     prompt.with_terminal_handoff do |_input, handoff_output|
       handoff_output.print("Gemfile\r\nREADME.md\r\n")
+      prompt.record_transient_terminal_output("Gemfile\nREADME.md\n", render: false)
     end
-    output_before_record = output.string.dup
-
-    prompt.record_transient_terminal_output("Gemfile\nREADME.md\n")
 
     transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
     assert_includes transcript, "$ ls\nGemfile\nREADME.md\n"
-    assert_includes output.string, "Gemfile"
-    redraw_output = output.string.delete_prefix(output_before_record)
-    assert_includes redraw_output, TTY::Cursor.clear_screen
-    assert_order redraw_output, TTY::Cursor.clear_screen, "$ ls", "Gemfile"
+    assert_equal 1, output.string.scan(TTY::Cursor.clear_screen).length
+    recovery_output = output.string.split(TTY::Cursor.clear_screen).last
+    assert_order recovery_output, "$ ls", "Gemfile"
   end
 
   def test_prompt_interface_does_not_preserve_composer_during_terminal_handoff
@@ -1057,6 +1054,7 @@ class TestPromptInterface < KwardTestCase
     transcript = prompt.instance_variable_get(:@transcript_buffer).to_s
     assert_includes transcript, "durable transcript"
     refute_includes transcript, "transient output"
+    assert_equal 1, output.string.scan(TTY::Cursor.clear_screen).length
   ensure
     input&.close unless input&.closed?
   end

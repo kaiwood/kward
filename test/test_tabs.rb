@@ -903,8 +903,9 @@ class TestTabs < KwardTestCase
       cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
         sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
         sink.write("safe bang output\r\n")
-        on_sink.call(sink) if on_sink
-        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        on_sink.call(sink, result) if on_sink
+        result
       end
 
       cli.send(:run_user_interactive_pty_command, "echo safe", shell: "/bin/sh", env: {}, cwd: dir)
@@ -947,8 +948,9 @@ class TestTabs < KwardTestCase
         max_capture_bytes = command == "truncated" ? 4 : 1_048_576
         sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: max_capture_bytes)
         sink.write(output)
-        on_sink.call(sink) if on_sink
-        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: input_forwarded)
+        result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: input_forwarded)
+        on_sink.call(sink, result) if on_sink
+        result
       end
 
       outputs.each_key do |command|
@@ -962,7 +964,7 @@ class TestTabs < KwardTestCase
     end
   end
 
-  def test_ctrl_l_clears_tab_transient_shell_state
+  def test_ctrl_l_clears_tab_transient_shell_state_without_restoring_the_tab_composer
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: dir)
@@ -970,12 +972,15 @@ class TestTabs < KwardTestCase
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
       cli.send(:setup_interactive_tabs, store, nil)
       tab = cli.send(:active_tab)
+      tab.shell = Object.new
       tab.append_transient_shell_entry("safe output\\n")
 
       prompt.output.clear
+      prompt.restores.clear
       cli.send(:redraw_interactive_prompt)
 
       assert_empty tab.transient_shell_entries
+      assert_empty prompt.restores
       refute_includes strip_ansi(prompt.output.join), "safe output"
 
       cli.send(:handle_tab_action, { tab_action: :new }, store)

@@ -524,8 +524,8 @@ module Kward
         tab.agent
       end
 
-      def render_tab(tab)
-        if tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot) && tab.running?
+      def render_tab(tab, restore_composer: true)
+        if restore_composer && tab.snapshot && @prompt.respond_to?(:restore_tab_view_snapshot) && tab.running?
           @prompt.restore_tab_view_snapshot(tab.snapshot)
           return
         end
@@ -539,7 +539,7 @@ module Kward
           report_tab_runtime_error(tab) if %w[failed cancelled].include?(tab.status.to_s)
           render_tab_transient_shell_entries(tab)
         end
-        restore_tab_composer_snapshot(tab.snapshot)
+        restore_tab_composer_snapshot(tab.snapshot) if restore_composer
       end
 
       def render_tab_transient_shell_entries(tab)

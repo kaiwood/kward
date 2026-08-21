@@ -1331,7 +1331,9 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!ls", "/exit"])
       recorded_output = []
-      prompt.define_singleton_method(:record_transient_terminal_output) { |text| recorded_output << text }
+      prompt.define_singleton_method(:record_transient_terminal_output) do |text, render: true|
+        recorded_output << [text, render]
+      end
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
       agent.define_singleton_method(:conversation) { conversation }
@@ -1340,13 +1342,14 @@ class TestCLI < KwardTestCase
       cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
         sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
         sink.write("\e[36mGemfile\e[0m\r\nREADME.md\r\n")
-        on_sink.call(sink)
-        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        on_sink.call(sink, result)
+        result
       end
 
       cli.interactive_loop(agent: agent)
 
-      assert_equal ["\e[36mGemfile\e[0m\nREADME.md\n"], recorded_output
+      assert_equal [["\e[36mGemfile\e[0m\nREADME.md\n", false]], recorded_output
       assert_empty conversation.messages
     end
   end
@@ -1355,7 +1358,9 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!less README.md", "/exit"])
       recorded_output = []
-      prompt.define_singleton_method(:record_transient_terminal_output) { |text| recorded_output << text }
+      prompt.define_singleton_method(:record_transient_terminal_output) do |text, render: true|
+        recorded_output << [text, render]
+      end
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
       agent.define_singleton_method(:conversation) { conversation }
@@ -1364,8 +1369,9 @@ class TestCLI < KwardTestCase
       cli.define_singleton_method(:run_interactive_pty_with_terminal_handoff) do |_shell, _command, env:, cwd:, &on_sink|
         sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
         sink.write("\e[?1049hfull screen\e[?1049l")
-        on_sink.call(sink)
-        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: true)
+        result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: true)
+        on_sink.call(sink, result)
+        result
       end
 
       cli.interactive_loop(agent: agent)
@@ -1379,7 +1385,9 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!printf cursor", "/exit"])
       recorded_output = []
-      prompt.define_singleton_method(:record_transient_terminal_output) { |text| recorded_output << text }
+      prompt.define_singleton_method(:record_transient_terminal_output) do |text, render: true|
+        recorded_output << [text, render]
+      end
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
       agent.define_singleton_method(:conversation) { conversation }
@@ -1391,8 +1399,9 @@ class TestCLI < KwardTestCase
         forwarded_output << cursor_output
         sink = Kward::PassthroughPtyOutputSink.new(output: StringIO.new, max_capture_bytes: 1_048_576)
         sink.write(cursor_output)
-        on_sink.call(sink)
-        Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        on_sink.call(sink, result)
+        result
       end
 
       cli.interactive_loop(agent: agent)

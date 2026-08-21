@@ -11,6 +11,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Reconstructed safe transient shell output as part of the PTY ownership handback frame, avoiding an extra clear and redraw after commands such as `ls`.
+- Preserved the active `/shell` prompt and composer when Ctrl+L clears transient shell output, and avoided a redundant preliminary redraw.
 - Reconstructed the complete Kward screen after interactive PTY handoff, including failure paths, instead of relying on the child process cursor position.
 
 ## [0.81.0] - 2026-08-20

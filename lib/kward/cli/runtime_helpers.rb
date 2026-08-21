@@ -241,22 +241,17 @@ module Kward
         elsif @prompt.respond_to?(:say)
           @prompt.say(intro_message)
         end
-        output_sink = nil
-        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |sink|
-          output_sink = sink
+        result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |sink, completed_result|
+          record_completed_pty_output(sink, completed_result)
         end
-        output = output_sink&.captured_output || +"".b
-        output_truncated = output_sink&.truncated? || false
         @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
-        transcript_output = terminal_transcript_output(output, result, truncated: output_truncated)
-        record_tab_transient_shell_output(transcript_output) if transcript_output
         result
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
         nil
       end
 
-      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_sink)
+      def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_complete)
         runner = InteractivePtyRunner.new
         run_with_sink = lambda do |input, output|
           sink = PassthroughPtyOutputSink.new(
@@ -264,7 +259,7 @@ module Kward
             max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
           )
           result = runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink)
-          on_sink.call(sink) if on_sink
+          on_complete.call(sink, result) if on_complete
           result
         end
 
@@ -272,6 +267,17 @@ module Kward
           @prompt.with_terminal_handoff { |input, output| run_with_sink.call(input, output) }
         else
           run_with_sink.call($stdin, $stdout)
+        end
+      end
+
+      def record_completed_pty_output(sink, result)
+        output = sink&.captured_output || +"".b
+        transcript_output = terminal_transcript_output(output, result, truncated: sink&.truncated? || false)
+        return unless transcript_output
+
+        record_tab_transient_shell_output(transcript_output, render: false)
+        if @prompt.respond_to?(:record_transient_terminal_output)
+          @prompt.record_transient_terminal_output(transcript_output, render: false)
         end
       end
 

@@ -14,8 +14,7 @@ module Kward
         tab = active_tab if respond_to?(:active_tab, true)
         clear_active_tab_transient_shell_output if tab && respond_to?(:clear_active_tab_transient_shell_output, true)
         if tab&.shell
-          @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
-          render_tab(tab)
+          render_tab(tab, restore_composer: false)
           return
         end
         if tab&.running?
