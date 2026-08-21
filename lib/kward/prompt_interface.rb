@@ -133,6 +133,7 @@ module Kward
       @output_io = output
       # Logical state may change during a child handoff, but only the owner may render.
       @terminal_owner = :kward
+      @terminal_handoff_mode = nil
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
       @prompt_history = prompt_history
@@ -581,13 +582,24 @@ module Kward
       end
     end
 
-    def with_terminal_handoff
+    def with_inline_terminal_handoff(&block)
+      with_terminal_handoff(inline: true, &block)
+    end
+
+    def with_terminal_handoff(inline: false)
       start
       input = nil
       output = nil
+      transition = nil
       @mutex.synchronize do
-        clear_prompt_for_output_locked
-        restore_scroll_region_locked
+        if inline
+          handle_resize_locked
+          reserve_composer_region_locked
+          move_to_transcript_cursor_locked
+        else
+          clear_prompt_for_output_locked
+          restore_scroll_region_locked
+        end
         disable_editor_mouse_reporting(force: true)
         print_output_locked(BRACKETED_PASTE_RESTORE)
         print_output_locked(KEYBOARD_PROTOCOL_RESTORE)
@@ -597,14 +609,18 @@ module Kward
         restore_console_mode_locked
         input = @input_io
         output = @output_io
+        transition = method(:switch_terminal_handoff_to_exclusive)
+        @terminal_handoff_mode = inline ? :inline : :exclusive
         @terminal_owner = :child
       end
 
-      yield(input, output)
+      yield(input, output, transition)
     ensure
       @mutex.synchronize do
         @terminal_owner = :kward
+        @terminal_handoff_mode = nil
         restore_scroll_region_locked
+        print_output_locked(TerminalSequences::SGR_RESET)
         enter_raw_mode_locked
         print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
         print_output_locked(BRACKETED_PASTE_ENABLE)
@@ -939,6 +955,21 @@ module Kward
     end
 
     private
+
+    def switch_terminal_handoff_to_exclusive
+      @mutex.synchronize do
+        return unless @terminal_owner == :child && @terminal_handoff_mode == :inline
+
+        @terminal_owner = :kward
+        with_synchronized_output_locked do
+          clear_prompt_for_output_locked
+          restore_scroll_region_locked
+        end
+        flush_output_locked
+        @terminal_handoff_mode = :exclusive
+        @terminal_owner = :child
+      end
+    end
 
     def write_transcript_message(message, preserve_composer:)
       @mutex.synchronize do

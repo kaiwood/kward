@@ -18,6 +18,7 @@ module Kward
     CURSOR_SHAPE_BAR = "\e[6 q".freeze
     MOUSE_REPORTING_ENABLE = "\e[?1003h\e[?1006h".freeze
     MOUSE_REPORTING_DISABLE = "\e[?1006l\e[?1003l".freeze
+    SGR_RESET = "\e[0m".freeze
     SGR_INVERSE = "\e[7m".freeze
     SGR_INVERSE_OFF = "\e[27m".freeze
 

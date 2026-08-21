@@ -213,4 +213,4 @@ If rendering becomes corrupted after resize or after an external program writes 
 
 You can also press `Ctrl+L`; it rebuilds the durable current-tab view without deleting the conversation transcript, removing transient shell output. If a shortcut never reaches Kward, prefer its slash-command equivalent or change `composer.tab_keybindings` in `/settings`.
 
-External commands inside `/shell` and one-shot `!command` input receive an interactive PTY by default, so full-screen programs such as Vim or `less` temporarily own the terminal. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer when output should remain in Kward's transcript instead.
+External commands inside `/shell` and one-shot `!command` input receive an interactive PTY by default. They begin inline above a frozen composer, then switch to full-terminal passthrough if they emit screen-oriented or unknown terminal controls; full-screen programs such as Vim or `less` can therefore temporarily own the terminal. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer for bounded, sanitized transcript output.

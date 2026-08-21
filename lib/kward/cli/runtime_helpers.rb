@@ -253,26 +253,52 @@ module Kward
 
       def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_complete)
         runner = InteractivePtyRunner.new
-        run_with_sink = lambda do |input, output|
-          sink = PassthroughPtyOutputSink.new(
-            output: output,
-            max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
-          )
+        run_with_sink = lambda do |input, sink|
           result = runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink)
           on_complete.call(sink, result) if on_complete
           result
         end
 
-        if @prompt.respond_to?(:with_terminal_handoff)
-          @prompt.with_terminal_handoff { |input, output| run_with_sink.call(input, output) }
+        if @prompt.respond_to?(:with_inline_terminal_handoff)
+          @prompt.with_inline_terminal_handoff do |input, output, transition|
+            sink = AdaptivePtyOutputSink.new(
+              output: output,
+              on_exclusive: transition,
+              max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
+            )
+            run_with_sink.call(input, sink)
+          end
+        elsif @prompt.respond_to?(:with_terminal_handoff)
+          @prompt.with_terminal_handoff do |input, output|
+            sink = PassthroughPtyOutputSink.new(
+              output: output,
+              max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
+            )
+            run_with_sink.call(input, sink)
+          end
         else
-          run_with_sink.call($stdin, $stdout)
+          sink = PassthroughPtyOutputSink.new(
+            output: $stdout,
+            max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
+          )
+          run_with_sink.call($stdin, sink)
         end
       end
 
       def record_completed_pty_output(sink, result)
+        classified_output = sink.respond_to?(:transcript_safe?)
+        return if classified_output && !sink.transcript_safe?
+
         output = sink&.captured_output || +"".b
-        transcript_output = terminal_transcript_output(output, result, truncated: sink&.truncated? || false)
+        allow_input = classified_output &&
+          sink.respond_to?(:pre_input_capture_only?) &&
+          sink.pre_input_capture_only?
+        transcript_output = terminal_transcript_output(
+          output,
+          result,
+          truncated: sink&.truncated? || false,
+          allow_input: allow_input
+        )
         return unless transcript_output
 
         record_tab_transient_shell_output(transcript_output, render: false)
@@ -281,8 +307,8 @@ module Kward
         end
       end
 
-      def terminal_transcript_output(output, result, truncated:)
-        return if truncated || result.input_forwarded
+      def terminal_transcript_output(output, result, truncated:, allow_input: false)
+        return if truncated || (result.input_forwarded && !allow_input)
 
         text = ANSI.normalize_transcript_encoding(output).gsub("\r\n", "\n")
         return if text.empty? || text.include?("\r")

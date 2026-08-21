@@ -18,11 +18,11 @@ Prefix a command with `!` in the normal composer:
 !less README.md
 ```
 
-The command runs from the active workspace root and temporarily owns the terminal. When it exits, Kward restores the composer. Safe, line-oriented output from commands such as `ls` is mirrored into the transient transcript view so a repaint cannot hide it. Shell output is never added to the AI conversation or sent to the model.
+The command runs from the active workspace root and begins in an inline PTY region above a frozen composer. Line-oriented output and single-line carriage-return progress scroll the transcript area naturally while keyboard input belongs to the child process. If the child emits alternate-screen, clear-screen, absolute cursor, or unknown terminal controls, Kward conservatively hides the composer and switches permanently to full-terminal passthrough for the rest of that command. Pagers and full-screen applications therefore retain the complete terminal without relying on a command-name allowlist.
 
-The line-oriented Git commands `git fetch`, `git ls-remote`, `git push`, `git remote`, and `git status` keep the composer visible as a frozen display while they run. Keyboard input still belongs to the child process. Other commands use the full-terminal handoff so full-screen programs retain the complete terminal.
+When an inline command exits without reading input, safe line-oriented output is mirrored into the transient transcript view so a repaint cannot hide it. If the child reads input, Kward retains only output captured before the first forwarded input byte; this prevents echoed passwords, OTPs, or other input from entering tab state. Shell output is never added to the AI conversation or sent to the model.
 
-Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
+Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, the composer remains frozen and keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
 
 Configured `ekwsh.yml` aliases also work after `!`:
 

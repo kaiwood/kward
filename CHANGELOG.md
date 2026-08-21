@@ -6,11 +6,12 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
-- Made interactive PTY handoffs exclusive to the child for the duration of the command, removing the frozen-composer display and deferring Kward rendering until full screen reconstruction on return.
+- Changed interactive PTY handoff to render conservative line/progress output above a frozen composer, with a permanent switch to exclusive full-terminal passthrough when the child emits screen-oriented or unknown controls.
 - Kept safe, normalized shell output as explicit tab-local transient state so completed `/shell` and `!command` output can be reconstructed after tab switches without entering session history or model context.
 
 ### Fixed
 
+- Kept echoed passwords, OTPs, and other child input out of transient tab state by stopping safe PTY output retention before the first forwarded input byte.
 - Reconstructed safe transient shell output as part of the PTY ownership handback frame, avoiding an extra clear and redraw after commands such as `ls`.
 - Preserved the active `/shell` prompt and composer when Ctrl+L clears transient shell output, and avoided a redundant preliminary redraw.
 - Reconstructed the complete Kward screen after interactive PTY handoff, including failure paths, instead of relying on the child process cursor position.

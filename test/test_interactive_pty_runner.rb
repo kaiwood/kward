@@ -4,11 +4,14 @@ require_relative "../lib/kward/interactive_pty_runner"
 
 class TestInteractivePtyRunner < KwardTestCase
   class RecordingSink
-    attr_reader :chunks
+    attr_reader :chunks, :input_forwarded_count
+    attr_reader :finished
 
     def initialize(output)
       @output = output
       @chunks = []
+      @input_forwarded_count = 0
+      @finished = false
     end
 
     def write(chunk)
@@ -18,6 +21,15 @@ class TestInteractivePtyRunner < KwardTestCase
 
     def flush
       @output.flush
+    end
+
+    def input_forwarded
+      @input_forwarded_count += 1
+    end
+
+    def finish
+      @finished = true
+      flush
     end
   end
 
@@ -53,10 +65,37 @@ class TestInteractivePtyRunner < KwardTestCase
     refute worker.alive?, "expected interactive PTY command to finish"
     assert_equal 0, result.exit_status
     assert result.input_forwarded
+    assert_operator sink.input_forwarded_count, :>=, 1
+    assert sink.finished
     assert_equal output, sink.chunks.join
     assert_includes output, "q"
   ensure
     worker&.kill if worker&.alive?
+    close_ios(input_reader, input_writer, output_reader, output_writer)
+  end
+
+  def test_initial_buffered_input_is_reported_before_child_output
+    input_reader, input_writer = IO.pipe
+    output_reader, output_writer = IO.pipe
+    sink = RecordingSink.new(output_writer)
+    input_writer.write("q")
+    input_writer.close
+
+    result = Kward::InteractivePtyRunner.new.run(
+      RbConfig.ruby,
+      "-rio/console",
+      "-e",
+      "STDIN.raw { print STDIN.getc; STDOUT.flush }",
+      input: input_reader,
+      sink: sink
+    )
+    output_writer.close
+
+    assert result.input_forwarded
+    assert_operator sink.input_forwarded_count, :>=, 1
+    assert sink.finished
+    assert_includes output_reader.read, "q"
+  ensure
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 

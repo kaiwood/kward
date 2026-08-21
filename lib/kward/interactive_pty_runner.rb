@@ -30,9 +30,11 @@ module Kward
         writer = child_writer
         update_window_size(reader, pid)
         with_raw_input(input) do
-          drain_initial_input(input, writer)
-          status, input_forwarded = forward_io(reader, writer, pid, input, sink)
+          input_forwarded = drain_initial_input(input, writer, sink)
+          status, forwarded = forward_io(reader, writer, pid, input, sink)
+          input_forwarded ||= forwarded
         end
+        sink.finish if sink.respond_to?(:finish)
         status ||= wait_for_status(pid)
       end
 
@@ -58,16 +60,20 @@ module Kward
       yield
     end
 
-    def drain_initial_input(input, writer)
+    def drain_initial_input(input, writer, sink)
+      forwarded = false
       loop do
         chunk = input.read_nonblock(READ_SIZE, exception: false)
         break if chunk.nil? || chunk == :wait_readable
 
+        sink.input_forwarded if sink.respond_to?(:input_forwarded)
         writer.write(chunk)
+        forwarded = true
       end
       writer.flush
+      forwarded
     rescue Errno::EIO, Errno::EPIPE, IOError
-      nil
+      forwarded
     end
 
     def forward_io(reader, writer, pid, input, sink)
@@ -80,7 +86,7 @@ module Kward
         readable = IO.select(readers, nil, nil, 0.02)&.first || []
         forward_pty_output(reader, sink) if readable.include?(reader)
         if input_open && readable.include?(input)
-          input_open, forwarded = forward_input(input, writer)
+          input_open, forwarded = forward_input(input, writer, sink)
           input_forwarded ||= forwarded
         end
 
@@ -119,11 +125,12 @@ module Kward
       nil
     end
 
-    def forward_input(input, writer)
+    def forward_input(input, writer, sink)
       chunk = input.read_nonblock(READ_SIZE, exception: false)
       return [false, false] if chunk.nil?
       return [true, false] if chunk == :wait_readable
 
+      sink.input_forwarded if sink.respond_to?(:input_forwarded)
       writer.write(chunk)
       writer.flush
       [true, true]

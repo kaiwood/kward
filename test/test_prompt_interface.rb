@@ -778,7 +778,44 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[<u"
     assert_includes output.string, "\e[?2004l"
     assert_includes output.string, "\e[>25u"
+    assert_includes output.string, Kward::TerminalSequences::SGR_RESET
     assert_includes output.string, "\e[?2004h"
+  end
+
+  def test_prompt_interface_inline_terminal_handoff_preserves_composer_until_exclusive_transition
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    prompt.send(:composer_input=, "draft")
+    prompt.redraw
+    prompt.instance_variable_set(:@reserved_rows, 0)
+    output.truncate(0)
+    output.rewind
+
+    prompt.with_inline_terminal_handoff do |_input, handoff_output, transition|
+      assert_equal :child, prompt.instance_variable_get(:@terminal_owner)
+      assert_equal :inline, prompt.instance_variable_get(:@terminal_handoff_mode)
+      inline_setup = output.string.dup
+      refute_includes inline_setup, TTY::Cursor.clear_line
+      assert_match(/\e\[1;\d+r.*\e\[\d+;\d+H/m, inline_setup)
+
+      handoff_output.print("inline output")
+      visible_output = output.string.dup
+      prompt.say("background transcript")
+      prompt.set_queued_count(1)
+      assert_equal visible_output, output.string
+
+      transition.call
+
+      assert_equal :exclusive, prompt.instance_variable_get(:@terminal_handoff_mode)
+      transition_output = output.string.delete_prefix(inline_setup + "inline output")
+      assert_includes transition_output, TTY::Cursor.clear_line
+      assert_includes transition_output, Kward::TerminalSequences.restore_scroll_region
+    end
+
+    assert_equal :kward, prompt.instance_variable_get(:@terminal_owner)
+    assert_nil prompt.instance_variable_get(:@terminal_handoff_mode)
+    assert_includes output.string, "draft"
   end
 
   def test_prompt_interface_reconstructs_screen_after_arbitrary_child_cursor_movement

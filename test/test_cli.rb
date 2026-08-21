@@ -1327,6 +1327,36 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_interactive_pty_uses_adaptive_inline_handoff_when_available
+    input, input_writer = IO.pipe
+    output = StringIO.new
+    transitions = 0
+    prompt = FakePrompt.new([])
+    prompt.define_singleton_method(:with_inline_terminal_handoff) do |&block|
+      block.call(input, output, -> { transitions += 1 })
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    completed_sink = nil
+
+    result = cli.send(
+      :run_interactive_pty_with_terminal_handoff,
+      "/bin/sh",
+      "printf inline-output",
+      env: {},
+      cwd: Dir.pwd
+    ) do |sink, _completed_result|
+      completed_sink = sink
+    end
+
+    assert_equal 0, result.exit_status
+    assert_instance_of Kward::AdaptivePtyOutputSink, completed_sink
+    assert_equal "inline-output", output.string
+    assert_equal 0, transitions
+  ensure
+    input_writer&.close unless input_writer&.closed?
+    input&.close unless input&.closed?
+  end
+
   def test_interactive_loop_records_line_oriented_bang_output
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["!ls", "/exit"])
@@ -1410,6 +1440,28 @@ class TestCLI < KwardTestCase
       assert_empty recorded_output
       assert_empty conversation.messages
     end
+  end
+
+  def test_completed_inline_pty_output_retains_only_bytes_before_forwarded_input
+    recorded_output = []
+    prompt = FakePrompt.new([])
+    prompt.define_singleton_method(:record_transient_terminal_output) do |text, render: true|
+      recorded_output << [text, render]
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    sink = Kward::AdaptivePtyOutputSink.new(
+      output: StringIO.new,
+      on_exclusive: -> {},
+      max_capture_bytes: 1_048_576
+    )
+    sink.write("Preparing push\r\nEnter OTP: \r\n")
+    sink.input_forwarded
+    sink.write("123456\r\nPushed successfully\r\n")
+    result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: true)
+
+    cli.send(:record_completed_pty_output, sink, result)
+
+    assert_equal [["Preparing push\nEnter OTP: \n", false]], recorded_output
   end
 
   def test_terminal_transcript_output_rejects_truncated_output
