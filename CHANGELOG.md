@@ -11,6 +11,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Refreshed composer status immediately after model runtime changes and `/git` returns, so selected model details and Git dirty-state color do not remain stale until another input.
 - Kept echoed passwords, OTPs, and other child input out of transient tab state by stopping safe PTY output retention before the first forwarded input byte.
 - Reconstructed safe transient shell output as part of the PTY ownership handback frame, avoiding an extra clear and redraw after commands such as `ls`.
 - Preserved the active `/shell` prompt and composer when Ctrl+L clears transient shell output, and avoided a redundant preliminary redraw.

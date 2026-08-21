@@ -244,7 +244,7 @@ module Kward
         result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |sink, completed_result|
           record_completed_pty_output(sink, completed_result)
         end
-        @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
+        refresh_composer_status
         result
       rescue Errno::ENOENT => e
         runtime_output("Error: #{e.message}")
@@ -599,6 +599,14 @@ module Kward
 
       def current_reasoning_effort
         @client.respond_to?(:current_reasoning_effort) ? @client.current_reasoning_effort : ModelInfo::DEFAULT_REASONING_EFFORT
+      end
+
+      def refresh_composer_status
+        if @prompt.respond_to?(:refresh_composer_status)
+          @prompt.refresh_composer_status
+        elsif @prompt.respond_to?(:redraw)
+          @prompt.redraw
+        end
       end
 
       def reload_client_config

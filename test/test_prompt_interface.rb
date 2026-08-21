@@ -187,6 +187,22 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "second"
   end
 
+  def test_refresh_composer_status_invalidates_cached_composer_status
+    value = "Codex first-model · medium"
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, composer_status: -> { value })
+    prompt.start
+    value = "Codex second-model · medium"
+    output.truncate(0)
+    output.rewind
+
+    prompt.refresh_composer_status
+
+    assert_includes strip_ansi(output.string), value
+  ensure
+    prompt&.close
+  end
+
   def test_prompt_interface_top_border_displays_model_and_reasoning
     output = StringIO.new
     status = lambda { "Codex gpt-5.5 · medium" }

@@ -84,6 +84,7 @@ class TestCLIGit < KwardTestCase
       assert_empty `git -C #{Shellwords.escape(dir)} status --short`.strip
       assert_equal "new", File.read(File.join(dir, "tracked.txt")).strip
       assert_includes prompt.output.join("\n"), "Git commit succeeded"
+      assert_equal 1, prompt.refresh_composer_status_count
     end
   end
 

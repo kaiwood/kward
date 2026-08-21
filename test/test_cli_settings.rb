@@ -102,7 +102,46 @@ class TestCLISettings < KwardTestCase
       assert_equal ["Models"], prompt.select_titles
       assert_includes prompt.select_choices.first, "Codex existing (current)"
       assert_empty prompt.output
-      assert_equal 1, prompt.redraw_count
+      assert_equal 1, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
+    end
+  end
+
+  def test_provider_selection_refreshes_composer_status
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new([], ["Anthropic"])
+      client = FakeClient.new([])
+      conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "fake-model", reasoning_effort: "medium")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:configure_provider, conversation)
+      end
+
+      assert_equal "anthropic", JSON.parse(File.read(config_path))["provider"]
+      assert_equal 1, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
+    end
+  end
+
+  def test_local_server_preset_refreshes_composer_status
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      prompt = FakeSettingsPrompt.new([], ["Ollama"])
+      client = FakeClient.new([])
+      conversation = Kward::Conversation.new(system_message: nil, provider: "Local", model: "fake-model", reasoning_effort: "medium")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        cli.send(:configure_local_server_preset, conversation)
+      end
+
+      config = JSON.parse(File.read(config_path))
+      assert_equal "ollama", config["local_backend"]
+      assert_equal "http://127.0.0.1:11434/v1", config["local_base_url"]
+      assert_equal 1, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
     end
   end
 
@@ -526,7 +565,8 @@ class TestCLISettings < KwardTestCase
       config = JSON.parse(File.read(config_path))
       assert_equal "openrouter", config["provider"]
       assert_equal 1, client.reload_count
-      assert_equal 1, prompt.redraw_count
+      assert_equal 1, prompt.refresh_composer_status_count
+      assert_equal 0, prompt.redraw_count
     end
   end
 

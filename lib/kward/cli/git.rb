@@ -30,12 +30,16 @@ module Kward
           status = result.is_a?(Hash) && result.key?(:status_lines) ? result[:status_lines] : result
           result
         end
-        return if message.nil?
+        if message.nil?
+          refresh_composer_status
+          return
+        end
 
         result = run_busy_local_command_and_requeue(activity: "committing") do
           git_commit(git_root, message)
         end
         print_git_commit_result(result)
+        refresh_composer_status
       ensure
         @git_hook_conversation = previous_git_hook_conversation
       end

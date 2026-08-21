@@ -115,7 +115,7 @@ module Kward
         ConfigFiles.update_config("provider" => ModelInfo.config_provider_for_provider(provider))
         reload_client_config
         refresh_conversation_runtime(conversation)
-        @prompt.redraw if @prompt.respond_to?(:redraw)
+        refresh_composer_status
       end
 
       def provider_choices
@@ -166,7 +166,7 @@ module Kward
         ConfigFiles.update_config("local_backend" => backend, "local_base_url" => url)
         reload_client_config
         refresh_conversation_runtime(conversation)
-        @prompt.redraw if @prompt.respond_to?(:redraw)
+        refresh_composer_status
       end
 
       def configure_account_settings
@@ -920,7 +920,7 @@ module Kward
         ConfigFiles.update_config(ModelInfo.config_values_for_selection(provider, model))
         reload_client_config
         refresh_conversation_runtime(conversation)
-        @prompt.redraw if @prompt.respond_to?(:redraw)
+        refresh_composer_status
       end
 
       REASONING_CONFIG_DEBOUNCE_SECONDS = 0.5
@@ -953,18 +953,10 @@ module Kward
         queue_reasoning_config(effort, provider: provider, conversation: conversation) if queue_config
         if queue_config
           update_conversation_reasoning_effort(conversation, effort)
-          refresh_reasoning_status
+          refresh_composer_status
         else
           refresh_conversation_runtime(conversation, reasoning_effort: effort)
-          refresh_reasoning_status
-        end
-      end
-
-      def refresh_reasoning_status
-        if @prompt.respond_to?(:refresh_composer_status)
-          @prompt.refresh_composer_status
-        else
-          @prompt.redraw if @prompt.respond_to?(:redraw)
+          refresh_composer_status
         end
       end
 
