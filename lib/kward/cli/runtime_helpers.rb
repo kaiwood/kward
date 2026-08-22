@@ -297,7 +297,8 @@ module Kward
           output,
           result,
           truncated: sink&.truncated? || false,
-          allow_input: allow_input
+          allow_input: allow_input,
+          normalize_line_controls: classified_output
         )
         return unless transcript_output
 
@@ -307,15 +308,28 @@ module Kward
         end
       end
 
-      def terminal_transcript_output(output, result, truncated:, allow_input: false)
+      def terminal_transcript_output(
+        output,
+        result,
+        truncated:,
+        allow_input: false,
+        normalize_line_controls: false
+      )
         return if truncated || (result.input_forwarded && !allow_input)
 
         text = ANSI.normalize_transcript_encoding(output).gsub("\r\n", "\n")
-        return if text.empty? || text.include?("\r")
+        return if text.empty?
 
-        sanitized = ANSI.sanitize_transcript(text)
-        return unless sanitized == text
-        return if ANSI.strip_control_sequences(text).match?(UNSAFE_TRANSCRIPT_CONTROL_PATTERN)
+        if normalize_line_controls
+          sanitized = PtyTranscriptNormalizer.normalize(text)
+        else
+          return if text.include?("\r")
+
+          sanitized = ANSI.sanitize_transcript(text)
+          return unless sanitized == text
+        end
+        return if sanitized.empty?
+        return if ANSI.strip_control_sequences(sanitized).match?(UNSAFE_TRANSCRIPT_CONTROL_PATTERN)
 
         sanitized
       end

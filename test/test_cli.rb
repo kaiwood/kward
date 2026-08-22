@@ -1464,6 +1464,29 @@ class TestCLI < KwardTestCase
     assert_equal [["Preparing push\nEnter OTP: \n", false]], recorded_output
   end
 
+  def test_completed_inline_pty_output_collapses_carriage_return_progress
+    recorded_output = []
+    prompt = FakePrompt.new([])
+    prompt.define_singleton_method(:record_transient_terminal_output) do |text, render: true|
+      recorded_output << [text, render]
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    sink = Kward::AdaptivePtyOutputSink.new(
+      output: StringIO.new,
+      on_exclusive: -> {},
+      max_capture_bytes: 1_048_576
+    )
+    sink.write("Enumerating objects: 3, done.\r\n")
+    sink.write("\e[?2026hWriting objects: 33%\e[K\e[0GWriting objects: 100%\e[K\r\n\e[?2026l")
+    sink.write("Done\r\n")
+    sink.finish
+    result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+
+    cli.send(:record_completed_pty_output, sink, result)
+
+    assert_equal [["Enumerating objects: 3, done.\nWriting objects: 100%\nDone\n", false]], recorded_output
+  end
+
   def test_terminal_transcript_output_rejects_truncated_output
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
     result = Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)

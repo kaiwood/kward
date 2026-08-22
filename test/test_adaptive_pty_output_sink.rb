@@ -92,6 +92,46 @@ class TestAdaptivePtyOutputSink < KwardTestCase
     assert_equal output, written_output(events)
   end
 
+  def test_synchronized_output_mode_remains_inline
+    sink, events = build_sink
+    output = "\e[?2026hDownloading 100%\r\e[2Kdone\e[?2026l"
+
+    sink.write(output)
+    sink.finish
+
+    assert sink.inline?
+    assert sink.transcript_safe?
+    assert_equal output, written_output(events)
+    refute_includes events, [:exclusive]
+  end
+
+  def test_finish_closes_unbalanced_synchronized_output
+    sink, events = build_sink
+    output = "\e[?2026hDownloading 100%"
+
+    sink.write(output)
+    sink.finish
+
+    assert sink.inline?
+    assert_equal output + Kward::TerminalSequences::SYNCHRONIZED_OUTPUT_DISABLE, written_output(events)
+  end
+
+  def test_exclusive_transition_closes_synchronized_output_before_handoff
+    sink, events = build_sink
+    synchronized_output = "\e[?2026hframe"
+    alternate_screen = "\e[?1049hfull screen"
+
+    sink.write(synchronized_output)
+    sink.write(alternate_screen)
+
+    assert_equal [
+      [:write, synchronized_output],
+      [:write, Kward::TerminalSequences::SYNCHRONIZED_OUTPUT_DISABLE],
+      [:exclusive],
+      [:write, alternate_screen]
+    ], events
+  end
+
   def test_stops_retention_before_forwarded_input_can_be_echoed
     sink, events = build_sink
 

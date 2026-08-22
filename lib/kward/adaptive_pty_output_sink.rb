@@ -1,3 +1,5 @@
+require_relative "terminal_sequences"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Streams a conservative subset of PTY output into Kward's inline terminal
@@ -19,6 +21,7 @@ module Kward
       @truncated = false
       @mode = :inline
       @sequence = +"".b
+      @synchronized_output = false
     end
 
     def write(chunk)
@@ -35,6 +38,7 @@ module Kward
 
     def finish
       switch_to_exclusive(@sequence) unless @sequence.empty? || exclusive?
+      end_synchronized_output if inline?
       flush
     end
 
@@ -83,6 +87,7 @@ module Kward
           @sequence << byte
           status = sequence_status
           if status == :safe
+            track_safe_sequence(@sequence)
             safe_output << @sequence
             @sequence.clear
           elsif status == :exclusive
@@ -133,8 +138,20 @@ module Kward
         value.match?(/\A\e\[[0-2]?K\z/) ||
         value.match?(/\A\e\[[0-9;]*[CDG`]\z/) ||
         value.match?(/\A\e\[\?25[hl]\z/) ||
-        value.match?(/\A\e\[\?2004[hl]\z/) ||
+        value.match?(/\A\e\[\?(?:2004|2026)[hl]\z/) ||
         value.match?(/\A\e\[[0-9;]* q\z/)
+    end
+
+    def track_safe_sequence(sequence)
+      @synchronized_output = true if sequence == TerminalSequences::SYNCHRONIZED_OUTPUT_ENABLE
+      @synchronized_output = false if sequence == TerminalSequences::SYNCHRONIZED_OUTPUT_DISABLE
+    end
+
+    def end_synchronized_output
+      return unless @synchronized_output
+
+      @output.write(TerminalSequences::SYNCHRONIZED_OUTPUT_DISABLE)
+      @synchronized_output = false
     end
 
     def flush_safe_output(value)
@@ -145,6 +162,7 @@ module Kward
     end
 
     def switch_to_exclusive(value)
+      end_synchronized_output
       @on_exclusive.call
       @mode = :exclusive
       @output.write(value) unless value.empty?
