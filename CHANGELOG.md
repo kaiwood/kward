@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added opt-in, content-free adaptive PTY transition diagnostics through `KWARD_PTY_DIAGNOSTICS_PATH` for troubleshooting unexpected exclusive terminal handoff.
+
 ### Changed
 
 - Changed interactive PTY handoff to render conservative line/progress output above a frozen composer, with a permanent switch to exclusive full-terminal passthrough when the child emits screen-oriented or unknown controls.
@@ -11,7 +15,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
-- Cached rebuildable session-list summaries so opening `/session` no longer reparses every unchanged conversation log, while retaining automatic fallback for existing, changed, or corrupt session data.
+- Cached rebuildable session-list summaries so opening `/session` no longer reparses every unchanged conversation log, while retaining automatic fallback for existing, changed, or corrupt session data
 - Refreshed composer status immediately after model runtime changes and `/git` returns, so selected model details and Git dirty-state color do not remain stale until another input.
 - Kept echoed passwords, OTPs, and other child input out of transient tab state by stopping safe PTY output retention before the first forwarded input byte.
 - Reconstructed safe transient shell output as part of the PTY ownership handback frame, avoiding an extra clear and redraw after commands such as `ls`.
