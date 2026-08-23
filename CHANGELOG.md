@@ -19,7 +19,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
-- Made the test environment explicitly disable terminal color so release preflight assertions remain deterministic when run directly from a color-capable TTY.
+- Made the test environment explicitly disable terminal color and made unified diff-viewer tests select that mode explicitly, keeping release preflight assertions deterministic across terminal capabilities and widths.
 - Kept `/files` image previews bounded within a fully cleared, bordered file-list overlay above the visible composer and preserved their aspect ratio in Kitty-compatible terminals.
 - Fixed inline image protocol detection and viewer handoff for Ghostty and other Kitty-compatible terminals by retrying inconclusive probes, honoring recognized Kitty hints, suppressing Kitty acknowledgements, and using valid, chunked graphics sequences.
 - Kept synchronized-output updates such as Homebrew downloads in the inline PTY region instead of resetting the cursor through an unnecessary exclusive handoff.

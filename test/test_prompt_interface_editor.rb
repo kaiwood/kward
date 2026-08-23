@@ -58,7 +58,7 @@ class TestPromptInterfaceEditor < KwardTestCase
   end
 
   def test_prompt_interface_diff_viewer_is_read_only_and_closes_with_escape
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", diff_view: "unified")
     assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
     editor = prompt.instance_variable_get(:@editor_state)
 
@@ -74,7 +74,7 @@ class TestPromptInterfaceEditor < KwardTestCase
 
   def test_prompt_interface_diff_viewer_ctrl_c_copies_selection
     output = StringIO.new
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern", diff_view: "unified")
     assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
     editor = prompt.instance_variable_get(:@editor_state)
     editor.selection_anchor = 0
@@ -90,7 +90,7 @@ class TestPromptInterfaceEditor < KwardTestCase
 
   def test_prompt_interface_diff_viewer_csi_u_cmd_c_copies_selection
     output = StringIO.new
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern", diff_view: "unified")
     assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
     editor = prompt.instance_variable_get(:@editor_state)
     editor.selection_anchor = 5
@@ -105,7 +105,7 @@ class TestPromptInterfaceEditor < KwardTestCase
   end
 
   def test_prompt_interface_diff_viewer_colors_added_and_removed_lines
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern", diff_view: "unified")
     prompt.instance_variable_set(:@color_enabled, true)
     assert prompt.send(:open_diff_viewer, "notes.txt", "-old\n+new\n")
 
@@ -2206,7 +2206,7 @@ class TestPromptInterfaceEditor < KwardTestCase
   end
 
   def test_prompt_interface_diff_viewer_keeps_absolute_line_numbers_when_relative_is_enabled
-    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_line_numbers: "relative")
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_line_numbers: "relative", diff_view: "unified")
     assert prompt.send(:open_diff_viewer, "notes.txt", "one\ntwo\nthree")
     editor = prompt.instance_variable_get(:@editor_state)
     editor.set_cursor_line_and_column(1, 0)
