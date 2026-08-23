@@ -1,5 +1,7 @@
+require "bundler/gem_tasks"
 require "fileutils"
 require "html-proofer"
+require "open3"
 require "rdoc/task"
 require "rubygems/package"
 require "webrick"
@@ -31,6 +33,36 @@ end
 def packaged_gem_files(gem_name)
   gem = Gem::Package.new(gem_name)
   gem.spec.files.sort
+end
+
+def verify_release_metadata
+  version = Kward::VERSION
+  tag = "v#{version}"
+  changelog = File.read("CHANGELOG.md")
+  abort("CHANGELOG.md is missing a [#{version}] release heading") unless changelog.match?(/^## \[#{Regexp.escape(version)}\] - \d{4}-\d{2}-\d{2}$/)
+
+  if ENV["GITHUB_REF_TYPE"] == "tag" && ENV["GITHUB_REF_NAME"] != tag
+    abort("GitHub tag #{ENV["GITHUB_REF_NAME"]} does not match gem version #{version}")
+  end
+
+  tag_commit, tag_status = Open3.capture2e("git", "rev-parse", "--verify", "#{tag}^{commit}")
+  return unless tag_status.success?
+
+  head_commit = `git rev-parse HEAD`.strip
+  abort("Tag #{tag} does not point at HEAD") unless tag_commit.strip == head_commit
+end
+
+def verify_packaged_gem(gem_name)
+  files = packaged_gem_files(gem_name)
+  required = ["exe/kward", "lib/kward/version.rb"]
+  missing = required - files
+  abort("Packaged gem is missing: #{missing.join(", ")}") unless missing.empty?
+
+  forbidden_prefixes = [".github/", "script/", "test/", "plan/"]
+  forbidden = files.select { |file| forbidden_prefixes.any? { |prefix| file.start_with?(prefix) } }
+  abort("Packaged gem includes development files: #{forbidden.join(", ")}") unless forbidden.empty?
+
+  files
 end
 
 def rewrite_yard_markdown_links
@@ -75,14 +107,22 @@ YARD::Rake::YardocTask.new do |yard|
 end
 
 namespace :release do
+  desc "Verify the version, changelog, and release tag agree"
+  task :verify do
+    verify_release_metadata
+  end
+
   desc "Run release checks and build a local gem"
-  task preflight: [:test, "docs:check"] do
-    gem_name = "kward-#{Kward::VERSION}.gem"
+  task preflight: ["release:verify", :test, "docs:check"] do
+    gem_name = File.join("pkg", "kward-#{Kward::VERSION}.gem")
     FileUtils.rm_f(gem_name)
-    sh "gem", "build", "kward.gemspec"
-    puts packaged_gem_files(gem_name)
+    Rake::Task["build"].invoke
+    puts verify_packaged_gem(gem_name)
   end
 end
+
+Rake::Task["release:source_control_push"].enhance(["release:verify"])
+Rake::Task["release:rubygem_push"].enhance(["release:verify"])
 
 namespace :docs do
   desc "Serve the built YARD documentation site locally and rebuild on changes"

@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+
+require_relative "release_support"
+
+ROOT = File.expand_path("..", __dir__)
+
+def usage
+  <<~USAGE
+    Usage:
+      script/release VERSION
+      printf 'VERSION\\n' | script/release
+  USAGE
+end
+
+def required_argument(arguments, name)
+  value = arguments.shift
+  raise Kward::Release::Error, "Missing #{name}\n\n#{usage}" if value.nil? || value.empty?
+
+  value
+end
+
+def reject_extra_arguments!(arguments)
+  raise Kward::Release::Error, "Unexpected arguments: #{arguments.join(" ")}" unless arguments.empty?
+end
+
+begin
+  case ARGV.first
+  when "notes"
+    ARGV.shift
+    version = required_argument(ARGV, "version")
+    reject_extra_arguments!(ARGV)
+    changelog = Kward::Release::Changelog.new(File.read(File.join(ROOT, "CHANGELOG.md")))
+    puts changelog.notes(version)
+  when "published"
+    ARGV.shift
+    version = required_argument(ARGV, "version")
+    reject_extra_arguments!(ARGV)
+    puts Kward::Release::RubyGemsRegistry.new.published?(version)
+  when "verify-gem"
+    ARGV.shift
+    version = required_argument(ARGV, "version")
+    gem_path = required_argument(ARGV, "gem path")
+    reject_extra_arguments!(ARGV)
+    Kward::Release::RubyGemsRegistry.new.verify_artifact!(version, gem_path)
+  else
+    version = ARGV.shift
+    version = $stdin.gets&.strip if version.nil? && !$stdin.tty?
+    raise Kward::Release::Error, usage unless version && !version.empty?
+    reject_extra_arguments!(ARGV)
+
+    Kward::Release::Command.new(root: ROOT, version: version).run
+  end
+rescue Kward::Release::Error => error
+  warn "Release error: #{error.message}"
+  exit 1
+end

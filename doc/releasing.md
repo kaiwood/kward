@@ -1,74 +1,107 @@
 # Releasing Kward
 
-## Before you begin
+Kward releases are prepared locally and published by GitHub Actions. The local command updates the version and changelog, runs every release check, creates the release commit and annotated tag, then pushes both atomically. The tag-triggered workflow publishes the gem to RubyGems.org and creates a GitHub Release with the same gem attached.
 
-Kward requires Ruby >= 3.4 (`spec.required_ruby_version` in `kward.gemspec`). If you develop with a newer Ruby, verify tests pass against the minimum supported version before releasing.
+## One-time setup
 
-## Prepare the release
+Kward publishes through [RubyGems trusted publishing](https://guides.rubygems.org/trusted-publishing/), so the repository does not need a long-lived RubyGems API key.
 
-Before publishing:
+Before the first automated release:
 
-1. Update `CHANGELOG.md` for the version. Move `[Unreleased]` entries under a new version heading.
-2. Update `Kward::VERSION` in `lib/kward/version.rb`.
-3. Run the release preflight:
+1. In the GitHub repository, create an Actions environment named `release`. Add required reviewers if releases should have a manual approval gate.
+2. On the RubyGems.org page for the `kward` gem, add a trusted publisher with:
+   - Repository owner: `kaiwood`
+   - Repository name: `kward`
+   - Workflow filename: `release.yml`
+   - Environment: `release`
+3. Confirm GitHub Actions can write repository contents. The release job requests only `contents: write` for the GitHub Release and `id-token: write` for RubyGems OIDC authentication.
 
-   ```bash
-   bundle exec rake release:preflight
-   ```
+GitHub Packages is intentionally not used. RubyGems.org remains the canonical package registry; the built `.gem` is also attached to each GitHub Release.
 
-   This runs the full test suite, builds and checks the generated docs, builds a local gem, and prints the packaged file list for review.
+## Prepare a release
 
-4. Run focused tests for any areas you changed during the release prep itself (docs, config, etc.):
+Keep notable changes under the appropriate `Added`, `Changed`, `Fixed`, or `Removed` heading in the `[Unreleased]` section of `CHANGELOG.md`. Do not add the version heading by hand.
 
-   ```bash
-   ruby -Itest test/test_cli.rb
-   ```
-
-5. Preview docs locally if you changed documentation or public APIs:
-
-   ```bash
-   bundle exec rake docs:serve
-   ```
-
-   The preview builds `_yardoc/`, serves it with WEBrick, and rebuilds in a fresh process when documentation sources, library code, or templates change. Refresh your browser after rebuilds.
-
-6. If you want to run the documentation check separately:
-
-   ```bash
-   bundle exec rake docs:build
-   bundle exec rake docs:check
-   ```
-
-   `docs:check` validates generated internal links, images, and scripts. Pushes to `main` deploy the generated YARD site to GitHub Pages. You can also run `bundle exec rake rdoc` to generate a separate RDoc site as a sanity check, but it is not deployed.
-
-7. Inspect the packaged files printed by `release:preflight` and confirm no local config, sessions, logs, or secrets are included. The gemspec uses `git ls-files` and excludes `test/`, `plan/`, `.ruby-lsp/`, `.gitignore`, and `AGENTS.md`.
-
-8. Install the built gem locally and smoke test the `kward` executable in a clean workspace.
-
-## Tag and publish
-
-Commit the version bump and create a Git tag:
+Before releasing, make sure `main` is clean, pushed, and synchronized with `origin/main`. Then run:
 
 ```bash
-git commit -am "Bump to VERSION"
-git tag vVERSION
-git push && git push --tags
+script/release 0.82.0
 ```
 
-Publish the built gem from the release checkout:
+The version can also come from standard input:
 
 ```bash
-gem push kward-VERSION.gem
+printf '0.82.0\n' | script/release
 ```
 
-RubyGems MFA is required for publishing. Prefer RubyGems trusted publishing for automated releases if CI publishing is added later, so long-lived API keys do not need to be stored in CI secrets.
+The command fails closed unless:
+
+- The version is a valid RubyGems version newer than `Kward::VERSION`.
+- The working tree is clean and checked out on `main`.
+- Local `main` exactly matches `origin/main`.
+- The tag does not exist locally or on GitHub.
+- RubyGems.org does not already contain the version.
+- `[Unreleased]` contains at least one changelog entry.
+
+If validation succeeds, it:
+
+1. Updates `Kward::VERSION` in `lib/kward/version.rb`.
+2. Refreshes `Gemfile.lock` with `bundle lock --local`.
+3. Moves the unreleased changelog entries under a dated version heading.
+4. Runs `bundle exec rake release:preflight`.
+5. Commits the three release files as `Release v0.82.0`.
+6. Creates an annotated `v0.82.0` tag.
+7. Atomically pushes `main` and the tag to `origin`.
+
+If preparation fails before the commit, the command restores the version, lockfile, and changelog. If tagging or pushing fails after the commit, it leaves the release commit in place and prints the failed command; inspect the repository before retrying rather than creating another release commit.
+
+## What the release workflow does
+
+A pushed `v*` tag starts `.github/workflows/release.yml`. The workflow:
+
+1. Checks that the tag, gem version, and changelog heading agree.
+2. Runs the full test suite and generated-documentation checks against Ruby 3.4.
+3. Builds the gem and verifies its packaged files.
+4. Publishes through RubyGems trusted publishing.
+5. Verifies the local gem checksum against the artifact served by RubyGems.org.
+6. Creates `Kward VERSION` as a GitHub Release using that version's changelog section and attaches the verified gem.
+
+The publishing job uses the protected `release` environment. If RubyGems.org already has the version after a partially completed workflow, a rerun rebuilds the gem and verifies that it exactly matches the published checksum before continuing. For an existing GitHub Release, the workflow downloads and compares the gem, uploads it when missing, and publishes an unfinished draft. This makes normal workflow reruns safe without silently replacing mismatched artifacts.
+
+Follow the run from the repository's **Actions → Release** page. Installation can be checked after publication with:
+
+```bash
+gem install kward --version 0.82.0
+kward --version
+```
+
+## Run checks without releasing
+
+After updating to an unreleased version, run the complete preflight directly with:
+
+```bash
+bundle exec rake release:preflight
+```
+
+This verifies release metadata, runs tests, builds and checks the generated documentation, builds `pkg/kward-VERSION.gem`, rejects development-only packaged files, and prints the final gem contents.
+
+Individual checks remain available:
+
+```bash
+bundle exec rake test
+bundle exec rake docs:check
+bundle exec rake release:verify
+bundle exec rake build
+```
+
+Use `bundle exec rake docs:serve` to preview documentation locally.
 
 ## If you need to yank a release
 
-If a published gem has a serious problem, you can yank it within 24 hours of pushing:
+If a published gem has a serious problem, yank it within 24 hours of pushing:
 
 ```bash
 gem yank kward --version VERSION
 ```
 
-Yanking removes the gem from the default install index but does not delete the version entirely. After yanking, fix the issue, bump the version, and release again.
+Yanking removes the gem from the default install index but does not delete the version. Fix the issue, choose a new version, and run the normal release command again. Never move or reuse a published version tag.

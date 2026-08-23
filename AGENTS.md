@@ -73,6 +73,12 @@ ruby lib/main.rb
 ruby lib/main.rb "Explain this project"
 ```
 
+Prepare and push a release after synchronizing `main` with `origin/main`:
+
+```bash
+script/release VERSION
+```
+
 ## Implementation notes
 
 - This project uses Minitest. Add or update focused tests for behavior changes.

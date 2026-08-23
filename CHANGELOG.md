@@ -6,11 +6,14 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `script/release` for validated, one-command release preparation from an argument or standard input, including changelog/version updates, preflight checks, an annotated tag, and an atomic push.
+- Added a tag-triggered GitHub Actions release workflow using RubyGems trusted publishing, published-artifact checksum verification, changelog-based GitHub Releases, and safe reruns after partial publication.
 - Added `+` and `-` controls for resizing inline `/files` image previews within the available overlay space.
 - Added inline read-only previews for PNG, JPEG, GIF, and WebP files opened from `/files` in terminals that support Kitty or iTerm2 image sequences, with local conversion for Kitty-compatible terminals when needed.
 
 ### Changed
 
+- Excluded GitHub workflow and local release-script files from packaged gems and added explicit release metadata and package-content checks.
 - Changed interactive PTY handoff to render conservative line/progress output above a frozen composer, with a permanent switch to exclusive full-terminal passthrough when the child emits screen-oriented or unknown controls.
 - Kept safe, normalized shell output as explicit tab-local transient state so completed `/shell` and `!command` output can be reconstructed after tab switches without entering session history or model context.
 

@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read release version
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Run release preflight
+        run: bundle exec rake release:preflight
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Check RubyGems.org
+        id: rubygems
+        shell: bash
+        run: |
+          published="$(ruby script/release published "$VERSION")"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
+      - name: Publish gem to RubyGems.org
+        if: steps.rubygems.outputs.published != 'true'
+        uses: rubygems/release-gem@v1
+
+      - name: Build existing RubyGems.org release
+        if: steps.rubygems.outputs.published == 'true'
+        run: bundle exec rake build
+
+      - name: Verify published artifact
+        run: ruby script/release verify-gem "$VERSION" "pkg/kward-${VERSION}.gem"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag="v${VERSION}"
+          asset="kward-${VERSION}.gem"
+          gem_path="pkg/${asset}"
+          ruby script/release notes "$VERSION" > release-notes.md
+
+          if release_json="$(gh release view "$tag" --json isDraft,assets 2>/dev/null)"; then
+            is_draft="$(ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("isDraft")' <<< "$release_json")"
+            has_asset="$(ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("assets").any? { |asset| asset.fetch("name") == ARGV.fetch(0) }' "$asset" <<< "$release_json")"
+
+            if [ "$has_asset" = "true" ]; then
+              download_dir="$(mktemp -d)"
+              gh release download "$tag" --pattern "$asset" --dir "$download_dir"
+              cmp "$gem_path" "$download_dir/$asset"
+            else
+              gh release upload "$tag" "$gem_path"
+            fi
+
+            if [ "$is_draft" = "true" ]; then
+              gh release edit "$tag" \
+                --draft=false \
+                --title "Kward ${VERSION}" \
+                --notes-file release-notes.md
+            else
+              echo "GitHub Release $tag already contains the verified gem."
+            fi
+          else
+            gh release create "$tag" "$gem_path" \
+              --verify-tag \
+              --title "Kward ${VERSION}" \
+              --notes-file release-notes.md
+          fi
