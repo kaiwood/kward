@@ -4051,7 +4051,7 @@ edit this prompt"
     assert_includes stripped, "You> look"
     refute_includes stripped, "You> look\ndata:image/png;base64"
     assert_includes output, "[image] pasted image · image/png · 9 B"
-    assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40:#{data}\e\\"
+    assert_includes output, "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{data}\e\\"
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
@@ -4157,7 +4157,7 @@ edit this prompt"
 
     assert_includes strip_ansi(prompt.output.join("\n")), "You> look #{path}"
     assert_includes prompt.output.join("\n"), "[image] #{path} · image/png · 9 B"
-    assert_includes prompt.output.join("\n"), "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
+    assert_includes prompt.output.join("\n"), "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{Base64.strict_encode64("png bytes")}\e\\"
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
@@ -4181,7 +4181,7 @@ edit this prompt"
     assert_includes stripped, "You> look"
     refute_includes stripped, "You> look\n#{path}"
     assert_includes output, "[image] #{path} · image/png · 9 B"
-    assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64(path)}:#{Base64.strict_encode64("png bytes")}\e\\"
+    assert_includes output, "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{Base64.strict_encode64("png bytes")}\e\\"
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
@@ -4204,7 +4204,7 @@ edit this prompt"
     assert_includes stripped, "You> look"
     refute_includes stripped, "You> look\ndata:image/png;base64"
     assert_includes output, "[image] pasted image · image/png · 9 B"
-    assert_includes output, "\e_Ginline=1;preserveAspectRatio=1;width=40:#{data}\e\\"
+    assert_includes output, "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{data}\e\\"
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")

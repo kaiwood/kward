@@ -289,8 +289,14 @@ module Kward
       # Writes the pasted images output for the terminal CLI flow.
       def print_pasted_images(input, image_parts: nil)
         parts = image_parts || Kward::ImageAttachments.image_parts_from_text(input)
+        protocol = @prompt.inline_image_protocol if @prompt.respond_to?(:inline_image_protocol)
         parts.each do |part|
-          sequence = Kward::ImageAttachments.terminal_image_sequence(part)
+          next if @prompt.respond_to?(:inline_image_protocol) && protocol.nil?
+
+          part = Kward::ImageAttachments.terminal_image_part(part, protocol) if protocol
+          next if protocol && part.nil?
+
+          sequence = Kward::ImageAttachments.terminal_image_sequence(part, protocol: protocol)
           next unless sequence
 
           if @prompt.respond_to?(:say_visual)

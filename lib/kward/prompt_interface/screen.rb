@@ -80,6 +80,7 @@ module Kward
         visible = select_editing_active? if @select_state
         visible = git_composing? if @git_state
         visible = project_browser_search_active? if project_browser_visible?
+        visible = false if image_viewer_active?
         set_cursor_visible_locked(visible)
       end
 

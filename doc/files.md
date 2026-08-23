@@ -12,9 +12,9 @@ From an interactive Kward session, run:
 /files
 ```
 
-Kward opens the project file browser. Use the arrow keys or `j`/`k` to move through the tree, then press `Enter` on a file to open it in the integrated editor.
+Kward opens the project file browser. Use the arrow keys or `j`/`k` to move through the tree, then press `Enter` on a file to open it in the integrated editor. Supported images (PNG, JPEG, GIF, and WebP) open as read-only inline previews when the terminal supports Kitty or iTerm2 image sequences.
 
-When you quit the editor, Kward returns to the file browser at the same position so you can keep browsing nearby files.
+When you quit the editor or close an image preview, Kward returns to the file browser at the same position so you can keep browsing nearby files.
 
 ## What appears in the browser
 
@@ -40,6 +40,7 @@ Outside Git, Kward scans the workspace directory and skips common noisy director
 | `/` | Start search |
 | `Backspace` | Delete the last search character |
 | `Esc` | Leave search; press again to close the browser |
+| `Q` | Close an image preview |
 | `@` | Insert the selected file as an `@path` mention |
 
 Directories use `▸` and `▾` markers to show collapsed and expanded state. Files are shown under their containing directory with indentation. File-type icons are off by default; users with a compatible Nerd Font can enable them under Interface in `/settings`. See [Configuration](configuration.md#project-browser-icons).
@@ -91,6 +92,10 @@ See [Integrated editor](editor.md) for editor modes, save/quit keys, search, sel
 Kward remembers the expanded folders and selected path for each workspace. The next time you open `/files` in the same project, it restores the browser close to where you left it.
 
 Search itself is temporary. Closing search returns to the normal tree, and closing the browser leaves your chat session intact.
+
+## Image previews
+
+Image previews are read-only and replace the file-list overlay while leaving the prompt composer and tabs visible. Press `Esc` or `Q` to return to `/files`. Kward probes Kitty-compatible terminals when it has a real interactive TTY, uses recognized terminal identity hints when probing is inconclusive, and retries transient detection failures. Terminals without reachable Kitty or iTerm2 inline-image support keep the selection in the browser and show a status message instead of opening binary data in the text editor. Kitty-compatible terminals use PNG data; JPEG, GIF, and WebP previews require an available local image converter.
 
 ## Notes and limitations
 

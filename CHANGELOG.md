@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added inline read-only previews for PNG, JPEG, GIF, and WebP files opened from `/files` in terminals that support Kitty or iTerm2 image sequences, with local conversion for Kitty-compatible terminals when needed.
+
 ### Changed
 
 - Changed interactive PTY handoff to render conservative line/progress output above a frozen composer, with a permanent switch to exclusive full-terminal passthrough when the child emits screen-oriented or unknown controls.
@@ -11,6 +15,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Kept `/files` image previews bounded within a fully cleared, bordered file-list overlay above the visible composer and preserved their aspect ratio in Kitty-compatible terminals.
+- Fixed inline image protocol detection and viewer handoff for Ghostty and other Kitty-compatible terminals by retrying inconclusive probes, honoring recognized Kitty hints, suppressing Kitty acknowledgements, and using valid, chunked graphics sequences.
 - Kept synchronized-output updates such as Homebrew downloads in the inline PTY region instead of resetting the cursor through an unnecessary exclusive handoff.
 - Retained the final visible state of carriage-return and horizontal-cursor progress output from commands such as `git push` and Homebrew when reconstructing the transcript after PTY handback.
 - Cached rebuildable session-list summaries so opening `/session` no longer reparses every unchanged conversation log, while retaining automatic fallback for existing, changed, or corrupt session data.

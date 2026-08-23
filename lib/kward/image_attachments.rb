@@ -1,8 +1,10 @@
 require "base64"
 require "cgi/escape"
+require "open3"
 require "shellwords"
 require "tmpdir"
 require "uri"
+require_relative "terminal_image_support"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -291,6 +293,71 @@ module Kward
       MIME_TYPES.key?(File.extname(path.to_s).downcase)
     end
 
+    def image_part_from_path(path)
+      expanded_path = File.expand_path(path.to_s)
+      return nil unless File.file?(expanded_path)
+
+      media_type = mime_type(expanded_path)
+      return nil unless media_type
+
+      size = File.size(expanded_path)
+      return nil if size > MAX_IMAGE_BYTES
+
+      {
+        type: "image",
+        media_type: media_type,
+        data: Base64.strict_encode64(File.binread(expanded_path)),
+        path: expanded_path,
+        size_bytes: size
+      }
+    rescue SystemCallError
+      nil
+    end
+
+    def terminal_image_part(part, protocol)
+      return part unless protocol == :kitty
+      return part if image_media_type(part) == "image/png"
+
+      convert_image_part_to_png(part)
+    end
+
+    def png_dimensions(part)
+      encoded = part[:data] || part["data"]
+      header = Base64.strict_decode64(encoded.to_s[0, 32])
+      return nil unless header.start_with?("\x89PNG\r\n\x1A\n".b)
+      return nil unless header.byteslice(12, 4) == "IHDR"
+
+      width, height = header.byteslice(16, 8).unpack("NN")
+      return nil unless width.positive? && height.positive?
+
+      [width, height]
+    rescue ArgumentError, NoMethodError
+      nil
+    end
+
+    def convert_image_part_to_png(part)
+      path = part[:path] || part["path"]
+      return nil unless path && File.file?(path)
+
+      stdout, _stderr, status = Open3.capture3(
+        "magick",
+        "-limit", "memory", "128MiB",
+        "-limit", "map", "256MiB",
+        "#{path}[0]",
+        "png:-"
+      )
+      return nil unless status.success?
+      return nil if stdout.empty? || stdout.bytesize > MAX_IMAGE_BYTES
+
+      part.merge(
+        media_type: "image/png",
+        data: Base64.strict_encode64(stdout),
+        size_bytes: stdout.bytesize
+      )
+    rescue SystemCallError
+      nil
+    end
+
     def mime_type(path)
       MIME_TYPES[File.extname(path.to_s).downcase]
     end
@@ -300,36 +367,52 @@ module Kward
       "data:#{media_type};base64,#{part[:data] || part["data"]}"
     end
 
-    def terminal_image_sequence(part, width: DEFAULT_TERMINAL_IMAGE_WIDTH, env: ENV)
+    def terminal_image_sequence(part, width: DEFAULT_TERMINAL_IMAGE_WIDTH, height: nil, protocol: nil, image_id: nil, move_cursor: true, env: ENV)
       data = part[:data] || part["data"]
       return nil if data.to_s.empty?
 
+      protocol ||= terminal_image_protocol(env)
       name = part[:path] || part["path"]
-      if iterm_image_protocol?(env)
-        iterm_image_sequence(data, name, width)
-      elsif kitty_image_protocol?(env)
-        kitty_image_sequence(data, name, width)
+      case protocol
+      when :iterm2
+        iterm_image_sequence(data, name, width, height, env: env)
+      when :kitty
+        return nil unless image_media_type(part) == "image/png"
+
+        kitty_image_sequence(data, name, width, height, image_id, move_cursor: move_cursor, env: env)
       end
     end
 
+    def terminal_image_protocol(env)
+      TerminalImageSupport.static_protocol(env)
+    end
+
     def iterm_image_protocol?(env)
-      env["TERM_PROGRAM"] == "iTerm.app"
+      TerminalImageSupport.iterm2_hint?(env)
     end
 
     def kitty_image_protocol?(env)
-      env["KITTY_WINDOW_ID"].to_s != "" || env["TERM"].to_s.include?("kitty") || env["TERM_PROGRAM"] == "WezTerm"
+      TerminalImageSupport.kitty_hint?(env)
     end
 
-    def iterm_image_sequence(data, name, width)
-      params = ["inline=1", "preserveAspectRatio=1", "width=#{width}"]
-      params << "name=#{Base64.strict_encode64(File.basename(name))}" if name
-      "\e]1337;File=#{params.join(";")}:#{data}\a"
+    def iterm_image_sequence(data, name, width, height = nil, env: ENV)
+      sequence = TerminalSequences.iterm2_image(data, name: name, width: width, height: height)
+      env["TMUX"].to_s.empty? ? sequence : TerminalSequences.tmux_passthrough(sequence)
     end
 
-    def kitty_image_sequence(data, name, width)
-      params = ["inline=1", "preserveAspectRatio=1", "width=#{width}"]
-      params << "name=#{Base64.strict_encode64(File.basename(name))}" if name
-      "\e_G#{params.join(";")}:#{data}\e\\"
+    def kitty_image_sequence(data, _name, width, height = nil, image_id = nil, move_cursor: true, env: ENV)
+      sequence = TerminalSequences.kitty_graphics(
+        data,
+        image_id: image_id,
+        columns: width,
+        rows: height,
+        move_cursor: move_cursor
+      )
+      env["TMUX"].to_s.empty? ? sequence : TerminalSequences.tmux_passthrough(sequence)
+    end
+
+    def image_media_type(part)
+      part[:media_type] || part["media_type"] || part[:mimeType] || part["mimeType"]
     end
   end
 end

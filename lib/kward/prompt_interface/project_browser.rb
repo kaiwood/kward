@@ -34,6 +34,7 @@ module Kward
       }.freeze
       PROJECT_BROWSER_DIRECTORY_ICON = ""
       PROJECT_BROWSER_FILE_ICON = ""
+      IMAGE_VIEWER_CELL_HEIGHT_TO_WIDTH = 2.0
 
       def open_project_browser
         @mutex.synchronize do
@@ -51,7 +52,8 @@ module Kward
           expanded: restored_project_browser_expanded_paths(paths, saved_state),
           selection_index: 0,
           search_active: false,
-          query: ""
+          query: "",
+          status: nil
         }
         restore_project_browser_selection(saved_state["selected_path"])
         self.composer_input = ""
@@ -63,7 +65,11 @@ module Kward
       private
 
       def project_browser_visible?
-        !@project_browser_state.nil? && !editor_active?
+        !@project_browser_state.nil? && !editor_active? && !image_viewer_active?
+      end
+
+      def image_viewer_active?
+        !@image_viewer_state.nil?
       end
 
       def dismiss_project_browser
@@ -243,11 +249,137 @@ module Kward
         if row[:directory]
           toggle_project_browser_directory(row[:path])
           true
+        elsif Kward::ImageAttachments.image_extension?(row[:path])
+          open_project_browser_image(row[:path])
         else
           persist_project_browser_state unless project_browser_search_active?
           @project_browser_restore_after_editor = true if open_editor(row[:path])
           true
         end
+      end
+
+      def open_project_browser_image(path)
+        full_path = File.expand_path(path.to_s, prompt_workspace_root)
+        part = Kward::ImageAttachments.image_part_from_path(full_path)
+        unless part
+          @project_browser_state[:status] = "Cannot preview #{path}: unreadable or larger than 20 MB"
+          return false
+        end
+
+        protocol = terminal_image_protocol
+        unless protocol
+          @project_browser_state[:status] = "Cannot preview #{path}: terminal does not support inline images"
+          return false
+        end
+
+        part = Kward::ImageAttachments.terminal_image_part(part, protocol)
+        unless part
+          @project_browser_state[:status] = "Cannot preview #{path}: terminal cannot render this image format"
+          return false
+        end
+
+        image_id = next_terminal_image_id
+        columns = image_viewer_columns(screen_width)
+        rows = image_viewer_preview_rows(screen_height, width: screen_width)
+        terminal_columns, terminal_rows = image_viewer_terminal_size(part, protocol, columns, rows)
+        sequence = Kward::ImageAttachments.terminal_image_sequence(
+          part,
+          width: terminal_columns,
+          height: terminal_rows,
+          protocol: protocol,
+          image_id: image_id,
+          move_cursor: false,
+          env: ENV
+        )
+        unless sequence
+          @project_browser_state[:status] = "Cannot preview #{path}: terminal cannot render this image format"
+          return false
+        end
+
+        @image_viewer_state = {
+          path: full_path,
+          display_path: path.to_s,
+          protocol: protocol,
+          image_id: image_id,
+          part: part,
+          columns: columns,
+          rows: rows,
+          sequence: sequence
+        }
+        @pending_keys.clear
+        @asking = true
+        true
+      end
+
+      def close_image_viewer
+        return false unless image_viewer_active?
+
+        clear_image_viewer_output_locked
+        @image_viewer_state = nil
+        sync_project_browser_query_input
+        @asking = true
+        true
+      end
+
+      def terminal_image_protocol
+        return @terminal_image_protocol if @terminal_image_protocol
+
+        detected = TerminalImageSupport.detect(input: @input_io, output: @output_io)
+        @terminal_image_protocol = detected if detected
+        detected
+      end
+
+      def next_terminal_image_id
+        @next_terminal_image_id ||= 0
+        @next_terminal_image_id += 1
+        @next_terminal_image_id = 1 if @next_terminal_image_id > 4_294_967_295
+        @next_terminal_image_id
+      end
+
+      def image_viewer_columns(width = screen_width)
+        [[ImageAttachments::DEFAULT_TERMINAL_IMAGE_WIDTH.to_i, width - 4].min, 1].max
+      end
+
+      def image_viewer_sequence(width, height)
+        columns = image_viewer_columns(width)
+        rows = image_viewer_preview_rows(height, width: width)
+        state = @image_viewer_state
+        return state[:sequence] if state[:columns] == columns && state[:rows] == rows
+
+        terminal_columns, terminal_rows = image_viewer_terminal_size(state[:part], state[:protocol], columns, rows)
+        state[:columns] = columns
+        state[:rows] = rows
+        state[:sequence] = Kward::ImageAttachments.terminal_image_sequence(
+          state[:part],
+          width: terminal_columns,
+          height: terminal_rows,
+          protocol: state[:protocol],
+          image_id: state[:image_id],
+          move_cursor: false,
+          env: ENV
+        )
+      end
+
+      def image_viewer_terminal_size(part, protocol, columns, rows)
+        return [columns, rows] unless protocol == TerminalImageSupport::KITTY
+
+        dimensions = Kward::ImageAttachments.png_dimensions(part)
+        return [nil, rows] unless dimensions
+
+        image_width, image_height = dimensions
+        image_aspect_ratio = image_width.to_f / image_height
+        available_aspect_ratio = columns.to_f / (rows * IMAGE_VIEWER_CELL_HEIGHT_TO_WIDTH)
+        image_aspect_ratio > available_aspect_ratio ? [columns, nil] : [nil, rows]
+      end
+
+      def clear_image_viewer_output_locked
+        return unless image_viewer_active?
+        return unless @image_viewer_state[:protocol] == TerminalImageSupport::KITTY
+        return unless @started
+
+        sequence = TerminalSequences.kitty_delete(@image_viewer_state[:image_id])
+        sequence = TerminalSequences.tmux_passthrough(sequence) unless ENV["TMUX"].to_s.empty?
+        print_output_locked(sequence)
       end
 
       def expand_selected_project_browser_row
@@ -318,7 +450,8 @@ module Kward
             expanded: restored_project_browser_expanded_paths(paths, saved_state),
             selection_index: 0,
             search_active: false,
-            query: ""
+            query: "",
+            status: nil
           }
           restore_project_browser_selection(saved_state["selected_path"])
         end
@@ -341,6 +474,7 @@ module Kward
             lines << overlay_choice_line(project_browser_row_text(row), selected: index == @project_browser_state[:selection_index])
           end
         end
+        lines << overlay_text_line(@project_browser_state[:status], :muted) if @project_browser_state[:status]
         lines << overlay_blank_line
         lines << overlay_text_line(project_browser_help_text, :muted)
         overlay_card_rows(title, lines, width)

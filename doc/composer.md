@@ -186,7 +186,7 @@ Example:
 
 If the cursor is at the start of an otherwise empty draft, Backspace removes the most recently added pending attachment. Submitting the draft clears its pending attachments.
 
-The active model must support image input. iTerm2 and Kitty-compatible terminals can render submitted images inline; other terminals still show attachment badges and send the image to the model without an inline preview.
+The active model must support image input. iTerm2 and Kitty-compatible terminals can render submitted images inline; Kward uses active Kitty capability detection when running on a real TTY and falls back to conservative terminal hints otherwise. Other terminals still show attachment badges and send the image to the model without an inline preview.
 
 ## Understand composer status
 

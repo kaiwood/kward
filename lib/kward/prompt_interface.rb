@@ -4,6 +4,8 @@ require "pathname"
 require "rbconfig"
 require "thread"
 require_relative "project_files"
+require_relative "image_attachments"
+require_relative "terminal_image_support"
 require_relative "prompt_history"
 require "tty-cursor"
 require "tty-reader"
@@ -68,6 +70,7 @@ module Kward
     FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_STATUS_REFRESH_INTERVAL = 1.0
     COMPOSER_MAX_INPUT_ROWS = 6
+    IMAGE_VIEWER_MAX_ROWS = 8
     TRANSCRIPT_BUFFER_LIMIT = 200_000
     BANNER_MESSAGE = Banner::MESSAGE
 
@@ -181,6 +184,8 @@ module Kward
       @file_editor_open_status = nil
       @file_mention_paths = nil
       @project_browser_state = nil
+      @image_viewer_state = nil
+      @terminal_image_protocol = nil
       @project_browser_restore_after_editor = false
       @editor_state = nil
       @interactive_state = nil
@@ -250,6 +255,7 @@ module Kward
       @mutex.synchronize do
         return unless @started
 
+        clear_image_viewer_output_locked if image_viewer_active?
         clear_prompt_for_output_locked
         restore_scroll_region_locked
         disable_editor_mouse_reporting(force: true)
@@ -344,6 +350,10 @@ module Kward
 
     def editing_file?
       @mutex.synchronize { editor_active? }
+    end
+
+    def inline_image_protocol
+      @mutex.synchronize { terminal_image_protocol }
     end
 
     def update_workspace_root(root, prompt_history: nil)
@@ -1024,6 +1034,8 @@ module Kward
       @file_mention_path_entries_paths = nil
       @file_mention_path_entries = nil
       @project_browser_state = nil
+      @image_viewer_state = nil
+      @terminal_image_protocol = nil
       @project_browser_tree_paths = nil
       @project_browser_tree = nil
       @file_overlay_dismissed_token = nil

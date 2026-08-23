@@ -112,6 +112,118 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_opens_supported_images_in_composer_preview
+    Dir.mktmpdir do |dir|
+      image_path = File.join(dir, "preview.png")
+      png_header = "\x89PNG\r\n\x1A\n".b + [13].pack("N") + "IHDR" + [1042, 396].pack("NN")
+      File.binwrite(image_path, png_header)
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["preview.png"])
+      prompt.instance_variable_set(:@terminal_image_protocol, :kitty)
+      prompt.update_tabs(labels: ["Main"], active_index: 0)
+      attachment = { type: "image", path: "/tmp/attached.png", source_text: "/tmp/attached.png" }
+      prompt.send(:add_attachment, attachment)
+
+      with_env("KITTY_WINDOW_ID" => "1") do
+        prompt.open_project_browser
+        prompt.send(:activate_project_browser_search)
+        "preview".each_char { |character| prompt.send(:project_browser_append_search, character) }
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        assert prompt.send(:image_viewer_active?)
+        refute prompt.send(:editor_active?)
+        assert_equal "preview", prompt.send(:composer_input)
+        assert_equal [attachment], prompt.send(:composer_attachments)
+
+        rows, = prompt.send(:composer_layout, 80, 20)
+        rendered = strip_ansi(rows.join("\n"))
+        image_row = rows.index { |row| row.include?("\e_G") }
+        prompt_row = rows.index { |row| strip_ansi(row).include?(" You ") }
+
+        assert_includes rendered, "preview.png"
+        assert_includes rendered, "preview"
+        assert_includes rendered, "1 Main"
+        assert_operator image_row, :<, prompt_row
+        assert_operator rows.length, :<=, 20
+        assert_includes rows[image_row], "a=T,f=100,t=d,i=1,c=40,C=1,q=2,m=0;"
+        refute_includes rows[image_row].split(";", 2).first, "r="
+        assert_includes rows[image_row], TTY::Cursor.clear_line
+        assert_includes rows[image_row], Kward::TerminalSequences.move_to_column(80)
+        overlay_rows = rows[(image_row + 1)...prompt_row]
+        overlay_rows[0...-1].each do |row|
+          assert_equal "│", strip_ansi(row)[0]
+          assert_equal "│", strip_ansi(row)[-1]
+        end
+        assert_equal "╰", strip_ansi(overlay_rows.last)[0]
+        assert_equal "╯", strip_ansi(overlay_rows.last)[-1]
+
+        prompt.send(:handle_key, "q")
+        refute prompt.send(:image_viewer_active?)
+        assert prompt.send(:project_browser_visible?)
+        assert_equal "preview.png", prompt.send(:selected_project_browser_row)[:path]
+        assert_equal "preview", prompt.send(:composer_input)
+        assert_equal [attachment], prompt.send(:composer_attachments)
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_preserves_square_kitty_image_aspect_ratio
+    Dir.mktmpdir do |dir|
+      image_path = File.join(dir, "preview.png")
+      png_header = "\x89PNG\r\n\x1A\n".b + [13].pack("N") + "IHDR" + [256, 256].pack("NN")
+      File.binwrite(image_path, png_header)
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["preview.png"])
+      prompt.instance_variable_set(:@terminal_image_protocol, :kitty)
+
+      with_env("KITTY_WINDOW_ID" => "1") do
+        prompt.open_project_browser
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        rows, = prompt.send(:composer_layout, 80, 20)
+        image_row = rows.find { |row| row.include?("\e_G") }
+
+        assert_includes image_row, "a=T,f=100,t=d,i=1,r=8,C=1,q=2,m=0;"
+        refute_includes image_row.split(";", 2).first, "c="
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_keeps_unsupported_image_in_browser
+    Dir.mktmpdir do |dir|
+      File.binwrite(File.join(dir, "preview.png"), "png bytes")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["preview.png"])
+
+      with_env("KITTY_WINDOW_ID" => nil, "TERM_PROGRAM" => nil, "TERM" => nil) do
+        prompt.open_project_browser
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        refute prompt.send(:image_viewer_active?)
+        refute prompt.send(:editor_active?)
+        assert prompt.send(:project_browser_visible?)
+        assert_includes strip_ansi(prompt.send(:project_browser_rows, 80).join), "terminal does not support inline images"
+      end
+    end
+  end
+
+  def test_prompt_interface_retries_terminal_detection_after_an_inconclusive_result
+    original_detect = Kward::TerminalImageSupport.method(:detect)
+    calls = 0
+    Kward::TerminalImageSupport.define_singleton_method(:detect) do |**_options|
+      calls += 1
+      calls == 1 ? nil : :kitty
+    end
+
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_nil prompt.send(:terminal_image_protocol)
+    assert_equal :kitty, prompt.send(:terminal_image_protocol)
+    assert_equal 2, calls
+  ensure
+    Kward::TerminalImageSupport.define_singleton_method(:detect, original_detect) if original_detect
+  end
+
   def test_prompt_interface_project_browser_j_and_k_move_selection
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "a.rb"), "a\n")

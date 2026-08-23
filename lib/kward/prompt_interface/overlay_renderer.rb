@@ -10,6 +10,7 @@ module Kward
         return question_overlay_rows(width) if @question_state
         return selection_overlay_rows(width, height: height) if @select_state
         return git_overlay_rows(width, height: height) if @git_state
+        return image_viewer_rows(width, height: height) if image_viewer_active?
         return project_browser_rows(width, height: height) if project_browser_visible?
         return completion_overlay_rows(width, height: height) if @completion_overlay
         return history_search_overlay_rows(width, height: height) if history_search_active?

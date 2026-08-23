@@ -95,6 +95,7 @@ module Kward
       def redraw_screen_locked(width: screen_width, height: screen_height)
         return unless @started && !terminal_owned_by_child_locked?
 
+        clear_image_viewer_output_locked if image_viewer_active?
         restore_scroll_region_locked
         print_output_locked(TTY::Cursor.clear_screen)
         move_to_screen(1, 1)

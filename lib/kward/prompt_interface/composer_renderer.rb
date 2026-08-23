@@ -265,6 +265,30 @@ module Kward
         @composer.cursor_logical_position
       end
 
+      def image_viewer_preview_rows(height, width: screen_width)
+        [max_project_browser_rows(height, width: width), IMAGE_VIEWER_MAX_ROWS].min
+      end
+
+      def image_viewer_rows(width, height: screen_height)
+        content_width = [width - 4, 1].max
+        preview_rows = image_viewer_preview_rows(height, width: width)
+        title = visible_truncate(" Image: #{@image_viewer_state[:display_path]} ", content_width)
+        rows = [
+          colored("╭", :primary_green) + title + colored("─" * [width - ANSI.strip(title).length - 2, 0].max, :primary_green) + colored("╮", :primary_green),
+          image_viewer_graphic_row(width, image_viewer_sequence(width, height))
+        ]
+        rows.concat(Array.new(preview_rows - 1) { box_content_row("", content_width) })
+        rows << footer_row(content_width, "Read-only image preview · Esc/Q close")
+        rows << bottom_border(width)
+        rows
+      end
+
+      def image_viewer_graphic_row(width, sequence)
+        left_border = "#{colored("│", :primary_green)} "
+        right_border = "#{TerminalSequences.move_to_column(width)}#{colored("│", :primary_green)}"
+        "#{TTY::Cursor.clear_line}#{left_border}#{sequence}#{right_border}"
+      end
+
     end
   end
 end

@@ -27,9 +27,20 @@ module Kward
         result.is_a?(String) ? true : result
       end
 
+      def handle_image_viewer_key(key)
+        return true if handle_bundled_key(key) { |token| handle_image_viewer_key(token) }
+
+        sequence = parse_csi_u_key(key)
+        return close_image_viewer if sequence && sequence[:code] == 27
+
+        close_image_viewer if key == "\e" || key == "q" || key == "Q"
+        true
+      end
+
       def handle_key(key)
         return submit_input if key.nil?
         return handle_interactive_key(key) if interactive_active_locked?
+        return handle_image_viewer_key(key) if image_viewer_active?
         return handle_editor_input_key(key) if editor_active?
         return handle_project_browser_key(key) if project_browser_visible?
         return handle_history_search_key(key) if history_search_active?

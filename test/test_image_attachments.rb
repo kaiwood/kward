@@ -113,12 +113,75 @@ class TestImageAttachments < KwardTestCase
     end
   end
 
+  def test_image_part_from_path_reads_supported_binary_image
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "preview.webp")
+      File.binwrite(path, "webp bytes")
+
+      part = Kward::ImageAttachments.image_part_from_path(path)
+
+      assert_equal "image/webp", part[:media_type]
+      assert_equal Base64.strict_encode64("webp bytes"), part[:data]
+      assert_equal "webp bytes".bytesize, part[:size_bytes]
+    end
+  end
+
+  def test_png_dimensions_reads_ihdr_without_decoding_the_full_image
+    header = "\x89PNG\r\n\x1A\n".b + [13].pack("N") + "IHDR" + [1042, 396].pack("NN")
+    part = { data: Base64.strict_encode64(header + "unused image payload") }
+
+    assert_equal [1042, 396], Kward::ImageAttachments.png_dimensions(part)
+    assert_nil Kward::ImageAttachments.png_dimensions(data: Base64.strict_encode64("not a png"))
+  end
+
+  def test_image_part_from_path_rejects_oversized_image
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "large.png")
+      File.open(path, "wb") { |file| file.truncate(Kward::ImageAttachments::MAX_IMAGE_BYTES + 1) }
+
+      assert_nil Kward::ImageAttachments.image_part_from_path(path)
+    end
+  end
+
   def test_terminal_image_sequence_renders_kitty_inline_image_escape_when_supported
     part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
 
     sequence = Kward::ImageAttachments.terminal_image_sequence(part, env: { "KITTY_WINDOW_ID" => "1" })
 
-    assert_equal "\e_Ginline=1;preserveAspectRatio=1;width=40;name=#{Base64.strict_encode64("pasted.png")}:#{Base64.strict_encode64("png bytes")}\e\\", sequence
+    assert_equal "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{Base64.strict_encode64("png bytes")}\e\\", sequence
+  end
+
+  def test_terminal_image_sequence_recognizes_ghostty_as_kitty_graphics
+    part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
+
+    sequence = Kward::ImageAttachments.terminal_image_sequence(part, env: { "TERM" => "xterm-ghostty" }, height: 8)
+
+    assert_includes sequence, "\e_Ga=T,f=100,t=d,c=40,r=8,q=2,m=0;"
+  end
+
+  def test_terminal_image_sequence_can_preserve_kitty_aspect_ratio_without_moving_cursor
+    part = { type: "image", media_type: "image/png", data: Base64.strict_encode64("png bytes"), path: "/tmp/pasted.png" }
+
+    sequence = Kward::ImageAttachments.terminal_image_sequence(
+      part,
+      width: nil,
+      height: 8,
+      protocol: :kitty,
+      move_cursor: false,
+      env: {}
+    )
+
+    assert_equal "\e_Ga=T,f=100,t=d,r=8,C=1,q=2,m=0;#{Base64.strict_encode64("png bytes")}\e\\", sequence
+  end
+
+  def test_kitty_image_sequence_chunks_large_payloads
+    part = { type: "image", media_type: "image/png", data: "A" * 5000, path: "/tmp/pasted.png" }
+
+    sequence = Kward::ImageAttachments.terminal_image_sequence(part, protocol: :kitty, env: {})
+
+    assert_equal 2, sequence.scan("\e_G").length
+    assert_includes sequence, "\e_Ga=T,f=100,t=d,c=40,m=1;#{"A" * 4096}"
+    assert_includes sequence, "\e_Gq=2,m=0;#{"A" * 904}"
   end
 
   def test_terminal_image_sequence_returns_nil_without_supported_terminal
