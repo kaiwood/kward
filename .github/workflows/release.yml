@@ -97,12 +97,29 @@ jobs:
         if: steps.rubygems.outputs.published != 'true'
         uses: rubygems/release-gem@v1
 
-      - name: Build existing RubyGems.org release
-        if: steps.rubygems.outputs.published == 'true'
-        run: bundle exec rake build
+      - name: Download and verify published artifact
+        shell: bash
+        run: |
+          gem_path="pkg/kward-${VERSION}.gem"
+          download_path="${gem_path}.download"
+          mkdir -p pkg
 
-      - name: Verify published artifact
-        run: ruby script/release verify-gem "$VERSION" "pkg/kward-${VERSION}.gem"
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --location \
+              --output "$download_path" \
+              "https://rubygems.org/gems/kward-${VERSION}.gem" && \
+              ruby script/release verify-gem "$VERSION" "$download_path"; then
+              mv "$download_path" "$gem_path"
+              exit 0
+            fi
+
+            rm -f "$download_path"
+            if [ "$attempt" -eq 12 ]; then
+              echo "RubyGems.org artifact did not become verifiable in time." >&2
+              exit 1
+            fi
+            sleep 10
+          done
 
       - name: Create GitHub Release
         env:

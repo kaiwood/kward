@@ -63,10 +63,10 @@ A pushed `v*` tag starts `.github/workflows/release.yml`. The workflow:
 2. Installs and enables Bubblewrap, then runs the full test suite and generated-documentation checks against Ruby 3.4 using the same Linux sandbox setup as normal CI.
 3. Builds the gem and verifies its packaged files.
 4. Publishes through RubyGems trusted publishing.
-5. Verifies the local gem checksum against the artifact served by RubyGems.org.
-6. Creates `Kward VERSION` as a GitHub Release using that version's changelog section and attaches the verified gem.
+5. Downloads the canonical published gem from RubyGems.org, waiting for propagation when necessary, and verifies its checksum against the RubyGems API.
+6. Creates `Kward VERSION` as a GitHub Release using that version's changelog section and attaches the verified RubyGems artifact.
 
-The publishing job uses the protected `release` environment. If RubyGems.org already has the version after a partially completed workflow, a rerun rebuilds the gem and verifies that it exactly matches the published checksum before continuing. For an existing GitHub Release, the workflow downloads and compares the gem, uploads it when missing, and publishes an unfinished draft. This makes normal workflow reruns safe without silently replacing mismatched artifacts.
+The publishing job uses the protected `release` environment. If RubyGems.org already has the version after a partially completed workflow, a rerun downloads and verifies the canonical published gem before continuing. This also accommodates trusted-publishing attestations that can change the published gem bytes. For an existing GitHub Release, the workflow downloads and compares the gem, uploads it when missing, and publishes an unfinished draft. This makes normal workflow reruns safe without silently replacing mismatched artifacts.
 
 If the workflow itself needs a fix after a tag has already been pushed, commit and push the fix to `main`, then recover the existing tag with the updated workflow:
 

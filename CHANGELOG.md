@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
-- Installed and enabled Bubblewrap during release verification so Linux worktree tests use the same sandbox setup as normal CI, and added manual dispatch for recovering an existing release tag after workflow fixes.
+- Installed and enabled Bubblewrap during release verification so Linux worktree tests use the same sandbox setup as normal CI, added manual recovery for existing release tags, and made publication wait for and attach the canonical RubyGems artifact after trusted-publishing attestation.
 
 ## [0.82.0] - 2026-08-23
 
