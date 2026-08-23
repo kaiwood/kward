@@ -3,6 +3,7 @@ require "tmpdir"
 
 KWARD_TEST_HOME = Dir.mktmpdir("kward-test-home")
 ENV["HOME"] = KWARD_TEST_HOME
+ENV["KWARD_COLOR"] = "never"
 at_exit { FileUtils.remove_entry(KWARD_TEST_HOME) if Dir.exist?(KWARD_TEST_HOME) }
 
 require "minitest/autorun"
