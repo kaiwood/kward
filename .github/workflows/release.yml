@@ -4,9 +4,15 @@ on:
   push:
     tags:
       - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish or recover
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -15,17 +21,27 @@ jobs:
     permissions:
       contents: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
     steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          REQUESTED_TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          if [[ ! "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9A-Za-z]+)*$ ]]; then
+            echo "Invalid release tag: $REQUESTED_TAG" >&2
+            exit 1
+          fi
+          echo "tag=$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${REQUESTED_TAG#v}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Read release version
-        id: version
-        shell: bash
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          ref: ${{ steps.release.outputs.tag }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -33,7 +49,18 @@ jobs:
           ruby-version: '3.4'
           bundler-cache: true
 
+      - name: Install sandbox test dependency
+        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
+
+      - name: Enable Bubblewrap namespaces
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          bwrap --ro-bind / / --unshare-net true
+
       - name: Run release preflight
+        env:
+          KWARD_RUN_BUBBLEWRAP_TESTS: "1"
         run: bundle exec rake release:preflight
 
   publish:
@@ -51,6 +78,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1

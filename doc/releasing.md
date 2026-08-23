@@ -60,13 +60,21 @@ If preparation fails before the commit, the command restores the version, lockfi
 A pushed `v*` tag starts `.github/workflows/release.yml`. The workflow:
 
 1. Checks that the tag, gem version, and changelog heading agree.
-2. Runs the full test suite and generated-documentation checks against Ruby 3.4.
+2. Installs and enables Bubblewrap, then runs the full test suite and generated-documentation checks against Ruby 3.4 using the same Linux sandbox setup as normal CI.
 3. Builds the gem and verifies its packaged files.
 4. Publishes through RubyGems trusted publishing.
 5. Verifies the local gem checksum against the artifact served by RubyGems.org.
 6. Creates `Kward VERSION` as a GitHub Release using that version's changelog section and attaches the verified gem.
 
 The publishing job uses the protected `release` environment. If RubyGems.org already has the version after a partially completed workflow, a rerun rebuilds the gem and verifies that it exactly matches the published checksum before continuing. For an existing GitHub Release, the workflow downloads and compares the gem, uploads it when missing, and publishes an unfinished draft. This makes normal workflow reruns safe without silently replacing mismatched artifacts.
+
+If the workflow itself needs a fix after a tag has already been pushed, commit and push the fix to `main`, then recover the existing tag with the updated workflow:
+
+```bash
+gh workflow run Release --ref main -f tag=v0.82.0
+```
+
+Manual recovery still checks out and verifies the tagged source before publishing. The `release` environment permits automatic version-tag runs and manual recovery runs from `main` only.
 
 Follow the run from the repository's **Actions → Release** page. Installation can be checked after publication with:
 

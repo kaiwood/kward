@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Installed and enabled Bubblewrap during release verification so Linux worktree tests use the same sandbox setup as normal CI, and added manual dispatch for recovering an existing release tag after workflow fixes.
+
 ## [0.82.0] - 2026-08-23
 
 ### Added
