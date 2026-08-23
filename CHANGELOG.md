@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.82.0] - 2026-08-23
+
 ### Added
 
 - Added `script/release` for validated, one-command release preparation from an argument or standard input, including changelog/version updates, preflight checks, an annotated tag, and an atomic push.
