@@ -189,6 +189,51 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_zooms_image_with_plus_and_minus_keys
+    Dir.mktmpdir do |dir|
+      image_path = File.join(dir, "preview.png")
+      png_header = "\x89PNG\r\n\x1A\n".b + [13].pack("N") + "IHDR" + [1042, 396].pack("NN")
+      File.binwrite(image_path, png_header)
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["preview.png"])
+      prompt.instance_variable_set(:@terminal_image_protocol, :kitty)
+
+      with_env("KITTY_WINDOW_ID" => "1") do
+        prompt.open_project_browser
+        prompt.send(:open_or_toggle_selected_project_browser_row)
+
+        base_rows, = prompt.send(:composer_layout, 120, 30)
+        assert_includes base_rows.join, "i=1,c=40,C=1"
+        assert_includes strip_ansi(base_rows.join), "100% · +/- zoom"
+
+        prompt.send(:handle_key, "+")
+        zoomed_rows, = prompt.send(:composer_layout, 120, 30)
+        zoomed_image_row = zoomed_rows.find { |row| row.include?("\e_Ga=T") }
+        delete_sequence = Kward::TerminalSequences.kitty_delete(1)
+        assert_equal 1.25, prompt.send(:image_viewer_zoom)
+        assert_includes zoomed_image_row, delete_sequence
+        assert_includes zoomed_image_row, "i=1,c=50,C=1"
+        assert_operator zoomed_image_row.index(delete_sequence), :<, zoomed_image_row.index("\e_Ga=T")
+        assert_includes strip_ansi(zoomed_rows.join), "125% · +/- zoom"
+        assert_operator zoomed_rows.length, :>, base_rows.length
+
+        prompt.send(:handle_key, "\e[45u")
+        reset_rows, = prompt.send(:composer_layout, 120, 30)
+        assert_equal 1.0, prompt.send(:image_viewer_zoom)
+        assert_includes reset_rows.join, "i=1,c=40,C=1"
+
+        prompt.send(:handle_key, "-")
+        smaller_rows, = prompt.send(:composer_layout, 120, 30)
+        assert_equal 0.75, prompt.send(:image_viewer_zoom)
+        assert_includes smaller_rows.join, "i=1,c=30,C=1"
+        assert_operator smaller_rows.length, :<, base_rows.length
+
+        prompt.send(:handle_key, "\e[43u")
+        assert_equal 1.0, prompt.send(:image_viewer_zoom)
+      end
+    end
+  end
+
   def test_prompt_interface_project_browser_keeps_unsupported_image_in_browser
     Dir.mktmpdir do |dir|
       File.binwrite(File.join(dir, "preview.png"), "png bytes")

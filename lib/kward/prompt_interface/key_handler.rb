@@ -31,7 +31,18 @@ module Kward
         return true if handle_bundled_key(key) { |token| handle_image_viewer_key(token) }
 
         sequence = parse_csi_u_key(key)
-        return close_image_viewer if sequence && sequence[:code] == 27
+        if sequence
+          queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+          return close_image_viewer if sequence[:code] == 27
+
+          text = csi_u_printable_text(sequence)
+          return zoom_image_viewer(:in) if text == "+"
+          return zoom_image_viewer(:out) if text == "-"
+          return true
+        end
+
+        return zoom_image_viewer(:in) if key == "+"
+        return zoom_image_viewer(:out) if key == "-"
 
         close_image_viewer if key == "\e" || key == "q" || key == "Q"
         true

@@ -266,7 +266,9 @@ module Kward
       end
 
       def image_viewer_preview_rows(height, width: screen_width)
-        [max_project_browser_rows(height, width: width), IMAGE_VIEWER_MAX_ROWS].min
+        available_rows = max_project_browser_rows(height, width: width)
+        desired_rows = [(IMAGE_VIEWER_MAX_ROWS * image_viewer_zoom).round, 1].max
+        [available_rows, desired_rows].min
       end
 
       def image_viewer_rows(width, height: screen_height)
@@ -278,7 +280,8 @@ module Kward
           image_viewer_graphic_row(width, image_viewer_sequence(width, height))
         ]
         rows.concat(Array.new(preview_rows - 1) { box_content_row("", content_width) })
-        rows << footer_row(content_width, "Read-only image preview · Esc/Q close")
+        zoom = (image_viewer_zoom * 100).round
+        rows << footer_row(content_width, "Read-only image preview · #{zoom}% · +/- zoom · Esc/Q close")
         rows << bottom_border(width)
         rows
       end

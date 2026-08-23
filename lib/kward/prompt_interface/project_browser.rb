@@ -35,6 +35,9 @@ module Kward
       PROJECT_BROWSER_DIRECTORY_ICON = ""
       PROJECT_BROWSER_FILE_ICON = ""
       IMAGE_VIEWER_CELL_HEIGHT_TO_WIDTH = 2.0
+      IMAGE_VIEWER_ZOOM_STEP = 0.25
+      IMAGE_VIEWER_MIN_ZOOM = 0.25
+      IMAGE_VIEWER_MAX_ZOOM = 4.0
 
       def open_project_browser
         @mutex.synchronize do
@@ -302,6 +305,7 @@ module Kward
           protocol: protocol,
           image_id: image_id,
           part: part,
+          zoom: 1.0,
           columns: columns,
           rows: rows,
           sequence: sequence
@@ -336,8 +340,24 @@ module Kward
         @next_terminal_image_id
       end
 
+      def image_viewer_zoom
+        @image_viewer_state&.fetch(:zoom, 1.0) || 1.0
+      end
+
+      def zoom_image_viewer(direction)
+        return false unless image_viewer_active?
+
+        delta = direction == :in ? IMAGE_VIEWER_ZOOM_STEP : -IMAGE_VIEWER_ZOOM_STEP
+        zoom = [[image_viewer_zoom + delta, IMAGE_VIEWER_MIN_ZOOM].max, IMAGE_VIEWER_MAX_ZOOM].min
+        @image_viewer_state[:zoom] = zoom.round(2)
+        @asking = true
+        true
+      end
+
       def image_viewer_columns(width = screen_width)
-        [[ImageAttachments::DEFAULT_TERMINAL_IMAGE_WIDTH.to_i, width - 4].min, 1].max
+        available_columns = [width - 4, 1].max
+        desired_columns = [(ImageAttachments::DEFAULT_TERMINAL_IMAGE_WIDTH.to_i * image_viewer_zoom).round, 1].max
+        [desired_columns, available_columns].min
       end
 
       def image_viewer_sequence(width, height)
@@ -349,7 +369,7 @@ module Kward
         terminal_columns, terminal_rows = image_viewer_terminal_size(state[:part], state[:protocol], columns, rows)
         state[:columns] = columns
         state[:rows] = rows
-        state[:sequence] = Kward::ImageAttachments.terminal_image_sequence(
+        sequence = Kward::ImageAttachments.terminal_image_sequence(
           state[:part],
           width: terminal_columns,
           height: terminal_rows,
@@ -358,6 +378,8 @@ module Kward
           move_cursor: false,
           env: ENV
         )
+        delete_sequence = image_viewer_delete_sequence(state[:image_id]) if state[:protocol] == TerminalImageSupport::KITTY
+        state[:sequence] = "#{delete_sequence}#{sequence}"
       end
 
       def image_viewer_terminal_size(part, protocol, columns, rows)
@@ -372,14 +394,17 @@ module Kward
         image_aspect_ratio > available_aspect_ratio ? [columns, nil] : [nil, rows]
       end
 
+      def image_viewer_delete_sequence(image_id)
+        sequence = TerminalSequences.kitty_delete(image_id)
+        ENV["TMUX"].to_s.empty? ? sequence : TerminalSequences.tmux_passthrough(sequence)
+      end
+
       def clear_image_viewer_output_locked
         return unless image_viewer_active?
         return unless @image_viewer_state[:protocol] == TerminalImageSupport::KITTY
         return unless @started
 
-        sequence = TerminalSequences.kitty_delete(@image_viewer_state[:image_id])
-        sequence = TerminalSequences.tmux_passthrough(sequence) unless ENV["TMUX"].to_s.empty?
-        print_output_locked(sequence)
+        print_output_locked(image_viewer_delete_sequence(@image_viewer_state[:image_id]))
       end
 
       def expand_selected_project_browser_row

@@ -41,6 +41,7 @@ Outside Git, Kward scans the workspace directory and skips common noisy director
 | `Backspace` | Delete the last search character |
 | `Esc` | Leave search; press again to close the browser |
 | `Q` | Close an image preview |
+| `+` / `-` | Zoom an image preview in / out |
 | `@` | Insert the selected file as an `@path` mention |
 
 Directories use `▸` and `▾` markers to show collapsed and expanded state. Files are shown under their containing directory with indentation. File-type icons are off by default; users with a compatible Nerd Font can enable them under Interface in `/settings`. See [Configuration](configuration.md#project-browser-icons).
@@ -95,7 +96,7 @@ Search itself is temporary. Closing search returns to the normal tree, and closi
 
 ## Image previews
 
-Image previews are read-only and replace the file-list overlay while leaving the prompt composer and tabs visible. Press `Esc` or `Q` to return to `/files`. Kward probes Kitty-compatible terminals when it has a real interactive TTY, uses recognized terminal identity hints when probing is inconclusive, and retries transient detection failures. Terminals without reachable Kitty or iTerm2 inline-image support keep the selection in the browser and show a status message instead of opening binary data in the text editor. Kitty-compatible terminals use PNG data; JPEG, GIF, and WebP previews require an available local image converter.
+Image previews are read-only and replace the file-list overlay while leaving the prompt composer and tabs visible. Press `+` or `-` to make the image larger or smaller within the available overlay space. Press `Esc` or `Q` to return to `/files`. Kward probes Kitty-compatible terminals when it has a real interactive TTY, uses recognized terminal identity hints when probing is inconclusive, and retries transient detection failures. Terminals without reachable Kitty or iTerm2 inline-image support keep the selection in the browser and show a status message instead of opening binary data in the text editor. Kitty-compatible terminals use PNG data; JPEG, GIF, and WebP previews require an available local image converter.
 
 ## Notes and limitations
 

@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `+` and `-` controls for resizing inline `/files` image previews within the available overlay space.
 - Added inline read-only previews for PNG, JPEG, GIF, and WebP files opened from `/files` in terminals that support Kitty or iTerm2 image sequences, with local conversion for Kitty-compatible terminals when needed.
 
 ### Changed
