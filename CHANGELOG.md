@@ -10,6 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed Claude subscription OAuth authorization and token-exchange requests by removing unsupported subscription scopes and the nonstandard `code` query parameter, and by forwarding the OAuth state to the token endpoint.
 - Installed and enabled Bubblewrap during release verification so Linux worktree tests use the same sandbox setup as normal CI, added manual recovery for existing release tags, and made publication wait for and attach the canonical RubyGems artifact after trusted-publishing attestation.
 
 ## [0.82.0] - 2026-08-23

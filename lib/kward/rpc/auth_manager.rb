@@ -235,7 +235,7 @@ module Kward
       def complete_login(login, code)
         raise "Missing authorization code" if code.to_s.empty?
 
-        login.oauth.complete_login_flow(code: code, redirect_uri: login.redirect_uri, code_verifier: login.pkce[:verifier])
+        login.oauth.complete_login_flow(code: code, redirect_uri: login.redirect_uri, code_verifier: login.pkce[:verifier], state: login.state)
         login.status = "completed"
         @server.notify("auth/loginFinished", login_payload(login))
       rescue StandardError => e

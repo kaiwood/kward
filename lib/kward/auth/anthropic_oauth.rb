@@ -17,7 +17,7 @@ module Kward
     DEFAULT_PORT = 53_692
     CALLBACK_PATH = "/callback"
     DEFAULT_CLIENT_ID = Base64.decode64("OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl")
-    SCOPE = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
+    SCOPE = "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
 
     attr_reader :auth_path
 
@@ -60,7 +60,7 @@ module Kward
       end
       raise "Missing authorization code" if code.to_s.empty?
 
-      complete_login_flow(code: code, redirect_uri: redirect_uri, code_verifier: pkce[:verifier])
+      complete_login_flow(code: code, redirect_uri: redirect_uri, code_verifier: pkce[:verifier], state: state)
       auth_path
     ensure
       server&.close unless server&.closed?
@@ -68,7 +68,6 @@ module Kward
 
     def authorization_url(redirect_uri:, code_challenge:, state:)
       query = URI.encode_www_form(
-        code: "true",
         client_id: client_id,
         response_type: "code",
         redirect_uri: redirect_uri,
@@ -98,8 +97,8 @@ module Kward
       wait_for_callback(server, expected_state: expected_state, timeout_seconds: timeout_seconds)
     end
 
-    def complete_login_flow(code:, redirect_uri:, code_verifier:)
-      tokens = exchange_code_for_tokens(code: code, redirect_uri: redirect_uri, code_verifier: code_verifier)
+    def complete_login_flow(code:, redirect_uri:, code_verifier:, state:)
+      tokens = exchange_code_for_tokens(code: code, redirect_uri: redirect_uri, code_verifier: code_verifier, state: state)
       save_auth(tokens: tokens)
       tokens
     end
@@ -192,13 +191,14 @@ module Kward
       oauth_callback_server(port_env: "KWARD_ANTHROPIC_OAUTH_PORT", default_port: DEFAULT_PORT)
     end
 
-    def exchange_code_for_tokens(code:, redirect_uri:, code_verifier:)
+    def exchange_code_for_tokens(code:, redirect_uri:, code_verifier:, state:)
       response = post_json(TOKEN_URL,
         grant_type: "authorization_code",
         client_id: client_id,
         code: code,
         redirect_uri: redirect_uri,
-        code_verifier: code_verifier)
+        code_verifier: code_verifier,
+        state: state)
       parse_successful_json(response, "Anthropic OAuth token exchange")
     end
 

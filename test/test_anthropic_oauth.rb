@@ -10,10 +10,12 @@ class TestAnthropicOAuth < KwardTestCase
     assert_equal "https://claude.ai/oauth/authorize", "#{URI.parse(url).scheme}://#{URI.parse(url).host}#{URI.parse(url).path}"
     assert_equal "client", params["client_id"]
     assert_equal "code", params["response_type"]
+    refute params.key?("code")
     assert_equal "challenge", params["code_challenge"]
     assert_equal "S256", params["code_challenge_method"]
     assert_includes params["scope"], "user:inference"
     assert_includes params["scope"], "user:sessions:claude_code"
+    refute_includes params["scope"], "org:create_api_key"
   end
 
   def test_authorization_code_from_callback_validates_state
@@ -35,6 +37,29 @@ class TestAnthropicOAuth < KwardTestCase
       assert_equal "anthropic_oauth", data.fetch("auth_mode")
       assert_equal "access", data.dig("tokens", "access_token")
       assert data["expires_at"]
+    end
+  end
+
+  def test_token_exchange_posts_state
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "anthropic_auth.json")
+      oauth = Kward::AnthropicOAuth.new(auth_path: path, client_id: "client", config_path: "missing_config.json")
+      posted = nil
+      response = Net::HTTPOK.new("1.1", "200", "OK")
+      response.instance_variable_set(:@read, true)
+      response.body = JSON.dump("access_token" => "access", "refresh_token" => "refresh", "expires_in" => 3600)
+      http = Object.new
+      http.define_singleton_method(:request) do |request|
+        posted = JSON.parse(request.body)
+        response
+      end
+
+      original_start = Net::HTTP.method(:start)
+      Net::HTTP.define_singleton_method(:start) { |_host, _port, use_ssl:, &block| block.call(http) }
+      oauth.complete_login_flow(code: "code", redirect_uri: "http://localhost/callback", code_verifier: "verifier", state: "state")
+      assert_equal "state", posted["state"]
+    ensure
+      Net::HTTP.define_singleton_method(:start, original_start) if original_start
     end
   end
 
