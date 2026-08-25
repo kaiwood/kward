@@ -906,7 +906,7 @@ module Kward
       request["Content-Type"] = "application/json"
       request["Accept"] = "text/event-stream"
       request.body = request_body || JSON.dump(codex_payload(messages, tools, max_tokens: max_tokens))
-      apply_codex_identity(request, luna: luna_request?(request.body))
+      request["originator"] = "kward"
 
       message = nil
       Net::HTTP.start(url.hostname, url.port, use_ssl: true, read_timeout: stream_idle_timeout_seconds) do |http|
@@ -929,22 +929,6 @@ module Kward
       raise Kward::Cancellation::CancelledError, "cancelled" if cancellation&.cancelled?
 
       raise e
-    end
-
-    def apply_codex_identity(request, luna:)
-      request["originator"] = "kward"
-      return unless luna
-
-      # TODO: Remove this Luna-specific Responses Lite workaround when Codex accepts Kward's own client identity.
-      request["originator"] = "codex_cli_rs"
-      request["User-Agent"] = "codex_cli_rs/0.144.1"
-      request["x-openai-internal-codex-responses-lite"] = "true"
-    end
-
-    def luna_request?(request_body)
-      JSON.parse(request_body)["model"] == "gpt-5.6-luna"
-    rescue JSON::ParserError
-      false
     end
 
     def parse_codex_sse(body, on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil)

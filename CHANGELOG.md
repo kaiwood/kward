@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Removed the obsolete GPT-5.6 Luna Responses Lite compatibility workaround so Luna requests retain Kward's identity and standard Codex payload.
+
 ### Fixed
 
 - Installed and enabled Bubblewrap during release verification so Linux worktree tests use the same sandbox setup as normal CI, added manual recovery for existing release tags, and made publication wait for and attach the canonical RubyGems artifact after trusted-publishing attestation.

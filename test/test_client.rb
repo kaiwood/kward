@@ -1049,7 +1049,7 @@ class TestClient < KwardTestCase
     end
   end
 
-  def test_luna_uses_responses_lite_workaround
+  def test_luna_requests_identify_as_kward_without_responses_lite
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), model: "gpt-5.6-luna", config_path: "missing_kward_config.json")
     success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n")
 
@@ -1058,10 +1058,10 @@ class TestClient < KwardTestCase
 
       request = http.requests.first
       payload = JSON.parse(request.body)
-      assert_equal "codex_cli_rs", request["originator"]
-      assert_equal "codex_cli_rs/0.144.1", request["User-Agent"]
-      assert_equal "true", request["x-openai-internal-codex-responses-lite"]
-      assert_equal "all_turns", payload.dig("reasoning", "context")
+      assert_equal "Kward/#{Kward::VERSION}", request["User-Agent"]
+      assert_equal "kward", request["originator"]
+      assert_nil request["x-openai-internal-codex-responses-lite"]
+      assert_nil payload.dig("reasoning", "context")
     end
   end
 
