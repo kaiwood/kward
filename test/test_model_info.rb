@@ -118,6 +118,7 @@ class TestModelInfo < KwardTestCase
     assert_equal "claude-opus-4-5", Kward::ModelInfo.model_for("Anthropic", config: { "anthropic_model" => "claude-opus-4.5" }, env: {})
     assert_equal "claude-opus-4-8", Kward::ModelInfo.normalize_anthropic_model("claude-opus-4.8")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-fable-5")
+    assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-opus-5")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-5")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-sonnet-4-6")
     assert_equal 1_000_000, Kward::ModelInfo.context_window("Anthropic", "claude-opus-4-8")
@@ -125,6 +126,7 @@ class TestModelInfo < KwardTestCase
     assert_equal 200_000, Kward::ModelInfo.context_window("Anthropic", "claude-haiku-4-5")
     refute Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-5")
     assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-fable-5")
+    assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-opus-5")
     assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-5")
     assert Kward::ModelInfo.reasoning_supported?("Anthropic", "claude-sonnet-4-6")
   end
@@ -134,6 +136,7 @@ class TestModelInfo < KwardTestCase
     assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.5").map(&:first)
     assert_equal %w[low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.3-codex").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-fable-5").map(&:first)
+    assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-opus-5").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-opus-4-8").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-sonnet-5").map(&:first)
     assert_equal %w[low medium high max], Kward::ModelInfo.reasoning_effort_choices("Anthropic", "claude-sonnet-4-6").map(&:first)

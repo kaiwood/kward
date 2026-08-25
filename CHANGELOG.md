@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added Claude Opus 5 to the Anthropic model picker with its 1M context window and high-reasoning metadata.
+
 ### Changed
 
 - Removed the obsolete GPT-5.6 Luna Responses Lite compatibility workaround so Luna requests retain Kward's identity and standard Codex payload.

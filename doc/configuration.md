@@ -248,7 +248,7 @@ Defaults:
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
 
-The Anthropic model choices include `claude-fable-5`, but Fable availability depends on the logged-in account and organization. Selecting it without access returns an Anthropic provider error.
+The Anthropic model choices include `claude-fable-5`, `claude-opus-5`, and `claude-sonnet-5`. Fable and Opus availability depends on the logged-in account and organization. Selecting a model without access returns an Anthropic provider error. Kward keeps Sonnet 5 as its default because it supports both Pro and Max subscriptions; select Opus 5 explicitly when it is available on the account.
 
 The interactive `/model` picker reads cached OpenRouter models when available. Run `kward openrouter refresh` to fetch text-capable models available to the configured OpenRouter API key and cache them under `~/.kward/cache/openrouter_models.json`. Run `kward openrouter list` to inspect the cached model ids.
 
