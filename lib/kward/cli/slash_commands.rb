@@ -54,7 +54,8 @@ module Kward
           run_captured_shell_command(argument, agent)
           [true, nil]
         when "scratchpad"
-          open_scratchpad_command(argument)
+          result = open_scratchpad_command(argument)
+          queue_editor_prompt_action(result)
           [true, nil]
         when "pty"
           run_interactive_pty_command(argument, agent)
@@ -305,6 +306,13 @@ module Kward
         else
           runtime_output("The scratchpad is only available in the interactive prompt.")
         end
+      end
+
+      def queue_editor_prompt_action(result)
+        return unless result.is_a?(Hash) && result[:editor_prompt]
+
+        @pending_inputs ||= []
+        @pending_inputs.unshift(result)
       end
 
       def scratchpad_language_argument(argument)

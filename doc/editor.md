@@ -85,9 +85,10 @@ $doc/editor.md
 1. Type `$doc/editor.md` in the composer.
 2. Pick the file from the matching results, or press `Enter` if the path is already complete.
 3. Edit the file.
-4. Save with `Ctrl+S` in Modern mode, `C-x C-s` in Emacs mode, or `:w` in Vibe mode. For an unsaved scratchpad in Vibe mode, use `:w filename`.
-5. Quit with `Ctrl+Q`, `C-x C-c`, or `:q`.
-6. Continue chatting with Kward.
+4. In Vibe normal mode, use `:prompt <instruction>` to ask the agent to update the current in-memory buffer. For example, `:prompt write a HelloWorld class`.
+5. The editor stays visible while the agent works; its status line shows a spinner. Review the generated buffer and save with `Ctrl+S` in Modern mode, `C-x C-s` in Emacs mode, or `:w` in Vibe mode. For an unsaved scratchpad in Vibe mode, use `:w filename`.
+6. Quit with `Ctrl+Q`, `C-x C-c`, or `:q`.
+7. Continue chatting with Kward.
 
 ## What the editor supports
 
@@ -101,6 +102,9 @@ The editor is intentionally compact, but it covers the basics you need for quick
 - Selection, copy, cut, and paste. Copy and cut also write to the terminal clipboard through OSC 52 when the terminal supports it.
 - A line-number gutter and a status line that shows the current mode and prompts.
 - Soft-wrap, enabled by default so long lines wrap within the editor width instead of scrolling sideways. Disable it with `editor.soft_wrap: false`.
+- Vibe `:prompt <instruction>` sends the complete current buffer and document metadata to a dedicated, transient editor agent. The agent can replace the in-memory buffer through an explicit editor tool; it does not save files automatically.
+- Editor prompts and their tool activity are not added to the normal chat transcript or session history.
+- The editor remains visible and locked for editing while the agent runs. Its status line displays progress and a spinner; `Ctrl+C` cancels the request.
 
 ## Choosing an editor mode
 
@@ -123,12 +127,16 @@ You can also configure it in `config.json`:
 ```json
 {
   "editor": {
-    "mode": "modern"
+    "mode": "modern",
+    "agent": {
+      "model": "gpt-5.5",
+      "reasoning_effort": "medium"
+    }
   }
 }
 ```
 
-`mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`.
+`mode` can be `modern`, `emacs`, or `vibe`. The optional `editor.agent.model` and `editor.agent.reasoning_effort` settings configure the dedicated Vibe editor agent. They use the active tab's provider. When either value is omitted, it falls back to the active tab's setting and then the client default. Editor-agent turns use a dedicated system prompt and are not persisted in the active tab transcript. The old `default` value is still accepted as an alias for `modern`.
 
 To disable auto-indent or auto-close pairs:
 

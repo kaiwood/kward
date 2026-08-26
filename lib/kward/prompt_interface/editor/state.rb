@@ -830,6 +830,17 @@ module Kward
         @cursor = @buffer.length
       end
 
+      def replace_buffer(content)
+        content = content.to_s
+        return false if content == @buffer
+
+        push_undo
+        self.buffer = content
+        @cursor = [@cursor, @buffer.length].min
+        changed!
+        true
+      end
+
       def replace_range(start_index, end_index, text)
         start_index, = @text_buffer.replace_range(start_index, end_index, text)
         @buffer = @text_buffer.text

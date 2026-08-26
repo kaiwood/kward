@@ -20,6 +20,12 @@ module Kward
       end
 
       def handle_editor_input_key(key)
+        if @editor_agent_suspended
+          return CANCEL_INPUT if @busy && key == TerminalKeys::CTRL_C
+
+          return true
+        end
+
         reset_editor_word_completion unless editor_word_completion_tab_key?(key)
 
         tab_result = handle_tab_key_binding(key)

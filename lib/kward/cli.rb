@@ -10,6 +10,8 @@ require_relative "compactor"
 require_relative "config_files"
 require_relative "clipboard"
 require_relative "cancellation"
+require_relative "editor_prompt"
+require_relative "editor_prompt_session"
 require_relative "cli_transcript_formatter"
 require_relative "model/context_usage"
 require_relative "events"
@@ -477,6 +479,11 @@ module Kward
           run_ekwsh_loop(active_tab.shell, tab: active_tab, history: build_ekwsh_history(active_tab.agent))
         end
         input = @pending_inputs.shift || (active_tab ? poll_active_tab_input : @prompt.ask("You>"))
+        if input.is_a?(Hash) && input[:editor_prompt]
+          pending_inputs = run_editor_prompt_turn(input[:editor_prompt], active_tab&.agent || agent)
+          pending_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
+          next
+        end
         if input.is_a?(Hash) && input[:tab_action]
           tab_result = handle_tab_action(input, session_store)
           break if tab_result == PromptInterface::EXIT_INPUT

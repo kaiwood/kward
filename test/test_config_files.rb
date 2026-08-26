@@ -20,6 +20,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal false, config.dig("memory", "auto_summary")
       assert_equal true, config.dig("composer", "busy_help")
       assert_equal "modern", config.dig("editor", "mode")
+      assert_equal({}, config.dig("editor", "agent"))
       assert_equal true, config.dig("editor", "auto_indent")
       assert_equal true, config.dig("editor", "auto_close_pairs")
       assert_equal true, config.dig("editor", "soft_wrap")
@@ -54,6 +55,22 @@ class TestConfigFiles < KwardTestCase
       refute config.key?("openai_oauth_client_id")
       refute config.key?("openrouter_api_key")
     end
+  end
+
+  def test_editor_agent_settings_are_optional_and_trimmed
+    config = {
+      "editor" => {
+        "agent" => {
+          "model" => "  gpt-editor  ",
+          "reasoning_effort" => " medium "
+        }
+      }
+    }
+
+    assert_equal "gpt-editor", Kward::ConfigFiles.editor_agent_model(config)
+    assert_equal "medium", Kward::ConfigFiles.editor_agent_reasoning_effort(config)
+    assert_nil Kward::ConfigFiles.editor_agent_model({})
+    assert_nil Kward::ConfigFiles.editor_agent_reasoning_effort({ "editor" => { "agent" => {} } })
   end
 
   def test_sandbox_policy_uses_only_global_configured_roots

@@ -192,6 +192,7 @@ module Kward
       end
 
       def handle_vibe_command_key(key)
+        result = nil
         case key
         when "\e", TerminalKeys::CTRL_C, :escape
           @editor_state.vibe_command = ""
@@ -202,20 +203,21 @@ module Kward
         when "\t"
           vibe_complete_command_path
         when "\n", "\r"
-          execute_vibe_command(@editor_state.vibe_command)
+          result = execute_vibe_command(@editor_state.vibe_command)
         else
           if printable_key?(key)
             @editor_state.vibe_command = @editor_state.vibe_command.to_s + key
             @editor_state.status = ":#{@editor_state.vibe_command}"
           end
         end
-        true
+        result || true
       end
 
       def execute_vibe_command(command)
         command = command.to_s.strip
         @editor_state.vibe_mode = "normal"
         @editor_state.vibe_command = ""
+        action = nil
         case command
         when "w"
           save_editor
@@ -225,6 +227,10 @@ module Kward
           vibe_edit_file(Regexp.last_match(2), force: Regexp.last_match(1) == "!")
         when "run"
           vibe_record_undo { run_editor_buffer }
+        when /\Aprompt\s+(.+)\z/
+          action = editor_prompt_action(Regexp.last_match(1))
+        when "prompt"
+          @editor_state.status = "Prompt instruction required"
         when "q"
           vibe_quit_editor
         when "q!"
@@ -244,7 +250,16 @@ module Kward
         else
           @editor_state.status = "Unknown command: #{command}"
         end
-        true
+        action || true
+      end
+
+      def editor_prompt_action(instruction)
+        {
+          editor_prompt: {
+            instruction: instruction.to_s.strip,
+            display_input: ":prompt #{instruction.to_s.strip}"
+          }
+        }
       end
 
       def vibe_edit_file(path, force: false)
@@ -426,7 +441,7 @@ module Kward
       def vibe_return_to_normal
         vibe_apply_visual_block_insert if @editor_state.vibe_visual_block_insert
         @editor_state.vibe_mode = "normal"
-        @editor_state.status = "NORMAL · i insert · :w save · :q quit"
+        @editor_state.status = "NORMAL · i insert · :prompt ask agent · :w save · :q quit"
         true
       end
 

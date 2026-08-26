@@ -18,6 +18,7 @@ require_relative "summarize_file_structure"
 require_relative "retrieve_tool_output"
 require_relative "web_search"
 require_relative "write_file"
+require_relative "replace_editor_buffer"
 require_relative "search/code"
 require_relative "search/web"
 require_relative "search/web_fetch"
@@ -79,7 +80,7 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -89,6 +90,7 @@ module Kward
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
       @allowed_tool_names = allowed_tool_names&.map(&:to_s)
+      @editor_prompt_session = editor_prompt_session
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
@@ -107,6 +109,20 @@ module Kward
                      end
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map { |tool| schema_with_metadata(tool) }.freeze
+    end
+
+    # Builds a registry scoped to one editor prompt turn.
+    #
+    # Editor prompts may inspect the workspace, but their only write operation
+    # is the in-memory editor buffer. Filesystem and shell mutation tools are
+    # intentionally excluded from this scoped registry.
+    def for_editor_prompt(editor_prompt_session)
+      registry = dup
+      registry.instance_variable_set(:@editor_prompt_session, editor_prompt_session)
+      registry.instance_variable_set(:@allowed_tool_names, editor_prompt_tool_names)
+      registry.instance_variable_set(:@tools, registry.send(:build_tools).freeze)
+      registry.instance_variable_set(:@schemas, registry.send(:build_schema_tools).map { |tool| registry.send(:schema_with_metadata, tool) }.freeze)
+      registry
     end
 
     # Executes a model-requested tool call and appends the result to the
@@ -486,6 +502,7 @@ module Kward
 
     def build_schema_tools
       tools = @tools.values_at(*CORE_TOOL_NAMES)
+      tools << @tools["replace_editor_buffer"] if @tools["replace_editor_buffer"]
       tools << @tools["git_commit"] if @tools["git_commit"]
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
@@ -507,7 +524,7 @@ module Kward
     end
 
     def core_tools
-      [
+      tools = [
         Tools::ListDirectory.new(workspace: @workspace),
         Tools::ReadFile.new(workspace: @workspace),
         Tools::WriteFile.new(workspace: @workspace),
@@ -519,6 +536,13 @@ module Kward
         Tools::ContextBudgetStats.new(context_budget_meter: @context_budget_meter),
         Tools::RetrieveToolOutput.new
       ]
+      tools << Tools::ReplaceEditorBuffer.new(editor_prompt_session: @editor_prompt_session) if @editor_prompt_session
+      tools
+    end
+
+    def editor_prompt_tool_names
+      readonly_tools = CORE_TOOL_NAMES - %w[write_file edit_file run_shell_command]
+      readonly_tools + ["replace_editor_buffer"]
     end
 
     def web_search_available?

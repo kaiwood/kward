@@ -1,6 +1,44 @@
 require_relative "test_helper"
 
 class TestPromptInterfaceEditorVibe < KwardTestCase
+  def test_prompt_interface_vibe_mode_returns_editor_prompt_action
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "alpha", editor_mode: "vibe"))
+
+    result = prompt.send(:execute_vibe_command, "prompt write a HelloWorld class")
+
+    assert_equal({
+      editor_prompt: {
+        instruction: "write a HelloWorld class",
+        display_input: ":prompt write a HelloWorld class"
+      }
+    }, result)
+    assert_equal "alpha", prompt.instance_variable_get(:@editor_state).buffer
+  end
+
+  def test_prompt_interface_vibe_mode_passes_editor_prompt_action_through_command_handler
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "alpha", editor_mode: "vibe"))
+    prompt.instance_variable_get(:@editor_state).vibe_command = "prompt hi"
+    prompt.instance_variable_get(:@editor_state).vibe_mode = "command"
+
+    assert_equal({
+      editor_prompt: {
+        instruction: "hi",
+        display_input: ":prompt hi"
+      }
+    }, prompt.send(:handle_vibe_command_key, "\n"))
+  end
+
+  def test_prompt_interface_vibe_mode_requires_an_editor_prompt_instruction
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "alpha", editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    assert_equal true, prompt.send(:execute_vibe_command, "prompt")
+    assert_equal "Prompt instruction required", editor.status
+  end
+
   def test_prompt_interface_vibe_mode_allows_ctrl_number_tab_switching
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe", tab_keybindings: "ctrl")
     prompt.instance_variable_set(:@tabs, [Object.new, Object.new])

@@ -13,6 +13,10 @@ module Kward
         !@editor_state.nil?
       end
 
+      def editor_visible?
+        editor_active?
+      end
+
       def open_selected_file_in_editor(fallback_to_typed_path: false)
         path = selected_file_open_path
         if path
@@ -58,6 +62,7 @@ module Kward
           language: language
         )
         @editor_state.status = scratchpad_status_text(language)
+        @editor_agent_suspended = false
         @prompt_label = "Edit>"
         self.composer_input = ""
         self.composer_cursor = 0
@@ -95,6 +100,7 @@ module Kward
         end
 
         @editor_state = EditorState.new(path: full_path, content: File.exist?(full_path) ? File.read(full_path) : "", new_file: !File.exist?(full_path), editor_mode: current_editor_mode)
+        @editor_agent_suspended = false
         @prompt_label = "Edit>"
         self.composer_input = ""
         self.composer_cursor = 0
@@ -115,6 +121,7 @@ module Kward
         diff_view_mode = current_diff_view_mode
         viewer_content = diff_view_mode == DiffViewMode::SIDE_BY_SIDE ? side_by_side_diff_content(content.to_s) : content.to_s
         @editor_state = EditorState.new(path: path.to_s, content: viewer_content, new_file: true, editor_mode: current_editor_mode, readonly: true, diff_view: diff_view_mode)
+        @editor_agent_suspended = false
         @prompt_label = "Diff>"
         self.composer_input = ""
         self.composer_cursor = 0
@@ -243,6 +250,7 @@ module Kward
         @editor_save_as_buffer = ""
         @editor_save_callback = nil
         @editor_state = nil
+        @editor_agent_suspended = false
         @prompt_label = "You>"
         self.composer_input = ""
         self.composer_cursor = 0

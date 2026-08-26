@@ -6,11 +6,13 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe `:prompt <instruction>` support, allowing the agent to inspect and replace the active in-memory editor buffer without saving it automatically.
 - Added current-buffer word completion to the integrated editor, with repeated Tab presses cycling nearby matches and existing smart indentation retained when no match exists.
 - Added Claude Opus 5 to the Anthropic model picker with its 1M context window and high-reasoning metadata.
 
 ### Changed
 
+- Vibe editor-agent turns now use an isolated, configurable model/reasoning context, remain visible with a status-line spinner, and stay out of normal chat transcripts and session history.
 - Removed the obsolete GPT-5.6 Luna Responses Lite compatibility workaround so Luna requests retain Kward's identity and standard Codex payload.
 
 ### Fixed

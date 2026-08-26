@@ -118,8 +118,12 @@ module Kward
         result.is_a?(Hash) && result[:reasoning_action]
       end
 
+      def editor_prompt_action?(result)
+        result.is_a?(Hash) && result[:editor_prompt]
+      end
+
       def prompt_action_result?(result)
-        tab_action_result?(result) || reasoning_action_result?(result)
+        tab_action_result?(result) || reasoning_action_result?(result) || editor_prompt_action?(result)
       end
 
     end

@@ -6,9 +6,68 @@ module Kward
     module InteractiveTurn
       private
 
-      def run_interactive_turn(agent, input, display_input: nil)
-        prepare_memory_context(agent.conversation, input) if agent.respond_to?(:conversation)
-        return run_blocking_interactive_turn(agent, input, display_input: display_input) unless prompt_interface?
+      def run_editor_prompt_turn(action, agent)
+        unless agent.respond_to?(:tool_registry) && agent.tool_registry.respond_to?(:for_editor_prompt)
+          runtime_output("Editor prompts are unavailable in this tab.")
+          return []
+        end
+        unless @prompt.respond_to?(:editor_prompt_context)
+          runtime_output("Editor prompts are unavailable in this prompt.")
+          return []
+        end
+
+        context = @prompt.editor_prompt_context
+        unless context
+          runtime_output("Open a Vibe editor buffer before using :prompt.")
+          return []
+        end
+
+        unless @prompt.suspend_editor_for_agent
+          runtime_output("The editor is busy.")
+          return []
+        end
+
+        session = EditorPromptSession.new(context)
+        registry = agent.tool_registry.for_editor_prompt(session)
+        editor_agent = build_editor_prompt_agent(agent, context, registry)
+        instruction = action[:instruction] || action["instruction"]
+        run_interactive_turn(
+          editor_agent,
+          EditorPrompt.input(instruction, context),
+          tool_registry: registry,
+          editor_prompt_session: session,
+          suppress_transcript: true
+        )
+      rescue StandardError => e
+        @prompt.resume_editor_for_agent(status: "Agent request failed") if @prompt.respond_to?(:resume_editor_for_agent)
+        runtime_output("Error: #{e.message}")
+        []
+      end
+
+      def build_editor_prompt_agent(active_agent, context, registry)
+        active_conversation = active_agent.conversation
+        config = safely_read_config.to_h
+        provider = active_conversation.provider || current_model_provider
+        model = ConfigFiles.editor_agent_model(config) || active_conversation.model || current_model_id
+        reasoning = ConfigFiles.editor_agent_reasoning_effort(config) || active_conversation.reasoning_effort || current_reasoning_effort
+        conversation = Conversation.new(
+          system_message: EditorPrompt.system_message,
+          workspace_root: context[:workspace_root] || active_conversation.workspace_root,
+          provider: provider,
+          model: model,
+          reasoning_effort: reasoning
+        )
+        Agent.new(
+          client: @client,
+          tool_registry: registry,
+          conversation: conversation,
+          warning_sink: ConfigFiles.warning_sink
+        )
+      end
+
+      def run_interactive_turn(agent, input, display_input: nil, tool_registry: nil, editor_prompt_session: nil, suppress_transcript: false)
+        prepare_memory_context(agent.conversation, input) if agent.respond_to?(:conversation) && !suppress_transcript
+        return run_blocking_interactive_turn(agent, input, display_input: display_input, tool_registry: tool_registry, suppress_transcript: suppress_transcript) unless prompt_interface?
 
         queued_inputs = []
         cancellation = Cancellation.new
@@ -26,10 +85,10 @@ module Kward
         answer = nil
         error = nil
         @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
-        print_user_transcript(input, display_input: display_input)
+        print_user_transcript(input, display_input: display_input) unless suppress_transcript
 
         worker = Thread.new do
-          options = agent_display_options(display_input)
+          options = agent_display_options(display_input, tool_registry: tool_registry)
           options[:cancellation] = cancellation
           options[:steering] = steering if steering
           answer = agent.ask(input, **options) do |event|
@@ -52,7 +111,7 @@ module Kward
             cancellation.cancel!
             worker.raise(Cancellation::CancelledError, "cancelled") if worker.alive?
           end
-          if busy_replacement_agent?
+          if busy_replacement_agent? || suppress_transcript
             discard_interactive_events(event_queue, markdown_chunks, stream_state)
           else
             drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
@@ -64,19 +123,37 @@ module Kward
           error ||= e
         end
         drain_busy_input(queued_inputs, nil) unless cancelled
-        if busy_replacement_agent?
+        if busy_replacement_agent? || suppress_transcript
           discard_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
         else
           drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
         end
         raise error if error && !error.is_a?(Cancellation::CancelledError) && !busy_replacement_agent?
 
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless cancelled || busy_replacement_agent? || stream_state[:streamed] || answer.to_s.empty?
-        persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
-        auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && queued_inputs.empty? && !cancelled
+        @prompt.commit_editor_prompt(editor_prompt_session) if editor_prompt_session && !cancelled && !busy_replacement_agent?
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || cancelled || busy_replacement_agent? || stream_state[:streamed] || answer.to_s.empty?
+        persist_memory_state(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
+        auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript && queued_inputs.empty? && !cancelled
         queued_inputs
       ensure
         @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+        if editor_prompt_session && @prompt.respond_to?(:resume_editor_for_agent)
+          status = if cancelled
+            "Agent request cancelled"
+          elsif error
+            "Agent request failed"
+          elsif editor_prompt_session && !editor_prompt_session.changed? && !answer.to_s.strip.empty?
+            editor_prompt_answer_status(answer)
+          end
+          @prompt.resume_editor_for_agent(status: status)
+        end
+      end
+
+      def editor_prompt_answer_status(answer)
+        text = answer.to_s.gsub(/\s+/, " ").strip
+        text = text[0, 120].to_s
+        text += "…" if answer.to_s.gsub(/\s+/, " ").strip.length > text.length
+        "Agent: #{text}"
       end
 
       def drain_interactive_events(event_queue, markdown_chunks, stream_state, agent = nil, force: false)
@@ -261,21 +338,23 @@ module Kward
         ModelInfo.reasoning_supported?(current_model_provider, model)
       end
 
-      def run_blocking_interactive_turn(agent, input, display_input: nil)
+      def run_blocking_interactive_turn(agent, input, display_input: nil, tool_registry: nil, suppress_transcript: false)
         streamed = false
         markdown_chunks = []
-        answer = agent.ask(input, **agent_display_options(display_input)) do |event|
-          streamed = true if render_blocking_turn_event(event, markdown_chunks, tool_line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
+        answer = agent.ask(input, **agent_display_options(display_input, tool_registry: tool_registry)) do |event|
+          streamed = true if !suppress_transcript && render_blocking_turn_event(event, markdown_chunks, tool_line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         end
         flush_markdown_deltas(markdown_chunks) if streamed
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless streamed || answer.to_s.empty?
-        persist_memory_state(agent.conversation) if agent.respond_to?(:conversation)
-        auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation)
+        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || streamed || answer.to_s.empty?
+        persist_memory_state(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
+        auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         []
       end
 
-      def agent_display_options(display_input)
-        display_input.nil? ? {} : { display_input: display_input }
+      def agent_display_options(display_input, tool_registry: nil)
+        options = display_input.nil? ? {} : { display_input: display_input }
+        options[:tool_registry] = tool_registry if tool_registry
+        options
       end
 
     end

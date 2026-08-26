@@ -136,6 +136,7 @@ module Kward
         },
         "editor" => {
           "mode" => "modern",
+          "agent" => {},
           "auto_indent" => true,
           "auto_close_pairs" => true,
           "soft_wrap" => true,
@@ -480,6 +481,22 @@ module Kward
     def editor_mode(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       EditorMode.normalize(editor["mode"])
+    end
+
+    # Returns the optional model override for editor-agent turns.
+    def editor_agent_model(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      agent = editor["agent"].is_a?(Hash) ? editor["agent"] : {}
+      value = agent["model"].to_s.strip
+      value.empty? ? nil : value
+    end
+
+    # Returns the optional reasoning-effort override for editor-agent turns.
+    def editor_agent_reasoning_effort(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      agent = editor["agent"].is_a?(Hash) ? editor["agent"] : {}
+      value = agent["reasoning_effort"].to_s.strip
+      value.empty? ? nil : value
     end
 
     # Returns whether the built-in TUI editor should auto-indent new lines.

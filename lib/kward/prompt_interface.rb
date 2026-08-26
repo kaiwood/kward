@@ -190,6 +190,7 @@ module Kward
       @terminal_image_protocol = nil
       @project_browser_restore_after_editor = false
       @editor_state = nil
+      @editor_agent_suspended = false
       @interactive_state = nil
       @last_interactive_tick = monotonic_now
       @select_state = nil
@@ -352,6 +353,60 @@ module Kward
 
     def editing_file?
       @mutex.synchronize { editor_active? }
+    end
+
+    # Returns the active Vibe editor buffer for an agent prompt turn.
+    def editor_prompt_context
+      @mutex.synchronize do
+        next nil unless editor_active? && @editor_state.vibe?
+
+        {
+          path: @editor_state.path,
+          display_path: @editor_state.display_path,
+          workspace_root: @workspace_root,
+          language: @editor_state.language,
+          content: @editor_state.buffer.dup,
+          cursor: @editor_state.cursor_line_and_column,
+          selection: @editor_state.selected_text
+        }
+      end
+    end
+
+    # Suspends the live editor while an agent prompt is running.
+    def suspend_editor_for_agent
+      @mutex.synchronize do
+        return false unless editor_active? && !@editor_agent_suspended
+
+        @editor_agent_suspended = true
+        @editor_state.status = "Agent is working · Ctrl+C cancels"
+        render_prompt_locked if @started
+        true
+      end
+    end
+
+    # Commits an agent draft as one undoable editor operation.
+    def commit_editor_prompt(session)
+      @mutex.synchronize do
+        return false unless editor_active? && @editor_agent_suspended
+        return false unless @editor_state.buffer == session.initial_content
+
+        changed = @editor_state.replace_buffer(session.content)
+        @editor_state.status = changed ? "Agent updated buffer · :w save" : "Agent made no buffer changes"
+        render_prompt_locked if @started
+        changed
+      end
+    end
+
+    # Resumes the editor after an agent prompt turn.
+    def resume_editor_for_agent(status: nil)
+      @mutex.synchronize do
+        return false unless editor_active?
+
+        @editor_agent_suspended = false
+        @editor_state.status = status.to_s unless status.to_s.empty?
+        render_prompt_locked if @started
+        true
+      end
     end
 
     def inline_image_protocol

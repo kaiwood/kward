@@ -8,7 +8,7 @@ module Kward
 
       def composer_layout(width, height = screen_height)
         return interactive_layout(width, height) if interactive_active_locked?
-        return editor_layout(width, height) if editor_active?
+        return editor_layout(width, height) if editor_visible?
         return compact_composer_layout(width) if height < 4
         return question_composer_layout(width, height) if @question_state
 

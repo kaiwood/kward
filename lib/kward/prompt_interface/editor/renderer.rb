@@ -264,6 +264,7 @@ module Kward
 
       def editor_status_text
         text = @editor_state.search_active ? "#{@editor_state.search_direction == :backward ? "Search backward" : "Search"}: #{@editor_state.search_query}" : @editor_state.status
+        text = "#{text} · #{spinner_frame}" if @editor_agent_suspended && @busy
         visible_truncate(text, [screen_width - 4, 1].max)
       end
     end

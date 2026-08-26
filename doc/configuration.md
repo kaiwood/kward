@@ -393,6 +393,21 @@ The built-in TUI file editor supports three keybinding modes. Modern is the defa
 
 `mode` can be `modern`, `emacs`, or `vibe`. The old `default` value is still accepted as an alias for `modern`. You can change this from `/settings` → Interface → Editor mode; newly opened editor buffers pick up the setting immediately.
 
+Vibe `:prompt` uses a dedicated transient editor agent. Configure its model and reasoning effort under `editor.agent` when it should differ from the active tab:
+
+```json
+{
+  "editor": {
+    "agent": {
+      "model": "gpt-5.5",
+      "reasoning_effort": "medium"
+    }
+  }
+}
+```
+
+These settings use the active tab's provider. If either value is omitted, Kward falls back to the active tab's value and then the client default. Editor-agent prompts and tool activity are kept out of the normal transcript and session history; the editor remains visible with a spinner while the transient turn runs.
+
 The integrated Git and session diff viewers support unified and side-by-side layouts:
 
 ```json

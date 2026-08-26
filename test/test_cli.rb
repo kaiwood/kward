@@ -867,6 +867,18 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_scratchpad_editor_prompt_action_is_requeued_for_interactive_loop
+    action = { editor_prompt: { instruction: "write a HelloWorld class" } }
+    prompt = FakePrompt.new([])
+    prompt.define_singleton_method(:scratchpad) { |_language| action }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.instance_variable_set(:@pending_inputs, [])
+
+    cli.send(:handle_local_slash_command, "/scratchpad ruby", nil, nil)
+
+    assert_equal [action], cli.instance_variable_get(:@pending_inputs)
+  end
+
   def test_interactive_loop_opens_scratchpad_without_model_turn
     prompt = FakePrompt.new(["/scratchpad ruby", "/exit"])
     opened = []
