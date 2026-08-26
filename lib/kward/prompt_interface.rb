@@ -34,6 +34,7 @@ require_relative "prompt_interface/editor/renderer"
 require_relative "prompt_interface/editor/syntax_highlighter"
 require_relative "prompt_interface/editor/auto_close_pairs"
 require_relative "prompt_interface/editor/endwise"
+require_relative "prompt_interface/editor/word_completion"
 require_relative "prompt_interface/editor/auto_indent"
 require_relative "prompt_interface/composer_renderer"
 require_relative "prompt_interface/composer_controller"
@@ -86,6 +87,7 @@ module Kward
     include EditorSyntaxHighlighter
     include EditorAutoClosePairs
     include EditorEndwise
+    include EditorWordCompletion
     include EditorAutoIndent
     include ComposerRenderer
     include ComposerController

@@ -94,7 +94,8 @@ $doc/editor.md
 The editor is intentionally compact, but it covers the basics you need for quick changes:
 
 - Syntax highlighting for common languages, including Ruby, ERB templates, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL. ERB highlights template HTML outside ERB tags and Ruby inside `<% ... %>` tags. Unknown file types render as plain text.
-- Auto-indent, enabled by default. New lines inherit indentation, Tab jumps to the expected indentation or the next indentation stop, Shift+Tab moves indentation back, obvious closing tokens are re-indented, and Backspace in leading whitespace removes one indentation unit when possible. ERB recognizes common inline Ruby control tags and HTML opening tags when calculating the next indentation. For Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, Enter after a block opener inserts the matching closing keyword; Ctrl+Enter also works from the middle of the line in terminals that report modified Enter keys.
+- Current-buffer word completion. After a partial word, Tab completes from words elsewhere in the active buffer; repeated Tab presses cycle nearby matches. Completion is case-sensitive and recognizes letters, numbers, and underscores. No project files or external sources are searched.
+- Auto-indent, enabled by default. New lines inherit indentation. When word completion does not apply, Tab jumps to the expected indentation or the next indentation stop. Shift+Tab moves indentation back, obvious closing tokens are re-indented, and Backspace in leading whitespace removes one indentation unit when possible. ERB recognizes common inline Ruby control tags and HTML opening tags when calculating the next indentation. For Ruby, Crystal, Elixir, Julia, Lua, Makefiles, and shell scripts, Enter after a block opener inserts the matching closing keyword; Ctrl+Enter also works from the middle of the line in terminals that report modified Enter keys.
 - Undo and redo, with up to 100 history entries per buffer.
 - Incremental search forward and backward.
 - Selection, copy, cut, and paste. Copy and cut also write to the terminal clipboard through OSC 52 when the terminal supports it.
@@ -192,7 +193,7 @@ Modern mode is the default and is the easiest place to start. It uses common ter
 | `Home` / `End`        | Move to start / end of line                       |
 | `PageUp` / `PageDown` | Scroll                                            |
 | `Enter`               | Insert newline, or confirm search                 |
-| `Tab`                 | Smart-indent to the expected indentation or next stop |
+| `Tab`                 | Complete a buffer word, or smart-indent when no match exists |
 | `Shift+Tab`           | Move indentation back by one stop                 |
 | `Backspace`           | Delete before cursor                              |
 | `Delete`              | Delete character at cursor                        |
@@ -233,7 +234,7 @@ Emacs mode is for users who prefer classic Emacs-style non-modal editing. Save a
 | `Home` / `End`        | Move to start / end of line                  |
 | `PageUp` / `PageDown` | Scroll                                       |
 | `Enter`               | Insert newline, or confirm search            |
-| `Tab`                 | Smart-indent to the expected indentation or next stop |
+| `Tab`                 | Complete a buffer word, or smart-indent when no match exists |
 | `Shift+Tab`           | Move indentation back by one stop            |
 | `Backspace`           | Delete before cursor                         |
 | `Delete` / `C-d`      | Delete character at cursor                   |
@@ -370,7 +371,7 @@ Vibe insert mode also supports readline-style shortcuts for efficient editing wi
 | ---------------- | ---------------------------------------- |
 | type text        | Insert characters                        |
 | `Enter`          | Insert newline                           |
-| `Tab`            | Smart-indent to the expected indentation or next stop |
+| `Tab`            | Complete a buffer word, or smart-indent when no match exists |
 | `Shift+Tab`      | Move indentation back by one stop        |
 | `Backspace`      | Delete before cursor                     |
 | `Delete`         | Delete character at cursor               |

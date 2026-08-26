@@ -83,8 +83,11 @@ module Kward
 
       def editor_insert_tab
         if @editor_state.multi_cursor? || @editor_state.selection_ranges.any?
+          reset_editor_word_completion
           return @editor_state.replace_selections(editor_indent_unit)
         end
+
+        return true if editor_complete_buffer_word
 
         if current_editor_auto_indent? && editor_cursor_in_leading_indent?
           return editor_smart_tab_forward

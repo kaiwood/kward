@@ -252,6 +252,8 @@ module Kward
 
       def handle_editor_key(key)
         return if key.nil?
+
+        reset_editor_word_completion unless editor_word_completion_tab_key?(key) && !editor_search_active?
         mouse_result = handle_editor_mouse_key(key)
         return mouse_result unless mouse_result == false
         return handle_editor_save_as_key(key) if @editor_save_as_active
