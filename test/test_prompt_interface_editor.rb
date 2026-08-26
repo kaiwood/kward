@@ -113,6 +113,18 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_includes prompt.send(:editor_render_diff_line, "-old"), "\e[31m-old\e[0m"
   end
 
+  def test_prompt_interface_modern_editor_provides_agent_prompt_context
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.insert("puts 'hello'\n")
+
+    context = prompt.editor_prompt_context
+
+    assert_equal "puts 'hello'\n", context[:content]
+    assert_equal :ruby, context[:language]
+  end
+
   def test_prompt_interface_opens_text_scratchpad
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
 
@@ -175,6 +187,58 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert_equal File.realpath(File.join(dir, "saved.rb")), File.realpath(editor.path)
       end
     end
+  end
+
+  def test_prompt_interface_modern_ctrl_period_opens_and_submits_editor_prompt
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    assert_equal true, prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_PERIOD)
+    "write a HelloWorld class".each_char { |char| prompt.send(:handle_editor_key, char) }
+    result = prompt.send(:handle_editor_key, "\r")
+
+    assert_equal({ editor_prompt: { instruction: "write a HelloWorld class", display_input: ":prompt write a HelloWorld class" } }, result)
+    assert_equal "", editor.buffer
+  end
+
+  def test_prompt_interface_modern_escape_aborts_editor_prompt_line
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_PERIOD)
+    "do something".each_char { |char| prompt.send(:handle_editor_key, char) }
+
+    assert_equal true, prompt.send(:handle_editor_key, "\e")
+    refute prompt.instance_variable_get(:@editor_prompt_active)
+    assert_equal "Ctrl+S save · Ctrl+Q quit · Ctrl+F search · Ctrl+C copy", editor.status
+    assert_equal "", editor.buffer
+  end
+
+  def test_prompt_interface_modern_csi_u_escape_aborts_editor_prompt_line
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_PERIOD)
+    "do something".each_char { |char| prompt.send(:handle_editor_key, char) }
+
+    assert_equal true, prompt.send(:handle_editor_key, "\e[27;1u")
+    refute prompt.instance_variable_get(:@editor_prompt_active)
+    assert_equal "", editor.buffer
+  end
+
+  def test_prompt_interface_modern_csi_u_ctrl_period_opens_editor_prompt
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+
+    assert_equal true, prompt.send(:handle_editor_key, "\e[46;5u")
+    "inspect it".each_char { |char| prompt.send(:handle_editor_key, "\e[#{char.ord};1u") }
+
+    result = prompt.send(:handle_editor_key, "\e[13;1u")
+    assert_equal({ editor_prompt: { instruction: "inspect it", display_input: ":prompt inspect it" } }, result)
+    refute prompt.instance_variable_get(:@editor_prompt_active)
   end
 
   def test_prompt_interface_modern_ctrl_r_runs_ruby_scratchpad

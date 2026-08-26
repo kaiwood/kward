@@ -18,7 +18,7 @@ module Kward
 
         context = @prompt.editor_prompt_context
         unless context
-          runtime_output("Open a Vibe editor buffer before using :prompt.")
+          runtime_output("Open a Modern or Vibe editor buffer before prompting the agent.")
           return []
         end
 

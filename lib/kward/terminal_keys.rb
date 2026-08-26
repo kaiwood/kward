@@ -23,6 +23,7 @@ module Kward
     CTRL_X = "\x18".freeze
     CTRL_Y = "\x19".freeze
     CTRL_Z = "\x1A".freeze
+    CTRL_PERIOD = "\x1E".freeze
 
     RETURN = ["\n", "\r"].freeze
     BACKSPACE = ["\b", "\x7F"].freeze

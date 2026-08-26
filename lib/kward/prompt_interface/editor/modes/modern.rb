@@ -198,6 +198,8 @@ module Kward
 
       def handle_modern_key_binding(key)
         case key
+        when TerminalKeys::CTRL_PERIOD
+          begin_editor_prompt
         when TerminalKeys::CTRL_SPACE
           true
         when TerminalKeys::CTRL_C
@@ -221,6 +223,8 @@ module Kward
         end
 
         case normalized_code
+        when 46
+          begin_editor_prompt
         when 13
           return false if editor_search_active?
 

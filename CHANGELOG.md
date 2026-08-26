@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `Ctrl+.` in Modern editor mode to open an in-editor prompt line for communicating with the dedicated editor agent.
 - Added Vibe `:prompt <instruction>` support, allowing the agent to inspect and replace the active in-memory editor buffer without saving it automatically.
 - Added current-buffer word completion to the integrated editor, with repeated Tab presses cycling nearby matches and existing smart indentation retained when no match exists.
 - Added Claude Opus 5 to the Anthropic model picker with its 1M context window and high-reasoning metadata.

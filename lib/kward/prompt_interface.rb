@@ -191,6 +191,8 @@ module Kward
       @project_browser_restore_after_editor = false
       @editor_state = nil
       @editor_agent_suspended = false
+      @editor_prompt_active = false
+      @editor_prompt_input = ""
       @interactive_state = nil
       @last_interactive_tick = monotonic_now
       @select_state = nil
@@ -355,10 +357,10 @@ module Kward
       @mutex.synchronize { editor_active? }
     end
 
-    # Returns the active Vibe editor buffer for an agent prompt turn.
+    # Returns the active Vibe or Modern editor buffer for an agent prompt turn.
     def editor_prompt_context
       @mutex.synchronize do
-        next nil unless editor_active? && @editor_state.vibe?
+        next nil unless editor_active? && (@editor_state.vibe? || @editor_state.modern?)
 
         {
           path: @editor_state.path,

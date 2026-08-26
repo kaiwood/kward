@@ -253,15 +253,6 @@ module Kward
         action || true
       end
 
-      def editor_prompt_action(instruction)
-        {
-          editor_prompt: {
-            instruction: instruction.to_s.strip,
-            display_input: ":prompt #{instruction.to_s.strip}"
-          }
-        }
-      end
-
       def vibe_edit_file(path, force: false)
         if @editor_state.dirty? && !force
           @editor_state.status = "No write since last change (:e! overrides)"

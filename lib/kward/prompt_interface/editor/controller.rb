@@ -260,6 +260,7 @@ module Kward
 
       def handle_editor_key(key)
         return if key.nil?
+        return handle_editor_prompt_key(key) if @editor_prompt_active
 
         reset_editor_word_completion unless editor_word_completion_tab_key?(key) && !editor_search_active?
         mouse_result = handle_editor_mouse_key(key)
@@ -319,6 +320,64 @@ module Kward
           elsif printable_key?(key)
             editor_insert_printable(key)
           end
+        end
+      end
+
+      def editor_prompt_action(instruction)
+        {
+          editor_prompt: {
+            instruction: instruction.to_s.strip,
+            display_input: ":prompt #{instruction.to_s.strip}"
+          }
+        }
+      end
+
+      def begin_editor_prompt
+        @editor_prompt_active = true
+        @editor_prompt_input = ""
+        @editor_state.status = "Prompt: "
+        true
+      end
+
+      def handle_editor_prompt_key(key)
+        sequence = parse_csi_u_key(key)
+        if sequence
+          queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+          return handle_editor_prompt_key("\r") if sequence[:code] == 13
+          return handle_editor_prompt_key("\e") if sequence[:code] == 27
+          return handle_editor_prompt_key("\b") if [8, 127].include?(sequence[:code])
+
+          text = csi_u_printable_text(sequence)
+          return handle_editor_prompt_key(text) if text
+
+          return true
+        end
+
+        case key
+        when "\e", TerminalKeys::CTRL_C, :escape
+          @editor_prompt_active = false
+          @editor_prompt_input = ""
+          @editor_state.status = EditorStatusText.default(readonly: @editor_state.readonly?, editor_mode: @editor_state.editor_mode)
+          true
+        when "\b", "\x7F"
+          @editor_prompt_input = @editor_prompt_input[0...-1]
+          @editor_state.status = "Prompt: #{@editor_prompt_input}"
+        when "\n", "\r"
+          instruction = @editor_prompt_input.strip
+          @editor_prompt_active = false
+          @editor_prompt_input = ""
+          if instruction.empty?
+            @editor_state.status = "Prompt instruction required"
+            true
+          else
+            editor_prompt_action(instruction)
+          end
+        else
+          if printable_key?(key)
+            @editor_prompt_input += key
+            @editor_state.status = "Prompt: #{@editor_prompt_input}"
+          end
+          true
         end
       end
 
