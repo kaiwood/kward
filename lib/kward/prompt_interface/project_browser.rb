@@ -52,6 +52,7 @@ module Kward
         saved_state = saved_project_browser_state
         @project_browser_state = {
           paths: paths,
+          show_ignored: false,
           expanded: restored_project_browser_expanded_paths(paths, saved_state),
           selection_index: 0,
           search_active: false,
@@ -142,6 +143,8 @@ module Kward
             collapse_selected_project_browser_row
           elsif text == "l" && !project_browser_search_active?
             expand_selected_project_browser_row
+          elsif text == "i" && !project_browser_search_active?
+            toggle_project_browser_ignored_files
           elsif project_browser_search_active?
             project_browser_append_search(text)
           else
@@ -173,6 +176,8 @@ module Kward
           project_browser_search_active? ? project_browser_append_search(key) : collapse_selected_project_browser_row
         when "l"
           project_browser_search_active? ? project_browser_append_search(key) : expand_selected_project_browser_row
+        when "i"
+          project_browser_search_active? ? project_browser_append_search(key) : toggle_project_browser_ignored_files
         else
           project_browser_append_search(key) if project_browser_search_active? && printable_key?(key)
         end
@@ -188,6 +193,20 @@ module Kward
 
       def toggle_project_browser_search
         project_browser_search_active? ? deactivate_project_browser_search : activate_project_browser_search
+      end
+
+      def toggle_project_browser_ignored_files
+        selected_path = selected_project_browser_row&.[](:path)
+        show_ignored = !project_browser_ignored_files_visible?
+        @project_browser_state[:paths] = project_file_paths(include_ignored: show_ignored)
+        @project_browser_state[:show_ignored] = show_ignored
+        @project_browser_tree_paths = nil
+        @project_browser_tree = nil
+        restore_project_browser_selection(selected_path)
+      end
+
+      def project_browser_ignored_files_visible?
+        @project_browser_state[:show_ignored] == true
       end
 
       def activate_project_browser_search
@@ -472,6 +491,7 @@ module Kward
           saved_state = saved_project_browser_state
           @project_browser_state = {
             paths: paths,
+            show_ignored: false,
             expanded: restored_project_browser_expanded_paths(paths, saved_state),
             selection_index: 0,
             search_active: false,
@@ -507,7 +527,8 @@ module Kward
 
       def project_browser_title
         query = @project_browser_state[:query].to_s
-        project_browser_search_active? ? "Project files — Search: #{query}" : "Project files"
+        title = project_browser_search_active? ? "Project files — Search: #{query}" : "Project files"
+        project_browser_ignored_files_visible? ? "#{title} (including ignored)" : title
       end
 
       def project_browser_empty_message
@@ -518,7 +539,7 @@ module Kward
         if project_browser_search_active?
           "Type search • Esc tree • Enter open • @ mention"
         else
-          "Enter open/toggle • ←/→ collapse/expand • Tab or / search • @ mention • Esc close"
+          "Enter open/toggle • i show/hide ignored • ←/→ collapse/expand • Tab or / search • @ mention • Esc close"
         end
       end
 

@@ -854,7 +854,7 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
-  def test_prompt_interface_file_overlay_uses_git_ignored_project_files
+  def test_prompt_interface_project_browser_hides_git_ignored_files_until_toggled
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "lib"))
       File.write(File.join(dir, "lib", "main.rb"), "")
@@ -869,6 +869,34 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
         assert_includes paths, "lib/main.rb"
         assert_includes paths, ".gitignore"
         refute_includes paths, "ignored.log"
+
+        assert prompt.open_project_browser
+        refute_includes prompt.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
+
+        prompt.send(:handle_project_browser_key, "i")
+        assert_includes prompt.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
+        assert_includes strip_ansi(prompt.send(:project_browser_rows, 80).join("\n")), "including ignored"
+
+        prompt.send(:handle_project_browser_key, "i")
+        refute_includes prompt.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
+      end
+    end
+  end
+
+  def test_prompt_interface_project_browser_can_show_ignored_files_when_no_other_git_files_exist
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "ignored.log"), "")
+      system("git", "init", "--quiet", chdir: dir)
+      File.write(File.join(dir, ".git", "info", "exclude"), "ignored.log\n")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+
+        assert_empty prompt.send(:project_file_paths)
+        prompt.open_project_browser
+        refute_includes prompt.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
+
+        prompt.send(:handle_project_browser_key, "i")
+        assert_includes prompt.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
       end
     end
   end

@@ -8,19 +8,32 @@ module Kward
   module ProjectFiles
     module_function
 
-    def list(root: Dir.pwd)
-      paths = git_paths(root)
-      paths = scanned_paths(root) if paths.empty?
+    def list(root: Dir.pwd, include_ignored: false)
+      paths = git_paths(root, include_ignored: include_ignored)
+      paths = scanned_paths(root) if paths.empty? && !git_repository?(root)
       paths.reject { |path| path.empty? || path.end_with?("/") }.uniq.sort
     end
 
-    def git_paths(root)
+    def git_paths(root, include_ignored: false)
       output, status = Open3.capture2("git", "ls-files", "--cached", "--others", "--exclude-standard", chdir: root)
       return [] unless status.success?
 
-      output.lines.map(&:chomp).reject(&:empty?)
+      paths = output.lines.map(&:chomp).reject(&:empty?)
+      return paths unless include_ignored
+
+      ignored_output, ignored_status = Open3.capture2("git", "ls-files", "--others", "--ignored", "--exclude-standard", chdir: root)
+      return paths unless ignored_status.success?
+
+      paths + ignored_output.lines.map(&:chomp).reject(&:empty?)
     rescue StandardError
       []
+    end
+
+    def git_repository?(root)
+      _output, status = Open3.capture2e("git", "rev-parse", "--is-inside-work-tree", chdir: root)
+      status.success?
+    rescue StandardError
+      false
     end
 
     def scanned_paths(root)

@@ -43,7 +43,7 @@ For a nested project tree, run:
 /files
 ```
 
-In the tree browser, use `↑`/`↓` to move, `←`/`→` to collapse or expand directories, `Enter` to toggle a directory or open a file, `Tab` or `/` to search, `@` to insert the selected file as an `@path` mention, and `Esc` to close. When you open a file from `/files`, quitting the editor returns to the browser at the same position.
+In the tree browser, use `↑`/`↓` to move, `←`/`→` to collapse or expand directories, `Enter` to toggle a directory or open a file, `Tab` or `/` to search, `i` to show or hide Git-ignored files, `@` to insert the selected file as an `@path` mention, and `Esc` to close. When you open a file from `/files`, quitting the editor returns to the browser at the same position.
 
 For an unsaved buffer, open a scratchpad:
 

@@ -185,6 +185,7 @@ module Kward
       @file_open_dismissed_token = nil
       @file_editor_open_status = nil
       @file_mention_paths = nil
+      @project_browser_file_paths = nil
       @project_browser_state = nil
       @image_viewer_state = nil
       @terminal_image_protocol = nil
@@ -1090,6 +1091,7 @@ module Kward
 
     def reset_workspace_file_state_locked
       @file_mention_paths = nil
+      @project_browser_file_paths = nil
       @file_mention_path_entries_paths = nil
       @file_mention_path_entries = nil
       @project_browser_state = nil

@@ -114,8 +114,12 @@ module Kward
         end
       end
 
-      def project_file_paths
-        @file_mention_paths ||= discover_project_file_paths
+      def project_file_paths(include_ignored: false)
+        if include_ignored
+          @project_browser_file_paths ||= discover_project_file_paths(include_ignored: true)
+        else
+          @file_mention_paths ||= discover_project_file_paths
+        end
       end
 
       def project_file_path_entries
@@ -126,14 +130,24 @@ module Kward
         @file_mention_path_entries = paths.map { |path| { path: path, downcase: path.downcase } }
       end
 
-      def discover_project_file_paths
-        paths = git_project_file_paths
-        paths = scanned_project_file_paths if paths.empty?
+      def discover_project_file_paths(include_ignored: false)
+        paths = if include_ignored
+                  git_project_file_paths(include_ignored: true)
+                else
+                  git_project_file_paths
+                end
+        paths = scanned_project_file_paths if paths.empty? && !git_project_repository?
         paths.reject { |path| path.empty? || path.end_with?("/") }.uniq.sort
       end
 
-      def git_project_file_paths
-        ProjectFiles.git_paths(prompt_workspace_root)
+      def git_project_file_paths(include_ignored: false)
+        return ProjectFiles.git_paths(prompt_workspace_root) unless include_ignored
+
+        ProjectFiles.git_paths(prompt_workspace_root, include_ignored: true)
+      end
+
+      def git_project_repository?
+        ProjectFiles.git_repository?(prompt_workspace_root)
       end
 
       def scanned_project_file_paths
