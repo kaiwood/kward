@@ -50,12 +50,12 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "1   truecolor xterm-256color"
   end
 
-  def test_defaults_git_pager_to_cat
+  def test_does_not_default_git_pager
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
-    result = shell.run("capture printf %s \"$GIT_PAGER\"")
+    result = shell.run("capture printf %s \"${GIT_PAGER-unset}\"")
 
-    assert_includes result.output, "cat"
+    assert_includes result.output, "unset"
   end
 
   def test_preserves_configured_git_pager
@@ -424,11 +424,11 @@ class TestEkwsh < KwardTestCase
     assert_includes result.output, "Usage: pty <command>"
   end
 
-  def test_pty_builtin_child_env_removes_default_git_pager
+  def test_child_env_does_not_inject_git_pager
     shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
+    refute_includes shell.child_env, "GIT_PAGER"
     refute_includes shell.child_env(interactive: true), "GIT_PAGER"
-    assert_equal "cat", shell.child_env.fetch("GIT_PAGER")
   end
 
   def test_pty_builtin_child_env_preserves_configured_git_pager

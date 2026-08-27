@@ -60,9 +60,7 @@ module Kward
     end
 
     def child_env(interactive: false)
-      env = @env.dup
-      env.delete("GIT_PAGER") if interactive && env["GIT_PAGER"] == "cat"
-      env
+      @env.dup
     end
 
     def prompt_label
@@ -113,7 +111,8 @@ module Kward
         result.interactive_command,
         display_command: command,
         timeout_seconds: timeout_seconds,
-        cancellation: cancellation
+        cancellation: cancellation,
+        suppress_git_pager: true
       )
       remember_result(command, result)
       result
@@ -122,7 +121,9 @@ module Kward
     # Runs an external command through the same persistent shell process while
     # the caller owns the terminal.
     def run_interactive(command, input:, sink:)
-      protocol = execute_protocol(command, input: input, sink: sink)
+      protocol = with_raw_input(input) do
+        execute_protocol(command, input: input, sink: sink)
+      end
       update_cwd(protocol[:cwd])
       InteractiveResult.new(
         exit_status: protocol[:status] || 1,
@@ -182,6 +183,20 @@ module Kward
 
     private
 
+    def with_raw_input(input)
+      return yield unless input.respond_to?(:raw)
+
+      yielded = false
+      input.raw do
+        yielded = true
+        yield
+      end
+    rescue Errno::ENOTTY
+      raise if yielded
+
+      yield
+    end
+
     def build_routing_shell
       Ekwsh.new(
         cwd: @cwd,
@@ -229,12 +244,12 @@ module Kward
       update_cwd(protocol[:cwd])
     end
 
-    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil)
+    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false)
       @command_mutex.synchronize do
         ensure_open
         cancellation&.raise_if_cancelled!
         marker = next_marker
-        write_protocol_command(command, marker)
+        write_protocol_command(command, marker, suppress_git_pager: suppress_git_pager)
         read_until_marker(
           marker,
           input: input,
@@ -249,8 +264,9 @@ module Kward
       raise
     end
 
-    def write_protocol_command(command, marker)
+    def write_protocol_command(command, marker, suppress_git_pager: false)
       escaped_command = Shellwords.escape(command.to_s)
+      pager_setup, pager_restore = git_pager_protocol(marker, suppress: suppress_git_pager)
       protocol = <<~SHELL
         if true; then
           if [ -n "${ZSH_VERSION-}" ]; then unsetopt zle 2>/dev/null; fi
@@ -258,13 +274,38 @@ module Kward
           PS2=''
           export PS1 PS2
           #{STTY_COMMAND} echo
+          #{pager_setup}
           if eval #{escaped_command}; then __kward_status=$?; else __kward_status=$?; fi
+          #{pager_restore}
           __kward_cwd=$(pwd 2>/dev/null)
           #{STTY_COMMAND} -echo
           printf '#{marker}:%s:%s\\n' "$__kward_status" "$__kward_cwd"
         fi
       SHELL
       write_raw(protocol)
+    end
+
+    def git_pager_protocol(marker, suppress:)
+      return ["", ""] unless suppress
+
+      was_set = "#{marker}_GIT_PAGER_WAS_SET"
+      saved_value = "#{marker}_GIT_PAGER_VALUE"
+      setup = <<~SHELL
+        #{was_set}=${GIT_PAGER+x}
+        #{saved_value}=${GIT_PAGER-}
+        GIT_PAGER=cat
+        export GIT_PAGER
+      SHELL
+      restore = <<~SHELL
+        if [ "$#{was_set}" = x ]; then
+          GIT_PAGER="$#{saved_value}"
+          export GIT_PAGER
+        else
+          unset GIT_PAGER
+        fi
+        unset #{was_set} #{saved_value}
+      SHELL
+      [setup, restore]
     end
 
     def read_until_marker(marker, input:, sink:, timeout_seconds:, max_output_bytes:, cancellation:)
@@ -421,11 +462,12 @@ module Kward
       sink.input_forwarded if sink.respond_to?(:input_forwarded)
     end
 
-    def execute_command(command, display_command:, timeout_seconds: nil, cancellation: nil, &block)
+    def execute_command(command, display_command:, timeout_seconds: nil, cancellation: nil, suppress_git_pager: false, &block)
       protocol = execute_protocol(
         command,
         timeout_seconds: timeout_seconds || @timeout_seconds,
-        cancellation: cancellation
+        cancellation: cancellation,
+        suppress_git_pager: suppress_git_pager
       )
       output = command_echo(display_command)
       output << clean_output(protocol[:output])
@@ -453,7 +495,13 @@ module Kward
         return Result.new(output: "#{command_echo(command)}Usage: capture <command>\n", exit_status: 2)
       end
 
-      execute_command(captured_command, display_command: command, cancellation: cancellation, &block)
+      execute_command(
+        captured_command,
+        display_command: command,
+        cancellation: cancellation,
+        suppress_git_pager: true,
+        &block
+      )
     end
 
     def interactive_result(command, expanded_command)

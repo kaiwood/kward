@@ -54,6 +54,83 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_interactive_commands_forward_single_keys_while_input_is_raw
+    Dir.mktmpdir("persistent-shell") do |dir|
+      shell = build_shell(dir)
+      input_reader, input_writer = IO.pipe
+      sink = Sink.new
+      result = nil
+      input_reader.define_singleton_method(:raw) do |&block|
+        instance_variable_set(:@raw_started, true)
+        block.call
+      end
+
+      worker = Thread.new do
+        result = shell.run_interactive(
+          "saved_stty=$(stty -g); stty raw; printf ready; dd bs=1 count=1 2>/dev/null; stty \"$saved_stty\"",
+          input: input_reader,
+          sink: sink
+        )
+      end
+      wait_until(timeout: 1, message: "persistent shell input did not enter raw mode") do
+        input_reader.instance_variable_get(:@raw_started)
+      end
+      wait_until(timeout: 1, message: "interactive command did not become ready") do
+        sink.output.include?("ready")
+      end
+      input_writer.write("q")
+      input_writer.flush
+      worker.join(2)
+
+      refute worker.alive?, "expected the single key to reach the interactive command"
+      assert_equal 0, result.exit_status
+      assert result.input_forwarded
+      assert_equal "readyq", sink.output
+    ensure
+      worker&.kill if worker&.alive?
+      input_reader&.close unless input_reader&.closed?
+      input_writer&.close unless input_writer&.closed?
+      shell&.close
+    end
+  end
+
+  def test_interactive_commands_do_not_inherit_a_kward_git_pager
+    Dir.mktmpdir("persistent-shell") do |dir|
+      shell = build_shell(dir, env: { "PATH" => ENV.fetch("PATH", "") })
+      sink = Sink.new
+
+      result = shell.run_interactive("printf '%s' \"${GIT_PAGER-unset}\"", input: nil, sink: sink)
+
+      assert_equal 0, result.exit_status
+      assert_equal "unset", sink.output
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_noninteractive_commands_suppress_and_restore_the_git_pager
+    Dir.mktmpdir("persistent-shell") do |dir|
+      shell = build_shell(
+        dir,
+        env: { "PATH" => ENV.fetch("PATH", ""), "GIT_PAGER" => "less" }
+      )
+
+      agent_result = shell.run_for_agent("printf '%s' \"$GIT_PAGER\"")
+      capture_result = shell.run("capture printf '%s' \"$GIT_PAGER\"")
+      sink = Sink.new
+      interactive_result = shell.run_interactive("printf '%s' \"$GIT_PAGER\"", input: nil, sink: sink)
+
+      assert_equal 0, agent_result.exit_status
+      assert_includes agent_result.output, "cat"
+      assert_equal 0, capture_result.exit_status
+      assert_includes capture_result.output, "cat"
+      assert_equal 0, interactive_result.exit_status
+      assert_equal "less", sink.output
+    ensure
+      shell&.close
+    end
+  end
+
   def test_agent_commands_are_noninteractive_but_use_the_persistent_process
     Dir.mktmpdir("persistent-shell") do |dir|
       nested = File.join(dir, "nested")

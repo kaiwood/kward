@@ -27,9 +27,7 @@ module Kward
     end
 
     def child_env(interactive: false)
-      env = @env.dup
-      env.delete("GIT_PAGER") if interactive && @defaulted_git_pager
-      env
+      @env.dup
     end
 
     def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: DEFAULT_SHELL, configured_env: {}, aliases: {}, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES)
@@ -153,8 +151,6 @@ module Kward
     def configure_color_environment
       @env["CLICOLOR"] ||= "1"
       @env["COLORTERM"] ||= "truecolor"
-      @defaulted_git_pager = !@env.key?("GIT_PAGER")
-      @env["GIT_PAGER"] ||= "cat"
       @env["TERM"] = "xterm-256color" if @env["TERM"].to_s.empty? || @env["TERM"] == "dumb"
     end
 

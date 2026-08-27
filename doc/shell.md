@@ -125,7 +125,7 @@ ruby
 ssh example.com
 ```
 
-Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. It prints the submitted command but no PTY start message or exit-status summary. The line-oriented Git commands `git fetch`, `git ls-remote`, `git push`, `git remote`, and `git status` keep the shell prompt visible as a frozen display. Safe, line-oriented output from commands that did not read keyboard input is kept in the transient transcript view; full-screen and genuinely interactive output stays terminal-owned.
+Kward gives each command the terminal, forwards keyboard input, and restores the shell prompt when the command exits. Interactive commands inherit your normal pager configuration, so commands such as `git log` can open `less` in full-screen mode. Kward suppresses Git paging only for noninteractive shell-agent and `capture` executions. It prints the submitted command but no PTY start message or exit-status summary. The line-oriented Git commands `git fetch`, `git ls-remote`, `git push`, `git remote`, and `git status` keep the shell prompt visible as a frozen display. Safe, line-oriented output from commands that did not read keyboard input is kept in the transient transcript view; full-screen and genuinely interactive output stays terminal-owned.
 
 Use `capture` inside `/shell` when you want ordinary, readable output in Kward's transcript area instead of direct terminal control:
 
