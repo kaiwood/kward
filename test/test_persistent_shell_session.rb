@@ -67,7 +67,7 @@ class TestPersistentShellSession < KwardTestCase
 
       worker = Thread.new do
         result = shell.run_interactive(
-          "saved_stty=$(stty -g); stty raw; printf ready; dd bs=1 count=1 2>/dev/null; stty \"$saved_stty\"",
+          "saved_stty=$(stty -g); stty raw -echo; printf ready; dd bs=1 count=1 2>/dev/null; stty \"$saved_stty\"",
           input: input_reader,
           sink: sink
         )

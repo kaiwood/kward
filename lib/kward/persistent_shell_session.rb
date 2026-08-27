@@ -16,6 +16,15 @@ module Kward
     Result = Ekwsh::Result
     InteractiveResult = Struct.new(:exit_status, :input_forwarded, keyword_init: true)
 
+    class CommandInterrupted < StandardError
+      attr_reader :protocol
+
+      def initialize(protocol)
+        @protocol = protocol
+        super("The embedded shell did not respond to an interrupt.")
+      end
+    end
+
     READ_SIZE = 4_096
     STARTUP_TIMEOUT_SECONDS = 5
     STTY_COMMAND = if File.executable?("/bin/stty")
@@ -259,6 +268,9 @@ module Kward
           cancellation: cancellation
         )
       end
+    rescue CommandInterrupted => e
+      restart_process
+      e.protocol
     rescue IOError
       close
       raise
@@ -322,6 +334,7 @@ module Kward
         if cancellation&.cancelled? && !interrupted
           interrupted = true
           interrupt_process
+          deadline = Time.now + 1
         end
         if deadline && Time.now >= deadline
           unless interrupted
@@ -330,8 +343,15 @@ module Kward
             interrupt_process
             deadline = Time.now + 1
           else
-            close
-            raise IOError, "The embedded shell did not respond to an interrupt."
+            interrupted_protocol = {
+              output: captured,
+              status: 130,
+              cwd: @cwd,
+              input_forwarded: input_forwarded,
+              timed_out: timed_out,
+              truncated: truncated
+            }
+            raise CommandInterrupted.new(interrupted_protocol)
           end
         end
 
@@ -661,6 +681,16 @@ module Kward
       write_raw("\u0003")
     rescue IOError, Errno::EIO
       nil
+    end
+
+    def restart_process
+      close
+      @closed = false
+      start_process
+      initialize_protocol
+    rescue StandardError
+      close
+      raise
     end
 
     def read_chunk
