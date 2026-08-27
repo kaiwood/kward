@@ -24,7 +24,7 @@ Inside a Git repository, `/files` uses Git's project view:
 git ls-files --cached --others --exclude-standard
 ```
 
-That means tracked files and normal untracked files appear by default, while ignored files stay out of the list. Press `i` in the tree view to show or hide Git-ignored files for the current browser session.
+That means tracked files and normal untracked files appear by default, while ignored files stay out of the list. Press `i` in the tree view to show or hide Git-ignored files; Kward remembers this choice for the workspace.
 
 Outside Git, Kward scans the workspace directory and skips common noisy directories such as `.git`, `.yardoc`, `_yardoc`, `node_modules`, `rdoc`, `tmp`, and `vendor/bundle`.
 
@@ -91,7 +91,7 @@ See [Integrated editor](editor.md) for editor modes, save/quit keys, search, sel
 
 ## Remembered state
 
-Kward remembers the expanded folders and selected path for each workspace. The next time you open `/files` in the same project, it restores the browser close to where you left it.
+Kward remembers the expanded folders, selected path, and Git-ignored file visibility for each workspace. The next time you open `/files` in the same project, it restores the browser close to where you left it.
 
 Search itself is temporary. Closing search returns to the normal tree, and closing the browser leaves your chat session intact.
 

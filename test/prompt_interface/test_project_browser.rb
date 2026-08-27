@@ -438,17 +438,24 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
           Dir.chdir(dir) do
             prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
             prompt.instance_variable_set(:@file_mention_paths, ["app/controllers/home.rb", "app/models/user.rb"])
+            prompt.instance_variable_set(:@project_browser_file_paths, ["app/controllers/home.rb", "app/models/user.rb", "ignored.log"])
             prompt.open_project_browser
             rows = prompt.send(:project_browser_visible_rows)
             prompt.instance_variable_get(:@project_browser_state)[:selection_index] = rows.index { |row| row[:path] == "app/models" }
+            prompt.send(:handle_project_browser_key, "i")
 
+            assert prompt.instance_variable_get(:@project_browser_state)[:show_ignored]
+            assert_includes prompt.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
             prompt.send(:collapse_selected_project_browser_row)
             prompt.send(:dismiss_project_browser)
 
             restored = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
             restored.instance_variable_set(:@file_mention_paths, ["app/controllers/home.rb", "app/models/user.rb"])
+            restored.instance_variable_set(:@project_browser_file_paths, ["app/controllers/home.rb", "app/models/user.rb", "ignored.log"])
             restored.open_project_browser
 
+            assert restored.instance_variable_get(:@project_browser_state)[:show_ignored]
+            assert_includes restored.send(:project_browser_visible_rows).map { |row| row[:path] }, "ignored.log"
             assert_equal "app/models", restored.send(:selected_project_browser_row)[:path]
             refute restored.instance_variable_get(:@project_browser_state)[:expanded].include?("app/models")
             refute_includes restored.send(:project_browser_visible_rows).map { |row| row[:path] }, "app/models/user.rb"

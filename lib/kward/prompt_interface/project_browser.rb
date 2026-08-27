@@ -48,11 +48,12 @@ module Kward
       end
 
       def open_project_browser_locked
-        paths = project_file_paths
         saved_state = saved_project_browser_state
+        show_ignored = saved_state["show_ignored"] == true
+        paths = project_file_paths(include_ignored: show_ignored)
         @project_browser_state = {
           paths: paths,
-          show_ignored: false,
+          show_ignored: show_ignored,
           expanded: restored_project_browser_expanded_paths(paths, saved_state),
           selection_index: 0,
           search_active: false,
@@ -203,6 +204,7 @@ module Kward
         @project_browser_tree_paths = nil
         @project_browser_tree = nil
         restore_project_browser_selection(selected_path)
+        persist_project_browser_state
       end
 
       def project_browser_ignored_files_visible?
@@ -487,11 +489,12 @@ module Kward
 
         @project_browser_restore_after_editor = false
         unless @project_browser_state
-          paths = project_file_paths
           saved_state = saved_project_browser_state
+          show_ignored = saved_state["show_ignored"] == true
+          paths = project_file_paths(include_ignored: show_ignored)
           @project_browser_state = {
             paths: paths,
-            show_ignored: false,
+            show_ignored: show_ignored,
             expanded: restored_project_browser_expanded_paths(paths, saved_state),
             selection_index: 0,
             search_active: false,
@@ -652,7 +655,8 @@ module Kward
         row = selected_project_browser_row
         workspaces[project_browser_workspace_root] = {
           "expanded" => @project_browser_state[:expanded].to_a.sort,
-          "selected_path" => row && row[:path]
+          "selected_path" => row && row[:path],
+          "show_ignored" => project_browser_ignored_files_visible?
         }
         data["version"] = PROJECT_BROWSER_STATE_VERSION
         data["workspaces"] = workspaces
