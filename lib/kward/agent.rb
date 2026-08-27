@@ -84,6 +84,7 @@ module Kward
       end
       loop do
         cancellation&.raise_if_cancelled!
+        auto_compact_if_needed
         begin
           message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry) do |event|
             yield event if block_given?

@@ -251,6 +251,30 @@ class TestCompactor < KwardTestCase
     assert_includes result.summary, "### Important Ruby Objects\n- Example"
   end
 
+  def test_auto_compaction_counts_codex_response_items
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("old request")
+    conversation.append_assistant({
+      "role" => "assistant",
+      "content" => "",
+      "response_items" => [{
+        "type" => "reasoning",
+        "summary" => [],
+        "encrypted_content" => "x" * 4_000_000
+      }]
+    })
+    conversation.append_user("recent request")
+    conversation.append_assistant("recent reply")
+    settings = Kward::Compaction::Settings.new(keep_recent_tokens: 20)
+    client = RecordingClient.new(["## Goal\ncontinue"])
+
+    result = Kward::Compactor.new(conversation: conversation, client: client, settings: settings).auto_compact_if_needed(context_window: 1_000_000)
+
+    refute_nil result
+    assert_operator result.tokens_before, :>, 1_000_000
+    assert_equal "compactionSummary", conversation.messages.first[:role]
+  end
+
   def test_auto_compaction_uses_last_provider_usage_plus_trailing_messages
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("short old request")

@@ -31,13 +31,15 @@ module Kward
         parts = [role]
         if role.to_s == "compactionSummary"
           parts << value(message, :summary)
-        else
+        elsif response_items(message).empty?
           parts << content_text(value(message, :content))
-        end
-        parts << value(message, :reasoning_summary)
-        tool_calls(message).each do |tool_call|
-          parts << tool_call_name(tool_call)
-          parts << tool_call_arguments(tool_call)
+          parts << value(message, :reasoning_summary)
+          tool_calls(message).each do |tool_call|
+            parts << tool_call_name(tool_call)
+            parts << tool_call_arguments(tool_call)
+          end
+        else
+          parts << JSON.generate(response_items(message))
         end
         parts << value(message, :tool_call_id)
         parts << value(message, :name)
@@ -63,6 +65,10 @@ module Kward
 
       def tool_calls(message)
         MessageAccess.tool_calls(message)
+      end
+
+      def response_items(message)
+        MessageAccess.response_items(message)
       end
 
       def tool_call_name(tool_call)

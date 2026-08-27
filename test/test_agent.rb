@@ -34,6 +34,41 @@ class TestAgent < KwardTestCase
     end
   end
 
+  class ToolLoopCompactionClient
+    attr_reader :main_calls, :summary_calls
+
+    def initialize
+      @main_calls = 0
+      @summary_calls = 0
+    end
+
+    def current_context_window
+      100_000
+    end
+
+    def chat(_messages, tools: [], **_kwargs)
+      if tools.empty?
+        @summary_calls += 1
+        return { "role" => "assistant", "content" => "## Goal\nContinue after tool compaction." }
+      end
+
+      @main_calls += 1
+      return { "role" => "assistant", "content" => nil, "tool_calls" => [tool_call] } if @main_calls < 8
+
+      { "role" => "assistant", "content" => "done" }
+    end
+
+    private
+
+    def tool_call
+      {
+        "id" => "call_#{@main_calls}",
+        "type" => "function",
+        "function" => { "name" => "large_tool", "arguments" => "{}" }
+      }
+    end
+  end
+
   class RuntimeCaptureClient
     attr_reader :calls
 
@@ -160,6 +195,26 @@ class TestAgent < KwardTestCase
         assert_equal ["compactionSummary", "user", "assistant"], conversation.messages.map { |message| message[:role] || message["role"] }
       end
     end
+  end
+
+  def test_agent_compacts_before_followup_model_request_after_tool_calls
+    client = ToolLoopCompactionClient.new
+    registry = Object.new
+    registry.define_singleton_method(:schemas) { [{ name: "large_tool" }] }
+    registry.define_singleton_method(:dispatch) do |tool_call, conversation, cancellation: nil|
+      content = "x" * 50_000
+      conversation.append_tool(tool_call_id: tool_call["id"], name: "large_tool", content: content)
+      content
+    end
+    conversation = Kward::Conversation.new(system_message: nil)
+    agent = Kward::Agent.new(client: client, tool_registry: registry, conversation: conversation)
+
+    answer = agent.ask("start")
+
+    assert_equal "done", answer
+    assert_equal 8, client.main_calls
+    assert_operator client.summary_calls, :>=, 1
+    assert_equal "compactionSummary", conversation.messages.first[:role]
   end
 
   def test_agent_does_not_retry_argument_errors_from_custom_client
