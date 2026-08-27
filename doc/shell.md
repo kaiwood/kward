@@ -165,7 +165,7 @@ Each Kward tab owns its `/shell` state. Switching away and back restores that ta
 
 Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. Configure its size with `history_limit` in `ekwsh.yml`.
 
-Kward's tab shortcuts work at the shell prompt and while a captured command is running. During an interactive command, the child owns every key; exit or interrupt it before switching Kward tabs.
+Kward's tab shortcuts work at the shell prompt and while a captured command is running. During an interactive command, the child owns every key; exit or interrupt it before switching Kward tabs. Bounded output from shell-agent `?` turns is also retained in the tab's transient runtime view, so it is restored when you switch away and back without being added to session history. Ctrl+L clears this transient shell and shell-agent output.
 
 ## Completion
 

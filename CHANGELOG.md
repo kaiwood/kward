@@ -17,6 +17,7 @@ All notable changes to Kward will be documented in this file.
 
 - `/shell` now keeps one persistent local shell process per tab so shell variables, functions, aliases, and directory changes are shared by user and agent commands.
 - Shell-agent turns use a transient per-tab context and receive only bounded, sanitized output after an explicit `?` request; ordinary shell output remains outside model context.
+- Shell-agent transcript output is now retained as bounded, tab-local runtime state so it survives tab switches without entering session history.
 - Vibe editor-agent turns now use an isolated, configurable model/reasoning context, remain visible with a status-line spinner, and stay out of normal chat transcripts and session history.
 - Removed the obsolete GPT-5.6 Luna Responses Lite compatibility workaround so Luna requests retain Kward's identity and standard Codex payload.
 

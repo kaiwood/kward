@@ -892,6 +892,42 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_shell_agent_output_persists_across_tab_switches_without_session_persistence
+    Dir.mktmpdir do |dir|
+      config_dir = File.join(dir, "config")
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: dir)
+      prompt = TabPrompt.new
+      client = RecordingClient.new(["The previous command failed."])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/bin/sh")
+      first_tab.shell = shell
+      first_tab.shell_agent = cli.send(:build_shell_prompt_agent, first_tab.agent)
+
+      cli.send(:run_shell_prompt_turn, "? explain the previous failure", shell, first_tab.shell_agent)
+
+      entries = strip_ansi(first_tab.transient_shell_entries.join)
+      assert_includes entries, "? explain the previous failure"
+      assert_includes entries, "The previous command failed."
+      refute_includes File.read(first_tab.session.path), "The previous command failed."
+
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+
+      restored = strip_ansi(prompt.output.join)
+      assert_includes restored, "? explain the previous failure"
+      assert_includes restored, "The previous command failed."
+
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :next }, store)
+      refute_includes strip_ansi(prompt.output.join), "The previous command failed."
+    ensure
+      shell&.close
+    end
+  end
+
   def test_one_shot_bang_output_is_explicit_tab_state_and_tab_local
     Dir.mktmpdir do |dir|
       config_dir = File.join(dir, "config")

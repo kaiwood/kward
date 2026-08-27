@@ -224,6 +224,8 @@ module Kward
       end
 
       def run_shell_prompt_turn(input, shell, shell_agent)
+        tab = active_tab if respond_to?(:active_tab, true)
+        transcript_before = prompt_transcript_text
         instruction = input.to_s.sub(/\A\?\s*/, "").strip
         if instruction.empty?
           runtime_output("Shell prompt instruction required after ?")
@@ -259,6 +261,8 @@ module Kward
       rescue StandardError => e
         runtime_output("Error: #{e.message}")
         []
+      ensure
+        record_shell_prompt_transcript(tab, transcript_before)
       end
 
       def shell_prompt_input?(input)
@@ -597,6 +601,44 @@ module Kward
 
       def clear_active_tab_transient_shell_output
         clear_active_tab_transient_shell_entries if respond_to?(:clear_active_tab_transient_shell_entries, true)
+      end
+
+      def prompt_transcript_text
+        return nil unless @prompt.respond_to?(:tab_view_snapshot)
+
+        snapshot = @prompt.tab_view_snapshot
+        transcript = snapshot[:transcript_buffer] || snapshot["transcript_buffer"] || snapshot[:transcript] || snapshot["transcript"]
+        transcript = transcript.map(&:to_s).join if transcript.is_a?(Array)
+        transcript.to_s
+      rescue StandardError
+        nil
+      end
+
+      def record_shell_prompt_transcript(tab, transcript_before)
+        return unless tab && !transcript_before.nil?
+
+        transcript_after = prompt_transcript_text
+        return if transcript_after.nil?
+
+        delta = shell_prompt_transcript_delta(transcript_before, transcript_after)
+        tab.append_transient_shell_entry(delta) unless delta.empty?
+      rescue StandardError
+        nil
+      end
+
+      def shell_prompt_transcript_delta(before, after)
+        return "" if before == after
+        return after[before.length..].to_s if after.start_with?(before)
+
+        # The prompt transcript is bounded and may trim while a large agent
+        # response is rendered. Preserve only the part not already retained.
+        overlap = [before.length, after.length].min
+        while overlap.positive?
+          return after[overlap..].to_s if before.end_with?(after[0, overlap])
+
+          overlap -= 1
+        end
+        after
       end
 
       def drain_ekwsh_chunks(chunks)
