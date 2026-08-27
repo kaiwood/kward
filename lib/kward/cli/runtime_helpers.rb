@@ -192,13 +192,82 @@ module Kward
         entering = tab.nil? || tab.shell.nil?
         shell = tab&.shell || build_ekwsh(agent)
         tab.shell = shell if tab
+        shell_agent = shell_prompt_agent_for(agent, tab: tab)
         runtime_output("Entering ekwsh. Type exit or press Ctrl+D on an empty prompt to return.") if entering
-        run_ekwsh_loop(shell, tab: tab, history: build_ekwsh_history(agent))
+        run_ekwsh_loop(shell, tab: tab, history: build_ekwsh_history(agent), shell_agent: shell_agent)
+      end
+
+      def shell_prompt_agent_for(agent, tab: nil)
+        return tab.shell_agent if tab&.shell_agent
+        return nil unless agent.respond_to?(:conversation) && agent.respond_to?(:tool_registry)
+
+        shell_agent = build_shell_prompt_agent(agent)
+        tab.shell_agent = shell_agent if tab
+        shell_agent
+      end
+
+      def build_shell_prompt_agent(active_agent)
+        active_conversation = active_agent.conversation
+        conversation = Conversation.new(
+          system_message: ShellPrompt.system_message,
+          workspace_root: active_conversation.workspace_root,
+          provider: active_conversation.provider || current_model_provider,
+          model: active_conversation.model || current_model_id,
+          reasoning_effort: active_conversation.reasoning_effort || current_reasoning_effort
+        )
+        Agent.new(
+          client: @client,
+          tool_registry: active_agent.tool_registry,
+          conversation: conversation,
+          warning_sink: ConfigFiles.warning_sink
+        )
+      end
+
+      def run_shell_prompt_turn(input, shell, shell_agent)
+        instruction = input.to_s.sub(/\A\?\s*/, "").strip
+        if instruction.empty?
+          runtime_output("Shell prompt instruction required after ?")
+          return []
+        end
+        unless shell_agent.respond_to?(:tool_registry)
+          runtime_output("Shell agent is unavailable in this prompt.")
+          return []
+        end
+
+        session = ShellPromptSession.new(shell)
+        registry = shell_agent.tool_registry.for_shell_prompt(session)
+        on_complete = lambda do |successful:, **|
+          next unless successful
+          next unless session.prepared_command
+
+          if @prompt.respond_to?(:prefill_input)
+            @prompt.prefill_input(session.prepared_command)
+          else
+            runtime_output("Prepared shell command:\n#{session.prepared_command}")
+          end
+        end
+        pending_inputs = run_interactive_turn(
+          shell_agent,
+          ShellPrompt.input(instruction, session.context),
+          display_input: "? #{instruction}",
+          tool_registry: registry,
+          busy_label: shell.prompt_label,
+          on_complete: on_complete
+        )
+        @prompt.update_prompt_label(shell.prompt_label) if @prompt.respond_to?(:update_prompt_label)
+        pending_inputs
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        []
+      end
+
+      def shell_prompt_input?(input)
+        input.to_s.start_with?("?")
       end
 
       def build_ekwsh(agent)
         config = ConfigFiles.read_ekwsh_config
-        Ekwsh.new(
+        PersistentShellSession.new(
           cwd: interactive_workspace_root(agent),
           configured_env: config[:env],
           aliases: config[:aliases],
@@ -242,7 +311,8 @@ module Kward
           @prompt.say(intro_message)
         end
         result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |sink, completed_result|
-          record_completed_pty_output(sink, completed_result)
+          transcript_output = record_completed_pty_output(sink, completed_result)
+          yield(transcript_output, completed_result) if block_given?
         end
         refresh_composer_status
         result
@@ -253,12 +323,18 @@ module Kward
 
       def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_complete)
         runner = InteractivePtyRunner.new
-        run_with_sink = lambda do |input, sink|
-          result = runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink)
+        with_interactive_terminal_handoff do |input, sink|
+          result = if shell.respond_to?(:run_interactive)
+            shell.run_interactive(command, input: input, sink: sink)
+          else
+            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink)
+          end
           on_complete.call(sink, result) if on_complete
           result
         end
+      end
 
+      def with_interactive_terminal_handoff
         if @prompt.respond_to?(:with_inline_terminal_handoff)
           @prompt.with_inline_terminal_handoff do |input, output, transition|
             sink = AdaptivePtyOutputSink.new(
@@ -266,7 +342,7 @@ module Kward
               on_exclusive: transition,
               max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
             )
-            run_with_sink.call(input, sink)
+            yield(input, sink)
           end
         elsif @prompt.respond_to?(:with_terminal_handoff)
           @prompt.with_terminal_handoff do |input, output|
@@ -274,14 +350,14 @@ module Kward
               output: output,
               max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
             )
-            run_with_sink.call(input, sink)
+            yield(input, sink)
           end
         else
           sink = PassthroughPtyOutputSink.new(
             output: $stdout,
             max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
           )
-          run_with_sink.call($stdin, sink)
+          yield($stdin, sink)
         end
       end
 
@@ -306,6 +382,7 @@ module Kward
         if @prompt.respond_to?(:record_transient_terminal_output)
           @prompt.record_transient_terminal_output(transcript_output, render: false)
         end
+        transcript_output
       end
 
       def terminal_transcript_output(
@@ -341,13 +418,15 @@ module Kward
         end
       end
 
-      def run_ekwsh_loop(shell, tab: nil, history: nil)
+      def run_ekwsh_loop(shell, tab: nil, history: nil, shell_agent: nil)
+        shell_agent ||= shell_prompt_agent_for(tab.agent, tab: tab) if tab&.agent
         with_ekwsh_history(history) do
-          run_ekwsh_loop_with_history(shell, tab: tab)
+          run_ekwsh_loop_with_history(shell, tab: tab, shell_agent: shell_agent)
         end
       end
 
-      def run_ekwsh_loop_with_history(shell, tab: nil)
+      def run_ekwsh_loop_with_history(shell, tab: nil, shell_agent: nil)
+        pending_shell_inputs = []
         loop do
           if @prompt.respond_to?(:editing_file?) && @prompt.editing_file?
             editor_result = @prompt.run_editor
@@ -357,12 +436,17 @@ module Kward
             end
           end
 
-          input = ask_ekwsh(shell)
+          input = pending_shell_inputs.shift || ask_ekwsh(shell)
           if input.is_a?(Hash) && input[:tab_action]
             (@pending_inputs ||= []).unshift(input)
             return :tab_action
           end
           break if input.nil?
+
+          if shell_prompt_input?(input)
+            pending_shell_inputs.concat(run_shell_prompt_turn(input, shell, shell_agent))
+            next
+          end
 
           result = run_ekwsh_command(shell, input)
           if result.clear
@@ -385,14 +469,24 @@ module Kward
             next
           end
           if result.exit_shell
+            close_ekwsh_session(shell)
             tab.shell = nil if tab
+            tab.shell_agent = nil if tab
             runtime_output("Shell exited.")
             return :exited
           end
         end
+        close_ekwsh_session(shell)
         tab.shell = nil if tab
+        tab.shell_agent = nil if tab
         runtime_output("Shell exited.")
         :exited
+      end
+
+      def close_ekwsh_session(shell)
+        shell.close if shell.respond_to?(:close)
+      rescue StandardError
+        nil
       end
 
       def with_ekwsh_history(history)
@@ -428,13 +522,19 @@ module Kward
       end
 
       def run_ekwsh_interactive_pty_command(shell, result)
+        shell_target = shell.respond_to?(:run_interactive) ? shell : shell.command_shell
         run_user_interactive_pty_command(
           result.interactive_command,
-          shell: shell.command_shell,
+          shell: shell_target,
           env: shell.child_env(interactive: true),
           cwd: shell.cwd,
           intro: result.output
-        )
+        ) do |transcript_output, completed_result|
+          shell.record_interactive_result(
+            output: transcript_output,
+            exit_status: completed_result.exit_status
+          )
+        end
       end
 
       def run_ekwsh_command(shell, input)

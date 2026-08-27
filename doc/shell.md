@@ -4,6 +4,7 @@ Kward lets you run your own shell commands without leaving the interactive TUI. 
 
 - **For one quick command, use `!command`.** It runs from the active workspace and returns you to the normal composer when it finishes.
 - **For a longer stretch of shell work, use `/shell`.** It keeps its directory, environment, aliases, and history between commands.
+- **To ask Kward for help from inside `/shell`, prefix the request with `?`.** It can inspect the latest shell output, run an explicitly requested state change, or prepare a command in the shell prompt for your confirmation.
 - **For bounded output in the transcript view, use `/capture <command>`.** Inside `/shell`, use `capture <command>` for the same kind of readable output while keeping the shell's current state.
 
 Ordinary `!command` input and external commands inside `/shell` receive an interactive PTY. Pagers, Vim, SSH, REPLs, password prompts, and other interactive tools therefore work without a `pty` prefix.
@@ -20,7 +21,7 @@ Prefix a command with `!` in the normal composer:
 
 The command runs from the active workspace root and begins in an inline PTY region above a frozen composer. Line-oriented output, single-line carriage-return progress, and synchronized-output update brackets scroll the transcript area naturally while keyboard input belongs to the child process. If the child emits alternate-screen, clear-screen, absolute cursor, or unknown terminal controls, Kward conservatively hides the composer and switches permanently to full-terminal passthrough for the rest of that command. Pagers and full-screen applications therefore retain the complete terminal without relying on a command-name allowlist.
 
-When an inline command exits without reading input, safe output is mirrored into the transient transcript view so a repaint cannot hide it. Carriage-return and horizontal-cursor progress redraws are reduced to their final visible lines, while an unterminated synchronized-output update is closed before Kward redraws. If the child reads input, Kward retains only output captured before the first forwarded input byte; this prevents echoed passwords, OTPs, or other input from entering tab state. Shell output is never added to the AI conversation or sent to the model.
+When an inline command exits without reading input, safe output is mirrored into the transient transcript view so a repaint cannot hide it. Carriage-return and horizontal-cursor progress redraws are reduced to their final visible lines, while an unterminated synchronized-output update is closed before Kward redraws. If the child reads input, Kward retains only output captured before the first forwarded input byte; this prevents echoed passwords, OTPs, or other input from entering tab state. Output from one-off commands is never added to the AI conversation or sent to the model.
 
 Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, the composer remains frozen and keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
 
@@ -89,6 +90,29 @@ printf '%s\n' "$FOO"
 Leave shell mode with `exit`, `logout`, or Ctrl+D on an empty prompt.
 
 `cd` changes only the embedded shell's directory. It does not change Kward's workspace root or the directory used by the model's other tools.
+
+## Ask the shell agent
+
+While `/shell` is active, start a submitted line with `?` to ask the transient shell assistant:
+
+```text
+? why did the last command fail?
+? show me which process is listening on port 3000
+? prepare a command to find Ruby files changed today
+```
+
+The assistant receives the current shell directory, the last command, its exit status, and bounded output from that command. Output is sent to the model only because you explicitly asked with `?`; it is sanitized and bounded before being included, and shell-agent turns are not added to the normal session history.
+
+If you explicitly ask the assistant to change shell state, it can use the active shell session:
+
+```text
+? cd into test
+? set RAILS_ENV to test
+```
+
+For a suggestion or prepared command, the assistant uses `prepare_shell_command`. The command is placed in the shell composer but is not run until you press `Enter`. Running a command directly and preparing one are deliberately separate actions.
+
+The shell assistant cannot safely run commands that require terminal input. Ask it to prepare those commands instead. The local `/shell` session keeps one interactive shell process alive, so directory changes, variables, functions, aliases, and other shell state persist between commands. The one-off `!command` and `/capture` workflows remain separate. SSH remains available through the normal interactive PTY handoff, but shell-agent prompting resumes after that SSH session exits.
 
 ## Interactive and captured commands
 
@@ -179,7 +203,7 @@ When several candidates match, repeated Tab presses cycle through them and wrap 
 
 ## Built-ins
 
-`ekwsh` handles a small set of commands itself so their state can persist:
+The persistent `/shell` process handles these commands in-session so their state can persist:
 
 | Built-in | What it does |
 | --- | --- |
@@ -232,12 +256,12 @@ aliases:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `shell` | `/bin/sh` | POSIX-compatible shell used with `-c`. It must be an absolute executable path. |
-| `timeout_seconds` | `300` | Maximum runtime for one captured command. |
-| `max_output_bytes` | `1048576` | Maximum output retained for one captured command. |
+| `shell` | `/bin/sh` | Absolute executable path for the persistent `/shell` process and interactive shell commands. |
+| `timeout_seconds` | `300` | Maximum runtime for one captured or shell-agent command. |
+| `max_output_bytes` | `1048576` | Maximum output retained for one captured or shell-agent command. |
 | `history_limit` | `1000` | Maximum shell-history entries per workspace. |
 
-Invalid or relative `shell` paths fall back to `/bin/sh`. These timeout and output limits apply only to `capture` inside `/shell`, not interactive commands or the separate `/capture` slash command.
+Invalid or relative `shell` paths fall back to `/bin/sh`. These timeout and output limits apply to `capture` inside `/shell` and shell-agent commands, not user-owned interactive commands or the separate `/capture` slash command.
 
 ### Environment
 
@@ -253,7 +277,7 @@ TERM=xterm-256color  # only when TERM is missing or dumb
 
 It does not force color. Set `FORCE_COLOR`, `CLICOLOR_FORCE`, or a command-specific option such as `--color=always` when needed.
 
-When rbenv is available, Kward adds its shims and bin directories to `PATH` and supplies `RBENV_ROOT` if it was missing. This lets `ruby`, `bundle`, and `./exe/kward` use the selected Ruby without sourcing shell startup files.
+When rbenv is available, Kward adds its shims and bin directories to `PATH` and supplies `RBENV_ROOT` if it was missing before starting `/shell`. The configured interactive shell may also load its normal startup files.
 
 ### Aliases
 
@@ -281,17 +305,17 @@ Aliases are intentionally simple: they do not expand recursively and are not she
 
 ## Terminal output and safety
 
-Interactive commands write directly to your terminal so full-screen tools can work. When a command does not read keyboard input and emits only line-oriented text plus safe color sequences, Kward mirrors that output into the transient transcript view after the command exits. Other interactive output is not sanitized and may contain terminal control sequences, so run only commands you trust with terminal access.
+Interactive commands write directly to your terminal so full-screen tools can work. When a command does not read keyboard input and emits only line-oriented text plus safe color sequences, Kward mirrors that output into the transient transcript view after the command exits. Other interactive output is not sanitized and may contain terminal control sequences, so run only commands you trust with terminal access. Safe bounded output is included in a shell-agent request only when you explicitly use `?`; it is never sent to the model for ordinary shell commands.
 
 Commands run with `capture` inside `/shell` preserve safe ANSI color and style sequences while removing cursor movement, clear-screen controls, title changes, alternate-screen controls, and similar sequences that could damage the TUI transcript.
 
 ## Limitations
 
-`ekwsh` manages shell-like state, but it is not a persistent login shell or terminal emulator:
+The local `/shell` session is persistent, but it is not a complete terminal emulator or a remote-shell protocol:
 
-- each external command runs separately through the configured shell,
-- there is no job control; a stopped child is terminated rather than leaving the terminal stranded,
-- shell functions do not persist and shell startup files are not sourced,
-- there is no login-shell readline integration,
+- the one-off `!command` and `/capture` workflows do not share `/shell` state,
+- shell state is held by the live process and is not serialized across Kward restarts,
+- a stopped or unresponsive command can still require Ctrl+C or shell-session cleanup,
 - full-screen terminal state is not retained after an interactive command exits,
-- safe line-oriented output may remain in the transient TUI transcript, but full-screen terminal state is not retained and no shell output becomes part of the AI conversation.
+- while an interactive SSH session owns the terminal, Kward cannot safely intercept `?` or provide remote cwd/completion context; shell-agent prompting resumes after SSH exits,
+- safe line-oriented output may remain in the transient TUI transcript; only bounded safe output from an explicit `?` request enters the transient shell-agent context and none of it is added to the normal session history.

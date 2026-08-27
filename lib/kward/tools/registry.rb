@@ -14,6 +14,7 @@ require_relative "mcp_tool"
 require_relative "read_file"
 require_relative "read_skill"
 require_relative "run_shell_command"
+require_relative "prepare_shell_command"
 require_relative "summarize_file_structure"
 require_relative "retrieve_tool_output"
 require_relative "web_search"
@@ -91,6 +92,7 @@ module Kward
       @ask_user_question_enabled = ask_user_question_enabled
       @allowed_tool_names = allowed_tool_names&.map(&:to_s)
       @editor_prompt_session = editor_prompt_session
+      @shell_prompt_session = nil
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
@@ -119,7 +121,23 @@ module Kward
     def for_editor_prompt(editor_prompt_session)
       registry = dup
       registry.instance_variable_set(:@editor_prompt_session, editor_prompt_session)
+      registry.instance_variable_set(:@shell_prompt_session, nil)
       registry.instance_variable_set(:@allowed_tool_names, editor_prompt_tool_names)
+      registry.instance_variable_set(:@tools, registry.send(:build_tools).freeze)
+      registry.instance_variable_set(:@schemas, registry.send(:build_schema_tools).map { |tool| registry.send(:schema_with_metadata, tool) }.freeze)
+      registry
+    end
+
+    # Builds a registry scoped to one transient shell-agent turn.
+    #
+    # Shell prompts may inspect the workspace and execute explicitly requested
+    # commands through the active shell, but they cannot write workspace files
+    # through the ordinary file tools or execute against a second shell state.
+    def for_shell_prompt(shell_prompt_session)
+      registry = dup
+      registry.instance_variable_set(:@editor_prompt_session, nil)
+      registry.instance_variable_set(:@shell_prompt_session, shell_prompt_session)
+      registry.instance_variable_set(:@allowed_tool_names, shell_prompt_tool_names)
       registry.instance_variable_set(:@tools, registry.send(:build_tools).freeze)
       registry.instance_variable_set(:@schemas, registry.send(:build_schema_tools).map { |tool| registry.send(:schema_with_metadata, tool) }.freeze)
       registry
@@ -423,11 +441,12 @@ module Kward
     end
 
     def shell_payload(args)
+      shell_cwd = @shell_prompt_session&.shell&.cwd
       {
         tool_name: "run_shell_command",
         command: args[:command] || args["command"],
-        timeout_seconds: args[:timeout_seconds] || args["timeout_seconds"] || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS,
-        cwd: @workspace.respond_to?(:root) ? @workspace.root.to_s : nil
+        timeout_seconds: args[:timeout_seconds] || args["timeout_seconds"] || @shell_prompt_session&.timeout_seconds || Workspace::DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        cwd: shell_cwd || (@workspace.respond_to?(:root) ? @workspace.root.to_s : nil)
       }.compact
     end
 
@@ -503,6 +522,7 @@ module Kward
     def build_schema_tools
       tools = @tools.values_at(*CORE_TOOL_NAMES)
       tools << @tools["replace_editor_buffer"] if @tools["replace_editor_buffer"]
+      tools << @tools["prepare_shell_command"] if @tools["prepare_shell_command"]
       tools << @tools["git_commit"] if @tools["git_commit"]
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
@@ -529,7 +549,7 @@ module Kward
         Tools::ReadFile.new(workspace: @workspace),
         Tools::WriteFile.new(workspace: @workspace),
         Tools::EditFile.new(workspace: @workspace),
-        Tools::RunShellCommand.new(workspace: @workspace),
+        shell_command_tool,
         Tools::CodeSearch.new(code_search: @code_search),
         Tools::SummarizeFileStructure.new(workspace: @workspace),
         Tools::ContextForTask.new(workspace: @workspace),
@@ -537,12 +557,26 @@ module Kward
         Tools::RetrieveToolOutput.new
       ]
       tools << Tools::ReplaceEditorBuffer.new(editor_prompt_session: @editor_prompt_session) if @editor_prompt_session
+      tools << Tools::PrepareShellCommand.new(shell_prompt_session: @shell_prompt_session) if @shell_prompt_session
       tools
+    end
+
+    def shell_command_tool
+      if @shell_prompt_session
+        Tools::RunShellCommand.new(shell_prompt_session: @shell_prompt_session)
+      else
+        Tools::RunShellCommand.new(workspace: @workspace)
+      end
     end
 
     def editor_prompt_tool_names
       readonly_tools = CORE_TOOL_NAMES - %w[write_file edit_file run_shell_command]
       readonly_tools + ["replace_editor_buffer"]
+    end
+
+    def shell_prompt_tool_names
+      readonly_tools = CORE_TOOL_NAMES - %w[write_file edit_file run_shell_command]
+      readonly_tools + %w[run_shell_command prepare_shell_command]
     end
 
     def web_search_available?

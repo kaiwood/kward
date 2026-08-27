@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `?` shell prompts for transient, context-aware assistance inside `/shell`, including shared shell-state commands and prepare-without-execute command drafts.
 - Added `Ctrl+.` in Modern editor mode to open an in-editor prompt line for communicating with the dedicated editor agent.
 - Added Vibe `:prompt <instruction>` support, allowing the agent to inspect and replace the active in-memory editor buffer without saving it automatically.
 - Added current-buffer word completion to the integrated editor, with repeated Tab presses cycling nearby matches and existing smart indentation retained when no match exists.
@@ -14,6 +15,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- `/shell` now keeps one persistent local shell process per tab so shell variables, functions, aliases, and directory changes are shared by user and agent commands.
+- Shell-agent turns use a transient per-tab context and receive only bounded, sanitized output after an explicit `?` request; ordinary shell output remains outside model context.
 - Vibe editor-agent turns now use an isolated, configurable model/reasoning context, remain visible with a status-line spinner, and stay out of normal chat transcripts and session history.
 - Removed the obsolete GPT-5.6 Luna Responses Lite compatibility workaround so Luna requests retain Kward's identity and standard Codex payload.
 

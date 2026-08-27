@@ -65,9 +65,9 @@ module Kward
         )
       end
 
-      def run_interactive_turn(agent, input, display_input: nil, tool_registry: nil, editor_prompt_session: nil, suppress_transcript: false)
+      def run_interactive_turn(agent, input, display_input: nil, tool_registry: nil, editor_prompt_session: nil, suppress_transcript: false, busy_label: "You>", on_complete: nil)
         prepare_memory_context(agent.conversation, input) if agent.respond_to?(:conversation) && !suppress_transcript
-        return run_blocking_interactive_turn(agent, input, display_input: display_input, tool_registry: tool_registry, suppress_transcript: suppress_transcript) unless prompt_interface?
+        return run_blocking_interactive_turn(agent, input, display_input: display_input, tool_registry: tool_registry, suppress_transcript: suppress_transcript, on_complete: on_complete) unless prompt_interface?
 
         queued_inputs = []
         cancellation = Cancellation.new
@@ -84,7 +84,7 @@ module Kward
         markdown_chunks = []
         answer = nil
         error = nil
-        @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+        @prompt.begin_busy_input(busy_label) if @prompt.respond_to?(:begin_busy_input)
         print_user_transcript(input, display_input: display_input) unless suppress_transcript
 
         worker = Thread.new do
@@ -128,9 +128,11 @@ module Kward
         else
           drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
         end
+        completed = !cancelled && !busy_replacement_agent? && !error
+        on_complete&.call(successful: completed, cancelled: cancelled, error: error, answer: answer)
         raise error if error && !error.is_a?(Cancellation::CancelledError) && !busy_replacement_agent?
 
-        @prompt.commit_editor_prompt(editor_prompt_session) if editor_prompt_session && !cancelled && !busy_replacement_agent?
+        @prompt.commit_editor_prompt(editor_prompt_session) if editor_prompt_session && completed
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || cancelled || busy_replacement_agent? || stream_state[:streamed] || answer.to_s.empty?
         persist_memory_state(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript && queued_inputs.empty? && !cancelled
@@ -338,7 +340,7 @@ module Kward
         ModelInfo.reasoning_supported?(current_model_provider, model)
       end
 
-      def run_blocking_interactive_turn(agent, input, display_input: nil, tool_registry: nil, suppress_transcript: false)
+      def run_blocking_interactive_turn(agent, input, display_input: nil, tool_registry: nil, suppress_transcript: false, on_complete: nil)
         streamed = false
         markdown_chunks = []
         answer = agent.ask(input, **agent_display_options(display_input, tool_registry: tool_registry)) do |event|
@@ -348,6 +350,7 @@ module Kward
         @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || streamed || answer.to_s.empty?
         persist_memory_state(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
+        on_complete&.call(successful: true, cancelled: false, error: nil, answer: answer)
         []
       end
 

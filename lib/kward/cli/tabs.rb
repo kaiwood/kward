@@ -35,6 +35,7 @@ module Kward
         :unread,
         :pending_question,
         :shell,
+        :shell_agent,
         :transient_shell_entries,
         :error_reported,
         :local_busy_activity,
@@ -317,6 +318,7 @@ module Kward
           unread: false,
           pending_question: nil,
           shell: nil,
+          shell_agent: nil,
           transient_shell_entries: [],
           error_reported: false,
           local_busy_activity: nil
@@ -418,12 +420,14 @@ module Kward
         end
 
         if @tabs.length <= 1
+          close_ekwsh_session(tab.shell) if tab&.shell && respond_to?(:close_ekwsh_session, true)
           @tabs.clear
           persist_tabs
           return PromptInterface::EXIT_INPUT
         end
 
         stop_tab_live_view
+        close_ekwsh_session(tab.shell) if tab&.shell && respond_to?(:close_ekwsh_session, true)
         tab.session&.delete_if_unused if tab&.session.respond_to?(:delete_if_unused)
         tab.driver.close if tab.driver.respond_to?(:close)
         @tabs.delete_at(@active_tab_index)
@@ -462,7 +466,9 @@ module Kward
         tab.seen_events = 0
         tab.queued_inputs.clear
         tab.steering = nil
+        close_ekwsh_session(tab.shell) if tab.shell && respond_to?(:close_ekwsh_session, true)
         tab.shell = nil
+        tab.shell_agent = nil
         tab.clear_transient_shell_entries
         tab.stream_state = new_tab_stream_state(tab.driver)
         tab.markdown_chunks.clear
@@ -959,11 +965,12 @@ module Kward
       def stop_tabs
         stop_tab_live_view
         Array(@tabs).each do |tab|
-          next unless tab&.running?
-
-          tab.cancellation&.cancel!
-          tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
-          tab.thread&.join(0.2)
+          if tab&.running?
+            tab.cancellation&.cancel!
+            tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
+            tab.thread&.join(0.2)
+          end
+          close_ekwsh_session(tab.shell) if tab&.shell && respond_to?(:close_ekwsh_session, true)
         rescue StandardError
           nil
         end

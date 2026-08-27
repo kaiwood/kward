@@ -15,6 +15,7 @@ Tools also enforce important boundaries:
 | Category | Tools | Guide |
 | --- | --- | --- |
 | Workspace tools | `list_directory`, `read_file`, `context_for_task`, `context_budget_stats`, `summarize_file_structure`, `write_file`, `edit_file`, `run_shell_command` | [Workspace tools](workspace-tools.md) |
+| Shell prompt tools | `run_shell_command`, `prepare_shell_command` (available only to the transient `?` shell assistant) | [Embedded shell](shell.md) |
 | Web tools | `web_search`, `fetch_content`, `fetch_raw` | [Web search](web-search.md) |
 | Code search | `code_search` | [Code search](code-search.md) |
 | Context and interaction tools | `read_skill`, `retrieve_tool_output`, `ask_user_question` | [Context tools](context-tools.md) |

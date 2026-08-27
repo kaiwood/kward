@@ -106,12 +106,16 @@ this interface.
 ## Boundaries and limits
 
 The current implementation protects **model-requested command workers only**.
+The transient `?` shell assistant is intentionally not one of those workers: its
+`run_shell_command` calls use the active user-owned `/shell` process so shell
+state can persist.
+
 It does not sandbox:
 
 - the Kward Ruby host process;
 - model-provider, search-provider, or RPC traffic;
 - trusted Ruby plugins;
-- MCP servers, lifecycle hooks, `/shell`, `!command`, `/capture`, or `/pty`.
+- MCP servers, lifecycle hooks, `/shell`, `?` shell-agent commands, `!command`, `/capture`, or `/pty`.
 
 Sandboxed command workers receive a minimal environment: Kward preserves only
 basic terminal, locale, and path variables, then supplies a private `HOME` and

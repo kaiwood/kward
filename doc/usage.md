@@ -78,7 +78,7 @@ For several commands, enter the embedded Kward shell:
 /shell
 ```
 
-`/shell` opens `ekwsh`, a Kward-native command mode that preserves state such as the current directory, environment variables, and aliases between commands. External commands receive an interactive PTY by default, so `git log`, `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer for bounded, transcript-friendly output. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
+`/shell` opens `ekwsh`, a Kward-native command mode with one persistent local shell process. It preserves state such as the current directory, environment variables, functions, and aliases between commands. Prefix a line with `?` inside `/shell` to ask a transient shell assistant about the latest output, execute an explicit state change, or prepare a command without running it. External commands receive an interactive PTY by default, so `git log`, `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer for bounded, transcript-friendly output. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
 
 ## Shell commands
 
@@ -123,7 +123,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/git` | review uncommitted changes, stage files, and commit. |
 | `/diff` | open the file changes recorded in the current session. |
 | `/files` | browse project files in a nested tree and open them in the editor. |
-| `/shell` | run stateful workspace commands with interactive PTY support. |
+| `/shell` | run stateful workspace commands with interactive PTY support and ask the shell agent with `?`. |
 | `/capture <command>` | run a bounded one-shot command and retain its output in the transcript. |
 | `/pty <command>` | explicitly hand the terminal to an interactive command; retained for compatibility with existing workflows. |
 | `/settings` | configure models, accounts, memory, interface, tools, context, personalization, and logging. |

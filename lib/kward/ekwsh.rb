@@ -18,8 +18,9 @@ module Kward
     DEFAULT_TIMEOUT_SECONDS = 300
     DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
     DEFAULT_HISTORY_LIMIT = 1_000
+    CONTEXT_OUTPUT_BYTES = 32_000
 
-    attr_reader :cwd
+    attr_reader :cwd, :last_command, :timeout_seconds
 
     def command_shell
       @shell
@@ -43,6 +44,8 @@ module Kward
       @shell = shell.to_s.empty? ? DEFAULT_SHELL : shell.to_s
       @timeout_seconds = timeout_seconds.to_i.positive? ? timeout_seconds.to_i : DEFAULT_TIMEOUT_SECONDS
       @max_output_bytes = max_output_bytes.to_i.positive? ? max_output_bytes.to_i : DEFAULT_MAX_OUTPUT_BYTES
+      @last_command = nil
+      @last_result = nil
     end
 
     def prompt_label
@@ -53,7 +56,45 @@ module Kward
       command = input.to_s.strip
       return Result.new(output: "", exit_status: 0) if command.empty?
 
-      run_expanded_command(command, cancellation: cancellation, &block)
+      result = run_expanded_command(command, cancellation: cancellation, &block)
+      remember_result(command, result)
+      result
+    end
+
+    # Runs a command for the shell assistant without handing it the terminal.
+    # Built-ins still execute in this Ekwsh instance so their state persists.
+    def run_for_agent(input, timeout_seconds: nil, cancellation: nil)
+      command = input.to_s.strip
+      return run(command, cancellation: cancellation) if command.empty?
+
+      result = run(command, cancellation: cancellation)
+      return result unless result.interactive_command
+
+      result = execute(
+        result.interactive_command,
+        display_command: command,
+        timeout_seconds: timeout_seconds,
+        cancellation: cancellation
+      )
+      remember_result(command, result)
+      result
+    end
+
+    # Records the output of an interactive command after terminal handoff.
+    def record_interactive_result(output:, exit_status:)
+      return unless @last_command
+
+      @last_result = Result.new(output: ANSI.sanitize_transcript(output.to_s), exit_status: exit_status)
+    end
+
+    # Returns bounded shell state for an explicit shell-agent prompt.
+    def context_snapshot(max_output_bytes: CONTEXT_OUTPUT_BYTES)
+      {
+        cwd: @cwd,
+        last_command: @last_command,
+        exit_status: @last_result&.exit_status,
+        last_output: context_output(@last_result&.output, max_output_bytes)
+      }
     end
 
     def complete(input, cursor)
@@ -522,12 +563,13 @@ module Kward
       key.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
     end
 
-    def execute(command, display_command: command, cancellation: nil)
+    def execute(command, display_command: command, timeout_seconds: nil, cancellation: nil)
       output = command_echo(display_command)
       streamed = block_given?
       yield output.dup if streamed
+      timeout = effective_timeout(timeout_seconds)
       result = external_command_runner.new(
-        timeout_seconds: @timeout_seconds,
+        timeout_seconds: timeout,
         max_output_bytes: @max_output_bytes,
         terminate_on_output_limit: true
       ).run(@shell, "-c", command, env: @env, cwd: @cwd, cancellation: cancellation) do |_stream, chunk|
@@ -537,7 +579,7 @@ module Kward
       end
       append_output_newline(output) { |text| yield text if streamed }
       exit_status = result.timed_out || result.truncated ? 1 : (result.exit_status || 1)
-      append_streamed(output, "ekwsh: command timed out after #{@timeout_seconds} seconds\n", streamed) { |text| yield text } if result.timed_out
+      append_streamed(output, "ekwsh: command timed out after #{timeout} seconds\n", streamed) { |text| yield text } if result.timed_out
       append_streamed(output, "ekwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n", streamed) { |text| yield text } if result.truncated
       append_streamed(output, "Exit status: #{exit_status}\n", streamed) { |text| yield text } unless exit_status.zero?
       Result.new(output: output, exit_status: exit_status, streamed: streamed)
@@ -547,6 +589,28 @@ module Kward
       Result.new(output: output, exit_status: 130, streamed: streamed)
     rescue Errno::ENOENT => e
       Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 127)
+    end
+
+    def effective_timeout(timeout_seconds)
+      timeout = timeout_seconds.to_i
+      timeout.positive? ? timeout : @timeout_seconds
+    end
+
+    def remember_result(command, result)
+      @last_command = command.to_s
+      @last_result = result
+    end
+
+    def context_output(output, max_output_bytes)
+      text = ANSI.sanitize_transcript(output.to_s)
+      limit = max_output_bytes.to_i
+      return text if limit <= 0 || text.bytesize <= limit
+
+      prefix = "[Earlier output omitted; showing the end of the command output.]\n"
+      tail_limit = [limit - prefix.bytesize, 0].max
+      tail = text.byteslice(-tail_limit, tail_limit).to_s if tail_limit.positive?
+      value = "#{prefix}#{tail}"
+      ANSI.normalize_transcript_encoding(value.byteslice(-limit, limit).to_s)
     end
 
     def external_command_runner

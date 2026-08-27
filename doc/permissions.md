@@ -176,6 +176,7 @@ The policy runs before Kward dispatches a model-requested tool. It does not cons
 - a permitted shell command can access files, processes, credentials, and network services available to your user account;
 - command-text rules are useful review controls, not a reliable way to enforce network destinations or all subprocess behavior;
 - direct commands that you type yourself—`!command`, `/capture`, `/shell`, and `/pty`—are treated as your actions and are outside this first policy scope;
+- commands run by the transient `?` shell assistant go through the normal permission and hook checks but deliberately use the user-owned `/shell` process, so the command sandbox cannot contain them;
 - plugins, hooks, and MCP servers are trusted local extensions with their own process access.
 
 For sensitive work, use a restricted operating-system account, container, virtual machine, or disposable checkout. [Command sandboxing](sandboxing.md) is a separate, opt-in operating-system boundary for model-requested `run_shell_command` workers. It can add filesystem and child-network restrictions, but does not cover Kward's host process, extensions, or direct interactive commands.

@@ -540,6 +540,21 @@ module Kward
       perform_pending_transcript_redraw
     end
 
+    # Prefills the next composer input without submitting it.
+    def prefill_input(value)
+      @mutex.synchronize do
+        @composer.prefill_input = value.to_s
+      end
+    end
+
+    # Updates the visible prompt label while the composer is active.
+    def update_prompt_label(label)
+      @mutex.synchronize do
+        @prompt_label = label.to_s
+        render_prompt_locked if @started && @asking
+      end
+    end
+
     def yes?(message, default: false)
       answer = ask("#{message} #{default ? "[Y/n]" : "[y/N]"}")
       return default if answer.nil?
