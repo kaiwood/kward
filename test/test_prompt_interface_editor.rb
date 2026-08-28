@@ -137,6 +137,18 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_equal :text, editor.language
   end
 
+  def test_prompt_interface_opens_every_supported_scratchpad_language
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+
+    Kward::ScratchpadLanguages::LANGUAGES.each do |language, definition|
+      prompt.send(:open_scratchpad, language)
+      editor = prompt.instance_variable_get(:@editor_state)
+
+      assert_equal language, editor.language
+      assert_equal definition.fetch(:display_path), editor.display_path
+    end
+  end
+
   def test_prompt_interface_modern_ctrl_s_prompts_for_scratchpad_filename
     Dir.mktmpdir do |dir|
       Dir.chdir(dir) do
@@ -249,8 +261,12 @@ class TestPromptInterfaceEditor < KwardTestCase
     editor.insert("puts 'ok'\n")
 
     prompt.send(:handle_editor_key, "\x12")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
 
-    assert_equal "puts 'ok'\n\n__END__\nok\n", editor.buffer
+    assert_equal "puts 'ok'\n", editor.buffer
+    result = prompt.instance_variable_get(:@editor_runner_state).result
+    assert_equal "ok\n", result.output
+    assert_equal 0, result.exit_status
   end
 
   def test_prompt_interface_modern_csi_u_ctrl_r_runs_ruby_scratchpad
@@ -260,20 +276,97 @@ class TestPromptInterfaceEditor < KwardTestCase
     editor.insert("puts 'ok'\n")
 
     prompt.send(:handle_editor_key, "\e[114;5u")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
 
-    assert_equal "puts 'ok'\n\n__END__\nok\n", editor.buffer
+    assert_equal "puts 'ok'\n", editor.buffer
+    assert_equal "ok\n", prompt.instance_variable_get(:@editor_runner_state).result.output
   end
 
-  def test_prompt_interface_vibe_run_writes_ruby_output_after_end_marker
+  def test_prompt_interface_vibe_run_shows_ruby_output_without_changing_buffer
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
     assert prompt.send(:open_scratchpad, :ruby)
     editor = prompt.instance_variable_get(:@editor_state)
     editor.insert("puts DATA.read.upcase\n\n__END__\nfoo\n")
 
     prompt.send(:execute_vibe_command, "run")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
 
-    assert_equal "puts DATA.read.upcase\n\n__END__\nFOO\n", editor.buffer
-    assert_equal "Ran ruby (exit 0)", editor.status
+    assert_equal "puts DATA.read.upcase\n\n__END__\nfoo\n", editor.buffer
+    result = prompt.instance_variable_get(:@editor_runner_state).result
+    assert_equal "FOO\n", result.output
+    assert_equal 0, result.exit_status
+    assert_includes editor.status, "Exit 0"
+  end
+
+  def test_prompt_interface_runner_output_is_read_only_and_closes
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.insert("puts 'output'\n")
+    normal_rows, = prompt.send(:editor_layout, 80, 12)
+
+    prompt.send(:run_editor_buffer)
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+    rows, = prompt.send(:editor_layout, 80, 12)
+
+    rendered = strip_ansi(rows.join("\n"))
+    assert_equal normal_rows.length, rows.length
+    assert_operator rendered.index("Output"), :>, rendered.index("Edit")
+    assert_includes rendered, "output"
+    assert prompt.send(:editor_runner_output_visible?)
+    prompt.send(:handle_editor_key, "\e")
+    refute prompt.send(:editor_runner_output_visible?)
+    assert_equal "puts 'output'\n", editor.buffer
+  end
+
+  def test_prompt_interface_runner_output_supports_virtual_mouse_selection
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "modern")
+    prompt.define_singleton_method(:screen_width) { 80 }
+    prompt.define_singleton_method(:screen_height) { 14 }
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.insert('puts "alpha\nbeta"' + "\n")
+    output.truncate(0)
+    output.rewind
+
+    prompt.send(:run_editor_buffer)
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+    output_row = prompt.send(:editor_runner_output_content_top_row)
+    prompt.send(:handle_editor_key, "\e[<0;3;#{output_row}M")
+    prompt.send(:handle_editor_key, "\e[<32;7;#{output_row + 1}M")
+    prompt.send(:handle_editor_key, "\e[<0;7;#{output_row + 1}m")
+
+    assert_equal "alpha\nbeta", prompt.send(:editor_runner_selected_text)
+    assert_includes prompt.send(:editor_layout, 80, 14).first.join, Kward::TerminalSequences::SGR_INVERSE
+
+    prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_C)
+
+    assert_includes output.string, Base64.strict_encode64("alpha\nbeta")
+    refute prompt.send(:editor_runner_selection_active?)
+  end
+
+  def test_prompt_interface_vibe_runner_selection_yanks_with_y
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "vibe")
+    prompt.define_singleton_method(:screen_width) { 80 }
+    prompt.define_singleton_method(:screen_height) { 14 }
+    assert prompt.send(:open_scratchpad, :ruby)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.insert('puts "alpha\\nbeta"' + "\n")
+    output.truncate(0)
+    output.rewind
+
+    prompt.send(:run_editor_buffer)
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+    output_row = prompt.send(:editor_runner_output_content_top_row)
+    prompt.send(:handle_editor_key, "\e[<0;3;#{output_row}M")
+    prompt.send(:handle_editor_key, "\e[<32;7;#{output_row + 1}M")
+    prompt.send(:handle_editor_key, "\e[<0;7;#{output_row + 1}m")
+    prompt.send(:handle_editor_key, "\e[121;1u")
+
+    assert_includes output.string, Base64.strict_encode64("alpha\nbeta")
+    refute prompt.send(:editor_runner_selection_active?)
   end
 
   def test_prompt_interface_modern_ctrl_s_saves_file

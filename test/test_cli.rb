@@ -879,6 +879,40 @@ class TestCLI < KwardTestCase
     assert_equal [action], cli.instance_variable_get(:@pending_inputs)
   end
 
+  def test_scratchpad_accepts_language_alias
+    prompt = FakePrompt.new([])
+    opened = []
+    prompt.define_singleton_method(:scratchpad) { |language| opened << language }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:handle_local_slash_command, "/scratchpad js", nil, nil)
+
+    assert_equal [:javascript], opened
+  end
+
+  def test_scratchpad_help_lists_language_choices
+    prompt = FakePrompt.new([])
+    prompt.define_singleton_method(:scratchpad) { |_language| }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:handle_local_slash_command, "/scratchpad help", nil, nil)
+
+    assert_includes prompt.output.join, "Supported scratchpad languages:"
+    assert_includes prompt.output.join, "javascript (js, jsx, mjs, cjs)"
+  end
+
+  def test_scratchpad_rejects_unknown_language
+    prompt = FakePrompt.new([])
+    opened = []
+    prompt.define_singleton_method(:scratchpad) { |language| opened << language }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:handle_local_slash_command, "/scratchpad pascal", nil, nil)
+
+    assert_empty opened
+    assert_includes prompt.output.join, "Unknown scratchpad language"
+  end
+
   def test_interactive_loop_opens_scratchpad_without_model_turn
     prompt = FakePrompt.new(["/scratchpad ruby", "/exit"])
     opened = []

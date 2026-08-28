@@ -160,7 +160,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/skill <name>` | activate a configured skill explicitly for the current session. |
 | `/stats [range]` | summarize enabled local telemetry. |
 | `/hooks ...` | inspect, diagnose, trust, or untrust lifecycle hooks. |
-| `/scratchpad [text|markdown|ruby]` | open an unsaved editor buffer. |
+| `/scratchpad [language|help]` | open an unsaved, syntax-highlighted editor buffer; `/scratchpad` alone opens plain text. |
 | `/redraw` | fix terminal drawing after resize or glitches. |
 | `/reload` | reload installed plugins. |
 | `/exit` | leave Kward. |

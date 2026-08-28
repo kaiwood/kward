@@ -31,6 +31,7 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
       "data.json" => :json,
       "config.yml" => :yaml,
       "script.sh" => :shell,
+      "lib/build.mk" => :makefile,
       "index.html" => :html,
       "styles.css" => :css,
       "styles.scss" => :scss,
@@ -44,7 +45,10 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
       "App.swift" => :swift,
       "Main.kt" => :kotlin,
       "init.lua" => :lua,
-      "query.sql" => :sql
+      "query.sql" => :sql,
+      "lib/example.cr" => :crystal,
+      "lib/example.ex" => :elixir,
+      "notebook.jl" => :julia
     }.each do |path, language|
       assert_equal language, prompt.send(:editor_detect_syntax_language, path), path
     end

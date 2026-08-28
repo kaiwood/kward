@@ -1,5 +1,6 @@
 require "fileutils"
-require_relative "../../scratchpad_runner"
+require_relative "../../scratchpad_languages"
+require_relative "runner"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -243,8 +244,12 @@ module Kward
       end
 
       def close_editor
+        cancel_editor_runner
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked
+        @editor_runner_state = nil
+        @editor_runner_output_visible = false
+        clear_editor_runner_selection
         @editor_text_width = nil
         @editor_save_as_active = false
         @editor_save_as_buffer = ""
@@ -261,6 +266,7 @@ module Kward
       def handle_editor_key(key)
         return if key.nil?
         return handle_editor_prompt_key(key) if @editor_prompt_active
+        return handle_editor_runner_output_key(key) if editor_runner_output_visible?
 
         reset_editor_word_completion unless editor_word_completion_tab_key?(key) && !editor_search_active?
         mouse_result = handle_editor_mouse_key(key)
@@ -1387,45 +1393,16 @@ module Kward
         true
       end
 
-      def run_editor_buffer
-        return false unless @editor_state
-
-        language = @editor_state.language || editor_syntax_language
-        result = ScratchpadRunner.run(language, @editor_state.buffer)
-        @editor_state.replace_range(0, @editor_state.buffer.length, result.buffer)
-        @editor_state.status = "Ran #{language} (exit #{result.exit_status})"
-        true
-      rescue StandardError => e
-        @editor_state.status = "Run failed: #{e.message}" if @editor_state
-        false
-      end
-
       def normalize_scratchpad_language(language)
-        case language.to_s.strip.downcase
-        when "", "text", "txt"
-          :text
-        when "markdown", "md"
-          :markdown
-        when "ruby", "rb"
-          :ruby
-        else
-          :text
-        end
+        ScratchpadLanguages.normalize(language)
       end
 
       def scratchpad_display_path(language)
-        case language.to_sym
-        when :markdown
-          "scratchpad.md"
-        when :ruby
-          "scratchpad.rb"
-        else
-          "scratchpad.txt"
-        end
+        ScratchpadLanguages.display_path(language)
       end
 
       def scratchpad_status_text(language)
-        runnable = language.to_sym == :ruby
+        runnable = ScratchpadLanguages.runnable?(language)
         case current_editor_mode
         when "vibe"
           runnable ? "NORMAL · i insert · :w filename save · :q quit · :run run" : "NORMAL · i insert · :w filename save · :q quit"

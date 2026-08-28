@@ -4,6 +4,14 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Extended `/scratchpad` to open all 26 built-in syntax-highlighted languages through canonical names or familiar file-extension shortcuts, with `/scratchpad help` for discovery.
+
+### Changed
+
+- Ruby scratchpad runs now preserve the source buffer and show captured output in a scrollable, cancellable lower-half output pane instead of appending it after `__END__`; mouse drag selection and `Ctrl+C`/Vibe `y` copy clean output without pane borders.
+
 ## [0.83.0] - 2026-08-28
 
 ### Added

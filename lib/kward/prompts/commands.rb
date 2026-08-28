@@ -29,7 +29,7 @@ module Kward
       { name: "files", description: "Browse project files.", argument_hint: "" },
       { name: "shell", description: "Open the embedded Kward shell.", argument_hint: "" },
       { name: "capture", description: "Run a command with bounded transcript capture.", argument_hint: "<command>" },
-      { name: "scratchpad", description: "Open an unsaved editor buffer.", argument_hint: "[text|markdown|ruby]" },
+      { name: "scratchpad", description: "Open an unsaved editor buffer.", argument_hint: "[language|help]" },
       { name: "pty", description: "Run a command in an interactive PTY passthrough session.", argument_hint: "<command>" },
       { name: "tab", description: "Manage tabs.", argument_hint: "[1-n|move|close|new|name|worktree]" },
       { name: "worktree", description: "Manage the active tab's linked Git worktree.", argument_hint: "[activate|detach|status|merge|merge abort|remove]" },

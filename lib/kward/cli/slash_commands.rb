@@ -1,3 +1,5 @@
+require_relative "../scratchpad_languages"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
@@ -304,11 +306,16 @@ module Kward
       end
 
       def open_scratchpad_command(argument)
-        if @prompt.respond_to?(:scratchpad)
-          @prompt.scratchpad(scratchpad_language_argument(argument))
-        else
-          runtime_output("The scratchpad is only available in the interactive prompt.")
+        unless @prompt.respond_to?(:scratchpad)
+          return runtime_output("The scratchpad is only available in the interactive prompt.")
         end
+
+        value = argument.to_s.strip
+        return runtime_output(ScratchpadLanguages.help_text) if value.casecmp("help").zero?
+
+        @prompt.scratchpad(ScratchpadLanguages.normalize(value))
+      rescue ArgumentError => e
+        runtime_output(e.message)
       end
 
       def queue_editor_prompt_action(result)
@@ -316,15 +323,6 @@ module Kward
 
         @pending_inputs ||= []
         @pending_inputs.unshift(result)
-      end
-
-      def scratchpad_language_argument(argument)
-        value = argument.to_s.strip.downcase
-        return :text if value.empty? || value == "text"
-        return :markdown if ["markdown", "md"].include?(value)
-        return :ruby if ["ruby", "rb"].include?(value)
-
-        :text
       end
 
       def open_project_files_browser

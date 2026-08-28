@@ -53,6 +53,7 @@ module Kward
           keywords: %w[begin if while for try let quote function macro module baremodule struct mutable abstract primitive type do end else elseif catch finally true false nothing]
         },
         makefile: {
+          extensions: %w[.mk],
           filenames: %w[Makefile makefile GNUmakefile],
           line_comment: "#",
           keywords: %w[ifeq ifneq ifdef ifndef else endif include define endef export unexport override]

@@ -50,11 +50,16 @@ For an unsaved buffer, open a scratchpad:
 ```text
 /scratchpad
 /scratchpad markdown
-/scratchpad ruby
+/scratchpad js
+/scratchpad python
+/scratchpad help
 ```
 
-Scratchpads start as virtual editor buffers named `scratchpad.txt`, `scratchpad.md`, or `scratchpad.rb`. In Vibe mode, save one to a real file with `:w filename`.
-Ruby scratchpads can run with `:run` in Vibe mode or `Ctrl+R` in Modern mode; Kward executes the buffer and writes combined output after `__END__`, replacing any previous output there.
+Scratchpads accept canonical language names and familiar file-extension shortcuts. For example, `js` selects JavaScript, `py` selects Python, `rb` selects Ruby, `yml` selects YAML, `cs` selects C#, and `cpp` selects C++. Use `/scratchpad help` to print the complete list of names and aliases.
+
+All 26 built-in syntax-highlighted languages are available: Ruby, ERB, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL. Scratchpads use a matching virtual filename such as `scratchpad.js` or `scratchpad.py`; in Vibe mode, save one to a real file with `:w filename`.
+
+Ruby scratchpads can run with `:run` in Vibe mode or `Ctrl+R` in Modern mode. Kward keeps the source buffer unchanged and opens a read-only output pane in the lower half of the editor with the captured output, exit status, and duration. Drag with the mouse to make a virtual selection inside the output, then press `Ctrl+C` to copy it (`y` in Vibe mode). Only the selected output text is copied; pane borders are excluded. Press `Esc` to return to editing, use the arrow or page keys to scroll, and press `Ctrl+C` without a selection to cancel a running buffer. Other language scratchpads currently provide editing and highlighting only.
 
 ```ruby
 puts "foo"
@@ -63,14 +68,14 @@ __END__
 foo
 ```
 
-The next run receives the current `__END__` section as Ruby `DATA`, then replaces it with the new output.
+The next run receives the current `__END__` section as Ruby `DATA`; the output window is refreshed without changing the source buffer.
 
 You can also type a relative path yourself and press `Enter`. If the file does not exist, Kward asks whether to create it.
 
 A few things to know:
 
 - `$` only opens the editor when it is the first character in the composer.
-- `/scratchpad` opens a plain-text scratchpad; pass `markdown` or `ruby` to pick another mode.
+- `/scratchpad` opens a plain-text scratchpad; pass a language name or shortcut to select syntax highlighting. `/scratchpad help` lists the available choices.
 - Once a file or scratchpad opens, the composer becomes the editor.
 - Save or quit to return to normal chat.
 - If the file changed on disk while you were editing, Kward asks before overwriting it.

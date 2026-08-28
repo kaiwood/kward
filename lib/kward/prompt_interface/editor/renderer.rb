@@ -7,6 +7,8 @@ module Kward
       private
 
       def editor_layout(width, height = screen_height)
+        return editor_split_layout(width, height) if editor_runner_output_visible?
+
         content_width = [width - 4, 1].max
         visible_count = editor_visible_line_count(height: height, width: width)
         line_index, column = @editor_state.cursor_line_and_column
@@ -21,7 +23,107 @@ module Kward
         end
       end
 
-      def editor_unwrapped_layout(width, content_width, visible_count, line_index, column, text_width)
+      def editor_split_layout(width, height)
+        content_width = [width - 4, 1].max
+        source_count, output_count = editor_split_visible_counts(height: height, width: width)
+        line_index, column = @editor_state.cursor_line_and_column
+        gutter_width = editor_line_number_gutter_width
+        text_width = editor_text_width(content_width, gutter_width)
+        sync_editor_wrap_state(text_width)
+        source_rows, cursor_row, cursor_col = if current_editor_soft_wrap?
+                                                editor_wrapped_layout(width, content_width, source_count, line_index, column, text_width, include_bottom: false)
+                                              else
+                                                editor_unwrapped_layout(width, content_width, source_count, line_index, column, text_width, include_bottom: false)
+                                              end
+        rows = source_rows + editor_runner_output_rows(width, content_width, output_count)
+        rows.concat(editor_bottom_rows(width))
+        [rows, cursor_row, cursor_col]
+      end
+
+      def editor_split_visible_counts(height:, width:)
+        # Keep one row available above the composer, matching the normal editor layout.
+        available = height - editor_bottom_rows(width).length - 5
+        available = 2 if available < 2
+        source_count = (available + 1) / 2
+        [source_count, available - source_count]
+      end
+
+      def editor_runner_output_rows(width, content_width, visible_count, include_bottom: false)
+        lines = editor_runner_output_lines(content_width)
+        maximum_scroll = [lines.length - visible_count, 0].max
+        @editor_runner_state.set_scroll_row(@editor_runner_state.scroll_row, maximum: maximum_scroll)
+        visible_lines = lines[@editor_runner_state.scroll_row, visible_count] || []
+        visible_lines << "" while visible_lines.length < visible_count
+        rows = [editor_runner_output_top_border(width)]
+        rows.concat(visible_lines.each_with_index.map do |line, index|
+          line_index = @editor_runner_state.scroll_row + index
+          selection = editor_runner_selection_range_for(line_index, ANSI.strip(line).length)
+          line = editor_overlay_selection(line, [selection], force: true) if selection
+          box_content_row(line, content_width)
+        end)
+        rows << footer_row(content_width, editor_runner_output_status)
+        rows.concat(editor_bottom_rows(width)) if include_bottom
+        rows
+      end
+
+      def editor_runner_output_visible_count(height: screen_height, width: screen_width)
+        editor_split_visible_counts(height: height, width: width).last
+      end
+
+      def editor_runner_output_scroll_max
+        width = [screen_width - 4, 1].max
+        lines = editor_runner_output_lines(width)
+        [lines.length - editor_runner_output_visible_count, 0].max
+      end
+
+      def editor_runner_output_lines(width)
+        text = ANSI.sanitize_transcript(@editor_runner_state.output_text)
+        text = ANSI.strip(text) unless @color_enabled
+        text = text.chomp
+        return ["(no output)"] if text.empty?
+
+        text.split("\n", -1).flat_map do |line|
+          wrapped = ANSI.wrap_visible(line, width)
+          wrapped.empty? ? [""] : wrapped
+        end
+      end
+
+      def editor_runner_output_top_border(width)
+        title = visible_truncate("Output #{editor_display_path}", [width - 4, 1].max)
+        plain_title = ANSI.strip(title)
+        "#{colored("╭", :primary_green)} #{title} #{colored("─" * [width - plain_title.length - 4, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
+      end
+
+      def editor_runner_output_status
+        state = @editor_runner_state
+        if state.running?
+          return "Canceling #{state.language} · please wait" if state.cancel_requested?
+
+          return "Running #{state.language} · Ctrl+C cancel · Esc close"
+        end
+
+        if (error = state.error)
+          return "Run failed: #{error.message} · Esc close"
+        end
+
+        result = state.result
+        status = if result.cancelled
+                   "Canceled"
+                 else
+                   "Exit #{result.exit_status}"
+                 end
+        status += " · #{format_runner_duration(result.duration)}"
+        status += " · output truncated" if result.truncated
+        status += " · source changed" if editor_runner_output_stale?
+        "#{status} · Ctrl+R rerun · Esc close"
+      end
+
+      def editor_runner_output_stale?
+        digest = Digest::SHA256.hexdigest(@editor_state.buffer.to_s)
+        digest != @editor_runner_state.source_digest
+      end
+
+      def editor_unwrapped_layout(width, content_width, visible_count, line_index, column, text_width, include_bottom: true)
         @editor_state.viewport_row = [[@editor_state.viewport_row, line_index - visible_count + 1].max, line_index].min
         @editor_state.viewport_row = [@editor_state.viewport_row, 0].max
         @editor_state.viewport_column = [[@editor_state.viewport_column.to_i, column - text_width + 1].max, column].min
@@ -43,13 +145,13 @@ module Kward
           box_content_row(row, content_width)
         end)
         rows << footer_row(content_width, editor_status_text)
-        rows.concat(editor_bottom_rows(width))
+        rows.concat(editor_bottom_rows(width)) if include_bottom
         cursor_row = 1 + line_index - @editor_state.viewport_row
         cursor_col = 2 + gutter_width + [[column - @editor_state.viewport_column, 0].max, text_width - 1].min
         [rows, cursor_row, cursor_col]
       end
 
-      def editor_wrapped_layout(width, content_width, visible_count, line_index, column, text_width)
+      def editor_wrapped_layout(width, content_width, visible_count, line_index, column, text_width, include_bottom: true)
         visual_rows = editor_visual_rows(text_width)
         cursor_visual_row = editor_visual_row_for(line_index, column, text_width)
         @editor_state.viewport_row = [[@editor_state.viewport_row, cursor_visual_row - visible_count + 1].max, cursor_visual_row].min
@@ -67,7 +169,7 @@ module Kward
           end
         end)
         rows << footer_row(content_width, editor_status_text)
-        rows.concat(editor_bottom_rows(width))
+        rows.concat(editor_bottom_rows(width)) if include_bottom
         line_start = editor_visual_row_start_column(line_index, column, text_width)
         cursor_row = 1 + cursor_visual_row - @editor_state.viewport_row
         cursor_col = 2 + editor_line_number_gutter_width + [[column - line_start, 0].max, text_width - 1].min
@@ -138,8 +240,8 @@ module Kward
         editor_overlay_selection(rendered, cursor_columns.map { |column| [column, column + 1] })
       end
 
-      def editor_overlay_selection(rendered, selection_ranges)
-        return rendered unless @color_enabled
+      def editor_overlay_selection(rendered, selection_ranges, force: false)
+        return rendered unless @color_enabled || force
 
         output = +""
         selected = false

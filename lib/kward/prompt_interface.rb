@@ -15,6 +15,7 @@ require_relative "terminal_sequences"
 require_relative "terminal_keys"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
+require_relative "scratchpad_languages"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
 require_relative "prompt_interface/editor/state"
@@ -32,6 +33,7 @@ require_relative "prompt_interface/git_prompt"
 require_relative "prompt_interface/overlay_renderer"
 require_relative "prompt_interface/editor/renderer"
 require_relative "prompt_interface/editor/syntax_highlighter"
+require_relative "prompt_interface/editor/runner"
 require_relative "prompt_interface/editor/auto_close_pairs"
 require_relative "prompt_interface/editor/endwise"
 require_relative "prompt_interface/editor/word_completion"
@@ -89,6 +91,7 @@ module Kward
     include EditorEndwise
     include EditorWordCompletion
     include EditorAutoIndent
+    include EditorRunner
     include ComposerRenderer
     include ComposerController
     include ModernEditorMode
@@ -191,6 +194,12 @@ module Kward
       @terminal_image_protocol = nil
       @project_browser_restore_after_editor = false
       @editor_state = nil
+      @editor_runner_state = nil
+      @editor_runner_output_visible = false
+      @editor_runner_selection_anchor = nil
+      @editor_runner_selection_cursor = nil
+      @editor_runner_mouse_dragging = false
+      @editor_runner_last_click = nil
       @editor_agent_suspended = false
       @editor_prompt_active = false
       @editor_prompt_input = ""
@@ -815,6 +824,10 @@ module Kward
 
     def restore_editor_snapshot_locked(snapshot)
       editor_was_active = editor_active?
+      cancel_editor_runner
+      @editor_runner_state = nil
+      @editor_runner_output_visible = false
+      clear_editor_runner_selection
       @editor_state = snapshot[:editor_state]&.dup
       editor_is_active = editor_active?
 
