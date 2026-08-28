@@ -62,6 +62,9 @@ module Kward
           [true, nil]
         when "tab"
           [true, handle_tab_command(argument, session_store)]
+        when "worktree"
+          handle_worktree_command(argument)
+          [true, active_tab&.agent]
         when "settings"
           configure_settings(agent.conversation)
           [true, nil]

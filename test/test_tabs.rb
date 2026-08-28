@@ -399,6 +399,25 @@ class TestTabs < KwardTestCase
     assert_equal ["Continue", "Cancel"], prompt.questions.first[:options].map { |option| option[:label] }
   end
 
+  def test_worktree_slash_command_alias_uses_the_active_tab
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+
+        handled, replacement = cli.send(:handle_local_slash_command, "/worktree", tab.agent, store)
+
+        assert handled
+        assert_same tab.agent, replacement
+        assert tab.driver.worktree.active?
+      ensure
+        remove_test_worktree(tab.driver.worktree) if defined?(tab) && tab
+      end
+    end
+  end
+
   def test_worktree_toggle_warns_for_dirty_origin_and_preserves_transcript
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|

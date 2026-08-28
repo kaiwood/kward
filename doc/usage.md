@@ -143,6 +143,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/tab worktree merge` | merge a clean worktree branch into the branch checked out in its original workspace. |
 | `/tab worktree merge abort` | abort a conflicted worktree merge in the original workspace. |
 | `/tab worktree remove` | remove a clean linked worktree while keeping its branch. |
+| `/worktree …` | alias for `/tab worktree …` on the active tab. |
 | `/session` | open the saved sessions picker or continue a previous session by path. |
 | `/resume` | alias for `/session`. |
 | `/session name <name>` | name or clear the current session. |
