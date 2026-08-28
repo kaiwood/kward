@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.83.0] - 2026-08-28
+
 ### Added
 
 - Added `?` shell prompts for transient, context-aware assistance inside `/shell`, including shared shell-state commands and prepare-without-execute command drafts.
