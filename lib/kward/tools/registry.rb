@@ -19,6 +19,7 @@ require_relative "summarize_file_structure"
 require_relative "retrieve_tool_output"
 require_relative "web_search"
 require_relative "write_file"
+require_relative "open_editor"
 require_relative "replace_editor_buffer"
 require_relative "search/code"
 require_relative "search/web"
@@ -73,8 +74,8 @@ module Kward
     # Builds tool objects and the schema list for the current frontend/config.
     #
     # @param workspace [Workspace] filesystem/shell boundary used by local tools
-    # @param prompt [Object, nil] interactive prompt bridge; must implement
-    #   `ask_user_question` before that tool is advertised
+    # @param prompt [Object, nil] interactive prompt bridge; tools such as
+    #   `ask_user_question` and `open_editor` are advertised only when supported
     # @param web_search [WebSearch] live web search implementation
     # @param web_fetch [WebFetch] specific URL fetch implementation
     # @param code_search [CodeSearch] public source/package search implementation
@@ -257,7 +258,7 @@ module Kward
         "web"
       when Tools::ReadSkill
         "skill"
-      when Tools::AskUserQuestion
+      when Tools::AskUserQuestion, Tools::OpenEditor
         "ui"
       else
         "builtin"
@@ -522,6 +523,7 @@ module Kward
     def build_schema_tools
       tools = @tools.values_at(*CORE_TOOL_NAMES)
       tools << @tools["replace_editor_buffer"] if @tools["replace_editor_buffer"]
+      tools << @tools["open_editor"] if @tools["open_editor"]
       tools << @tools["prepare_shell_command"] if @tools["prepare_shell_command"]
       tools << @tools["git_commit"] if @tools["git_commit"]
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
@@ -557,6 +559,7 @@ module Kward
         Tools::RetrieveToolOutput.new
       ]
       tools << Tools::ReplaceEditorBuffer.new(editor_prompt_session: @editor_prompt_session) if @editor_prompt_session
+      tools << Tools::OpenEditor.new(workspace: @workspace, prompt: @prompt) if editor_available?
       tools << Tools::PrepareShellCommand.new(shell_prompt_session: @shell_prompt_session) if @shell_prompt_session
       tools
     end
@@ -567,6 +570,10 @@ module Kward
       else
         Tools::RunShellCommand.new(workspace: @workspace)
       end
+    end
+
+    def editor_available?
+      @prompt&.respond_to?(:edit_file)
     end
 
     def editor_prompt_tool_names

@@ -106,6 +106,10 @@ module Kward
           @cli.send(:ask_tab_user_question, @tab, questions, cancellation: cancellation)
         end
 
+        def edit_file(path, base_dir:, allow_new:)
+          @cli.send(:open_editor_for_agent, path, base_dir: base_dir, allow_new: allow_new)
+        end
+
         def ask_tool_approval(tool_name:, args:, reason: nil)
           answers = ask_user_question([
             {
@@ -677,6 +681,10 @@ module Kward
             return next_tab_queued_input(tab) if tab.idle? && !tab.queued_inputs.empty?
             return :tab_idle if tab.idle?
 
+            next
+          end
+          if @prompt.respond_to?(:modal_active?) && @prompt.modal_active?
+            sleep 0.01
             next
           end
           poll_result = @prompt.poll_input

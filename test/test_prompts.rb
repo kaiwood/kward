@@ -16,6 +16,8 @@ class TestPrompts < KwardTestCase
     assert_includes content, "fetch_content for important human-readable pages"
     assert_includes content, "fetch_raw for machine-readable resources"
     assert_includes content, "Use code_search for package, GitHub repository, and source-code research."
+    assert_includes content, "When the user asks to open a file in the built-in editor and open_editor is advertised, use open_editor rather than read_file"
+    assert_includes content, "Opening the editor is a user-facing action and does not itself modify or save the file."
   end
 
   def test_base_prompt_includes_context_budget_and_clarification_guidance

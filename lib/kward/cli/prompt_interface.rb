@@ -99,6 +99,13 @@ module Kward
         @prompt.respond_to?(:start_stream_block) && @prompt.respond_to?(:write_delta)
       end
 
+      def open_editor_for_agent(path, base_dir:, allow_new:)
+        return false unless prompt_interface?
+        return false unless @prompt.respond_to?(:edit_file)
+
+        @prompt.edit_file(path, base_dir: base_dir, allow_new: allow_new)
+      end
+
       def emit_warning(message)
         sink = ConfigFiles.warning_sink
         sink ? sink.call(message) : warn(message)

@@ -23,7 +23,7 @@ cd ~/code/my-project
 kward edit lib/kward/agent.rb
 ```
 
-Kward uses the current directory as the workspace, opens the file in the integrated editor, and exits when you close the editor. Use `--working-directory` when the file belongs to another workspace:
+Kward uses the current directory as the workspace, opens the file in the integrated editor, and exits when you close the editor. During an interactive chat session, you can also ask Kward to open a workspace file for you; it uses the `open_editor` tool when that capability is available. Opening the editor does not change or save the file unless you choose to do so. Use `--working-directory` when the file belongs to another workspace:
 
 ```bash
 kward --working-directory ~/code/my-project edit lib/kward/agent.rb

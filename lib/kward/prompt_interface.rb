@@ -448,6 +448,12 @@ module Kward
       return false unless opened
 
       run_editor
+    rescue StandardError
+      @mutex.synchronize do
+        close_editor if editor_active?
+        render_prompt_locked if @started
+      end
+      raise
     end
 
     def scratchpad(language = :text)
