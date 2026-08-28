@@ -100,16 +100,16 @@ module Kward
           if sequence[:code] == 121 && !ctrl_modifier?(sequence[:modifier]) && @editor_state&.vibe? && editor_runner_selection_active?
             return copy_editor_runner_selection
           end
+          normalized_code = ctrl_code(sequence[:code])
+          if (ctrl_modifier?(sequence[:modifier]) || super_modifier?(sequence[:modifier])) && normalized_code == 99
+            return copy_editor_runner_selection if editor_runner_selection_active?
+            return cancel_editor_runner if ctrl_modifier?(sequence[:modifier]) && editor_runner_running?
+          end
           if ctrl_modifier?(sequence[:modifier])
-            normalized_code = ctrl_code(sequence[:code])
             return run_editor_buffer if normalized_code == 114
             if normalized_code == 113
               close_editor_runner_output
               return quit_editor
-            end
-            if normalized_code == 99
-              return copy_editor_runner_selection if editor_runner_selection_active?
-              return cancel_editor_runner if editor_runner_running?
             end
           end
           return close_editor_runner_output if sequence[:code] == 27

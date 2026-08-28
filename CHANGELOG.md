@@ -10,7 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
-- Ruby scratchpad runs now preserve the source buffer and show captured output in a scrollable, cancellable lower-half output pane instead of appending it after `__END__`; mouse drag selection and `Ctrl+C`/Vibe `y` copy clean output without pane borders.
+- Ruby scratchpad runs now preserve the source buffer and show captured output in a scrollable, cancellable lower-half output pane instead of appending it after `__END__`; mouse drag selection and `Ctrl+C`/`Cmd+C`/Vibe `y` copy clean output without pane borders.
 
 ## [0.83.0] - 2026-08-28
 

@@ -273,6 +273,8 @@ module Kward
         return mouse_result unless mouse_result == false
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
+        super_copy_result = handle_editor_super_copy_key(key)
+        return super_copy_result unless super_copy_result == false
         return handle_vibe_key(key) if @editor_state&.vibe?
         return handle_emacs_key(key) if @editor_state&.emacs?
         return handle_modern_key(key) if @editor_state&.modern?
@@ -326,6 +328,22 @@ module Kward
           elsif printable_key?(key)
             editor_insert_printable(key)
           end
+        end
+      end
+
+      def handle_editor_super_copy_key(key)
+        sequence = parse_csi_u_key(key)
+        return false unless sequence
+        return false unless super_modifier?(sequence[:modifier]) && ctrl_code(sequence[:code]) == 99
+
+        queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        return editor_search_cancel if editor_search_active?
+        return false unless editor_selection_active?
+
+        if @editor_state.vibe? && vibe_visual_mode?
+          vibe_yank_visual_selection
+        else
+          copy_editor_selection
         end
       end
 

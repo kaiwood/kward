@@ -340,7 +340,7 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_equal "alpha\nbeta", prompt.send(:editor_runner_selected_text)
     assert_includes prompt.send(:editor_layout, 80, 14).first.join, Kward::TerminalSequences::SGR_INVERSE
 
-    prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_C)
+    prompt.send(:handle_editor_key, "\e[99;9u")
 
     assert_includes output.string, Base64.strict_encode64("alpha\nbeta")
     refute prompt.send(:editor_runner_selection_active?)
@@ -717,6 +717,22 @@ class TestPromptInterfaceEditor < KwardTestCase
         assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("world")}\a"
       end
     end
+  end
+
+  def test_prompt_interface_vibe_csi_u_cmd_c_copies_selection
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "vibe")
+    assert prompt.send(:open_scratchpad, :ruby, content: "hello world")
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.selection_anchor = 0
+    editor.cursor = 5
+
+    prompt.send(:handle_editor_key, "\e[99;9u")
+
+    assert_equal "hello", editor.kill_buffer
+    assert_equal "Copied selection", editor.status
+    refute editor.selection_active?
+    assert_includes output.string, "\e]52;c;#{Base64.strict_encode64("hello")}\a"
   end
 
   def test_prompt_interface_modern_uses_shift_selection_and_clipboard_shortcuts
