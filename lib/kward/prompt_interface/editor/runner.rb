@@ -8,6 +8,11 @@ module Kward
     module EditorRunner
       private
 
+      def editor_runner_config
+        config = @editor_runners_source.respond_to?(:call) ? @editor_runners_source.call : {}
+        config.is_a?(Hash) ? config : {}
+      end
+
       def editor_runner_output_visible?
         @editor_runner_output_visible && @editor_runner_state
       end
@@ -18,6 +23,7 @@ module Kward
 
       def run_editor_buffer(source: nil)
         return false unless @editor_state
+        return false if @editor_state.readonly?
         if editor_runner_running?
           @editor_runner_output_visible = true
           @editor_state.status = "Runner already active · Ctrl+C cancel"
@@ -31,6 +37,8 @@ module Kward
         end
 
         source = source.nil? ? @editor_state.buffer.dup : source.to_s
+        source_path = @editor_state.path
+        workspace_root = prompt_workspace_root
         state = EditorRunnerState.new(language: language, source: source)
         @editor_runner_state = state
         @editor_runner_output_visible = true
@@ -38,7 +46,14 @@ module Kward
         @editor_state.status = "Running #{language} · Ctrl+C cancel"
         Thread.new do
           Thread.current.report_on_exception = false
-          result = ScratchpadRunner.run(language, source, cancelled: state.method(:cancel_requested?))
+          result = ScratchpadRunner.run(
+            language,
+            source,
+            cancelled: state.method(:cancel_requested?),
+            cwd: workspace_root,
+            source_path: source_path,
+            runner_config: editor_runner_config
+          )
           finish_editor_runner(state, result)
         rescue StandardError => e
           fail_editor_runner(state, e)

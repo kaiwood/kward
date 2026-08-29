@@ -45,6 +45,7 @@ module Kward
           editor_line_numbers_source: -> { ConfigFiles.editor_line_numbers },
           diff_view: ConfigFiles.diff_view,
           diff_view_source: -> { ConfigFiles.diff_view },
+          editor_runners_source: -> { ConfigFiles.editor_runners },
           redraw_handler: method(:redraw_interactive_prompt)
         )
         if @prompt.method(:start).parameters.any? { |kind, name| [:key, :keyreq].include?(kind) && name == :render }

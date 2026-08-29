@@ -21,6 +21,7 @@ class TestConfigFiles < KwardTestCase
       assert_equal true, config.dig("composer", "busy_help")
       assert_equal "modern", config.dig("editor", "mode")
       assert_equal({}, config.dig("editor", "agent"))
+      assert_equal({}, config.dig("editor", "runners"))
       assert_equal true, config.dig("editor", "auto_indent")
       assert_equal true, config.dig("editor", "auto_close_pairs")
       assert_equal true, config.dig("editor", "soft_wrap")
@@ -55,6 +56,21 @@ class TestConfigFiles < KwardTestCase
       refute config.key?("openai_oauth_client_id")
       refute config.key?("openrouter_api_key")
     end
+  end
+
+  def test_editor_runners_are_optional_and_nested_under_editor
+    config = {
+      "editor" => {
+        "runners" => {
+          "node" => { "binary" => "/opt/node/bin/node" },
+          "python" => { "binary" => ".venv/bin/python" }
+        }
+      }
+    }
+
+    assert_equal config["editor"]["runners"], Kward::ConfigFiles.editor_runners(config)
+    assert_equal({}, Kward::ConfigFiles.editor_runners({}))
+    assert_equal({}, Kward::ConfigFiles.editor_runners("editor" => { "runners" => [] }))
   end
 
   def test_editor_agent_settings_are_optional_and_trimmed

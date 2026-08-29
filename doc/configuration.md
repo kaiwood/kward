@@ -448,6 +448,27 @@ The integrated Git and session diff viewers support unified and side-by-side lay
 
 `diff_view` can be `auto`, `unified`, or `side_by_side`. In `auto` mode, Kward uses side-by-side output when the terminal is at least 120 columns wide and unified output in narrower terminals. Change it with `/settings` → Interface → Diff view.
 
+### Editor runners
+
+The editor can run the current in-memory buffer for supported scratchpad languages and normal files. It never saves a normal file automatically before running. Configure runner binaries under `editor.runners`; omitted entries use the built-in defaults.
+
+```json
+{
+  "editor": {
+    "runners": {
+      "node": { "binary": "node" },
+      "python": { "binary": ".venv/bin/python" },
+      "shell": { "binary": "/bin/bash" },
+      "go": { "binary": "/usr/local/go/bin/go" }
+    }
+  }
+}
+```
+
+`binary` may be an executable name resolved through `PATH`, an absolute path, or a relative path resolved from the active workspace. JavaScript and TypeScript use the `node` runner. TypeScript `.ts` buffers require a Node version with built-in TypeScript support; Node strips erasable types but does not type-check the buffer or read `tsconfig.json`. Node's built-in support does not run `.tsx` buffers. Runner processes execute directly without a shell.
+
+The initial runnable languages are Ruby, JavaScript, TypeScript, Python, Shell, Lua, Julia, Elixir, Crystal, Go, and Swift. Other highlighted languages remain editor-only until they have a suitable execution model.
+
 The editor includes syntax highlighting, automatic indentation, and matching-pair insertion for common languages. Unknown file types and color-disabled terminals use plain text. See [Integrated editor](editor.md#What_the_editor_supports) for the supported languages and detailed editing behavior.
 
 Auto-indent and matching-pair insertion are enabled by default. To disable either feature:

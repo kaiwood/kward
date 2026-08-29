@@ -142,6 +142,7 @@ module Kward
         "editor" => {
           "mode" => "modern",
           "agent" => {},
+          "runners" => {},
           "auto_indent" => true,
           "auto_close_pairs" => true,
           "soft_wrap" => true,
@@ -444,6 +445,16 @@ module Kward
     def editor_mode(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
       EditorMode.normalize(editor["mode"])
+    end
+
+    # Returns configured editor runner definitions, or an empty map.
+    #
+    # Runner defaults are resolved by the editor runner at execution time so
+    # the generated config remains portable across machines.
+    def editor_runners(config = read_config)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      runners = editor["runners"]
+      runners.is_a?(Hash) ? runners : {}
     end
 
     # Returns the optional provider override for editor-agent turns.

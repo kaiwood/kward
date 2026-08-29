@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added configurable editor runners under `editor.runners`, with Node, TypeScript, Python, Shell, Lua, Julia, Elixir, Crystal, Go, and Swift buffer execution alongside Ruby.
 - Added Vibe visual-mode `Ctrl+h`/`Ctrl+j`/`Ctrl+k`/`Ctrl+l` shortcuts to outdent, move down, move up, and indent selected lines while keeping visual mode active.
 - Added a live `source`/`.` shell builtin that applies declarative aliases and exports to the running `/shell` session without restarting Kward.
 - Added shell-agent provider, model, and reasoning-effort settings under `shell.agent`, editor-agent provider settings under `editor.agent`, and environment overrides for transient-agent provider selection.

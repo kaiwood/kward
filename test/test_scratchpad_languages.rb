@@ -17,10 +17,12 @@ class TestScratchpadLanguages < KwardTestCase
     end
   end
 
-  def test_only_ruby_is_runnable
-    assert Kward::ScratchpadLanguages.runnable?(:ruby)
-    refute Kward::ScratchpadLanguages.runnable?(:python)
+  def test_supported_runner_languages_are_runnable
+    %i[ruby javascript typescript python shell crystal elixir julia go swift lua].each do |language|
+      assert Kward::ScratchpadLanguages.runnable?(language), language
+    end
     refute Kward::ScratchpadLanguages.runnable?(:text)
+    refute Kward::ScratchpadLanguages.runnable?(:json)
   end
 
   def test_unknown_language_is_rejected

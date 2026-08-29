@@ -21,6 +21,54 @@ class TestScratchpadRunner < KwardTestCase
     refute result.cancelled
   end
 
+  def test_configured_node_binary_runs_javascript_and_typescript_buffers
+    config = { "node" => { "binary" => RbConfig.ruby } }
+
+    javascript = Kward::ScratchpadRunner.run(:javascript, "puts 'javascript'\n", runner_config: config)
+    typescript = Kward::ScratchpadRunner.run(:typescript, "puts 'typescript'\n", runner_config: config)
+
+    assert_equal "javascript\n", javascript.output
+    assert_equal [RbConfig.ruby, "<scratchpad.js>"], javascript.command
+    assert_equal "typescript\n", typescript.output
+    assert_equal [RbConfig.ruby, "<scratchpad.ts>"], typescript.command
+  end
+
+  def test_configured_relative_binary_is_resolved_from_workspace
+    Dir.mktmpdir do |dir|
+      binary = File.join(dir, "fake-node")
+      File.write(binary, "#!/usr/bin/env ruby\nputs File.extname(ARGV.last)\n")
+      File.chmod(0o755, binary)
+
+      result = Kward::ScratchpadRunner.run(
+        :javascript,
+        "console.log('hello')\n",
+        cwd: dir,
+        runner_config: { "node" => { "binary" => "./fake-node" } }
+      )
+
+      assert_equal ".js\n", result.output
+      assert_equal [binary, "<scratchpad.js>"], result.command
+    end
+  end
+
+  def test_toolchain_runner_arguments_are_inserted_before_source
+    Dir.mktmpdir do |dir|
+      binary = File.join(dir, "fake-go")
+      File.write(binary, "#!/usr/bin/env ruby\nputs ARGV.first\nputs File.extname(ARGV.last)\n")
+      File.chmod(0o755, binary)
+
+      result = Kward::ScratchpadRunner.run(
+        :go,
+        "package main\n",
+        cwd: dir,
+        runner_config: { "go" => { "binary" => binary } }
+      )
+
+      assert_equal "run\n.go\n", result.output
+      assert_equal [binary, "run", "<scratchpad.go>"], result.command
+    end
+  end
+
   def test_runner_can_cancel_a_running_process
     cancelled = false
     result = nil

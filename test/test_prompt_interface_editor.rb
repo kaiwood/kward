@@ -282,6 +282,42 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_equal "ok\n", prompt.instance_variable_get(:@editor_runner_state).result.output
   end
 
+  def test_editor_runs_current_unsaved_buffer_for_normal_files
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "example.rb")
+      File.write(path, "puts 'saved'\n")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "modern")
+
+      assert prompt.send(:open_editor, path)
+      editor = prompt.instance_variable_get(:@editor_state)
+      editor.buffer = "puts 'unsaved'\n"
+
+      assert prompt.send(:run_editor_buffer)
+      wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+
+      assert_equal "unsaved\n", prompt.instance_variable_get(:@editor_runner_state).result.output
+      assert_equal "puts 'saved'\n", File.read(path)
+    end
+  end
+
+  def test_editor_runner_uses_the_configured_runner_source
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: StringIO.new,
+      editor_runners_source: -> { { "node" => { "binary" => RbConfig.ruby } } }
+    )
+    assert prompt.send(:open_scratchpad, :javascript)
+    editor = prompt.instance_variable_get(:@editor_state)
+    editor.buffer = "puts 'configured'\n"
+
+    assert prompt.send(:run_editor_buffer)
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+
+    result = prompt.instance_variable_get(:@editor_runner_state).result
+    assert_equal "configured\n", result.output
+    assert_equal [RbConfig.ruby, "<scratchpad.js>"], result.command
+  end
+
   def test_prompt_interface_vibe_run_shows_ruby_output_without_changing_buffer
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
     assert prompt.send(:open_scratchpad, :ruby)

@@ -59,7 +59,7 @@ Scratchpads accept canonical language names and familiar file-extension shortcut
 
 All 26 built-in syntax-highlighted languages are available: Ruby, ERB, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL. Markdown buffers also apply the tagged language highlighter, auto-indentation, and endwise behavior inside fenced code blocks, such as a fence tagged `ruby` or `js`; unknown tags remain readable as plain text. Scratchpads use a matching virtual filename such as `scratchpad.js` or `scratchpad.py`; in Vibe mode, save one to a real file with `:w filename`.
 
-Ruby scratchpads can run with `:run` in Vibe mode or `Ctrl+R` in Modern mode. Kward keeps the source buffer unchanged and opens a read-only output pane in the lower half of the editor with the captured output, exit status, and duration. Drag with the mouse to make a virtual selection inside the output, then press `Ctrl+C` or `Cmd+C` to copy it (`y` in Vibe mode). Only the selected output text is copied; pane borders are excluded. `Cmd+C` requires the terminal to forward the Command key to Kward. Press `Esc` to return to editing, use the arrow or page keys to scroll, and press `Ctrl+C` without a selection to cancel a running buffer. Other language scratchpads currently provide editing and highlighting only.
+Supported editable buffers can run with `:run` in Vibe mode or `Ctrl+R` in Modern mode. This works for both scratchpads and normal editor files. Kward runs the current in-memory buffer, including unsaved changes, without saving the file automatically. It opens a read-only output pane in the lower half of the editor with the captured output, exit status, and duration. Drag with the mouse to make a virtual selection inside the output, then press `Ctrl+C` or `Cmd+C` to copy it (`y` in Vibe mode). Only the selected output text is copied; pane borders are excluded. `Cmd+C` requires the terminal to forward the Command key to Kward. Press `Esc` to return to editing, use the arrow or page keys to scroll, and press `Ctrl+C` without a selection to cancel a running buffer. Runnable languages are Ruby, JavaScript, TypeScript, Python, Shell, Lua, Julia, Elixir, Crystal, Go, and Swift; other languages currently provide editing and highlighting only.
 
 ```ruby
 puts "foo"
@@ -433,7 +433,7 @@ Enter command mode with `:` from normal mode. Type a command and press `Enter`. 
 | `:wq`   | Save and quit                              |
 | `:x`    | Save if changed, then quit                 |
 | `:N`    | Go to line `N`                             |
-| `:run`  | Run the complete Ruby scratchpad           |
+| `:run`  | Run the complete current supported editor buffer |
 | `:prompt instruction` | Ask the editor agent to update the buffer |
 | `:s/a/b/g` | Substitute `a` with `b`                   |
 | `:'<,'>s/a/b/g` | Substitute only across the visual selection |

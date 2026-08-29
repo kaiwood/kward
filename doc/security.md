@@ -56,7 +56,8 @@ Kward's built-in file tools normally resolve paths inside the active workspace. 
 
 These protections reduce accidental edits. They do not contain the whole process:
 
-- With `sandbox.mode: off` (the default), `run_shell_command`, `!command`, `/capture`, `/shell`, and `/pty` run with your user permissions.
+- With `sandbox.mode: off` (the default), `run_shell_command`, `!command`, `/capture`, `/shell`, `/pty`, and editor buffer runners run with your user permissions.
+- Editor buffer runners are user-directed and execute the current in-memory buffer, including normal files and scratchpads, through the configured `editor.runners` binary without a shell. They are not covered by the command sandbox.
 - A non-off [command sandbox](sandboxing.md) restricts only model-requested `run_shell_command` workers and their descendants. It does not cover `!command`, `/capture`, `/shell`, or `/pty`, including commands that the transient `?` shell assistant runs through the user's persistent `/shell` process.
 - External `/shell` commands, `!command`, and `/pty` receive an interactive PTY. Kward forwards a conservative set of line-oriented controls into the inline region, then grants full-terminal passthrough when a child emits screen-oriented or unknown controls. Full passthrough bypasses transcript control-sequence sanitization, so run only commands you trust with terminal access. `capture <command>` and `/capture <command>` sanitize their captured output.
 - Plugins, command hooks, and MCP servers are local processes with the same general operating-system access.
