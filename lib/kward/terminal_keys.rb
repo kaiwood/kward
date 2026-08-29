@@ -9,6 +9,8 @@ module Kward
     CTRL_D = "\x04".freeze
     CTRL_E = "\x05".freeze
     CTRL_F = "\x06".freeze
+    CTRL_H = "\x08".freeze
+    CTRL_J = "\x0A".freeze
     CTRL_K = "\x0B".freeze
     CTRL_L = "\x0C".freeze
     CTRL_N = "\x0E".freeze

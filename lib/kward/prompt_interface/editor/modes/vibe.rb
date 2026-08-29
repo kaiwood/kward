@@ -17,6 +17,9 @@ module Kward
       VIBE_RUBY_BLOCK_OPENERS = %w[if unless case while until for def module class do begin].freeze
       VIBE_RUBY_PATHS = %w[Gemfile Rakefile Guardfile Capfile Vagrantfile].freeze
       VIBE_RUBY_EXTENSIONS = %w[.rb .rake .gemspec].freeze
+      VIBE_VISUAL_LINE_MOVE_CONTROLS = {
+        TerminalKeys::CTRL_H => "h", TerminalKeys::CTRL_J => "j", TerminalKeys::CTRL_K => "k", TerminalKeys::CTRL_L => "l"
+      }.freeze
 
       VibeOperatorTarget = Struct.new(:type, :start_index, :end_index, :replacement_text, :replacement_cursor_offset, keyword_init: true) do
         def characterwise?
@@ -674,6 +677,13 @@ module Kward
       end
 
       def handle_vibe_visual_key(key)
+        if (direction = VIBE_VISUAL_LINE_MOVE_CONTROLS[key])
+          count, = vibe_count_and_body(@editor_state.vibe_pending.to_s + direction)
+          count = 1 if count.zero?
+          @editor_state.vibe_pending = ""
+          return vibe_move_selected_lines(direction, count)
+        end
+
         key_name = key_name_for(key)
         return handle_vibe_visual_named_key(key_name) if key_name
         if key == "\e" || key == TerminalKeys::CTRL_C
@@ -956,6 +966,71 @@ module Kward
 
       def vibe_move_visual_selection(motion, count = 1)
         vibe_apply_cursor_motion(motion, count)
+      end
+
+      def vibe_move_selected_lines(direction, count)
+        @editor_state.status = case @editor_state.vibe_mode
+                               when "visual_line" then "VISUAL LINE"
+                               when "visual_block" then "VISUAL BLOCK"
+                               else "VISUAL"
+                               end
+        start_line, end_line = vibe_visual_line_bounds
+        original_lines = @editor_state.lines.dup
+        lines = original_lines.dup
+        endpoint_positions = [@editor_state.selection_anchor, @editor_state.cursor].map do |offset|
+          @editor_state.cursor_line_and_column_for(offset)
+        end
+        line_shift = 0
+
+        case direction
+        when "h", "l"
+          moved_lines = lines[start_line..end_line].map(&:dup)
+          count.times do
+            moved_lines = moved_lines.map do |line|
+              if direction == "l"
+                "  #{line}"
+              else
+                line.sub(/\A(?:  |\t| )/, "")
+              end
+            end
+          end
+          lines[start_line..end_line] = moved_lines
+        when "k"
+          line_shift = -[count, start_line].min
+          return true if line_shift.zero?
+
+          selected_lines = lines.slice!(start_line..end_line)
+          lines.insert(start_line + line_shift, *selected_lines)
+        when "j"
+          line_shift = [count, lines.length - end_line - 1].min
+          return true if line_shift.zero?
+
+          selected_lines = lines.slice!(start_line..end_line)
+          lines.insert(start_line + line_shift, *selected_lines)
+        end
+
+        return false if lines == @editor_state.lines
+
+        @editor_state.replace_buffer(lines.join("\n"))
+        selection_offsets = endpoint_positions.map do |line, column|
+          new_line = line + line_shift
+          new_column = if direction == "l"
+                         column + (lines[line].length - original_lines[line].length)
+                       elsif direction == "h"
+                         [column - (original_lines[line].length - lines[line].length), 0].max
+                       else
+                         column
+                       end
+          @editor_state.offset_for_line_and_column(new_line, new_column)
+        end
+        @editor_state.set_selections([{ anchor: selection_offsets[0], cursor: selection_offsets[1] }])
+        true
+      end
+
+      def vibe_visual_line_bounds
+        anchor_line, = @editor_state.cursor_line_and_column_for(@editor_state.selection_anchor)
+        cursor_line, = @editor_state.cursor_line_and_column
+        [anchor_line, cursor_line].minmax
       end
 
       def vibe_visual_range

@@ -359,11 +359,13 @@ Use normal mode for movement, operators, marks, registers, macros, search, and c
 
 ### Visual mode
 
-Visual mode uses the same motion language as normal mode where practical. Start characterwise visual mode with `v`, linewise mode with `V`, or visual block mode with `Ctrl+V`.
+Visual mode uses the same motion language as normal mode where practical. Arrow keys and plain `h`/`j`/`k`/`l` extend the selection. Start characterwise visual mode with `v`, linewise mode with `V`, or visual block mode with `Ctrl+V`.
 
 | Key                     | Action                                          |
 | ----------------------- | ----------------------------------------------- |
 | `o`                     | Switch active end of visual selection           |
+| `Ctrl+h` / `Ctrl+l`     | Outdent / indent selected lines                 |
+| `Ctrl+j` / `Ctrl+k`     | Move selected lines down / up                   |
 | `G` / `gg` / `N`motion  | Extend visual selection with counts/motions     |
 | `%`, `f`/`F`/`t`/`T`    | Extend visual selection with advanced motions   |
 | `iw` / `a(` / `ip`      | Select visual text objects                      |

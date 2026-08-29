@@ -343,8 +343,8 @@ class TestPromptInterfaceEditorVibeVisual < KwardTestCase
         prompt.send(:handle_editor_key, "v")
         prompt.send(:handle_editor_key, "2")
         assert_equal "2", editor.vibe_pending
-        prompt.send(:handle_editor_key, "j")
-        assert_equal [2, 0], editor.cursor_line_and_column
+        prompt.send(:handle_editor_key, "G")
+        assert_equal [1, 0], editor.cursor_line_and_column
         assert_equal "", editor.vibe_pending
 
         prompt.send(:handle_editor_key, "\e")
@@ -431,6 +431,65 @@ class TestPromptInterfaceEditorVibeVisual < KwardTestCase
         prompt.send(:handle_editor_key, "v")
         prompt.send(:handle_editor_key, "p")
         assert_equal "omega beta", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_visual_hjkl_moves_selected_lines_and_keeps_visual_mode
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo\nthree\nfour")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "V")
+        prompt.send(:handle_editor_key, "j")
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_J)
+        assert_equal "three\none\ntwo\nfour", editor.buffer
+        assert_equal "visual_line", editor.vibe_mode
+        assert_equal "one\ntwo\n", editor.selected_text
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_J)
+        assert_equal "three\nfour\none\ntwo", editor.buffer
+        assert_equal "visual_line", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_K)
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_K)
+        assert_equal "one\ntwo\nthree\nfour", editor.buffer
+        assert_equal "visual_line", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_L)
+        assert_equal "  one\n  two\nthree\nfour", editor.buffer
+        assert_equal "visual_line", editor.vibe_mode
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_H)
+        assert_equal "one\ntwo\nthree\nfour", editor.buffer
+        assert_equal "visual_line", editor.vibe_mode
+        assert_equal "one\ntwo\n", editor.selected_text
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_visual_h_and_l_move_character_selection_with_line
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "one\ntwo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, "v")
+        2.times { prompt.send(:handle_editor_key, "l") }
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_L)
+
+        assert_equal "  one\ntwo", editor.buffer
+        assert_equal "one", editor.selected_text
+        assert_equal "visual", editor.vibe_mode
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_H)
+        assert_equal "one\ntwo", editor.buffer
+        assert_equal "one", editor.selected_text
+        assert_equal "visual", editor.vibe_mode
       end
     end
   end
