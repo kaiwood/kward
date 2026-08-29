@@ -10,7 +10,7 @@ end
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Kward-native embedded shell command runner.
-  class Ekwsh
+  class Kwsh
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :interactive_command, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
     BUILTINS = %w[alias capture cd pwd export unset unalias clear exit logout pty].freeze
@@ -60,7 +60,7 @@ module Kward
     end
 
     # Runs a command for the shell assistant without handing it the terminal.
-    # Built-ins still execute in this Ekwsh instance so their state persists.
+    # Built-ins still execute in this Kwsh instance so their state persists.
     def run_for_agent(input, timeout_seconds: nil, cancellation: nil)
       command = input.to_s.strip
       return run(command, cancellation: cancellation) if command.empty?
@@ -322,12 +322,12 @@ module Kward
       return nil unless %w[exit logout].include?(words.first)
 
       if words.length > 2 || (words[1] && !words[1].match?(/\A\d+\z/))
-        return Result.new(output: "#{command_echo(display_command)}ekwsh: #{words.first}: numeric status expected\n", exit_status: 2)
+        return Result.new(output: "#{command_echo(display_command)}kwsh: #{words.first}: numeric status expected\n", exit_status: 2)
       end
 
       Result.new(output: command_echo(display_command), exit_status: words[1].to_i, exit_shell: true)
     rescue ArgumentError => e
-      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
+      Result.new(output: "#{command_echo(display_command)}kwsh: #{e.message}\n", exit_status: 2)
     end
 
     def builtin_result(command, display_command: command, cancellation: nil, &block)
@@ -359,7 +359,7 @@ module Kward
         nil
       end
     rescue ArgumentError => e
-      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
+      Result.new(output: "#{command_echo(display_command)}kwsh: #{e.message}\n", exit_status: 2)
     end
 
     def captured_command_result(command, display_command:, cancellation: nil, &block)
@@ -399,7 +399,7 @@ module Kward
           invalid << name
         end
       end
-      return Result.new(output: "#{command_echo(command)}ekwsh: alias: invalid name: #{invalid.join(" ")}\n", exit_status: 2) unless invalid.empty?
+      return Result.new(output: "#{command_echo(command)}kwsh: alias: invalid name: #{invalid.join(" ")}\n", exit_status: 2) unless invalid.empty?
 
       names = @aliases.keys.sort if names.empty? && assignments.empty?
       lines = names.filter_map { |name| @aliases[name] ? "alias #{name}=#{Shellwords.escape(@aliases.fetch(name))}" : nil }
@@ -417,7 +417,7 @@ module Kward
       end
 
       missing = words.drop(1).reject { |name| @aliases.delete(name) }
-      return Result.new(output: "#{command_echo(command)}ekwsh: unalias: not found: #{missing.join(" ")}\n", exit_status: 1) unless missing.empty?
+      return Result.new(output: "#{command_echo(command)}kwsh: unalias: not found: #{missing.join(" ")}\n", exit_status: 1) unless missing.empty?
 
       Result.new(output: command_echo(command), exit_status: 0)
     end
@@ -455,7 +455,7 @@ module Kward
       path = File.expand_path(words[2], @cwd)
       Result.new(output: command_echo(display_command), exit_status: 0, open_editor_path: path)
     rescue ArgumentError => e
-      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 2)
+      Result.new(output: "#{command_echo(display_command)}kwsh: #{e.message}\n", exit_status: 2)
     end
 
     def kward_edit_command?(words)
@@ -489,7 +489,7 @@ module Kward
 
     def change_directory(command, words)
       if words.length > 2
-        return Result.new(output: "#{command_echo(command)}ekwsh: cd: too many arguments\n", exit_status: 2)
+        return Result.new(output: "#{command_echo(command)}kwsh: cd: too many arguments\n", exit_status: 2)
       end
 
       target = words[1]
@@ -497,7 +497,7 @@ module Kward
       target = @previous_cwd || @cwd if target == "-"
       path = File.expand_path(target, @cwd)
       unless File.directory?(path)
-        return Result.new(output: "#{command_echo(command)}ekwsh: cd: no such directory: #{target}\n", exit_status: 1)
+        return Result.new(output: "#{command_echo(command)}kwsh: cd: no such directory: #{target}\n", exit_status: 1)
       end
 
       @previous_cwd = @cwd
@@ -528,7 +528,7 @@ module Kward
       if invalid.empty?
         Result.new(output: command_echo(command), exit_status: 0)
       else
-        Result.new(output: "#{command_echo(command)}ekwsh: export: invalid assignment: #{invalid.join(" ")}\n", exit_status: 2)
+        Result.new(output: "#{command_echo(command)}kwsh: export: invalid assignment: #{invalid.join(" ")}\n", exit_status: 2)
       end
     end
 
@@ -541,7 +541,7 @@ module Kward
       if invalid.empty?
         Result.new(output: command_echo(command), exit_status: 0)
       else
-        Result.new(output: "#{command_echo(command)}ekwsh: unset: invalid name: #{invalid.join(" ")}\n", exit_status: 2)
+        Result.new(output: "#{command_echo(command)}kwsh: unset: invalid name: #{invalid.join(" ")}\n", exit_status: 2)
       end
     end
 
@@ -575,8 +575,8 @@ module Kward
       end
       append_output_newline(output) { |text| yield text if streamed }
       exit_status = result.timed_out || result.truncated ? 1 : (result.exit_status || 1)
-      append_streamed(output, "ekwsh: command timed out after #{timeout} seconds\n", streamed) { |text| yield text } if result.timed_out
-      append_streamed(output, "ekwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n", streamed) { |text| yield text } if result.truncated
+      append_streamed(output, "kwsh: command timed out after #{timeout} seconds\n", streamed) { |text| yield text } if result.timed_out
+      append_streamed(output, "kwsh: output exceeded #{@max_output_bytes} bytes; command terminated\n", streamed) { |text| yield text } if result.truncated
       append_streamed(output, "Exit status: #{exit_status}\n", streamed) { |text| yield text } unless exit_status.zero?
       Result.new(output: output, exit_status: exit_status, streamed: streamed)
     rescue Cancellation::CancelledError
@@ -584,7 +584,7 @@ module Kward
       append_streamed(output, "^C\nExit status: 130\n", streamed) { |text| yield text }
       Result.new(output: output, exit_status: 130, streamed: streamed)
     rescue Errno::ENOENT => e
-      Result.new(output: "#{command_echo(display_command)}ekwsh: #{e.message}\n", exit_status: 127)
+      Result.new(output: "#{command_echo(display_command)}kwsh: #{e.message}\n", exit_status: 127)
     end
 
     def effective_timeout(timeout_seconds)

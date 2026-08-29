@@ -2,7 +2,7 @@ require_relative "test_helper"
 
 class TestShellPrompt < KwardTestCase
   def test_shell_context_tracks_the_last_command_and_bounded_output
-    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
     shell.run_for_agent("printf ready")
     context = shell.context_snapshot(max_output_bytes: 8)
@@ -16,7 +16,7 @@ class TestShellPrompt < KwardTestCase
     Dir.mktmpdir("shell-prompt") do |dir|
       nested = File.join(dir, "nested")
       Dir.mkdir(nested)
-      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh")
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh")
       session = Kward::ShellPromptSession.new(shell)
 
       session.prepare("cd nested")
@@ -30,7 +30,7 @@ class TestShellPrompt < KwardTestCase
     Dir.mktmpdir("shell-prompt") do |dir|
       nested = File.join(dir, "nested")
       Dir.mkdir(nested)
-      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh")
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh")
       session = Kward::ShellPromptSession.new(shell)
 
       output = session.run("cd nested")
@@ -42,7 +42,7 @@ class TestShellPrompt < KwardTestCase
   end
 
   def test_shell_prompt_session_preserves_environment_changes
-    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
+    shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
     session = Kward::ShellPromptSession.new(shell)
 
     session.run("export KWARD_SHELL_PROMPT=ready")
@@ -53,7 +53,7 @@ class TestShellPrompt < KwardTestCase
 
   def test_shell_prompt_registry_exposes_shared_shell_tools_without_file_writes
     Dir.mktmpdir("shell-prompt") do |dir|
-      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh")
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh")
       shell_prompt = Kward::ShellPromptSession.new(shell)
       registry = Kward::ToolRegistry.new(
         workspace: Kward::Workspace.new(root: dir),
@@ -81,7 +81,7 @@ class TestShellPrompt < KwardTestCase
         assistant_tool_call("prepare_shell_command", command: "find . -name '*.rb'"),
         "Prepared."
       ])
-      shell = Kward::Ekwsh.new(cwd: dir, shell: "/bin/sh")
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh")
       shell.run_for_agent("printf previous-error")
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Kward::Agent.new(
@@ -115,7 +115,7 @@ class TestShellPrompt < KwardTestCase
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
       shell_agent = cli.send(:build_shell_prompt_agent, agent)
 
-      assert_equal :exited, cli.send(:run_ekwsh_loop, shell, shell_agent: shell_agent)
+      assert_equal :exited, cli.send(:run_kwsh_loop, shell, shell_agent: shell_agent)
 
       assert_includes prompt.output.join, "The previous command failed."
       assert_equal 2, shell_agent.conversation.messages.length

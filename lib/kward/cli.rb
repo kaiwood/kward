@@ -18,7 +18,7 @@ require_relative "cli_transcript_formatter"
 require_relative "model/context_usage"
 require_relative "events"
 require_relative "export_path"
-require_relative "ekwsh"
+require_relative "kwsh"
 require_relative "persistent_shell_session"
 require_relative "interactive_pty_runner"
 require_relative "adaptive_pty_output_sink"
@@ -479,7 +479,7 @@ module Kward
 
       loop do
         if @pending_inputs.empty? && active_tab&.shell
-          run_ekwsh_loop(active_tab.shell, tab: active_tab, history: build_ekwsh_history(active_tab.agent))
+          run_kwsh_loop(active_tab.shell, tab: active_tab, history: build_kwsh_history(active_tab.agent))
         end
         input = @pending_inputs.shift || (active_tab ? poll_active_tab_input : @prompt.ask("You>"))
         if input.is_a?(Hash) && input[:editor_prompt]

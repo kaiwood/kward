@@ -894,7 +894,7 @@ class TestTabs < KwardTestCase
       cli.send(:setup_interactive_tabs, store, nil)
       first_tab = cli.send(:active_tab)
 
-      cli.send(:run_ekwsh, first_tab.agent)
+      cli.send(:run_kwsh, first_tab.agent)
       assert first_tab.shell
       cli.send(:handle_tab_action, cli.instance_variable_get(:@pending_inputs).shift, store)
       assert_equal 1, cli.instance_variable_get(:@active_tab_index)
@@ -903,7 +903,7 @@ class TestTabs < KwardTestCase
       refute prompt.restores.any? { |snapshot| snapshot[:transcript] }, "shell output should not be restored from a prompt snapshot"
       assert_includes first_tab.transient_shell_entries.join, "$ cd nested"
 
-      cli.send(:run_ekwsh_loop, first_tab.shell, tab: first_tab)
+      cli.send(:run_kwsh_loop, first_tab.shell, tab: first_tab)
 
       output = strip_ansi(prompt.output.join)
       assert_includes output, nested

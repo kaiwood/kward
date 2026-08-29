@@ -50,7 +50,7 @@ module Kward
           open_project_files_browser
           [true, nil]
         when "shell"
-          run_ekwsh(agent)
+          run_kwsh(agent)
           [true, nil]
         when "capture"
           run_captured_shell_command(argument, agent)

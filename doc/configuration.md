@@ -128,7 +128,7 @@ By default, Kward stores user data under `~/.kward`. Common files and directorie
 ~/.kward/anthropic_auth.json
 ~/.kward/github_auth.json
 ~/.kward/PRINCIPLES.md
-~/.kward/ekwsh.yml
+~/.kward/kwsh.yml
 ~/.kward/prompts/
 ~/.kward/skills/
 ~/.kward/plugins/
@@ -169,7 +169,7 @@ Project-local hooks can also live in `.kward/hooks.json`, but Kward loads them o
 
 ## Embedded shell config
 
-The embedded Kward shell (`/shell`, internally `ekwsh`) reads optional global settings from `~/.kward/ekwsh.yml` or, when `KWARD_CONFIG_PATH` is set, from `ekwsh.yml` beside that config file.
+The embedded Kward shell (`/shell`, internally `kwsh`) reads optional global settings from `~/.kward/kwsh.yml` or, when `KWARD_CONFIG_PATH` is set, from `kwsh.yml` beside that config file.
 
 Example:
 
@@ -186,7 +186,7 @@ aliases:
 
 `env` values are applied when shell mode starts, after Kward's conservative color defaults. `/shell` keeps one persistent local interactive shell process per tab. Keys must look like environment variable names (`A_Z`, digits after the first character, and underscores); invalid keys are ignored. Values are converted to strings.
 
-`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Configured aliases are available both inside `/shell` and after the normal composer's `!` prefix, including command-name Tab completion. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `ekwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current `/shell` session and are not available to `!command` input.
+`aliases` expand the first word of a command once. For example, `ll lib` runs `ls -la lib`. Configured aliases are available both inside `/shell` and after the normal composer's `!` prefix, including command-name Tab completion. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `kwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current `/shell` session and are not available to `!command` input.
 
 ## Provider and model settings
 

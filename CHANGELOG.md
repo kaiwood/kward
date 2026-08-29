@@ -82,7 +82,7 @@ All notable changes to Kward will be documented in this file.
 - Displayed packaged plugins with their folder name in the startup plugin list, such as `folder/plugin.rb`.
 - Added a frozen composer display for line-oriented Git PTY commands while preserving the full-terminal handoff for full-screen programs.
 - Changed external `/shell` commands and one-shot `!command` input to use interactive PTY terminal handoff by default, while retaining `pty` and `/pty` for compatibility.
-- Made aliases configured in `ekwsh.yml` available to leading-`!` execution and command completion.
+- Made aliases configured in `kwsh.yml` available to leading-`!` execution and command completion.
 - Removed interactive PTY start and exit-status messages while retaining the submitted command echo.
 - Changed shell and leading-`!` completion so the candidate list appears in an interactive overlay while repeated Tab presses cycle through candidates in the composer.
 - Removed the `Tab` and `Shift+Tab` reasoning-effort shortcuts so the composer keeps its normal completion behavior.
@@ -337,27 +337,27 @@ All notable changes to Kward will be documented in this file.
 - Added `/queue open <id>` to open a queued worker's session for review or follow-up.
 - Added `/diff` to open the chronological file changes recorded in the current session in the integrated diff viewer.
 - Added `/scratchpad [text|markdown|ruby]` for opening unsaved editor buffers, including Vibe `:w filename` save-as support and Ruby `:run`/Modern `Ctrl+R` output written after `__END__`.
-- Added `/pty <command>` and the `ekwsh` `pty <command>` built-in for explicit interactive PTY passthrough sessions, enabling terminal-owned tools such as pagers to run from Kward.
-- Added minimal PTY execution for external `ekwsh` commands so terminal-aware tools can detect a TTY and terminal width.
-- Added Ctrl+C cancellation for running `ekwsh` commands and preserved tab-switch actions while shell commands are active.
-- Added quoted path completion and cached `$PATH` executable completion for `ekwsh`.
-- Added streaming `ekwsh` command output in the TUI transcript while commands run.
-- Added separate workspace-scoped `ekwsh` command history so embedded shell input no longer shares normal prompt history.
+- Added `/pty <command>` and the `kwsh` `pty <command>` built-in for explicit interactive PTY passthrough sessions, enabling terminal-owned tools such as pagers to run from Kward.
+- Added minimal PTY execution for external `kwsh` commands so terminal-aware tools can detect a TTY and terminal width.
+- Added Ctrl+C cancellation for running `kwsh` commands and preserved tab-switch actions while shell commands are active.
+- Added quoted path completion and cached `$PATH` executable completion for `kwsh`.
+- Added streaming `kwsh` command output in the TUI transcript while commands run.
+- Added separate workspace-scoped `kwsh` command history so embedded shell input no longer shares normal prompt history.
 - Added structured RPC `runtime/updateSetting` `defaultModel` values so clients can send provider and model separately while keeping the existing string format.
 
 ### Changed
 
-- Changed PTY-backed `ekwsh` commands to refresh terminal window size while running so long-lived commands can adapt to resizes.
-- Changed `ekwsh` to default `GIT_PAGER` to `cat`, while preserving user-provided values, so Git commands do not unexpectedly enter an interactive pager under PTY execution.
-- Improved `ekwsh` POSIX-oriented built-ins, including `exit [status]`, stricter `cd`/`pwd`, `export NAME`, assignment persistence, `unalias`, and shared alias-name validation.
-- Changed `ekwsh` configuration to prefer a POSIX `/bin/sh` default shell and validate runtime settings for command timeout, output cap, and shell history size.
+- Changed PTY-backed `kwsh` commands to refresh terminal window size while running so long-lived commands can adapt to resizes.
+- Changed `kwsh` to default `GIT_PAGER` to `cat`, while preserving user-provided values, so Git commands do not unexpectedly enter an interactive pager under PTY execution.
+- Improved `kwsh` POSIX-oriented built-ins, including `exit [status]`, stricter `cd`/`pwd`, `export NAME`, assignment persistence, `unalias`, and shared alias-name validation.
+- Changed `kwsh` configuration to prefer a POSIX `/bin/sh` default shell and validate runtime settings for command timeout, output cap, and shell history size.
 
 ### Fixed
 
-- Normalized ordinary PTY line endings in `ekwsh` command output so transcripts avoid stray carriage returns.
-- Added `ekwsh` timeout and output-limit enforcement for external commands using the shared local command runner.
+- Normalized ordinary PTY line endings in `kwsh` command output so transcripts avoid stray carriage returns.
+- Added `kwsh` timeout and output-limit enforcement for external commands using the shared local command runner.
 - Consolidated workspace shell command execution on a shared local command runner with timeout, cancellation, bounded capture, and optional streaming support.
-- Fixed `ekwsh` shell output sanitization so unsafe terminal controls are stripped before command output is shown while SGR color is preserved.
+- Fixed `kwsh` shell output sanitization so unsafe terminal controls are stripped before command output is shown while SGR color is preserved.
 - Split Vibe editor insert/readline key handling into a focused mixin without changing editor behavior.
 - Consolidated compaction message-field reads through the shared message access helper.
 - Consolidated RPC transcript tool metadata normalization with tool event metadata so tool names, args, diffs, and changed files stay aligned.
@@ -379,7 +379,7 @@ All notable changes to Kward will be documented in this file.
 
 - Added a built-in editor that can be opened from the TUI with `$` or directly from the CLI with `kward edit <filename>`, with modern, Emacs-style, and Vibe editing modes.
 - Added richer editor workflows including syntax highlighting, undo/redo, auto-indent, soft wrap, mouse support, multi-cursor editing, relative line numbers, and an expanded Vim-like Vibe mode with visual selections, text objects, registers, marks, macros, substitution, and Ruby navigation.
-- Added `/shell`, an embedded Kward shell (`ekwsh`) for running workspace commands without leaving the TUI, including command/path completion, safe color output, optional global `ekwsh.yml` configuration, and rbenv shim autodetection.
+- Added `/shell`, an embedded Kward shell (`kwsh`) for running workspace commands without leaving the TUI, including command/path completion, safe color output, optional global `kwsh.yml` configuration, and rbenv shim autodetection.
 - Added `/files`, a searchable project file browser that can open files in the editor and remembers cursor and folder expansion state per workspace.
 - Added persistent TUI tabs for session-backed conversations, plus tab commands, shortcuts, status colors, and restoration across restarts.
 - Added `/git` workflows for reviewing changes, viewing diffs, staging or unstaging files, and writing commit messages from inside the TUI.

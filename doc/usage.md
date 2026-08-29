@@ -66,7 +66,7 @@ Inside interactive mode, ask Kward to run a command:
 Run the focused test for the CLI status command.
 ```
 
-Or run an interactive PTY command yourself from the composer by prefixing it with `!`. Aliases configured in `ekwsh.yml` are expanded here too:
+Or run an interactive PTY command yourself from the composer by prefixing it with `!`. Aliases configured in `kwsh.yml` are expanded here too:
 
 ```text
 !git status --short
@@ -78,7 +78,7 @@ For several commands, enter the embedded Kward shell:
 /shell
 ```
 
-`/shell` opens `ekwsh`, a Kward-native command mode with one persistent local shell process. It preserves state such as the current directory, environment variables, functions, and aliases between commands. Prefix a line with `?` inside `/shell` to ask a transient shell assistant about the latest output, execute an explicit state change, or prepare a command without running it. External commands receive an interactive PTY by default, so `git log`, `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer for bounded, transcript-friendly output. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
+`/shell` opens `kwsh`, a Kward-native command mode with one persistent local shell process. It preserves state such as the current directory, environment variables, functions, and aliases between commands. Prefix a line with `?` inside `/shell` to ask a transient shell assistant about the latest output, execute an explicit state change, or prepare a command without running it. External commands receive an interactive PTY by default, so `git log`, `less`, Vim, SSH, and REPLs work without a prefix. Use `capture <command>` inside `/shell` or `/capture <command>` from the normal composer for bounded, transcript-friendly output. See [Embedded shell](shell.md) for built-ins, completion, configuration, ANSI handling, PTY passthrough, and limitations.
 
 ## Shell commands
 

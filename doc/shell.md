@@ -25,7 +25,7 @@ When an inline command exits without reading input, safe output is mirrored into
 
 Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, the composer remains frozen and keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
 
-Configured `ekwsh.yml` aliases also work after `!`:
+Configured `kwsh.yml` aliases also work after `!`:
 
 ```yaml
 aliases:
@@ -131,13 +131,13 @@ Use `capture` inside `/shell` when you want ordinary, readable output in Kward's
 
 ```sh
 capture git status --short
-capture bundle exec ruby -Itest test/test_ekwsh.rb
+capture bundle exec ruby -Itest test/test_kwsh.rb
 ```
 
-An `ekwsh` `capture` command:
+An `kwsh` `capture` command:
 
 - does not receive keyboard input,
-- uses the timeout and output-size limit from `ekwsh.yml`,
+- uses the timeout and output-size limit from `kwsh.yml`,
 - preserves safe color and styling,
 - strips controls that could corrupt Kward's TUI,
 - can be cancelled with Ctrl+C.
@@ -163,7 +163,7 @@ Each Kward tab owns its `/shell` state. Switching away and back restores that ta
 - runtime aliases,
 - shell prompt and transcript view.
 
-Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. Configure its size with `history_limit` in `ekwsh.yml`.
+Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. Configure its size with `history_limit` in `kwsh.yml`.
 
 Kward's tab shortcuts work at the shell prompt and while a captured command is running. During an interactive command, the child owns every key; exit or interrupt it before switching Kward tabs. Bounded output from shell-agent `?` turns is also retained in the tab's transient runtime view, so it is restored when you switch away and back without being added to session history. Ctrl+L clears this transient shell and shell-agent output.
 
@@ -220,15 +220,15 @@ The persistent `/shell` process handles these commands in-session so their state
 
 Built-ins take precedence over aliases and executables.
 
-## Configure ekwsh
+## Configure kwsh
 
 Global shell configuration lives at:
 
 ```text
-~/.kward/ekwsh.yml
+~/.kward/kwsh.yml
 ```
 
-When `KWARD_CONFIG_PATH` selects another main config file, Kward reads `ekwsh.yml` from the same directory.
+When `KWARD_CONFIG_PATH` selects another main config file, Kward reads `kwsh.yml` from the same directory.
 
 A practical configuration might look like this:
 
@@ -293,8 +293,8 @@ aliases:
 ll lib
 # runs: ls -la lib
 
-t test/test_ekwsh.rb
-# runs: bundle exec ruby -Itest test/test_ekwsh.rb
+t test/test_kwsh.rb
+# runs: bundle exec ruby -Itest test/test_kwsh.rb
 ```
 
 Configured aliases work inside `/shell` and after `!`. Aliases created with the `alias` built-in belong only to the current `/shell` session and are not shared with one-shot `!command` input.

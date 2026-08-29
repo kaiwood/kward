@@ -194,24 +194,24 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
-  def test_read_ekwsh_config_returns_empty_settings_when_missing
+  def test_read_kwsh_config_returns_empty_settings_when_missing
     Dir.mktmpdir do |dir|
-      path = File.join(dir, "ekwsh.yml")
+      path = File.join(dir, "kwsh.yml")
 
       assert_equal({
-        shell: Kward::Ekwsh::DEFAULT_SHELL,
-        timeout_seconds: Kward::Ekwsh::DEFAULT_TIMEOUT_SECONDS,
-        max_output_bytes: Kward::Ekwsh::DEFAULT_MAX_OUTPUT_BYTES,
-        history_limit: Kward::Ekwsh::DEFAULT_HISTORY_LIMIT,
+        shell: Kward::Kwsh::DEFAULT_SHELL,
+        timeout_seconds: Kward::Kwsh::DEFAULT_TIMEOUT_SECONDS,
+        max_output_bytes: Kward::Kwsh::DEFAULT_MAX_OUTPUT_BYTES,
+        history_limit: Kward::Kwsh::DEFAULT_HISTORY_LIMIT,
         env: {},
         aliases: {}
-      }, Kward::ConfigFiles.read_ekwsh_config(path))
+      }, Kward::ConfigFiles.read_kwsh_config(path))
     end
   end
 
-  def test_read_ekwsh_config_reads_env_and_aliases
+  def test_read_kwsh_config_reads_env_and_aliases
     Dir.mktmpdir do |dir|
-      path = File.join(dir, "ekwsh.yml")
+      path = File.join(dir, "kwsh.yml")
       File.write(path, <<~YAML)
         shell: /bin/sh
         timeout_seconds: 600
@@ -230,7 +230,7 @@ class TestConfigFiles < KwardTestCase
           empty:
       YAML
 
-      config = Kward::ConfigFiles.read_ekwsh_config(path)
+      config = Kward::ConfigFiles.read_kwsh_config(path)
 
       assert_equal "/bin/sh", config[:shell]
       assert_equal 600, config[:timeout_seconds]
@@ -241,9 +241,9 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
-  def test_read_ekwsh_config_defaults_invalid_runtime_settings
+  def test_read_kwsh_config_defaults_invalid_runtime_settings
     Dir.mktmpdir do |dir|
-      path = File.join(dir, "ekwsh.yml")
+      path = File.join(dir, "kwsh.yml")
       File.write(path, <<~YAML)
         shell: relative-shell
         timeout_seconds: 0
@@ -251,12 +251,12 @@ class TestConfigFiles < KwardTestCase
         history_limit: -5
       YAML
 
-      config = Kward::ConfigFiles.read_ekwsh_config(path)
+      config = Kward::ConfigFiles.read_kwsh_config(path)
 
-      assert_equal Kward::Ekwsh::DEFAULT_SHELL, config[:shell]
-      assert_equal Kward::Ekwsh::DEFAULT_TIMEOUT_SECONDS, config[:timeout_seconds]
-      assert_equal Kward::Ekwsh::DEFAULT_MAX_OUTPUT_BYTES, config[:max_output_bytes]
-      assert_equal Kward::Ekwsh::DEFAULT_HISTORY_LIMIT, config[:history_limit]
+      assert_equal Kward::Kwsh::DEFAULT_SHELL, config[:shell]
+      assert_equal Kward::Kwsh::DEFAULT_TIMEOUT_SECONDS, config[:timeout_seconds]
+      assert_equal Kward::Kwsh::DEFAULT_MAX_OUTPUT_BYTES, config[:max_output_bytes]
+      assert_equal Kward::Kwsh::DEFAULT_HISTORY_LIMIT, config[:history_limit]
     end
   end
 

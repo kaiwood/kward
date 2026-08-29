@@ -8,7 +8,7 @@ class TestPromptInterface < KwardTestCase
     writer.write("pw\t\n")
     writer.close
     prompt = Kward::PromptInterface.new(input: input, output: output)
-    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
+    shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" })
 
     result = prompt.with_completion_provider(->(value, cursor) { shell.complete(value, cursor) }) do
       prompt.ask("Shell $")
@@ -28,7 +28,7 @@ class TestPromptInterface < KwardTestCase
     calls = 0
     provider = lambda do |value, cursor|
       calls += 1
-      Kward::Ekwsh::Completion.new(
+      Kward::Kwsh::Completion.new(
         range: (cursor - value.length)...cursor,
         replacement: value,
         candidates: ["alpha", "alpine"]

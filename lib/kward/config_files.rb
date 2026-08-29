@@ -8,7 +8,7 @@ require_relative "private_file"
 require_relative "path_guard"
 require_relative "permissions/policy"
 require_relative "sandbox/policy"
-require_relative "ekwsh"
+require_relative "kwsh"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
 require_relative "prompts/templates"
@@ -108,8 +108,8 @@ module Kward
     end
 
     # @return [String] embedded-shell YAML config path
-    def ekwsh_config_path
-      File.join(config_dir, "ekwsh.yml")
+    def kwsh_config_path
+      File.join(config_dir, "kwsh.yml")
     end
 
     def workspace_hooks_path(root = Dir.pwd)
@@ -340,35 +340,35 @@ module Kward
       merged
     end
 
-    def read_ekwsh_config(path = ekwsh_config_path)
+    def read_kwsh_config(path = kwsh_config_path)
       path = File.expand_path(path)
-      return normalize_ekwsh_config(nil) unless File.exist?(path)
+      return normalize_kwsh_config(nil) unless File.exist?(path)
 
       data = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
-      normalize_ekwsh_config(data)
+      normalize_kwsh_config(data)
     rescue Psych::SyntaxError => e
-      raise "Invalid ekwsh YAML config: #{path}: #{e.message}"
+      raise "Invalid kwsh YAML config: #{path}: #{e.message}"
     end
 
-    def normalize_ekwsh_config(data)
+    def normalize_kwsh_config(data)
       data = data.transform_keys(&:to_s) if data.is_a?(Hash)
       settings = data.is_a?(Hash) ? data : {}
       {
-        shell: normalize_ekwsh_shell(settings["shell"]),
-        timeout_seconds: normalize_positive_integer(settings["timeout_seconds"], Ekwsh::DEFAULT_TIMEOUT_SECONDS),
-        max_output_bytes: normalize_positive_integer(settings["max_output_bytes"], Ekwsh::DEFAULT_MAX_OUTPUT_BYTES),
-        history_limit: normalize_positive_integer(settings["history_limit"], Ekwsh::DEFAULT_HISTORY_LIMIT),
-        env: normalize_ekwsh_env(settings["env"]),
-        aliases: normalize_ekwsh_aliases(settings["aliases"])
+        shell: normalize_kwsh_shell(settings["shell"]),
+        timeout_seconds: normalize_positive_integer(settings["timeout_seconds"], Kwsh::DEFAULT_TIMEOUT_SECONDS),
+        max_output_bytes: normalize_positive_integer(settings["max_output_bytes"], Kwsh::DEFAULT_MAX_OUTPUT_BYTES),
+        history_limit: normalize_positive_integer(settings["history_limit"], Kwsh::DEFAULT_HISTORY_LIMIT),
+        env: normalize_kwsh_env(settings["env"]),
+        aliases: normalize_kwsh_aliases(settings["aliases"])
       }
     end
 
-    def normalize_ekwsh_shell(value)
+    def normalize_kwsh_shell(value)
       shell = value.to_s.strip
-      return Ekwsh::DEFAULT_SHELL if shell.empty?
+      return Kwsh::DEFAULT_SHELL if shell.empty?
       return shell if shell.start_with?("/") && File.executable?(shell)
 
-      Ekwsh::DEFAULT_SHELL
+      Kwsh::DEFAULT_SHELL
     end
 
     def normalize_positive_integer(value, default)
@@ -378,7 +378,7 @@ module Kward
       default
     end
 
-    def normalize_ekwsh_env(values)
+    def normalize_kwsh_env(values)
       return {} unless values.is_a?(Hash)
 
       values.each_with_object({}) do |(key, value), result|
@@ -390,13 +390,13 @@ module Kward
       end
     end
 
-    def normalize_ekwsh_aliases(values)
+    def normalize_kwsh_aliases(values)
       return {} unless values.is_a?(Hash)
 
       values.each_with_object({}) do |(name, command), result|
         name = name.to_s
         command = command.to_s.strip
-        next unless Ekwsh.valid_alias_name?(name)
+        next unless Kwsh.valid_alias_name?(name)
         next if command.empty?
 
         result[name] = command

@@ -3,7 +3,7 @@ require "pty"
 require "securerandom"
 require "shellwords"
 require_relative "ansi"
-require_relative "ekwsh"
+require_relative "kwsh"
 require_relative "local_pty_command_runner"
 
 # Namespace for the Kward CLI agent runtime.
@@ -13,7 +13,7 @@ module Kward
   # The process is kept alive between commands so shell variables, functions,
   # aliases, directory changes, and child-shell state belong to one session.
   class PersistentShellSession
-    Result = Ekwsh::Result
+    Result = Kwsh::Result
     InteractiveResult = Struct.new(:exit_status, :input_forwarded, keyword_init: true)
 
     class CommandInterrupted < StandardError
@@ -38,14 +38,14 @@ module Kward
 
     attr_reader :cwd, :last_command, :timeout_seconds
 
-    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: Ekwsh::DEFAULT_SHELL, configured_env: {}, aliases: {}, timeout_seconds: Ekwsh::DEFAULT_TIMEOUT_SECONDS, max_output_bytes: Ekwsh::DEFAULT_MAX_OUTPUT_BYTES, window_size_provider: nil)
+    def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: Kwsh::DEFAULT_SHELL, configured_env: {}, aliases: {}, timeout_seconds: Kwsh::DEFAULT_TIMEOUT_SECONDS, max_output_bytes: Kwsh::DEFAULT_MAX_OUTPUT_BYTES, window_size_provider: nil)
       @cwd = File.expand_path(cwd.to_s.empty? ? Dir.pwd : cwd.to_s)
       @base_env = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @configured_env = configured_env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @aliases = aliases.to_h.transform_keys(&:to_s).transform_values(&:to_s)
-      @shell = shell.to_s.empty? ? Ekwsh::DEFAULT_SHELL : shell.to_s
-      @timeout_seconds = timeout_seconds.to_i.positive? ? timeout_seconds.to_i : Ekwsh::DEFAULT_TIMEOUT_SECONDS
-      @max_output_bytes = max_output_bytes.to_i.positive? ? max_output_bytes.to_i : Ekwsh::DEFAULT_MAX_OUTPUT_BYTES
+      @shell = shell.to_s.empty? ? Kwsh::DEFAULT_SHELL : shell.to_s
+      @timeout_seconds = timeout_seconds.to_i.positive? ? timeout_seconds.to_i : Kwsh::DEFAULT_TIMEOUT_SECONDS
+      @max_output_bytes = max_output_bytes.to_i.positive? ? max_output_bytes.to_i : Kwsh::DEFAULT_MAX_OUTPUT_BYTES
       @window_size_provider = window_size_provider
       @last_command = nil
       @last_result = nil
@@ -103,7 +103,7 @@ module Kward
       remember_result(command, result)
       result
     rescue ArgumentError => e
-      result = Result.new(output: "#{command_echo(command)}ekwsh: #{e.message}\n", exit_status: 2)
+      result = Result.new(output: "#{command_echo(command)}kwsh: #{e.message}\n", exit_status: 2)
       remember_result(command, result)
       result
     end
@@ -150,7 +150,7 @@ module Kward
     end
 
     # Returns bounded shell state for an explicit shell-agent prompt.
-    def context_snapshot(max_output_bytes: Ekwsh::CONTEXT_OUTPUT_BYTES)
+    def context_snapshot(max_output_bytes: Kwsh::CONTEXT_OUTPUT_BYTES)
       {
         cwd: @cwd,
         last_command: @last_command,
@@ -207,7 +207,7 @@ module Kward
     end
 
     def build_routing_shell
-      Ekwsh.new(
+      Kwsh.new(
         cwd: @cwd,
         env: @env || @base_env,
         shell: @shell,
@@ -494,10 +494,10 @@ module Kward
       append_output_newline(output)
       status = protocol[:status] || 1
       if protocol[:timed_out]
-        output << "ekwsh: command timed out after #{effective_timeout(timeout_seconds)} seconds\n"
+        output << "kwsh: command timed out after #{effective_timeout(timeout_seconds)} seconds\n"
         status = 1
       elsif protocol[:truncated]
-        output << "ekwsh: output exceeded #{@max_output_bytes} bytes; output truncated\n"
+        output << "kwsh: output exceeded #{@max_output_bytes} bytes; output truncated\n"
         status = 1
       elsif cancellation&.cancelled?
         output << "^C\n" unless output.end_with?("^C\n")
@@ -535,7 +535,7 @@ module Kward
 
     def exit_result(command, words)
       if words.length > 2 || (words[1] && !words[1].match?(/\A\d+\z/))
-        return Result.new(output: "#{command_echo(command)}ekwsh: #{words.first}: numeric status expected\n", exit_status: 2)
+        return Result.new(output: "#{command_echo(command)}kwsh: #{words.first}: numeric status expected\n", exit_status: 2)
       end
 
       Result.new(output: command_echo(command), exit_status: words[1].to_i, exit_shell: true)
@@ -555,7 +555,7 @@ module Kward
         before = @aliases.dup
         words.drop(1).each do |assignment|
           name, value = assignment.split("=", 2)
-          @aliases[name] = value.to_s if value && Ekwsh.valid_alias_name?(name)
+          @aliases[name] = value.to_s if value && Kwsh.valid_alias_name?(name)
         end
         before != @aliases
       when "unalias"

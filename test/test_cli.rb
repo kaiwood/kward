@@ -944,7 +944,7 @@ class TestCLI < KwardTestCase
     assert_empty conversation.messages
   end
 
-  def test_interactive_loop_runs_ekwsh_without_model_turn
+  def test_interactive_loop_runs_kwsh_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["/shell", "pwd", "exit", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
@@ -956,7 +956,7 @@ class TestCLI < KwardTestCase
       cli.interactive_loop(agent: agent)
 
       output = strip_ansi(prompt.output.join)
-      assert_includes output, "Entering ekwsh"
+      assert_includes output, "Entering kwsh"
       assert_includes output, "$ pwd"
       assert_includes output, File.realpath(dir)
       assert_includes output, "$ exit"
@@ -965,7 +965,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_loop_runs_ekwsh_pty_builtin_without_model_turn
+  def test_interactive_loop_runs_kwsh_pty_builtin_without_model_turn
     Dir.mktmpdir do |dir|
       prompt = FakePrompt.new(["/shell", "pty printf shell-pty-ok", "exit", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
@@ -1021,16 +1021,16 @@ class TestCLI < KwardTestCase
     assert_empty conversation.messages
   end
 
-  def test_interactive_loop_runs_ekwsh_with_global_config
+  def test_interactive_loop_runs_kwsh_with_global_config
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
         env:
-          KWARD_EKWSH_CONFIG_TEST: configured
+          KWARD_KWSH_CONFIG_TEST: configured
         aliases:
           hi: printf alias-ok
       YAML
-      prompt = FakePrompt.new(["/shell", "printf %s $KWARD_EKWSH_CONFIG_TEST", "hi", "exit", "/exit"])
+      prompt = FakePrompt.new(["/shell", "printf %s $KWARD_KWSH_CONFIG_TEST", "hi", "exit", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
       agent.define_singleton_method(:conversation) { conversation }
@@ -1046,13 +1046,13 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal ["printf %s $KWARD_EKWSH_CONFIG_TEST", "printf alias-ok"], calls.map { |call| call[:command] }
-      assert calls.all? { |call| call[:env]["KWARD_EKWSH_CONFIG_TEST"] == "configured" }
+      assert_equal ["printf %s $KWARD_KWSH_CONFIG_TEST", "printf alias-ok"], calls.map { |call| call[:command] }
+      assert calls.all? { |call| call[:env]["KWARD_KWSH_CONFIG_TEST"] == "configured" }
       assert_empty conversation.messages
     end
   end
 
-  def test_interactive_loop_opens_ekwsh_kward_edit_alias_in_current_prompt
+  def test_interactive_loop_opens_kwsh_kward_edit_alias_in_current_prompt
     Dir.mktmpdir do |dir|
       file_path = File.join(File.realpath(dir), "note one.md")
       prompt = FakePrompt.new(["/shell", "alias vibe='kward edit'", "vibe 'note one.md'", "exit", "/exit"])
@@ -1077,11 +1077,11 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_loop_opens_bang_ekwsh_kward_edit_alias_in_current_prompt
+  def test_interactive_loop_opens_bang_kwsh_kward_edit_alias_in_current_prompt
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       File.write(config_path, "{}")
-      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
         aliases:
           vibe: kward edit
       YAML
@@ -1116,7 +1116,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_interactive_loop_requeues_ekwsh_tab_action
+  def test_interactive_loop_requeues_kwsh_tab_action
     prompt = FakePrompt.new([{ tab_action: :next }, "/exit"])
     conversation = Kward::Conversation.new(system_message: nil)
     agent = Object.new
@@ -1125,13 +1125,13 @@ class TestCLI < KwardTestCase
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
     cli.instance_variable_set(:@pending_inputs, [])
 
-    cli.send(:run_ekwsh, agent)
+    cli.send(:run_kwsh, agent)
 
     assert_equal [{ tab_action: :next }], cli.instance_variable_get(:@pending_inputs)
     assert_empty conversation.messages
   end
 
-  def test_ekwsh_running_command_requeues_tab_action
+  def test_kwsh_running_command_requeues_tab_action
     started_at = Time.now
     prompt = FakePrompt.new(["capture ruby -e 'sleep 5'"])
     prompt.define_singleton_method(:begin_busy_input) { |_message, activity: "loading"| nil }
@@ -1142,15 +1142,15 @@ class TestCLI < KwardTestCase
     end
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
     cli.instance_variable_set(:@pending_inputs, [])
-    shell = Kward::Ekwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 5)
+    shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh", timeout_seconds: 5)
 
-    result = Timeout.timeout(2) { cli.send(:run_ekwsh_loop, shell) }
+    result = Timeout.timeout(2) { cli.send(:run_kwsh_loop, shell) }
 
     assert_equal :tab_action, result
     assert_equal [{ tab_action: :next }], cli.instance_variable_get(:@pending_inputs)
   end
 
-  def test_interactive_loop_persists_ekwsh_history_separately
+  def test_interactive_loop_persists_kwsh_history_separately
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       workspace = File.join(dir, "workspace")
@@ -1250,10 +1250,10 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_bang_completion_includes_configured_ekwsh_aliases
+  def test_bang_completion_includes_configured_kwsh_aliases
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
         aliases:
           greet: printf hello
       YAML
@@ -1543,7 +1543,7 @@ class TestCLI < KwardTestCase
   def test_interactive_loop_expands_legacy_pty_alias_for_bang_command
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(File.join(dir, "ekwsh.yml"), <<~YAML)
+      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
         aliases:
           glog: pty git log --decorate
       YAML

@@ -102,14 +102,14 @@ module Kward
         if editor_result
           record_tab_transient_shell_output(editor_result.output, render: false)
           @prompt.say(editor_result.output) unless editor_result.output.to_s.empty?
-          open_ekwsh_editor(editor_result.open_editor_path, shell) if editor_result.open_editor_path
+          open_kwsh_editor(editor_result.open_editor_path, shell) if editor_result.open_editor_path
           return true
         end
 
         expanded_command = shell.expand_alias(command, interactive: true)
         run_user_interactive_pty_command(
           expanded_command,
-          shell: Ekwsh::DEFAULT_SHELL,
+          shell: Kwsh::DEFAULT_SHELL,
           env: interactive_pty_environment({}, preserve_git_pager: true),
           cwd: interactive_workspace_root(agent),
           intro: "$ #{command}\n"
@@ -142,7 +142,7 @@ module Kward
         completion = bang_shell(agent).complete(value[1..], cursor.to_i - 1)
         return nil unless completion
 
-        Ekwsh::Completion.new(
+        Kwsh::Completion.new(
           range: (completion.range.begin + 1)...(completion.range.end + 1),
           replacement: completion.replacement,
           candidates: completion.candidates
@@ -151,12 +151,12 @@ module Kward
 
       def bang_shell(agent)
         root = File.expand_path(interactive_workspace_root(agent).to_s)
-        aliases = ConfigFiles.read_ekwsh_config[:aliases]
+        aliases = ConfigFiles.read_kwsh_config[:aliases]
         cache_key = [root, ENV.fetch("PATH", ""), aliases.sort]
         return @bang_shell if @bang_shell_key == cache_key
 
         @bang_shell_key = cache_key
-        @bang_shell = Ekwsh.new(cwd: root, env: ENV.to_h, aliases: aliases)
+        @bang_shell = Kwsh.new(cwd: root, env: ENV.to_h, aliases: aliases)
       end
 
       def install_bang_completion_provider(agent)
@@ -182,7 +182,7 @@ module Kward
         @bang_completion_provider_installed = false
       end
 
-      def run_ekwsh(agent)
+      def run_kwsh(agent)
         unless @prompt.respond_to?(:ask)
           runtime_output("The embedded shell is only available in interactive mode.")
           return
@@ -190,11 +190,11 @@ module Kward
 
         tab = active_tab if respond_to?(:active_tab, true)
         entering = tab.nil? || tab.shell.nil?
-        shell = tab&.shell || build_ekwsh(agent)
+        shell = tab&.shell || build_kwsh(agent)
         tab.shell = shell if tab
         shell_agent = shell_prompt_agent_for(agent, tab: tab)
-        runtime_output("Entering ekwsh. Type exit or press Ctrl+D on an empty prompt to return.") if entering
-        run_ekwsh_loop(shell, tab: tab, history: build_ekwsh_history(agent), shell_agent: shell_agent)
+        runtime_output("Entering kwsh. Type exit or press Ctrl+D on an empty prompt to return.") if entering
+        run_kwsh_loop(shell, tab: tab, history: build_kwsh_history(agent), shell_agent: shell_agent)
       end
 
       def shell_prompt_agent_for(agent, tab: nil)
@@ -269,8 +269,8 @@ module Kward
         input.to_s.start_with?("?")
       end
 
-      def build_ekwsh(agent)
-        config = ConfigFiles.read_ekwsh_config
+      def build_kwsh(agent)
+        config = ConfigFiles.read_kwsh_config
         PersistentShellSession.new(
           cwd: interactive_workspace_root(agent),
           configured_env: config[:env],
@@ -281,8 +281,8 @@ module Kward
         )
       end
 
-      def build_ekwsh_history(agent)
-        config = ConfigFiles.read_ekwsh_config
+      def build_kwsh_history(agent)
+        config = ConfigFiles.read_kwsh_config
         PromptHistory.new(
           cwd: interactive_workspace_root(agent),
           limit: config[:history_limit],
@@ -297,7 +297,7 @@ module Kward
           return
         end
 
-        config = ConfigFiles.read_ekwsh_config
+        config = ConfigFiles.read_kwsh_config
         run_user_interactive_pty_command(
           command,
           shell: config[:shell],
@@ -422,14 +422,14 @@ module Kward
         end
       end
 
-      def run_ekwsh_loop(shell, tab: nil, history: nil, shell_agent: nil)
+      def run_kwsh_loop(shell, tab: nil, history: nil, shell_agent: nil)
         shell_agent ||= shell_prompt_agent_for(tab.agent, tab: tab) if tab&.agent
-        with_ekwsh_history(history) do
-          run_ekwsh_loop_with_history(shell, tab: tab, shell_agent: shell_agent)
+        with_kwsh_history(history) do
+          run_kwsh_loop_with_history(shell, tab: tab, shell_agent: shell_agent)
         end
       end
 
-      def run_ekwsh_loop_with_history(shell, tab: nil, shell_agent: nil)
+      def run_kwsh_loop_with_history(shell, tab: nil, shell_agent: nil)
         pending_shell_inputs = []
         loop do
           if @prompt.respond_to?(:editing_file?) && @prompt.editing_file?
@@ -440,7 +440,7 @@ module Kward
             end
           end
 
-          input = pending_shell_inputs.shift || ask_ekwsh(shell)
+          input = pending_shell_inputs.shift || ask_kwsh(shell)
           if input.is_a?(Hash) && input[:tab_action]
             (@pending_inputs ||= []).unshift(input)
             return :tab_action
@@ -452,7 +452,7 @@ module Kward
             next
           end
 
-          result = run_ekwsh_command(shell, input)
+          result = run_kwsh_command(shell, input)
           if result.clear
             clear_active_tab_transient_shell_output
             @prompt.clear_transcript if @prompt.respond_to?(:clear_transcript)
@@ -463,37 +463,37 @@ module Kward
           return :tab_action if pending_tab_action?
 
           if result.open_editor_path
-            editor_result = open_ekwsh_editor(result.open_editor_path, shell)
+            editor_result = open_kwsh_editor(result.open_editor_path, shell)
             return :tab_action if editor_result == :tab_action
 
             next
           end
           if result.interactive_command
-            run_ekwsh_interactive_pty_command(shell, result)
+            run_kwsh_interactive_pty_command(shell, result)
             next
           end
           if result.exit_shell
-            close_ekwsh_session(shell)
+            close_kwsh_session(shell)
             tab.shell = nil if tab
             tab.shell_agent = nil if tab
             runtime_output("Shell exited.")
             return :exited
           end
         end
-        close_ekwsh_session(shell)
+        close_kwsh_session(shell)
         tab.shell = nil if tab
         tab.shell_agent = nil if tab
         runtime_output("Shell exited.")
         :exited
       end
 
-      def close_ekwsh_session(shell)
+      def close_kwsh_session(shell)
         shell.close if shell.respond_to?(:close)
       rescue StandardError
         nil
       end
 
-      def with_ekwsh_history(history)
+      def with_kwsh_history(history)
         if history && @prompt.respond_to?(:with_prompt_history)
           @prompt.with_prompt_history(history) { yield }
         else
@@ -501,7 +501,7 @@ module Kward
         end
       end
 
-      def open_ekwsh_editor(path, shell)
+      def open_kwsh_editor(path, shell)
         unless @prompt.respond_to?(:edit_file)
           runtime_output("Integrated editor is unavailable in this prompt.")
           return false
@@ -516,7 +516,7 @@ module Kward
         result
       end
 
-      def ask_ekwsh(shell)
+      def ask_kwsh(shell)
         provider = ->(input, cursor) { shell.complete(input, cursor) }
         if @prompt.respond_to?(:with_completion_provider)
           @prompt.with_completion_provider(provider, slash_overlay: false) { @prompt.ask(shell.prompt_label) }
@@ -525,7 +525,7 @@ module Kward
         end
       end
 
-      def run_ekwsh_interactive_pty_command(shell, result)
+      def run_kwsh_interactive_pty_command(shell, result)
         shell_target = shell.respond_to?(:run_interactive) ? shell : shell.command_shell
         run_user_interactive_pty_command(
           result.interactive_command,
@@ -541,12 +541,12 @@ module Kward
         end
       end
 
-      def run_ekwsh_command(shell, input)
+      def run_kwsh_command(shell, input)
         if @prompt.respond_to?(:begin_busy_input)
           @prompt.begin_busy_input(shell.prompt_label, activity: "running")
         end
         if @prompt.respond_to?(:write_transcript_delta) && @prompt.respond_to?(:poll_input)
-          run_streaming_ekwsh_command(shell, input)
+          run_streaming_kwsh_command(shell, input)
         elsif @prompt.respond_to?(:write_transcript_delta)
           shell.run(input) { |chunk| @prompt.write_transcript_delta(chunk) }
         else
@@ -556,7 +556,7 @@ module Kward
         @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
       end
 
-      def run_streaming_ekwsh_command(shell, input)
+      def run_streaming_kwsh_command(shell, input)
         cancellation = Cancellation.new
         chunks = Queue.new
         queued_inputs = []
@@ -570,7 +570,7 @@ module Kward
         worker.report_on_exception = false
 
         while worker.alive?
-          drain_ekwsh_chunks(chunks)
+          drain_kwsh_chunks(chunks)
           poll_result = collect_queued_input(queued_inputs)
           if poll_result == PromptInterface::CANCEL_INPUT
             cancellation.cancel!
@@ -581,7 +581,7 @@ module Kward
           sleep 0.01
         end
         worker.join
-        drain_ekwsh_chunks(chunks)
+        drain_kwsh_chunks(chunks)
         raise error if error
 
         queued_inputs.reverse_each { |pending_input| (@pending_inputs ||= []).unshift(pending_input) }
@@ -641,7 +641,7 @@ module Kward
         after
       end
 
-      def drain_ekwsh_chunks(chunks)
+      def drain_kwsh_chunks(chunks)
         loop do
           @prompt.write_transcript_delta(chunks.pop(true))
         rescue ThreadError
