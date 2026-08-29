@@ -374,6 +374,25 @@ class TestPromptInterfaceEditor < KwardTestCase
     refute prompt.send(:editor_runner_output_visible?)
   end
 
+  def test_prompt_interface_vibe_run_all_executes_runnable_fences_sequentially
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(
+      path: "README.md",
+      content: "```ruby\nwarn 'first error'\nexit 3\n```\n\n```text\nskipped\n```\n\n```ruby\nputs 'second'\n```\n",
+      editor_mode: "vibe"
+    )
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:execute_vibe_command, "run all")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+
+    assert_includes editor.buffer, "```ruby\nwarn 'first error'\nexit 3\n```\n\n<output>\nfirst error\n</output>"
+    assert_includes editor.buffer, "```text\nskipped\n```"
+    assert_includes editor.buffer, "```ruby\nputs 'second'\n```\n\n<output>\nsecond\n</output>"
+    assert_equal "Ran 2 code blocks · 1 failed", editor.status
+    refute prompt.send(:editor_runner_output_visible?)
+  end
+
   def test_prompt_interface_runner_output_is_read_only_and_closes
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     assert prompt.send(:open_scratchpad, :ruby)

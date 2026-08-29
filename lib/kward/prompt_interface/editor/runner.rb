@@ -70,7 +70,7 @@ module Kward
           completion = @editor_runner_completion
           @editor_runner_completion = nil
           @editor_runner_output_visible = false if completion
-          completion ? completion.call(result) : @editor_state.status = editor_runner_result_status(result)
+          completion ? completion.call(result, nil) : @editor_state.status = editor_runner_result_status(result)
           render_prompt_locked if @started && @asking
         end
       end
@@ -83,7 +83,11 @@ module Kward
           completion = @editor_runner_completion
           @editor_runner_completion = nil
           @editor_runner_output_visible = false if completion
-          @editor_state.status = "Run failed: #{error.message}"
+          if completion
+            completion.call(nil, error)
+          else
+            @editor_state.status = "Run failed: #{error.message}"
+          end
           render_prompt_locked if @started && @asking
         end
       end

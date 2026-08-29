@@ -234,6 +234,8 @@ module Kward
           save_editor(Regexp.last_match(1))
         when /\Ae(!?)\s+(.+)\z/
           vibe_edit_file(Regexp.last_match(2), force: Regexp.last_match(1) == "!")
+        when "run all"
+          run_vibe_all_markdown_code_blocks
         when "run"
           block = vibe_markdown_code_block_for_run(command_range)
           if block
@@ -311,21 +313,73 @@ module Kward
           return false
         end
 
+        start_vibe_markdown_code_block_run(block, language) do |result, error|
+          if @editor_state.buffer != document
+            @editor_state.status = "Output not inserted: buffer changed"
+            next
+          end
+
+          output = error ? "Run failed: #{error.message}" : result.output
+          @editor_state.replace_buffer(block.with_output(output))
+          @editor_state.status = error ? "Output updated · Run failed" : vibe_code_block_result_status(result)
+        end
+      end
+
+      def run_vibe_all_markdown_code_blocks
+        document = @editor_state.buffer.dup
+        runs = MarkdownCodeBlock.parse(document).filter_map do |block|
+          language = normalize_vibe_code_block_language(block.language)
+          [block, language] if language
+        end
+        if runs.empty?
+          @editor_state.status = "No runnable code blocks"
+          return false
+        end
+
+        results = []
+        run_next = nil
+        run_next = lambda do
+          block, language = runs.shift
+          start_vibe_markdown_code_block_run(block, language) do |result, error|
+            output = error ? "Run failed: #{error.message}" : result.output
+            results << [block, output, result, error]
+            if runs.empty?
+              finish_vibe_all_markdown_code_blocks(document, results)
+            else
+              run_next.call
+            end
+          end
+        end
+        run_next.call
+      end
+
+      def start_vibe_markdown_code_block_run(block, language, &completion)
         run_editor_buffer(
           source: block.code,
           language: language,
           source_path: ScratchpadLanguages.display_path(language),
           output_visible: false,
-          completion: lambda do |result|
-            if @editor_state.buffer != document
-              @editor_state.status = "Output not inserted: buffer changed"
-              next
-            end
-
-            @editor_state.replace_buffer(block.with_output(result.output))
-            @editor_state.status = vibe_code_block_result_status(result)
-          end
+          completion: completion
         )
+      end
+
+      def finish_vibe_all_markdown_code_blocks(document, results)
+        if @editor_state.buffer != document
+          @editor_state.status = "Output not inserted: buffer changed"
+          return false
+        end
+
+        content = document.dup
+        results.reverse_each do |block, output, _result, _error|
+          start_index, end_index, replacement = block.output_edit(output)
+          content[start_index...end_index] = replacement
+        end
+        @editor_state.replace_buffer(content)
+        failures = results.count { |_block, _output, result, error| error || result.exit_status != 0 }
+        status = "Ran #{results.length} code blocks"
+        status += " · #{failures} failed" if failures.positive?
+        @editor_state.status = status
+        true
       end
 
       def vibe_code_block_result_status(result)

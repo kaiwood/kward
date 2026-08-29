@@ -16,19 +16,24 @@ module Kward
         match if match && match.begin(0) < limit && match.end(0) <= limit
       end
 
-      def with_output(output)
+      def output_edit(output)
         replacement = MarkdownCodeBlock.format_output(output, newline: newline)
         match = output_match
         if match
-          source.dup.tap { |content| content[match.begin(0)...match.end(0)] = replacement }
+          [match.begin(0), match.end(0), replacement]
         else
           insertion = if source[close_end - newline.length, newline.length] == newline
                          "#{newline}#{replacement}#{newline}"
                        else
                          "#{newline}#{newline}#{replacement}#{newline}"
                        end
-          source.dup.tap { |content| content.insert(close_end, insertion) }
+          [close_end, close_end, insertion]
         end
+      end
+
+      def with_output(output)
+        start_index, end_index, replacement = output_edit(output)
+        source.dup.tap { |content| content[start_index...end_index] = replacement }
       end
 
       private

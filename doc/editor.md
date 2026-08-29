@@ -434,11 +434,12 @@ Enter command mode with `:` from normal mode. Type a command and press `Enter`. 
 | `:x`    | Save if changed, then quit                 |
 | `:N`    | Go to line `N`                             |
 | `:run`  | Run the complete current supported editor buffer; inside a Markdown fence, run that block into its `<output>` field |
+| `:run all` | Run every runnable Markdown fenced block sequentially into its `<output>` field |
 | `:prompt instruction` | Ask the editor agent to update the buffer |
 | `:s/a/b/g` | Substitute `a` with `b`                   |
 | `:'<,'>s/a/b/g` | Substitute only across the visual selection |
 
-Visual line ranges apply to `:s` and `:run`. For `:run`, select the body or complete fence of one Markdown code block with a runnable language, or place the cursor inside that block without making a selection; Kward runs that block and inserts or replaces a formatted `<output>` field without opening the output pane. An existing output field is searched for after the block until the next code fence, so inline fields are reformatted too. Without a matching output field, one is inserted directly below the block with one blank line. Other commands retain their normal save, navigation, file, and quit behavior.
+Visual line ranges apply to `:s` and `:run`. For `:run`, select the body or complete fence of one Markdown code block with a runnable language, or place the cursor inside that block without making a selection; Kward runs that block and inserts or replaces a formatted `<output>` field without opening the output pane. `:run all` executes every runnable fenced block in document order, skips unlabeled or unsupported fences, continues after failures, and writes each runner error into that block's output field. An existing output field is searched for after the block until the next code fence, so inline fields are reformatted too. Without a matching output field, one is inserted directly below the block with one blank line. Other commands retain their normal save, navigation, file, and quit behavior.
 
 ### Vibe design notes
 
