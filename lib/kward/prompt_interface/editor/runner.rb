@@ -21,7 +21,7 @@ module Kward
         @editor_runner_state&.running?
       end
 
-      def run_editor_buffer(source: nil)
+      def run_editor_buffer(source: nil, language: nil, source_path: nil, output_visible: true, completion: nil)
         return false unless @editor_state
         return false if @editor_state.readonly?
         if editor_runner_running?
@@ -30,18 +30,19 @@ module Kward
           return false
         end
 
-        language = @editor_state.language || editor_syntax_language
+        language ||= @editor_state.language || editor_syntax_language
         unless ScratchpadLanguages.runnable?(language)
           @editor_state.status = "No runner available for #{language || "text"}"
           return false
         end
 
         source = source.nil? ? @editor_state.buffer.dup : source.to_s
-        source_path = @editor_state.path
+        source_path ||= @editor_state.path
         workspace_root = prompt_workspace_root
         state = EditorRunnerState.new(language: language, source: source)
         @editor_runner_state = state
-        @editor_runner_output_visible = true
+        @editor_runner_completion = completion
+        @editor_runner_output_visible = output_visible
         clear_editor_runner_selection
         @editor_state.status = "Running #{language} · Ctrl+C cancel"
         Thread.new do
@@ -66,7 +67,10 @@ module Kward
           return unless @editor_runner_state.equal?(state) && @editor_state
 
           state.complete(result)
-          @editor_state.status = editor_runner_result_status(result)
+          completion = @editor_runner_completion
+          @editor_runner_completion = nil
+          @editor_runner_output_visible = false if completion
+          completion ? completion.call(result) : @editor_state.status = editor_runner_result_status(result)
           render_prompt_locked if @started && @asking
         end
       end
@@ -76,6 +80,9 @@ module Kward
           return unless @editor_runner_state.equal?(state) && @editor_state
 
           state.fail(error)
+          completion = @editor_runner_completion
+          @editor_runner_completion = nil
+          @editor_runner_output_visible = false if completion
           @editor_state.status = "Run failed: #{error.message}"
           render_prompt_locked if @started && @asking
         end

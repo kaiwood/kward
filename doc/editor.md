@@ -433,12 +433,12 @@ Enter command mode with `:` from normal mode. Type a command and press `Enter`. 
 | `:wq`   | Save and quit                              |
 | `:x`    | Save if changed, then quit                 |
 | `:N`    | Go to line `N`                             |
-| `:run`  | Run the complete current supported editor buffer |
+| `:run`  | Run the complete current supported editor buffer; in visual mode, run the selected Markdown fenced block into its `<output>` field |
 | `:prompt instruction` | Ask the editor agent to update the buffer |
 | `:s/a/b/g` | Substitute `a` with `b`                   |
 | `:'<,'>s/a/b/g` | Substitute only across the visual selection |
 
-Visual line ranges apply to `:s` and `:run`; `:run` executes only the selected source lines. Other commands retain their normal save, navigation, file, and quit behavior.
+Visual line ranges apply to `:s` and `:run`. For `:run`, select the body or complete fence of one Markdown code block with a runnable language; Kward runs that block and inserts or replaces a formatted `<output>` field without opening the output pane. An existing output field is searched for after the block until the next code fence, so inline fields are reformatted too. Without a matching output field, one is inserted directly below the block with one blank line. Other commands retain their normal save, navigation, file, and quit behavior.
 
 ### Vibe design notes
 

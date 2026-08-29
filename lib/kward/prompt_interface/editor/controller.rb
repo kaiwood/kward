@@ -248,6 +248,7 @@ module Kward
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked
         @editor_runner_state = nil
+        @editor_runner_completion = nil
         @editor_runner_output_visible = false
         clear_editor_runner_selection
         @editor_text_width = nil
@@ -273,6 +274,7 @@ module Kward
         return mouse_result unless mouse_result == false
         return handle_editor_save_as_key(key) if @editor_save_as_active
         return handle_readonly_editor_key(key) if @editor_state&.readonly?
+        return cancel_editor_runner if editor_runner_running? && @editor_runner_completion && key == TerminalKeys::CTRL_C
         super_copy_result = handle_editor_super_copy_key(key)
         return super_copy_result unless super_copy_result == false
         return handle_vibe_key(key) if @editor_state&.vibe?

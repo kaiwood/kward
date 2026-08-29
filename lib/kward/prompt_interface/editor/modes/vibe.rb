@@ -235,7 +235,12 @@ module Kward
         when /\Ae(!?)\s+(.+)\z/
           vibe_edit_file(Regexp.last_match(2), force: Regexp.last_match(1) == "!")
         when "run"
-          vibe_record_undo { run_editor_buffer(source: vibe_command_source(command_range)) }
+          block = MarkdownCodeBlock.for_selection(@editor_state.buffer, *command_range) if command_range.is_a?(Array)
+          if block
+            run_vibe_markdown_code_block(block)
+          else
+            vibe_record_undo { run_editor_buffer(source: vibe_command_source(command_range)) }
+          end
         when /\Aprompt\s+(.+)\z/
           action = editor_prompt_action(Regexp.last_match(1))
         when "prompt"
@@ -287,6 +292,46 @@ module Kward
 
         first_line, last_line = range.to_s.split(",", 2).map { |value| value.to_i - 1 }
         [first_line, last_line]
+      end
+
+      def run_vibe_markdown_code_block(block)
+        document = block.source.dup
+        language = normalize_vibe_code_block_language(block.language)
+        unless language
+          @editor_state.status = "Selected code block has no runnable language"
+          return false
+        end
+
+        run_editor_buffer(
+          source: block.code,
+          language: language,
+          source_path: ScratchpadLanguages.display_path(language),
+          output_visible: false,
+          completion: lambda do |result|
+            if @editor_state.buffer != document
+              @editor_state.status = "Output not inserted: buffer changed"
+              next
+            end
+
+            @editor_state.replace_buffer(block.with_output(result.output))
+            @editor_state.status = vibe_code_block_result_status(result)
+          end
+        )
+      end
+
+      def vibe_code_block_result_status(result)
+        return "Output updated · Canceled" if result.cancelled
+
+        "Output updated · Exit #{result.exit_status} · #{format_runner_duration(result.duration)}"
+      end
+
+      def normalize_vibe_code_block_language(language)
+        return nil if language.to_s.strip.empty?
+
+        normalized = ScratchpadLanguages.normalize(language)
+        ScratchpadLanguages.runnable?(normalized) ? normalized : nil
+      rescue ArgumentError
+        nil
       end
 
       def vibe_edit_file(path, force: false)

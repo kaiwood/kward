@@ -16,6 +16,7 @@ require_relative "terminal_keys"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
 require_relative "scratchpad_languages"
+require_relative "markdown_code_block"
 require_relative "prompt_interface/banner"
 require_relative "prompt_interface/composer_state"
 require_relative "prompt_interface/editor/state"
@@ -195,6 +196,7 @@ module Kward
       @project_browser_restore_after_editor = false
       @editor_state = nil
       @editor_runner_state = nil
+      @editor_runner_completion = nil
       @editor_runner_output_visible = false
       @editor_runner_selection_anchor = nil
       @editor_runner_selection_cursor = nil
@@ -833,6 +835,7 @@ module Kward
       editor_was_active = editor_active?
       cancel_editor_runner
       @editor_runner_state = nil
+      @editor_runner_completion = nil
       @editor_runner_output_visible = false
       clear_editor_runner_selection
       @editor_state = snapshot[:editor_state]&.dup

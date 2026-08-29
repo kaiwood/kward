@@ -334,6 +334,29 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_includes editor.status, "Exit 0"
   end
 
+  def test_prompt_interface_vibe_visual_run_updates_markdown_output_block
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    content = "```ruby\nputs 'Hello, world!'\n```\n"
+    editor = Kward::PromptInterface::EditorState.new(
+      path: "README.md",
+      content: content,
+      editor_mode: "vibe"
+    )
+    prompt.instance_variable_set(:@editor_state, editor)
+    editor.set_cursor_line_and_column(0, 0)
+
+    prompt.send(:handle_editor_key, "V")
+    2.times { prompt.send(:handle_editor_key, "j") }
+    prompt.send(:handle_editor_key, ":")
+    "run".each_char { |char| prompt.send(:handle_editor_key, char) }
+    prompt.send(:handle_editor_key, "\r")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+
+    assert_equal "```ruby\nputs 'Hello, world!'\n```\n\n<output>\nHello, world!\n</output>\n", editor.buffer
+    refute prompt.send(:editor_runner_output_visible?)
+    assert_includes editor.status, "Output updated"
+  end
+
   def test_prompt_interface_runner_output_is_read_only_and_closes
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     assert prompt.send(:open_scratchpad, :ruby)
