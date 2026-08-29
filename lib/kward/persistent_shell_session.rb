@@ -4,6 +4,7 @@ require "securerandom"
 require "shellwords"
 require_relative "ansi"
 require_relative "kwsh"
+require_relative "kwshrc"
 require_relative "local_pty_command_runner"
 
 # Namespace for the Kward CLI agent runtime.
@@ -93,6 +94,8 @@ module Kward
         capture_result(command, expanded_command, cancellation: cancellation, &block)
       elsif words.first == "pty"
         interactive_result(command, expanded_command)
+      elsif %w[source .].include?(words.first)
+        source_result(command, words)
       elsif (editor_result = editor_command_result(command))
         editor_result
       elsif stateful_command?(words)
@@ -507,6 +510,31 @@ module Kward
       update_cwd(protocol[:cwd])
       block&.call(output)
       Result.new(output: output, exit_status: status, streamed: block_given?)
+    end
+
+    def source_result(command, words)
+      unless words.length == 2
+        return Result.new(output: "#{command_echo(command)}Usage: source <file>\n", exit_status: 2)
+      end
+
+      path = Kwshrc.resolve_path(words[1], cwd: @cwd, env: @env)
+      config = Kwshrc.read_file(path, env: @env)
+      exports = config[:env]
+      if exports.any?
+        assignments = exports.map { |key, value| "#{key}=#{Shellwords.escape(value)}" }
+        protocol = execute_protocol("export #{assignments.join(" ")}", timeout_seconds: STARTUP_TIMEOUT_SECONDS, max_output_bytes: nil)
+        unless protocol[:status].to_i.zero?
+          return Result.new(output: "#{command_echo(command)}kwsh: source: could not apply environment\n", exit_status: 1)
+        end
+      end
+
+      @env.merge!(exports)
+      @aliases.merge!(config[:aliases])
+      @routing_shell = build_routing_shell
+      @completion_shell = nil
+      Result.new(output: command_echo(command), exit_status: 0)
+    rescue Kwshrc::ParseError => e
+      Result.new(output: "#{command_echo(command)}kwsh: source: #{e.message}\n", exit_status: 1)
     end
 
     def capture_result(command, expanded_command, cancellation: nil, &block)

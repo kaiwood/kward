@@ -208,6 +208,7 @@ The persistent `/shell` process handles these commands in-session so their state
 | `cd [dir]` | Change the shell directory. Supports `cd`, `cd -`, and relative paths. |
 | `pwd` | Print the shell directory. |
 | `export KEY[=value]` | Set an environment variable. `export` and `export -p` list variables. |
+| `source <file>` / `. <file>` | Parse and apply aliases and exports from an rc file immediately. |
 | `unset KEY` | Remove an environment variable. |
 | `alias [name]` | List, inspect, or create aliases. |
 | `unalias name` / `unalias -a` | Remove aliases. |
@@ -237,7 +238,7 @@ export PATH="$HOME/bin:$PATH"
 source ~/.kward/kwsh-aliases
 ```
 
-`source` reads another rc file without executing it; relative paths are resolved from the file containing the directive. Unsupported shell scripting is ignored for now.
+`source` reads another rc file without executing it; relative paths in rc-file directives are resolved from the file containing the directive. When entered as a `/shell` builtin, the path is resolved from the current shell directory and its aliases and exports are applied immediately, without restarting Kward. Unsupported shell scripting is ignored for now.
 
 The transient shell assistant normally follows the active conversation's model and reasoning effort. Configure it in the main JSON file:
 

@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added a live `source`/`.` shell builtin that applies declarative aliases and exports to the running `/shell` session without restarting Kward.
 - Added shell-agent provider, model, and reasoning-effort settings under `shell.agent`, editor-agent provider settings under `editor.agent`, and environment overrides for transient-agent provider selection.
 - Added shell-style `kwshrc` configuration files at `~/.kward/kwshrc` and `~/.kwshrc`, with ordered `alias`, `export`, and declarative `source` support.
 - Added the `open_editor` agent tool so interactive sessions can open a requested workspace file in Kward's built-in editor.

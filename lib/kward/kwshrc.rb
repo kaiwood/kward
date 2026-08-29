@@ -18,6 +18,18 @@ module Kward
       new(env: env).read(paths)
     end
 
+    def self.read_file(path, env: ENV.to_h)
+      parser = new(env: env)
+      parser.read_path(path)
+    end
+
+    def self.resolve_path(path, cwd:, env: ENV.to_h)
+      parser = new(env: env)
+      expanded = parser.send(:expand_variables, path.to_s)
+      expanded = expanded.sub(/\A~(?=\/|\z)/, Dir.home)
+      File.expand_path(expanded, cwd)
+    end
+
     def initialize(env: ENV.to_h)
       @environment = env.to_h.transform_keys(&:to_s).transform_values(&:to_s)
       @exports = {}
@@ -27,10 +39,19 @@ module Kward
 
     def read(paths)
       Array(paths).each { |path| read_file(path, required: false) }
-      { env: @exports, aliases: @aliases }
+      configuration
+    end
+
+    def read_path(path)
+      read_file(path, required: true)
+      configuration
     end
 
     private
+
+    def configuration
+      { env: @exports, aliases: @aliases }
+    end
 
     def read_file(path, required:)
       path = File.expand_path(path.to_s)

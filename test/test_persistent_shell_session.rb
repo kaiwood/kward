@@ -147,6 +147,27 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_source_updates_aliases_and_environment_in_the_persistent_process
+    Dir.mktmpdir("persistent-shell") do |dir|
+      File.write(File.join(dir, "aliases.kwshrc"), <<~KWSHRC)
+        export KWARD_PERSISTENT_SOURCE=ready
+        alias sourced='printf sourced'
+      KWSHRC
+      shell = build_shell(dir)
+
+      result = shell.run("source aliases.kwshrc")
+      alias_result = shell.run_for_agent("sourced")
+      environment_result = shell.run_for_agent("printf %s \"$KWARD_PERSISTENT_SOURCE\"")
+
+      assert_equal 0, result.exit_status
+      assert_equal 0, alias_result.exit_status
+      assert_includes alias_result.output, "sourced"
+      assert_includes environment_result.output, "ready"
+    ensure
+      shell&.close
+    end
+  end
+
   def test_output_limit_is_bounded_without_losing_the_shell
     Dir.mktmpdir("persistent-shell") do |dir|
       shell = build_shell(dir, max_output_bytes: 4)

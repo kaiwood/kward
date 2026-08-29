@@ -655,6 +655,37 @@ class TestKwsh < KwardTestCase
     assert_includes result.output, "ready"
   end
 
+  def test_source_loads_aliases_and_exports_into_the_running_shell
+    Dir.mktmpdir("kwsh-source") do |dir|
+      File.write(File.join(dir, "aliases.kwshrc"), <<~KWSHRC)
+        export KWARD_SOURCE_TEST=ready
+        alias sourced='printf sourced'
+      KWSHRC
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      result = shell.run("source aliases.kwshrc")
+      alias_result = shell.run("sourced")
+      environment_result = shell.run("capture printf %s \"$KWARD_SOURCE_TEST\"")
+
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "$ source aliases.kwshrc"
+      assert_equal "printf sourced", alias_result.interactive_command
+      assert_includes environment_result.output, "ready"
+    end
+  end
+
+  def test_source_reports_missing_files_without_changing_shell_state
+    Dir.mktmpdir("kwsh-source") do |dir|
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh", env: { "PATH" => "" })
+
+      result = shell.run("source missing.kwshrc")
+
+      assert_equal 1, result.exit_status
+      assert_includes result.output, "kwsh: source:"
+      refute shell.child_env.key?("KWARD_SOURCE_TEST")
+    end
+  end
+
   def test_unalias_removes_aliases
     shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh", env: { "PATH" => "" }, aliases: { "hi" => "printf hi" })
 

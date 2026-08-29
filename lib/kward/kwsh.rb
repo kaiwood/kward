@@ -13,7 +13,7 @@ module Kward
   class Kwsh
     Result = Struct.new(:output, :exit_status, :exit_shell, :clear, :open_editor_path, :interactive_command, :streamed, keyword_init: true)
     Completion = Struct.new(:range, :replacement, :candidates, keyword_init: true)
-    BUILTINS = %w[alias capture cd pwd export unset unalias clear exit logout pty].freeze
+    BUILTINS = %w[alias capture cd pwd export source unset unalias clear exit logout pty].freeze
     DEFAULT_SHELL = "/bin/sh"
     DEFAULT_TIMEOUT_SECONDS = 300
     DEFAULT_MAX_OUTPUT_BYTES = 1_048_576
@@ -347,6 +347,8 @@ module Kward
         print_working_directory(display_command, words)
       when "export"
         export_variables(display_command, words)
+      when "source", "."
+        source_file(display_command, words)
       when "unset"
         unset_variables(display_command, words)
       when "clear"
@@ -530,6 +532,23 @@ module Kward
       else
         Result.new(output: "#{command_echo(command)}kwsh: export: invalid assignment: #{invalid.join(" ")}\n", exit_status: 2)
       end
+    end
+
+    def source_file(command, words)
+      unless words.length == 2
+        return Result.new(output: "#{command_echo(command)}Usage: source <file>\n", exit_status: 2)
+      end
+
+      require_relative "kwshrc"
+      path = Kwshrc.resolve_path(words[1], cwd: @cwd, env: @env)
+      config = Kwshrc.read_file(path, env: @env)
+      path_changed = config[:env].key?("PATH")
+      @env.merge!(config[:env])
+      @aliases.merge!(config[:aliases])
+      invalidate_path_executables_cache if path_changed
+      Result.new(output: command_echo(command), exit_status: 0)
+    rescue Kwshrc::ParseError => e
+      Result.new(output: "#{command_echo(command)}kwsh: source: #{e.message}\n", exit_status: 1)
     end
 
     def unset_variables(command, words)
