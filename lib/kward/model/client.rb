@@ -108,11 +108,12 @@ module Kward
       @local_models = nil
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil, provider_required: false)
       cancellation&.raise_if_cancelled!
       requested_provider = provider
+      validate_required_provider!(requested_provider) if provider_required
       url, token, resolved_provider, account_id = credentials(provider: requested_provider)
-      if token.to_s.empty? && authentication_required?(resolved_provider) && !requested_provider.to_s.empty? && resolved_provider != "OpenAI"
+      if token.to_s.empty? && authentication_required?(resolved_provider) && !provider_required && !requested_provider.to_s.empty? && resolved_provider != "OpenAI"
         url, token, resolved_provider, account_id = credentials
         model = nil
         reasoning = nil
@@ -1061,6 +1062,13 @@ module Kward
 
     def reasoning_effort(provider = nil)
       ModelInfo.reasoning_effort(config: @config, provider: provider)
+    end
+
+    def validate_required_provider!(provider)
+      provider_id = provider.to_s.strip.downcase
+      return if ProviderCatalog.configuration_ids.include?(provider_id)
+
+      raise ArgumentError, "Unknown provider: #{provider}"
     end
 
     def authentication_required?(provider)

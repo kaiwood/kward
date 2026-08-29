@@ -47,9 +47,10 @@ module Kward
       def build_editor_prompt_agent(active_agent, context, registry)
         active_conversation = active_agent.conversation
         config = safely_read_config.to_h
-        provider = active_conversation.provider || current_model_provider
-        model = ConfigFiles.editor_agent_model(config) || active_conversation.model || current_model_id
-        reasoning = ConfigFiles.editor_agent_reasoning_effort(config) || active_conversation.reasoning_effort || current_reasoning_effort
+        configured_provider = ConfigFiles.editor_agent_provider(config)
+        provider = configured_provider || active_conversation.provider || current_model_provider
+        model = ConfigFiles.editor_agent_model(config) || (configured_provider ? nil : active_conversation.model || current_model_id)
+        reasoning = ConfigFiles.editor_agent_reasoning_effort(config) || (configured_provider ? nil : active_conversation.reasoning_effort || current_reasoning_effort)
         conversation = Conversation.new(
           system_message: EditorPrompt.system_message,
           workspace_root: context[:workspace_root] || active_conversation.workspace_root,
@@ -61,6 +62,7 @@ module Kward
           client: @client,
           tool_registry: registry,
           conversation: conversation,
+          strict_provider: !configured_provider.nil?,
           warning_sink: ConfigFiles.warning_sink
         )
       end

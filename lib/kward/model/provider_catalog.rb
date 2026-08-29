@@ -71,8 +71,13 @@ module Kward
       Definition.new(id: "xai", name: "xAI", api_key_env: ["XAI_API_KEY"], protocol: "openai_chat", oauth_name: "xAI Grok"),
       Definition.new(id: "copilot", name: "GitHub Copilot", api_key_env: [], protocol: "copilot", oauth_name: "GitHub Copilot")
     ].freeze
+    CONFIGURATION_IDS = (["codex", "openai_api", "local"] + DEFINITIONS.map(&:id).reject { |id| id == "openai" }).freeze
 
     module_function
+
+    def configuration_ids
+      CONFIGURATION_IDS
+    end
 
     def all
       DEFINITIONS

@@ -245,17 +245,21 @@ The transient shell assistant normally follows the active conversation's model a
 {
   "shell": {
     "agent": {
-      "model": "gpt-5.6-luna",
+      "provider": "openrouter",
+      "model": "openai/gpt-5.6-sol",
       "reasoning_effort": "none"
     }
   }
 }
 ```
 
+The optional `provider` uses the lowercase configuration IDs listed in [Model providers](providers.md). When omitted, the shell assistant follows the active conversation. If a provider is explicitly configured without a model or reasoning effort, Kward uses that provider's defaults instead of inheriting the active conversation's values.
+
 Override those settings with environment variables:
 
 ```sh
-export KWSH_MODE="gpt-5.6-luna"
+export KWSH_PROVIDER="openrouter"
+export KWSH_MODE="openai/gpt-5.6-sol"
 export KWSH_REASONING="none"
 ```
 

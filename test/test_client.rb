@@ -901,6 +901,30 @@ class TestClient < KwardTestCase
     end
   end
 
+  def test_required_provider_does_not_fall_back_to_another_authenticated_provider
+    Dir.mktmpdir do |dir|
+      client = Kward::Client.new(
+        api_key: nil,
+        openai_access_token: "openai-token",
+        oauth: FakeOAuth.new("oauth-token"),
+        anthropic_oauth: FakeAnthropicOAuth.new(nil),
+        config_path: File.join(dir, "config.json")
+      )
+
+      error = assert_raises(RuntimeError) do
+        client.chat([{ role: "user", content: "hello" }], provider: "anthropic", provider_required: true)
+      end
+
+      assert_equal Kward::Client::ANTHROPIC_AUTH_ERROR, error.message
+
+      error = assert_raises(ArgumentError) do
+        client.chat([{ role: "user", content: "hello" }], provider: "not-a-provider", provider_required: true)
+      end
+
+      assert_equal "Unknown provider: not-a-provider", error.message
+    end
+  end
+
   def test_openrouter_provider_is_explicit_and_uses_openrouter_even_with_openai_token
     Dir.mktmpdir do |dir|
       path = File.join(dir, "config.json")

@@ -446,20 +446,30 @@ module Kward
       EditorMode.normalize(editor["mode"])
     end
 
+    # Returns the optional provider override for editor-agent turns.
+    def editor_agent_provider(config = read_config)
+      value = ENV["KWARD_EDITOR_PROVIDER"].to_s.strip
+      return value unless value.empty?
+
+      editor_agent_setting(config, "provider")
+    end
+
     # Returns the optional model override for editor-agent turns.
     def editor_agent_model(config = read_config)
-      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
-      agent = editor["agent"].is_a?(Hash) ? editor["agent"] : {}
-      value = agent["model"].to_s.strip
-      value.empty? ? nil : value
+      editor_agent_setting(config, "model")
     end
 
     # Returns the optional reasoning-effort override for editor-agent turns.
     def editor_agent_reasoning_effort(config = read_config)
-      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
-      agent = editor["agent"].is_a?(Hash) ? editor["agent"] : {}
-      value = agent["reasoning_effort"].to_s.strip
-      value.empty? ? nil : value
+      editor_agent_setting(config, "reasoning_effort")
+    end
+
+    # Returns the shell-agent provider override, preferring the environment.
+    def shell_agent_provider(config = read_config)
+      value = ENV["KWSH_PROVIDER"].to_s.strip
+      return value unless value.empty?
+
+      shell_agent_setting(config, "provider")
     end
 
     # Returns the shell-agent model override, preferring the environment.
@@ -476,6 +486,13 @@ module Kward
       return value unless value.empty?
 
       shell_agent_setting(config, "reasoning_effort")
+    end
+
+    def editor_agent_setting(config, key)
+      editor = config["editor"].is_a?(Hash) ? config["editor"] : {}
+      agent = editor["agent"].is_a?(Hash) ? editor["agent"] : {}
+      value = agent[key].to_s.strip
+      value.empty? ? nil : value
     end
 
     def shell_agent_setting(config, key)

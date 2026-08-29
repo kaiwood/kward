@@ -147,19 +147,41 @@ class TestEditorPrompt < KwardTestCase
   def test_editor_prompt_uses_configured_model_and_reasoning
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(config_path, JSON.dump("editor" => { "agent" => { "model" => "editor-model", "reasoning_effort" => "high" } }))
+      File.write(config_path, JSON.dump("editor" => { "agent" => { "provider" => "anthropic", "model" => "editor-model", "reasoning_effort" => "high" } }))
       prompt = EditorPromptTestPrompt.new(content: "old\n", display_path: "hello.rb", language: :ruby)
       client = EditorPromptTestClient.new
       active_conversation = Kward::Conversation.new(system_message: nil, provider: "OpenAI", model: "tab-model", reasoning_effort: "low")
       active_agent = Kward::Agent.new(client: client, conversation: active_conversation, tool_registry: Kward::ToolRegistry.new(workspace: Kward::Workspace.new))
       cli = Kward::CLI.new(prompt: prompt, client: client)
 
-      with_env("KWARD_CONFIG_PATH" => config_path) do
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_EDITOR_PROVIDER" => nil) do
         cli.send(:run_editor_prompt_turn, { instruction: "update it" }, active_agent)
       end
 
+      assert_equal "anthropic", client.requests.first[:provider]
       assert_equal "editor-model", client.requests.first[:model]
       assert_equal "high", client.requests.first[:reasoning]
+      assert_equal true, client.requests.first[:provider_required]
+    end
+  end
+
+  def test_editor_prompt_does_not_inherit_model_or_reasoning_for_a_configured_provider
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("editor" => { "agent" => { "provider" => "anthropic" } }))
+      prompt = EditorPromptTestPrompt.new(content: "old\n", display_path: "hello.rb", language: :ruby)
+      client = EditorPromptTestClient.new
+      active_conversation = Kward::Conversation.new(system_message: nil, provider: "Codex", model: "tab-model", reasoning_effort: "low")
+      active_agent = Kward::Agent.new(client: client, conversation: active_conversation, tool_registry: Kward::ToolRegistry.new(workspace: Kward::Workspace.new))
+      cli = Kward::CLI.new(prompt: prompt, client: client)
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_EDITOR_PROVIDER" => nil) do
+        cli.send(:run_editor_prompt_turn, { instruction: "update it" }, active_agent)
+      end
+
+      assert_equal "anthropic", client.requests.first[:provider]
+      assert_nil client.requests.first[:model]
+      assert_nil client.requests.first[:reasoning]
     end
   end
 

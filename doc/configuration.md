@@ -191,21 +191,25 @@ The transient shell assistant normally follows the active conversation's model a
 {
   "shell": {
     "agent": {
-      "model": "gpt-5.6-luna",
+      "provider": "openrouter",
+      "model": "openai/gpt-5.6-sol",
       "reasoning_effort": "none"
     }
   }
 }
 ```
 
+The optional `provider` selects a different backend for the transient shell assistant. Use the lowercase configuration IDs listed in [Model providers](providers.md). When it is omitted, the shell assistant follows the active conversation's provider, model, and reasoning effort. If a provider is explicitly configured without a model or reasoning effort, Kward uses that provider's defaults rather than inheriting values from the active conversation.
+
 Environment variables take precedence over the JSON settings:
 
 ```sh
-export KWSH_MODE="gpt-5.6-luna"
+export KWSH_PROVIDER="openrouter"
+export KWSH_MODE="openai/gpt-5.6-sol"
 export KWSH_REASONING="none"
 ```
 
-`KWSH_MODE` selects the shell-agent model and `KWSH_REASONING` selects its reasoning effort. Empty values are ignored.
+`KWSH_PROVIDER` selects the shell-agent provider, `KWSH_MODE` selects its model, and `KWSH_REASONING` selects its reasoning effort. Empty values are ignored.
 
 `export` values are applied when shell mode starts, after Kward's conservative color defaults, and are also available to leading-`!` commands. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion. `/shell` keeps one persistent local interactive shell process per tab.
 
@@ -422,14 +426,15 @@ Vibe `:prompt` uses a dedicated transient editor agent. Configure its model and 
 {
   "editor": {
     "agent": {
-      "model": "gpt-5.5",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
       "reasoning_effort": "medium"
     }
   }
 }
 ```
 
-These settings use the active tab's provider. If either value is omitted, Kward falls back to the active tab's value and then the client default. Editor-agent prompts and tool activity are kept out of the normal transcript and session history; the editor remains visible with a spinner while the transient turn runs.
+The optional `provider` selects a different backend for the transient editor assistant. Use the lowercase configuration IDs listed in [Model providers](providers.md). When it is omitted, the editor assistant follows the active tab's provider, model, and reasoning effort. `KWARD_EDITOR_PROVIDER` can override the JSON provider for one-off runs. If a provider is explicitly configured without a model or reasoning effort, Kward uses that provider's defaults rather than inheriting values from the active tab. Editor-agent prompts and tool activity are kept out of the normal transcript and session history; the editor remains visible with a spinner while the transient turn runs.
 
 The integrated Git and session diff viewers support unified and side-by-side layouts:
 

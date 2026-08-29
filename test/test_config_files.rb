@@ -61,14 +61,22 @@ class TestConfigFiles < KwardTestCase
     config = {
       "editor" => {
         "agent" => {
+          "provider" => "  anthropic  ",
           "model" => "  gpt-editor  ",
           "reasoning_effort" => " medium "
         }
       }
     }
 
-    assert_equal "gpt-editor", Kward::ConfigFiles.editor_agent_model(config)
-    assert_equal "medium", Kward::ConfigFiles.editor_agent_reasoning_effort(config)
+    with_env("KWARD_EDITOR_PROVIDER" => nil) do
+      assert_equal "anthropic", Kward::ConfigFiles.editor_agent_provider(config)
+      assert_equal "gpt-editor", Kward::ConfigFiles.editor_agent_model(config)
+      assert_equal "medium", Kward::ConfigFiles.editor_agent_reasoning_effort(config)
+    end
+    with_env("KWARD_EDITOR_PROVIDER" => " openrouter ") do
+      assert_equal "openrouter", Kward::ConfigFiles.editor_agent_provider(config)
+    end
+    assert_nil Kward::ConfigFiles.editor_agent_provider({})
     assert_nil Kward::ConfigFiles.editor_agent_model({})
     assert_nil Kward::ConfigFiles.editor_agent_reasoning_effort({ "editor" => { "agent" => {} } })
   end
@@ -77,11 +85,24 @@ class TestConfigFiles < KwardTestCase
     config = {
       "shell" => {
         "agent" => {
+          "provider" => "  anthropic  ",
           "model" => "  config-model  ",
           "reasoning_effort" => " medium "
         }
       }
     }
+
+    with_env("KWSH_PROVIDER" => nil, "KWSH_MODE" => nil, "KWSH_REASONING" => nil) do
+      assert_equal "anthropic", Kward::ConfigFiles.shell_agent_provider(config)
+      assert_equal "config-model", Kward::ConfigFiles.shell_agent_model(config)
+      assert_equal "medium", Kward::ConfigFiles.shell_agent_reasoning_effort(config)
+    end
+
+    with_env("KWSH_PROVIDER" => " openrouter ", "KWSH_MODE" => " env-model ", "KWSH_REASONING" => " none ") do
+      assert_equal "openrouter", Kward::ConfigFiles.shell_agent_provider(config)
+      assert_equal "env-model", Kward::ConfigFiles.shell_agent_model(config)
+      assert_equal "none", Kward::ConfigFiles.shell_agent_reasoning_effort(config)
+    end
 
     with_env("KWSH_MODE" => nil, "KWSH_REASONING" => nil) do
       assert_equal "config-model", Kward::ConfigFiles.shell_agent_model(config)

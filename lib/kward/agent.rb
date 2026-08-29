@@ -28,10 +28,11 @@ module Kward
   # lowest layer that owns the behavior, and use `Agent` only for cross-step turn
   # coordination.
   class Agent
-    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: nil, warning_sink: nil, hook_manager: nil, hook_context: nil)
+    def initialize(client:, tool_registry: ToolRegistry.new, conversation: Conversation.new, telemetry_logger: nil, warning_sink: nil, hook_manager: nil, hook_context: nil, strict_provider: false)
       @client = client
       @tool_registry = tool_registry
       @conversation = conversation
+      @strict_provider = strict_provider == true
       @warning_sink = warning_sink
       @telemetry_logger = telemetry_logger || TelemetryLogger.new(warning_sink: warning_sink)
       @hook_manager = hook_manager
@@ -241,7 +242,8 @@ module Kward
         tools: registry.schemas,
         provider: options[:provider] || @conversation.provider,
         model: options[:model] || @conversation.model,
-        reasoning: options[:reasoning] || @conversation.reasoning_effort
+        reasoning: options[:reasoning] || @conversation.reasoning_effort,
+        provider_required: @strict_provider
       }
       before = run_hook("model_request_before", payload: request)
       request = DeepCopy.merge(request, before.payload) if before.decision.modify?
@@ -261,7 +263,8 @@ module Kward
           steering: steering,
           provider: request[:provider] || request["provider"],
           model: request[:model] || request["model"],
-          reasoning: request[:reasoning] || request["reasoning"]
+          reasoning: request[:reasoning] || request["reasoning"],
+          provider_required: request[:provider_required] || request["provider_required"]
         }
       )
       run_hook("model_response_after_parse", payload: { message: response })
