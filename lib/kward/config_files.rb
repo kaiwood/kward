@@ -462,6 +462,29 @@ module Kward
       value.empty? ? nil : value
     end
 
+    # Returns the shell-agent model override, preferring the environment.
+    def shell_agent_model(config = read_config)
+      value = ENV["KWSH_MODE"].to_s.strip
+      return value unless value.empty?
+
+      shell_agent_setting(config, "model")
+    end
+
+    # Returns the shell-agent reasoning-effort override, preferring the environment.
+    def shell_agent_reasoning_effort(config = read_config)
+      value = ENV["KWSH_REASONING"].to_s.strip
+      return value unless value.empty?
+
+      shell_agent_setting(config, "reasoning_effort")
+    end
+
+    def shell_agent_setting(config, key)
+      shell = config["shell"].is_a?(Hash) ? config["shell"] : {}
+      agent = shell["agent"].is_a?(Hash) ? shell["agent"] : {}
+      value = agent[key].to_s.strip
+      value.empty? ? nil : value
+    end
+
     # Returns whether the built-in TUI editor should auto-indent new lines.
     def editor_auto_indent?(config = read_config)
       editor = config["editor"].is_a?(Hash) ? config["editor"] : {}

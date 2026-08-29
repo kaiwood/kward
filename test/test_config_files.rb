@@ -73,6 +73,32 @@ class TestConfigFiles < KwardTestCase
     assert_nil Kward::ConfigFiles.editor_agent_reasoning_effort({ "editor" => { "agent" => {} } })
   end
 
+  def test_shell_agent_settings_prefer_environment_over_main_config
+    config = {
+      "shell" => {
+        "agent" => {
+          "model" => "  config-model  ",
+          "reasoning_effort" => " medium "
+        }
+      }
+    }
+
+    with_env("KWSH_MODE" => nil, "KWSH_REASONING" => nil) do
+      assert_equal "config-model", Kward::ConfigFiles.shell_agent_model(config)
+      assert_equal "medium", Kward::ConfigFiles.shell_agent_reasoning_effort(config)
+    end
+
+    with_env("KWSH_MODE" => " env-model ", "KWSH_REASONING" => " none ") do
+      assert_equal "env-model", Kward::ConfigFiles.shell_agent_model(config)
+      assert_equal "none", Kward::ConfigFiles.shell_agent_reasoning_effort(config)
+    end
+
+    with_env("KWSH_MODE" => nil, "KWSH_REASONING" => nil) do
+      assert_nil Kward::ConfigFiles.shell_agent_model({})
+      assert_nil Kward::ConfigFiles.shell_agent_reasoning_effort({ "shell" => { "agent" => {} } })
+    end
+  end
+
   def test_sandbox_policy_uses_only_global_configured_roots
     Dir.mktmpdir do |dir|
       workspace = File.join(dir, "workspace")

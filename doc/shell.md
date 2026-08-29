@@ -239,6 +239,28 @@ source ~/.kward/kwsh-aliases
 
 `source` reads another rc file without executing it; relative paths are resolved from the file containing the directive. Unsupported shell scripting is ignored for now.
 
+The transient shell assistant normally follows the active conversation's model and reasoning effort. Configure it in the main JSON file:
+
+```json
+{
+  "shell": {
+    "agent": {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "none"
+    }
+  }
+}
+```
+
+Override those settings with environment variables:
+
+```sh
+export KWSH_MODE="gpt-5.6-luna"
+export KWSH_REASONING="none"
+```
+
+Environment variables take precedence over the JSON settings, and empty values are ignored.
+
 ### Runtime defaults
 
 These runtime settings are built into kwsh and are not configurable through rc files:

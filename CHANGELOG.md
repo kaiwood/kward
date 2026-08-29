@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added shell-agent model and reasoning-effort settings under `shell.agent` in the main JSON config, with `KWSH_MODE` and `KWSH_REASONING` environment overrides.
 - Added shell-style `kwshrc` configuration files at `~/.kward/kwshrc` and `~/.kwshrc`, with ordered `alias`, `export`, and declarative `source` support.
 - Added the `open_editor` agent tool so interactive sessions can open a requested workspace file in Kward's built-in editor.
 - Extended `/scratchpad` to open all 26 built-in syntax-highlighted languages through canonical names or familiar file-extension shortcuts, with `/scratchpad help` for discovery.

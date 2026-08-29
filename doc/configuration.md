@@ -183,6 +183,30 @@ source ~/.kward/kwsh-aliases
 
 Only declarative `alias`, `export`, and `source` (or `.`) directives are handled. `source` parses the referenced file without executing it, resolving relative paths from the containing rc file. Other shell scripting is ignored for now.
 
+### Shell-agent model
+
+The transient shell assistant normally follows the active conversation's model and reasoning effort. Override those defaults in the main JSON configuration:
+
+```json
+{
+  "shell": {
+    "agent": {
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "none"
+    }
+  }
+}
+```
+
+Environment variables take precedence over the JSON settings:
+
+```sh
+export KWSH_MODE="gpt-5.6-luna"
+export KWSH_REASONING="none"
+```
+
+`KWSH_MODE` selects the shell-agent model and `KWSH_REASONING` selects its reasoning effort. Empty values are ignored.
+
 `export` values are applied when shell mode starts, after Kward's conservative color defaults, and are also available to leading-`!` commands. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion. `/shell` keeps one persistent local interactive shell process per tab.
 
 `alias` entries expand the first word of a command once. For example, `alias ll='ls -la'` makes `ll lib` run `ls -la lib`. Configured aliases are available both inside `/shell` and after the normal composer's `!` prefix, including command-name Tab completion. Built-in shell commands such as `cd`, `pwd`, `export`, `unset`, `alias`, `capture`, `clear`, `pty`, and `exit` take precedence over aliases inside `/shell`. External commands receive an interactive PTY by default. Prefix a submitted line with `?` inside `/shell` to ask the transient shell assistant about the current command output or state. An alias value can begin with `capture` when its `/shell` output should use the configured timeout, output limit, and transcript sanitization. Leading-`!` alias invocations are always interactive, so Kward removes a leading `capture` or legacy `pty` mode marker from the expanded alias before execution. Run `alias` inside `kwsh` to list configured aliases. Aliases created at runtime with that built-in belong only to the current `/shell` session and are not available to `!command` input.

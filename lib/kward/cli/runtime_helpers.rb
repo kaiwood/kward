@@ -210,12 +210,13 @@ module Kward
 
       def build_shell_prompt_agent(active_agent)
         active_conversation = active_agent.conversation
+        config = ConfigFiles.read_config
         conversation = Conversation.new(
           system_message: ShellPrompt.system_message,
           workspace_root: active_conversation.workspace_root,
           provider: active_conversation.provider || current_model_provider,
-          model: active_conversation.model || current_model_id,
-          reasoning_effort: active_conversation.reasoning_effort || current_reasoning_effort
+          model: ConfigFiles.shell_agent_model(config) || active_conversation.model || current_model_id,
+          reasoning_effort: ConfigFiles.shell_agent_reasoning_effort(config) || active_conversation.reasoning_effort || current_reasoning_effort
         )
         Agent.new(
           client: @client,

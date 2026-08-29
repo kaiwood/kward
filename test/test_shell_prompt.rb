@@ -101,6 +101,45 @@ class TestShellPrompt < KwardTestCase
     end
   end
 
+  def test_shell_prompt_agent_uses_configured_model_and_reasoning_with_environment_overrides
+    Dir.mktmpdir("shell-prompt") do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.generate(
+        "shell" => {
+          "agent" => {
+            "model" => "configured-model",
+            "reasoning_effort" => "high"
+          }
+        }
+      ))
+      conversation = Kward::Conversation.new(
+        system_message: nil,
+        workspace_root: dir,
+        provider: "Codex",
+        model: "main-model",
+        reasoning_effort: "medium"
+      )
+      active_agent = Object.new
+      active_agent.define_singleton_method(:conversation) { conversation }
+      active_agent.define_singleton_method(:tool_registry) do
+        Kward::ToolRegistry.new(workspace: Kward::Workspace.new(root: dir))
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWSH_MODE" => nil, "KWSH_REASONING" => nil) do
+        configured = cli.send(:build_shell_prompt_agent, active_agent).conversation
+        assert_equal "configured-model", configured.model
+        assert_equal "high", configured.reasoning_effort
+      end
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWSH_MODE" => "env-model", "KWSH_REASONING" => "none") do
+        overridden = cli.send(:build_shell_prompt_agent, active_agent).conversation
+        assert_equal "env-model", overridden.model
+        assert_equal "none", overridden.reasoning_effort
+      end
+    end
+  end
+
   def test_cli_shell_loop_routes_question_input_to_the_shell_agent
     Dir.mktmpdir("shell-prompt") do |dir|
       prompt = FakePrompt.new(["? explain the previous failure", "exit"])
