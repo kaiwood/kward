@@ -5,7 +5,7 @@ module Kward
     # Modal Vibe editor state for one editor buffer.
     class VibeEditorState
       attr_accessor :mode, :pending, :command, :last_change, :last_find
-      attr_accessor :last_visual_selection, :visual_block_insert
+      attr_accessor :command_range, :last_visual_selection, :visual_block_insert
       attr_accessor :marks, :registers, :register_types, :macros, :recording_macro, :last_macro
       attr_accessor :kill_linewise, :previous_change_cursor, :jump_back_list, :jump_forward_list
 
@@ -13,6 +13,7 @@ module Kward
         @mode = editor_mode == "vibe" ? "normal" : nil
         @pending = ""
         @command = ""
+        @command_range = nil
         @last_change = nil
         @last_find = nil
         @last_visual_selection = nil
@@ -34,6 +35,7 @@ module Kward
         state.mode = other.mode&.dup
         state.pending = other.pending.dup
         state.command = other.command.dup
+        state.command_range = other.command_range&.dup
         state.last_change = other.last_change&.dup
         state.last_find = other.last_find&.dup
         state.last_visual_selection = other.last_visual_selection&.dup

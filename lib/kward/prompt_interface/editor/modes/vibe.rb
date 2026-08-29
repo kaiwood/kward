@@ -87,6 +87,7 @@ module Kward
 
         @editor_state.vibe_command = ""
         @editor_state.vibe_pending = ""
+        @editor_state.vibe_command_range = nil
         @editor_state.clear_selection
         vibe_return_to_normal
       end
@@ -199,6 +200,7 @@ module Kward
         case key
         when "\e", TerminalKeys::CTRL_C, :escape
           @editor_state.vibe_command = ""
+          @editor_state.vibe_command_range = nil
           vibe_return_to_normal
         when "\b", "\x7F"
           @editor_state.vibe_command = @editor_state.vibe_command[0...-1].to_s
@@ -218,6 +220,10 @@ module Kward
 
       def execute_vibe_command(command)
         command = command.to_s.strip
+        command_range = @editor_state.vibe_command_range
+        command_range ||= vibe_visual_line_bounds if vibe_visual_mode?
+        command_range, command = vibe_extract_command_range(command, command_range)
+        @editor_state.vibe_command_range = nil
         @editor_state.vibe_mode = "normal"
         @editor_state.vibe_command = ""
         action = nil
@@ -229,7 +235,7 @@ module Kward
         when /\Ae(!?)\s+(.+)\z/
           vibe_edit_file(Regexp.last_match(2), force: Regexp.last_match(1) == "!")
         when "run"
-          vibe_record_undo { run_editor_buffer }
+          vibe_record_undo { run_editor_buffer(source: vibe_command_source(command_range)) }
         when /\Aprompt\s+(.+)\z/
           action = editor_prompt_action(Regexp.last_match(1))
         when "prompt"
@@ -246,7 +252,7 @@ module Kward
           save_editor if @editor_state&.dirty?
           close_editor if @editor_state
         when /\A(?:(%|\d+,\d+))?s\/([^\/]*)\/([^\/]*)\/(g?)\z/
-          vibe_substitute_command(Regexp.last_match(1), Regexp.last_match(2), Regexp.last_match(3), global: Regexp.last_match(4) == "g")
+          vibe_substitute_command(command_range || Regexp.last_match(1), Regexp.last_match(2), Regexp.last_match(3), global: Regexp.last_match(4) == "g")
         when /\A\d+\z/
           @editor_state.set_cursor_line_and_column(command.to_i - 1, 0)
           @editor_state.status = "Line #{command}"
@@ -254,6 +260,33 @@ module Kward
           @editor_state.status = "Unknown command: #{command}"
         end
         action || true
+      end
+
+      def vibe_extract_command_range(command, visual_range)
+        if command.start_with?("'<,'>")
+          [visual_range, command[5..].to_s.strip]
+        elsif (match = command.match(/\A(%|\d+,\d+)(?=[a-z])/))
+          [match[1], command[match[1].length..].to_s]
+        else
+          [visual_range, command]
+        end
+      end
+
+      def vibe_command_source(range)
+        return @editor_state.buffer.dup unless range
+
+        first_line, last_line = vibe_command_line_bounds(range)
+        start_index = @editor_state.line_range(first_line)[0]
+        end_index = @editor_state.line_range(last_line)[1]
+        @editor_state.buffer[start_index...end_index].to_s
+      end
+
+      def vibe_command_line_bounds(range)
+        return range if range.is_a?(Array)
+        return [0, @editor_state.lines.length - 1] if range.to_s == "%"
+
+        first_line, last_line = range.to_s.split(",", 2).map { |value| value.to_i - 1 }
+        [first_line, last_line]
       end
 
       def vibe_edit_file(path, force: false)
@@ -267,6 +300,8 @@ module Kward
 
       def vibe_complete_command_path
         command = @editor_state.vibe_command.to_s
+        range_prefix = command.start_with?("'<,'>") ? command[0, 5] : ""
+        command = command[5..].to_s if range_prefix != ""
         match = command.match(/\A(e!?)\s+(.*)\z/)
         return false unless match
 
@@ -279,7 +314,7 @@ module Kward
 
         replacement = candidates.length == 1 ? candidates.first : vibe_common_prefix(candidates)
         if replacement.length > prefix.length
-          @editor_state.vibe_command = "#{match[1]} #{replacement}"
+          @editor_state.vibe_command = "#{range_prefix}#{match[1]} #{replacement}"
           @editor_state.status = ":#{@editor_state.vibe_command}"
         elsif candidates.length > 1
           @editor_state.status = vibe_path_completion_status(candidates)
@@ -339,7 +374,9 @@ module Kward
 
         start_line = 0
         end_line = @editor_state.lines.length - 1
-        if range&.include?(",")
+        if range.is_a?(Array)
+          start_line, end_line = range
+        elsif range&.include?(",")
           start_line, end_line = range.split(",", 2).map { |value| value.to_i - 1 }
         end
         start_line = [[start_line, 0].max, @editor_state.lines.length - 1].min
@@ -656,6 +693,7 @@ module Kward
         when "u"
           @editor_state.undo
         when ":"
+          @editor_state.vibe_command_range = nil
           @editor_state.vibe_mode = "command"
           @editor_state.vibe_command = ""
           @editor_state.status = ":"
@@ -745,6 +783,8 @@ module Kward
           editor_search_repeat(vibe_opposite_search_direction)
         when "o"
           vibe_switch_visual_selection_end
+        when ":"
+          vibe_begin_visual_command
         when "G"
           vibe_visual_goto_line(command.match?(/\A\d+G\z/) ? count : nil)
         when "gg"
@@ -792,6 +832,14 @@ module Kward
 
       def vibe_switch_visual_selection_end
         @editor_state.selection_anchor, @editor_state.cursor = @editor_state.cursor, @editor_state.selection_anchor
+        true
+      end
+
+      def vibe_begin_visual_command
+        @editor_state.vibe_command_range = vibe_visual_line_bounds
+        @editor_state.vibe_mode = "command"
+        @editor_state.vibe_command = "'<,'>"
+        @editor_state.status = ":'<,'>"
         true
       end
 

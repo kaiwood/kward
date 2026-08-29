@@ -423,7 +423,7 @@ Typing an opening bracket (`(`, `[`, `{`) or quote (`"`, `'`, `` ` ``) in visual
 
 ### Command mode
 
-Enter command mode with `:` from normal mode. Type a command and press `Enter`. Press `Esc` or `Ctrl+C` to cancel.
+Enter command mode with `:` from normal mode. Type a command and press `Enter`. Press `Esc` or `Ctrl+C` to cancel. From visual mode, `:` starts the command with the selected line range (`'<,'>`), as in Vim.
 
 | Command | Action                                     |
 | ------- | ------------------------------------------ |
@@ -433,6 +433,12 @@ Enter command mode with `:` from normal mode. Type a command and press `Enter`. 
 | `:wq`   | Save and quit                              |
 | `:x`    | Save if changed, then quit                 |
 | `:N`    | Go to line `N`                             |
+| `:run`  | Run the complete Ruby scratchpad           |
+| `:prompt instruction` | Ask the editor agent to update the buffer |
+| `:s/a/b/g` | Substitute `a` with `b`                   |
+| `:'<,'>s/a/b/g` | Substitute only across the visual selection |
+
+Visual line ranges apply to `:s` and `:run`; `:run` executes only the selected source lines. Other commands retain their normal save, navigation, file, and quit behavior.
 
 ### Vibe design notes
 

@@ -16,7 +16,7 @@ module Kward
         @editor_runner_state&.running?
       end
 
-      def run_editor_buffer
+      def run_editor_buffer(source: nil)
         return false unless @editor_state
         if editor_runner_running?
           @editor_runner_output_visible = true
@@ -30,7 +30,7 @@ module Kward
           return false
         end
 
-        source = @editor_state.buffer.dup
+        source = source.nil? ? @editor_state.buffer.dup : source.to_s
         state = EditorRunnerState.new(language: language, source: source)
         @editor_runner_state = state
         @editor_runner_output_visible = true

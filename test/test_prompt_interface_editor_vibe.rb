@@ -628,6 +628,41 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_uses_visual_selection_as_substitute_range
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    assert prompt.send(:open_scratchpad, :text, content: "alpha\nalpha\nbeta")
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, "v")
+    prompt.send(:handle_editor_key, "j")
+    prompt.send(:handle_editor_key, ":")
+
+    assert_equal "command", editor.vibe_mode
+    assert_equal "'<,'>", editor.vibe_command
+
+    "s/alpha/omega/g".each_char { |key| prompt.send(:handle_editor_key, key) }
+    prompt.send(:handle_editor_key, "\r")
+
+    assert_equal "omega\nomega\nbeta", editor.buffer
+    assert_equal "normal", editor.vibe_mode
+  end
+
+  def test_prompt_interface_vibe_mode_uses_visual_selection_as_run_range
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    assert prompt.send(:open_scratchpad, :ruby, content: "puts 'selected'\nputs 'not selected'\n")
+    editor = prompt.instance_variable_get(:@editor_state)
+
+    prompt.send(:handle_editor_key, "V")
+    prompt.send(:handle_editor_key, ":")
+    "run".each_char { |key| prompt.send(:handle_editor_key, key) }
+    prompt.send(:handle_editor_key, "\r")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+
+    result = prompt.instance_variable_get(:@editor_runner_state).result
+    assert_equal "selected\n", result.output
+    assert_equal "puts 'selected'\nputs 'not selected'\n", editor.buffer
+  end
+
   def test_prompt_interface_vibe_mode_stops_macro_recording_from_visual_mode
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "abc")

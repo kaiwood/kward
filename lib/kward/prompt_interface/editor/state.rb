@@ -180,6 +180,15 @@ module Kward
         sync_vibe_state
       end
 
+      def vibe_command_range
+        @vibe_state.command_range
+      end
+
+      def vibe_command_range=(value)
+        @vibe_state.command_range = value
+        sync_vibe_state
+      end
+
       def vibe_last_change
         @vibe_state.last_change
       end
@@ -1289,6 +1298,7 @@ module Kward
         @vibe_mode = @vibe_state.mode
         @vibe_pending = @vibe_state.pending
         @vibe_command = @vibe_state.command
+        @vibe_command_range = @vibe_state.command_range
         @vibe_last_change = @vibe_state.last_change
         @vibe_last_find = @vibe_state.last_find
         @vibe_last_visual_selection = @vibe_state.last_visual_selection
