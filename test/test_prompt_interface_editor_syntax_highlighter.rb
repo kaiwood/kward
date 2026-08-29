@@ -187,6 +187,31 @@ class TestPromptInterfaceEditorSyntaxHighlighter < KwardTestCase
     assert_equal "Use `kward` now", strip_ansi(inline)
   end
 
+  def test_markdown_highlighting_delegates_fenced_code_to_tagged_language
+    content = "# Example\n\n```rb\nclass HelloWorld\nend\n```\n"
+    prompt = syntax_prompt(path: "README.md", content: content)
+
+    opening = prompt.send(:editor_render_line, "```rb", 2, 80)
+    code = prompt.send(:editor_render_line, "class HelloWorld", 3, 80)
+    closing = prompt.send(:editor_render_line, "```", 5, 80)
+
+    assert_equal "\e[90m```rb\e[0m", opening
+    assert_includes code, "\e[34mclass\e[0m"
+    assert_includes code, "\e[33mHelloWorld\e[0m"
+    assert_equal "\e[34mend\e[0m", prompt.send(:editor_render_line, "end", 4, 80)
+    assert_equal "\e[90m```\e[0m", closing
+    assert_equal "class HelloWorld", strip_ansi(code)
+  end
+
+  def test_markdown_highlighting_keeps_unknown_fenced_code_plain
+    content = "```unknown\n# not a heading\n```\n"
+    prompt = syntax_prompt(path: "README.md", content: content)
+
+    rendered = prompt.send(:editor_render_line, "# not a heading", 1, 80)
+
+    assert_equal "# not a heading", rendered
+  end
+
   def test_additional_language_highlighting_colorizes_representative_tokens
     examples = {
       "app.js" => ["const Name = \"ok\" // comment", "\e[34mconst\e[0m", "\e[33mName\e[0m", "\e[90m// comment\e[0m"],

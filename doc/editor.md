@@ -43,7 +43,7 @@ For a nested project tree, run:
 /files
 ```
 
-In the tree browser, use `↑`/`↓` to move, `←`/`→` to collapse or expand directories, `Enter` to toggle a directory or open a file, `Tab` or `/` to search, `i` to show or hide Git-ignored files, `@` to insert the selected file as an `@path` mention, and `Esc` to close. When you open a file from `/files`, quitting the editor returns to the browser at the same position.
+In the tree browser, use `↑`/`↓` to move, `←`/`→` to collapse or expand directories, `Enter` to toggle a directory or open a file, `Tab` or `/` to search, `i` to show or hide Git-ignored files, `f` to create a file, `d` to create a directory, `r` to rename the selected entry, `Backspace` to delete after confirmation, `@` to insert the selected file as an `@path` mention, and `Esc` to close. Create and rename names are entered in the prompt and must be single entry names. When you open a file from `/files`, quitting the editor returns to the browser at the same position.
 
 For an unsaved buffer, open a scratchpad:
 
@@ -57,7 +57,7 @@ For an unsaved buffer, open a scratchpad:
 
 Scratchpads accept canonical language names and familiar file-extension shortcuts. For example, `js` selects JavaScript, `py` selects Python, `rb` selects Ruby, `yml` selects YAML, `cs` selects C#, and `cpp` selects C++. Use `/scratchpad help` to print the complete list of names and aliases.
 
-All 26 built-in syntax-highlighted languages are available: Ruby, ERB, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL. Scratchpads use a matching virtual filename such as `scratchpad.js` or `scratchpad.py`; in Vibe mode, save one to a real file with `:w filename`.
+All 26 built-in syntax-highlighted languages are available: Ruby, ERB, Crystal, Elixir, Julia, JavaScript, TypeScript, JSON, Markdown, YAML, Shell, Makefile, HTML, CSS, SCSS, Python, Go, Rust, Java, C#, C, C++, Swift, Kotlin, Lua, and SQL. Markdown buffers also apply the tagged language highlighter, auto-indentation, and endwise behavior inside fenced code blocks, such as a fence tagged `ruby` or `js`; unknown tags remain readable as plain text. Scratchpads use a matching virtual filename such as `scratchpad.js` or `scratchpad.py`; in Vibe mode, save one to a real file with `:w filename`.
 
 Ruby scratchpads can run with `:run` in Vibe mode or `Ctrl+R` in Modern mode. Kward keeps the source buffer unchanged and opens a read-only output pane in the lower half of the editor with the captured output, exit status, and duration. Drag with the mouse to make a virtual selection inside the output, then press `Ctrl+C` or `Cmd+C` to copy it (`y` in Vibe mode). Only the selected output text is copied; pane borders are excluded. `Cmd+C` requires the terminal to forward the Command key to Kward. Press `Esc` to return to editing, use the arrow or page keys to scroll, and press `Ctrl+C` without a selection to cancel a running buffer. Other language scratchpads currently provide editing and highlighting only.
 

@@ -12,7 +12,7 @@ From an interactive Kward session, run:
 /files
 ```
 
-Kward opens the project file browser. Use the arrow keys or `j`/`k` to move through the tree, then press `Enter` on a file to open it in the integrated editor. Supported images (PNG, JPEG, GIF, and WebP) open as read-only inline previews when the terminal supports Kitty or iTerm2 image sequences.
+Kward opens the project file browser. Use the arrow keys or `j`/`k` to move through the tree, then press `Enter` on a file to open it in the integrated editor. Supported images (PNG, JPEG, GIF, and WebP) open as read-only inline previews when the terminal supports Kitty or iTerm2 image sequences. Use `f` for a new file, `d` for a new directory, or `r` to rename the selected file or directory; type the single entry name in the prompt and press `Enter`.
 
 When you quit the editor or close an image preview, Kward returns to the file browser at the same position so you can keep browsing nearby files.
 
@@ -40,7 +40,11 @@ Outside Git, Kward scans the workspace directory and skips common noisy director
 | `/` | Start search |
 | `Backspace` | Delete the last search character |
 | `i` | Show or hide Git-ignored files |
-| `Esc` | Leave search; press again to close the browser |
+| `f` | Create a file beneath the selected directory, or beside the selected file |
+| `d` | Create a directory beneath the selected directory, or beside the selected file |
+| `r` | Rename the selected file or directory; the prompt starts with its current name |
+| `Backspace` | Start deletion confirmation for the selected file or directory |
+| `Esc` | Leave search or name entry; cancel deletion; press again to close the browser |
 | `Q` | Close an image preview |
 | `+` / `-` | Zoom an image preview in / out |
 | `@` | Insert the selected file as an `@path` mention |
@@ -93,7 +97,7 @@ See [Integrated editor](editor.md) for editor modes, save/quit keys, search, sel
 
 Kward remembers the expanded folders, selected path, and Git-ignored file visibility for each workspace. The next time you open `/files` in the same project, it restores the browser close to where you left it.
 
-Search itself is temporary. Closing search returns to the normal tree, and closing the browser leaves your chat session intact.
+Search itself is temporary. Closing search returns to the normal tree, and closing the browser leaves your chat session intact. Create and rename operations reject existing names rather than replacing them; name entry accepts only one file or directory name, not a path. Backspace requires confirmation before deleting. Non-empty directories display an additional warning and require a second confirmation before recursive deletion.
 
 ## Image previews
 
@@ -103,5 +107,5 @@ Image previews are read-only and replace the file-list overlay while leaving the
 
 - `/files` is only available in the interactive prompt.
 - It opens files inside the current workspace.
-- It is a focused project browser, not a full file manager: it does not rename, move, copy, or delete files.
+- It is a focused project browser, not a full file manager: it does not move or copy files.
 - Ignored Git files are hidden by default when Git can provide the file list; press `i` in the tree view to show them.

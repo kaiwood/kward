@@ -112,6 +112,159 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     end
   end
 
+  def test_prompt_interface_project_browser_creates_file_in_selected_file_parent
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "original.rb"), "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["lib/original.rb"])
+      prompt.open_project_browser
+      prompt.instance_variable_get(:@project_browser_state)[:selection_index] = prompt.send(:project_browser_visible_rows).index { |row| row[:path] == "lib/original.rb" }
+
+      prompt.send(:handle_project_browser_key, "f")
+      assert_equal "New file>", prompt.instance_variable_get(:@prompt_label)
+      "created.rb".each_char { |character| prompt.send(:handle_project_browser_key, character) }
+      prompt.send(:handle_project_browser_key, "\r")
+
+      assert File.file?(File.join(dir, "lib", "created.rb"))
+      assert_equal "lib/created.rb", prompt.send(:selected_project_browser_row)[:path]
+    end
+  end
+
+  def test_prompt_interface_project_browser_creates_and_renames_directory
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "original.rb"), "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["lib/original.rb"])
+      prompt.open_project_browser
+      prompt.instance_variable_get(:@project_browser_state)[:selection_index] = 0
+
+      prompt.send(:handle_project_browser_key, "d")
+      "empty".each_char { |character| prompt.send(:handle_project_browser_key, character) }
+      prompt.send(:handle_project_browser_key, "\r")
+      assert File.directory?(File.join(dir, "lib", "empty"))
+      assert_equal "lib/empty", prompt.send(:selected_project_browser_row)[:path]
+
+      prompt.send(:handle_project_browser_key, "r")
+      assert_equal "empty", prompt.send(:composer_input)
+      prompt.send(:handle_project_browser_key, "\x15")
+      "renamed".each_char { |character| prompt.send(:handle_project_browser_key, character) }
+      prompt.send(:handle_project_browser_key, "\r")
+
+      refute File.exist?(File.join(dir, "lib", "empty"))
+      assert File.directory?(File.join(dir, "lib", "renamed"))
+      assert_equal "lib/renamed", prompt.send(:selected_project_browser_row)[:path]
+
+      prompt.send(:handle_project_browser_key, "\b")
+      prompt.send(:handle_project_browser_key, "\b")
+      refute File.exist?(File.join(dir, "lib", "renamed"))
+    end
+  end
+
+  def test_prompt_interface_project_browser_rejects_existing_name_and_keeps_prompt_open
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "lib"))
+      File.write(File.join(dir, "lib", "original.rb"), "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["lib/original.rb"])
+      prompt.open_project_browser
+      prompt.instance_variable_get(:@project_browser_state)[:selection_index] = 0
+
+      prompt.send(:handle_project_browser_key, "f")
+      "original.rb".each_char { |character| prompt.send(:handle_project_browser_key, character) }
+      prompt.send(:handle_project_browser_key, "\r")
+
+      assert_equal "Name already exists", prompt.instance_variable_get(:@project_browser_state)[:status]
+      assert prompt.send(:project_browser_name_entry_active?)
+      assert File.file?(File.join(dir, "lib", "original.rb"))
+    end
+  end
+
+  def test_prompt_interface_project_browser_name_entry_escape_returns_to_browser
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "original.rb"), "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["original.rb"])
+      prompt.open_project_browser
+
+      prompt.send(:handle_project_browser_key, "r")
+      assert_equal "original.rb", prompt.send(:composer_input)
+      prompt.send(:handle_project_browser_key, "\e")
+
+      refute prompt.send(:project_browser_name_entry_active?)
+      assert_equal "", prompt.send(:composer_input)
+      assert prompt.send(:project_browser_visible?)
+    end
+  end
+
+  def test_prompt_interface_project_browser_confirms_file_deletion_with_backspace
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "remove.rb")
+      File.write(path, "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["remove.rb"])
+      prompt.open_project_browser
+
+      prompt.send(:handle_project_browser_key, "\b")
+      assert prompt.send(:project_browser_delete_confirmation_active?)
+      assert_includes strip_ansi(prompt.send(:project_browser_rows, 80).join("\n")), "remove.rb"
+      assert File.exist?(path)
+
+      prompt.send(:handle_project_browser_key, "\b")
+
+      refute File.exist?(path)
+      refute prompt.send(:project_browser_delete_confirmation_active?)
+      assert_equal "Deleted: remove.rb", prompt.instance_variable_get(:@project_browser_state)[:status]
+    end
+  end
+
+  def test_prompt_interface_project_browser_can_cancel_file_deletion
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "keep.rb")
+      File.write(path, "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["keep.rb"])
+      prompt.open_project_browser
+
+      prompt.send(:handle_project_browser_key, "\b")
+      prompt.send(:handle_project_browser_key, "\e")
+
+      assert File.exist?(path)
+      refute prompt.send(:project_browser_delete_confirmation_active?)
+      assert prompt.send(:project_browser_visible?)
+    end
+  end
+
+  def test_prompt_interface_project_browser_requires_extra_confirmation_for_non_empty_directory
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "remove"))
+      File.write(File.join(dir, "remove", "child.rb"), "")
+      prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: dir, editor_mode: "emacs")
+      prompt.instance_variable_set(:@file_mention_paths, ["remove/child.rb"])
+      prompt.open_project_browser
+
+      prompt.send(:handle_project_browser_key, "\b")
+
+      assert prompt.send(:project_browser_delete_confirmation_active?)
+      assert File.exist?(File.join(dir, "remove", "child.rb"))
+      assert_includes strip_ansi(prompt.send(:project_browser_rows, 80).join("\n")), "permanently delete"
+
+      prompt.send(:handle_project_browser_key, "\b")
+
+      refute File.exist?(File.join(dir, "remove"))
+      refute prompt.send(:project_browser_delete_confirmation_active?)
+    end
+  end
+
+  def test_prompt_interface_project_browser_shows_backspace_delete_help
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
+    prompt.open_project_browser
+
+    assert_includes strip_ansi(prompt.send(:project_browser_rows, 80).join("\n")), "Backspace delete"
+  end
+
   def test_prompt_interface_project_browser_opens_supported_images_in_composer_preview
     Dir.mktmpdir do |dir|
       image_path = File.join(dir, "preview.png")
@@ -646,7 +799,7 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     assert_equal "lib/main.rb", prompt.send(:selected_project_browser_row)[:path]
   end
 
-  def test_prompt_interface_project_browser_cursor_is_visible_only_while_searching
+  def test_prompt_interface_project_browser_cursor_is_visible_while_searching_or_entering_a_name
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, ["README.md"])
@@ -660,6 +813,14 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     output.truncate(0)
     output.rewind
     prompt.send(:handle_key, "\e[47u")
+    prompt.send(:render_cursor_visibility_locked)
+
+    assert_includes output.string, Kward::PromptInterface::CURSOR_SHOW
+
+    output.truncate(0)
+    output.rewind
+    prompt.send(:handle_key, "\e[9u")
+    prompt.send(:handle_key, "f")
     prompt.send(:render_cursor_visibility_locked)
 
     assert_includes output.string, Kward::PromptInterface::CURSOR_SHOW

@@ -51,6 +51,39 @@ class TestPromptInterfaceEditorIndentation < KwardTestCase
     end
   end
 
+  def test_prompt_interface_editor_endwise_uses_ruby_inside_markdown_fence
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "README.md"), "Intro\n\n```ruby\nclass HelloWorld\n```")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "README.md")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.set_cursor_line_and_column(3, "class HelloWorld".length)
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "Intro\n\n```ruby\nclass HelloWorld\n  \nend\n```", editor.buffer
+        assert_equal [4, 2], editor.cursor_line_and_column
+      end
+    end
+  end
+
+  def test_prompt_interface_editor_auto_indent_uses_nested_markdown_language
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "README.md"), "```ruby\nclass HelloWorld\n  puts :ok")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
+        assert prompt.send(:open_editor, "README.md")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = editor.buffer.length
+
+        prompt.send(:handle_editor_key, "\n")
+
+        assert_equal "```ruby\nclass HelloWorld\n  puts :ok\n  ", editor.buffer
+      end
+    end
+  end
+
   def test_prompt_interface_editor_endwise_skips_existing_ruby_end
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "example.rb"), "if condition\nend")

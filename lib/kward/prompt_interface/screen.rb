@@ -79,7 +79,7 @@ module Kward
         visible = !(@question_state && !selected_question_choice&.fetch(:custom, false))
         visible = select_editing_active? if @select_state
         visible = git_composing? if @git_state
-        visible = project_browser_search_active? if project_browser_visible?
+        visible = (project_browser_search_active? || project_browser_name_entry_active?) if project_browser_visible?
         visible = false if image_viewer_active? || editor_runner_output_visible?
         set_cursor_visible_locked(visible)
       end

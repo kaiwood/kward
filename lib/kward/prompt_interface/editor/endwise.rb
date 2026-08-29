@@ -136,7 +136,7 @@ module Kward
         line_index, column = @editor_state.cursor_line_and_column
         return nil unless editor_endwise_line_exists?(line_index)
 
-        language = editor_syntax_language
+        language = editor_effective_syntax_language(line_index)
         definition = ENDWISE_LANGUAGES[language]
         return nil unless definition
 
@@ -190,7 +190,8 @@ module Kward
         line_index >= 0 && line_index < @editor_state.lines.length
       end
 
-      def editor_endwise_line_opens_block?(line_index, language = editor_syntax_language)
+      def editor_endwise_line_opens_block?(line_index, language = nil)
+        language ||= editor_effective_syntax_language(line_index)
         code = editor_endwise_code_line_at(line_index, language)
         return false if editor_endwise_ignored_definition?(code, language)
 
@@ -200,7 +201,7 @@ module Kward
       end
 
       def editor_endwise_closing_keyword_for_line(line_index, column, called_with_modifier: false)
-        language = editor_syntax_language
+        language = editor_effective_syntax_language(line_index)
         definition = ENDWISE_LANGUAGES[language]
         return nil unless definition
 
@@ -221,6 +222,9 @@ module Kward
             return close if @editor_state.lines.length <= scan_line + 1
 
             line_below = @editor_state.lines[scan_line + 1].to_s
+            next_language = editor_effective_syntax_language(scan_line + 1)
+            return close if next_language != language
+
             code_below = editor_endwise_code_line_at(scan_line + 1, language)
             closes_any_block = editor_endwise_closes_block?(code_below, language)
             closes_this_block = editor_endwise_closes_with?(code_below, close)
@@ -254,6 +258,8 @@ module Kward
       end
 
       def editor_endwise_code_line_at(line_index, language)
+        return "" unless editor_effective_syntax_language(line_index) == language
+
         definition = ENDWISE_LANGUAGES[language]
         line = @editor_state.lines[line_index].to_s
         return "" if editor_endwise_inside_block_comment?(line_index, definition.fetch(:block_comments))
@@ -263,7 +269,10 @@ module Kward
 
       def editor_endwise_inside_block_comment?(line_index, block_comments)
         active_comment = nil
-        @editor_state.lines.first(line_index + 1).each_with_index do |line, index|
+        first_index = editor_syntax_context_start(line_index)
+        first_index = 0 unless first_index
+        (first_index..line_index).each do |index|
+          line = @editor_state.lines[index].to_s
           if active_comment
             target_line = index == line_index
             active_comment = nil if line.match?(active_comment.fetch(:end))

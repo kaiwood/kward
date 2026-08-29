@@ -1,3 +1,4 @@
+require "fileutils"
 require "json"
 require "set"
 require_relative "../config_files"
@@ -58,7 +59,8 @@ module Kward
           selection_index: 0,
           search_active: false,
           query: "",
-          status: nil
+          status: nil,
+          directory_paths: restored_project_browser_directory_paths(saved_state)
         }
         restore_project_browser_selection(saved_state["selected_path"])
         self.composer_input = ""
@@ -86,6 +88,8 @@ module Kward
       end
 
       def handle_project_browser_key(key)
+        return handle_project_browser_name_key(key) if project_browser_name_entry_active?
+        return handle_project_browser_delete_confirmation_key(key) if project_browser_delete_confirmation_active?
         return true if handle_bundled_key(key) { |token| handle_project_browser_key(token) }
 
         csi_result = handle_project_browser_csi_u_key(key)
@@ -95,7 +99,7 @@ module Kward
         when :return, :enter
           open_or_toggle_selected_project_browser_row
         when :backspace
-          project_browser_delete_search_character
+          project_browser_search_active? ? project_browser_delete_search_character : request_project_browser_delete
         when :ctrl_l
           redraw_screen_locked
         when :left
@@ -123,7 +127,7 @@ module Kward
         when 27
           project_browser_escape
         when 8, 127
-          project_browser_delete_search_character
+          project_browser_search_active? ? project_browser_delete_search_character : request_project_browser_delete
         when 9
           return false if ctrl_modifier?(sequence[:modifier]) || alt_modifier?(sequence[:modifier]) || super_modifier?(sequence[:modifier])
 
@@ -146,6 +150,8 @@ module Kward
             expand_selected_project_browser_row
           elsif text == "i" && !project_browser_search_active?
             toggle_project_browser_ignored_files
+          elsif ["f", "r", "d"].include?(text) && !project_browser_search_active?
+            start_project_browser_name_entry(text)
           elsif project_browser_search_active?
             project_browser_append_search(text)
           else
@@ -160,7 +166,7 @@ module Kward
         when "\n", "\r"
           open_or_toggle_selected_project_browser_row
         when "\b", "\x7F"
-          project_browser_delete_search_character
+          project_browser_search_active? ? project_browser_delete_search_character : request_project_browser_delete
         when "\e"
           project_browser_escape
         when "@"
@@ -179,6 +185,8 @@ module Kward
           project_browser_search_active? ? project_browser_append_search(key) : expand_selected_project_browser_row
         when "i"
           project_browser_search_active? ? project_browser_append_search(key) : toggle_project_browser_ignored_files
+        when "f", "r", "d"
+          start_project_browser_name_entry(key) unless project_browser_search_active?
         else
           project_browser_append_search(key) if project_browser_search_active? && printable_key?(key)
         end
@@ -190,6 +198,371 @@ module Kward
         else
           dismiss_project_browser
         end
+      end
+
+      def project_browser_delete_confirmation_active?
+        @project_browser_state && @project_browser_state[:delete_confirmation]
+      end
+
+      def request_project_browser_delete
+        row = selected_project_browser_row
+        return false unless row
+
+        path = project_browser_path_for(row[:path])
+        return false unless path && path != File.expand_path(prompt_workspace_root)
+        return false unless project_browser_parent_available?(File.dirname(path))
+
+        directory = row[:directory] && !File.symlink?(path)
+        @project_browser_state[:delete_confirmation] = {
+          path: row[:path],
+          directory: directory,
+          recursive: directory && project_browser_directory_nonempty?(path)
+        }
+        @project_browser_state[:status] = nil
+        true
+      end
+
+      def handle_project_browser_delete_confirmation_key(key)
+        return true if handle_bundled_key(key) { |token| handle_project_browser_delete_confirmation_key(token) }
+
+        sequence = parse_csi_u_key(key)
+        if sequence
+          queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+          return cancel_project_browser_delete if sequence[:code] == 27
+          return confirm_project_browser_delete if [8, 127].include?(sequence[:code])
+
+          return true
+        end
+
+        return cancel_project_browser_delete if key == "\e"
+        return confirm_project_browser_delete if key == "\b" || key == "\x7F" || key_name_for(key) == :backspace
+
+        true
+      end
+
+      def project_browser_directory_nonempty?(path)
+        !Dir.empty?(path)
+      rescue SystemCallError
+        true
+      end
+
+      def cancel_project_browser_delete
+        @project_browser_state.delete(:delete_confirmation)
+        @project_browser_state[:status] = nil
+        true
+      end
+
+      def confirm_project_browser_delete
+        confirmation = @project_browser_state[:delete_confirmation]
+        return false unless confirmation
+
+        path = project_browser_path_for(confirmation[:path])
+        unless path && path != File.expand_path(prompt_workspace_root) && path_exists?(path) && project_browser_parent_available?(File.dirname(path))
+          @project_browser_state.delete(:delete_confirmation)
+          @project_browser_state[:status] = "Entry is no longer available"
+          return true
+        end
+
+        if confirmation[:directory] && !confirmation[:recursive] && project_browser_directory_nonempty?(path)
+          confirmation[:recursive] = true
+          return true
+        end
+
+        begin
+          if confirmation[:directory]
+            FileUtils.rm_r(path)
+          else
+            FileUtils.rm(path)
+          end
+        rescue SystemCallError
+          @project_browser_state.delete(:delete_confirmation)
+          @project_browser_state[:status] = "Unable to delete #{confirmation[:path]}"
+          return true
+        end
+
+        deleted_path = confirmation[:path]
+        @project_browser_state[:directory_paths].delete_if do |directory|
+          directory == deleted_path || directory.start_with?("#{deleted_path}/")
+        end
+        @project_browser_state.delete(:delete_confirmation)
+        refresh_project_browser_paths
+        restore_project_browser_selection(File.dirname(deleted_path))
+        @project_browser_state[:status] = "Deleted: #{deleted_path}"
+        persist_project_browser_state
+        true
+      end
+
+      def project_browser_delete_confirmation_rows(width)
+        confirmation = @project_browser_state[:delete_confirmation]
+        path = confirmation[:path]
+        lines = [overlay_text_line("Delete #{confirmation[:directory] ? "directory" : "file"}?"), overlay_blank_line]
+        if confirmation[:recursive]
+          lines << overlay_text_line("This will permanently delete #{path} and its contents.", :muted)
+          lines << overlay_text_line("Press Backspace again to confirm • Esc to cancel", :muted)
+        else
+          lines << overlay_text_line(path)
+          lines << overlay_text_line("Press Backspace again to confirm • Esc to cancel", :muted)
+        end
+        overlay_card_rows("Confirm deletion", lines, width)
+      end
+
+      def project_browser_name_entry_active?
+        @project_browser_state && @project_browser_state[:name_entry]
+      end
+
+      def start_project_browser_name_entry(action)
+        row = selected_project_browser_row
+        return false if action == "r" && !row
+
+        if action == "r"
+          parent = File.dirname(row[:path].to_s)
+          parent = PROJECT_BROWSER_ROOT if parent == "."
+          initial_name = row[:name]
+          source = row[:path]
+        else
+          parent = if row
+                     row[:directory] ? row[:path] : File.dirname(row[:path].to_s)
+                   else
+                     PROJECT_BROWSER_ROOT
+                   end
+          parent = PROJECT_BROWSER_ROOT if parent == "."
+          initial_name = ""
+          source = nil
+        end
+
+        @project_browser_state[:name_entry] = {
+          action: action,
+          parent: parent,
+          source: source
+        }
+        @project_browser_state[:status] = nil
+        @project_browser_state[:prompt_label] = @prompt_label
+        @prompt_label = project_browser_name_prompt(action)
+        self.composer_input = initial_name
+        self.composer_cursor = initial_name.length
+        true
+      end
+
+      def project_browser_name_prompt(action)
+        case action
+        when "f" then "New file>"
+        when "d" then "New directory>"
+        else "Rename>"
+        end
+      end
+
+      def handle_project_browser_name_key(key)
+        return true if handle_bracketed_paste(key) { |content| insert_string(normalize_paste(content)) }
+
+        sequence = parse_csi_u_key(key)
+        if sequence
+          queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+          case sequence[:code]
+          when 13
+            return submit_project_browser_name_entry
+          when 27
+            return cancel_project_browser_name_entry
+          when 8, 127
+            alt_modifier?(sequence[:modifier]) ? delete_word_before_cursor : delete_before_cursor
+            return true
+          else
+            modified_result = project_browser_name_modified_key(sequence)
+            return modified_result unless modified_result == false
+            insert_csi_u_text(sequence)
+            return true
+          end
+        end
+
+        return true if handle_bundled_key(key) { |token| handle_project_browser_name_key(token) }
+
+        case key
+        when "\n", "\r"
+          submit_project_browser_name_entry
+        when "\e", TerminalKeys::CTRL_C
+          cancel_project_browser_name_entry
+        when "\b", "\x7F"
+          delete_before_cursor
+        else
+          key_name = key_name_for(key)
+          return true if project_browser_name_named_key(key_name)
+
+          binding_result = handle_composer_key_binding(key)
+          return binding_result unless binding_result == false || binding_result.nil?
+
+          insert_key(key)
+        end
+        true
+      end
+
+      def project_browser_name_modified_key(sequence)
+        return false unless ctrl_modifier?(sequence[:modifier]) || alt_modifier?(sequence[:modifier])
+
+        code = ctrl_code_for(sequence[:code])
+        if ctrl_modifier?(sequence[:modifier])
+          case code
+          when 97 then move_to_start_of_line
+          when 98 then move_cursor_left
+          when 99 then cancel_project_browser_name_entry
+          when 100 then delete_at_cursor
+          when 101 then move_to_end_of_line
+          when 102 then move_cursor_right
+          when 107 then kill_line_after_cursor
+          when 117 then kill_line_before_cursor
+          when 119 then delete_word_before_cursor
+          else return false
+          end
+        elsif alt_modifier?(sequence[:modifier])
+          case code
+          when 98 then move_to_previous_word
+          when 100 then delete_word_after_cursor
+          when 102 then move_to_next_word
+          else return false
+          end
+        end
+        true
+      end
+
+      def project_browser_name_named_key(key_name)
+        case key_name
+        when :left then move_cursor_left
+        when :right then move_cursor_right
+        when :home then move_to_start_of_line
+        when :end then move_to_end_of_line
+        when :delete then delete_at_cursor
+        else false
+        end
+      end
+
+      def cancel_project_browser_name_entry
+        entry = @project_browser_state.delete(:name_entry)
+        return false unless entry
+
+        @prompt_label = @project_browser_state.delete(:prompt_label) || "You>"
+        @project_browser_state[:status] = nil
+        self.composer_input = ""
+        self.composer_cursor = 0
+        true
+      end
+
+      def submit_project_browser_name_entry
+        entry = @project_browser_state[:name_entry]
+        return false unless entry
+
+        name = composer_input
+        error = project_browser_name_error(name, entry)
+        if error
+          @project_browser_state[:status] = error
+          return true
+        end
+
+        source_is_directory = entry[:action] == "r" && directory_path?(entry[:source])
+        begin
+          project_browser_apply_name_entry(name, entry)
+        rescue SystemCallError
+          @project_browser_state[:status] = "Unable to #{project_browser_name_action(entry[:action])} #{name}"
+          return true
+        end
+
+        target = project_browser_target_path(entry[:parent], name)
+        @project_browser_state[:directory_paths].add(target) if entry[:action] == "d"
+        if source_is_directory
+          old_prefix = entry[:source]
+          @project_browser_state[:directory_paths] = Set.new(@project_browser_state[:directory_paths].map do |path|
+            path == old_prefix || path.start_with?("#{old_prefix}/") ? target + path.delete_prefix(old_prefix) : path
+          end)
+        end
+        refresh_project_browser_paths
+        expand_project_browser_ancestors(target)
+        @project_browser_state.delete(:name_entry)
+        @prompt_label = @project_browser_state.delete(:prompt_label) || "You>"
+        self.composer_input = ""
+        self.composer_cursor = 0
+        restore_project_browser_selection(target)
+        @project_browser_state[:status] = "#{project_browser_name_action(entry[:action]).capitalize}: #{target}"
+        persist_project_browser_state
+        true
+      end
+
+      def project_browser_name_error(name, entry)
+        return "Name cannot be empty" if name.empty? || name.strip.empty?
+        return "Name must be a single entry name" if name.include?("/") || name.include?("\\") || name.include?("\0")
+        return "Name cannot be . or .." if [".", ".."].include?(name)
+
+        parent = project_browser_path_for(entry[:parent])
+        return "Parent directory is unavailable" unless project_browser_parent_available?(parent)
+
+        target = project_browser_target_path(entry[:parent], name)
+        target_path = project_browser_path_for(target)
+        source_path = project_browser_path_for(entry[:source])
+        return "Name already exists" if path_exists?(target_path) && target_path != source_path
+
+        nil
+      end
+
+      def project_browser_apply_name_entry(name, entry)
+        target = project_browser_path_for(project_browser_target_path(entry[:parent], name))
+        case entry[:action]
+        when "f"
+          FileUtils.touch(target)
+        when "d"
+          Dir.mkdir(target)
+        when "r"
+          File.rename(project_browser_path_for(entry[:source]), target)
+        end
+      end
+
+      def project_browser_name_action(action)
+        { "f" => "create file", "d" => "create directory", "r" => "rename" }.fetch(action)
+      end
+
+      def project_browser_target_path(parent, name)
+        [parent, name].reject(&:empty?).join("/")
+      end
+
+      def project_browser_path_for(path)
+        root = File.expand_path(prompt_workspace_root)
+        full_path = File.expand_path(path.to_s, root)
+        return nil unless full_path == root || full_path.start_with?("#{root}/")
+
+        full_path
+      end
+
+      def project_browser_parent_available?(path)
+        return false unless path && File.directory?(path)
+
+        root = File.realpath(prompt_workspace_root)
+        real_path = File.realpath(path)
+        real_path == root || real_path.start_with?("#{root}/")
+      rescue SystemCallError
+        false
+      end
+
+      def path_exists?(path)
+        path && (File.exist?(path) || File.symlink?(path))
+      end
+
+      def directory_path?(path)
+        path && File.directory?(project_browser_path_for(path))
+      end
+
+      def refresh_project_browser_paths
+        @file_mention_paths = nil
+        @file_mention_path_entries = nil
+        @file_mention_path_entries_paths = nil
+        @project_browser_file_paths = nil
+        paths = project_file_paths(include_ignored: project_browser_ignored_files_visible?)
+        @project_browser_state[:paths] = paths
+        @project_browser_tree_paths = nil
+        @project_browser_tree = nil
+      end
+
+      def expand_project_browser_ancestors(path)
+        parent = File.dirname(path.to_s)
+        until parent == "." || parent.empty?
+          @project_browser_state[:expanded].add(parent)
+          parent = File.dirname(parent)
+        end
+        @project_browser_state[:expanded].add(PROJECT_BROWSER_ROOT)
       end
 
       def toggle_project_browser_search
@@ -499,7 +872,8 @@ module Kward
             selection_index: 0,
             search_active: false,
             query: "",
-            status: nil
+            status: nil,
+            directory_paths: restored_project_browser_directory_paths(saved_state)
           }
           restore_project_browser_selection(saved_state["selected_path"])
         end
@@ -509,6 +883,7 @@ module Kward
 
       def project_browser_rows(width, height: screen_height)
         return [] unless project_browser_visible?
+        return project_browser_delete_confirmation_rows(width) if project_browser_delete_confirmation_active?
 
         rows = project_browser_visible_rows
         lines = []
@@ -542,7 +917,7 @@ module Kward
         if project_browser_search_active?
           "Type search • Esc tree • Enter open • @ mention"
         else
-          "Enter open/toggle • i show/hide ignored • ←/→ collapse/expand • Tab or / search • @ mention • Esc close"
+          "f new file • d new directory • r rename • Backspace delete • Enter open/toggle • i show/hide ignored • ←/→ collapse/expand • Tab or / search • @ mention • Esc close"
         end
       end
 
@@ -595,6 +970,15 @@ module Kward
 
         directories = Hash.new { |hash, key| hash[key] = Set.new }
         files = Hash.new { |hash, key| hash[key] = [] }
+        @project_browser_state.fetch(:directory_paths, Set.new).each do |path|
+          parts = path.split("/")
+          parent = PROJECT_BROWSER_ROOT
+          parts.each do |part|
+            directory = parent.empty? ? part : "#{parent}/#{part}"
+            directories[parent].add(directory)
+            parent = directory
+          end
+        end
         paths.each do |path|
           parts = path.split("/")
           parent = PROJECT_BROWSER_ROOT
@@ -656,7 +1040,8 @@ module Kward
         workspaces[project_browser_workspace_root] = {
           "expanded" => @project_browser_state[:expanded].to_a.sort,
           "selected_path" => row && row[:path],
-          "show_ignored" => project_browser_ignored_files_visible?
+          "show_ignored" => project_browser_ignored_files_visible?,
+          "created_directories" => @project_browser_state.fetch(:directory_paths, Set.new).to_a.sort
         }
         data["version"] = PROJECT_BROWSER_STATE_VERSION
         data["workspaces"] = workspaces
@@ -679,8 +1064,18 @@ module Kward
         ConfigFiles.canonical_workspace_root(prompt_workspace_root)
       end
 
+      def restored_project_browser_directory_paths(saved_state)
+        Array(saved_state["created_directories"]).each_with_object(Set.new) do |path, directories|
+          next unless path.is_a?(String) && path.match?(/\A[^\\\0]+(?:\/[^\\\0]+)*\z/)
+          next if path.split("/").any? { |part| part.empty? || [".", ".."].include?(part) }
+          next unless project_browser_parent_available?(project_browser_path_for(path)) && File.directory?(project_browser_path_for(path))
+
+          directories.add(path)
+        end
+      end
+
       def restored_project_browser_expanded_paths(paths, saved_state)
-        directories = project_browser_directory_paths(paths)
+        directories = project_browser_directory_paths(paths) | restored_project_browser_directory_paths(saved_state)
         saved_expanded = saved_state["expanded"]
         expanded = if saved_expanded.is_a?(Array)
                      Set.new(saved_expanded.select { |path| directories.include?(path.to_s) })

@@ -126,11 +126,17 @@ module Kward
       def editor_highlight_line(line, line_index = nil)
         return line.to_s unless @color_enabled
 
-        case editor_syntax_language
+        if editor_syntax_language == :markdown
+          editor_highlight_markdown(line, line_index)
+        else
+          editor_highlight_language_line(line, editor_syntax_language, line_index)
+        end
+      end
+
+      def editor_highlight_language_line(line, language, line_index = nil)
+        case language
         when :ruby
           editor_highlight_ruby(line, line_index)
-        when :markdown
-          editor_highlight_markdown(line)
         when :json
           editor_highlight_json(line)
         when :yaml
@@ -144,7 +150,7 @@ module Kward
         when :sql
           editor_highlight_sql(line)
         else
-          editor_highlight_generic(line, editor_syntax_language, line_index)
+          editor_highlight_generic(line, language, line_index)
         end
       end
 
@@ -396,14 +402,69 @@ module Kward
         nil
       end
 
-      def editor_highlight_markdown(line)
+      def editor_highlight_markdown(line, line_index = nil)
         text = line.to_s
+        fence_context = editor_markdown_fence_context(line_index)
+        return editor_highlight_markdown_fence(text) if fence_context == :marker
+        if fence_context.is_a?(Array)
+          language, nested_line_index = fence_context
+          return editor_highlight_language_line(text, language, nested_line_index) if language
+
+          return text
+        end
+
         return editor_highlight_markdown_heading(text) if text.match?(/\A\s{0,3}[#]{1,6}\s/)
-        return editor_highlight_markdown_fence(text) if text.match?(/\A\s*```/)
         return editor_highlight_markdown_blockquote(text) if text.match?(/\A\s*>/)
         return editor_highlight_markdown_list(text) if text.match?(/\A\s*(?:[-*+]\s+|\d+\.\s+)/)
 
         editor_highlight_markdown_inline(text)
+      end
+
+      def editor_markdown_fence_context(line_index)
+        return nil unless line_index && @editor_state
+
+        inside_fence = false
+        language = nil
+        opening_index = nil
+        @editor_state.lines.first(line_index.to_i + 1).each_with_index do |line, index|
+          match = line.to_s.match(/\A\s*```([^`]*)\s*\z/)
+          if match
+            if inside_fence
+              inside_fence = false
+              language = nil
+              opening_index = nil
+            else
+              inside_fence = true
+              language = editor_markdown_fence_language(match[1])
+              opening_index = index
+            end
+            return :marker if index == line_index
+          elsif inside_fence && index == line_index
+            return [language, index, opening_index]
+          end
+        end
+
+        nil
+      end
+
+      def editor_effective_syntax_language(line_index = nil)
+        language = editor_syntax_language
+        return language unless language == :markdown
+
+        context = editor_markdown_fence_context(line_index)
+        context.is_a?(Array) ? context.first || :markdown : :markdown
+      end
+
+      def editor_syntax_context_start(line_index = nil)
+        return nil unless editor_syntax_language == :markdown
+
+        context = editor_markdown_fence_context(line_index)
+        context.is_a?(Array) ? context[2] : nil
+      end
+
+      def editor_markdown_fence_language(info)
+        name = info.to_s.strip.split(/\s/, 2).first.to_s.downcase
+        ScratchpadLanguages::ALIASES[name]
       end
 
       def editor_highlight_markdown_heading(line)

@@ -12,6 +12,7 @@ All notable changes to Kward will be documented in this file.
 - Added shell-style `kwshrc` configuration files at `~/.kward/kwshrc` and `~/.kwshrc`, with ordered `alias`, `export`, and declarative `source` support.
 - Added the `open_editor` agent tool so interactive sessions can open a requested workspace file in Kward's built-in editor.
 - Extended `/scratchpad` to open all 26 built-in syntax-highlighted languages through canonical names or familiar file-extension shortcuts, with `/scratchpad help` for discovery.
+- Added nested syntax highlighting, auto-indentation, and endwise behavior for recognized language tags inside fenced code blocks in Markdown editor buffers.
 
 ### Changed
 
@@ -32,6 +33,8 @@ All notable changes to Kward will be documented in this file.
 - Added current-buffer word completion to the integrated editor, with repeated Tab presses cycling nearby matches and existing smart indentation retained when no match exists.
 - Added Claude Opus 5 to the Anthropic model picker with its 1M context window and high-reasoning metadata.
 - Added an `i` toggle to the `/files` browser for showing Git-ignored files, which remain hidden by default.
+- Added `f`, `d`, and `r` actions to the `/files` browser for creating files, creating directories, and renaming entries from the composer prompt.
+- Added Backspace deletion to the `/files` browser with confirmation and an additional confirmation before recursively deleting non-empty directories.
 
 ### Changed
 
