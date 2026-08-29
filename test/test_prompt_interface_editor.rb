@@ -357,6 +357,23 @@ class TestPromptInterfaceEditor < KwardTestCase
     assert_includes editor.status, "Output updated"
   end
 
+  def test_prompt_interface_vibe_run_uses_the_code_block_under_the_cursor
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(
+      path: "README.md",
+      content: "before\n```ruby\nputs 'cursor run'\n```\nafter\n",
+      editor_mode: "vibe"
+    )
+    prompt.instance_variable_set(:@editor_state, editor)
+    editor.set_cursor_line_and_column(2, 0)
+
+    prompt.send(:execute_vibe_command, "run")
+    wait_until { !prompt.instance_variable_get(:@editor_runner_state).running? }
+
+    assert_includes editor.buffer, "<output>\ncursor run\n</output>"
+    refute prompt.send(:editor_runner_output_visible?)
+  end
+
   def test_prompt_interface_runner_output_is_read_only_and_closes
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "modern")
     assert prompt.send(:open_scratchpad, :ruby)

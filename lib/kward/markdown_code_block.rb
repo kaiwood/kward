@@ -51,6 +51,12 @@ module Kward
         candidates.min_by { |block| block.close_line - block.open_line }
       end
 
+      def for_cursor(source, line)
+        parse(source).select do |block|
+          block.open_line <= line && line <= block.close_line
+        end.min_by { |block| block.close_line - block.open_line }
+      end
+
       def parse(source)
         source = source.to_s
         lines = source.lines

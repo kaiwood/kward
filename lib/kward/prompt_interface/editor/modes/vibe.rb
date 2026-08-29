@@ -235,7 +235,7 @@ module Kward
         when /\Ae(!?)\s+(.+)\z/
           vibe_edit_file(Regexp.last_match(2), force: Regexp.last_match(1) == "!")
         when "run"
-          block = MarkdownCodeBlock.for_selection(@editor_state.buffer, *command_range) if command_range.is_a?(Array)
+          block = vibe_markdown_code_block_for_run(command_range)
           if block
             run_vibe_markdown_code_block(block)
           else
@@ -292,6 +292,15 @@ module Kward
 
         first_line, last_line = range.to_s.split(",", 2).map { |value| value.to_i - 1 }
         [first_line, last_line]
+      end
+
+      def vibe_markdown_code_block_for_run(command_range)
+        if command_range.is_a?(Array)
+          MarkdownCodeBlock.for_selection(@editor_state.buffer, *command_range)
+        else
+          line, = @editor_state.cursor_line_and_column
+          MarkdownCodeBlock.for_cursor(@editor_state.buffer, line)
+        end
       end
 
       def run_vibe_markdown_code_block(block)

@@ -6,7 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
-- Added Vibe visual `:run` support for executing a selected Markdown fenced language block and inserting or replacing its formatted `<output>` field.
+- Added Vibe visual and cursor-aware `:run` support for executing a selected or containing Markdown fenced language block and inserting or replacing its formatted `<output>` field.
 - Added configurable editor runners under `editor.runners`, with Node, TypeScript, Python, Shell, Lua, Julia, Elixir, Crystal, Go, and Swift buffer execution alongside Ruby.
 - Added Vibe visual-mode `Ctrl+h`/`Ctrl+j`/`Ctrl+k`/`Ctrl+l` shortcuts to outdent, move down, move up, and indent selected lines while keeping visual mode active.
 - Added a live `source`/`.` shell builtin that applies declarative aliases and exports to the running `/shell` session without restarting Kward.
