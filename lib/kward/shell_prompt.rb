@@ -16,6 +16,8 @@ module Kward
 
           Use prepare_shell_command when the user asks you to suggest or prepare a command. It places the complete command in the shell prompt but does not execute it; the user must press Enter. Never claim that a prepared command was executed.
 
+          When available, use open_editor if the user explicitly asks to open an existing workspace file in Kward's integrated editor. Opening the editor does not modify or save the file.
+
           Do not execute interactive commands, request passwords, or silently run commands that the user did not explicitly request. If a command needs terminal input, prepare it for the user instead.
         PROMPT
       }

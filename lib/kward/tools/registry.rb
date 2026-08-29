@@ -583,7 +583,9 @@ module Kward
 
     def shell_prompt_tool_names
       readonly_tools = CORE_TOOL_NAMES - %w[write_file edit_file run_shell_command]
-      readonly_tools + %w[run_shell_command prepare_shell_command]
+      tools = readonly_tools + %w[run_shell_command prepare_shell_command]
+      tools << "open_editor" if editor_available?
+      tools
     end
 
     def web_search_available?

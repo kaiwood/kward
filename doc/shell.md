@@ -110,6 +110,8 @@ If you explicitly ask the assistant to change shell state, it can use the active
 
 For a suggestion or prepared command, the assistant uses `prepare_shell_command`. The command is placed in the shell composer but is not run until you press `Enter`. Running a command directly and preparing one are deliberately separate actions.
 
+If you explicitly ask it to open an existing workspace file, the assistant uses `open_editor` to open Kward's integrated editor. Opening the editor does not modify or save the file.
+
 The shell assistant cannot safely run commands that require terminal input. Ask it to prepare those commands instead. The local `/shell` session keeps one interactive shell process alive, so directory changes, variables, functions, aliases, and other shell state persist between commands. The one-off `!command` and `/capture` workflows remain separate. SSH remains available through the normal interactive PTY handoff, but shell-agent prompting resumes after that SSH session exits.
 
 ## Interactive and captured commands

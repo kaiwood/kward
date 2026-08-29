@@ -1,6 +1,19 @@
 require_relative "test_helper"
 
 class TestShellPrompt < KwardTestCase
+  class ShellEditorPrompt
+    attr_reader :opened_paths
+
+    def initialize
+      @opened_paths = []
+    end
+
+    def edit_file(path, base_dir:, allow_new:)
+      @opened_paths << { path: path, base_dir: base_dir, allow_new: allow_new }
+      true
+    end
+  end
+
   def test_shell_context_tracks_the_last_command_and_bounded_output
     shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 
@@ -71,6 +84,27 @@ class TestShellPrompt < KwardTestCase
       registry.dispatch(tool_call("prepare_shell_command", command: "pwd"), conversation)
 
       assert_equal "pwd", shell_prompt.prepared_command
+    end
+  end
+
+  def test_shell_prompt_registry_can_open_an_existing_workspace_file
+    Dir.mktmpdir("shell-prompt") do |dir|
+      path = File.join(dir, "notes.md")
+      File.write(path, "Notes\n")
+      prompt = ShellEditorPrompt.new
+      shell = Kward::Kwsh.new(cwd: dir, shell: "/bin/sh")
+      registry = Kward::ToolRegistry.new(
+        workspace: Kward::Workspace.new(root: dir),
+        prompt: prompt,
+        web_search_enabled: false,
+        skills: []
+      ).for_shell_prompt(Kward::ShellPromptSession.new(shell))
+      names = registry.schemas.map { |schema| schema.dig(:function, :name) }
+      conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
+
+      assert_includes names, "open_editor"
+      assert_equal "Opened notes.md in the integrated editor.", registry.dispatch(tool_call("open_editor", path: "notes.md"), conversation)
+      assert_equal [{ path: File.realpath(path), base_dir: Pathname.new(dir).realpath, allow_new: false }], prompt.opened_paths
     end
   end
 
