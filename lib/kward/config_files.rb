@@ -1,7 +1,6 @@
 require "digest"
 require "fileutils"
 require "json"
-require "yaml"
 require_relative "frontmatter"
 require_relative "deep_copy"
 require_relative "private_file"
@@ -9,6 +8,7 @@ require_relative "path_guard"
 require_relative "permissions/policy"
 require_relative "sandbox/policy"
 require_relative "kwsh"
+require_relative "kwshrc"
 require_relative "editor_mode"
 require_relative "diff_view_mode"
 require_relative "prompts/templates"
@@ -107,9 +107,14 @@ module Kward
       File.join(config_dir, "cache")
     end
 
-    # @return [String] embedded-shell YAML config path
-    def kwsh_config_path
-      File.join(config_dir, "kwsh.yml")
+    # @return [String] embedded-shell rc config path
+    def kwshrc_path
+      File.join(config_dir, "kwshrc")
+    end
+
+    # @return [Array<String>] embedded-shell rc config paths in load order
+    def kwshrc_paths
+      [kwshrc_path, File.expand_path("~/.kwshrc")].uniq
     end
 
     def workspace_hooks_path(root = Dir.pwd)
@@ -340,67 +345,25 @@ module Kward
       merged
     end
 
-    def read_kwsh_config(path = kwsh_config_path)
-      path = File.expand_path(path)
-      return normalize_kwsh_config(nil) unless File.exist?(path)
-
-      data = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
-      normalize_kwsh_config(data)
-    rescue Psych::SyntaxError => e
-      raise "Invalid kwsh YAML config: #{path}: #{e.message}"
-    end
-
-    def normalize_kwsh_config(data)
-      data = data.transform_keys(&:to_s) if data.is_a?(Hash)
-      settings = data.is_a?(Hash) ? data : {}
-      {
-        shell: normalize_kwsh_shell(settings["shell"]),
-        timeout_seconds: normalize_positive_integer(settings["timeout_seconds"], Kwsh::DEFAULT_TIMEOUT_SECONDS),
-        max_output_bytes: normalize_positive_integer(settings["max_output_bytes"], Kwsh::DEFAULT_MAX_OUTPUT_BYTES),
-        history_limit: normalize_positive_integer(settings["history_limit"], Kwsh::DEFAULT_HISTORY_LIMIT),
-        env: normalize_kwsh_env(settings["env"]),
-        aliases: normalize_kwsh_aliases(settings["aliases"])
+    def read_kwsh_config
+      config = {
+        shell: Kwsh::DEFAULT_SHELL,
+        timeout_seconds: Kwsh::DEFAULT_TIMEOUT_SECONDS,
+        max_output_bytes: Kwsh::DEFAULT_MAX_OUTPUT_BYTES,
+        history_limit: Kwsh::DEFAULT_HISTORY_LIMIT,
+        env: {},
+        aliases: {}
       }
+      rc_config = read_kwshrc_config
+      config[:env].merge!(rc_config[:env])
+      config[:aliases].merge!(rc_config[:aliases])
+      config
     end
 
-    def normalize_kwsh_shell(value)
-      shell = value.to_s.strip
-      return Kwsh::DEFAULT_SHELL if shell.empty?
-      return shell if shell.start_with?("/") && File.executable?(shell)
-
-      Kwsh::DEFAULT_SHELL
-    end
-
-    def normalize_positive_integer(value, default)
-      integer = Integer(value)
-      integer.positive? ? integer : default
-    rescue ArgumentError, TypeError
-      default
-    end
-
-    def normalize_kwsh_env(values)
-      return {} unless values.is_a?(Hash)
-
-      values.each_with_object({}) do |(key, value), result|
-        key = key.to_s
-        next unless key.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
-        next if value.nil?
-
-        result[key] = value.to_s
-      end
-    end
-
-    def normalize_kwsh_aliases(values)
-      return {} unless values.is_a?(Hash)
-
-      values.each_with_object({}) do |(name, command), result|
-        name = name.to_s
-        command = command.to_s.strip
-        next unless Kwsh.valid_alias_name?(name)
-        next if command.empty?
-
-        result[name] = command
-      end
+    def read_kwshrc_config(paths = kwshrc_paths, env: ENV.to_h)
+      Kwshrc.read(paths, env: env)
+    rescue Kwshrc::ParseError => e
+      raise "Invalid kwshrc config: #{e.message}"
     end
 
     # Merges top-level config values and writes the updated config privately.

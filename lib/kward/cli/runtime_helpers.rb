@@ -110,7 +110,7 @@ module Kward
         run_user_interactive_pty_command(
           expanded_command,
           shell: Kwsh::DEFAULT_SHELL,
-          env: interactive_pty_environment({}, preserve_git_pager: true),
+          env: interactive_pty_environment(shell.child_env, preserve_git_pager: true),
           cwd: interactive_workspace_root(agent),
           intro: "$ #{command}\n"
         )
@@ -151,12 +151,14 @@ module Kward
 
       def bang_shell(agent)
         root = File.expand_path(interactive_workspace_root(agent).to_s)
-        aliases = ConfigFiles.read_kwsh_config[:aliases]
-        cache_key = [root, ENV.fetch("PATH", ""), aliases.sort]
+        config = ConfigFiles.read_kwsh_config
+        aliases = config[:aliases]
+        configured_env = config[:env]
+        cache_key = [root, ENV.fetch("PATH", ""), aliases.sort, configured_env.sort]
         return @bang_shell if @bang_shell_key == cache_key
 
         @bang_shell_key = cache_key
-        @bang_shell = Kwsh.new(cwd: root, env: ENV.to_h, aliases: aliases)
+        @bang_shell = Kwsh.new(cwd: root, env: ENV.to_h, configured_env: configured_env, aliases: aliases)
       end
 
       def install_bang_completion_provider(agent)

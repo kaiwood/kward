@@ -6,12 +6,17 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added shell-style `kwshrc` configuration files at `~/.kward/kwshrc` and `~/.kwshrc`, with ordered `alias`, `export`, and declarative `source` support.
 - Added the `open_editor` agent tool so interactive sessions can open a requested workspace file in Kward's built-in editor.
 - Extended `/scratchpad` to open all 26 built-in syntax-highlighted languages through canonical names or familiar file-extension shortcuts, with `/scratchpad help` for discovery.
 
 ### Changed
 
 - Ruby scratchpad runs now preserve the source buffer and show captured output in a scrollable, cancellable lower-half output pane instead of appending it after `__END__`; mouse drag selection and `Ctrl+C`/`Cmd+C`/Vibe `y` copy clean output without pane borders.
+
+### Removed
+
+- Removed legacy `kwsh.yml` shell configuration; shell aliases and exports now use the shell-style `kwshrc` files.
 
 ## [0.83.0] - 2026-08-28
 
@@ -82,7 +87,7 @@ All notable changes to Kward will be documented in this file.
 - Displayed packaged plugins with their folder name in the startup plugin list, such as `folder/plugin.rb`.
 - Added a frozen composer display for line-oriented Git PTY commands while preserving the full-terminal handoff for full-screen programs.
 - Changed external `/shell` commands and one-shot `!command` input to use interactive PTY terminal handoff by default, while retaining `pty` and `/pty` for compatibility.
-- Made aliases configured in `kwsh.yml` available to leading-`!` execution and command completion.
+- Made aliases configured in `kwshrc` available to leading-`!` execution and command completion.
 - Removed interactive PTY start and exit-status messages while retaining the submitted command echo.
 - Changed shell and leading-`!` completion so the candidate list appears in an interactive overlay while repeated Tab presses cycle through candidates in the composer.
 - Removed the `Tab` and `Shift+Tab` reasoning-effort shortcuts so the composer keeps its normal completion behavior.
@@ -379,7 +384,7 @@ All notable changes to Kward will be documented in this file.
 
 - Added a built-in editor that can be opened from the TUI with `$` or directly from the CLI with `kward edit <filename>`, with modern, Emacs-style, and Vibe editing modes.
 - Added richer editor workflows including syntax highlighting, undo/redo, auto-indent, soft wrap, mouse support, multi-cursor editing, relative line numbers, and an expanded Vim-like Vibe mode with visual selections, text objects, registers, marks, macros, substitution, and Ruby navigation.
-- Added `/shell`, an embedded Kward shell (`kwsh`) for running workspace commands without leaving the TUI, including command/path completion, safe color output, optional global `kwsh.yml` configuration, and rbenv shim autodetection.
+- Added `/shell`, an embedded Kward shell (`kwsh`) for running workspace commands without leaving the TUI, including command/path completion, safe color output, optional global `kwshrc` configuration, and rbenv shim autodetection.
 - Added `/files`, a searchable project file browser that can open files in the editor and remembers cursor and folder expansion state per workspace.
 - Added persistent TUI tabs for session-backed conversations, plus tab commands, shortcuts, status colors, and restoration across restarts.
 - Added `/git` workflows for reviewing changes, viewing diffs, staging or unstaging files, and writing commit messages from inside the TUI.

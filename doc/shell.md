@@ -25,11 +25,10 @@ When an inline command exits without reading input, safe output is mirrored into
 
 Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, the composer remains frozen and keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
 
-Configured `kwsh.yml` aliases also work after `!`:
+Configured `kwshrc` aliases also work after `!`:
 
-```yaml
-aliases:
-  glog: "git log --decorate --stat --graph"
+```sh
+alias glog='git log --decorate --stat --graph'
 ```
 
 ```text
@@ -38,9 +37,8 @@ aliases:
 
 An alias that resolves to `kward edit <filename>` opens Kward's integrated editor in the current session instead of starting a nested Kward process:
 
-```yaml
-aliases:
-  vibe: "kward edit"
+```sh
+alias vibe='kward edit'
 ```
 
 ```text
@@ -137,7 +135,7 @@ capture bundle exec ruby -Itest test/test_kwsh.rb
 An `kwsh` `capture` command:
 
 - does not receive keyboard input,
-- uses the timeout and output-size limit from `kwsh.yml`,
+- uses kwsh's built-in timeout and output-size limits,
 - preserves safe color and styling,
 - strips controls that could corrupt Kward's TUI,
 - can be cancelled with Ctrl+C.
@@ -163,7 +161,7 @@ Each Kward tab owns its `/shell` state. Switching away and back restores that ta
 - runtime aliases,
 - shell prompt and transcript view.
 
-Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. Configure its size with `history_limit` in `kwsh.yml`.
+Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. The shell-history limit is a built-in kwsh default.
 
 Kward's tab shortcuts work at the shell prompt and while a captured command is running. During an interactive command, the child owns every key; exit or interrupt it before switching Kward tabs. Bounded output from shell-agent `?` turns is also retained in the tab's transient runtime view, so it is restored when you switch away and back without being added to session history. Ctrl+L clears this transient shell and shell-agent output.
 
@@ -222,37 +220,28 @@ Built-ins take precedence over aliases and executables.
 
 ## Configure kwsh
 
-Global shell configuration lives at:
+Global shell configuration lives in these optional rc files, loaded in order:
 
 ```text
-~/.kward/kwsh.yml
+~/.kward/kwshrc
+~/.kwshrc
 ```
 
-When `KWARD_CONFIG_PATH` selects another main config file, Kward reads `kwsh.yml` from the same directory.
+When `KWARD_CONFIG_PATH` selects another main config file, Kward reads the first file beside that config file instead. The later file overrides earlier aliases and exported variables with the same names. The rc format currently supports declarative `alias`, `export`, and `source` directives:
 
-A practical configuration might look like this:
-
-```yaml
-shell: /bin/sh
-timeout_seconds: 300
-max_output_bytes: 1048576
-history_limit: 1000
-
-env:
-  FORCE_COLOR: "1"
-  BUNDLE_WITHOUT: "production"
-  RAILS_ENV: "test"
-
-aliases:
-  ll: "ls -la"
-  gs: "git status --short"
-  gd: "git diff --color=always"
-  glog: "git log --decorate --stat --graph"
-  be: "bundle exec"
-  t: "bundle exec ruby -Itest"
+```sh
+alias ll='ls -la'
+alias gs="git status --short"
+export BUNDLE_WITHOUT=production
+export PATH="$HOME/bin:$PATH"
+source ~/.kward/kwsh-aliases
 ```
 
-### Settings
+`source` reads another rc file without executing it; relative paths are resolved from the file containing the directive. Unsupported shell scripting is ignored for now.
+
+### Runtime defaults
+
+These runtime settings are built into kwsh and are not configurable through rc files:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -265,14 +254,14 @@ Invalid or relative `shell` paths fall back to `/bin/sh`. These timeout and outp
 
 ### Environment
 
-Configured `env` values are applied when `/shell` starts. Keys must be valid environment-variable names; nil values and invalid keys are ignored, and other values are converted to strings.
+`export` values from rc files are applied when `/shell` starts and are also available to leading-`!` commands. Keys must be valid environment-variable names; invalid keys are ignored. Values support shell quoting and simple `$VAR`/`${VAR}` expansion.
 
 Kward also supplies conservative terminal defaults:
 
 ```sh
-CLICOLOR=1
-COLORTERM=truecolor
-TERM=xterm-256color  # only when TERM is missing or dumb
+export CLICOLOR=1
+export COLORTERM=truecolor
+export TERM=xterm-256color  # only when TERM is missing or dumb
 ```
 
 It does not force color. Set `FORCE_COLOR`, `CLICOLOR_FORCE`, or a command-specific option such as `--color=always` when needed.
@@ -283,10 +272,9 @@ When rbenv is available, Kward adds its shims and bin directories to `PATH` and 
 
 Aliases replace the first command word once and append any remaining arguments:
 
-```yaml
-aliases:
-  ll: "ls -la"
-  t: "bundle exec ruby -Itest"
+```sh
+alias ll='ls -la'
+alias t='bundle exec ruby -Itest'
 ```
 
 ```sh

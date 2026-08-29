@@ -194,69 +194,71 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
-  def test_read_kwsh_config_returns_empty_settings_when_missing
-    Dir.mktmpdir do |dir|
-      path = File.join(dir, "kwsh.yml")
-
-      assert_equal({
-        shell: Kward::Kwsh::DEFAULT_SHELL,
-        timeout_seconds: Kward::Kwsh::DEFAULT_TIMEOUT_SECONDS,
-        max_output_bytes: Kward::Kwsh::DEFAULT_MAX_OUTPUT_BYTES,
-        history_limit: Kward::Kwsh::DEFAULT_HISTORY_LIMIT,
-        env: {},
-        aliases: {}
-      }, Kward::ConfigFiles.read_kwsh_config(path))
+  def test_read_kwsh_config_returns_defaults_when_rc_files_are_missing
+    Dir.mktmpdir do |home|
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        assert_equal({
+          shell: Kward::Kwsh::DEFAULT_SHELL,
+          timeout_seconds: Kward::Kwsh::DEFAULT_TIMEOUT_SECONDS,
+          max_output_bytes: Kward::Kwsh::DEFAULT_MAX_OUTPUT_BYTES,
+          history_limit: Kward::Kwsh::DEFAULT_HISTORY_LIMIT,
+          env: {},
+          aliases: {}
+        }, Kward::ConfigFiles.read_kwsh_config)
+      end
     end
   end
 
-  def test_read_kwsh_config_reads_env_and_aliases
-    Dir.mktmpdir do |dir|
-      path = File.join(dir, "kwsh.yml")
-      File.write(path, <<~YAML)
-        shell: /bin/sh
-        timeout_seconds: 600
-        max_output_bytes: 2097152
-        history_limit: 2000
-        env:
-          FORCE_COLOR: 1
-          BAD-NAME: ignored
-          EMPTY:
-        aliases:
-          ll: ls -la
-          gs: git status --short
-          bad name: ignored
-          pwd: ignored
-          1bad: ignored
-          empty:
-      YAML
+  def test_read_kwsh_config_loads_kwshrc_files_in_order_and_sources_declarative_directives
+    Dir.mktmpdir do |home|
+      config_dir = File.join(home, ".kward")
+      FileUtils.mkdir_p(config_dir)
+      source_path = File.join(config_dir, "aliases.kwshrc")
+      File.write(File.join(config_dir, "kwshrc"), <<~KWSHRC)
+        export KWARD_KWSH_CONFIG_TEST=first
+        alias ll='ls -la'
+        source aliases.kwshrc
+      KWSHRC
+      File.write(source_path, <<~KWSHRC)
+        export KWARD_KWSH_SOURCE_TEST="$KWARD_KWSH_CONFIG_TEST/source"
+        alias gs='git status --short'
+      KWSHRC
+      File.write(File.join(home, ".kwshrc"), <<~KWSHRC)
+        export KWARD_KWSH_CONFIG_TEST=second
+        export KWARD_KWSH_LITERAL='$KWARD_KWSH_CONFIG_TEST'
+        alias ll="ls -l"
+      KWSHRC
 
-      config = Kward::ConfigFiles.read_kwsh_config(path)
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        config = Kward::ConfigFiles.read_kwsh_config
 
-      assert_equal "/bin/sh", config[:shell]
-      assert_equal 600, config[:timeout_seconds]
-      assert_equal 2_097_152, config[:max_output_bytes]
-      assert_equal 2_000, config[:history_limit]
-      assert_equal({ "FORCE_COLOR" => "1" }, config[:env])
-      assert_equal({ "ll" => "ls -la", "gs" => "git status --short" }, config[:aliases])
+        assert_equal [File.join(config_dir, "kwshrc"), File.join(home, ".kwshrc")], Kward::ConfigFiles.kwshrc_paths
+        assert_equal "second", config[:env]["KWARD_KWSH_CONFIG_TEST"]
+        assert_equal "first/source", config[:env]["KWARD_KWSH_SOURCE_TEST"]
+        assert_equal "$KWARD_KWSH_CONFIG_TEST", config[:env]["KWARD_KWSH_LITERAL"]
+        assert_equal({ "ll" => "ls -l", "gs" => "git status --short" }, config[:aliases])
+      end
     end
   end
 
-  def test_read_kwsh_config_defaults_invalid_runtime_settings
-    Dir.mktmpdir do |dir|
-      path = File.join(dir, "kwsh.yml")
-      File.write(path, <<~YAML)
-        shell: relative-shell
-        timeout_seconds: 0
-        max_output_bytes: nope
-        history_limit: -5
-      YAML
+  def test_read_kwsh_config_ignores_unsupported_kwshrc_scripting
+    Dir.mktmpdir do |home|
+      config_dir = File.join(home, ".kward")
+      FileUtils.mkdir_p(config_dir)
+      marker = File.join(home, "should-not-exist")
+      File.write(File.join(config_dir, "kwshrc"), <<~KWSHRC)
+        if true; then
+          touch #{marker}
+        fi
+        export KWARD_KWSH_SUPPORTED=yes
+      KWSHRC
 
-      config = Kward::ConfigFiles.read_kwsh_config(path)
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        config = Kward::ConfigFiles.read_kwsh_config
 
-      assert_equal Kward::Kwsh::DEFAULT_SHELL, config[:shell]
-      assert_equal Kward::Kwsh::DEFAULT_TIMEOUT_SECONDS, config[:timeout_seconds]
-      assert_equal Kward::Kwsh::DEFAULT_MAX_OUTPUT_BYTES, config[:max_output_bytes]
-      assert_equal Kward::Kwsh::DEFAULT_HISTORY_LIMIT, config[:history_limit]
+        assert_equal "yes", config[:env]["KWARD_KWSH_SUPPORTED"]
+        refute File.exist?(marker)
+      end
     end
   end
 

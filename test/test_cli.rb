@@ -1024,12 +1024,10 @@ class TestCLI < KwardTestCase
   def test_interactive_loop_runs_kwsh_with_global_config
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
-        env:
-          KWARD_KWSH_CONFIG_TEST: configured
-        aliases:
-          hi: printf alias-ok
-      YAML
+      File.write(File.join(dir, "kwshrc"), <<~KWSHRC)
+        export KWARD_KWSH_CONFIG_TEST=configured
+        alias hi='printf alias-ok'
+      KWSHRC
       prompt = FakePrompt.new(["/shell", "printf %s $KWARD_KWSH_CONFIG_TEST", "hi", "exit", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
@@ -1081,10 +1079,9 @@ class TestCLI < KwardTestCase
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
       File.write(config_path, "{}")
-      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
-        aliases:
-          vibe: kward edit
-      YAML
+      File.write(File.join(dir, "kwshrc"), <<~KWSHRC)
+        alias vibe='kward edit'
+      KWSHRC
       file_path = File.join(File.realpath(dir), "note one.md")
       prompt = FakePrompt.new(["!vibe 'note one.md'", "/exit"])
       opened = []
@@ -1253,10 +1250,9 @@ class TestCLI < KwardTestCase
   def test_bang_completion_includes_configured_kwsh_aliases
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
-        aliases:
-          greet: printf hello
-      YAML
+      File.write(File.join(dir, "kwshrc"), <<~KWSHRC)
+        alias greet='printf hello'
+      KWSHRC
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
       agent.define_singleton_method(:conversation) { conversation }
@@ -1543,10 +1539,9 @@ class TestCLI < KwardTestCase
   def test_interactive_loop_expands_legacy_pty_alias_for_bang_command
     Dir.mktmpdir do |dir|
       config_path = File.join(dir, "config.json")
-      File.write(File.join(dir, "kwsh.yml"), <<~YAML)
-        aliases:
-          glog: pty git log --decorate
-      YAML
+      File.write(File.join(dir, "kwshrc"), <<~KWSHRC)
+        alias glog='pty git log --decorate'
+      KWSHRC
       prompt = FakePrompt.new(["!glog --stat", "/exit"])
       conversation = Kward::Conversation.new(system_message: nil, workspace_root: dir)
       agent = Object.new
