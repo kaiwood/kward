@@ -12,7 +12,7 @@ module Kward
           clear_stream_caret_locked
           if label && @stream_state.block != label
             ensure_transcript_block_separator_locked
-            write_transcript_text_locked("#{colored("#{transcript_label(label)}>", *label_styles(label))} ")
+            write_transcript_text_locked("#{colored(transcript_marker(label), *label_styles(label))} ")
             @stream_state.start_block(label)
           end
           write_transcript_text_locked(delta) unless delta.empty?
@@ -134,6 +134,11 @@ module Kward
         else
           label
         end
+      end
+
+      def transcript_marker(label)
+        marker = "#{transcript_label(label)}>"
+        label == "Assistant" ? "✦ #{marker}" : marker
       end
 
       def label_styles(label)

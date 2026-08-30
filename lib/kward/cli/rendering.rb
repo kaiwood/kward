@@ -224,7 +224,7 @@ module Kward
       # Writes the user transcript output for the terminal CLI flow.
       def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
         visible_input = display_input.nil? ? input : display_input
-        write_prompt_transcript("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
+        write_prompt_transcript("\n#{colored("❯ You>", :blue, :bold)} #{visible_input}\n")
         print_attachment_badges(input, references: attachment_references)
         print_pasted_images(input, image_parts: image_parts)
       end
@@ -401,7 +401,7 @@ module Kward
         return if @stream_block == label
 
         puts if @stream_block
-        print "\n#{colored("#{transcript_label(label)}>", *label_styles(label))} "
+        print "\n#{colored(transcript_marker(label), *label_styles(label))} "
         @stream_block = label
       end
 
@@ -427,6 +427,11 @@ module Kward
         else
           label
         end
+      end
+
+      def transcript_marker(label)
+        marker = "#{transcript_label(label)}>"
+        label == "Assistant" ? "✦ #{marker}" : marker
       end
 
       def label_styles(label)

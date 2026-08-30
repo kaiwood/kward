@@ -880,7 +880,7 @@ module Kward
         return if tab.stream_state[:streamed]
         return if tab.answer.to_s.empty?
 
-        @prompt.say("\n#{colored(assistant_output_prompt, :activity, :bold)} #{render_markdown_transcript(tab.answer)}\n")
+        @prompt.say("\n#{colored(transcript_marker("Assistant"), :activity, :bold)} #{render_markdown_transcript(tab.answer)}\n")
       end
 
       def new_tab_stream_state(driver)
