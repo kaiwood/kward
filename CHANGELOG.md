@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Smoothed interactive response streaming by pacing buffered provider events and rendering safe text before incomplete inline Markdown instead of delaying whole lines.
 - Replaced the busy Braille spinner with a calmer four-frame activity pulse in the interactive composer.
 - Added a visual-only streaming caret for assistant and reasoning output on interactive terminals; it is excluded from transcript storage and redirected output.
 - Added brief success, failure, and cancellation transitions to the interactive composer when an agent turn finishes.

@@ -41,6 +41,46 @@ class TestANSI < KwardTestCase
     assert_equal "\e[1mExploring key handling\e[0m -> Better Markdown\n", rendered
   end
 
+  def test_markdown_stream_emits_text_before_incomplete_inline_markup
+    stream = Kward::ANSI::MarkdownStream.new(enabled: true)
+
+    assert_equal "Start ", stream.render("Start **smo")
+    assert_equal "\e[1msmooth\e[0m ending", stream.render("oth** ending")
+    assert_equal " and ", stream.render(" and `co")
+    assert_equal "`\e[2mcode\e[0m`", stream.render("de`")
+  end
+
+  def test_markdown_stream_preserves_split_block_markup
+    stream = Kward::ANSI::MarkdownStream.new(enabled: false)
+
+    assert_empty stream.render("```ru")
+    assert_equal "┌─ code ruby\n", stream.render("by\n")
+    assert_empty stream.render("puts :ok")
+    assert_equal "│ puts :ok\n└───────────────────────────────────────\n", stream.render("\n```\n")
+  end
+
+  def test_markdown_stream_matches_full_render_across_chunk_boundaries
+    samples = [
+      "# Heading\n",
+      "Use **bold**, *italic*, _also_, ~~gone~~, `code`, and [docs](https://example.test).\n",
+      "> quoted **text**\n",
+      "- [x] done\n",
+      "```ruby\nputs :ok\n```\n"
+    ]
+
+    samples.each do |source|
+      expected = Kward::ANSI.markdown(source, enabled: true)
+      (1...source.length).each do |split|
+        stream = Kward::ANSI::MarkdownStream.new(enabled: true)
+        rendered = stream.render(source[0...split])
+        rendered << stream.render(source[split..])
+        rendered << stream.render("", final: true)
+
+        assert_equal expected, rendered, "split #{source.inspect} at #{split}"
+      end
+    end
+  end
+
   def test_ansi_markdown_renders_inline_links_and_emphasis
     rendered = Kward::ANSI.markdown("Use *italic*, _also_, ~~gone~~, and [docs](https://example.test).\n", enabled: true)
 

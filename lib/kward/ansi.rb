@@ -187,23 +187,30 @@ module Kward
         @enabled = enabled
         @pending = +""
         @in_fence = false
+        @line_streaming = false
       end
 
       def render(delta, final: false)
-        text = delta.to_s
-        return ANSI.markdown(text, enabled: @enabled) if fast_markdown?(text, final)
-
-        @pending << text
+        @pending << delta.to_s
         rendered = +""
         while (match = @pending.match(/\r\n|\r|\n/))
           line = @pending[0...match.begin(0)]
           @pending = @pending[(match.end(0))..] || +""
-          rendered << render_line(line) << "\n"
+          rendered << render_pending_line(line) << "\n"
         end
 
-        if final && !@pending.empty?
-          rendered << render_line(@pending)
-          @pending.clear
+        if final
+          unless @pending.empty?
+            rendered << render_pending_line(@pending)
+            @pending.clear
+          end
+        else
+          streamable = streamable_inline_prefix
+          unless streamable.empty?
+            rendered << ANSI.inline_markdown(streamable, enabled: @enabled)
+            @pending = @pending[streamable.length..] || +""
+            @line_streaming = true
+          end
         end
 
         if final && @in_fence
@@ -217,8 +224,95 @@ module Kward
 
       private
 
-      def fast_markdown?(text, final)
-        !final && !@in_fence && @pending.empty? && !text.match?(/[`*~_\[\]>]/)
+      def render_pending_line(line)
+        if @line_streaming
+          @line_streaming = false
+          ANSI.inline_markdown(line, enabled: @enabled)
+        else
+          render_line(line)
+        end
+      end
+
+      def streamable_inline_prefix
+        return "" if @pending.empty? || block_line_pending?
+
+        boundary = [
+          unmatched_marker_index("`"),
+          unmatched_marker_index("**"),
+          unmatched_marker_index("~~"),
+          unmatched_emphasis_index("*"),
+          unmatched_emphasis_index("_"),
+          incomplete_marker_prefix_index,
+          incomplete_link_index
+        ].compact.min
+        boundary ? @pending[0...boundary] : @pending.dup
+      end
+
+      def unmatched_marker_index(marker)
+        unmatched = nil
+        offset = 0
+        while (index = @pending.index(marker, offset))
+          unmatched = unmatched ? nil : index
+          offset = index + marker.length
+        end
+        unmatched
+      end
+
+      def unmatched_emphasis_index(marker)
+        unmatched = nil
+        offset = 0
+        while (index = @pending.index(marker, offset))
+          previous = index.positive? ? @pending[index - 1] : nil
+          following = @pending[index + 1]
+          offset = index + 1
+          next if previous == marker || following == marker
+
+          if unmatched
+            unmatched = nil if following.nil? || following.match?(/[\s\)\]},.!?:;]/)
+          elsif previous.nil? || previous.match?(/[\s\(\[{]/)
+            unmatched = index
+          end
+        end
+        unmatched
+      end
+
+      def incomplete_marker_prefix_index
+        trailing = @pending[/~+\z/]
+        return nil unless trailing&.length&.odd?
+
+        @pending.length - 1
+      end
+
+      def incomplete_link_index
+        offset = 0
+        while (opening = @pending.index("[", offset))
+          closing = @pending.index("]", opening + 1)
+          return opening unless closing
+          return opening if closing == @pending.length - 1
+
+          unless @pending[closing + 1] == "("
+            offset = closing + 1
+            next
+          end
+
+          closing_parenthesis = @pending.index(")", closing + 2)
+          return opening unless closing_parenthesis
+
+          offset = closing_parenthesis + 1
+        end
+        nil
+      end
+
+      def block_line_pending?
+        return true if @in_fence
+        return false if @line_streaming
+
+        line = @pending.lstrip
+        line.start_with?("```") || line.match?(/\A`{1,2}\z/) ||
+          line.match?(/\A\#{1,6}(?:\s|\z)/) ||
+          line.start_with?(">") ||
+          line.match?(/\A[-*]\s+\[[ xX]\](?:\s|\z)/) ||
+          line.match?(/\A[-*](?:\s*\z|\s+\[[ xX]?\z)/)
       end
 
       def render_line(line)

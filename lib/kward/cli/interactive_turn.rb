@@ -130,7 +130,7 @@ module Kward
         if busy_replacement_agent? || suppress_transcript
           discard_interactive_events(event_queue, markdown_chunks, stream_state, force: true)
         else
-          drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
+          drain_remaining_interactive_events(event_queue, markdown_chunks, stream_state, agent)
         end
         completed = !cancelled && !busy_replacement_agent? && !error
         on_complete&.call(successful: completed, cancelled: cancelled, error: error, answer: answer)
@@ -186,6 +186,14 @@ module Kward
         end
 
         flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: force)
+      end
+
+      def drain_remaining_interactive_events(event_queue, markdown_chunks, stream_state, agent)
+        until event_queue.empty?
+          drain_interactive_events(event_queue, markdown_chunks, stream_state, agent)
+          sleep STREAM_RENDER_INTERVAL unless event_queue.empty?
+        end
+        drain_interactive_events(event_queue, markdown_chunks, stream_state, agent, force: true)
       end
 
       def discard_interactive_events(event_queue, markdown_chunks, stream_state, force: false)

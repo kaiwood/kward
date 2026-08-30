@@ -1859,6 +1859,18 @@ class TestCLI < KwardTestCase
     assert_operator prompt.write_deltas.length, :<, events.length
   end
 
+  def test_prompt_interface_interactive_turn_paces_buffered_completion_events
+    prompt = BusyPrompt.new([])
+    events = 30.times.map { Kward::Events::AssistantDelta.new(delta: "word ") }
+    agent = EventAgent.new(events)
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal "word " * 30, prompt.write_deltas.join
+    assert_operator prompt.write_deltas.length, :>, 1
+  end
+
   def test_prompt_interface_interactive_turn_renders_streamed_inline_bold
     prompt = BusyPrompt.new([])
     events = [Kward::Events::ReasoningDelta.new(delta: "**Exploring key handling** -> Better Markdown")]
