@@ -1580,6 +1580,29 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_briefly_shows_completion_status
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    prompt.show_completion(:success)
+
+    assert_includes strip_ansi(output.string), "You · ✓ Complete"
+
+    prompt.instance_variable_get(:@completion_status)[:expires_at] = prompt.send(:monotonic_now) - 1
+    assert prompt.send(:tick_completion_locked)
+    assert_nil prompt.instance_variable_get(:@completion_status)
+  end
+
+  def test_prompt_interface_uses_distinct_failure_and_cancellation_completion_markers
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+
+    assert_equal "× Failed", prompt.send(:completion_status, :failed)[:text]
+    assert_equal "– Cancelled", prompt.send(:completion_status, :cancelled)[:text]
+  end
+
   def test_prompt_interface_hides_spinner_when_input_is_queued
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

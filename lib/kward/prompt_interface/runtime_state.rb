@@ -38,6 +38,28 @@ module Kward
         busy && @queued_count.zero? && @started && @asking
       end
 
+      def completion_status(status)
+        text = case status&.to_sym
+        when :success
+          "✓ Complete"
+        when :failed
+          "× Failed"
+        when :cancelled
+          "– Cancelled"
+        else
+          return nil
+        end
+        { text: text, expires_at: monotonic_now + COMPLETION_DISPLAY_SECONDS }
+      end
+
+      def tick_completion_locked
+        return false unless @completion_status
+        return false if monotonic_now < @completion_status[:expires_at]
+
+        @completion_status = nil
+        true
+      end
+
       def tick_footer_locked
         return false unless @footer && @started && @asking
         return false unless footer_refresh_due?

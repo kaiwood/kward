@@ -73,6 +73,7 @@ module Kward
     SPINNER_INTERVAL = 0.16
     FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_STATUS_REFRESH_INTERVAL = 1.0
+    COMPLETION_DISPLAY_SECONDS = 0.8
     COMPOSER_MAX_INPUT_ROWS = 6
     IMAGE_VIEWER_MAX_ROWS = 8
     TRANSCRIPT_BUFFER_LIMIT = 200_000
@@ -154,6 +155,7 @@ module Kward
       @asking = false
       @busy = false
       @busy_activity = "streaming"
+      @completion_status = nil
       @queued_count = 0
       @steered_count = 0
       @spinner_frame_index = 0
@@ -547,7 +549,8 @@ module Kward
           if key.nil?
             resized = handle_resize_locked
             footer_refreshed = tick_footer_locked
-            render_prompt_locked if resized || footer_refreshed
+            completion_changed = tick_completion_locked
+            render_prompt_locked if resized || footer_refreshed || completion_changed
           else
             result = handle_key(key)
             render_prompt_locked unless result.is_a?(String) || result == EXIT_INPUT || prompt_action_result?(result)
@@ -872,6 +875,7 @@ module Kward
       @mutex.synchronize do
         @prompt_label = message.to_s
         @busy_activity = normalize_busy_activity(activity)
+        @completion_status = nil
         self.composer_input = ""
         self.composer_cursor = 0
         @composer.clear_attachments
@@ -921,6 +925,13 @@ module Kward
       end
     end
 
+    def show_completion(status)
+      @mutex.synchronize do
+        @completion_status = completion_status(status)
+        render_prompt_locked if @started && @asking
+      end
+    end
+
     def filter_terminal_handoff_input(chunk)
       @mutex.synchronize { filter_terminal_handoff_input_locked(chunk) }
     end
@@ -948,7 +959,8 @@ module Kward
           resized = handle_resize_locked
           spun = tick_spinner_locked
           footer_refreshed = tick_footer_locked
-          render_prompt_locked if resized || spun || footer_refreshed
+          completion_changed = tick_completion_locked
+          render_prompt_locked if resized || spun || footer_refreshed || completion_changed
           return nil
         end
 

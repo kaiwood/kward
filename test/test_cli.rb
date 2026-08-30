@@ -174,6 +174,19 @@ class TestCLI < KwardTestCase
     end
   end
 
+  class CompletionPrompt < BusyPrompt
+    attr_reader :completion_statuses
+
+    def initialize(inputs)
+      super
+      @completion_statuses = []
+    end
+
+    def show_completion(status)
+      @completion_statuses << status
+    end
+  end
+
   class CombinedStreamPrompt < BusyPrompt
     attr_reader :stream_writes
 
@@ -1938,6 +1951,16 @@ class TestCLI < KwardTestCase
     cli.send(:run_interactive_turn, agent, "hello")
 
     assert_equal ["answer"], prompt.write_deltas
+  end
+
+  def test_prompt_interface_interactive_turn_shows_success_completion
+    prompt = CompletionPrompt.new([])
+    agent = EventAgent.new([Kward::Events::AssistantDelta.new(delta: "done")])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal [:success], prompt.completion_statuses
   end
 
   def test_prompt_interface_interactive_turn_notifies_plugin_transcript_events

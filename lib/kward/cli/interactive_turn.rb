@@ -141,6 +141,16 @@ module Kward
         queued_inputs
       ensure
         @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+        if @prompt.respond_to?(:show_completion) && !busy_replacement_agent?
+          completion = if cancelled
+            :cancelled
+          elsif error
+            :failed
+          elsif completed
+            :success
+          end
+          @prompt.show_completion(completion) if completion
+        end
         if editor_prompt_session && @prompt.respond_to?(:resume_editor_for_agent)
           status = if cancelled
             "Agent request cancelled"

@@ -97,6 +97,8 @@ module Kward
           status_composer_text(busy_title("#{label} · #{spinner_frame} steering"))
         elsif @busy
           status_composer_text(busy_title("#{label} · #{spinner_frame} #{@busy_activity}"))
+        elsif @completion_status
+          status_composer_text("#{label} · #{@completion_status[:text]}")
         else
           status_composer_text(label)
         end

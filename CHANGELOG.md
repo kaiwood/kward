@@ -23,6 +23,7 @@ All notable changes to Kward will be documented in this file.
 
 - Replaced the busy Braille spinner with a calmer four-frame activity pulse in the interactive composer.
 - Added a visual-only streaming caret for assistant and reasoning output on interactive terminals; it is excluded from transcript storage and redirected output.
+- Added brief success, failure, and cancellation transitions to the interactive composer when an agent turn finishes.
 - Documentation checks now validate the curated public extension entry points without presenting aggregate internal-helper coverage as a product-quality metric.
 - The repository and documentation landing pages now use a focused coding-workflow visual, restrained project badges, and clearer product identity.
 - Updated RubyGems positioning and metadata to describe Kward's supported product surfaces and direct users to the documentation site while keeping source and issue links on GitHub.
