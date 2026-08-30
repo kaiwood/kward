@@ -581,22 +581,20 @@ Manual `/compact [instructions]` works even when auto-compaction is disabled.
 
 ## Pan mode
 
-`kward pan` starts a LAN-reachable web UI and requires HTTP Basic Auth. Configure credentials before starting it:
+`kward pan` starts a local web UI and requires HTTP Basic Auth. Configure credentials before starting it:
 
 ```json
 {
   "pan_mode": {
-    "host": "0.0.0.0",
-    "port": 8765,
     "username": "kward",
     "password": "choose-a-private-password"
   }
 }
 ```
 
-`host` defaults to `0.0.0.0` and `port` defaults to `8765`. Kward fails to start pan mode unless `username` and `password` are configured.
+`host` defaults to `127.0.0.1` and `port` defaults to `8765`. Set `host` to `0.0.0.0` only when you intentionally want access from another device on a trusted LAN. Kward prints a warning for every non-loopback binding because Pan uses plain HTTP without TLS.
 
-These credentials are stored in plaintext config. Use a private, user-specific password and do not share the config file. Pan mode exposes the agent's file, shell, web, and configured extension tools to anyone on the LAN who has the credentials, so use it only on trusted networks. See [Pan mode](pan.md) for the full browser workflow, session behavior, security guidance, and limitations.
+Kward fails to start Pan unless `username` and either `password` or the `KWARD_PAN_PASSWORD` environment variable are configured. Config-file credentials are stored in plaintext; use a unique password and do not share the file. Pan exposes the agent's file, shell, web, and configured extension tools to anyone who can connect and authenticate. See [Pan mode](pan.md) for the full browser workflow, session behavior, security guidance, and limitations.
 
 ## Web search
 

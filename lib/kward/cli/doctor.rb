@@ -127,8 +127,11 @@ module Kward
         return { status: :warning, label: "Pan mode", message: "skipped because config is invalid" } if config_result.is_a?(ConfigFiles::ConfigError)
 
         pan = config_result.to_h["pan_mode"] || {}
-        if !pan["username"].to_s.empty? && !pan["password"].to_s.empty?
-          { status: :ok, label: "Pan mode", message: "credentials configured" }
+        environment_password = ENV["KWARD_PAN_PASSWORD"].to_s
+        password = environment_password.empty? ? pan["password"].to_s : environment_password
+        if !pan["username"].to_s.empty? && !password.empty?
+          source = environment_password.empty? ? "config" : "environment"
+          { status: :ok, label: "Pan mode", message: "credentials configured (password from #{source})" }
         else
           { status: :warning, label: "Pan mode", message: "username/password not configured" }
         end

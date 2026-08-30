@@ -8,38 +8,40 @@ Use it when you want to work from another browser or device on a trusted network
 
 Pan is a small local HTTP server, not a hosted service. The machine running Kward performs model requests, reads and edits workspace files, runs tools, and stores sessions.
 
-Pan requires HTTP Basic Auth. Add credentials to `~/.kward/config.json`:
+Pan requires HTTP Basic Auth. Add a username and password to `~/.kward/config.json`:
+
+```json
+{
+  "pan_mode": {
+    "username": "kward",
+    "password": "choose-a-long-private-password"
+  }
+}
+```
+
+Pan listens on `127.0.0.1:8765` by default, so only browsers on the same machine can connect. Kward refuses to start Pan unless a username and password are available.
+
+To keep the password out of `config.json`, omit `password` and provide it when starting Pan:
+
+```bash
+KWARD_PAN_PASSWORD="choose-a-long-private-password" kward pan
+```
+
+When stored in `config.json`, the password is plaintext. Do not reuse an important password or share the file. Environment variables avoid config-file storage but may still be visible to processes or shell-history tooling on your machine.
+
+To use Pan from another device on a trusted LAN, explicitly listen on all interfaces:
 
 ```json
 {
   "pan_mode": {
     "host": "0.0.0.0",
     "port": 8765,
-    "username": "kward",
-    "password": "choose-a-long-private-password"
+    "username": "kward"
   }
 }
 ```
 
-The defaults are:
-
-- `host`: `0.0.0.0`, which listens on all network interfaces.
-- `port`: `8765`.
-
-Kward refuses to start Pan unless both `username` and `password` are configured. The password is stored as plaintext in your config file, so do not reuse an important password or share the file.
-
-For access from the same machine only, bind to loopback instead:
-
-```json
-{
-  "pan_mode": {
-    "host": "127.0.0.1",
-    "port": 8765,
-    "username": "kward",
-    "password": "choose-a-long-private-password"
-  }
-}
-```
+Then start Pan with `KWARD_PAN_PASSWORD` or add the password to that configuration. Kward prints a plain-HTTP exposure warning whenever Pan binds to a non-loopback address.
 
 ## Start Pan
 
@@ -56,11 +58,13 @@ Or select the workspace explicitly:
 kward --working-directory ~/code/my-project pan
 ```
 
-Kward prints the listening URL, workspace, and initial session path. With the default LAN binding, it detects and prints the machine's routed LAN address when available. Open port `8765` at that address, for example:
+Kward prints the listening URL, workspace, and initial session path. With the default loopback binding, open:
 
 ```text
-http://192.168.1.25:8765/
+http://127.0.0.1:8765/
 ```
+
+With an explicit `0.0.0.0` LAN binding, Kward detects and prints the machine's routed LAN address when available, such as `http://192.168.1.25:8765/`.
 
 Your browser asks for the configured Basic Auth username and password.
 
@@ -142,8 +146,8 @@ Pan exposes powerful agent tools through ordinary HTTP. Basic Auth protects ever
 
 Use these precautions:
 
-- Run it only on a network and machine you trust.
-- Prefer `127.0.0.1` when remote access is unnecessary.
+- Keep the default `127.0.0.1` binding when remote access is unnecessary.
+- Bind to `0.0.0.0` only on a network and machine you trust.
 - Do not expose the port directly to the public internet.
 - Do not put Pan behind a public tunnel unless you provide a properly secured TLS/authentication boundary and understand the risk.
 - Use a unique password and protect `config.json`.

@@ -1,5 +1,6 @@
 require "base64"
 require "erb"
+require "ipaddr"
 require "json"
 require "socket"
 require "thread"
@@ -24,7 +25,7 @@ require_relative "../workspace_factory"
 module Kward
   # Local HTTP server for the mobile-friendly Pan web UI.
   class PanServer
-    DEFAULT_HOST = "0.0.0.0"
+    DEFAULT_HOST = "127.0.0.1"
     DEFAULT_PORT = 8765
     MAX_REQUEST_BODY_BYTES = 64 * 1024
     ROUTING_PROBE_ADDRESS = "8.8.8.8"
@@ -44,8 +45,11 @@ module Kward
       @host = @config.fetch("host", DEFAULT_HOST).to_s
       @port = positive_port(@config.fetch("port", DEFAULT_PORT))
       @username = @config["username"].to_s
-      @password = @config["password"].to_s
-      raise "Pan mode requires pan_mode.username and pan_mode.password in #{ConfigFiles.config_path}" if @username.empty? || @password.empty?
+      environment_password = ENV["KWARD_PAN_PASSWORD"].to_s
+      @password = environment_password.empty? ? @config["password"].to_s : environment_password
+      if @username.empty? || @password.empty?
+        raise "Pan mode requires pan_mode.username and either pan_mode.password or KWARD_PAN_PASSWORD"
+      end
 
       @session_store = SessionStore.new(config_dir: config_dir, cwd: @workspace.root.to_s)
       @session = @session_store.create(
@@ -69,6 +73,7 @@ module Kward
     attr_reader :host, :port, :session, :workspace
 
     def run
+      warn_if_exposed
       start_worker
       @server = TCPServer.new(@host, @port)
       actual_port = @server.addr[1]
@@ -593,6 +598,21 @@ module Kward
       return @host unless @host == "0.0.0.0"
 
       lan_address || "<lan-address>"
+    end
+
+    def warn_if_exposed
+      return if loopback_host?
+
+      @output.puts "Warning: Pan is exposed over plain HTTP on #{@host}."
+      @output.puts "Use it only on a trusted network, or bind pan_mode.host to 127.0.0.1."
+    end
+
+    def loopback_host?
+      return true if @host.casecmp?("localhost")
+
+      IPAddr.new(@host).loopback?
+    rescue IPAddr::InvalidAddressError
+      false
     end
 
     def lan_address

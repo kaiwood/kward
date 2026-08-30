@@ -84,6 +84,23 @@ class TestCLICommands < KwardTestCase
     end
   end
 
+  def test_doctor_recognizes_pan_password_from_environment
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump({ "pan_mode" => { "username" => "kward" } }))
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: ["doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path, "KWARD_PAN_PASSWORD" => "secret-from-environment") do
+        cli.run
+      end
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Pan mode: credentials configured (password from environment)"
+      refute_includes output, "secret-from-environment"
+    end
+  end
+
   def test_doctor_help_is_available
     prompt = FakePrompt.new([])
     cli = Kward::CLI.new(argv: ["doctor", "--help"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))

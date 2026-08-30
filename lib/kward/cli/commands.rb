@@ -165,7 +165,7 @@ module Kward
           },
           "pan" => {
             usage: "kward pan",
-            description: "Start Pan mode, a mobile-friendly LAN web UI with persistent sessions.",
+            description: "Start Pan mode, a mobile-friendly local web UI with persistent sessions.",
             examples: ["kward pan", "kward --working-directory ~/code/project pan"]
           },
           "rpc" => {

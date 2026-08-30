@@ -162,7 +162,7 @@
         <button class="icon-button" id="open-sessions" type="button" aria-label="Open sessions">☰</button>
         <div class="title-block">
           <div class="title-row"><span class="live-dot"></span><h1 id="conversation-title">New session</h1></div>
-          <div class="top-meta" id="session-meta">Secure LAN workspace</div>
+          <div class="top-meta" id="session-meta">Authenticated HTTP workspace</div>
         </div>
         <button class="text-button" id="capture-skill" type="button">Capture skill</button>
         <button class="text-button" id="rename-session" type="button">Rename</button>
@@ -437,7 +437,7 @@
       if (!activeSession) return;
       titleEl.textContent = activeSession.title || activeSession.name || 'New session';
       const details = [activeSession.model, activeSession.messageCount != null ? `${activeSession.messageCount} messages` : null].filter(Boolean);
-      sessionMeta.textContent = details.join(' · ') || 'Secure LAN workspace';
+      sessionMeta.textContent = details.join(' · ') || 'Authenticated HTTP workspace';
     }
 
     async function changeSession(action, values = {}) {

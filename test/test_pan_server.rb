@@ -33,7 +33,56 @@ class TestPanServer < KwardTestCase
     end
   end
 
-  def test_pan_server_displays_routed_lan_address_for_default_host
+  def test_pan_server_defaults_to_loopback
+    Dir.mktmpdir do |dir|
+      config = { "pan_mode" => { "username" => "kward", "password" => "secret", "port" => 0 } }
+      server = build_server(dir, config: config)
+
+      assert_equal "127.0.0.1", server.host
+    end
+  end
+
+  def test_pan_server_accepts_password_from_environment
+    Dir.mktmpdir do |dir|
+      config = { "pan_mode" => { "username" => "kward", "host" => "127.0.0.1", "port" => 0 } }
+      server = with_env("KWARD_PAN_PASSWORD" => "environment-secret") do
+        build_server(dir, config: config)
+      end
+      authorization = Base64.strict_encode64("kward:environment-secret")
+      response = request(server, "GET / HTTP/1.1\r\nHost: example\r\nAuthorization: Basic #{authorization}\r\n\r\n")
+
+      assert_includes response, "HTTP/1.1 200 OK"
+      refute_includes response, "environment-secret"
+    end
+  end
+
+  def test_pan_server_warns_when_exposed_over_plain_http
+    Dir.mktmpdir do |dir|
+      output = StringIO.new
+      config = { "pan_mode" => { "username" => "kward", "password" => "secret", "host" => "0.0.0.0", "port" => 0 } }
+      server = Kward::PanServer.new(client: PanStreamingClient.new([]), working_directory: dir, config: config, config_dir: File.join(dir, ".kward"), output: output)
+
+      server.send(:warn_if_exposed)
+
+      assert_includes output.string, "Pan is exposed over plain HTTP on 0.0.0.0"
+      assert_includes output.string, "bind pan_mode.host to 127.0.0.1"
+      refute_includes output.string, "secret"
+    end
+  end
+
+  def test_pan_server_does_not_warn_for_loopback
+    Dir.mktmpdir do |dir|
+      output = StringIO.new
+      config = { "pan_mode" => { "username" => "kward", "password" => "secret", "host" => "127.0.0.1", "port" => 0 } }
+      server = Kward::PanServer.new(client: PanStreamingClient.new([]), working_directory: dir, config: config, config_dir: File.join(dir, ".kward"), output: output)
+
+      server.send(:warn_if_exposed)
+
+      assert_empty output.string
+    end
+  end
+
+  def test_pan_server_displays_routed_lan_address_for_all_interfaces
     Dir.mktmpdir do |dir|
       socket = LanAddressSocket.new("192.168.1.25")
       socket_class = Class.new { define_singleton_method(:new) { socket } }
@@ -75,6 +124,7 @@ class TestPanServer < KwardTestCase
       assert_includes response, "<strong>Assistant</strong>"
       assert_includes response, "Workspace: #{File.realpath(dir)}"
       assert_includes response, "State your business."
+      assert_includes response, "Authenticated HTTP workspace"
       assert_includes response, "src=\"/kward-logo.png\""
     end
   end

@@ -20,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Pan now binds to `127.0.0.1` by default, accepts `KWARD_PAN_PASSWORD`, and warns whenever it is explicitly exposed over plain HTTP on a non-loopback address.
 - Vibe visual selections can now be used as line ranges for `:` commands, including `:s` substitutions and `:run` scratchpad execution.
 - Ruby scratchpad runs now preserve the source buffer and show captured output in a scrollable, cancellable lower-half output pane instead of appending it after `__END__`; mouse drag selection and `Ctrl+C`/`Cmd+C`/Vibe `y` copy clean output without pane borders.
 
