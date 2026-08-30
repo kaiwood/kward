@@ -28,8 +28,8 @@ jobs:
           ruby-version: '3.4'
           bundler-cache: true
 
-      - name: Build documentation
-        run: bundle exec rake docs:build
+      - name: Build and check documentation
+        run: bundle exec rake docs:check
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
