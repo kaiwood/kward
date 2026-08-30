@@ -122,7 +122,7 @@ class TestCLIBusyInput < KwardTestCase
     assert_equal "first", client.seen_messages[0][1][:content]
     assert_includes rendered, "You> steer this"
     assert_includes rendered, "steering"
-    assert_includes rendered, "streaming"
+    assert_includes rendered, "thinking"
     refute_includes rendered, "steered"
   ensure
     writer_thread&.join

@@ -106,7 +106,7 @@ class TestEditorPrompt < KwardTestCase
     assert prompt.send(:editor_visible?)
     status = strip_ansi(output.string)
     assert_includes status, "Agent is working"
-    assert_includes status, "· ⠋"
+    assert_includes status, "· ·"
     prompt.send(:handle_key, "i")
     assert_equal "old", editor.buffer
   end
