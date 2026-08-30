@@ -6,16 +6,16 @@ Gem::Specification.new do |spec|
   spec.authors = ["Kai Wood"]
   spec.email = ["kai.wood@icloud.com"]
 
-  spec.summary = "An extendable Ruby CLI coding agent."
-  spec.description = "Kward is a Ruby CLI coding agent with local workspace tools, configurable prompts, web search, sessions, and an experimental JSON-RPC backend."
-  spec.homepage = "https://github.com/kaiwood/kward"
+  spec.summary = "An extensible Ruby coding agent for your terminal."
+  spec.description = "Kward is an extensible Ruby coding agent with workspace tools, resumable sessions, multiple model providers, a local browser UI, and JSON-RPC integrations."
+  spec.homepage = "https://kaiwood.github.io/kward/"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.4"
 
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["source_code_uri"] = "https://github.com/kaiwood/kward"
   spec.metadata["changelog_uri"] = "https://github.com/kaiwood/kward/blob/main/CHANGELOG.md"
-  spec.metadata["documentation_uri"] = "https://github.com/kaiwood/kward#readme"
+  spec.metadata["documentation_uri"] = "https://kaiwood.github.io/kward/"
   spec.metadata["bug_tracker_uri"] = "https://github.com/kaiwood/kward/issues"
 
   spec.files = Dir.chdir(__dir__) do
