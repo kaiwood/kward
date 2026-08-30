@@ -95,6 +95,8 @@ module Kward
           status_composer_text(busy_title("#{label} · #{colored("#{@queued_count} queued", :metadata)}"))
         elsif @busy && @steered_count.to_i.positive?
           status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} steering"))
+        elsif @busy && response_arriving?
+          status_composer_text(busy_title("#{label} · #{colored("✦", :activity, :bold)} responding"))
         elsif @busy
           status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} #{@busy_activity}"))
         elsif @completion_status

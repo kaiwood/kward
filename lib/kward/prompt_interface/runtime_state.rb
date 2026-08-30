@@ -52,6 +52,16 @@ module Kward
         { text: text.first, style: text.last, expires_at: monotonic_now + COMPLETION_DISPLAY_SECONDS }
       end
 
+      def response_arriving?
+        return false unless @response_arrival_until
+
+        if monotonic_now >= @response_arrival_until
+          @response_arrival_until = nil
+          return false
+        end
+        true
+      end
+
       def tick_completion_locked
         return false unless @completion_status
         return false if monotonic_now < @completion_status[:expires_at]

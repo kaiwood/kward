@@ -78,6 +78,7 @@ module Kward
         event_queue = Queue.new
         stream_state = {
           streamed: false,
+          assistant_arrived: false,
           last_flush: monotonic_now,
           stream_block_open: false,
           markdown_streams: {},
@@ -211,6 +212,10 @@ module Kward
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
         when Events::AssistantDelta
           stream_state[:streamed] = true
+          unless stream_state[:assistant_arrived]
+            @prompt.show_response_arrival if @prompt.respond_to?(:show_response_arrival)
+            stream_state[:assistant_arrived] = true
+          end
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)
         when Events::Steering
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)

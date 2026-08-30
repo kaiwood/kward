@@ -74,6 +74,7 @@ module Kward
     FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_STATUS_REFRESH_INTERVAL = 1.0
     COMPLETION_DISPLAY_SECONDS = 0.8
+    RESPONSE_ARRIVAL_SECONDS = 0.4
     COMPOSER_MAX_INPUT_ROWS = 6
     IMAGE_VIEWER_MAX_ROWS = 8
     TRANSCRIPT_BUFFER_LIMIT = 200_000
@@ -156,6 +157,7 @@ module Kward
       @busy = false
       @busy_activity = "streaming"
       @completion_status = nil
+      @response_arrival_until = nil
       @queued_count = 0
       @steered_count = 0
       @spinner_frame_index = 0
@@ -876,6 +878,7 @@ module Kward
         @prompt_label = message.to_s
         @busy_activity = normalize_busy_activity(activity)
         @completion_status = nil
+        @response_arrival_until = nil
         self.composer_input = ""
         self.composer_cursor = 0
         @composer.clear_attachments
@@ -918,10 +921,18 @@ module Kward
       @mutex.synchronize do
         @busy = false
         @busy_activity = "streaming"
+        @response_arrival_until = nil
         @queued_count = 0
         @steered_count = 0
         @asking = true
         render_prompt_locked
+      end
+    end
+
+    def show_response_arrival
+      @mutex.synchronize do
+        @response_arrival_until = monotonic_now + RESPONSE_ARRIVAL_SECONDS
+        render_prompt_locked if @started && @asking && @busy
       end
     end
 

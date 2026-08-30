@@ -886,6 +886,7 @@ module Kward
       def new_tab_stream_state(driver)
         {
           streamed: false,
+          assistant_arrived: false,
           last_flush: monotonic_now,
           stream_block_open: false,
           markdown_streams: {},

@@ -1580,6 +1580,21 @@ class TestPromptInterface < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_prompt_interface_briefly_flourishes_when_response_arrives
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.begin_busy_input("You>")
+    output.truncate(0)
+    output.rewind
+
+    prompt.show_response_arrival
+
+    assert_includes strip_ansi(output.string), "You · ✦ responding"
+
+    prompt.instance_variable_set(:@response_arrival_until, prompt.send(:monotonic_now) - 1)
+    refute prompt.send(:response_arriving?)
+  end
+
   def test_prompt_interface_briefly_shows_completion_status
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
