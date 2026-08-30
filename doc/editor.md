@@ -257,7 +257,7 @@ Emacs mode is for users who prefer classic Emacs-style non-modal editing. Save a
 
 Vibe mode is a modal editor built for Kward, inspired by classic Vi and Vim. If you already know Vim, you will feel at home here. Files open in normal mode, where keys run commands. Press `i`, `a`, `o`, or another insert command to type text, then press `Esc` to return to normal mode.
 
-It supports a compact but practical modal-editing set: counts, operators with motions, visual selections, visual block edits, marks, registers, macros, search, repeat (`.`), Ruby-aware navigation, and `:` commands. It is not a full Vim clone — there are no splits or ex-mode scripting — but it covers everyday keyboard editing inside the conversation.
+It supports a compact but practical modal-editing set: counts, operators with motions, visual selections, multi-cursor and visual block edits, marks, registers, macros, search, repeat (`.`), Ruby-aware navigation, and `:` commands. It is not a full Vim clone — there are no splits or ex-mode scripting — but it covers everyday keyboard editing inside the conversation.
 
 The status line always shows the current mode (`NORMAL`, `INSERT`, `VISUAL`, `REPLACE`, or `:`) so you never lose track of where you are.
 
@@ -293,7 +293,7 @@ Use normal mode for movement, operators, marks, registers, macros, search, and c
 | `Ctrl+K`                | Move up by indentation level                    |
 | `Ctrl+F`                | Page down                                       |
 | `Ctrl+B`                | Page up                                         |
-| `Ctrl+D`                | Half page down                                  |
+| `Ctrl+D`                | Select the next occurrence and enter insert mode |
 | `Ctrl+U`                | Half page up                                    |
 | `Ctrl+E`                | Scroll down one line                            |
 | `Ctrl+Y`                | Scroll up one line                              |
@@ -371,7 +371,8 @@ Visual mode uses the same motion language as normal mode where practical. Arrow 
 | `iw` / `a(` / `ip`      | Select visual text objects                      |
 | `>` / `<`               | Indent / outdent selected lines                 |
 | `=`                     | Reindent selected lines                         |
-| `I` / `A`               | Insert / append text across visual block lines  |
+| `I` / `A`               | Insert cursors at the start / end of each selected line |
+| `Ctrl+D`                | Add the next occurrence of a characterwise selection |
 | `J`                     | Join selected lines                             |
 | `~` / `u` / `U`         | Swapcase / lowercase / uppercase selection      |
 | `/` / `?` / `n` / `N`   | Extend visual selection with search             |
@@ -395,7 +396,7 @@ Vibe insert mode also supports readline-style shortcuts for efficient editing wi
 | `Ctrl+E`         | Move to end of line                      |
 | `Ctrl+B`         | Move left                                |
 | `Ctrl+F`         | Move right                               |
-| `Ctrl+D`         | Delete character at cursor               |
+| `Ctrl+D`         | Select the next occurrence                |
 | `Ctrl+K`         | Kill to end of line                      |
 | `Ctrl+U`         | Kill to start of line                    |
 | `Ctrl+W`         | Delete word before cursor                |

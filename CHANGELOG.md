@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added Vibe multi-cursor editing with `Ctrl+D` occurrence selection from normal, insert, and characterwise visual modes, plus visual-mode `I`/`A` cursors at each selected line boundary.
 - Added `script/benchmark_composer` for repeatable draft-layout, history-search, and file-completion performance measurements.
 - Added Vibe visual and cursor-aware `:run` support plus `:run all` for executing runnable Markdown fenced language blocks and inserting or replacing their formatted `<output>` fields.
 - Added configurable editor runners under `editor.runners`, with Node, TypeScript, Python, Shell, Lua, Julia, Elixir, Crystal, Go, and Swift buffer execution alongside Ruby.

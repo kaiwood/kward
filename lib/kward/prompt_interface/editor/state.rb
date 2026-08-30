@@ -216,15 +216,6 @@ module Kward
         sync_vibe_state
       end
 
-      def vibe_visual_block_insert
-        @vibe_state.visual_block_insert
-      end
-
-      def vibe_visual_block_insert=(value)
-        @vibe_state.visual_block_insert = value
-        sync_vibe_state
-      end
-
       def vibe_marks
         @vibe_state.marks
       end
@@ -1302,7 +1293,6 @@ module Kward
         @vibe_last_change = @vibe_state.last_change
         @vibe_last_find = @vibe_state.last_find
         @vibe_last_visual_selection = @vibe_state.last_visual_selection
-        @vibe_visual_block_insert = @vibe_state.visual_block_insert
         @vibe_marks = @vibe_state.marks
         @vibe_registers = @vibe_state.registers
         @vibe_register_types = @vibe_state.register_types

@@ -71,6 +71,73 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
     end
   end
 
+  def test_prompt_interface_vibe_mode_ctrl_d_selects_occurrences_for_multi_cursor_editing
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "foo bar foo baz foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_D)
+        assert_equal "insert", editor.vibe_mode
+        assert_equal [[0, 3]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, "\e[100;5u")
+        assert_equal [[0, 3], [8, 11]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, "x")
+        prompt.send(:handle_editor_key, "y")
+        assert_equal "xy bar xy baz foo", editor.buffer
+
+        prompt.send(:handle_editor_key, "\e")
+        assert_equal "normal", editor.vibe_mode
+        refute editor.multi_cursor?
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ctrl_d_adds_occurrences_for_visual_word_selection
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "notes.txt"), "zero foo one foo two foo")
+      Dir.chdir(dir) do
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+        assert prompt.send(:open_editor, "notes.txt")
+        editor = prompt.instance_variable_get(:@editor_state)
+        editor.cursor = 5
+
+        prompt.send(:handle_editor_key, "v")
+        2.times { prompt.send(:handle_editor_key, "l") }
+        assert_equal "foo", editor.selected_text
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_D)
+        assert_equal "insert", editor.vibe_mode
+        assert_equal [[5, 8], [13, 16]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_D)
+        assert_equal [[5, 8], [13, 16], [21, 24]], editor.selection_ranges
+
+        prompt.send(:handle_editor_key, "x")
+        prompt.send(:handle_editor_key, "y")
+        assert_equal "zero xy one xy two xy", editor.buffer
+      end
+    end
+  end
+
+  def test_prompt_interface_vibe_mode_ctrl_d_keeps_visual_selection_when_no_more_occurrences_exist
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "vibe")
+    editor = Kward::PromptInterface::EditorState.new(path: "notes.txt", content: "only", editor_mode: "vibe")
+    prompt.instance_variable_set(:@editor_state, editor)
+
+    prompt.send(:handle_editor_key, "v")
+    3.times { prompt.send(:handle_editor_key, "l") }
+    prompt.send(:handle_editor_key, Kward::TerminalKeys::CTRL_D)
+
+    assert_equal "visual", editor.vibe_mode
+    assert_equal "only", editor.selected_text
+    assert_equal "No more matches: only", editor.status
+  end
+
   def test_prompt_interface_vibe_mode_supports_classic_first_non_blank_movement
     Dir.mktmpdir do |dir|
       File.write(File.join(dir, "notes.txt"), "  one\n    two\nthree\n  four")
@@ -223,13 +290,10 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         prompt.send(:handle_editor_key, "\x06")
         assert_equal [10, 0], editor.cursor_line_and_column
 
-        prompt.send(:handle_editor_key, "\x02")
-        assert_equal [0, 0], editor.cursor_line_and_column
-
-        prompt.send(:handle_editor_key, "\x04")
+        prompt.send(:handle_editor_key, "\x15")
         assert_equal [5, 0], editor.cursor_line_and_column
 
-        prompt.send(:handle_editor_key, "\x15")
+        prompt.send(:handle_editor_key, "\x02")
         assert_equal [0, 0], editor.cursor_line_and_column
 
         assert_equal 0, editor.viewport_row
@@ -2341,15 +2405,12 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         prompt.send(:handle_editor_key, "i")
         editor.set_cursor_line_and_column(0, 5)
 
-        prompt.send(:handle_editor_key, "\x04")
-        assert_equal "helloworld", editor.buffer
-
         prompt.send(:handle_editor_key, "\x0B")
         assert_equal "hello", editor.buffer
-        assert_equal "world", editor.kill_buffer
+        assert_equal " world", editor.kill_buffer
 
         prompt.send(:handle_editor_key, "\x19")
-        assert_equal "helloworld", editor.buffer
+        assert_equal "hello world", editor.buffer
 
         prompt.send(:handle_editor_key, "\x15")
         assert_equal "", editor.buffer
@@ -2456,13 +2517,10 @@ class TestPromptInterfaceEditorVibe < KwardTestCase
         prompt.send(:handle_editor_key, "\e[102;5u")
         assert_equal [8, 0], editor.cursor_line_and_column
 
-        prompt.send(:handle_editor_key, "\e[98;5u")
-        assert_equal [0, 0], editor.cursor_line_and_column
-
-        prompt.send(:handle_editor_key, "\e[100;5u")
+        prompt.send(:handle_editor_key, "\e[117;5u")
         assert_equal [4, 0], editor.cursor_line_and_column
 
-        prompt.send(:handle_editor_key, "\e[117;5u")
+        prompt.send(:handle_editor_key, "\e[98;5u")
         assert_equal [0, 0], editor.cursor_line_and_column
 
         prompt.send(:handle_editor_key, "\e[101;5u")

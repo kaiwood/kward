@@ -41,6 +41,9 @@ module Kward
         csi_result = handle_vibe_csi_u_key(key)
         return csi_result unless csi_result == false
 
+        multi_cursor_result = handle_vibe_multi_cursor_key(key)
+        return multi_cursor_result unless multi_cursor_result == false
+
         return handle_vibe_command_key(key) if @editor_state.vibe_mode == "command"
 
         tab_result = handle_tab_key_binding(key)
@@ -127,6 +130,35 @@ module Kward
         nil
       end
 
+      def handle_vibe_multi_cursor_key(key)
+        return false unless key == TerminalKeys::CTRL_D
+        return false if editor_search_active?
+
+        visual_selection = @editor_state.vibe_mode == "visual"
+        return false unless visual_selection || %w[normal insert replace].include?(@editor_state.vibe_mode)
+
+        original_selection = vibe_prepare_visual_selection_for_multi_cursor if visual_selection
+        added = @editor_state.add_next_occurrence_selection
+        if added
+          vibe_enter_insert_mode(TerminalKeys::CTRL_D) unless @editor_state.vibe_mode == "insert"
+        elsif original_selection
+          @editor_state.vibe_mode = "visual"
+          @editor_state.set_selections([original_selection])
+        end
+        true
+      end
+
+      def vibe_prepare_visual_selection_for_multi_cursor
+        range = @editor_state.selection_range
+        return unless range
+
+        original_selection = { anchor: @editor_state.selection_anchor, cursor: @editor_state.cursor }
+        vibe_remember_visual_selection
+        @editor_state.vibe_mode = "normal"
+        @editor_state.set_selections([{ anchor: range[0], cursor: range[1] }])
+        original_selection
+      end
+
       def handle_vibe_search_key(key)
         case key
         when "\n", "\r"
@@ -163,7 +195,7 @@ module Kward
           named_result = handle_vibe_insert_named_key(key_name) if key_name
           return named_result unless named_result == false || named_result.nil?
 
-          vibe_record_undo { editor_insert_printable(key) } if printable_key?(key)
+          vibe_record_undo { vibe_insert_printable(key) } if printable_key?(key)
         end
       end
 
@@ -190,9 +222,15 @@ module Kward
         end
       end
 
+      def vibe_insert_printable(text)
+        return editor_insert_printable(text) unless @editor_state.multi_cursor?
+
+        @editor_state.replace_selections(text)
+      end
+
       def vibe_replace_character(key)
         @editor_state.delete_at_cursor
-        editor_insert_printable(key)
+        vibe_insert_printable(key)
       end
 
       def handle_vibe_command_key(key)
@@ -554,8 +592,6 @@ module Kward
           @editor_state.page_up(editor_page_rows)
         when :ctrl_f
           @editor_state.page_down(editor_page_rows)
-        when :ctrl_d
-          @editor_state.page_down(vibe_half_page_rows)
         when :ctrl_u
           @editor_state.page_up(vibe_half_page_rows)
         when :ctrl_e
@@ -570,7 +606,7 @@ module Kward
       end
 
       def vibe_normal_control_key?(key)
-        ["\n", "\r", "\b", "\x7F", TerminalKeys::CTRL_B, TerminalKeys::CTRL_D, TerminalKeys::CTRL_E, TerminalKeys::CTRL_F, "\x0F", TerminalKeys::CTRL_R, TerminalKeys::CTRL_U, TerminalKeys::CTRL_Y].include?(key)
+        ["\n", "\r", "\b", "\x7F", TerminalKeys::CTRL_B, TerminalKeys::CTRL_E, TerminalKeys::CTRL_F, "\x0F", TerminalKeys::CTRL_R, TerminalKeys::CTRL_U, TerminalKeys::CTRL_Y].include?(key)
       end
 
       def vibe_visual_mode?
@@ -578,7 +614,7 @@ module Kward
       end
 
       def vibe_return_to_normal
-        vibe_apply_visual_block_insert if @editor_state.vibe_visual_block_insert
+        @editor_state.collapse_to_primary_selection if @editor_state.multi_cursor?
         @editor_state.vibe_mode = "normal"
         @editor_state.status = "NORMAL · i insert · :prompt ask agent · :w save · :q quit"
         true
@@ -699,8 +735,6 @@ module Kward
           @editor_state.page_down(editor_page_rows)
         when TerminalKeys::CTRL_B
           @editor_state.page_up(editor_page_rows)
-        when TerminalKeys::CTRL_D
-          @editor_state.page_down(vibe_half_page_rows)
         when TerminalKeys::CTRL_U
           @editor_state.page_up(vibe_half_page_rows)
         when TerminalKeys::CTRL_E
@@ -864,9 +898,9 @@ module Kward
         when "p"
           vibe_paste_visual_selection
         when "I"
-          vibe_begin_visual_block_insert(:before)
+          vibe_begin_visual_multi_cursor_insert(:before)
         when "A"
-          vibe_begin_visual_block_insert(:after)
+          vibe_begin_visual_multi_cursor_insert(:after)
         when ">"
           vibe_indent_visual_selection(:right)
         when "<"
@@ -1244,37 +1278,17 @@ module Kward
         vibe_cancel_visual_mode
       end
 
-      def vibe_begin_visual_block_insert(position)
-        return vibe_move_visual_selection(position == :before ? "I" : "A") unless @editor_state.vibe_mode == "visual_block"
-
-        anchor_line, anchor_column = @editor_state.cursor_line_and_column_for(@editor_state.selection_anchor)
-        cursor_line, cursor_column = @editor_state.cursor_line_and_column
-        start_line, end_line = [anchor_line, cursor_line].minmax
-        start_column, end_column = [anchor_column, cursor_column].minmax
-        column = position == :before ? start_column : end_column + 1
-        @editor_state.vibe_visual_block_insert = { start_line: start_line, end_line: end_line, column: column }
-        @editor_state.clear_selection
-        @editor_state.set_cursor_line_and_column(start_line, column)
-        @editor_state.vibe_visual_block_insert[:start_index] = @editor_state.cursor
-        @editor_state.vibe_mode = "insert"
-        @editor_state.status = "INSERT · Esc normal"
-        true
-      end
-
-      def vibe_apply_visual_block_insert
-        block = @editor_state.vibe_visual_block_insert
-        @editor_state.vibe_visual_block_insert = nil
-        return unless block
-
-        inserted_text = @editor_state.buffer[block[:start_index]...@editor_state.cursor].to_s
-        return if inserted_text.empty?
-
-        block[:end_line].downto(block[:start_line] + 1) do |line_index|
-          line_start = @editor_state.line_start_offset(line_index)
-          line_length = @editor_state.lines[line_index].to_s.length
-          @editor_state.cursor = line_start + [block[:column], line_length].min
-          @editor_state.insert(inserted_text)
+      def vibe_begin_visual_multi_cursor_insert(position)
+        vibe_remember_visual_selection
+        start_line, end_line = vibe_visual_line_bounds
+        selections = (start_line..end_line).map do |line_index|
+          column = position == :before ? 0 : @editor_state.lines[line_index].to_s.length
+          offset = @editor_state.offset_for_line_and_column(line_index, column)
+          { anchor: offset, cursor: offset }
         end
+        @editor_state.set_selections(selections)
+        vibe_enter_insert_mode(position == :before ? "I" : "A")
+        true
       end
 
       def vibe_transform_visual_selection(transform)
