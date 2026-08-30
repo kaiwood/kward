@@ -170,10 +170,14 @@ module Kward
         @cursor = @input.length
       end
 
-      # Returns `[row, column]` for cursor placement in multi-line input.
-      def cursor_logical_position
+      # Returns `[lines, row, column]` for cursor-aware multi-line layout.
+      def lines_and_cursor
+        lines = @input.split("\n", -1)
         before_cursor = @input[0...@cursor]
-        [before_cursor.count("\n"), (before_cursor.split("\n", -1).last || "").length]
+        row = before_cursor.count("\n")
+        line_start = before_cursor.rindex("\n")
+        column = line_start ? before_cursor.length - line_start - 1 : before_cursor.length
+        [lines.empty? ? [""] : lines, row, column]
       end
 
       # Replaces the in-memory history list with persisted entries.

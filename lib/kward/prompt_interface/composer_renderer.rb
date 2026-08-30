@@ -37,10 +37,10 @@ module Kward
       end
 
       def compact_composer_layout(width)
-        cursor_line, cursor_col = cursor_logical_position
+        lines, cursor_line, cursor_col = @composer.lines_and_cursor
         prefix = "#{@prompt_label} "
         prefix_width = TerminalText.width(prefix)
-        line = input_lines[cursor_line] || ""
+        line = lines[cursor_line] || ""
         input_width = [width - prefix_width, 1].max
         layout = TerminalText.wrap(line, width: input_width, cursor: cursor_col)
         visible = layout[:rows][layout[:cursor_row]].to_s
@@ -49,13 +49,13 @@ module Kward
       end
 
       def input_layout(content_width)
-        cursor_line, cursor_col = cursor_logical_position
+        lines, cursor_line, cursor_col = @composer.lines_and_cursor
         rows = []
         cursor_row = 0
         cursor_col_in_row = 0
         rendered_row_offset = 0
 
-        input_lines.each_with_index do |line, index|
+        lines.each_with_index do |line, index|
           prefix = input_prefix(index)
           prefix_width = TerminalText.width(prefix)
           continuation_prefix = " " * prefix_width
@@ -258,17 +258,8 @@ module Kward
         [[input_cap, height - 3 - overlay_count - footer_count - attachment_count].min, 1].max
       end
 
-      def input_lines
-        lines = composer_input.split("\n", -1)
-        lines.empty? ? [""] : lines
-      end
-
       def input_prefix(_index)
         ""
-      end
-
-      def cursor_logical_position
-        @composer.cursor_logical_position
       end
 
       def image_viewer_preview_rows(height, width: screen_width)

@@ -19,13 +19,17 @@ module Kward
       end
 
       def normalize_slash_commands(commands)
-        commands.map do |command|
+        commands.filter_map do |command|
+          name = slash_command_value(command, :name).to_s
+          next if name.empty?
+
           {
-            name: slash_command_value(command, :name).to_s,
+            name: name,
+            normalized_name: name.downcase,
             description: slash_command_value(command, :description).to_s,
             argument_hint: slash_command_value(command, :argument_hint).to_s
           }
-        end.reject { |command| command[:name].empty? }.sort_by { |command| command[:name] }
+        end.sort_by { |command| command[:name] }
       end
 
       def slash_command_value(command, key)
@@ -44,7 +48,18 @@ module Kward
 
       def slash_overlay_matches
         prefix = composer_input.delete_prefix("/").downcase
-        @slash_commands.select { |command| command[:name].downcase.start_with?(prefix) }.first(8)
+        cache = @slash_overlay_match_cache
+        return cache[:matches] if cache && cache[:prefix] == prefix && cache[:commands].equal?(@slash_commands)
+
+        matches = []
+        @slash_commands.each do |command|
+          next unless command[:normalized_name].start_with?(prefix)
+
+          matches << command
+          break if matches.length == 8
+        end
+        @slash_overlay_match_cache = { prefix: prefix, commands: @slash_commands, matches: matches }
+        matches
       end
 
       def selected_slash_command

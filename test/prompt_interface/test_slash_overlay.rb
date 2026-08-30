@@ -37,6 +37,17 @@ class TestPromptInterfaceSlashOverlay < KwardTestCase
     assert_equal "usage", prompt.send(:selected_slash_command)[:name]
   end
 
+  def test_prompt_interface_caches_and_caps_case_insensitive_slash_matches
+    commands = 12.times.map { |index| { name: "Command#{index}", description: "Command #{index}." } }
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, slash_commands: commands)
+    prompt.send(:composer_input=, "/command")
+
+    matches = prompt.send(:slash_overlay_matches)
+
+    assert_equal 8, matches.length
+    assert_same matches, prompt.send(:slash_overlay_matches)
+  end
+
   def test_prompt_interface_can_disable_slash_overlay_for_completion_provider
     input, writer = IO.pipe
     output = StringIO.new
