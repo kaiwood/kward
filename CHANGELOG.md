@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.84.0] - 2026-08-30
+
 ### Added
 
 - Added security reporting, contribution and conduct policies, structured issue and pull-request templates, and an explicit macOS/Linux/WSL/Windows support matrix.
