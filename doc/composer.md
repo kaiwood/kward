@@ -28,7 +28,7 @@ The composer supports familiar line-editing keys:
 
 | Key | Action |
 | --- | --- |
-| `Left` / `Right` | Move by character |
+| `Left` / `Right` | Move by visible character (Unicode grapheme) |
 | `Home` / `Ctrl+A` | Move to the start of the current line |
 | `End` / `Ctrl+E` | Move to the end of the current line |
 | `Ctrl+B` / `Ctrl+F` | Move left or right |

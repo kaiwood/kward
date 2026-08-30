@@ -1,3 +1,5 @@
+require_relative "../terminal_text"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Shared overlay drawing helpers for prompt UI popups.
@@ -63,7 +65,7 @@ module Kward
 
       def overlay_top_border(title, card_width)
         title = visible_truncate(title.to_s, [card_width - 4, 1].max)
-        plain_length = ANSI.strip(title).length
+        plain_length = TerminalText.width(ANSI.strip(title))
         colored("╭", :primary_green) + " #{colored(title, :primary_green, :bold)} " + colored("─" * [card_width - plain_length - 4, 0].max, :primary_green) + colored("╮", :primary_green)
       end
 
@@ -98,7 +100,7 @@ module Kward
       end
 
       def align_overlay_row(row, width)
-        plain_length = ANSI.strip(row).length
+        plain_length = TerminalText.width(ANSI.strip(row))
         padding = [width - plain_length, 0].max
         left = overlay_left_padding(width, plain_length)
         right = padding - left
@@ -152,14 +154,14 @@ module Kward
       end
 
       def visible_ljust(text, width)
-        text.to_s + (" " * [width - ANSI.strip(text.to_s).length, 0].max)
+        text.to_s + (" " * [width - TerminalText.width(ANSI.strip(text.to_s)), 0].max)
       end
 
       def visible_truncate(text, width)
         plain = ANSI.strip(text.to_s)
-        return text.to_s if plain.length <= width
+        return text.to_s if TerminalText.width(plain) <= width
 
-        plain[0, width]
+        TerminalText.truncate(plain, width)
       end
 
     end

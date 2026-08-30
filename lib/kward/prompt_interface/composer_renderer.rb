@@ -1,3 +1,5 @@
+require_relative "../terminal_text"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Renderer for the editable composer text area.
@@ -37,43 +39,40 @@ module Kward
       def compact_composer_layout(width)
         cursor_line, cursor_col = cursor_logical_position
         prefix = "#{@prompt_label} "
+        prefix_width = TerminalText.width(prefix)
         line = input_lines[cursor_line] || ""
-        input_width = [width - prefix.length, 1].max
-        visible_start = [[cursor_col - input_width + 1, 0].max, [line.length - input_width, 0].max].min
-        visible = line[visible_start, input_width].to_s
-        row = "#{prefix}#{visible}"[0, width].to_s.ljust(width)
-        [[row], 0, [prefix.length + cursor_col - visible_start, width - 1].min]
+        input_width = [width - prefix_width, 1].max
+        layout = TerminalText.wrap(line, width: input_width, cursor: cursor_col)
+        visible = layout[:rows][layout[:cursor_row]].to_s
+        row = visible_ljust(TerminalText.truncate("#{prefix}#{visible}", width), width)
+        [[row], 0, [prefix_width + layout[:cursor_col], width - 1].min]
       end
 
       def input_layout(content_width)
         cursor_line, cursor_col = cursor_logical_position
         rows = []
         cursor_row = 0
+        cursor_col_in_row = 0
         rendered_row_offset = 0
 
         input_lines.each_with_index do |line, index|
           prefix = input_prefix(index)
-          continuation_prefix = " " * prefix.length
-          available = [content_width - prefix.length, 1].max
-          chunks = line.scan(/.{1,#{available}}/m)
-          chunks = [""] if chunks.empty?
-          if index == cursor_line && cursor_col == line.length && line.length.positive? && (line.length % available).zero?
-            chunks << ""
-          end
+          prefix_width = TerminalText.width(prefix)
+          continuation_prefix = " " * prefix_width
+          available = [content_width - prefix_width, 1].max
+          layout = TerminalText.wrap(line, width: available, cursor: index == cursor_line ? cursor_col : nil)
 
           if index == cursor_line
-            cursor_row = rendered_row_offset + (cursor_col / available)
+            cursor_row = rendered_row_offset + layout[:cursor_row]
+            cursor_col_in_row = prefix_width + layout[:cursor_col]
           end
 
-          chunks.each_with_index do |chunk, chunk_index|
+          layout[:rows].each_with_index do |chunk, chunk_index|
             rows << "#{chunk_index.zero? ? prefix : continuation_prefix}#{chunk}"
           end
-          rendered_row_offset += chunks.length
+          rendered_row_offset += layout[:rows].length
         end
 
-        prefix = input_prefix(cursor_line)
-        available = [content_width - prefix.length, 1].max
-        cursor_col_in_row = prefix.length + (cursor_col % available)
         [rows, cursor_row, cursor_col_in_row]
       end
 
@@ -81,13 +80,13 @@ module Kward
         title = composer_title
         status = cached_composer_status_text
         if status
-          gap = width - 2 - ANSI.strip(title).length - ANSI.strip(status).length
+          gap = width - 2 - TerminalText.width(ANSI.strip(title)) - TerminalText.width(ANSI.strip(status))
           if gap >= 0
             return colored("╭", :primary_green) + title + colored("─" * gap, :primary_green) + status + colored("╮", :primary_green)
           end
         end
         plain_title = ANSI.strip(title)
-        "#{colored("╭", :primary_green)}#{title}#{colored("─" * [width - plain_title.length - 2, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
+        "#{colored("╭", :primary_green)}#{title}#{colored("─" * [width - TerminalText.width(plain_title) - 2, 0].max, :primary_green)}#{colored("╮", :primary_green)}"
       end
 
       def composer_title
@@ -140,7 +139,7 @@ module Kward
         label_left = 4
         @tabs.each_with_index.map do |label, index|
           text = tab_label(label, index)
-          width = ANSI.strip(text).length
+          width = TerminalText.width(ANSI.strip(text))
           slot = {
             left: label_left - 2,
             label_left: label_left,
@@ -185,18 +184,25 @@ module Kward
 
         visible_offset = 0
         last_index = nil
-        text.to_s.scan(/\e\[[0-9;:]*m|./m).each do |part|
+        text.to_s.scan(/\e\[[0-9;:]*m|\X/m).each do |part|
           if part.start_with?("\e")
             index = visible_offset.positive? ? last_index : left
             row[index] = row[index].to_s + part if index&.between?(0, row.length - 1)
             next
           end
 
+          part_width = TerminalText.width(part)
+          if part_width.zero?
+            row[last_index] = row[last_index].to_s + part if last_index
+            next
+          end
+
           index = left + visible_offset
           break if index >= row.length
           row[index] = row[index].to_s.sub(/\A /, "") + part unless index.negative?
+          1.upto(part_width - 1) { |offset| row[index + offset] = "" if (index + offset).between?(0, row.length - 1) }
           last_index = index
-          visible_offset += 1
+          visible_offset += part_width
         end
       end
 
@@ -276,7 +282,7 @@ module Kward
         preview_rows = image_viewer_preview_rows(height, width: width)
         title = visible_truncate(" Image: #{@image_viewer_state[:display_path]} ", content_width)
         rows = [
-          colored("╭", :primary_green) + title + colored("─" * [width - ANSI.strip(title).length - 2, 0].max, :primary_green) + colored("╮", :primary_green),
+          colored("╭", :primary_green) + title + colored("─" * [width - TerminalText.width(ANSI.strip(title)) - 2, 0].max, :primary_green) + colored("╮", :primary_green),
           image_viewer_graphic_row(width, image_viewer_sequence(width, height))
         ]
         rows.concat(Array.new(preview_rows - 1) { box_content_row("", content_width) })

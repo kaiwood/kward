@@ -1,5 +1,6 @@
 require_relative "../text_boundary"
 require_relative "../text_matcher"
+require_relative "../terminal_text"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -79,31 +80,33 @@ module Kward
         @cursor += string.length
       end
 
-      # Deletes one character before the cursor.
+      # Deletes one grapheme before the cursor.
       def delete_before_cursor
         return false if @cursor.zero?
 
-        @input = @input[0...(@cursor - 1)] + @input[@cursor..]
-        @cursor -= 1
+        previous = TerminalText.previous_grapheme_boundary(@input, @cursor)
+        @input = @input[0...previous] + @input[@cursor..]
+        @cursor = previous
         true
       end
 
-      # Deletes one character at the cursor without moving it.
+      # Deletes one grapheme at the cursor without moving it.
       def delete_at_cursor
         return false unless @cursor < @input.length
 
-        @input = @input[0...@cursor] + @input[(@cursor + 1)..]
+        following = TerminalText.next_grapheme_boundary(@input, @cursor)
+        @input = @input[0...@cursor] + @input[following..]
         true
       end
 
-      # Moves the cursor one character left when possible.
+      # Moves the cursor one grapheme left when possible.
       def move_cursor_left
-        @cursor -= 1 if @cursor.positive?
+        @cursor = TerminalText.previous_grapheme_boundary(@input, @cursor) if @cursor.positive?
       end
 
-      # Moves the cursor one character right when possible.
+      # Moves the cursor one grapheme right when possible.
       def move_cursor_right
-        @cursor += 1 if @cursor < @input.length
+        @cursor = TerminalText.next_grapheme_boundary(@input, @cursor) if @cursor < @input.length
       end
 
       # Moves the cursor to the beginning of the input buffer.

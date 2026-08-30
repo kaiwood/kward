@@ -2175,6 +2175,34 @@ class TestPromptInterface < KwardTestCase
     assert_includes rows.join("\n"), "line 10"
   end
 
+  def test_prompt_interface_uses_terminal_cells_for_unicode_input_layout
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.send(:composer_input=, "界a")
+    prompt.send(:composer_cursor=, 2)
+
+    rows, cursor_row, cursor_col = prompt.send(:input_layout, 6)
+
+    assert_equal ["界a"], rows
+    assert_equal 0, cursor_row
+    assert_equal 3, cursor_col
+  end
+
+  def test_prompt_interface_moves_and_deletes_by_grapheme
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    value = "a👩‍💻b"
+    prompt.send(:composer_input=, value)
+    prompt.send(:composer_cursor=, value.length - 1)
+
+    prompt.send(:move_cursor_left)
+    assert_equal 1, prompt.send(:composer_cursor)
+
+    prompt.send(:move_cursor_right)
+    prompt.send(:delete_before_cursor)
+
+    assert_equal "ab", prompt.send(:composer_input)
+    assert_equal 1, prompt.send(:composer_cursor)
+  end
+
   def test_prompt_interface_submits_on_csi_u_enter
     assert_equal "hello", ask_prompt_with_input("hello\e[13u")
   end
