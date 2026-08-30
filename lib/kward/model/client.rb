@@ -1191,7 +1191,7 @@ module Kward
     end
 
     def codex_show_raw_reasoning?
-      @config.fetch("codex_show_raw_reasoning", true) == true
+      @config["codex_show_raw_reasoning"] == true
     end
 
     def stream_idle_timeout_seconds

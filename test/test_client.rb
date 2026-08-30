@@ -1331,7 +1331,7 @@ class TestClient < KwardTestCase
     assert_equal ["thinking"], deltas
   end
 
-  def test_codex_sse_shows_raw_reasoning_by_default
+  def test_codex_sse_hides_raw_reasoning_by_default
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     deltas = []
     body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
@@ -1340,29 +1340,10 @@ class TestClient < KwardTestCase
 
     message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
 
-    assert_equal "Planning Ruby code review focus\n\n", message["reasoning_summary"]
-    assert_equal ["Planning Ruby code review focus\n\n"], deltas
-    assert_equal "Planning Ruby code review focus\n\n", message["response_items"].first["summary"].first["text"]
-    assert_equal "Planning Ruby code review focus\n\n<!-- -->", message["response_items"].first["content"].first["text"]
-  end
-
-  def test_codex_sse_can_hide_raw_reasoning_when_configured
-    Dir.mktmpdir do |dir|
-      config_path = File.join(dir, "config.json")
-      File.write(config_path, JSON.dump("codex_show_raw_reasoning" => false))
-      client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil), config_path: config_path)
-      deltas = []
-      body = "data: #{JSON.dump("type" => "response.output_item.added", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [] })}\n\n" \
-        "data: #{JSON.dump("type" => "response.reasoning_text.delta", "delta" => "Planning Ruby code review focus\n\n<!-- -->")}\n\n" \
-        "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "rs_1", "type" => "reasoning", "summary" => [], "content" => [{ "type" => "reasoning_text", "text" => "Planning Ruby code review focus\n\n<!-- -->" }] })}\n\n"
-
-      message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { deltas << delta })
-
-      refute message.key?("reasoning_summary")
-      assert_empty deltas
-      assert_equal [], message["response_items"].first["summary"]
-      refute message["response_items"].first.key?("content")
-    end
+    refute message.key?("reasoning_summary")
+    assert_empty deltas
+    assert_equal [], message["response_items"].first["summary"]
+    refute message["response_items"].first.key?("content")
   end
 
   def test_codex_sse_strips_comment_artifacts_from_reasoning_summary
