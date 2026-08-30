@@ -7,20 +7,20 @@ module Kward
         argument = Array(arguments).join(" ").strip.downcase
         _workspace_root, candidates, coordinator = project_skill_trust_coordinator
         if candidates.empty? && argument != "untrust"
-          @prompt.say("No project skills found in the current workspace.")
+          project_skills_cli_output("No project skills found in the current workspace.")
           return
         end
 
         case argument
         when "", "status"
           lines = candidates.empty? ? ["No project skills found in the current workspace."] : candidates.map { |candidate| "#{relative_workspace_path(candidate.path)}: #{coordinator.decision(candidate) || "needs review"}" }
-          @prompt.say(lines.join("\n"))
+          project_skills_cli_output(lines.join("\n"))
         when "trust"
           coordinator.record!(candidates, "allow")
-          @prompt.say("Project skills trusted for the current skill snapshots.")
+          project_skills_cli_output("Project skills trusted for the current skill snapshots.")
         when "untrust"
           coordinator.remove_workspace!
-          @prompt.say("Project skill trust removed for this workspace.")
+          project_skills_cli_output("Project skill trust removed for this workspace.")
         when "review"
           review_project_skills(candidates)
         else
@@ -42,6 +42,10 @@ module Kward
       end
 
       private
+
+      def project_skills_cli_output(message)
+        @prompt.say("#{colored("Project skills", :green, :bold)}\n\n#{message}")
+      end
 
       def project_skill_trust_coordinator
         workspace_root = current_workspace_root

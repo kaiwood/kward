@@ -263,7 +263,7 @@ module Kward
         raise ArgumentError, command_usage("doctor") unless @argv.length == 1
 
         ensure_client!
-        print_doctor
+        exit 1 unless print_doctor
         return
       end
 
@@ -273,7 +273,7 @@ module Kward
           return
         end
 
-        handle_hooks_command((@argv[1..] || []).join(" "))
+        handle_hooks_command((@argv[1..] || []).join(" "), command_line: true)
         return
       end
 

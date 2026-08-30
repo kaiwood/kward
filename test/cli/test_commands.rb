@@ -15,13 +15,17 @@ class TestCLICommands < KwardTestCase
     cli.run
 
     output = prompt.output.join("\n")
-    assert_includes output, "\e[32;1mKward\e[0m - an extendable CLI coding agent"
-    assert_includes output, "\e[34;1mUsage\e[0m"
-    assert_includes output, "\e[32;1mkward login\e[0m"
-    assert_includes output, "\e[32;1mkward init\e[0m"
-    assert_includes output, "\e[32;1mkward pan\e[0m"
-    assert_includes output, "\e[36m\"Explain this project\"\e[0m"
-    assert_includes output, "\e[36m\"Summarize the main changes\"\e[0m"
+    assert_includes output, "\e[32;1mKward\e[0m - an extensible CLI coding agent"
+    assert_includes output, "\e[34;1mGetting started\e[0m"
+    assert_includes output, "\e[34;1mWork\e[0m"
+    assert_includes output, "\e[34;1mManage\e[0m"
+    assert_includes output, "\e[34;1mIntegrate\e[0m"
+    assert_includes output, "kward login [PROVIDER]"
+    assert_includes output, "kward init"
+    assert_includes output, "kward pan"
+    assert_includes output, "kward \"Explain this project\""
+    assert_includes output, "git diff | kward \"Summarize the main changes\""
+    refute_includes output, "\e[34;1mCommands\e[0m"
     refute_includes output, "--install-starter-pack"
     refute_includes output, "--pan-mode"
     assert_includes output, "Command names take precedence. Anything else is sent as a one-shot prompt."
@@ -79,7 +83,10 @@ class TestCLICommands < KwardTestCase
         assert_includes output, "Model: Codex / fake-model"
         assert_includes output, "Auth:"
         assert_includes output, "OpenRouter API key"
+        assert_includes output, "Core checks"
+        assert_includes output, "Optional"
         assert_includes output, "Pan mode: credentials configured"
+        assert_includes output, "Kward is ready."
       end
     end
   end
@@ -99,6 +106,19 @@ class TestCLICommands < KwardTestCase
       assert_includes output, "Pan mode: credentials configured (password from environment)"
       refute_includes output, "secret-from-environment"
     end
+  end
+
+  def test_doctor_exits_nonzero_when_a_core_check_fails
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: ["doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    cli.define_singleton_method(:doctor_checks) do
+      [{ status: :error, label: "Workspace", message: "not readable" }]
+    end
+
+    error = assert_raises(SystemExit) { cli.run }
+
+    assert_equal 1, error.status
+    assert_includes strip_ansi(prompt.output.join("\n")), "Kward needs attention: 1 core check failed."
   end
 
   def test_doctor_help_is_available
@@ -126,13 +146,34 @@ class TestCLICommands < KwardTestCase
       end
 
       output = strip_ansi(prompt.output.join("\n"))
-      assert_includes output, "Auth Status"
-      assert_includes output, "OpenAI OAuth: configured"
-      assert_includes output, "GitHub OAuth: configured"
-      assert_includes output, "OpenRouter API key: configured"
+      assert_includes output, "Authentication"
+      assert_includes output, "Configured"
+      assert_includes output, "✓ OpenAI OAuth"
+      assert_includes output, "✓ GitHub OAuth"
+      assert_includes output, "✓ OpenRouter API key"
+      assert_includes output, "other providers are not configured"
+      assert_includes output, "kward auth status --all"
+      refute_includes output, "Anthropic API key"
       refute_includes output, "secret-openai"
       refute_includes output, "secret-github"
       refute_includes output, "secret-openrouter"
+    end
+  end
+
+  def test_auth_status_all_lists_unconfigured_providers
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, "{}")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: ["auth", "status", "--all"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) { cli.run }
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Not configured"
+      assert_includes output, "• Anthropic API key"
+      assert_includes output, "Credential directory"
+      refute_includes output, "not configured ("
     end
   end
 
@@ -164,7 +205,36 @@ class TestCLICommands < KwardTestCase
 
     cli.run
 
-    assert_includes prompt.output.join("\n"), "Usage\n  kward auth status|logout"
+    assert_includes prompt.output.join("\n"), "Usage\n  kward auth status [--all]|logout"
+  end
+
+  def test_hooks_doctor_uses_command_output_without_runtime_label
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, "{}")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: ["hooks", "doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) { cli.run }
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert_includes output, "Lifecycle hook diagnostics"
+      refute_includes output, "Runtime>"
+      refute output.start_with?("\n")
+    end
+  end
+
+  def test_skills_status_uses_a_consistent_heading
+    Dir.mktmpdir do |workspace|
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: ["--working-directory", workspace, "skills", "status"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.run
+
+      output = strip_ansi(prompt.output.join("\n"))
+      assert output.start_with?("Project skills\n\n")
+      assert_includes output, "No project skills found"
+    end
   end
 
   def test_known_command_with_invalid_arguments_does_not_run_one_shot

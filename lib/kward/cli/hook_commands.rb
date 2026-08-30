@@ -9,7 +9,9 @@ module Kward
     module HookCommands
       private
 
-      def handle_hooks_command(argument)
+      def handle_hooks_command(argument, command_line: false)
+        previous_output_mode = @hook_command_line_output
+        @hook_command_line_output = command_line
         subcommand, rest = argument.to_s.strip.split(/\s+/, 2)
         subcommand = "list" if subcommand.to_s.empty?
 
@@ -27,8 +29,16 @@ module Kward
         when "untrust"
           untrust_workspace_hooks
         else
-          runtime_output("Usage: /hooks [list|events|logs|doctor|trust|untrust]")
+          raise ArgumentError, command_usage("hooks") if command_line
+
+          hook_command_output("Usage: /hooks [list|events|logs|doctor|trust|untrust]")
         end
+      ensure
+        @hook_command_line_output = previous_output_mode
+      end
+
+      def hook_command_output(text)
+        @hook_command_line_output ? @prompt.say(text) : runtime_output(text)
       end
 
       def print_hooks_list
@@ -46,7 +56,7 @@ module Kward
             lines << "- #{details.join(' ')}"
           end
         end
-        runtime_output(lines.join("\n"))
+        hook_command_output(lines.join("\n"))
       end
 
       def print_hooks_events
@@ -57,7 +67,7 @@ module Kward
           suffix = fields.empty? ? "" : " modifies=#{fields.join(',')}"
           lines << "- #{event_name} failure_policy=#{Hooks::Catalog.failure_policy(event_name)}#{suffix}"
         end
-        runtime_output(lines.join("\n"))
+        hook_command_output(lines.join("\n"))
       end
 
       def print_hooks_logs(argument)
@@ -65,7 +75,7 @@ module Kward
         count = 20 unless count.positive?
         path = hooks_log_path
         unless File.file?(path)
-          runtime_output("No lifecycle hook audit log found at #{path}.")
+          hook_command_output("No lifecycle hook audit log found at #{path}.")
           return
         end
 
@@ -75,7 +85,7 @@ module Kward
           nil
         end
         if records.empty?
-          runtime_output("No readable lifecycle hook audit records found at #{path}.")
+          hook_command_output("No readable lifecycle hook audit records found at #{path}.")
           return
         end
 
@@ -83,7 +93,7 @@ module Kward
         records.each do |record|
           lines << format_hook_log_record(record)
         end
-        runtime_output(lines.join("\n"))
+        hook_command_output(lines.join("\n"))
       end
 
       def print_hooks_doctor
@@ -105,7 +115,7 @@ module Kward
         rescue StandardError => e
           lines << "Error: #{e.message}"
         end
-        runtime_output(lines.join("\n"))
+        hook_command_output(lines.join("\n"))
       end
 
       def configured_hook_entries
@@ -226,16 +236,16 @@ module Kward
 
       def trust_workspace_hooks
         ConfigFiles.trust_workspace_hooks!(current_workspace_root)
-        runtime_output("Trusted workspace hooks: #{ConfigFiles.workspace_hooks_path(current_workspace_root)}")
+        hook_command_output("Trusted workspace hooks: #{ConfigFiles.workspace_hooks_path(current_workspace_root)}")
       rescue StandardError => e
-        runtime_output("Workspace hook trust error: #{e.message}")
+        hook_command_output("Workspace hook trust error: #{e.message}")
       end
 
       def untrust_workspace_hooks
         ConfigFiles.untrust_workspace_hooks!(current_workspace_root)
-        runtime_output("Untrusted workspace hooks: #{ConfigFiles.workspace_hooks_path(current_workspace_root)}")
+        hook_command_output("Untrusted workspace hooks: #{ConfigFiles.workspace_hooks_path(current_workspace_root)}")
       rescue StandardError => e
-        runtime_output("Workspace hook trust error: #{e.message}")
+        hook_command_output("Workspace hook trust error: #{e.message}")
       end
 
       def hooks_log_path

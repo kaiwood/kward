@@ -10,13 +10,15 @@ This page covers common issues and how to diagnose them. When something is not w
 kward doctor
 ```
 
-It checks that your config file is readable and valid JSON, that the config and session directories are writable, that the workspace exists, which provider and model are active, and which credentials are configured. Use it as the first diagnostic step for any unexpected behavior.
+It checks that your config file is readable and valid JSON, that the config and session directories are writable, that the workspace exists, which provider and model are active, and which credentials are configured. Core check failures produce a nonzero exit status, so the command can also guard setup scripts. Optional features such as Pan are reported separately and do not make an otherwise healthy setup fail.
 
-`kward auth status` gives a focused view of credentials only, also without printing secrets:
+`kward auth status` gives a focused view of configured credentials only, also without printing secrets:
 
 ```bash
 kward auth status
 ```
+
+Use `kward auth status --all` when you also want to see every unconfigured provider.
 
 Kward keeps normal command failures concise. To include a Ruby backtrace while diagnosing an unexpected failure, rerun the command with debug errors enabled:
 

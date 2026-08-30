@@ -38,67 +38,88 @@ module Kward
 
       # Writes the help output for the terminal CLI flow.
       def print_help
-        command = ->(text) { colored(text, :green, :bold) }
-        option = ->(text) { colored(text, :cyan) }
         heading = ->(text) { colored(text, :blue, :bold) }
+        lines = ["#{colored("Kward", :green, :bold)} - an extensible CLI coding agent", ""]
 
-        @prompt.say <<~HELP.rstrip
-          #{colored("Kward", :green, :bold)} - an extendable CLI coding agent
+        help_sections.each do |title, entries|
+          lines << heading.call(title)
+          lines.concat formatted_help_rows(entries, color: :green, bold: true)
+          lines << ""
+        end
 
-          #{heading.call("Usage")}
-            #{command.call("kward")}                              Start an interactive chat
-            #{command.call("kward")} #{option.call('"Explain this project"')}       Run a one-shot prompt
-            #{command.call("kward --filter")} #{option.call('"Translate"')}          Filter stdin with an instruction
-            #{command.call("kward login")}                        Sign in or save provider credentials
-            #{command.call("kward auth status")}                  Show saved credential status
-            #{command.call("kward init")}                         Install starter prompts and PRINCIPLES.md
-            #{command.call("kward doctor")}                       Check local Kward setup
-            #{command.call("kward hooks doctor")}                 Inspect lifecycle hook setup
-            #{command.call("kward skills status")}                 Inspect project skill trust
-            #{command.call("kward edit")} #{option.call("<filename>")}              Open a file in the integrated editor
-            #{command.call("kward sysprompt")}                    Inspect the effective system prompt
-            #{command.call("kward openrouter refresh")}           Refresh cached OpenRouter models
-            #{command.call("kward pan")}                          Start Pan mode web UI
-            #{command.call("kward rpc")}                          Start the JSON-RPC backend
-            #{command.call("kward transport")}                    Manage transport plugins
+        lines << heading.call("Options")
+        lines.concat formatted_help_rows(help_options, color: :cyan)
+        lines << ""
+        lines << heading.call("Examples")
+        lines.concat help_examples.map { |example| "  #{colored(example, :green, :bold)}" }
+        lines << ""
+        lines << "Command names take precedence. Anything else is sent as a one-shot prompt."
+        @prompt.say lines.join("\n")
+      end
 
-          #{heading.call("Commands")}
-            #{command.call("help")}                               Show this help
-            #{command.call("version")}                            Show the installed Kward version
-            #{command.call("login")} [anthropic|openrouter|github] Sign in with OpenAI, Anthropic, OpenRouter, or GitHub
-            #{command.call("auth status|logout")}                 Show or clear saved credentials
-            #{command.call("init")}                               Install starter prompts and PRINCIPLES.md
-            #{command.call("doctor")}                             Check local Kward setup
-            #{command.call("hooks list|events|logs|doctor|trust|untrust")} Inspect lifecycle hooks
-            #{command.call("skills status|trust|untrust|review")}  Manage project skill trust
-            #{command.call("edit")} #{option.call("<filename>")}                  Open a file in the integrated editor
-            #{command.call("sysprompt")} [--raw]                  Inspect the effective system prompt
-            #{command.call("stats tokens")} [range] [options]      Export local token telemetry as CSV
-            #{command.call("openrouter refresh|list")}             Refresh or list cached OpenRouter models
-            #{command.call("pan")}                                Start Pan mode web UI
-            #{command.call("rpc")}                                Run the JSON-RPC backend for UI clients
-            #{command.call("transport list|status|run")}            Manage transport plugins
+      def help_sections
+        {
+          "Getting started" => [
+            ["kward", "Start an interactive chat"],
+            ["kward login [PROVIDER]", "Sign in or save provider credentials"],
+            ["kward doctor", "Check local Kward setup"],
+            ["kward init", "Install starter prompts and PRINCIPLES.md"]
+          ],
+          "Work" => [
+            ["kward \"PROMPT\"", "Run a one-shot prompt"],
+            ["kward --filter \"INSTRUCTION\"", "Filter standard input"],
+            ["kward edit <filename>", "Open a file in the integrated editor"],
+            ["kward sysprompt [--raw]", "Inspect the effective system prompt"]
+          ],
+          "Manage" => [
+            ["kward auth status [--all]", "Show saved credential status"],
+            ["kward hooks <command>", "Inspect lifecycle hooks"],
+            ["kward skills <command>", "Manage project skill trust"],
+            ["kward openrouter <command>", "Manage cached OpenRouter models"],
+            ["kward stats tokens [range] [options]", "Export local token telemetry as CSV"]
+          ],
+          "Integrate" => [
+            ["kward pan", "Start the local Pan web UI"],
+            ["kward rpc", "Start the JSON-RPC backend"],
+            ["kward transport <command>", "Manage transport plugins"]
+          ],
+          "Reference" => [
+            ["kward help [command]", "Show help"],
+            ["kward version", "Show the installed version"]
+          ]
+        }
+      end
 
-          #{heading.call("Options")}
-            #{option.call("--working-directory=PATH")}             Run Kward from PATH
-            #{option.call("--mode=MODE")}                          Execution mode: auto, chat, oneshot, filter
-            #{option.call("--filter")}                              Shortcut for --mode filter
-            #{option.call("--skip-config")}                         Ignore the main config file for this run
-            #{option.call("--help")}, #{option.call("-h")}                         Show this help
-            #{option.call("--version")}, #{option.call("-v")}                      Show the installed version
+      def help_options
+        [
+          ["--working-directory=PATH", "Run Kward from PATH"],
+          ["--mode=MODE", "Execution mode: auto, chat, oneshot, filter"],
+          ["--filter", "Shortcut for --mode filter"],
+          ["--skip-config", "Ignore the main config file for this run"],
+          ["--help, -h", "Show help"],
+          ["--version, -v", "Show the installed version"]
+        ]
+      end
 
-          #{heading.call("Examples")}
-            #{command.call("kward")}
-            #{command.call("kward")} #{option.call('"Explain this project"')}
-            #{command.call("git diff | kward")} #{option.call('"Summarize the main changes"')}
-            #{command.call("echo Hello | kward --filter")} #{option.call('"Translate to German"')}
-            #{command.call("kward login openrouter")}
-            #{command.call("kward edit lib/main.rb")}
-            #{command.call("kward openrouter refresh")}
-            #{command.call("kward stats tokens today --bucket hour")}
+      def help_examples
+        [
+          "kward",
+          "kward \"Explain this project\"",
+          "git diff | kward \"Summarize the main changes\"",
+          "echo Hello | kward --filter \"Translate to German\"",
+          "kward login openrouter",
+          "kward edit lib/main.rb",
+          "kward stats tokens today --bucket hour"
+        ]
+      end
 
-          Command names take precedence. Anything else is sent as a one-shot prompt.
-        HELP
+      def formatted_help_rows(entries, color:, bold: false)
+        width = entries.map { |label, _description| label.length }.max
+        styles = [color]
+        styles << :bold if bold
+        entries.map do |label, description|
+          "  #{colored(label.ljust(width), *styles)}  #{description}"
+        end
       end
 
       def command_help
@@ -119,9 +140,9 @@ module Kward
             examples: ["kward login", "kward login anthropic", "kward login openrouter", "kward login github"]
           },
           "auth" => {
-            usage: "kward auth status|logout",
+            usage: "kward auth status [--all]|logout",
             description: "Show or clear saved provider credentials without printing secrets.",
-            examples: ["kward auth status", "kward auth logout"]
+            examples: ["kward auth status", "kward auth status --all", "kward auth logout"]
           },
           "init" => {
             usage: "kward init",

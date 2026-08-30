@@ -8,11 +8,32 @@ module Kward
 
       # Writes the doctor output for the terminal CLI flow.
       def print_doctor
-        lines = ["#{colored("Kward Doctor", :green, :bold)}", ""]
-        doctor_checks.each do |check|
-          lines << "#{doctor_mark(check.fetch(:status))} #{check.fetch(:label)}: #{check.fetch(:message)}"
+        checks = doctor_checks
+        core_checks, optional_checks = checks.partition { |check| !check[:optional] }
+        lines = [colored("Kward Doctor", :green, :bold), "", colored("Core checks", :blue, :bold)]
+        lines.concat(doctor_check_lines(core_checks))
+        if optional_checks.any?
+          lines << ""
+          lines << colored("Optional", :blue, :bold)
+          lines.concat(doctor_check_lines(optional_checks))
         end
+        lines << ""
+        lines << doctor_summary(checks)
         @prompt.say lines.join("\n")
+        checks.none? { |check| check.fetch(:status) == :error && !check[:optional] }
+      end
+
+      def doctor_check_lines(checks)
+        checks.map { |check| "#{doctor_mark(check.fetch(:status))} #{check.fetch(:label)}: #{check.fetch(:message)}" }
+      end
+
+      def doctor_summary(checks)
+        errors = checks.count { |check| check.fetch(:status) == :error && !check[:optional] }
+        warnings = checks.count { |check| check.fetch(:status) == :warning && !check[:optional] }
+        return "Kward needs attention: #{errors} core check#{errors == 1 ? "" : "s"} failed." if errors.positive?
+        return "Kward is ready with #{warnings} warning#{warnings == 1 ? "" : "s"}." if warnings.positive?
+
+        "Kward is ready."
       end
 
       def doctor_checks
@@ -108,32 +129,28 @@ module Kward
         { status: :error, label: "Local endpoint", message: "invalid URL: #{url}" }
       end
 
-      def doctor_auth_check(config)
-        openai_auth = OpenAIOAuth.default_auth_path
-        github_auth = GithubOAuth.default_auth_path
-        has_openrouter = !config.to_h["openrouter_api_key"].to_s.empty? || !ENV["OPENROUTER_API_KEY"].to_s.empty?
+      def doctor_auth_check(_config)
         local_provider = @client.respond_to?(:current_provider) && @client.current_provider == "Local"
-        paths = []
-        paths << "OpenAI OAuth" if File.exist?(openai_auth)
-        paths << "GitHub OAuth" if File.exist?(github_auth)
-        paths << "OpenRouter API key" if has_openrouter
-        paths << "Local endpoint (no authentication required)" if local_provider
-        return { status: :ok, label: "Auth", message: paths.join(", ") } if paths.any?
+        configured = auth_credentials.select { |credential| credential.fetch(:configured) }.map { |credential| credential.fetch(:label) }
+        configured << "Local endpoint (no authentication required)" if local_provider
+        return { status: :ok, label: "Auth", message: configured.join(", ") } if configured.any?
 
         { status: :warning, label: "Auth", message: "no saved credentials found; run `kward login`" }
+      rescue ConfigFiles::ConfigError
+        { status: :warning, label: "Auth", message: "skipped because config is invalid" }
       end
 
       def doctor_pan_check(config_result)
-        return { status: :warning, label: "Pan mode", message: "skipped because config is invalid" } if config_result.is_a?(ConfigFiles::ConfigError)
+        return { status: :optional, label: "Pan mode", message: "skipped because config is invalid", optional: true } if config_result.is_a?(ConfigFiles::ConfigError)
 
         pan = config_result.to_h["pan_mode"] || {}
         environment_password = ENV["KWARD_PAN_PASSWORD"].to_s
         password = environment_password.empty? ? pan["password"].to_s : environment_password
         if !pan["username"].to_s.empty? && !password.empty?
           source = environment_password.empty? ? "config" : "environment"
-          { status: :ok, label: "Pan mode", message: "credentials configured (password from #{source})" }
+          { status: :ok, label: "Pan mode", message: "credentials configured (password from #{source})", optional: true }
         else
-          { status: :warning, label: "Pan mode", message: "username/password not configured" }
+          { status: :optional, label: "Pan mode", message: "not configured", optional: true }
         end
       end
 
@@ -143,6 +160,8 @@ module Kward
           colored("✓", :green, :bold)
         when :warning
           colored("!", :yellow, :bold)
+        when :optional
+          colored("•", :gray, :bold)
         else
           colored("✗", :red, :bold)
         end

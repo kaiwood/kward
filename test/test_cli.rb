@@ -892,10 +892,13 @@ class TestCLI < KwardTestCase
       File.write(config_path, "{\n  \"model\": \"gpt-5\"\n  \"provider\": \"openai\"\n}")
       prompt = FakePrompt.new([])
 
-      with_env("KWARD_CONFIG_PATH" => config_path) do
-        Kward::CLI.new(argv: ["doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+      error = with_env("KWARD_CONFIG_PATH" => config_path) do
+        assert_raises(SystemExit) do
+          Kward::CLI.new(argv: ["doctor"], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([])).run
+        end
       end
 
+      assert_equal 1, error.status
       output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "Kward Doctor"
       assert_includes output, "Config: #{config_path}"

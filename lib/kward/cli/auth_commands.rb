@@ -13,6 +13,8 @@ module Kward
         case arguments
         when ["status"]
           print_auth_status
+        when ["status", "--all"]
+          print_auth_status(show_all: true)
         when ["logout"]
           logout_auth
         else
@@ -21,23 +23,42 @@ module Kward
       end
 
       # Writes the auth status output for the terminal CLI flow.
-      def print_auth_status
-        store = api_key_store
-        store.migrate_openrouter_config_key!
-        lines = ["#{colored("Auth Status", :green, :bold)}", ""]
-        lines << auth_status_line("OpenAI OAuth", File.exist?(OpenAIOAuth.default_auth_path), OpenAIOAuth.default_auth_path)
-        lines << auth_status_line("Anthropic OAuth", File.exist?(AnthropicOAuth.default_auth_path), AnthropicOAuth.default_auth_path)
-        lines << auth_status_line("GitHub OAuth", File.exist?(GithubOAuth.default_auth_path), GithubOAuth.default_auth_path)
-        ProviderCatalog.api_key_providers.each do |provider|
-          lines << auth_status_line("#{provider.name} API key", store.configured?(provider.id), store.path)
+      def print_auth_status(show_all: false)
+        credentials = auth_credentials
+        configured, missing = credentials.partition { |credential| credential.fetch(:configured) }
+        lines = [colored("Authentication", :green, :bold), "", colored("Configured", :blue, :bold)]
+        lines.concat(auth_credential_lines(configured, status: :ok, empty_message: "None"))
+
+        if show_all
+          lines << ""
+          lines << colored("Not configured", :blue, :bold)
+          lines.concat(auth_credential_lines(missing, status: :optional, empty_message: "None"))
+        elsif missing.any?
+          lines << ""
+          lines << "#{missing.length} other provider#{missing.length == 1 ? " is" : "s are"} not configured. Run `kward auth status --all` for details."
         end
+
+        lines << ""
+        lines << colored("Credential directory", :blue, :bold)
+        lines << "  #{ConfigFiles.config_dir}"
         @prompt.say lines.join("\n")
       end
 
-      def auth_status_line(label, configured, location)
-        status = configured ? :ok : :warning
-        message = configured ? "configured" : "not configured"
-        "#{doctor_mark(status)} #{label}: #{message} (#{location})"
+      def auth_credentials
+        store = api_key_store
+        store.migrate_openrouter_config_key!
+        credentials = [
+          { label: "OpenAI OAuth", configured: File.exist?(OpenAIOAuth.default_auth_path) },
+          { label: "Anthropic OAuth", configured: File.exist?(AnthropicOAuth.default_auth_path) },
+          { label: "GitHub OAuth", configured: File.exist?(GithubOAuth.default_auth_path) }
+        ]
+        credentials.concat ProviderCatalog.api_key_providers.map { |provider| { label: "#{provider.name} API key", configured: store.configured?(provider.id) } }
+      end
+
+      def auth_credential_lines(credentials, status:, empty_message:)
+        return ["  #{empty_message}"] if credentials.empty?
+
+        credentials.map { |credential| "  #{doctor_mark(status)} #{credential.fetch(:label)}" }
       end
 
       def logout_auth
