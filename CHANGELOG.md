@@ -27,6 +27,7 @@ All notable changes to Kward will be documented in this file.
 - Standardized terminal accents by meaning: cyan for agent activity, green for success, amber for caution, red for failure, purple for tools, and gray for metadata.
 - Added compact tool-start cards with safe, action-specific context while preserving the existing bounded result summaries.
 - Added a brief, visual-only response-arrival flourish when the first assistant output reaches the interactive composer.
+- Made the composer activity label follow real turn states such as thinking, reasoning, responding, retrying, and the currently running tool.
 - Documentation checks now validate the curated public extension entry points without presenting aggregate internal-helper coverage as a product-quality metric.
 - The repository and documentation landing pages now use a focused coding-workflow visual, restrained project badges, and clearer product identity.
 - Updated RubyGems positioning and metadata to describe Kward's supported product surfaces and direct users to the documentation site while keeping source and issue links on GitHub.

@@ -13,7 +13,7 @@ module Kward
 
       def normalize_busy_activity(activity)
         text = activity.to_s.gsub(/\s+/, " ").strip
-        text.empty? ? "streaming" : text
+        text.empty? ? "thinking" : text
       end
 
       def tick_spinner_locked

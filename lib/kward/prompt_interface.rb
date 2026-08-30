@@ -155,7 +155,7 @@ module Kward
       @started = false
       @asking = false
       @busy = false
-      @busy_activity = "streaming"
+      @busy_activity = "thinking"
       @completion_status = nil
       @response_arrival_until = nil
       @queued_count = 0
@@ -872,7 +872,7 @@ module Kward
       end
     end
 
-    def begin_busy_input(message = "You>", activity: "streaming")
+    def begin_busy_input(message = "You>", activity: "thinking")
       start
       @mutex.synchronize do
         @prompt_label = message.to_s
@@ -890,6 +890,17 @@ module Kward
         reset_spinner_locked
         reset_history_navigation
         render_prompt_locked
+      end
+    end
+
+    def update_busy_activity(activity)
+      @mutex.synchronize do
+        value = normalize_busy_activity(activity)
+        return false if value == @busy_activity
+
+        @busy_activity = value
+        render_prompt_locked if @started && @asking && @busy
+        true
       end
     end
 
@@ -912,7 +923,7 @@ module Kward
     def clear_steered_count
       @mutex.synchronize do
         @steered_count = 0
-        @busy_activity = "streaming"
+        @busy_activity = "thinking"
         render_prompt_locked if @asking
       end
     end
@@ -920,7 +931,7 @@ module Kward
     def finish_busy_input
       @mutex.synchronize do
         @busy = false
-        @busy_activity = "streaming"
+        @busy_activity = "thinking"
         @response_arrival_until = nil
         @queued_count = 0
         @steered_count = 0

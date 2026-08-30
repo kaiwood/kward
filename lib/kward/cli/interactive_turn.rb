@@ -206,16 +206,19 @@ module Kward
         case event
         when Events::ReasoningDelta
           stream_state[:streamed] = true
+          update_busy_activity("reasoning")
           append_markdown_delta(markdown_chunks, "Reasoning", event.delta)
         when Events::ReasoningBoundary
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+          update_busy_activity("thinking")
         when Events::AssistantDelta
           stream_state[:streamed] = true
           unless stream_state[:assistant_arrived]
             @prompt.show_response_arrival if @prompt.respond_to?(:show_response_arrival)
             stream_state[:assistant_arrived] = true
           end
+          update_busy_activity("responding")
           append_markdown_delta(markdown_chunks, "Assistant", event.delta)
         when Events::Steering
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
@@ -225,17 +228,24 @@ module Kward
         when Events::Retry
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+          update_busy_activity("retrying")
           print_retry(event)
         when Events::ToolCall
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
+          update_busy_activity(tool_activity(event.tool_call))
           print_tool_call_card(event.tool_call)
         when Events::ToolResult
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
           update_session_diff(event.content, tool_call: event.tool_call)
           print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
+          update_busy_activity("thinking")
         end
+      end
+
+      def update_busy_activity(activity)
+        @prompt.update_busy_activity(activity) if @prompt.respond_to?(:update_busy_activity)
       end
 
       def flush_interactive_markdown_deltas(markdown_chunks, stream_state, force: false)

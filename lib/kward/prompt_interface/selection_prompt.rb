@@ -349,7 +349,7 @@ module Kward
       def finish_select_action
         @mutex.synchronize do
           @busy = false
-          @busy_activity = "streaming"
+          @busy_activity = "thinking"
           @select_state&.delete(:busy_activity)
           render_prompt_locked if @asking
           flush_output_locked

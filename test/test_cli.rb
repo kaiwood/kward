@@ -139,7 +139,7 @@ class TestCLI < KwardTestCase
       @stream_block = nil
     end
 
-    def begin_busy_input(message, activity: "streaming")
+    def begin_busy_input(message, activity: "thinking")
       @events << [:begin_busy_input, message, activity]
     end
 
@@ -184,6 +184,19 @@ class TestCLI < KwardTestCase
 
     def show_response_arrival
       @response_arrivals += 1
+    end
+  end
+
+  class ActivityPrompt < ResponseArrivalPrompt
+    attr_reader :activities
+
+    def initialize(inputs)
+      super
+      @activities = []
+    end
+
+    def update_busy_activity(activity)
+      @activities << activity
     end
   end
 
@@ -1829,7 +1842,7 @@ class TestCLI < KwardTestCase
 
     cli.send(:run_interactive_turn, agent, "hello")
 
-    begin_index = prompt.events.index([:begin_busy_input, "You>", "streaming"])
+    begin_index = prompt.events.index([:begin_busy_input, "You>", "thinking"])
     say_index = prompt.events.index { |event| event.first == :say }
     assert_operator begin_index, :<, say_index
   end
@@ -1964,6 +1977,23 @@ class TestCLI < KwardTestCase
     cli.send(:run_interactive_turn, agent, "hello")
 
     assert_equal ["answer"], prompt.write_deltas
+  end
+
+  def test_prompt_interface_interactive_turn_tracks_real_activity_transitions
+    prompt = ActivityPrompt.new([])
+    call = tool_call("read_file", path: "README.md")
+    agent = EventAgent.new([
+      Kward::Events::ReasoningDelta.new(delta: "inspect"),
+      Kward::Events::ReasoningBoundary.new,
+      Kward::Events::AssistantDelta.new(delta: "checking"),
+      Kward::Events::ToolCall.new(tool_call: call),
+      Kward::Events::ToolResult.new(tool_call: call, content: "contents")
+    ])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    assert_equal ["reasoning", "thinking", "responding", "running read file", "thinking"], prompt.activities
   end
 
   def test_prompt_interface_interactive_turn_flourishes_once_when_response_arrives

@@ -6,6 +6,10 @@ module Kward
     module ToolSummaries
       private
 
+      def tool_activity(tool_call)
+        "running #{tool_call_name(tool_call).tr("_", " ")}"
+      end
+
       def tool_call_card(tool_call)
         name = tool_call_name(tool_call)
         args = tool_call_args(tool_call)
