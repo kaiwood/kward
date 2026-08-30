@@ -1718,6 +1718,32 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(output.string), "╭"
   end
 
+  def test_prompt_interface_renders_visual_only_streaming_caret
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.instance_variable_set(:@stream_caret_enabled, true)
+
+    prompt.write_stream_block("Assistant", "hello", finish: false)
+
+    assert_includes output.string, "▍"
+    refute_includes prompt.instance_variable_get(:@transcript_buffer).to_s, "▍"
+
+    output.truncate(0)
+    output.rewind
+    prompt.finish_stream_block
+
+    refute_includes output.string, "▍"
+  end
+
+  def test_prompt_interface_omits_streaming_caret_for_non_tty_output
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.write_stream_block("Assistant", "hello", finish: false)
+
+    refute_includes output.string, "▍"
+  end
+
   def test_prompt_interface_restores_cursor_to_composer_after_stream_render
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
