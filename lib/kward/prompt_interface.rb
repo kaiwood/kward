@@ -149,8 +149,6 @@ module Kward
       @workspace_root = File.expand_path(workspace_root.to_s.empty? ? Dir.pwd : workspace_root)
       @composer = ComposerState.new
       load_history(@prompt_history.values) if @prompt_history
-      self.composer_input = @composer.input
-      self.composer_cursor = @composer.cursor
       @started = false
       @asking = false
       @busy = false
@@ -823,8 +821,6 @@ module Kward
       @completion_cycle = nil
       @completion_overlay = nil
       @prompt_label = snapshot[:prompt_label].to_s.empty? ? "You>" : snapshot[:prompt_label].to_s
-      self.composer_input = @composer.input
-      self.composer_cursor = @composer.cursor
       @last_composer_rows = []
     end
 
