@@ -1304,6 +1304,48 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_busy_kwsh_command_continues_after_tab_switch
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+
+      started = Queue.new
+      shell = Object.new
+      shell.define_singleton_method(:run) do |_input, cancellation:, &output|
+        started << true
+        sleep 0.2
+        output.call("command output\n")
+        Kward::Kwsh::Result.new(output: "command output\n", exit_status: 0, streamed: true)
+      end
+
+      command = Thread.new { cli.send(:run_streaming_kwsh_command, shell, "capture sleep") }
+      started.pop
+      prompt.queue_poll({ tab_action: :next })
+      result = command.join(1) && command.value
+
+      assert result
+      assert_equal 0, cli.instance_variable_get(:@active_tab_index)
+      assert_equal [{ tab_action: :next }], cli.instance_variable_get(:@pending_inputs)
+      assert first_tab.local_busy?
+      cli.send(:handle_tab_action, cli.instance_variable_get(:@pending_inputs).shift, store)
+      assert_equal 1, cli.instance_variable_get(:@active_tab_index)
+      refute_nil first_tab.background_run
+
+      wait_until(timeout: 2) do
+        cli.send(:service_background_tab_runs)
+        !first_tab.local_busy?
+      end
+      assert_includes first_tab.transient_shell_entries.join, "command output"
+    ensure
+      cli&.send(:stop_tabs)
+    end
+  end
+
   def test_busy_local_command_switches_tabs_and_restores_spinner_when_switching_back
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

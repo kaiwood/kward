@@ -478,7 +478,8 @@ module Kward
       install_bang_completion_provider(agent)
 
       loop do
-        if @pending_inputs.empty? && active_tab&.shell
+        service_background_tab_runs if respond_to?(:service_background_tab_runs, true)
+        if @pending_inputs.empty? && active_tab&.shell && !active_tab.local_busy?
           run_kwsh_loop(active_tab.shell, tab: active_tab, history: build_kwsh_history(active_tab.agent))
         end
         input = @pending_inputs.shift || (active_tab ? poll_active_tab_input : @prompt.ask("You>"))

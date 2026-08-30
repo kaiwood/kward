@@ -1,5 +1,52 @@
+require "thread"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
+  # Retains output while a detached PTY command runs without terminal ownership.
+  class BufferedPtyOutputSink
+    attr_reader :captured_output
+
+    def initialize(max_capture_bytes:)
+      @max_capture_bytes = max_capture_bytes
+      @captured_output = +"".b
+      @truncated = false
+      @mutex = Mutex.new
+    end
+
+    def write(chunk)
+      value = chunk.to_s.b
+      @mutex.synchronize do
+        remaining = @max_capture_bytes - @captured_output.bytesize
+        if value.bytesize > remaining
+          @captured_output << value.byteslice(0, remaining) if remaining.positive?
+          @truncated = true
+        else
+          @captured_output << value
+        end
+      end
+    end
+
+    def flush
+      nil
+    end
+
+    def finish
+      nil
+    end
+
+    def transcript_safe?
+      true
+    end
+
+    def pre_input_capture_only?
+      true
+    end
+
+    def truncated?
+      @mutex.synchronize { @truncated }
+    end
+  end
+
   # Forwards PTY output immediately and optionally keeps a bounded byte copy.
   #
   # The runner only depends on the sink's `write` method and optional `flush`

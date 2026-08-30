@@ -268,6 +268,38 @@ class TestInteractivePtyRunner < KwardTestCase
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 
+  def test_tab_action_detaches_child_when_detach_handler_is_available
+    Dir.mktmpdir("interactive-pty") do |dir|
+      completed_path = File.join(dir, "completed")
+      input_reader, input_writer = IO.pipe
+      sink = RecordingSink.new(StringIO.new)
+      detached_sink = Kward::BufferedPtyOutputSink.new(max_capture_bytes: 10_000)
+      input_writer.write("\e[50;5u")
+      input_writer.flush
+
+      result = Kward::InteractivePtyRunner.new.run(
+        RbConfig.ruby,
+        "-e",
+        "sleep 0.2; print 'output'; File.write(ARGV.fetch(0), 'done')",
+        completed_path,
+        input: input_reader,
+        sink: sink,
+        tab_action_handler: ->(_chunk) { { input: "", tab_action: { tab_action: :select, index: 1 } } },
+        on_detach: -> { detached_sink }
+      )
+
+      assert_equal({ tab_action: :select, index: 1 }, result.tab_action)
+      assert result.background
+      refute result.background.complete?
+      wait_until(timeout: 2) { result.background.complete? }
+      assert_equal 0, result.background.result.exit_status
+      assert_equal "done", File.read(completed_path)
+      assert_equal "output", detached_sink.captured_output
+    ensure
+      close_ios(input_reader, input_writer)
+    end
+  end
+
   def test_terminates_and_reaps_child_when_sink_write_fails
     Dir.mktmpdir("interactive-pty") do |dir|
       pid_path = File.join(dir, "pid")

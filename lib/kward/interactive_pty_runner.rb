@@ -3,6 +3,7 @@ require "pty"
 require "timeout"
 require_relative "local_pty_command_runner"
 require_relative "pty_output_sink"
+require_relative "detached_run"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -10,7 +11,7 @@ module Kward
   # This is intentionally low level: UI orchestration decides when terminal
   # ownership is handed to the child process and how the result is presented.
   class InteractivePtyRunner
-    Result = Struct.new(:exit_status, :input_forwarded, :tab_action, keyword_init: true)
+    Result = Struct.new(:exit_status, :input_forwarded, :tab_action, :background, keyword_init: true)
 
     READ_SIZE = 4096
 
@@ -19,34 +20,43 @@ module Kward
       @window_size = nil
     end
 
-    def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, sink:, tab_action_handler: nil)
-      pid = nil
+    def run(*command, env: {}, cwd: Dir.pwd, input: $stdin, sink:, tab_action_handler: nil, on_detach: nil)
+      reader, writer, pid = PTY.spawn(env.to_h, *command, chdir: cwd.to_s)
       status = nil
-      writer = nil
       input_forwarded = false
       tab_action = nil
       forwarded = false
+      detached = nil
 
-      PTY.spawn(env.to_h, *command, chdir: cwd.to_s) do |reader, child_writer, child_pid|
-        pid = child_pid
-        writer = child_writer
-        update_window_size(reader, pid)
-        with_raw_input(input) do
-          input_forwarded, tab_action = drain_initial_input(input, writer, sink, tab_action_handler: tab_action_handler)
-          if tab_action
-            status = terminate_and_reap(pid)
-          else
-            status, forwarded, tab_action = forward_io(reader, writer, pid, input, sink, tab_action_handler: tab_action_handler)
-          end
+      update_window_size(reader, pid)
+      with_raw_input(input) do
+        input_forwarded, tab_action = drain_initial_input(input, writer, sink, tab_action_handler: tab_action_handler)
+        if tab_action && on_detach
+          detached_sink = on_detach.call
+          sink.finish if sink.respond_to?(:finish)
+          detached = detach_process(reader, writer, pid, detached_sink, input_forwarded)
+          reader = writer = pid = nil
+        elsif tab_action
+          status = terminate_and_reap(pid)
+        else
+          status, forwarded, tab_action = forward_io(reader, writer, pid, input, sink, tab_action_handler: tab_action_handler, on_detach: on_detach)
           input_forwarded ||= forwarded
+          if tab_action && on_detach
+            detached_sink = on_detach.call
+            sink.finish if sink.respond_to?(:finish)
+            detached = detach_process(reader, writer, pid, detached_sink, input_forwarded)
+            reader = writer = pid = nil
+          end
         end
-        sink.finish if sink.respond_to?(:finish)
-        status ||= wait_for_status(pid)
+        input_forwarded ||= forwarded
       end
+      sink.finish if sink.respond_to?(:finish) && !detached
+      status ||= wait_for_status(pid) if pid
 
-      Result.new(exit_status: exit_status(status), input_forwarded: input_forwarded, tab_action: tab_action)
+      Result.new(exit_status: exit_status(status), input_forwarded: input_forwarded, tab_action: tab_action, background: detached)
     ensure
       writer&.close unless writer&.closed?
+      reader&.close unless reader&.closed?
       terminate_and_reap(pid) if pid && status.nil?
     end
 
@@ -98,7 +108,7 @@ module Kward
       [forwarded, nil]
     end
 
-    def forward_io(reader, writer, pid, input, sink, tab_action_handler: nil)
+    def forward_io(reader, writer, pid, input, sink, tab_action_handler: nil, on_detach: nil)
       input_open = true
       input_forwarded = false
       loop do
@@ -110,6 +120,7 @@ module Kward
         if input_open && readable.include?(input)
           input_open, forwarded, tab_action = forward_input(input, writer, sink, tab_action_handler: tab_action_handler)
           input_forwarded ||= forwarded
+          return [nil, input_forwarded, tab_action] if tab_action && on_detach
           return [terminate_and_reap(pid), input_forwarded, tab_action] if tab_action
         end
 
@@ -122,6 +133,30 @@ module Kward
         return [status, input_forwarded, nil]
       rescue Errno::EIO
         return [wait_for_status(pid), input_forwarded, nil]
+      end
+    end
+
+    def detach_process(reader, writer, pid, sink, input_forwarded)
+      DetachedRun.new(sink: sink, canceler: -> { terminate_process_group(pid) }) do
+        status = nil
+        begin
+          loop do
+            readable, = IO.select([reader], nil, nil, 0.02)&.first
+            forward_pty_output(reader, sink) if readable
+            status = finished_status(pid)
+            next unless status
+
+            drain_pty_output(reader, sink)
+            break
+          end
+        rescue Errno::EIO
+          status = wait_for_status(pid)
+        ensure
+          sink.finish if sink.respond_to?(:finish)
+          writer.close unless writer.closed?
+          reader.close unless reader.closed?
+        end
+        Result.new(exit_status: exit_status(status), input_forwarded: input_forwarded)
       end
     end
 

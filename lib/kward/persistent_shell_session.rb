@@ -6,6 +6,7 @@ require_relative "ansi"
 require_relative "kwsh"
 require_relative "kwshrc"
 require_relative "local_pty_command_runner"
+require_relative "detached_run"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -15,7 +16,7 @@ module Kward
   # aliases, directory changes, and child-shell state belong to one session.
   class PersistentShellSession
     Result = Kwsh::Result
-    InteractiveResult = Struct.new(:exit_status, :input_forwarded, :tab_action, keyword_init: true)
+    InteractiveResult = Struct.new(:exit_status, :input_forwarded, :tab_action, :background, keyword_init: true)
 
     class CommandInterrupted < StandardError
       attr_reader :protocol
@@ -132,15 +133,16 @@ module Kward
 
     # Runs an external command through the same persistent shell process while
     # the caller owns the terminal.
-    def run_interactive(command, input:, sink:, tab_action_handler: nil)
+    def run_interactive(command, input:, sink:, tab_action_handler: nil, on_detach: nil)
       protocol = with_raw_input(input) do
-        execute_protocol(command, input: input, sink: sink, tab_action_handler: tab_action_handler)
+        execute_protocol(command, input: input, sink: sink, tab_action_handler: tab_action_handler, on_detach: on_detach)
       end
-      update_cwd(protocol[:cwd])
+      update_cwd(protocol[:cwd]) unless protocol[:background]
       InteractiveResult.new(
         exit_status: protocol[:status] || 1,
         input_forwarded: protocol[:input_forwarded],
-        tab_action: protocol[:tab_action]
+        tab_action: protocol[:tab_action],
+        background: protocol[:background]
       )
     ensure
       sink.finish if sink.respond_to?(:finish)
@@ -257,7 +259,7 @@ module Kward
       update_cwd(protocol[:cwd])
     end
 
-    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false, tab_action_handler: nil)
+    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false, tab_action_handler: nil, on_detach: nil)
       @command_mutex.synchronize do
         ensure_open
         cancellation&.raise_if_cancelled!
@@ -270,11 +272,12 @@ module Kward
           timeout_seconds: timeout_seconds,
           max_output_bytes: max_output_bytes,
           cancellation: cancellation,
-          tab_action_handler: tab_action_handler
+          tab_action_handler: tab_action_handler,
+          on_detach: on_detach
         )
       end
     rescue CommandInterrupted => e
-      restart_process
+      restart_process unless e.protocol[:background]
       e.protocol
     rescue IOError
       close
@@ -325,8 +328,8 @@ module Kward
       [setup, restore]
     end
 
-    def read_until_marker(marker, input:, sink:, timeout_seconds:, max_output_bytes:, cancellation:, tab_action_handler: nil)
-      buffer = +"".b
+    def read_until_marker(marker, input:, sink:, timeout_seconds:, max_output_bytes:, cancellation:, tab_action_handler: nil, on_detach: nil, initial_buffer: nil)
+      buffer = initial_buffer ? initial_buffer.dup : +"".b
       captured = +"".b
       captured_bytes = 0
       truncated = false
@@ -424,6 +427,27 @@ module Kward
               input_forwarded = true
             end
             if filtered && filtered[:tab_action]
+              if on_detach
+                detached_sink = on_detach.call
+                detached = detach_protocol(
+                  marker,
+                  sink: detached_sink,
+                  timeout_seconds: timeout_seconds,
+                  max_output_bytes: max_output_bytes,
+                  initial_buffer: buffer,
+                  input_forwarded: input_forwarded
+                )
+                raise CommandInterrupted.new(
+                  output: captured,
+                  status: 0,
+                  cwd: @cwd,
+                  input_forwarded: input_forwarded,
+                  tab_action: filtered[:tab_action],
+                  truncated: truncated,
+                  background: detached
+                )
+              end
+
               interrupt_process
               raise CommandInterrupted.new(
                 output: captured,
@@ -440,6 +464,30 @@ module Kward
       end
     rescue Errno::EIO
       raise IOError, "The embedded shell exited before completing the command."
+    end
+
+    def detach_protocol(marker, sink:, timeout_seconds:, max_output_bytes:, initial_buffer:, input_forwarded:)
+      DetachedRun.new(sink: sink, canceler: method(:interrupt_process)) do
+        begin
+          protocol = read_until_marker(
+            marker,
+            input: nil,
+            sink: sink,
+            timeout_seconds: timeout_seconds,
+            max_output_bytes: max_output_bytes,
+            cancellation: nil,
+            initial_buffer: initial_buffer
+          )
+          update_cwd(protocol[:cwd])
+          InteractiveResult.new(
+            exit_status: protocol[:status] || 1,
+            input_forwarded: input_forwarded || protocol[:input_forwarded],
+            background: nil
+          )
+        ensure
+          sink.finish if sink.respond_to?(:finish)
+        end
+      end
     end
 
     def extract_marker(buffer, marker)

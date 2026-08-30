@@ -319,8 +319,9 @@ module Kward
         elsif @prompt.respond_to?(:say)
           @prompt.say(intro_message)
         end
+        origin_tab = active_tab if respond_to?(:active_tab, true)
         result = run_interactive_pty_with_terminal_handoff(shell, command, env: env, cwd: cwd) do |sink, completed_result|
-          transcript_output = record_completed_pty_output(sink, completed_result)
+          transcript_output = record_completed_pty_output(sink, completed_result, tab: origin_tab)
           yield(transcript_output, completed_result) if block_given?
         end
         refresh_composer_status
@@ -332,14 +333,22 @@ module Kward
 
       def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_complete)
         runner = InteractivePtyRunner.new
+        origin_tab = active_tab if respond_to?(:active_tab, true)
         with_interactive_terminal_handoff do |input, sink|
           tab_action_handler = terminal_handoff_tab_action_handler
-          result = if shell.respond_to?(:run_interactive)
-            shell.run_interactive(command, input: input, sink: sink, tab_action_handler: tab_action_handler)
-          else
-            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink, tab_action_handler: tab_action_handler)
+          on_detach = if origin_tab
+            -> { BufferedPtyOutputSink.new(max_capture_bytes: Kward::CLI::Tabs::TRANSIENT_SHELL_OUTPUT_LIMIT) }
           end
-          on_complete.call(sink, result) if on_complete
+          result = if shell.respond_to?(:run_interactive)
+            shell.run_interactive(command, input: input, sink: sink, tab_action_handler: tab_action_handler, on_detach: on_detach)
+          else
+            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink, tab_action_handler: tab_action_handler, on_detach: on_detach)
+          end
+          if result&.background
+            register_background_tab_run(origin_tab, result.background, &on_complete)
+          else
+            on_complete.call(sink, result) if on_complete
+          end
           result
         end
       end
@@ -395,7 +404,7 @@ module Kward
         end
       end
 
-      def record_completed_pty_output(sink, result)
+      def record_completed_pty_output(sink, result, tab: nil)
         classified_output = sink.respond_to?(:transcript_safe?)
         return if classified_output && !sink.transcript_safe?
 
@@ -412,8 +421,8 @@ module Kward
         )
         return unless transcript_output
 
-        record_tab_transient_shell_output(transcript_output, render: false)
-        if @prompt.respond_to?(:record_transient_terminal_output)
+        record_tab_transient_shell_output(transcript_output, render: false, tab: tab)
+        if @prompt.respond_to?(:record_transient_terminal_output) && (!tab || tab == active_tab)
           @prompt.record_transient_terminal_output(transcript_output, render: false)
         end
         transcript_output
@@ -592,10 +601,18 @@ module Kward
         cancellation = Cancellation.new
         chunks = Queue.new
         queued_inputs = []
+        origin_tab = active_tab if respond_to?(:active_tab, true)
+        detached_sink = nil
         result = nil
         error = nil
         worker = Thread.new do
-          result = shell.run(input, cancellation: cancellation) { |chunk| chunks << chunk }
+          result = shell.run(input, cancellation: cancellation) do |chunk|
+            if detached_sink
+              detached_sink.write(chunk)
+            else
+              chunks << chunk
+            end
+          end
         rescue StandardError => e
           error = e
         end
@@ -608,6 +625,20 @@ module Kward
             cancellation.cancel!
           elsif poll_result.is_a?(Hash) && poll_result[:tab_action]
             (@pending_inputs ||= []).unshift(poll_result)
+            if origin_tab
+              detached_sink = BufferedPtyOutputSink.new(max_capture_bytes: Kward::CLI::Tabs::TRANSIENT_SHELL_OUTPUT_LIMIT)
+              background = DetachedRun.new(sink: detached_sink, canceler: -> { cancellation.cancel! }) do
+                worker.join
+                raise error if error
+
+                result
+              end
+              register_background_tab_run(origin_tab, background) do |_sink, completed_result|
+                record_tab_transient_shell_output(completed_result.output, render: false, tab: origin_tab)
+                @prompt.say(completed_result.output) if origin_tab == active_tab && completed_result.output.to_s != ""
+              end
+              return Kwsh::Result.new(output: "", exit_status: 0, streamed: true)
+            end
             cancellation.cancel!
           end
           sleep 0.01
@@ -620,13 +651,13 @@ module Kward
         result
       end
 
-      def record_tab_transient_shell_output(text, render: true)
+      def record_tab_transient_shell_output(text, render: true, tab: nil)
         value = text.to_s
         return if value.empty?
 
-        tab = active_tab if respond_to?(:active_tab, true)
+        tab ||= active_tab if respond_to?(:active_tab, true)
         tab&.append_transient_shell_entry(value)
-        if render && @prompt.respond_to?(:record_transient_terminal_output)
+        if render && @prompt.respond_to?(:record_transient_terminal_output) && tab == active_tab
           @prompt.record_transient_terminal_output(value)
         end
       end

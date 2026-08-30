@@ -23,7 +23,7 @@ The command runs from the active workspace root and begins in an inline PTY regi
 
 When an inline command exits without reading input, safe output is mirrored into the transient transcript view so a repaint cannot hide it. Carriage-return and horizontal-cursor progress redraws are reduced to their final visible lines, while an unterminated synchronized-output update is closed before Kward redraws. If the child reads input, Kward retains only output captured before the first forwarded input byte; this prevents echoed passwords, OTPs, or other input from entering tab state. Output from one-off commands is never added to the AI conversation or sent to the model.
 
-Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command is still running, the composer remains frozen and keyboard input—including Ctrl+L and Kward's tab shortcuts—belongs to the child process.
+Shell output can leave transient text in the transcript area. **After the command finishes, press Ctrl+L to redraw the durable conversation and clear that transient `!command` output.** While an interactive command owns the terminal, the composer remains frozen and ordinary keyboard input belongs to the child process. Kward's tab shortcuts are intercepted separately; switching tabs detaches the command and lets it continue in the originating tab's bounded background state.
 
 Configured `kwshrc` aliases also work after `!`:
 
@@ -165,7 +165,7 @@ Each Kward tab owns its `/shell` state. Switching away and back restores that ta
 
 Shell commands use a separate, workspace-scoped history rather than the normal chat-prompt history. The shell-history limit is a built-in kwsh default.
 
-Kward's tab shortcuts work at the shell prompt and while a captured command is running. During an interactive command, the child owns every key; exit or interrupt it before switching Kward tabs. Bounded output from shell-agent `?` turns is also retained in the tab's transient runtime view, so it is restored when you switch away and back without being added to session history. Ctrl+L clears this transient shell and shell-agent output.
+Kward's tab shortcuts work at the shell prompt and while a shell command is running. Switching tabs detaches the running command instead of interrupting it; bounded output and completion state remain owned by the originating tab and are restored when you return. While detached, the command no longer receives terminal input. Explicit cancellation or shutdown still terminates detached work. Bounded output from shell-agent `?` turns is also retained in the tab's transient runtime view, so it is restored when you switch away and back without being added to session history. Ctrl+L clears this transient shell and shell-agent output.
 
 ## Completion
 

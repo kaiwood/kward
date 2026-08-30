@@ -36,6 +36,7 @@ module Kward
         :pending_question,
         :shell,
         :shell_agent,
+        :background_run,
         :transient_shell_entries,
         :error_reported,
         :local_busy_activity,
@@ -323,6 +324,7 @@ module Kward
           pending_question: nil,
           shell: nil,
           shell_agent: nil,
+          background_run: nil,
           transient_shell_entries: [],
           error_reported: false,
           local_busy_activity: nil
@@ -505,6 +507,7 @@ module Kward
       end
 
       def activate_tab(index, render: true)
+        service_background_tab_runs
         tab = @tabs[index]
         return nil unless tab
 
@@ -607,6 +610,39 @@ module Kward
         index ? index + 1 : active_tab_number
       end
 
+      def register_background_tab_run(tab, run, &completion)
+        return unless tab && run
+
+        tab.background_run = { run: run, completion: completion }
+        tab.local_busy_activity = "running"
+        update_prompt_tabs
+      end
+
+      def service_background_tab_runs
+        return unless @tabs
+
+        @tabs.each do |tab|
+          state = tab.background_run
+          next unless state&.fetch(:run)&.complete?
+
+          result = state[:run].result
+          tab.background_run = nil
+          state[:completion]&.call(state[:run].sink, result) if result.is_a?(Struct)
+          finish_local_busy_command_for_tab(tab)
+          tab.unread = true if tab != active_tab
+        rescue StandardError => e
+          tab.background_run = nil
+          tab.error = e.message
+          finish_local_busy_command_for_tab(tab)
+        end
+        update_prompt_tabs
+      end
+
+      def finish_local_busy_command_for_tab(tab)
+        tab.local_busy_activity = nil
+        @prompt.finish_busy_input if prompt_interface? && tab == active_tab && @prompt.respond_to?(:finish_busy_input)
+      end
+
       def submit_tab_input(tab, input, display_input: nil)
         return if input.to_s.strip.empty?
 
@@ -666,8 +702,9 @@ module Kward
       end
 
       def poll_active_tab_input
+        service_background_tab_runs
         tab = active_tab
-        unless tab&.running?
+        unless tab&.running? || tab&.local_busy?
           input = @prompt.ask("You>")
           return { tab_action: :close } if input.nil? && tab && @tabs.length > 1
 
@@ -676,6 +713,7 @@ module Kward
 
         @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
         loop do
+          service_background_tab_runs
           refresh_active_tab
           if service_active_tab_question
             return next_tab_queued_input(tab) if tab.idle? && !tab.queued_inputs.empty?
@@ -695,8 +733,12 @@ module Kward
               return poll_result
             end
           when PromptInterface::CANCEL_INPUT
-            tab.cancellation&.cancel!
-            tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
+            if tab.background_run
+              tab.background_run[:run].cancel!
+            else
+              tab.cancellation&.cancel!
+              tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
+            end
           when PromptInterface::EXIT_INPUT
             tab.queued_inputs << "/exit"
             @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
@@ -978,6 +1020,11 @@ module Kward
             tab.thread&.raise(Cancellation::CancelledError, "cancelled") if tab.thread&.alive?
             tab.thread&.join(0.2)
           end
+          if (background_run = tab.background_run&.fetch(:run))
+            background_run.cancel!
+            background_run.join(0.5)
+          end
+          tab.background_run = nil
           close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
         rescue StandardError
           nil

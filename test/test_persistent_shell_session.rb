@@ -54,6 +54,37 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_tab_action_detaches_interactive_command_without_interrupting_shell
+    Dir.mktmpdir("persistent-shell") do |dir|
+      shell = build_shell(dir)
+      input_reader, input_writer = IO.pipe
+      sink = Sink.new
+      detached_sink = Kward::BufferedPtyOutputSink.new(max_capture_bytes: 10_000)
+      input_writer.write("\e[50;5u")
+      input_writer.flush
+
+      result = shell.run_interactive(
+        "sleep 0.2; printf done",
+        input: input_reader,
+        sink: sink,
+        tab_action_handler: ->(_chunk) { { input: "", tab_action: { tab_action: :select, index: 1 } } },
+        on_detach: -> { detached_sink }
+      )
+
+      assert_equal({ tab_action: :select, index: 1 }, result.tab_action)
+      assert result.background
+      wait_until(timeout: 2) { result.background.complete? }
+      completed = result.background.result
+      assert_equal 0, completed.exit_status
+      assert_includes detached_sink.captured_output, "done"
+      assert_equal 0, shell.run_for_agent(":").exit_status
+    ensure
+      input_reader&.close unless input_reader&.closed?
+      input_writer&.close unless input_writer&.closed?
+      shell&.close
+    end
+  end
+
   def test_interactive_commands_forward_single_keys_while_input_is_raw
     Dir.mktmpdir("persistent-shell") do |dir|
       shell = build_shell(dir)

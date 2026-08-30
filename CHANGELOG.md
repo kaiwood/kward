@@ -27,7 +27,7 @@ All notable changes to Kward will be documented in this file.
 
 - Fixed composer cursor movement, deletion, wrapping, truncation, and border alignment for wide and multi-codepoint Unicode graphemes.
 - Reduced composer latency for long drafts, large file and slash-command lists, and prompt histories by eliminating repeated layout work, discovering project paths outside rendering, and reusing search results.
-- Fixed Ctrl+number tab switching being blocked while an interactive shell command is running; tab shortcuts now take priority and stop forwarding to the child command.
+- Fixed tab switching during shell commands so tab shortcuts take priority without aborting the command; detached commands continue in the originating tab's background and report their output when complete.
 
 ### Removed
 
