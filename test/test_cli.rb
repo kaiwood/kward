@@ -2459,6 +2459,30 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_startup_authentication_notice_only_applies_to_unconfigured_model_client
+    client = Kward::Client.allocate
+    client.define_singleton_method(:current_provider) { "Codex" }
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: client)
+    cli.define_singleton_method(:auth_credentials) { [{ label: "OpenAI OAuth", configured: false }] }
+
+    assert_equal true, cli.send(:startup_authentication_required?)
+
+    client.define_singleton_method(:current_provider) { "Local" }
+    assert_equal false, cli.send(:startup_authentication_required?)
+  end
+
+  def test_startup_info_screen_guides_users_without_credentials
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: RecordingClient.new([]))
+    cli.instance_variable_set(:@plugin_registry, Kward::PluginRegistry.new)
+    cli.define_singleton_method(:startup_authentication_required?) { true }
+
+    output = with_env("KWARD_DISABLE_UPDATE_CHECK" => "1") { strip_ansi(cli.send(:startup_info_screen)) }
+
+    assert_includes output, "No model provider is connected."
+    assert_includes output, "Run /login to sign in, or /model to configure a local server."
+    assert_order output, "Kward v#{Kward::VERSION} is online.", "No model provider is connected.", "Workspace", "State your business."
+  end
+
   def test_startup_info_screen_shows_cached_update_notice
     Dir.mktmpdir do |config_dir|
       cache_path = File.join(config_dir, "cache", "update_check.json")

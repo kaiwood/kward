@@ -67,7 +67,7 @@ module Kward
   # `prompt_interface/` to keep rendering, layout, keyboard handling, and runtime
   # state readable while sharing one terminal state object.
   class PromptInterface
-    HELP_TEXT = "Enter sends • Shift+Enter inserts newline • ↑/↓ history • Ctrl+D exits empty prompt".freeze
+    HELP_TEXT = "Enter sends • Shift+Enter newline • / commands • @ files • ↑/↓ history • Ctrl+D exits".freeze
     BUSY_HELP_TEXT = "Ctrl+C cancels".freeze
     SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
     SPINNER_INTERVAL = 0.1

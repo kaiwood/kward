@@ -96,6 +96,8 @@ Find where user authentication is implemented and summarize the flow.
 
 Kward can read files, suggest edits, apply changes, and run commands from the workspace. Existing files must be read in the current conversation before Kward can edit them.
 
+The composer footer highlights the two main discovery shortcuts: type `/` to browse commands and `@` to find and mention project files. If no model provider is connected, the startup screen points directly to `/login` and `/model` before you submit a prompt.
+
 ## Ask one question and exit
 
 For quick tasks, pass the prompt directly:

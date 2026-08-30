@@ -125,6 +125,7 @@ class TestPanServer < KwardTestCase
       assert_includes response, "Workspace: #{File.realpath(dir)}"
       assert_includes response, "State your business."
       assert_includes response, "Authenticated HTTP workspace"
+      assert_includes response, "Ask Assistant to inspect, explain, or change code"
       assert_includes response, "src=\"/kward-logo.png\""
     end
   end

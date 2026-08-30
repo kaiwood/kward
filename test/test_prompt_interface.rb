@@ -1434,6 +1434,11 @@ class TestPromptInterface < KwardTestCase
     assert_includes strip_ansi(output.string), "╭ You · ⠋ compacting "
   end
 
+  def test_prompt_interface_help_advertises_command_and_file_completion
+    assert_includes Kward::PromptInterface::HELP_TEXT, "/ commands"
+    assert_includes Kward::PromptInterface::HELP_TEXT, "@ files"
+  end
+
   def test_prompt_interface_renders_busy_help_text_by_default
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

@@ -20,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- The composer now highlights `/` command and `@` file discovery, and the startup screen gives actionable guidance when no model provider is connected.
 - Grouped and aligned top-level help, condensed credential status with an opt-in `--all` view, and standardized doctor, hooks, and project-skill diagnostics with actionable summaries and exit statuses.
 - Pan now binds to `127.0.0.1` by default, accepts `KWARD_PAN_PASSWORD`, and warns whenever it is explicitly exposed over plain HTTP on a non-loopback address.
 - Vibe visual selections can now be used as line ranges for `:` commands, including `:s` substitutions and `:run` scratchpad execution.

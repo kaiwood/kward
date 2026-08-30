@@ -137,6 +137,7 @@ module Kward
         [
           startup_status_line(refresh_update_check: refresh_update_check),
           *startup_update_notice_lines,
+          *startup_authentication_notice_lines,
           "",
           startup_info_line("Workspace", startup_workspace_label),
           startup_info_line("Branch", startup_branch_value),
@@ -204,6 +205,24 @@ module Kward
 
         @startup_update_check ||= UpdateCheck.new(current_version: Kward::VERSION)
         @startup_update_notice = @startup_update_check.notice(refresh: refresh)
+      end
+
+      def startup_authentication_notice_lines
+        return [] unless startup_authentication_required?
+
+        [
+          ANSI.colorize("  No model provider is connected.", :yellow, enabled: @color_enabled),
+          "  Run /login to sign in, or /model to configure a local server."
+        ]
+      end
+
+      def startup_authentication_required?
+        return false unless @client.is_a?(Client)
+        return false if @client.current_provider == "Local"
+
+        auth_credentials.none? { |credential| credential.fetch(:configured) }
+      rescue StandardError
+        false
       end
 
       def startup_info_line(label, value)
