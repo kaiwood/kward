@@ -3076,6 +3076,25 @@ class TestCLI < KwardTestCase
     assert_includes output, "Codex request failed: 503 upstream"
   end
 
+  def test_tool_call_cards_show_compact_safe_context
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+
+    read_output = capture_io do
+      cli.send(:print_tool_call_card, tool_call("read_file", path: "README.md"))
+    end.first
+    write_output = capture_io do
+      cli.send(:print_tool_call_card, tool_call("write_file", path: "notes.md", content: "private draft"))
+    end.first
+    search_output = capture_io do
+      cli.send(:print_tool_call_card, tool_call("web_search", queries: ["ruby terminal UI"]))
+    end.first
+
+    assert_includes strip_ansi(read_output), "Tool> ◆ Read  README.md"
+    assert_includes strip_ansi(write_output), "Tool> ◆ Write  notes.md"
+    refute_includes write_output, "private draft"
+    assert_includes strip_ansi(search_output), "Tool> ◆ Search  “ruby terminal UI”"
+  end
+
   def test_tool_output_display_uses_compact_summaries
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
 
