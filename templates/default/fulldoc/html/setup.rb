@@ -9,7 +9,7 @@ def generate_assets
   asset('css/kward.css', file('css/kward.css', true))
   asset('js/kward.js', file('js/kward.js', true))
   asset('images/kward_logo.png', file('images/kward_logo.png', true))
-  asset('images/kward_screen_1.png', file('images/kward_screen_1.png', true))
+  asset('images/kward_workflow.svg', file('images/kward_workflow.svg', true))
 end
 
 def stylesheets_full_list

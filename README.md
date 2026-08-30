@@ -1,4 +1,16 @@
-# Kward
+<p align="center">
+  <img src="templates/default/fulldoc/html/images/kward_logo.png" width="150" alt="Kward logo">
+</p>
+
+<h1 align="center">Kward</h1>
+
+<p align="center"><strong>An extensible Ruby coding agent for your terminal.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/kaiwood/kward/actions/workflows/ci.yml"><img src="https://github.com/kaiwood/kward/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://rubygems.org/gems/kward"><img src="https://badge.fury.io/rb/kward.svg" alt="RubyGems version"></a>
+  <a href="https://kaiwood.github.io/kward/"><img src="https://img.shields.io/badge/docs-kaiwood.github.io-9caf35" alt="Documentation"></a>
+</p>
 
 Kward is a coding agent for your terminal. It can inspect and edit a project, run commands, research problems, and save your work in sessions you can resume later.
 
@@ -11,6 +23,10 @@ Software work rarely fits into one chat. A project can span days of research, im
 Kward treats that work as an ongoing workspace rather than a disposable conversation. You can resume earlier sessions, split work across tabs and Git worktrees, and keep project guidance close to the code. Optional permissions, command sandboxing, and workspace boundaries give you more control when a task needs it.
 
 Start with a normal coding conversation. If your workflow grows, you can add memory, reusable prompts and skills, local plugins, lifecycle hooks, MCP servers, transports, or a custom RPC client.
+
+<p align="center">
+  <img src="templates/default/fulldoc/html/images/kward_workflow.svg" width="1000" alt="Kward completing a focused coding change and test run">
+</p>
 
 ## Install
 

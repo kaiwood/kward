@@ -20,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- The repository and documentation landing pages now use a focused coding-workflow visual, restrained project badges, and clearer product identity.
 - Updated RubyGems positioning and metadata to describe Kward's supported product surfaces and direct users to the documentation site while keeping source and issue links on GitHub.
 - Refined the documentation homepage with a concrete static message, direct getting-started navigation, branded browser and social metadata, canonical URLs, and a quieter generated-docs footer.
 - The composer now highlights `/` command and `@` file discovery, and the startup screen gives actionable guidance when no model provider is connected.

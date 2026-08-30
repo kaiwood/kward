@@ -83,7 +83,7 @@ module KwardDocsNavigation
         title: title,
         path: source,
         url: url_for(link),
-        text: content.gsub(/[`*_#>\[\]()]/, " ").gsub(/\s+/, " ").strip
+        text: content.gsub(/<[^>]+>/, " ").gsub(/[`*_#>\[\]()]/, " ").gsub(/\s+/, " ").strip
       }
     end
   end
@@ -166,7 +166,7 @@ module KwardDocsNavigation
     GUIDE_FILE_LINKS.merge(API_FILE_LINKS).each do |source, target|
       html = html.gsub(%(href="#{source}"), %(href="#{target}"))
     end
-    html
+    html.gsub(%(src="templates/default/fulldoc/html/images/), %(src="images/))
   end
 end
 

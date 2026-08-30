@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title description">
+  <title id="title">Kward coding workflow</title>
+  <desc id="description">A Kward terminal session reads and edits the CLI, runs focused tests, and reports a successful authentication error-handling change.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11170f"/>
+      <stop offset="1" stop-color="#070b07"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="700" fill="#070b07"/>
+  <rect x="28" y="28" width="1144" height="644" rx="20" fill="url(#background)" stroke="#465035" stroke-width="2" filter="url(#shadow)"/>
+  <path d="M28 82h1144" stroke="#293024" stroke-width="2"/>
+  <circle cx="62" cy="55" r="8" fill="#ff5f57"/>
+  <circle cx="88" cy="55" r="8" fill="#febc2e"/>
+  <circle cx="114" cy="55" r="8" fill="#28c840"/>
+  <text x="600" y="63" text-anchor="middle" fill="#777c68" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">kward · ~/code/kward</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <circle cx="65" cy="119" r="7" fill="#9caf35"/>
+    <text x="84" y="126" fill="#efe8d0" font-size="20" font-weight="700">Kward v0.83.0 is online.</text>
+    <text x="64" y="159" fill="#777c68" font-size="16">Workspace</text>
+    <text x="180" y="159" fill="#d2df62" font-size="16">kaiwood/kward</text>
+    <text x="64" y="184" fill="#777c68" font-size="16">Branch</text>
+    <text x="180" y="184" fill="#d2df62" font-size="16">main</text>
+    <text x="64" y="219" fill="#efe8d0" font-size="18" font-weight="700">State your business.</text>
+
+    <text x="64" y="276" fill="#afa88f" font-size="16" font-weight="700">You&gt;</text>
+    <text x="126" y="276" fill="#efe8d0" font-size="18">Make one-shot authentication failures concise and add focused tests.</text>
+
+    <rect x="64" y="309" width="1072" height="164" rx="12" fill="#0d120d" stroke="#293024"/>
+    <text x="88" y="342" fill="#9caf35" font-size="15" font-weight="700">TOOL ACTIVITY</text>
+    <text x="88" y="378" fill="#d2df62" font-size="17">Read</text>
+    <text x="174" y="378" fill="#efe8d0" font-size="17">lib/kward/cli.rb</text>
+    <text x="88" y="414" fill="#d2df62" font-size="17">Edit</text>
+    <text x="174" y="414" fill="#efe8d0" font-size="17">lib/kward/cli.rb</text>
+    <text x="1016" y="414" text-anchor="end" fill="#9caf35" font-size="16">+34</text>
+    <text x="88" y="450" fill="#d2df62" font-size="17">Test</text>
+    <text x="174" y="450" fill="#efe8d0" font-size="17">3 runs · 26 assertions</text>
+    <text x="1110" y="450" text-anchor="end" fill="#9caf35" font-size="17" font-weight="700">0 failures</text>
+
+    <text x="64" y="526" fill="#9caf35" font-size="16" font-weight="700">Kward&gt;</text>
+    <text x="154" y="526" fill="#efe8d0" font-size="18">Authentication failures now return an actionable message without a traceback.</text>
+    <text x="154" y="559" fill="#afa88f" font-size="17">Debug backtraces remain available with KWARD_DEBUG=1.</text>
+
+    <path d="M52 608h1096" stroke="#293024"/>
+    <text x="64" y="642" fill="#afa88f" font-size="15">main*</text>
+    <text x="1128" y="642" text-anchor="end" fill="#777c68" font-size="15">18% · Codex gpt-5.6-sol · medium</text>
+  </g>
+</svg>
