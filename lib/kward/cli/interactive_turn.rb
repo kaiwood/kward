@@ -235,7 +235,6 @@ module Kward
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
           update_busy_activity(tool_activity(event.tool_call))
-          print_tool_call_card(event.tool_call)
         when Events::ToolUpdate
           key = tool_call_id(event.tool_call) || event.tool_call.object_id
           stream_state[:tool_elapsed_ms][key] = event.elapsed_ms

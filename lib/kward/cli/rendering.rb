@@ -127,7 +127,6 @@ module Kward
           :streamed
         when Events::ToolCall
           flush_markdown_deltas(markdown_chunks)
-          print_tool_call_card(event.tool_call)
           :streamed
         when Events::ToolResult
           flush_markdown_deltas(markdown_chunks)
@@ -345,25 +344,6 @@ module Kward
 
       def retry_message(event)
         RetryMessage.format(event)
-      end
-
-      # Writes a compact tool-start card for the terminal CLI flow.
-      def print_tool_call_card(tool_call)
-        card = tool_call_card(tool_call)
-        if prompt_interface?
-          if @prompt.respond_to?(:write_stream_block)
-            @prompt.write_stream_block("Tool", "#{card}\n", finish: true)
-          else
-            @prompt.start_stream_block("Tool")
-            @prompt.write_delta("#{card}\n")
-            @prompt.finish_stream_block
-          end
-        else
-          start_stream_block("Tool")
-          puts card
-          $stdout.flush
-          @stream_block = nil
-        end
       end
 
       # Writes the tool result output for the terminal CLI flow.

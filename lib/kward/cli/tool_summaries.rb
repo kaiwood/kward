@@ -10,47 +10,6 @@ module Kward
         "running #{tool_call_name(tool_call).tr("_", " ")}"
       end
 
-      def tool_call_card(tool_call)
-        name = tool_call_name(tool_call)
-        args = tool_call_args(tool_call)
-        title = {
-          "read_file" => "Read",
-          "write_file" => "Write",
-          "edit_file" => "Edit",
-          "list_directory" => "List",
-          "run_shell_command" => "Run",
-          "web_search" => "Search",
-          "code_search" => "Code search",
-          "fetch_content" => "Fetch",
-          "fetch_raw" => "Fetch",
-          "read_skill" => "Skill"
-        }.fetch(name, name.tr("_", " ").capitalize)
-        context = tool_call_card_context(name, args)
-        ["◆ #{title}", context].compact.join("  ")
-      end
-
-      def tool_call_card_context(name, args)
-        value = case name
-        when "read_file", "write_file", "edit_file", "list_directory"
-          args["path"] || args[:path]
-        when "run_shell_command"
-          args["command"] || args[:command]
-        when "web_search"
-          query = Array(args["queries"] || args[:queries]).first
-          "“#{query}”" if query
-        when "code_search"
-          args["query"] || args[:query] || args["package"] || args[:package]
-        when "fetch_content", "fetch_raw"
-          args["url"] || args[:url]
-        when "read_skill"
-          args["name"] || args[:name]
-        end
-        text = value.to_s.gsub(/\s+/, " ").strip
-        return nil if text.empty?
-
-        text.length > 80 ? "#{text[0, 79]}…" : text
-      end
-
       def tool_summary_with_duration(summary, elapsed_ms)
         return summary.to_s unless elapsed_ms
 

@@ -25,7 +25,6 @@ All notable changes to Kward will be documented in this file.
 - Added a visual-only streaming caret for assistant and reasoning output on interactive terminals; it is excluded from transcript storage and redirected output.
 - Added brief success, failure, and cancellation transitions to the interactive composer when an agent turn finishes.
 - Standardized terminal accents by meaning: cyan for agent activity, green for success, amber for caution, red for failure, purple for tools, and gray for metadata.
-- Added compact tool-start cards with safe, action-specific context while preserving the existing bounded result summaries.
 - Added a brief, visual-only response-arrival flourish when the first assistant output reaches the interactive composer.
 - Made the composer activity label follow real turn states such as thinking, reasoning, responding, retrying, and the currently running tool.
 - Added unobtrusive elapsed-time feedback after two seconds, final turn duration in completion transitions, and provider-reported tool durations in result summaries.
