@@ -216,15 +216,16 @@ module Kward
       def tab_label(label, index)
         tab = normalize_tab_label(label)
         name = tab[:name].empty? ? "Tab" : tab[:name]
+        name = "#{name} #{tab[:marker]}" if tab[:marker]
         color = tab[:color]
         name = colored(name, color) if color
         "#{index + 1} #{name}"
       end
 
       def normalize_tab_label(label)
-        return { name: label[:name].to_s, color: label[:color] } if label.is_a?(Hash)
+        return { name: label[:name].to_s, color: label[:color], marker: label[:marker] } if label.is_a?(Hash)
 
-        { name: label.to_s, color: nil }
+        { name: label.to_s, color: nil, marker: nil }
       end
 
       def color_tab_border(row)

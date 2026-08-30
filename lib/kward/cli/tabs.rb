@@ -33,6 +33,7 @@ module Kward
         :markdown_chunks,
         :label,
         :unread,
+        :attention,
         :pending_question,
         :shell,
         :shell_agent,
@@ -321,6 +322,7 @@ module Kward
           markdown_chunks: [],
           label: label,
           unread: false,
+          attention: nil,
           pending_question: nil,
           shell: nil,
           shell_agent: nil,
@@ -467,6 +469,7 @@ module Kward
         tab.error = nil
         tab.answer = nil
         tab.unread = false
+        tab.attention = nil
         tab.error_reported = false
         tab.event_history.clear
         tab.seen_events = 0
@@ -524,6 +527,7 @@ module Kward
           @prompt.update_assistant_label(assistant_prompt_name) if @prompt.respond_to?(:update_assistant_label)
         end
         tab.unread = false
+        tab.attention = nil
         restore_tab_composer_snapshot(tab.snapshot)
         update_prompt_workspace_root(current_workspace_root)
         @prompt.refresh_composer_status if @prompt.respond_to?(:refresh_composer_status)
@@ -615,6 +619,7 @@ module Kward
 
         tab.background_run = { run: run, completion: completion }
         tab.local_busy_activity = "running"
+        tab.attention = nil
         update_prompt_tabs
       end
 
@@ -629,11 +634,15 @@ module Kward
           tab.background_run = nil
           state[:completion]&.call(state[:run].sink, result) if result.is_a?(Struct)
           finish_local_busy_command_for_tab(tab)
-          tab.unread = true if tab != active_tab
+          if tab != active_tab
+            tab.unread = true
+            tab.attention = :success
+          end
         rescue StandardError => e
           tab.background_run = nil
           tab.error = e.message
           finish_local_busy_command_for_tab(tab)
+          tab.attention = :failure if tab != active_tab
         end
         update_prompt_tabs
       end
@@ -656,6 +665,7 @@ module Kward
         print_user_transcript(input, display_input: display_input) if prompt_interface?
         tab.status = "queued"
         tab.unread = false
+        tab.attention = nil
         tab.cancellation = Cancellation.new
         tab.steering = tab.driver.supports_steering? && steering_supported? ? Steering.new : nil
         tab.error = nil
@@ -679,14 +689,17 @@ module Kward
         end
         tab.status = "ready"
         tab.unread = tab != active_tab
+        tab.attention = :output if tab != active_tab
       rescue Cancellation::CancelledError
         tab.status = "cancelled"
         tab.unread = false
+        tab.attention = :failure if tab != active_tab
         report_tab_runtime_error(tab)
       rescue StandardError => e
         tab.error = e.message
         tab.status = "failed"
         tab.unread = false
+        tab.attention = :failure if tab != active_tab
         report_tab_runtime_error(tab)
       ensure
         finish_tab_turn(tab)
@@ -900,15 +913,26 @@ module Kward
           label = tab.label.to_s.empty? ? default_tab_label(index) : tab.label.to_s
           binding = worktree_binding_for(tab)
           label = "#{label} · #{binding.branch}" if binding&.active?
-          { name: label, color: tab_label_color(tab) }
+          { name: label, color: tab_label_color(tab), marker: tab_attention_marker(tab, index) }
         end
       end
 
       def tab_label_color(tab)
-        return :green if tab.status.to_s == "waiting_for_question"
-        return :yellow if tab.running? || tab.local_busy?
-        return :red if %w[failed cancelled].include?(tab.status.to_s)
-        return :green if tab.unread
+        return :success if tab.status.to_s == "waiting_for_question"
+        return :caution if tab.running? || tab.local_busy?
+        return :failure if %w[failed cancelled].include?(tab.status.to_s) || tab.attention == :failure
+        return :success if tab.attention == :success
+        return :activity if tab.unread
+
+        nil
+      end
+
+      def tab_attention_marker(tab, index)
+        return nil if index == @active_tab_index
+        return "!" if %w[failed cancelled].include?(tab.status.to_s) || tab.attention == :failure
+        return "?" if tab.status.to_s == "waiting_for_question"
+        return "•" if tab.running? || tab.local_busy? || tab.attention == :output
+        return "✓" if tab.attention == :success
 
         nil
       end
