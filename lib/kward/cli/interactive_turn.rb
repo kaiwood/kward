@@ -82,6 +82,7 @@ module Kward
           last_flush: monotonic_now,
           stream_block_open: false,
           markdown_streams: {},
+          tool_elapsed_ms: {},
           defer_assistant_streaming: defer_assistant_streaming?(agent)
         }
         markdown_chunks = []
@@ -235,11 +236,16 @@ module Kward
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
           update_busy_activity(tool_activity(event.tool_call))
           print_tool_call_card(event.tool_call)
+        when Events::ToolUpdate
+          key = tool_call_id(event.tool_call) || event.tool_call.object_id
+          stream_state[:tool_elapsed_ms][key] = event.elapsed_ms
         when Events::ToolResult
           stream_state[:streamed] = true
           finish_interactive_markdown_deltas(markdown_chunks, stream_state)
           update_session_diff(event.content, tool_call: event.tool_call)
-          print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
+          key = tool_call_id(event.tool_call) || event.tool_call.object_id
+          elapsed_ms = stream_state[:tool_elapsed_ms].delete(key)
+          print_tool_result(event.tool_call, event.content, line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT, elapsed_ms: elapsed_ms)
           update_busy_activity("thinking")
         end
       end

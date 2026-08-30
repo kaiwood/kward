@@ -1446,6 +1446,31 @@ class TestPromptInterface < KwardTestCase
     refute prompt.update_busy_activity("reasoning")
   end
 
+  def test_prompt_interface_shows_elapsed_time_only_for_longer_work
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.define_singleton_method(:monotonic_now) { 10.0 }
+    prompt.begin_busy_input("You>")
+
+    refute_includes strip_ansi(prompt.send(:composer_title)), "0.0s"
+
+    prompt.instance_variable_set(:@busy_started_at, 7.5)
+
+    assert_includes strip_ansi(prompt.send(:composer_title)), "2.5s"
+  end
+
+  def test_prompt_interface_includes_duration_in_completion_status
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.define_singleton_method(:monotonic_now) { 10.0 }
+    prompt.begin_busy_input("You>")
+    prompt.instance_variable_set(:@busy_started_at, 7.5)
+
+    prompt.finish_busy_input
+    prompt.show_completion(:success)
+
+    assert_includes strip_ansi(output.string), "✓ Complete · 2.5s"
+  end
+
   def test_prompt_interface_help_advertises_command_and_file_completion
     assert_includes Kward::PromptInterface::HELP_TEXT, "/ commands"
     assert_includes Kward::PromptInterface::HELP_TEXT, "@ files"

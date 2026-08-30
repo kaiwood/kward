@@ -367,8 +367,9 @@ module Kward
       end
 
       # Writes the tool result output for the terminal CLI flow.
-      def print_tool_result(tool_call, content, line_limit: nil)
+      def print_tool_result(tool_call, content, line_limit: nil, elapsed_ms: nil)
         summary = tool_result_summary(tool_call, content)
+        summary = tool_summary_with_duration(summary, elapsed_ms)
         summary = limit_tool_output_lines(summary, line_limit) if line_limit
         display_summary = tool_summary_display_text(summary)
         if prompt_interface?

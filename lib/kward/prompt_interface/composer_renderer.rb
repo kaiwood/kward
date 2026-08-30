@@ -114,6 +114,8 @@ module Kward
       end
 
       def busy_title(text)
+        elapsed = busy_elapsed_text
+        text = "#{text} · #{colored(elapsed, :metadata)}" if elapsed
         @busy_help ? "#{text} · #{BUSY_HELP_TEXT}" : text
       end
 

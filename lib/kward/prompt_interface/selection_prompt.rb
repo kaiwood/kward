@@ -338,6 +338,7 @@ module Kward
 
         @mutex.synchronize do
           @busy = true
+          @busy_started_at = monotonic_now
           @busy_activity = normalize_busy_activity(activity)
           @asking = true
           reset_spinner_locked
@@ -349,6 +350,7 @@ module Kward
       def finish_select_action
         @mutex.synchronize do
           @busy = false
+          @busy_started_at = nil
           @busy_activity = "thinking"
           @select_state&.delete(:busy_activity)
           render_prompt_locked if @asking

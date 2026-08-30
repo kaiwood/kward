@@ -1996,6 +1996,22 @@ class TestCLI < KwardTestCase
     assert_equal ["reasoning", "thinking", "responding", "running read file", "thinking"], prompt.activities
   end
 
+  def test_prompt_interface_interactive_turn_adds_reported_tool_duration
+    prompt = CombinedStreamPrompt.new([])
+    call = tool_call("read_file", path: "README.md")
+    agent = EventAgent.new([
+      Kward::Events::ToolCall.new(tool_call: call),
+      Kward::Events::ToolUpdate.new(tool_call: call, content: "contents", elapsed_ms: 1_460),
+      Kward::Events::ToolResult.new(tool_call: call, content: "contents")
+    ])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    cli.send(:run_interactive_turn, agent, "hello")
+
+    result = prompt.stream_writes.find { |write| write[:delta].include?("read_file: README.md") }
+    assert_includes result[:delta], "read_file: README.md · 1.5 s"
+  end
+
   def test_prompt_interface_interactive_turn_flourishes_once_when_response_arrives
     prompt = ResponseArrivalPrompt.new([])
     agent = EventAgent.new([

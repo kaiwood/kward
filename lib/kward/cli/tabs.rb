@@ -890,6 +890,7 @@ module Kward
           last_flush: monotonic_now,
           stream_block_open: false,
           markdown_streams: {},
+          tool_elapsed_ms: {},
           defer_assistant_streaming: driver.respond_to?(:conversation) && defer_assistant_streaming?(driver.agent)
         }
       end

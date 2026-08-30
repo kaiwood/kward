@@ -51,6 +51,16 @@ module Kward
         text.length > 80 ? "#{text[0, 79]}…" : text
       end
 
+      def tool_summary_with_duration(summary, elapsed_ms)
+        return summary.to_s unless elapsed_ms
+
+        lines = summary.to_s.lines
+        first = lines.shift.to_s.chomp
+        duration = elapsed_ms < 1_000 ? "#{elapsed_ms.round} ms" : format("%.1f s", elapsed_ms / 1_000.0)
+        first = "#{first} · #{duration}"
+        lines.empty? ? first : (["#{first}\n"] + lines).join
+      end
+
       def tool_result_summary(tool_call, content)
         name = tool_call_name(tool_call)
         args = tool_call_args(tool_call)

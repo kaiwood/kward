@@ -49,7 +49,9 @@ module Kward
         else
           return nil
         end
-        { text: text.first, style: text.last, expires_at: monotonic_now + COMPLETION_DISPLAY_SECONDS }
+        duration = formatted_elapsed(@last_busy_elapsed)
+        label = [text.first, duration].compact.join(" · ")
+        { text: label, style: text.last, expires_at: monotonic_now + COMPLETION_DISPLAY_SECONDS }
       end
 
       def response_arriving?
@@ -60,6 +62,21 @@ module Kward
           return false
         end
         true
+      end
+
+      def busy_elapsed_text
+        return nil unless @busy_started_at
+
+        elapsed = monotonic_now - @busy_started_at
+        return nil if elapsed < BUSY_ELAPSED_DELAY_SECONDS
+
+        formatted_elapsed(elapsed)
+      end
+
+      def formatted_elapsed(seconds)
+        return nil unless seconds
+
+        format("%.1fs", seconds)
       end
 
       def tick_completion_locked

@@ -75,6 +75,7 @@ module Kward
     COMPOSER_STATUS_REFRESH_INTERVAL = 1.0
     COMPLETION_DISPLAY_SECONDS = 0.8
     RESPONSE_ARRIVAL_SECONDS = 0.4
+    BUSY_ELAPSED_DELAY_SECONDS = 2.0
     COMPOSER_MAX_INPUT_ROWS = 6
     IMAGE_VIEWER_MAX_ROWS = 8
     TRANSCRIPT_BUFFER_LIMIT = 200_000
@@ -156,6 +157,8 @@ module Kward
       @asking = false
       @busy = false
       @busy_activity = "thinking"
+      @busy_started_at = nil
+      @last_busy_elapsed = nil
       @completion_status = nil
       @response_arrival_until = nil
       @queued_count = 0
@@ -885,6 +888,8 @@ module Kward
                   @pending_keys.clear
         @asking = true
         @busy = true
+        @busy_started_at = monotonic_now
+        @last_busy_elapsed = nil
         @queued_count = 0
         @steered_count = 0
         reset_spinner_locked
@@ -930,6 +935,8 @@ module Kward
 
     def finish_busy_input
       @mutex.synchronize do
+        @last_busy_elapsed = monotonic_now - @busy_started_at if @busy_started_at
+        @busy_started_at = nil
         @busy = false
         @busy_activity = "thinking"
         @response_arrival_until = nil
