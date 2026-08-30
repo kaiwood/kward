@@ -1,0 +1,72 @@
+name: Bug report
+description: Report reproducible behavior that is not working as expected
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Kward. Remove API keys, OAuth tokens, private code, personal data, and sensitive paths before submitting. Report vulnerabilities privately through the Security tab instead.
+  - type: input
+    id: version
+    attributes:
+      label: Kward version
+      description: Run `kward --version`.
+      placeholder: kward 0.83.0
+    validations:
+      required: true
+  - type: input
+    id: ruby
+    attributes:
+      label: Ruby version
+      description: Run `ruby --version`.
+      placeholder: ruby 3.4.x
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Platform and terminal
+      placeholder: macOS 15, Ghostty 1.x
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest commands or steps that reproduce the problem.
+      placeholder: |
+        1. Run ...
+        2. Enter ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include relevant `kward doctor` output or logs only after removing secrets and private data.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed credentials, private code, personal data, and sensitive paths.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

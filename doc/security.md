@@ -2,7 +2,7 @@
 
 Kward can read code, edit files, run commands, call model and search providers, and load local extensions. That makes it useful, but it also means you should treat it like a developer tool running with your account—not like a sandbox.
 
-This guide explains the trust boundaries and gives you a safe way to start work in an unfamiliar repository.
+This guide explains the trust boundaries and gives you a safe way to start work in an unfamiliar repository. Report suspected vulnerabilities privately through the [security policy](https://github.com/kaiwood/kward/blob/main/SECURITY.md).
 
 ## The short version
 

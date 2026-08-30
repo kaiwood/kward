@@ -81,6 +81,8 @@ New to Kward:
 Work safely:
 
 - [Security and trust](doc/security.md): local permissions, external data flow, trusted extensions, and safe work in unfamiliar repositories.
+- [Security policy](https://github.com/kaiwood/kward/blob/main/SECURITY.md): privately report suspected vulnerabilities and understand supported security-fix versions.
+- [Platform support](doc/platform-support.md): macOS, Linux, WSL, native Windows, terminal, and sandbox support expectations.
 - [Permissions](doc/permissions.md): opt-in tool approval, write scopes, policy rules, and current limits.
 - [Command sandboxing](doc/sandboxing.md): opt-in OS-enforced boundaries for model-requested shell commands.
 - [Troubleshooting](doc/troubleshooting.md): environment-specific install and runtime issues.
@@ -99,7 +101,7 @@ Everyday workflows:
 - [Skills](doc/skills.md): add reusable instructions that load only for matching tasks.
 - [Prompt templates](doc/prompt-templates.md): create reusable slash prompts and use the starter templates installed by `kward init`.
 - [MCP servers](doc/mcp.md): connect trusted local Model Context Protocol tool servers.
-- [Pan mode](doc/pan.md): use the mobile-friendly browser interface on a trusted local network.
+- [Pan mode](doc/pan.md): use the mobile-friendly local browser interface or explicitly expose it to a trusted LAN.
 - [Local models](doc/local-models.md): connect Ollama, LM Studio, or llama.cpp and use a minimal replacement prompt.
 
 Extend and integrate:
@@ -124,6 +126,8 @@ Generated Ruby API:
 - [API reference](doc/api.md): generated Ruby API entry points, indexes, and supported API expectations.
 
 ## Development
+
+Read [Contributing to Kward](https://github.com/kaiwood/kward/blob/main/CONTRIBUTING.md) before preparing a pull request. Participation is governed by the [Code of conduct](https://github.com/kaiwood/kward/blob/main/CODE_OF_CONDUCT.md).
 
 Run tests:
 

@@ -7,6 +7,7 @@ This page gets you from install to a first useful chat.
 ## Requirements
 
 - Ruby 3.4 or newer.
+- macOS or Linux. WSL is best effort; native Windows is not currently supported. See [Platform support](platform-support.md).
 - Credentials for one model provider. The easiest setup is `kward login` or `/login` inside Kward.
 - Bundler only if you run Kward from a source checkout.
 

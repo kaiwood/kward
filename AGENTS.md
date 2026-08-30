@@ -45,6 +45,8 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `test/` - Minitest coverage.
 - `doc/` - user documentation and generated docs source pages.
 - `doc/api.md` - curated API reference overview used as the API docs landing page.
+- `doc/platform-support.md` - supported operating systems, terminals, and sandbox backends.
+- `CONTRIBUTING.md`, `SECURITY.md`, and `CODE_OF_CONDUCT.md` - contribution workflow and project trust policies.
 - `templates/default/kward_navigation.rb` - shared generated-docs navigation data for guide/API dropdowns.
 - `templates/default/layout/` - YARD layout templates for normal generated docs pages.
 - `templates/default/fulldoc/` - YARD templates for generated full-list pages such as class, method, and file indexes.

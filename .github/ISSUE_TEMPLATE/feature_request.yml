@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a focused improvement to Kward
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explain the workflow problem before proposing an implementation. Focused requests with concrete examples are easiest to evaluate.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Workflow problem
+      description: What are you trying to accomplish, and where does the current experience fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience
+      description: Show the commands, interaction, configuration, or API shape you would expect.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe current workarounds or simpler alternatives.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Product surface
+      options:
+        - Interactive CLI/TUI
+        - One-shot/filter CLI
+        - Pan browser UI
+        - JSON-RPC
+        - Plugins, hooks, skills, or prompts
+        - Documentation or onboarding
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and safety
+      description: Note effects on existing behavior, security boundaries, supported platforms, or stored data.

@@ -12,6 +12,7 @@ module KwardDocsNavigationData
         ["Authentication", "file.authentication.html"],
         ["Model providers", "file.providers.html"],
         ["Security and trust", "file.security.html"],
+        ["Platform support", "file.platform-support.html"],
         ["Troubleshooting", "file.troubleshooting.html"]
       ]
     ],

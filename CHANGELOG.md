@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added security reporting, contribution and conduct policies, structured issue and pull-request templates, and an explicit macOS/Linux/WSL/Windows support matrix.
 - Added Vibe multi-cursor editing with `Ctrl+D` occurrence selection from normal, insert, and characterwise visual modes, plus visual-mode `I`/`A` cursors at each selected line boundary.
 - Added `script/benchmark_composer` for repeatable draft-layout, history-search, and file-completion performance measurements.
 - Added Vibe visual and cursor-aware `:run` support plus `:run all` for executing runnable Markdown fenced language blocks and inserting or replacing their formatted `<output>` fields.
