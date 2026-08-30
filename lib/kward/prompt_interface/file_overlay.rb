@@ -88,6 +88,10 @@ module Kward
       def file_overlay_matches
         token = active_file_open || active_file_mention
         return [] unless token
+        unless @file_mention_paths
+          start_file_mention_discovery_locked
+          return []
+        end
 
         query = token[:query].downcase
         entries = project_file_path_entries
@@ -104,6 +108,57 @@ module Kward
         end
         @file_overlay_match_cache = { query: query, entries: entries, matches: matches }
         matches
+      end
+
+      def start_file_mention_discovery_locked
+        root = prompt_workspace_root
+        active_thread = @file_mention_discovery_thread
+        return if active_thread&.alive? && @file_mention_discovery_root == root
+
+        token = Object.new
+        start = Queue.new
+        @file_mention_discovery_root = root
+        @file_mention_discovery_token = token
+        worker = Thread.new do
+          start.pop
+          paths = discover_file_mention_paths(root)
+          @mutex.synchronize do
+            next unless @file_mention_discovery_token.equal?(token)
+
+            @file_mention_discovery_thread = nil
+            @file_mention_discovery_root = nil
+            @file_mention_discovery_token = nil
+            next unless root == prompt_workspace_root
+
+            @file_mention_paths = paths
+            @file_mention_path_entries_paths = nil
+            @file_mention_path_entries = nil
+            @file_overlay_match_cache = nil
+            render_prompt_locked if @started && @asking && file_overlay_visible?
+          end
+        end
+        worker.report_on_exception = false
+        @file_mention_discovery_thread = worker
+        start << true
+      end
+
+      def discover_file_mention_paths(root)
+        ProjectFiles.list(root: root)
+      end
+
+      def finish_file_mention_discovery_locked
+        root = prompt_workspace_root
+        @file_mention_discovery_thread = nil
+        @file_mention_discovery_root = nil
+        @file_mention_discovery_token = nil
+        @file_mention_paths = discover_file_mention_paths(root)
+        @file_mention_path_entries_paths = nil
+        @file_mention_path_entries = nil
+        @file_overlay_match_cache = nil
+      end
+
+      def file_mention_discovery_loading?
+        @file_mention_discovery_thread&.alive? && @file_mention_discovery_root == prompt_workspace_root
       end
 
       def project_file_paths(include_ignored: false)
@@ -157,6 +212,7 @@ module Kward
       def selected_file_overlay_path
         return nil unless file_overlay_visible?
 
+        finish_file_mention_discovery_locked unless @file_mention_paths
         matches = file_overlay_matches
         return nil if matches.empty?
 
@@ -192,6 +248,9 @@ module Kward
         return [] unless file_overlay_visible?
 
         matches = file_overlay_matches
+        if file_mention_discovery_loading?
+          return overlay_card_rows("Files", [overlay_text_line("Loading project files…", :muted)], width)
+        end
         if matches.empty?
           return overlay_card_rows("Files", [overlay_text_line("No matching files", :muted)], width)
         end

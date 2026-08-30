@@ -51,6 +51,53 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     assert_includes strip_ansi(rows.join("\n")), "No matching files"
   end
 
+  def test_prompt_interface_file_overlay_discovers_paths_without_blocking_render
+    gate = Queue.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.define_singleton_method(:discover_file_mention_paths) do |_root|
+      gate.pop
+      ["lib/main.rb"]
+    end
+    prompt.send(:composer_input=, "@lib")
+    prompt.send(:composer_cursor=, 4)
+
+    rows = prompt.send(:file_overlay_rows, 80)
+    worker = prompt.instance_variable_get(:@file_mention_discovery_thread)
+
+    assert_includes strip_ansi(rows.join("\n")), "Loading project files"
+    assert worker.alive?
+
+    gate << true
+    worker.join(2)
+
+    refute worker.alive?
+    assert_equal ["lib/main.rb"], prompt.send(:file_overlay_matches)
+  end
+
+  def test_prompt_interface_file_overlay_discards_discovery_from_previous_workspace
+    Dir.mktmpdir do |first|
+      Dir.mktmpdir do |second|
+        gate = Queue.new
+        prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, workspace_root: first)
+        prompt.define_singleton_method(:discover_file_mention_paths) do |_root|
+          gate.pop
+          ["stale.txt"]
+        end
+        prompt.send(:composer_input=, "@stale")
+        prompt.send(:composer_cursor=, 6)
+        prompt.send(:file_overlay_rows, 80)
+        worker = prompt.instance_variable_get(:@file_mention_discovery_thread)
+
+        assert prompt.update_workspace_root(second)
+        gate << true
+        worker.join(2)
+
+        refute worker.alive?
+        assert_nil prompt.instance_variable_get(:@file_mention_paths)
+      end
+    end
+  end
+
   def test_prompt_interface_file_overlay_limits_matches
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.instance_variable_set(:@file_mention_paths, 250.times.map { |index| "lib/file#{index}.rb" })
