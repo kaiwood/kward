@@ -122,6 +122,7 @@ module Kward
         worker = Thread.new do
           start.pop
           paths = discover_file_mention_paths(root)
+          entries = build_file_path_entries(paths)
           @mutex.synchronize do
             next unless @file_mention_discovery_token.equal?(token)
 
@@ -131,8 +132,8 @@ module Kward
             next unless root == prompt_workspace_root
 
             @file_mention_paths = paths
-            @file_mention_path_entries_paths = nil
-            @file_mention_path_entries = nil
+            @file_mention_path_entries_paths = paths
+            @file_mention_path_entries = entries
             @file_overlay_match_cache = nil
             render_prompt_locked if @started && @asking && file_overlay_visible?
           end
@@ -152,8 +153,8 @@ module Kward
         @file_mention_discovery_root = nil
         @file_mention_discovery_token = nil
         @file_mention_paths = discover_file_mention_paths(root)
-        @file_mention_path_entries_paths = nil
-        @file_mention_path_entries = nil
+        @file_mention_path_entries_paths = @file_mention_paths
+        @file_mention_path_entries = build_file_path_entries(@file_mention_paths)
         @file_overlay_match_cache = nil
       end
 
@@ -174,7 +175,11 @@ module Kward
         return @file_mention_path_entries if @file_mention_path_entries_paths.equal?(paths) && @file_mention_path_entries
 
         @file_mention_path_entries_paths = paths
-        @file_mention_path_entries = paths.map { |path| { path: path, downcase: path.downcase } }
+        @file_mention_path_entries = build_file_path_entries(paths)
+      end
+
+      def build_file_path_entries(paths)
+        paths.map { |path| { path: path, downcase: path.downcase } }
       end
 
       def discover_project_file_paths(include_ignored: false)
