@@ -263,7 +263,7 @@ Model settings:
 
 `model` is a legacy generic fallback. Provider-specific values take precedence. Catalog providers use `<runtime-id>_model`; for example, direct OpenAI uses `openai_api_model`, Gemini uses `gemini_model`, and Groq uses `groq_model`. Codex keeps `openai_model`. `reasoning_effort` and `thinking_level` are generic reasoning settings. `thinking_level` is an alias for `reasoning_effort` honored by all providers. For each provider, Kward resolves reasoning in this order: the provider-specific key (for example `openai_reasoning_effort`), then the generic `reasoning_effort`, then `thinking_level`, then the default `medium`. `openai_reasoning_effort`, `anthropic_reasoning_effort`, `openrouter_reasoning_effort`, and `copilot_reasoning_effort` are provider-specific forms.
 
-Set `codex_show_raw_reasoning` to `true` to display raw Codex `reasoning_text` when the API does not provide reasoning summary text. It defaults to `false`; raw reasoning can include internal or unstable model output, so enable it only when you explicitly want to inspect that stream.
+Kward displays raw Codex `reasoning_text` when the API provides it, rather than showing only the reasoning summary. Set `codex_show_raw_reasoning` to `false` to hide this stream. Raw reasoning can include internal or unstable model output.
 
 `stream_idle_timeout_seconds` limits how long a streamed Codex, Anthropic, or Local response may go without receiving data. It defaults to `120`; set a positive value to override it. When the provider is silent longer than this limit, Kward closes the request and applies its normal transient-network retry behavior.
 
