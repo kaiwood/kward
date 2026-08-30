@@ -1416,13 +1416,13 @@ class TestPromptInterface < KwardTestCase
     assert_equal "draft", prompt.send(:composer_input)
   end
 
-  def test_prompt_interface_renders_braille_spinner_while_busy
+  def test_prompt_interface_renders_activity_pulse_while_busy
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
 
     prompt.begin_busy_input("You>")
 
-    assert_includes strip_ansi(output.string), "╭ You · ⠋ streaming "
+    assert_includes strip_ansi(output.string), "╭ You · · streaming "
   end
 
   def test_prompt_interface_renders_custom_busy_activity
@@ -1431,7 +1431,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.begin_busy_input("You>", activity: "compacting")
 
-    assert_includes strip_ansi(output.string), "╭ You · ⠋ compacting "
+    assert_includes strip_ansi(output.string), "╭ You · · compacting "
   end
 
   def test_prompt_interface_help_advertises_command_and_file_completion
@@ -1469,7 +1469,7 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:render_prompt_locked)
 
     assert_equal 0, output.string.scan(TTY::Cursor.clear_line).length
-    assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
+    assert_match(/╭ You · [•●] streaming /, strip_ansi(output.string))
   end
 
   def test_question_overlay_wraps_each_line_of_approval_details
@@ -1563,7 +1563,7 @@ class TestPromptInterface < KwardTestCase
     thread&.kill if thread&.alive?
   end
 
-  def test_prompt_interface_advances_braille_spinner_while_busy
+  def test_prompt_interface_advances_activity_pulse_while_busy
     input, writer = IO.pipe
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: input, output: output)
@@ -1574,7 +1574,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.poll_input
 
-    assert_match(/╭ You · [⠙⠹⠸⠼⠴⠦⠧⠇⠏] streaming /, strip_ansi(output.string))
+    assert_match(/╭ You · [•●] streaming /, strip_ansi(output.string))
   ensure
     writer&.close unless writer&.closed?
     input&.close unless input&.closed?
@@ -1602,7 +1602,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.set_steered_count(1)
 
-    assert_includes strip_ansi(output.string), "╭ You · ⠋ steering "
+    assert_includes strip_ansi(output.string), "╭ You · · steering "
     refute_includes output.string, "steered"
     refute_includes output.string, "queued"
   end
@@ -1617,7 +1617,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.clear_steered_count
 
-    assert_includes strip_ansi(output.string), "╭ You · ⠋ streaming "
+    assert_includes strip_ansi(output.string), "╭ You · · streaming "
     refute_includes output.string, "steering"
     refute_includes output.string, "steered"
   end
