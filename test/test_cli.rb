@@ -2100,10 +2100,10 @@ class TestCLI < KwardTestCase
     runtime_cli.instance_variable_set(:@color_enabled, true)
     runtime_cli.send(:runtime_output, "Saved.")
 
-    assert_includes assistant_output, "\e[32;1mAssistant>\e[0m"
+    assert_includes assistant_output, "\e[36;1mAssistant>\e[0m"
     assert_includes reasoning_output, "\e[90;1mReasoning>\e[0m"
     assert_includes retry_output, "\e[33;1mRetry>\e[0m"
-    assert_includes tool_output, "\e[36;1mTool>\e[0m"
+    assert_includes tool_output, "\e[35;1mTool>\e[0m"
     assert_includes failed_tool_output, "\e[31;1mTool>\e[0m"
     assert_includes runtime_prompt.output.join, "\e[90;1mRuntime>\e[0m"
   end

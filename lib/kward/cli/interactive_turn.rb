@@ -135,7 +135,7 @@ module Kward
         raise error if error && !error.is_a?(Cancellation::CancelledError) && !busy_replacement_agent?
 
         @prompt.commit_editor_prompt(editor_prompt_session) if editor_prompt_session && completed
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || cancelled || busy_replacement_agent? || stream_state[:streamed] || answer.to_s.empty?
+        @prompt.say("\n#{colored(assistant_output_prompt, :activity, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || cancelled || busy_replacement_agent? || stream_state[:streamed] || answer.to_s.empty?
         persist_memory_state(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript && queued_inputs.empty? && !cancelled
         queued_inputs
@@ -359,7 +359,7 @@ module Kward
           streamed = true if !suppress_transcript && render_blocking_turn_event(event, markdown_chunks, tool_line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         end
         flush_markdown_deltas(markdown_chunks) if streamed
-        @prompt.say("\n#{colored(assistant_output_prompt, :green, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || streamed || answer.to_s.empty?
+        @prompt.say("\n#{colored(assistant_output_prompt, :activity, :bold)} #{render_markdown_transcript(answer)}\n") unless suppress_transcript || streamed || answer.to_s.empty?
         persist_memory_state(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         on_complete&.call(successful: true, cancelled: false, error: nil, answer: answer)

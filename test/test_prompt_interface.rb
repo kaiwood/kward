@@ -2022,7 +2022,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.redraw
 
-    assert_includes output.string, "\e[36;1mTool output>\e[0m"
+    assert_includes output.string, "\e[35;1mTool output>\e[0m"
     assert_includes output.string, "\e[31mred\e[0m"
   end
 

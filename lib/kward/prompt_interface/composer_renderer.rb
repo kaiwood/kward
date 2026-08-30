@@ -92,13 +92,14 @@ module Kward
       def composer_title
         label = composer_title_label
         if @busy && @queued_count.positive?
-          status_composer_text(busy_title("#{label} · #{@queued_count} queued"))
+          status_composer_text(busy_title("#{label} · #{colored("#{@queued_count} queued", :metadata)}"))
         elsif @busy && @steered_count.to_i.positive?
-          status_composer_text(busy_title("#{label} · #{spinner_frame} steering"))
+          status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} steering"))
         elsif @busy
-          status_composer_text(busy_title("#{label} · #{spinner_frame} #{@busy_activity}"))
+          status_composer_text(busy_title("#{label} · #{colored(spinner_frame, :activity, :bold)} #{@busy_activity}"))
         elsif @completion_status
-          status_composer_text("#{label} · #{@completion_status[:text]}")
+          completion = colored(@completion_status[:text], @completion_status[:style], :bold)
+          status_composer_text("#{label} · #{completion}")
         else
           status_composer_text(label)
         end

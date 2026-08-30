@@ -41,15 +41,15 @@ module Kward
       def completion_status(status)
         text = case status&.to_sym
         when :success
-          "✓ Complete"
+          ["✓ Complete", :success]
         when :failed
-          "× Failed"
+          ["× Failed", :failure]
         when :cancelled
-          "– Cancelled"
+          ["– Cancelled", :metadata]
         else
           return nil
         end
-        { text: text, expires_at: monotonic_now + COMPLETION_DISPLAY_SECONDS }
+        { text: text.first, style: text.last, expires_at: monotonic_now + COMPLETION_DISPLAY_SECONDS }
       end
 
       def tick_completion_locked

@@ -15,6 +15,15 @@ class TestANSI < KwardTestCase
     assert_equal "\e[38;2;138;160;106mborder\e[0m", colored
   end
 
+  def test_ansi_colorizes_semantic_palette
+    assert_equal "\e[36mactivity\e[0m", Kward::ANSI.colorize("activity", :activity, enabled: true)
+    assert_equal "\e[32msuccess\e[0m", Kward::ANSI.colorize("success", :success, enabled: true)
+    assert_equal "\e[33mcaution\e[0m", Kward::ANSI.colorize("caution", :caution, enabled: true)
+    assert_equal "\e[31mfailure\e[0m", Kward::ANSI.colorize("failure", :failure, enabled: true)
+    assert_equal "\e[35mtool\e[0m", Kward::ANSI.colorize("tool", :tool, enabled: true)
+    assert_equal "\e[90mmetadata\e[0m", Kward::ANSI.colorize("metadata", :metadata, enabled: true)
+  end
+
   def test_ansi_markdown_renders_basic_styles
     rendered = Kward::ANSI.markdown("# Heading\nUse `code`.\n\n```ruby\nputs :ok\n```\n- item\n", enabled: true)
 

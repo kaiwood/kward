@@ -48,7 +48,7 @@ module Kward
         return unless %w[Assistant Reasoning].include?(@stream_state.block)
         return if @stream_state.pending_wrap?
 
-        print_output_locked(colored("▍", :cyan))
+        print_output_locked(colored("▍", :activity))
         @stream_caret_visible = true
       end
 
@@ -139,17 +139,17 @@ module Kward
       def label_styles(label)
         case label
         when "Reasoning", "Compaction summary"
-          [:gray, :bold]
+          [:metadata, :bold]
         when "Assistant", "Kward"
-          [:green, :bold]
+          [:activity, :bold]
         when "Tool", "Tool output"
-          [:cyan, :bold]
+          [:tool, :bold]
         when "Tool failed"
-          [:red, :bold]
+          [:failure, :bold]
         when "Retry"
-          [:yellow, :bold]
+          [:caution, :bold]
         else
-          [:gray, :bold]
+          [:metadata, :bold]
         end
       end
 
