@@ -173,6 +173,7 @@ module Kward
       @transcript_viewport_rows = 0
       @restoring_transcript = false
       @pending_keys = []
+      @handoff_input_buffer = +"".b
       @completion_provider = nil
       @completion_cycle = nil
       @completion_overlay = nil
@@ -685,11 +686,11 @@ module Kward
       end
     end
 
-    def with_inline_terminal_handoff(&block)
-      with_terminal_handoff(inline: true, &block)
+    def with_inline_terminal_handoff(preserve_tab_keybindings: false, &block)
+      with_terminal_handoff(inline: true, preserve_tab_keybindings: preserve_tab_keybindings, &block)
     end
 
-    def with_terminal_handoff(inline: false)
+    def with_terminal_handoff(inline: false, preserve_tab_keybindings: false)
       start
       input = nil
       output = nil
@@ -705,7 +706,8 @@ module Kward
         end
         disable_editor_mouse_reporting(force: true)
         print_output_locked(BRACKETED_PASTE_RESTORE)
-        print_output_locked(KEYBOARD_PROTOCOL_RESTORE)
+        print_output_locked(KEYBOARD_PROTOCOL_RESTORE) unless preserve_tab_keybindings
+        @handoff_input_buffer.clear
         restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
         flush_output_locked
@@ -727,6 +729,7 @@ module Kward
         enter_raw_mode_locked
         print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
         print_output_locked(BRACKETED_PASTE_ENABLE)
+        @handoff_input_buffer.clear
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked(force: true)
         @cursor_visible = nil
@@ -914,6 +917,10 @@ module Kward
         @asking = true
         render_prompt_locked
       end
+    end
+
+    def filter_terminal_handoff_input(chunk)
+      @mutex.synchronize { filter_terminal_handoff_input_locked(chunk) }
     end
 
     def poll_input

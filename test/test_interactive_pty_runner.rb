@@ -241,6 +241,33 @@ class TestInteractivePtyRunner < KwardTestCase
     close_ios(input_reader, input_writer, output_reader, output_writer)
   end
 
+  def test_tab_action_handler_stops_child_without_forwarding_tab_key
+    input_reader, input_writer = IO.pipe
+    output_reader, output_writer = IO.pipe
+    sink = RecordingSink.new(output_writer)
+    input_writer.write("\e[50;5u")
+    input_writer.flush
+    seen = []
+
+    result = Kward::InteractivePtyRunner.new.run(
+      RbConfig.ruby,
+      "-e",
+      "sleep 10",
+      input: input_reader,
+      sink: sink,
+      tab_action_handler: lambda do |chunk|
+        seen << chunk
+        { input: "", tab_action: { tab_action: :select, index: 1 } }
+      end
+    )
+
+    assert_equal({ tab_action: :select, index: 1 }, result.tab_action)
+    refute result.input_forwarded
+    assert_equal ["\e[50;5u"], seen
+  ensure
+    close_ios(input_reader, input_writer, output_reader, output_writer)
+  end
+
   def test_terminates_and_reaps_child_when_sink_write_fails
     Dir.mktmpdir("interactive-pty") do |dir|
       pid_path = File.join(dir, "pid")

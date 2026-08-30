@@ -21,6 +21,10 @@ All notable changes to Kward will be documented in this file.
 - Vibe visual selections can now be used as line ranges for `:` commands, including `:s` substitutions and `:run` scratchpad execution.
 - Ruby scratchpad runs now preserve the source buffer and show captured output in a scrollable, cancellable lower-half output pane instead of appending it after `__END__`; mouse drag selection and `Ctrl+C`/`Cmd+C`/Vibe `y` copy clean output without pane borders.
 
+### Fixed
+
+- Fixed Ctrl+number tab switching being blocked while an interactive shell command is running; tab shortcuts now take priority and stop forwarding to the child command.
+
 ### Removed
 
 - Removed legacy `kwsh.yml` shell configuration; shell aliases and exports now use the shell-style `kwshrc` files.

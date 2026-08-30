@@ -15,7 +15,7 @@ module Kward
   # aliases, directory changes, and child-shell state belong to one session.
   class PersistentShellSession
     Result = Kwsh::Result
-    InteractiveResult = Struct.new(:exit_status, :input_forwarded, keyword_init: true)
+    InteractiveResult = Struct.new(:exit_status, :input_forwarded, :tab_action, keyword_init: true)
 
     class CommandInterrupted < StandardError
       attr_reader :protocol
@@ -132,14 +132,15 @@ module Kward
 
     # Runs an external command through the same persistent shell process while
     # the caller owns the terminal.
-    def run_interactive(command, input:, sink:)
+    def run_interactive(command, input:, sink:, tab_action_handler: nil)
       protocol = with_raw_input(input) do
-        execute_protocol(command, input: input, sink: sink)
+        execute_protocol(command, input: input, sink: sink, tab_action_handler: tab_action_handler)
       end
       update_cwd(protocol[:cwd])
       InteractiveResult.new(
         exit_status: protocol[:status] || 1,
-        input_forwarded: protocol[:input_forwarded]
+        input_forwarded: protocol[:input_forwarded],
+        tab_action: protocol[:tab_action]
       )
     ensure
       sink.finish if sink.respond_to?(:finish)
@@ -256,7 +257,7 @@ module Kward
       update_cwd(protocol[:cwd])
     end
 
-    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false)
+    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false, tab_action_handler: nil)
       @command_mutex.synchronize do
         ensure_open
         cancellation&.raise_if_cancelled!
@@ -268,7 +269,8 @@ module Kward
           sink: sink,
           timeout_seconds: timeout_seconds,
           max_output_bytes: max_output_bytes,
-          cancellation: cancellation
+          cancellation: cancellation,
+          tab_action_handler: tab_action_handler
         )
       end
     rescue CommandInterrupted => e
@@ -323,7 +325,7 @@ module Kward
       [setup, restore]
     end
 
-    def read_until_marker(marker, input:, sink:, timeout_seconds:, max_output_bytes:, cancellation:)
+    def read_until_marker(marker, input:, sink:, timeout_seconds:, max_output_bytes:, cancellation:, tab_action_handler: nil)
       buffer = +"".b
       captured = +"".b
       captured_bytes = 0
@@ -414,9 +416,24 @@ module Kward
           if input_chunk.nil?
             input = nil
           elsif input_chunk != :wait_readable
-            notify_input_forwarded(sink)
-            write_raw(input_chunk)
-            input_forwarded = true
+            filtered = tab_action_handler&.call(input_chunk)
+            input_chunk = filtered[:input].to_s if filtered
+            unless input_chunk.empty?
+              notify_input_forwarded(sink)
+              write_raw(input_chunk)
+              input_forwarded = true
+            end
+            if filtered && filtered[:tab_action]
+              interrupt_process
+              raise CommandInterrupted.new(
+                output: captured,
+                status: 130,
+                cwd: @cwd,
+                input_forwarded: input_forwarded,
+                tab_action: filtered[:tab_action],
+                truncated: truncated
+              )
+            end
           end
         end
         update_window_size

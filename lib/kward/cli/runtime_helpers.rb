@@ -107,14 +107,14 @@ module Kward
         end
 
         expanded_command = shell.expand_alias(command, interactive: true)
-        run_user_interactive_pty_command(
+        result = run_user_interactive_pty_command(
           expanded_command,
           shell: Kwsh::DEFAULT_SHELL,
           env: interactive_pty_environment(shell.child_env, preserve_git_pager: true),
           cwd: interactive_workspace_root(agent),
           intro: "$ #{command}\n"
         )
-        true
+        result&.tab_action ? :tab_action : true
       end
 
       def run_captured_shell_command(command, agent)
@@ -333,10 +333,11 @@ module Kward
       def run_interactive_pty_with_terminal_handoff(shell, command, env:, cwd:, &on_complete)
         runner = InteractivePtyRunner.new
         with_interactive_terminal_handoff do |input, sink|
+          tab_action_handler = terminal_handoff_tab_action_handler
           result = if shell.respond_to?(:run_interactive)
-            shell.run_interactive(command, input: input, sink: sink)
+            shell.run_interactive(command, input: input, sink: sink, tab_action_handler: tab_action_handler)
           else
-            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink)
+            runner.run(shell, "-c", command, env: env, cwd: cwd, input: input, sink: sink, tab_action_handler: tab_action_handler)
           end
           on_complete.call(sink, result) if on_complete
           result
@@ -345,7 +346,7 @@ module Kward
 
       def with_interactive_terminal_handoff
         if @prompt.respond_to?(:with_inline_terminal_handoff)
-          @prompt.with_inline_terminal_handoff do |input, output, transition|
+          with_tab_keybinding_handoff(:with_inline_terminal_handoff) do |input, output, transition|
             sink = AdaptivePtyOutputSink.new(
               output: output,
               on_exclusive: transition,
@@ -354,7 +355,7 @@ module Kward
             yield(input, sink)
           end
         elsif @prompt.respond_to?(:with_terminal_handoff)
-          @prompt.with_terminal_handoff do |input, output|
+          with_tab_keybinding_handoff(:with_terminal_handoff) do |input, output|
             sink = PassthroughPtyOutputSink.new(
               output: output,
               max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
@@ -367,6 +368,30 @@ module Kward
             max_capture_bytes: MAX_TRANSIENT_TERMINAL_OUTPUT_BYTES
           )
           yield($stdin, sink)
+        end
+      end
+
+      def with_tab_keybinding_handoff(method_name)
+        method = @prompt.method(method_name)
+        supports_option = method.parameters.any? do |type, name|
+          type == :keyrest || (type == :key || type == :keyreq) && name == :preserve_tab_keybindings
+        end
+        if supports_option
+          @prompt.public_send(method_name, preserve_tab_keybindings: true) { |*args| yield(*args) }
+        else
+          @prompt.public_send(method_name) { |*args| yield(*args) }
+        end
+      end
+
+      def terminal_handoff_tab_action_handler
+        return unless @prompt.respond_to?(:filter_terminal_handoff_input)
+        return unless respond_to?(:handle_tab_action, true)
+
+        lambda do |chunk|
+          filtered = @prompt.filter_terminal_handoff_input(chunk)
+          action = filtered[:tab_action]
+          handle_tab_action(action, @session_store) if action
+          filtered
         end
       end
 
@@ -474,7 +499,9 @@ module Kward
             next
           end
           if result.interactive_command
-            run_kwsh_interactive_pty_command(shell, result)
+            pty_result = run_kwsh_interactive_pty_command(shell, result)
+            return :tab_action if pty_result&.tab_action
+
             next
           end
           if result.exit_shell

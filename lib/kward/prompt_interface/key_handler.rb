@@ -6,6 +6,73 @@ module Kward
     module KeyHandler
       private
 
+      def filter_terminal_handoff_input_locked(chunk)
+        @handoff_input_buffer << chunk.to_s.b
+        forwarded = +"".b
+        tab_action = nil
+
+        until @handoff_input_buffer.empty?
+          if @handoff_input_buffer.start_with?(TerminalKeys::CTRL_T)
+            action = handle_tab_key_binding(TerminalKeys::CTRL_T)
+            if action != false
+              remainder = @handoff_input_buffer.byteslice(TerminalKeys::CTRL_T.bytesize..).to_s
+              queue_pending_keys(remainder) unless remainder.empty?
+              @handoff_input_buffer.clear
+              tab_action = action
+              break
+            end
+            forwarded << @handoff_input_buffer.slice!(0)
+            next
+          end
+
+          if @handoff_input_buffer.start_with?("\e")
+            complete = TerminalKeys::TAB_ACTION_SEQUENCES.find { |sequence| @handoff_input_buffer.start_with?(sequence) }
+            partial = TerminalKeys::TAB_ACTION_SEQUENCES.any? { |sequence| sequence.start_with?(@handoff_input_buffer) }
+            break if partial && !complete
+
+            if complete
+              action = handle_tab_key_binding(complete)
+              if action != false
+                remainder = @handoff_input_buffer.byteslice(complete.bytesize..).to_s
+                queue_pending_keys(remainder) unless remainder.empty?
+                @handoff_input_buffer.clear
+                tab_action = action
+                break
+              end
+              forwarded << complete
+              @handoff_input_buffer = @handoff_input_buffer.byteslice(complete.bytesize..).to_s.b
+              next
+            end
+
+            if (sequence = parse_csi_u_key(@handoff_input_buffer)) && @handoff_input_buffer.start_with?(sequence[:sequence])
+              legacy_key = legacy_handoff_key(sequence)
+              unless legacy_key.nil?
+                forwarded << legacy_key
+                @handoff_input_buffer = @handoff_input_buffer.byteslice(sequence[:sequence].bytesize..).to_s.b
+                next
+              end
+            end
+          end
+
+          forwarded << @handoff_input_buffer.slice!(0)
+        end
+
+        { input: forwarded, tab_action: tab_action }
+      end
+
+      def legacy_handoff_key(sequence)
+        event = csi_u_key_event(sequence)
+        return event[:text] if event[:type] == :printable
+        return "\r" if event[:type] == :enter
+        return "\b" if event[:type] == :backspace
+        return "\t" if event[:type] == :tab
+
+        return unless event[:type] == :modified && ctrl_modifier?(event[:modifier])
+        return unless event[:code].between?(32, 126)
+
+        (event[:code] & 0x1f).chr
+      end
+
       def read_key(nonblock: false)
         pending = @pending_keys.shift unless @pending_keys.empty?
         return pending if pending

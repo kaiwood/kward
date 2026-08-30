@@ -537,7 +537,10 @@ module Kward
           end
         end
         next if handled
-        next if shell_command_input?(command_input) && handle_interactive_shell_command(command_input, agent)
+        if shell_command_input?(command_input)
+          shell_result = handle_interactive_shell_command(command_input, agent)
+          next if shell_result == true || shell_result == :tab_action
+        end
 
         flush_pending_reasoning_config(conversation: active_tab.agent.conversation) if active_tab&.agent
         flush_pending_reasoning_config(conversation: agent.conversation) unless active_tab

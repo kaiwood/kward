@@ -518,6 +518,24 @@ class TestPromptInterface < KwardTestCase
     assert_equal({ tab_action: :select, index: 2 }, prompt.send(:handle_key, "\e[51;5u"))
   end
 
+  def test_prompt_interface_filters_tab_switches_during_terminal_handoff
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "ctrl")
+    prompt.update_tabs(labels: ["1", "2", "3"], active_index: 0)
+
+    assert_equal({ input: "", tab_action: { tab_action: :select, index: 1 } }, prompt.filter_terminal_handoff_input("\e[50;5u"))
+    assert_equal({ input: "", tab_action: { tab_action: :new } }, prompt.filter_terminal_handoff_input(Kward::TerminalKeys::CTRL_T))
+    assert_equal({ input: "\x03", tab_action: nil }, prompt.filter_terminal_handoff_input("\e[99;5u"))
+    assert_empty prompt.instance_variable_get(:@pending_keys)
+  end
+
+  def test_prompt_interface_preserves_non_tab_input_around_handoff_tab_switch
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, tab_keybindings: "ctrl")
+    prompt.update_tabs(labels: ["1", "2"], active_index: 0)
+
+    assert_equal({ input: "x", tab_action: nil }, prompt.filter_terminal_handoff_input("x\e[50"))
+    assert_equal({ input: "", tab_action: { tab_action: :select, index: 1 } }, prompt.filter_terminal_handoff_input(";5u"))
+  end
+
   def test_prompt_interface_renders_attachment_badge_rows
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, attachment_badges: ->(_input) { ["[image] screenshot.png · image/png · 12 KB"] })
     prompt.send(:composer_input=, "describe screenshot.png")
