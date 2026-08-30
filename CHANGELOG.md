@@ -25,6 +25,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Replaced one-shot authentication and runtime backtraces with concise, actionable CLI errors while retaining opt-in debug backtraces through `KWARD_DEBUG=1`.
 - Fixed composer cursor movement, deletion, wrapping, truncation, and border alignment for wide and multi-codepoint Unicode graphemes.
 - Reduced composer latency for long drafts, large file and slash-command lists, and prompt histories by eliminating repeated layout work, discovering project paths outside rendering, and reusing search results.
 - Fixed tab switching during shell commands so tab shortcuts take priority without aborting the command; detached commands continue in the originating tab's background and report their output when complete.

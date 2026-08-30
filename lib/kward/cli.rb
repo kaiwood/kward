@@ -156,6 +156,16 @@ module Kward
       warn e.message
       warn "Run `kward help` for available commands."
       exit 1
+    rescue Client::AuthenticationError => e
+      raise if debug_errors?
+
+      warn authentication_error_message(e)
+      exit 1
+    rescue StandardError => e
+      raise if debug_errors?
+
+      warn runtime_error_message(e)
+      exit 1
     ensure
       ConfigFiles.skip_config = false
     end
@@ -182,6 +192,30 @@ module Kward
         Emergency fallback:
           kward --skip-config doctor
       MESSAGE
+    end
+
+    def authentication_error_message(error)
+      <<~MESSAGE.rstrip
+        Authentication required
+
+        #{error.message}
+
+        Run `kward doctor` to inspect your setup.
+      MESSAGE
+    end
+
+    def runtime_error_message(error)
+      <<~MESSAGE.rstrip
+        Kward could not complete the request.
+
+        #{error.message}
+
+        Set KWARD_DEBUG=1 to show a backtrace.
+      MESSAGE
+    end
+
+    def debug_errors?
+      ENV["KWARD_DEBUG"] == "1"
     end
 
     def dispatch

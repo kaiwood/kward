@@ -37,12 +37,12 @@ module Kward
       "lm_studio" => "http://127.0.0.1:1234/v1",
       "llama_cpp" => "http://127.0.0.1:8080/v1"
     }.freeze
-    AUTH_ERROR = "No OpenAI OAuth login found. Run `ruby lib/main.rb login`, or set OPENAI_ACCESS_TOKEN/OPENROUTER_API_KEY."
-    OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Set OPENROUTER_API_KEY or sign in with an API key."
-    OPENAI_API_AUTH_ERROR = "No OpenAI API key found. Set OPENAI_API_KEY or sign in with an API key."
-    AZURE_OPENAI_AUTH_ERROR = "No Azure OpenAI API key found. Set AZURE_OPENAI_API_KEY or sign in with an API key."
-    COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `ruby lib/main.rb login github` or set COPILOT_GITHUB_TOKEN."
-    ANTHROPIC_AUTH_ERROR = "No Anthropic OAuth login found. Run `ruby lib/main.rb login anthropic`."
+    AUTH_ERROR = "No OpenAI OAuth login found. Run `kward login`, or set OPENAI_ACCESS_TOKEN or OPENROUTER_API_KEY."
+    OPENROUTER_AUTH_ERROR = "No OpenRouter API key found. Run `kward login openrouter`, or set OPENROUTER_API_KEY."
+    OPENAI_API_AUTH_ERROR = "No OpenAI API key found. Run `kward login`, or set OPENAI_API_KEY."
+    AZURE_OPENAI_AUTH_ERROR = "No Azure OpenAI API key found. Run `kward login`, or set AZURE_OPENAI_API_KEY."
+    COPILOT_AUTH_ERROR = "No GitHub Copilot OAuth login found. Run `kward login github`, or set COPILOT_GITHUB_TOKEN."
+    ANTHROPIC_AUTH_ERROR = "No Anthropic OAuth login found. Run `kward login anthropic`."
     DEFAULT_OPENAI_MODEL = ModelInfo::DEFAULT_OPENAI_MODEL
     DEFAULT_REASONING_EFFORT = ModelInfo::DEFAULT_REASONING_EFFORT
     RETRY_DELAYS = [1, 2].freeze
@@ -60,6 +60,8 @@ module Kward
       /(?:usage|spend|credit|quota).*(?:exceeded|reached|exhausted|depleted)/i,
       /(?:exceeded|reached).*(?:usage|quota|credit|budget|balance)/i
     ].freeze
+
+    AuthenticationError = Class.new(RuntimeError)
 
     RequestError = Class.new(StandardError) do
       attr_reader :provider, :code, :body
@@ -594,20 +596,22 @@ module Kward
     end
 
     def auth_error_for(provider)
-      case provider
-      when "Azure OpenAI"
-        AZURE_OPENAI_AUTH_ERROR
-      when "OpenAI"
-        OPENAI_API_AUTH_ERROR
-      when "OpenRouter"
-        OPENROUTER_AUTH_ERROR
-      when "Copilot"
-        COPILOT_AUTH_ERROR
-      when "Anthropic"
-        ANTHROPIC_AUTH_ERROR
-      else
-        AUTH_ERROR
-      end
+      message =
+        case provider
+        when "Azure OpenAI"
+          AZURE_OPENAI_AUTH_ERROR
+        when "OpenAI"
+          OPENAI_API_AUTH_ERROR
+        when "OpenRouter"
+          OPENROUTER_AUTH_ERROR
+        when "Copilot"
+          COPILOT_AUTH_ERROR
+        when "Anthropic"
+          ANTHROPIC_AUTH_ERROR
+        else
+          AUTH_ERROR
+        end
+      AuthenticationError.new(message)
     end
 
     def with_retries(provider, model, request_bytes: nil, on_retry: nil, cancellation: nil)

@@ -815,6 +815,61 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_run_reports_authentication_errors_without_backtrace
+    client = FakeClient.new([])
+    client.define_singleton_method(:chat) do |*_arguments, **_options|
+      raise Kward::Client::AuthenticationError, Kward::Client::AUTH_ERROR
+    end
+
+    stdout, stderr = capture_io do
+      error = assert_raises(SystemExit) do
+        Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
+      end
+      assert_equal 1, error.status
+    end
+
+    assert_empty stdout
+    assert_includes stderr, "Authentication required"
+    assert_includes stderr, "Run `kward login`"
+    assert_includes stderr, "Run `kward doctor` to inspect your setup."
+    refute_includes stderr, "test/test_cli.rb"
+  end
+
+  def test_run_reports_unexpected_errors_without_backtrace
+    client = FakeClient.new([])
+    client.define_singleton_method(:chat) do |*_arguments, **_options|
+      raise "provider connection failed"
+    end
+
+    stdout, stderr = capture_io do
+      error = assert_raises(SystemExit) do
+        Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
+      end
+      assert_equal 1, error.status
+    end
+
+    assert_empty stdout
+    assert_includes stderr, "Kward could not complete the request."
+    assert_includes stderr, "provider connection failed"
+    assert_includes stderr, "Set KWARD_DEBUG=1 to show a backtrace."
+    refute_includes stderr, "test/test_cli.rb"
+  end
+
+  def test_debug_errors_reraises_unexpected_errors
+    client = FakeClient.new([])
+    client.define_singleton_method(:chat) do |*_arguments, **_options|
+      raise "provider connection failed"
+    end
+
+    error = with_env("KWARD_DEBUG" => "1") do
+      assert_raises(RuntimeError) do
+        Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: false), prompt: FakePrompt.new([]), client: client).run
+      end
+    end
+
+    assert_equal "provider connection failed", error.message
+  end
+
   def test_skip_config_doctor_ignores_broken_main_config
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

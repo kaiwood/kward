@@ -18,6 +18,14 @@ It checks that your config file is readable and valid JSON, that the config and 
 kward auth status
 ```
 
+Kward keeps normal command failures concise. To include a Ruby backtrace while diagnosing an unexpected failure, rerun the command with debug errors enabled:
+
+```bash
+KWARD_DEBUG=1 kward "Repeat the failing task"
+```
+
+Backtraces can include local paths and implementation details. Review them before sharing them publicly.
+
 ## Authentication errors and token expiration
 
 OAuth tokens expire. Kward refreshes access tokens automatically when a refresh token is available, but if the refresh token is missing or expired, requests fail with a provider-specific error:
