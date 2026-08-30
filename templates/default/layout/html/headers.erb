@@ -1,0 +1,23 @@
+<meta charset="<%= charset %>">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><%= h docs_page_title %></title>
+<meta name="description" content="<%= h docs_page_description %>">
+<meta name="theme-color" content="#070b07">
+<link rel="canonical" href="<%= h docs_canonical_url %>">
+<link rel="icon" type="image/png" href="<%= url_for('images/kward_logo.png') %>">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Kward">
+<meta property="og:title" content="<%= h docs_page_title %>">
+<meta property="og:description" content="<%= h docs_page_description %>">
+<meta property="og:url" content="<%= h docs_canonical_url %>">
+<meta property="og:image" content="https://kaiwood.github.io/kward/images/kward_logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="<%= h docs_page_title %>">
+<meta name="twitter:description" content="<%= h docs_page_description %>">
+<% stylesheets.each do |stylesheet| %>
+  <link rel="stylesheet" href="<%= mtime_url(stylesheet) %>" type="text/css">
+<% end %>
+<%= erb :script_setup %>
+<% javascripts.each do |javascript| %>
+  <script type="text/javascript" charset="utf-8" src="<%= mtime_url(javascript) %>"></script>
+<% end %>

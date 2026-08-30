@@ -1,0 +1,10 @@
+<div id="footer">
+  <% if home_page? %>
+    Kward is open source software released under the
+    <a href="https://github.com/kaiwood/kward/blob/main/LICENSE">MIT License</a>.
+  <% else %>
+    Generated with
+    <a href="https://yardoc.org" title="YARD documentation tool" target="_parent">YARD</a>
+    <%= YARD::VERSION %>.
+  <% end %>
+</div>

@@ -24,6 +24,10 @@ module KwardDocsNavigation
       end
     end
   ].freeze
+  DOCS_LINK_TITLES = (
+    [["Overview", GUIDE_OVERVIEW], ["Advanced", EXTENSION_OVERVIEW], ["API Docs", API_OVERVIEW]] +
+    (GUIDE_GROUPS + EXTENSION_GROUPS + API_GROUPS).flat_map { |_title, items| items }
+  ).to_h { |label, link| [link, label] }.freeze
   GUIDE_FILE_LINKS = {
     "doc/getting-started.md" => "file.getting-started.html",
     "doc/usage.md" => "file.usage.html",
@@ -109,6 +113,35 @@ module KwardDocsNavigation
 
   def home_page?
     options.index && readme_file?
+  end
+
+  def docs_page_title
+    return "Kward — Ruby Coding Agent for Your Terminal" if home_page?
+
+    page = DOCS_LINK_TITLES[docs_output_path] || @page_title.to_s.sub(/\AFile:\s*/, "")
+    "#{page} | Kward Docs"
+  end
+
+  def docs_page_description
+    if home_page?
+      "Kward is an extensible Ruby coding agent for inspecting code, editing files, running tests, and resuming work from your terminal."
+    else
+      "Documentation for Kward, the extensible Ruby coding agent for your terminal."
+    end
+  end
+
+  def docs_canonical_url
+    return "https://kaiwood.github.io/kward/" if home_page?
+
+    "https://kaiwood.github.io/kward/#{docs_output_path}"
+  end
+
+  def docs_output_path
+    if defined?(@file) && @file
+      GUIDE_FILE_LINKS[@file.filename.to_s] || API_FILE_LINKS[@file.filename.to_s] || current_docs_path
+    else
+      current_docs_path
+    end
   end
 
   def guide_page?

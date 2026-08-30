@@ -65,6 +65,27 @@ def verify_packaged_gem(gem_name)
   files
 end
 
+def verify_docs_branding
+  homepage = File.read("_yardoc/index.html")
+  required = [
+    "<title>Kward — Ruby Coding Agent for Your Terminal</title>",
+    '<meta name="description"',
+    '<link rel="canonical" href="https://kaiwood.github.io/kward/">',
+    '<link rel="icon" type="image/png"',
+    'href="file.getting-started.html">Get Started'
+  ]
+  missing = required.reject { |content| homepage.include?(content) }
+  abort("Generated documentation is missing branded homepage metadata: #{missing.join(", ")}") if missing.any?
+
+  getting_started = File.read("_yardoc/file.getting-started.html")
+  guide_required = [
+    "<title>Getting started | Kward Docs</title>",
+    '<link rel="canonical" href="https://kaiwood.github.io/kward/file.getting-started.html">'
+  ]
+  missing = guide_required.reject { |content| getting_started.include?(content) }
+  abort("Generated guide metadata is incorrect: #{missing.join(", ")}") if missing.any?
+end
+
 def rewrite_yard_markdown_links
   guide_names = Dir.glob("doc/*.md").map { |path| File.basename(path, ".md") }
 
@@ -183,5 +204,6 @@ namespace :docs do
     }
 
     HTMLProofer.check_directory("_yardoc", options).run
+    verify_docs_branding
   end
 end
