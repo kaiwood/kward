@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `script/benchmark_composer` for repeatable draft-layout, history-search, and file-completion performance measurements.
 - Added Vibe visual and cursor-aware `:run` support plus `:run all` for executing runnable Markdown fenced language blocks and inserting or replacing their formatted `<output>` fields.
 - Added configurable editor runners under `editor.runners`, with Node, TypeScript, Python, Shell, Lua, Julia, Elixir, Crystal, Go, and Swift buffer execution alongside Ruby.
 - Added Vibe visual-mode `Ctrl+h`/`Ctrl+j`/`Ctrl+k`/`Ctrl+l` shortcuts to outdent, move down, move up, and indent selected lines while keeping visual mode active.

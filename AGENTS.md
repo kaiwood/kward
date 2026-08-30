@@ -75,6 +75,12 @@ ruby lib/main.rb
 ruby lib/main.rb "Explain this project"
 ```
 
+Benchmark composer hot paths:
+
+```bash
+script/benchmark_composer
+```
+
 Prepare and push a release after synchronizing `main` with `origin/main`:
 
 ```bash
@@ -91,7 +97,7 @@ script/release VERSION
 - When adding configuration, document default behavior and environment variable interactions.
 - When adding tools, keep tool schemas, argument validation, execution, and tests aligned.
 - When changing prompt/skill behavior, update `doc/extensibility.md`, `doc/skills.md`, CLI/RPC/Pan exposure, compaction behavior when activated instructions are durable, and prompt-related tests as needed. Skill capture sends the complete selected persisted session branch to the active model provider, must stay personal-skill-only, and requires editable review before an explicit save.
-- Keep terminal escape ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus visible text stripping/sanitizing/wrapping, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
+- Keep terminal text ownership centralized: `TerminalSequences` owns terminal output/control sequences, `TerminalKeys` owns input key byte sequences and key parser regexes, `ANSI` owns styling plus escape-aware transcript stripping/sanitizing/wrapping, `TerminalText` owns Unicode cell widths and grapheme-aware composer layout, and `PromptInterface::KeyHandler` owns input reading, tokenization, queueing, parsing, and dispatch mechanics.
 - Vibe `:prompt <instruction>` and Modern `Ctrl+.` prompt lines run an interactive, editor-scoped agent turn. The model receives the active in-memory buffer and can use only the transactional `replace_editor_buffer` tool; commit generated content back to the editor as one undoable change and leave disk persistence to the user's normal save command. Keep this TUI-only until an equivalent editor capability exists for other frontends.
 - Editor runners execute the current in-memory buffer for scratchpads and normal editable files. Keep runner binaries configured under `editor.runners`, resolve relative binaries from the active workspace, invoke them directly without a shell, and preserve bounded capture plus cancellation. JavaScript and TypeScript use Node by default; compiler-backed languages need explicit runner mechanics before becoming runnable.
 - Inline image capability detection should prefer an active Kitty graphics probe on real TTYs, use recognized terminal hints when probing is inconclusive, retry transient detection failures, and fail closed for unknown terminals. Keep Kitty payloads protocol-valid, chunked, and response-suppressed so terminal acknowledgements do not enter the composer, and keep protocol-specific encoding in `TerminalSequences`.
