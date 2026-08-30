@@ -135,8 +135,10 @@ class TestRelease < KwardTestCase
         registry: UnpublishedRegistry.new
       )
 
-      command.run
+      stdout, stderr = capture_subprocess_io { command.run }
 
+      assert_empty stdout
+      assert_empty stderr
       assert_equal "1.2.3", Kward::Release::VersionFile.new(File.join(root, "lib/kward/version.rb")).current
       assert_includes File.read(File.join(root, "CHANGELOG.md")), "## [1.2.3] - 2026-08-21"
       assert_equal "Release v1.2.3", git!(root, "log", "-1", "--format=%s").strip

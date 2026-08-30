@@ -1033,8 +1033,10 @@ class TestCLI < KwardTestCase
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
       hide_composer_git_branch(cli)
 
-      cli.interactive_loop(agent: agent)
+      stdout, stderr = capture_subprocess_io { cli.interactive_loop(agent: agent) }
 
+      assert_includes stdout, "shell-pty-ok"
+      assert_empty stderr
       output = strip_ansi(prompt.output.join)
       assert_includes output, "$ pty printf shell-pty-ok"
       refute_includes output, "interactive PTY session"
@@ -1053,8 +1055,10 @@ class TestCLI < KwardTestCase
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
       hide_composer_git_branch(cli)
 
-      cli.interactive_loop(agent: agent)
+      stdout, stderr = capture_subprocess_io { cli.interactive_loop(agent: agent) }
 
+      assert_includes stdout, "pty-ok"
+      assert_empty stderr
       output = strip_ansi(prompt.output.join)
       assert_includes output, "$ printf pty-ok"
       assert_includes output, "pty-ok"
@@ -1375,8 +1379,10 @@ class TestCLI < KwardTestCase
       agent.define_singleton_method(:ask) { |_input, **_options| raise "model should not be called" }
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
 
-      cli.interactive_loop(agent: agent)
+      stdout, stderr = capture_subprocess_io { cli.interactive_loop(agent: agent) }
 
+      assert_includes stdout, "hello"
+      assert_empty stderr
       output = strip_ansi(prompt.output.join)
       assert_includes output, "$ echo hello"
       refute_includes output, "interactive PTY session"

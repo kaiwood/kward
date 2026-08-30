@@ -82,6 +82,10 @@ Generated entry points:
 
 The generated comments focus on these supported extension boundaries rather than trying to make every internal orchestration helper public. When a generated method lacks guide coverage, treat it as internal unless the page explicitly marks it as a public API.
 
+## Documentation checks
+
+`bundle exec rake docs:check` validates links, images, scripts, branded metadata, guide canonical URLs, and the curated plugin, tool, RPC, prompt, skill, and configuration entry points listed above. The generated site intentionally includes implementation detail for contributors, so aggregate documentation coverage across every internal constant and helper is not used as a release-quality signal.
+
 ## Public API expectations
 
 The generated reference is useful for understanding the codebase, but it does not make every class, method, or constructor a supported public API.

@@ -139,8 +139,18 @@ module Kward
 
       def run!(*command)
         @output.puts "$ #{command.shelljoin}"
-        success = system(*command, chdir: @root)
-        raise Error, "#{command.shelljoin} failed" unless success
+        raise Error, "#{command.shelljoin} failed" unless run_command(*command)
+      end
+
+      private
+
+      def run_command(*command)
+        return system(*command, chdir: @root) if @output.equal?($stdout)
+
+        stdout, stderr, status = Open3.capture3(*command, chdir: @root)
+        @output.write(stdout)
+        @output.write(stderr)
+        status.success?
       end
     end
 

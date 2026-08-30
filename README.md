@@ -2,7 +2,7 @@
   <img src="templates/default/fulldoc/html/images/kward_logo.png" width="150" alt="Kward logo">
 </p>
 
-<h1 align="center">Kward</h1>
+# Kward
 
 <p align="center"><strong>An extensible Ruby coding agent for your terminal.</strong></p>
 

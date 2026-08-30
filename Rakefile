@@ -1,8 +1,10 @@
 require "bundler/gem_tasks"
 require "fileutils"
+Warning[:experimental] = false if Warning.respond_to?(:[]=)
 require "html-proofer"
 require "open3"
 require "rdoc/task"
+require "rbconfig"
 require "rubygems/package"
 require "webrick"
 require "yard"
@@ -86,6 +88,23 @@ def verify_docs_branding
   abort("Generated guide metadata is incorrect: #{missing.join(", ")}") if missing.any?
 end
 
+def verify_public_api_docs
+  api_page = File.read("_yardoc/file.api.html")
+  required_links = [
+    "Kward.html#plugin-class_method",
+    "Kward/PluginRegistry/DSL.html",
+    "Kward/PluginRegistry/Context.html",
+    "Kward/Tools/Base.html",
+    "Kward/ToolRegistry.html",
+    "Kward/RPC/Server.html",
+    "Kward/Prompts.html",
+    "Kward/Skills/Registry.html",
+    "Kward/ConfigFiles.html"
+  ]
+  missing = required_links.reject { |link| api_page.include?(%(href="#{link}")) }
+  abort("Generated public API landing page is missing supported entry points: #{missing.join(", ")}") if missing.any?
+end
+
 def rewrite_yard_markdown_links
   guide_names = Dir.glob("doc/*.md").map { |path| File.basename(path, ".md") }
 
@@ -108,7 +127,8 @@ task default: :test
 
 desc "Run the full test suite"
 task :test do
-  ruby "-Itest", "-e", 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }'
+  success = system(RbConfig.ruby, "-Itest", "-e", 'Dir["test/**/test_*.rb"].sort.each { |file| require_relative file }')
+  abort("Test suite failed") unless success
 end
 
 RDoc::Task.new do |rdoc|
@@ -123,7 +143,8 @@ YARD::Rake::YardocTask.new do |yard|
     "--readme", "README.md",
     "--output-dir", "_yardoc",
     "--markup", "markdown",
-    "--template-path", "templates"
+    "--template-path", "templates",
+    "--no-stats"
   ]
 end
 
@@ -205,5 +226,6 @@ namespace :docs do
 
     HTMLProofer.check_directory("_yardoc", options).run
     verify_docs_branding
+    verify_public_api_docs
   end
 end

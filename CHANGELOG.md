@@ -21,6 +21,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Documentation checks now validate the curated public extension entry points without presenting aggregate internal-helper coverage as a product-quality metric.
 - The repository and documentation landing pages now use a focused coding-workflow visual, restrained project badges, and clearer product identity.
 - Updated RubyGems positioning and metadata to describe Kward's supported product surfaces and direct users to the documentation site while keeping source and issue links on GitHub.
 - Refined the documentation homepage with a concrete static message, direct getting-started navigation, branded browser and social metadata, canonical URLs, and a quieter generated-docs footer.
@@ -32,6 +33,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Kept expected Git discovery failures, PTY fixtures, and release subprocess output inside their owning tests so successful suite and CI logs remain quiet.
 - Replaced one-shot authentication and runtime backtraces with concise, actionable CLI errors while retaining opt-in debug backtraces through `KWARD_DEBUG=1`.
 - Fixed composer cursor movement, deletion, wrapping, truncation, and border alignment for wide and multi-codepoint Unicode graphemes.
 - Reduced composer latency for long drafts, large file and slash-command lists, and prompt histories by eliminating repeated layout work, discovering project paths outside rendering, and reusing search results.

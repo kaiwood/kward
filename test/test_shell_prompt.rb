@@ -125,8 +125,13 @@ class TestShellPrompt < KwardTestCase
       )
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
-      pending = cli.send(:run_shell_prompt_turn, "? prepare a search", shell, agent)
+      pending = nil
+      stdout, stderr = capture_io do
+        pending = cli.send(:run_shell_prompt_turn, "? prepare a search", shell, agent)
+      end
 
+      assert_includes stdout, "Tool> prepare_shell_command"
+      assert_empty stderr
       assert_empty pending
       assert_equal ["find . -name '*.rb'"], prompt.prefilled_inputs
       assert_includes client.seen_messages.first.last[:content], "previous-error"
@@ -250,8 +255,12 @@ class TestShellPrompt < KwardTestCase
       )
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
 
-      cli.send(:run_shell_prompt_turn, "? cd into nested", shell, agent)
+      stdout, stderr = capture_io do
+        cli.send(:run_shell_prompt_turn, "? cd into nested", shell, agent)
+      end
 
+      assert_includes stdout, "Tool> run_shell_command"
+      assert_empty stderr
       assert_equal nested, shell.cwd
       assert_empty prompt.prefilled_inputs
     ensure

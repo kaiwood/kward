@@ -15,13 +15,13 @@ module Kward
     end
 
     def git_paths(root, include_ignored: false)
-      output, status = Open3.capture2("git", "ls-files", "--cached", "--others", "--exclude-standard", chdir: root)
+      output, status = Open3.capture2e("git", "ls-files", "--cached", "--others", "--exclude-standard", chdir: root)
       return [] unless status.success?
 
       paths = output.lines.map(&:chomp).reject(&:empty?)
       return paths unless include_ignored
 
-      ignored_output, ignored_status = Open3.capture2("git", "ls-files", "--others", "--ignored", "--exclude-standard", chdir: root)
+      ignored_output, ignored_status = Open3.capture2e("git", "ls-files", "--others", "--ignored", "--exclude-standard", chdir: root)
       return paths unless ignored_status.success?
 
       paths + ignored_output.lines.map(&:chomp).reject(&:empty?)
