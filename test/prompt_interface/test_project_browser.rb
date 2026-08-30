@@ -63,6 +63,22 @@ class TestPromptInterfaceProjectBrowser < KwardTestCase
     assert_equal "lib/file199.rb", matches.last
   end
 
+  def test_prompt_interface_file_overlay_reuses_matches_for_the_active_query
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.instance_variable_set(:@file_mention_paths, ["README.md", "lib/main.rb"])
+    prompt.send(:composer_input=, "@lib")
+    prompt.send(:composer_cursor=, 4)
+
+    matches = prompt.send(:file_overlay_matches)
+
+    assert_same matches, prompt.send(:file_overlay_matches)
+
+    prompt.send(:composer_input=, "@read")
+    prompt.send(:composer_cursor=, 5)
+
+    refute_same matches, prompt.send(:file_overlay_matches)
+  end
+
   def test_prompt_interface_workspace_update_reroots_files_and_editor
     Dir.mktmpdir do |origin|
       Dir.mktmpdir do |worktree|

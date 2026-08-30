@@ -1,4 +1,5 @@
 require_relative "../text_boundary"
+require_relative "../text_matcher"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -41,6 +42,8 @@ module Kward
         @history_search_query = nil
         @history_search_draft = nil
         @history_search_index = 0
+        @history_search_matches_query = nil
+        @history_search_matches = nil
       end
 
       # Removes all pending attachments without changing text input.
@@ -175,6 +178,7 @@ module Kward
         @history = Array(values).map(&:to_s).reject { |value| value.strip.empty? }
         reset_history_navigation
         reset_history_search
+        invalidate_history_search_matches
       end
 
       # Stores a submitted input unless it is blank or duplicates the previous entry.
@@ -184,6 +188,7 @@ module Kward
         return false if @history.last == value
 
         @history << value
+        invalidate_history_search_matches
         true
       end
 
@@ -234,9 +239,13 @@ module Kward
 
       def history_search_matches
         query = @history_search_query.to_s.downcase
-        return @history.reverse if query.empty?
+        return @history_search_matches if @history_search_matches_query == query && @history_search_matches
 
-        @history.reverse.select { |value| fuzzy_history_match?(value.downcase, query) }
+        pattern = TextMatcher.subsequence_pattern(query)
+        @history_search_matches_query = query
+        @history_search_matches = @history.reverse.select do |value|
+          TextMatcher.subsequence?(value.downcase, query, pattern)
+        end
       end
 
       def selected_history_search_match
@@ -274,16 +283,9 @@ module Kward
         @history_search_index = 0
       end
 
-      def fuzzy_history_match?(value, query)
-        query.chars.all? do |char|
-          index = value.index(char)
-          if index
-            value = value[(index + 1)..].to_s
-            true
-          else
-            false
-          end
-        end
+      def invalidate_history_search_matches
+        @history_search_matches_query = nil
+        @history_search_matches = nil
       end
     end
   end

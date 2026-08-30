@@ -954,14 +954,20 @@ module Kward
 
       def project_browser_search_rows
         query = @project_browser_state[:query].downcase
-        matches = []
-        project_file_path_entries.each do |entry|
-          next unless file_mention_match?(entry[:downcase], query)
+        entries = project_file_path_entries
+        cache = @project_browser_search_cache
+        return cache[:rows] if cache && cache[:query] == query && cache[:entries].equal?(entries)
 
-          matches << { path: entry[:path], name: entry[:path], depth: 0, directory: false }
-          break if matches.length >= PROJECT_BROWSER_RESULT_LIMIT
+        pattern = TextMatcher.subsequence_pattern(query)
+        rows = []
+        entries.each do |entry|
+          next unless TextMatcher.subsequence?(entry[:downcase], query, pattern)
+
+          rows << { path: entry[:path], name: entry[:path], depth: 0, directory: false }
+          break if rows.length >= PROJECT_BROWSER_RESULT_LIMIT
         end
-        matches
+        @project_browser_search_cache = { query: query, entries: entries, rows: rows }
+        rows
       end
 
       def project_browser_tree

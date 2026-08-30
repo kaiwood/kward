@@ -1,3 +1,5 @@
+require_relative "../text_matcher"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # File-mention completion overlay behavior.
@@ -88,30 +90,20 @@ module Kward
         return [] unless token
 
         query = token[:query].downcase
+        entries = project_file_path_entries
+        cache = @file_overlay_match_cache
+        return cache[:matches] if cache && cache[:query] == query && cache[:entries].equal?(entries)
+
+        pattern = TextMatcher.subsequence_pattern(query)
         matches = []
-        project_file_path_entries.each do |entry|
-          next unless file_mention_match?(entry[:downcase], query)
+        entries.each do |entry|
+          next unless TextMatcher.subsequence?(entry[:downcase], query, pattern)
 
           matches << entry[:path]
           break if matches.length >= FILE_MENTION_RESULT_LIMIT
         end
+        @file_overlay_match_cache = { query: query, entries: entries, matches: matches }
         matches
-      end
-
-      def file_mention_match?(path, query)
-        return true if query.empty?
-        return true if path.include?(query)
-
-        query_chars = query.chars
-        query_chars.all? do |char|
-          index = path.index(char)
-          if index
-            path = path[(index + 1)..].to_s
-            true
-          else
-            false
-          end
-        end
       end
 
       def project_file_paths(include_ignored: false)

@@ -1387,6 +1387,21 @@ class TestPromptInterface < KwardTestCase
     assert_equal "run tests", prompt.send(:composer_input)
   end
 
+  def test_prompt_interface_history_search_reuses_matches_until_query_changes
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
+    prompt.send(:load_history, ["explain project", "run tests", "review diff"])
+    prompt.send(:composer_input=, "e")
+    prompt.send(:start_history_search)
+
+    matches = prompt.send(:history_search_matches)
+
+    assert_same matches, prompt.send(:history_search_matches)
+
+    prompt.send(:update_history_search_query, "r")
+
+    refute_same matches, prompt.send(:history_search_matches)
+  end
+
   def test_prompt_interface_ctrl_r_search_cancels_to_original_draft
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new)
     prompt.send(:load_history, ["explain project"])
