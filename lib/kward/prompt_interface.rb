@@ -123,7 +123,6 @@ module Kward
     CURSOR_HIDE = TerminalSequences::CURSOR_HIDE
     CURSOR_SHAPE_DEFAULT = TerminalSequences::CURSOR_SHAPE_DEFAULT
     CURSOR_SHAPE_BAR = TerminalSequences::CURSOR_SHAPE_BAR
-    ERASE_CHARACTER = TerminalSequences::ERASE_CHARACTER
     SHIFT_ENTER_SEQUENCES = TerminalKeys::SHIFT_ENTER
     EXIT_INPUT = :exit_input
     CANCEL_INPUT = :cancel_input
@@ -172,7 +171,6 @@ module Kward
       @prompt_label = "You>"
       @assistant_label = "Assistant"
       @stream_state = StreamState.new
-      @stream_caret_visible = false
       @rendered_rows = 0
       @last_composer_rows = []
       @cursor_rendered_row = 0
@@ -226,7 +224,6 @@ module Kward
       @last_height = screen_height
       @reserved_rows = 0
       @color_enabled = ANSI.enabled?(output)
-      @stream_caret_enabled = output.respond_to?(:tty?) && output.tty?
       @cursor_visible = true
       @editor_bar_cursor_active = false
       @synchronized_output_depth = 0

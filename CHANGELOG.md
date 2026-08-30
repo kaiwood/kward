@@ -23,7 +23,6 @@ All notable changes to Kward will be documented in this file.
 
 - Smoothed interactive response streaming by pacing buffered provider events and rendering safe text before incomplete inline Markdown instead of delaying whole lines.
 - Replaced the busy Braille spinner with a calmer four-frame activity pulse in the interactive composer.
-- Added a visual-only streaming caret for assistant and reasoning output on interactive terminals; it is excluded from transcript storage and redirected output.
 - Added brief success, failure, and cancellation transitions to the interactive composer when an agent turn finishes.
 - Standardized terminal accents by meaning: cyan for agent activity, green for success, amber for caution, red for failure, purple for tools, and gray for metadata.
 - Added a brief, visual-only response-arrival flourish when the first assistant output reaches the interactive composer.

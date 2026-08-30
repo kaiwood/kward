@@ -110,10 +110,6 @@ module Kward
         @last_width = width
         @last_height = height
         reset_stream_position_from_transcript_locked(width)
-        if @stream_state.block
-          move_to_transcript_cursor_locked(width: width, height: height)
-          render_stream_caret_locked
-        end
         if @asking
           move_to_screen(composer_top_row(height) + cursor_row, cursor_col + 1)
           render_cursor_visibility_locked

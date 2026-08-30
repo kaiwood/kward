@@ -9,7 +9,6 @@ module Kward
       def write_stream_block_locked(label, delta, finish: false)
         with_synchronized_output_locked do
           prepare_transcript_output_locked unless @restoring_transcript
-          clear_stream_caret_locked
           if label && @stream_state.block != label
             ensure_transcript_block_separator_locked
             write_transcript_text_locked("#{colored(transcript_marker(label), *label_styles(label))} ")
@@ -18,7 +17,6 @@ module Kward
           write_transcript_text_locked(delta) unless delta.empty?
           write_transcript_text_locked("\n") if finish && @stream_state.block && !@transcript_buffer.end_with?("\n")
           @stream_state.finish_block if finish
-          render_stream_caret_locked unless finish
           restore_composer_cursor_locked unless @restoring_transcript
         end
         flush_output_locked unless @restoring_transcript
@@ -40,23 +38,6 @@ module Kward
 
       def append_transcript_buffer(text)
         @transcript_buffer.append(text.to_s)
-      end
-
-      def render_stream_caret_locked
-        return if @restoring_transcript
-        return unless @stream_caret_enabled
-        return unless %w[Assistant Reasoning].include?(@stream_state.block)
-        return if @stream_state.pending_wrap?
-
-        print_output_locked(colored("▍", :activity))
-        @stream_caret_visible = true
-      end
-
-      def clear_stream_caret_locked
-        return unless @stream_caret_visible
-
-        print_output_locked(ERASE_CHARACTER)
-        @stream_caret_visible = false
       end
 
       def ensure_transcript_block_separator_locked

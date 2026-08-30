@@ -21,7 +21,6 @@ module Kward
     SGR_RESET = "\e[0m".freeze
     SGR_INVERSE = "\e[7m".freeze
     SGR_INVERSE_OFF = "\e[27m".freeze
-    ERASE_CHARACTER = "\e[X".freeze
 
     module_function
 
