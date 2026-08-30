@@ -97,6 +97,7 @@ class TestRPCTranscriptNormalizer < KwardTestCase
 
     assert_equal [
       { type: "thinking", thinking: "Checked context." },
+      { type: "thinking", thinking: "Need inspect file first." },
       { type: "text", text: "Done." },
       { type: "toolCall", id: "call_read_file", name: "read", arguments: { path: "README.md" } }
     ], messages.first[:content]

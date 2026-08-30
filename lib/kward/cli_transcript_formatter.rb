@@ -15,10 +15,17 @@ module Kward
 
     def reasoning_blocks(message)
       response_blocks = response_items(message).flat_map do |item|
-        next [] unless MessageAccess.value(item, :type) == "reasoning"
+        case MessageAccess.value(item, :type)
+        when "reasoning"
+          summary = response_item_text_parts(MessageAccess.value(item, :summary))
+          summary.empty? ? response_item_text_parts(MessageAccess.value(item, :content)) : summary
+        when "message"
+          next [] unless MessageAccess.value(item, :phase).to_s == "commentary"
 
-        summary = response_item_text_parts(MessageAccess.value(item, :summary))
-        summary.empty? ? response_item_text_parts(MessageAccess.value(item, :content)) : summary
+          response_item_text_parts(MessageAccess.value(item, :content))
+        else
+          []
+        end
       end
       return response_blocks unless response_blocks.empty?
 

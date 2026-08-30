@@ -173,10 +173,14 @@ module Kward
           when "reasoning"
             reasoning_item_blocks(item).map { |thinking| { type: "thinking", thinking: thinking } }
           when "message"
-            next [] if ToolCall.value(item, :phase).to_s == "commentary"
-
             text = response_message_item_text(item)
-            text.empty? ? [] : [{ type: "text", text: text }]
+            next [] if text.empty?
+
+            if ToolCall.value(item, :phase).to_s == "commentary"
+              [{ type: "thinking", thinking: text }]
+            else
+              [{ type: "text", text: text }]
+            end
           else
             []
           end

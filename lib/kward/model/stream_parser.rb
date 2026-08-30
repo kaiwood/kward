@@ -347,7 +347,7 @@ module Kward
       when "response.content_part.added"
         codex_content_part_added(state, event["part"])
       when "response.output_text.delta", "response.refusal.delta"
-        codex_output_text_delta(state, event["delta"], on_assistant_delta: on_assistant_delta)
+        codex_output_text_delta(state, event["delta"], on_reasoning_delta: on_reasoning_delta, on_assistant_delta: on_assistant_delta)
       when "response.reasoning_summary_part.added"
         codex_reasoning_summary_part_added(state, event["part"])
       when "response.reasoning_summary_text.delta"
@@ -417,7 +417,7 @@ module Kward
       state[:current_text_content_part] = item["content"].last
     end
 
-    def codex_output_text_delta(state, delta, on_assistant_delta: nil)
+    def codex_output_text_delta(state, delta, on_reasoning_delta: nil, on_assistant_delta: nil)
       text = delta.to_s
       return if text.empty?
 
@@ -431,6 +431,9 @@ module Kward
         part[text_key] = part[text_key].to_s + text
         if codex_streamable_message_item?(item)
           on_assistant_delta&.call(text)
+          state[:emitted_message_keys] << codex_item_key(item)
+        elsif codex_commentary_message_item?(item)
+          on_reasoning_delta&.call(text)
           state[:emitted_message_keys] << codex_item_key(item)
         end
       end
@@ -647,10 +650,19 @@ module Kward
       case item["type"]
       when "message"
         text = text_from_codex_items([item])
-        return if text.empty? || !codex_streamable_message_item?(item)
+        return if text.empty?
+
+        key = codex_item_key(item)
+        if codex_commentary_message_item?(item)
+          unless state[:emitted_message_keys].include?(key)
+            on_reasoning_delta&.call(text)
+            state[:emitted_message_keys] << key
+          end
+          return
+        end
+        return unless codex_streamable_message_item?(item)
 
         state[:content] << text
-        key = codex_item_key(item)
         unless state[:emitted_message_keys].include?(key)
           on_assistant_delta&.call(text)
           state[:emitted_message_keys] << key
@@ -772,6 +784,10 @@ module Kward
     def codex_streamable_message_item?(item)
       phase = codex_message_phase(item)
       phase.empty? || phase == "final_answer"
+    end
+
+    def codex_commentary_message_item?(item)
+      codex_message_phase(item) == "commentary"
     end
 
     def codex_message_phase(item)

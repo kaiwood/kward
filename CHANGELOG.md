@@ -43,6 +43,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Restored Codex commentary as visible reasoning output during streaming and session replay instead of showing only the provider's short reasoning-summary headline.
 - Kept expected Git discovery failures, PTY fixtures, and release subprocess output inside their owning tests so successful suite and CI logs remain quiet.
 - Replaced one-shot authentication and runtime backtraces with concise, actionable CLI errors while retaining opt-in debug backtraces through `KWARD_DEBUG=1`.
 - Fixed composer cursor movement, deletion, wrapping, truncation, and border alignment for wide and multi-codepoint Unicode graphemes.

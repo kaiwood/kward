@@ -3119,7 +3119,7 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_resume_renders_response_item_reasoning_and_hides_commentary
+  def test_resume_renders_response_item_reasoning_and_commentary
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       saved = store.create
@@ -3144,7 +3144,7 @@ class TestCLI < KwardTestCase
 
       output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "Reasoning> Need context."
-      refute_includes output, "Need inspect file first."
+      assert_includes output, "Reasoning> Need inspect file first."
       assert_includes output, "Tool> read_file: README.md\n\n1 lines, 16 bytes"
     end
   end
