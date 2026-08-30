@@ -913,7 +913,7 @@ module Kward
           label = tab.label.to_s.empty? ? default_tab_label(index) : tab.label.to_s
           binding = worktree_binding_for(tab)
           label = "#{label} · #{binding.branch}" if binding&.active?
-          { name: label, color: tab_label_color(tab), marker: tab_attention_marker(tab, index) }
+          { name: label, color: tab_label_color(tab) }
         end
       end
 
@@ -923,16 +923,6 @@ module Kward
         return :failure if %w[failed cancelled].include?(tab.status.to_s) || tab.attention == :failure
         return :success if tab.attention == :success
         return :activity if tab.unread
-
-        nil
-      end
-
-      def tab_attention_marker(tab, index)
-        return nil if index == @active_tab_index
-        return "!" if %w[failed cancelled].include?(tab.status.to_s) || tab.attention == :failure
-        return "?" if tab.status.to_s == "waiting_for_question"
-        return "•" if tab.running? || tab.local_busy? || tab.attention == :output
-        return "✓" if tab.attention == :success
 
         nil
       end

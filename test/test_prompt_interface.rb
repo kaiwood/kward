@@ -320,11 +320,11 @@ class TestPromptInterface < KwardTestCase
     refute_includes rendered_rows.join("\n"), "[2]"
   end
 
-  def test_prompt_interface_renders_tab_attention_markers
+  def test_prompt_interface_omits_tab_markers_without_discarding_colors
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(
       labels: [
-        { name: "Main", marker: nil },
+        { name: "Main" },
         { name: "Work", color: :activity, marker: "•" },
         { name: "Tests", color: :success, marker: "✓" }
       ],
@@ -334,7 +334,9 @@ class TestPromptInterface < KwardTestCase
     rows, = prompt.send(:composer_layout, 80)
     tab_row = strip_ansi(rows.last(2).first)
 
-    assert_match(/1 Main.*2 Work •.*3 Tests ✓/, tab_row)
+    assert_match(/1 Main.*2 Work.*3 Tests/, tab_row)
+    refute_match(/[•✓]/, tab_row)
+    assert_equal({ name: "Work", color: :activity }, prompt.send(:normalize_tab_label, name: "Work", color: :activity, marker: "•"))
   end
 
   def test_prompt_interface_does_not_render_unchanged_tabs

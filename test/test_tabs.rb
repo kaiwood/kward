@@ -44,10 +44,6 @@ class TestTabs < KwardTestCase
       @tabs_updates.last[:labels].map { |label| label.is_a?(Hash) ? label[:color] : nil }
     end
 
-    def tab_update_markers
-      @tabs_updates.last[:labels].map { |label| label.is_a?(Hash) ? label[:marker] : nil }
-    end
-
     def restore_transcript
       yield
     end
@@ -1346,7 +1342,8 @@ class TestTabs < KwardTestCase
       end
       assert_includes first_tab.transient_shell_entries.join, "command output"
       assert_equal :success, first_tab.attention
-      assert_equal "✓", prompt.tab_update_markers.first
+      assert_equal :success, prompt.tab_update_colors.first
+      refute prompt.tabs_updates.last[:labels].first.key?(:marker)
     ensure
       cli&.send(:stop_tabs)
     end
@@ -1425,7 +1422,7 @@ class TestTabs < KwardTestCase
     end
   end
 
-  def test_background_tab_failure_uses_attention_marker
+  def test_background_tab_failure_uses_attention_color_without_changing_label
     cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: TabPrompt.new, client: FakeClient.new([]))
     failed = Kward::CLI::Tabs::TabRuntime.new(label: "Build", status: "failed", unread: false, attention: :failure, local_busy_activity: nil)
     active = Kward::CLI::Tabs::TabRuntime.new(label: "Main", status: "ready", unread: false, attention: nil, local_busy_activity: nil)
@@ -1434,8 +1431,9 @@ class TestTabs < KwardTestCase
 
     label = cli.send(:tab_labels).first
 
-    assert_equal "!", label[:marker]
+    assert_equal "Build", label[:name]
     assert_equal :failure, label[:color]
+    refute label.key?(:marker)
   end
 
   def test_tab_label_colors_reflect_runtime_state
@@ -1452,12 +1450,12 @@ class TestTabs < KwardTestCase
       cli.send(:submit_tab_input, first_tab, "first")
       client.started.pop
       assert_equal :caution, prompt.tab_update_colors.first
-      assert_equal "•", prompt.tab_update_markers.first
+      assert_equal "Main", prompt.tab_update_names.first
 
       client.release << true
       first_tab.thread.join(1)
       wait_until { prompt.tab_update_colors.first == :activity }
-      assert_equal "•", prompt.tab_update_markers.first
+      assert_equal "Main", prompt.tab_update_names.first
 
       cli.send(:handle_tab_action, { tab_action: :previous }, store)
       assert_nil prompt.tab_update_colors.first
@@ -1485,7 +1483,7 @@ class TestTabs < KwardTestCase
       assert_equal second_tab, cli.send(:active_tab)
       refute prompt.asked_question?
       assert_equal :success, prompt.tab_update_colors.first
-      assert_equal "?", prompt.tab_update_markers.first
+      assert_equal "Main", prompt.tab_update_names.first
 
       switch_thread = Thread.new { cli.send(:handle_tab_action, { tab_action: :previous }, store) }
       wait_until { prompt.asked_question? }
