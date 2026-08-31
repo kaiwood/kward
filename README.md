@@ -25,7 +25,7 @@ Kward treats that work as an ongoing workspace rather than a disposable conversa
 Start with a normal coding conversation. If your workflow grows, you can add memory, reusable prompts and skills, local plugins, lifecycle hooks, MCP servers, transports, or a custom RPC client.
 
 <p align="center">
-  <img src="templates/default/fulldoc/html/images/kward_workflow.svg" width="1000" alt="Kward completing a focused coding change and test run">
+  <img src="templates/default/fulldoc/html/images/kward_screen_1.png" width="1000" alt="Kward terminal interface screenshot">
 </p>
 
 ## Install
