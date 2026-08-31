@@ -1381,6 +1381,101 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_detached_kwsh_output_is_restored_and_streams_when_tab_is_active
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      prompt.define_singleton_method(:write_transcript_delta) { |delta| @output << delta }
+      prompt.define_singleton_method(:record_transient_terminal_output) do |text, render: true|
+        @output << text if render
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+      first_tab = cli.send(:active_tab)
+      started = Queue.new
+      release = Queue.new
+      late_output = Queue.new
+      finish = Queue.new
+      shell = Object.new
+      shell.define_singleton_method(:run) do |_input, cancellation:, &output|
+        output.call("early output\\n")
+        started << true
+        release.pop
+        output.call("late output\\n")
+        late_output << true
+        finish.pop
+        Kward::Kwsh::Result.new(output: "early output\\nlate output\\n", exit_status: 0, streamed: true)
+      end
+
+      command = Thread.new { cli.send(:run_streaming_kwsh_command, shell, "long") }
+      started.pop
+      wait_until { prompt.output.join.include?("early output") }
+      prompt.queue_poll({ tab_action: :next })
+      command.join(1)
+      cli.send(:handle_tab_action, cli.instance_variable_get(:@pending_inputs).shift, store)
+      prompt.output.clear
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+
+      assert_includes prompt.output.join, "early output"
+      assert first_tab.background_run
+
+      release << true
+      late_output.pop
+      cli.send(:service_background_tab_runs)
+      assert_includes prompt.output.join, "late output"
+      assert first_tab.background_run
+
+      finish << true
+      wait_until(timeout: 1) do
+        cli.send(:service_background_tab_runs)
+        !first_tab.background_run
+      end
+      assert_equal 1, prompt.output.join.scan("early output").length
+      assert_equal 1, prompt.output.join.scan("late output").length
+    ensure
+      cli&.send(:stop_tabs)
+    end
+  end
+
+  def test_detached_pty_output_keeps_bytes_emitted_before_detach
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      prompt.define_singleton_method(:with_inline_terminal_handoff) do |**_options, &block|
+        block.call(StringIO.new, StringIO.new, -> {})
+      end
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      first_tab = cli.send(:active_tab)
+      shell = Object.new
+      shell.define_singleton_method(:run_interactive) do |_command, input:, sink:, tab_action_handler:, on_detach:|
+        sink.write("early output\\n")
+        detached_sink = on_detach.call
+        detached_sink.write("late output\\n")
+        background = Kward::DetachedRun.new(sink: detached_sink) do
+          Kward::InteractivePtyRunner::Result.new(exit_status: 0, input_forwarded: false)
+        end
+        Kward::InteractivePtyRunner::Result.new(
+          exit_status: 0,
+          input_forwarded: false,
+          tab_action: { tab_action: :next },
+          background: background
+        )
+      end
+
+      cli.send(:run_user_interactive_pty_command, "long", shell: shell, env: {}, cwd: Dir.pwd)
+      cli.send(:service_background_tab_runs)
+
+      entries = first_tab.transient_shell_entries.join
+      assert_equal 1, entries.scan("early output").length
+      assert_equal 1, entries.scan("late output").length
+    ensure
+      cli&.send(:stop_tabs)
+    end
+  end
+
   def test_busy_local_command_completion_is_rendered_in_originating_tab
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)

@@ -635,10 +635,15 @@ module Kward
         index ? index + 1 : active_tab_number
       end
 
-      def register_background_tab_run(tab, run, &completion)
+      def register_background_tab_run(tab, run, output_kind: nil, &completion)
         return unless tab && run
 
-        tab.background_run = { run: run, completion: completion }
+        tab.background_run = {
+          run: run,
+          completion: completion,
+          output_kind: output_kind,
+          rendered_output: +""
+        }
         tab.local_busy_activity = "running"
         tab.attention = nil
         update_prompt_tabs
@@ -649,11 +654,17 @@ module Kward
 
         @tabs.each do |tab|
           state = tab.background_run
-          next unless state&.fetch(:run)&.complete?
+          next unless state
 
-          result = state[:run].result
+          complete = state[:run].complete?
+          result = state[:run].result if complete
+          if state[:output_kind] && respond_to?(:flush_background_tab_output, true)
+            flush_background_tab_output(tab, state, result: result)
+          end
+          next unless complete
+
           tab.background_run = nil
-          state[:completion]&.call(state[:run].sink, result) if result.is_a?(Struct)
+          state[:completion]&.call(state[:run].sink, result, state) if result.is_a?(Struct)
           finish_local_busy_command_for_tab(tab)
           if tab != active_tab
             tab.unread = true

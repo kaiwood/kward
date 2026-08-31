@@ -4,17 +4,22 @@ require "thread"
 module Kward
   # Retains output while a detached PTY command runs without terminal ownership.
   class BufferedPtyOutputSink
-    attr_reader :captured_output
-
-    def initialize(max_capture_bytes:)
+    def initialize(max_capture_bytes:, initial_output: nil, initial_truncated: false)
       @max_capture_bytes = max_capture_bytes
       @captured_output = +"".b
-      @truncated = false
+      @truncated = initial_truncated
       @mutex = Mutex.new
+      write(initial_output) unless initial_output.to_s.empty?
+    end
+
+    def captured_output
+      @mutex.synchronize { @captured_output.dup }
     end
 
     def write(chunk)
       value = chunk.to_s.b
+      return if value.empty?
+
       @mutex.synchronize do
         remaining = @max_capture_bytes - @captured_output.bytesize
         if value.bytesize > remaining
