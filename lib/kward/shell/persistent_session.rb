@@ -5,8 +5,8 @@ require "shellwords"
 require_relative "../ansi"
 require_relative "kwsh"
 require_relative "kwshrc"
-require_relative "../local_pty_command_runner"
-require_relative "../detached_run"
+require_relative "../pty/local_pty_runner"
+require_relative "../pty/detached_run"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

@@ -1,8 +1,8 @@
 require "shellwords"
 require_relative "../ansi"
-require_relative "../local_command_runner"
+require_relative "../pty/local_command_runner"
 begin
-  require_relative "local_pty_command_runner"
+  require_relative "../pty/local_pty_runner"
 rescue LoadError
   nil
 end

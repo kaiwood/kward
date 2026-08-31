@@ -1,5 +1,5 @@
 require "pathname"
-require_relative "local_command_runner"
+require_relative "pty/local_command_runner"
 require_relative "sandbox"
 require_relative "sessions/diff"
 
