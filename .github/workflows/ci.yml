@@ -37,7 +37,7 @@ jobs:
           bwrap --ro-bind / / --unshare-net true
 
       - name: Check syntax
-        run: find lib test -name '*.rb' -print0 | xargs -0 ruby -c
+        run: ruby -e 'Dir["lib/**/*.rb", "test/**/*.rb"].each { |file| RubyVM::InstructionSequence.compile_file(file) }'
 
       - name: Check runtime warnings
         run: bundle exec ruby -w -Ilib -e 'require "kward"'
