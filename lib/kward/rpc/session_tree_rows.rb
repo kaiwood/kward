@@ -1,7 +1,7 @@
 require_relative "../message_access"
 require_relative "../message_text"
-require_relative "../session_tree_nodes"
-require_relative "../session_tree_tool_display"
+require_relative "../sessions/tree_nodes"
+require_relative "../sessions/tree_tool_display"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

@@ -13,13 +13,13 @@ require_relative "../model/retry_message"
 require_relative "../plugin_registry"
 require_relative "../prompts/commands"
 require_relative "../rpc/transcript_normalizer"
-require_relative "../session_store"
+require_relative "../sessions/store"
 require_relative "../skills/capture"
-require_relative "../session_trash"
+require_relative "../sessions/trash"
 require_relative "../tools/tool_call"
 require_relative "../tools/registry"
 require_relative "../version"
-require_relative "../workspace_factory"
+require_relative "../workspace/factory"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

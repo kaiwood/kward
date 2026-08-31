@@ -1,5 +1,5 @@
 require "pathname"
-require_relative "../workspace"
+require_relative "../workspace/workspace"
 require_relative "base"
 
 # Namespace for the Kward CLI agent runtime.

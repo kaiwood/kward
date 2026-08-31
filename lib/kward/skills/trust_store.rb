@@ -1,7 +1,7 @@
 require "digest"
 require "json"
 require "pathname"
-require_relative "../path_guard"
+require_relative "../workspace/path_guard"
 require_relative "../private_file"
 
 # Namespace for Agent Skills discovery and trust management.

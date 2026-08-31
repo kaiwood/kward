@@ -29,7 +29,7 @@ require_relative "../mcp/server_config"
 require_relative "../permissions/policy"
 require_relative "../telemetry/logger"
 require_relative "../tool_output_compactor"
-require_relative "../workspace"
+require_relative "../workspace/workspace"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

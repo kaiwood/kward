@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/workspace_factory"
+require_relative "../lib/kward/workspace/factory"
 
 class TestWorkspaceFactory < KwardTestCase
   def test_strict_worktree_workspace_keeps_file_guardrails_enabled

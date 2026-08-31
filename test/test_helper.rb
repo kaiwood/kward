@@ -8,14 +8,14 @@ at_exit { FileUtils.remove_entry(KWARD_TEST_HOME) if Dir.exist?(KWARD_TEST_HOME)
 
 require "minitest/autorun"
 require "stringio"
-require_relative "../lib/kward/ansi"
+require_relative "../lib/kward/terminal/ansi"
 require_relative "../lib/kward/model/client"
 require_relative "../lib/kward/conversation"
 require_relative "../lib/kward/cli"
 require_relative "../lib/kward/plugin_registry"
 require_relative "../lib/kward/prompt_interface"
 require_relative "../lib/kward/tools/registry"
-require_relative "../lib/kward/workspace"
+require_relative "../lib/kward/workspace/workspace"
 
 class KwardTestCase < Minitest::Test
   def ask_prompt_with_input(keys)

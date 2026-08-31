@@ -1,6 +1,6 @@
 require "pty"
 require_relative "test_helper"
-require_relative "../lib/kward/interactive_pty_runner"
+require_relative "../lib/kward/pty/interactive_runner"
 
 class TestInteractivePtyRunner < KwardTestCase
   class RecordingSink

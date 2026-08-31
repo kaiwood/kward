@@ -1,5 +1,5 @@
 require_relative "../tools/tool_call"
-require_relative "../workspace"
+require_relative "../workspace/workspace"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

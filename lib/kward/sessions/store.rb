@@ -11,7 +11,7 @@ require_relative "../private_file"
 require_relative "../rpc/tool_event_normalizer"
 require_relative "catalog"
 require_relative "../tools/tool_call"
-require_relative "../workspace"
+require_relative "../workspace/workspace"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

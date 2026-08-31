@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/session_trash"
+require_relative "../lib/kward/sessions/trash"
 
 class TestSessionTrash < KwardTestCase
   def test_delete_uses_available_trash_command

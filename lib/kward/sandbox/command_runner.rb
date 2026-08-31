@@ -1,4 +1,4 @@
-require_relative "../local_command_runner"
+require_relative "../pty/local_command_runner"
 
 # Namespace for operating-system command sandboxing.
 module Kward

@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/adaptive_pty_output_sink"
+require_relative "../lib/kward/pty/adaptive_output_sink"
 
 class TestAdaptivePtyOutputSink < KwardTestCase
   class EventOutput
