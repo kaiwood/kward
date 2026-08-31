@@ -13,6 +13,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - Make the smallest correct change for the request.
 - Inspect relevant files before editing, and preserve existing style and naming.
 - Prefer straightforward Ruby from the standard library unless an existing dependency is already used.
+- Internal requires should target canonical implementations under domain folders; root-level compatibility require files are only for legacy external paths.
 - Keep user-facing behavior consistent with existing docs and tests.
 - Do not introduce broad rewrites, formatting-only churn, or unrelated cleanup.
 - Do not split large orchestration files such as `RPC::SessionManager` or `Model::Client` just because they are large; extract only when a behavior change exposes a clear, tested ownership boundary.
@@ -22,14 +23,14 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 
 - `lib/main.rb` - executable entrypoint.
 - `lib/kward/cli.rb` - command-line flow and interactive chat orchestration.
-- `lib/kward/session_store.rb` - authoritative JSONL session persistence and conversation reconstruction.
-- `lib/kward/session_catalog.rb` - rebuildable, fingerprint-validated session-list summary cache; JSONL sessions remain authoritative.
+- `lib/kward/sessions/store.rb` - authoritative JSONL session persistence and conversation reconstruction.
+- `lib/kward/sessions/catalog.rb` - rebuildable, fingerprint-validated session-list summary cache; JSONL sessions remain authoritative.
 - `lib/kward/tab_driver.rb` - session and plugin tab-driver boundary used by interactive tabs.
 - `lib/kward/git_worktree_manager.rb` - Git worktree discovery, creation, validation, and removal mechanics.
 - `lib/kward/cli/worktrees.rb` - interactive session-tab worktree binding and workspace re-rooting orchestration.
-- `lib/kward/kwsh.rb`, `lib/kward/kwshrc.rb`, and `lib/kward/persistent_shell_session.rb` - embedded-shell command routing, declarative rc parsing, state, protocol, and PTY lifecycle.
-- `lib/kward/detached_run.rb` - shared lifecycle for commands detached from terminal ownership while remaining owned by a tab.
-- `lib/kward/shell_prompt.rb` and `lib/kward/shell_prompt_session.rb` - transient shell-agent prompt context and scoped actions.
+- `lib/kward/shell/kwsh.rb`, `lib/kward/shell/kwshrc.rb`, and `lib/kward/shell/persistent_session.rb` - embedded-shell command routing, declarative rc parsing, state, protocol, and PTY lifecycle.
+- `lib/kward/pty/detached_run.rb` - shared lifecycle for commands detached from terminal ownership while remaining owned by a tab.
+- `lib/kward/shell/prompt.rb` and `lib/kward/shell/prompt_session.rb` - transient shell-agent prompt context and scoped actions.
 - `lib/kward/agent.rb` - agent loop and tool execution flow.
 - `lib/kward/model/` - model provider HTTP client and stream parsing behavior.
 - `lib/kward/auth/` - OAuth providers and auth credential file helpers.
