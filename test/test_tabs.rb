@@ -1400,13 +1400,13 @@ class TestTabs < KwardTestCase
       finish = Queue.new
       shell = Object.new
       shell.define_singleton_method(:run) do |_input, cancellation:, &output|
-        output.call("early output\\n")
+        output.call("\e[2Kearly output\r")
         started << true
         release.pop
-        output.call("late output\\n")
+        output.call("\nlate output\n")
         late_output << true
         finish.pop
-        Kward::Kwsh::Result.new(output: "early output\\nlate output\\n", exit_status: 0, streamed: true)
+        Kward::Kwsh::Result.new(output: "\e[2Kearly output\r\nlate output\n", exit_status: 0, streamed: true)
       end
 
       command = Thread.new { cli.send(:run_streaming_kwsh_command, shell, "long") }

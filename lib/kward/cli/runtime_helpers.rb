@@ -446,7 +446,6 @@ module Kward
         sink = state[:run].sink
         output = sink&.captured_output.to_s
         return if output.empty?
-        return if result.nil? && output.match?(PtyTranscriptNormalizer::HORIZONTAL_REDRAW_PATTERN)
 
         transcript_output = if state[:output_kind] == :streamed
           background_stream_transcript_output(sink)
@@ -470,7 +469,7 @@ module Kward
         return if sink&.truncated?
 
         text = ANSI.normalize_transcript_encoding(sink&.captured_output.to_s).gsub("\r\n", "\n")
-        sanitized = ANSI.sanitize_transcript(text)
+        sanitized = PtyTranscriptNormalizer.normalize(text)
         return if sanitized.empty?
         return if ANSI.strip_control_sequences(sanitized).match?(UNSAFE_TRANSCRIPT_CONTROL_PATTERN)
 
