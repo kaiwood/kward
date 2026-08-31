@@ -562,6 +562,7 @@ module Kward
           end
           report_tab_runtime_error(tab) if %w[failed cancelled].include?(tab.status.to_s)
           render_tab_transient_shell_entries(tab)
+          render_background_tab_output(tab)
         end
         restore_tab_composer_snapshot(tab.snapshot) if restore_composer
         render_pending_tab_runtime_outputs(tab)
@@ -587,6 +588,17 @@ module Kward
           elsif @prompt.respond_to?(:write_transcript)
             @prompt.write_transcript(entry)
           end
+        end
+      end
+
+      def render_background_tab_output(tab)
+        output = tab.background_run&.fetch(:rendered_output, "").to_s
+        return if output.empty?
+
+        if @prompt.respond_to?(:say)
+          @prompt.say(output)
+        elsif @prompt.respond_to?(:write_transcript)
+          @prompt.write_transcript(output)
         end
       end
 
@@ -663,8 +675,10 @@ module Kward
           end
           next unless complete
 
-          tab.background_run = nil
           state[:completion]&.call(state[:run].sink, result, state) if result.is_a?(Struct)
+          rendered_output = state[:rendered_output].to_s
+          tab.append_transient_shell_entry(rendered_output) unless rendered_output.empty?
+          tab.background_run = nil
           finish_local_busy_command_for_tab(tab)
           if tab != active_tab
             tab.unread = true

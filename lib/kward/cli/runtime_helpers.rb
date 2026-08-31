@@ -432,7 +432,7 @@ module Kward
         end
         if background_state
           background_state[:rendered_output] = transcript_output
-          record_tab_transient_shell_output(delta, tab: tab) unless delta.empty?
+          render_background_tab_delta(tab, delta) unless delta.empty?
         else
           record_tab_transient_shell_output(transcript_output, render: false, tab: tab)
           if @prompt.respond_to?(:record_transient_terminal_output) && (!tab || tab == active_tab)
@@ -456,13 +456,26 @@ module Kward
         return unless transcript_output
 
         rendered_output = state[:rendered_output].to_s
-        return unless transcript_output.start_with?(rendered_output)
+        if transcript_output.start_with?(rendered_output)
+          delta = transcript_output[rendered_output.length..].to_s
+          return if delta.empty?
 
-        delta = transcript_output[rendered_output.length..].to_s
-        return if delta.empty?
+          state[:rendered_output] = transcript_output
+          render_background_tab_delta(tab, delta)
+        else
+          state[:rendered_output] = transcript_output
+          render_tab(tab, restore_composer: false) if tab == active_tab
+        end
+      end
 
-        state[:rendered_output] = transcript_output
-        record_tab_transient_shell_output(delta, tab: tab)
+      def render_background_tab_delta(tab, delta)
+        return unless tab == active_tab
+
+        if @prompt.respond_to?(:record_transient_terminal_output)
+          @prompt.record_transient_terminal_output(delta)
+        elsif @prompt.respond_to?(:say)
+          @prompt.say(delta)
+        end
       end
 
       def background_stream_transcript_output(sink)

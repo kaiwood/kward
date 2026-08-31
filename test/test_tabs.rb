@@ -1403,10 +1403,10 @@ class TestTabs < KwardTestCase
         output.call("\e[2Kearly output\r")
         started << true
         release.pop
-        output.call("\nlate output\n")
+        output.call("\e[2Klate output\r")
         late_output << true
         finish.pop
-        Kward::Kwsh::Result.new(output: "\e[2Kearly output\r\nlate output\n", exit_status: 0, streamed: true)
+        Kward::Kwsh::Result.new(output: "\e[2Kearly output\r\e[2Klate output\r", exit_status: 0, streamed: true)
       end
 
       command = Thread.new { cli.send(:run_streaming_kwsh_command, shell, "long") }
@@ -1466,7 +1466,10 @@ class TestTabs < KwardTestCase
       end
 
       cli.send(:run_user_interactive_pty_command, "long", shell: shell, env: {}, cwd: Dir.pwd)
-      cli.send(:service_background_tab_runs)
+      wait_until(timeout: 1) do
+        cli.send(:service_background_tab_runs)
+        !first_tab.background_run
+      end
 
       entries = first_tab.transient_shell_entries.join
       assert_equal 1, entries.scan("early output").length
