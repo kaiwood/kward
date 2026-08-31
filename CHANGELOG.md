@@ -36,6 +36,7 @@ All notable changes to Kward will be documented in this file.
 - Added unobtrusive elapsed-time feedback after two seconds, final turn duration in completion transitions, and provider-reported tool durations in result summaries.
 - Added stable `❯` user and `✦` assistant anchors to make transcript turn boundaries easier to scan without changing stored conversation content.
 - Added persistent background-tab status colors for running work, unread output, successful detached commands, questions, and failures without changing tab label widths.
+- Restored green for ready tabs with unread output.
 - Documentation checks now validate the curated public extension entry points without presenting aggregate internal-helper coverage as a product-quality metric.
 - The repository and documentation landing pages now use a focused coding-workflow visual, restrained project badges, and clearer product identity.
 - Updated RubyGems positioning and metadata to describe Kward's supported product surfaces and direct users to the documentation site while keeping source and issue links on GitHub.

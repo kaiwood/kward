@@ -1523,7 +1523,7 @@ class TestTabs < KwardTestCase
 
       client.release << true
       first_tab.thread.join(1)
-      wait_until { prompt.tab_update_colors.first == :activity }
+      wait_until { prompt.tab_update_colors.first == :success }
       assert_equal "Main", prompt.tab_update_names.first
 
       cli.send(:handle_tab_action, { tab_action: :previous }, store)

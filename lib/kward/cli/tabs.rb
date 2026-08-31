@@ -943,7 +943,7 @@ module Kward
         return :caution if tab.running? || tab.local_busy?
         return :failure if %w[failed cancelled].include?(tab.status.to_s) || tab.attention == :failure
         return :success if tab.attention == :success
-        return :activity if tab.unread
+        return :success if tab.unread
 
         nil
       end
