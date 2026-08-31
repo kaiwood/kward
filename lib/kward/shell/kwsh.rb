@@ -1,5 +1,5 @@
 require "shellwords"
-require_relative "../ansi"
+require_relative "../terminal/ansi"
 require_relative "../pty/local_command_runner"
 begin
   require_relative "../pty/local_pty_runner"

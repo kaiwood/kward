@@ -4,7 +4,7 @@ require "open3"
 require "shellwords"
 require "tmpdir"
 require "uri"
-require_relative "terminal_image_support"
+require_relative "terminal/image_support"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

@@ -1,6 +1,6 @@
 require_relative "../text_boundary"
 require_relative "../text_matcher"
-require_relative "../terminal_text"
+require_relative "../terminal/text"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

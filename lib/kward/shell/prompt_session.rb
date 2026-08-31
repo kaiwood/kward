@@ -1,4 +1,4 @@
-require_relative "../ansi"
+require_relative "../terminal/ansi"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

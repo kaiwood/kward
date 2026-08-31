@@ -1,4 +1,4 @@
-require_relative "../terminal_sequences"
+require_relative "../terminal/sequences"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
