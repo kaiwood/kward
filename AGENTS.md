@@ -39,6 +39,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/tools/` - individual tool implementations, one file per tool.
 - `lib/kward/mcp/` - local MCP client transports and configured server clients.
 - `lib/kward/transport.rb` and `lib/kward/transport/` - frontend-neutral transport contracts, host, session gateway, persistent state, lifecycle manager, and foreground runtime.
+- `lib/kward/transcripts/` - shared Markdown, HTML, and safe-path transcript export mechanics.
 - `lib/kward/cli/transports.rb` - transport listing, status, and foreground-run commands.
 - `lib/kward/rpc/` - JSON-RPC backend.
 - `lib/kward/prompts.rb` - system prompt and skill catalog prompt assembly.

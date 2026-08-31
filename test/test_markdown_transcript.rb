@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/markdown_transcript"
+require_relative "../lib/kward/transcripts/markdown_transcript"
 
 class TestMarkdownTranscript < KwardTestCase
   def test_renders_display_content_and_skips_system_message

@@ -1,5 +1,5 @@
-require_relative "message_access"
-require_relative "message_text"
+require_relative "../message_access"
+require_relative "../message_text"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
