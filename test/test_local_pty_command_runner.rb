@@ -15,4 +15,15 @@ class TestLocalPtyCommandRunner < KwardTestCase
     assert_equal 0, result.exit_status
     assert_includes result.stdout, "120"
   end
+
+  def test_continues_reading_after_the_pty_is_temporarily_idle
+    runner = Kward::LocalPtyCommandRunner.new(timeout_seconds: 5, max_output_bytes: 1024)
+    ruby = RbConfig.ruby
+    script = "STDOUT.sync = true; 20.times { print 'x'; sleep 0.01 }"
+
+    result = runner.run(ruby, "-e", script)
+
+    assert_equal 0, result.exit_status
+    assert_equal "x" * 20, result.stdout
+  end
 end

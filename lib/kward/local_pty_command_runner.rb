@@ -52,7 +52,8 @@ module Kward
             readable, = IO.select([reader], nil, nil, 0.02)
             next unless readable
 
-            chunk = read_chunk(reader)
+            chunk = reader.read_nonblock(READ_SIZE, exception: false)
+            next if chunk == :wait_readable
             break if chunk.nil?
 
             chunk = normalize_line_endings(chunk)
@@ -100,13 +101,6 @@ module Kward
       [rows, columns]
     rescue StandardError
       [DEFAULT_ROWS, DEFAULT_COLUMNS]
-    end
-
-    def read_chunk(reader)
-      reader.read_nonblock(READ_SIZE, exception: false).tap do |chunk|
-        return nil if chunk.nil?
-        return nil if chunk == :wait_readable
-      end
     end
 
     def normalize_line_endings(chunk)
