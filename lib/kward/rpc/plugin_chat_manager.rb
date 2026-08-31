@@ -1,7 +1,7 @@
 require_relative "../cancellation"
 require_relative "../image_attachments"
-require_relative "../plugin_chat_runtime"
-require_relative "../plugin_registry"
+require_relative "../plugins/chat_runtime"
+require_relative "../plugins/registry"
 require_relative "attachment_normalizer"
 require_relative "transcript_normalizer"
 

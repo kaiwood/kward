@@ -14,6 +14,7 @@ class TestCompatibilityRequirePaths < KwardTestCase
     kward/local_pty_command_runner
     kward/path_guard
     kward/persistent_shell_session
+    kward/plugin_registry
     kward/project_files
     kward/pty_output_sink
     kward/pty_transcript_normalizer

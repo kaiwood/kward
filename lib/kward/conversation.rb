@@ -3,7 +3,7 @@ require "set"
 require_relative "context_budget_meter"
 require_relative "image_attachments"
 require_relative "message_access"
-require_relative "plugin_registry"
+require_relative "plugins/registry"
 require_relative "prompts"
 
 # Namespace for the Kward CLI agent runtime.

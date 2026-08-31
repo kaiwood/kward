@@ -1,7 +1,7 @@
 require "digest"
 require "json"
-require_relative "config_files"
-require_relative "private_file"
+require_relative "../config_files"
+require_relative "../private_file"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

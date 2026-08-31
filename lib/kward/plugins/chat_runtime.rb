@@ -1,11 +1,11 @@
 require "digest"
 require "securerandom"
 require "thread"
-require_relative "cancellation"
-require_relative "events"
-require_relative "plugin_registry"
-require_relative "tab_driver"
-require_relative "tools/tool_call"
+require_relative "../cancellation"
+require_relative "../events"
+require_relative "registry"
+require_relative "../tabs/driver"
+require_relative "../tools/tool_call"
 
 # Frontend-neutral runtime for trusted plugin-owned conversational drivers.
 module Kward

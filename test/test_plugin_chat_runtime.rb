@@ -1,5 +1,5 @@
 require_relative "test_helper"
-require_relative "../lib/kward/plugin_chat_runtime"
+require_relative "../lib/kward/plugins/chat_runtime"
 
 class TestPluginChatRuntime < KwardTestCase
   class Driver

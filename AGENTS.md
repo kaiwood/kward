@@ -25,7 +25,8 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/cli.rb` - command-line flow and interactive chat orchestration.
 - `lib/kward/sessions/store.rb` - authoritative JSONL session persistence and conversation reconstruction.
 - `lib/kward/sessions/catalog.rb` - rebuildable, fingerprint-validated session-list summary cache; JSONL sessions remain authoritative.
-- `lib/kward/tab_driver.rb` - session and plugin tab-driver boundary used by interactive tabs.
+- `lib/kward/tabs/driver.rb` - session and plugin tab-driver boundary used by interactive tabs.
+- `lib/kward/plugins/registry.rb` and `lib/kward/plugins/chat_runtime.rb` - trusted plugin registration and frontend-neutral plugin-chat execution.
 - `lib/kward/git_worktree_manager.rb` - Git worktree discovery, creation, validation, and removal mechanics.
 - `lib/kward/cli/worktrees.rb` - interactive session-tab worktree binding and workspace re-rooting orchestration.
 - `lib/kward/shell/kwsh.rb`, `lib/kward/shell/kwshrc.rb`, and `lib/kward/shell/persistent_session.rb` - embedded-shell command routing, declarative rc parsing, state, protocol, and PTY lifecycle.

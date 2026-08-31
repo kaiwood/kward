@@ -1,6 +1,6 @@
 require "base64"
 require "thread"
-require_relative "../plugin_chat_runtime"
+require_relative "../plugins/chat_runtime"
 
 module Kward
   module Transport
