@@ -47,6 +47,11 @@ module Kward
 
       def runtime_output(text)
         content = text.to_s.chomp
+        if (tab = Thread.current[:kward_local_busy_tab]) && !content.empty?
+          tab.append_pending_runtime_output(content)
+          return
+        end
+
         label = colored(runtime_output_prompt, :gray, :bold)
         separator = content.include?("\n") ? "\n" : " "
         @prompt.say("\n#{label}#{separator}#{content}\n")
@@ -737,44 +742,56 @@ module Kward
         queued_inputs = []
         result = nil
         error = nil
-        begin_local_busy_command(activity)
+        cancelled = false
+        origin_tab = active_tab
+        cancellation = Cancellation.new
+        begin_local_busy_command(activity, tab: origin_tab)
 
         worker = Thread.new do
-          result = yield
+          Thread.current[:kward_local_busy_tab] = origin_tab
+          result = yield(cancellation)
         rescue StandardError => e
           error = e
+        ensure
+          Thread.current[:kward_local_busy_tab] = nil
         end
 
         while worker.alive?
           poll_result = collect_queued_input(queued_inputs)
+          if poll_result == PromptInterface::CANCEL_INPUT && !cancelled
+            cancelled = true
+            cancellation.cancel!
+          end
           handle_busy_local_tab_action(poll_result, activity: activity) if busy_local_tab_action?(poll_result)
           sleep 0.02
         end
         worker.join
         drain_queued_input(queued_inputs)
-        raise error if error
+        flushed = flush_pending_runtime_outputs(origin_tab)
+        origin_tab.unread = true if origin_tab && !flushed && origin_tab.pending_runtime_outputs.any?
+        raise error if error && !error.is_a?(Cancellation::CancelledError)
 
         [result, queued_inputs]
       ensure
-        finish_local_busy_command(activity)
+        finish_local_busy_command(activity, tab: origin_tab)
       end
 
       def run_busy_local_command_and_requeue(activity: "loading")
         return yield unless prompt_interface?
 
-        result, queued_inputs = run_busy_local_command(activity: activity) { yield }
+        result, queued_inputs = run_busy_local_command(activity: activity) { |cancellation| yield(cancellation) }
         queued_inputs.reverse_each { |pending_input| @pending_inputs.unshift(pending_input) }
         result
       end
 
-      def begin_local_busy_command(activity)
-        active_tab.local_busy_activity = activity if active_tab
+      def begin_local_busy_command(activity, tab: active_tab)
+        tab.local_busy_activity = activity if tab
         @prompt.begin_busy_input("You>", activity: activity) if @prompt.respond_to?(:begin_busy_input)
         update_prompt_tabs if respond_to?(:update_prompt_tabs, true)
       end
 
-      def finish_local_busy_command(activity)
-        tab = local_busy_tab(activity)
+      def finish_local_busy_command(activity, tab: nil)
+        tab ||= local_busy_tab(activity)
         tab.local_busy_activity = nil if tab
         update_prompt_tabs if respond_to?(:update_prompt_tabs, true)
         @prompt.finish_busy_input if prompt_interface? && @prompt.respond_to?(:finish_busy_input) && (!active_tab || active_tab == tab)

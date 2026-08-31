@@ -1883,6 +1883,27 @@ class TestCLI < KwardTestCase
     assert_equal ["\e[1mExploring key handling\e[0m -> Better Markdown"], prompt.write_deltas
   end
 
+  def test_busy_local_command_forwards_ctrl_c_cancellation
+    prompt = BusyPrompt.new([])
+    prompt.define_singleton_method(:poll_input) do
+      @busy_cancel_polls ||= 0
+      @busy_cancel_polls += 1
+      @busy_cancel_polls == 1 ? Kward::PromptInterface::CANCEL_INPUT : nil
+    end
+    cancellation_seen = Queue.new
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+    result = cli.send(:run_busy_local_command) do |cancellation|
+      cancellation_seen << cancellation
+      sleep 0.01 until cancellation.cancelled?
+      cancellation.raise_if_cancelled!
+    end
+
+    assert cancellation_seen.pop.cancelled?
+    assert_equal [nil, []], result
+    assert_includes prompt.events, [:finish_busy_input]
+  end
+
   def test_prompt_interface_interactive_turn_cancels_on_busy_ctrl_c
     prompt = BusyPrompt.new([Kward::PromptInterface::CANCEL_INPUT])
     prompt.define_singleton_method(:poll_input) { @inputs.shift }

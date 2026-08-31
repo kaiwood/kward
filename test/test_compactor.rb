@@ -210,6 +210,24 @@ class TestCompactor < KwardTestCase
     assert_equal({ read_files: [], modified_files: [] }, summary[:details])
   end
 
+  def test_compaction_forwards_cancellation_to_model_client
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("old request with enough detail to require compaction")
+    conversation.append_assistant("old reply")
+    conversation.append_user("recent")
+    conversation.append_assistant("recent reply")
+    client = RecordingClient.new(["summary"])
+    cancellation = Kward::Cancellation.new
+
+    Kward::Compactor.new(
+      conversation: conversation,
+      client: client,
+      settings: Kward::Compaction::Settings.new(keep_recent_tokens: 10)
+    ).compact(cancellation: cancellation)
+
+    assert_same cancellation, client.requests.first[:cancellation]
+  end
+
   def test_compaction_replaces_existing_files_code_sections
     conversation = Kward::Conversation.new(system_message: nil)
     conversation.append_user("old request with enough detail to require compaction")

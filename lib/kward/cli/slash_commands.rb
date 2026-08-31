@@ -113,7 +113,11 @@ module Kward
           run_busy_local_command_and_requeue { export_session(agent.conversation, argument) }
           [true, nil]
         when "compact"
-          run_busy_local_command_and_requeue(activity: "compacting") { compact_context(agent, argument) }
+          origin_tab = active_tab
+          result = run_busy_local_command_and_requeue(activity: "compacting") do |cancellation|
+            compact_context(agent, argument, cancellation: cancellation)
+          end
+          render_compaction_summary(result) if !origin_tab || origin_tab == active_tab
           [true, nil]
         else
           if name.to_s.start_with?("skill:")

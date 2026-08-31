@@ -41,6 +41,7 @@ module Kward
         :transient_shell_entries,
         :error_reported,
         :local_busy_activity,
+        :pending_runtime_outputs,
         keyword_init: true
       ) do
         TRANSIENT_SHELL_OUTPUT_LIMIT = 200_000
@@ -51,6 +52,11 @@ module Kward
 
         def local_busy?
           !local_busy_activity.to_s.empty?
+        end
+
+        def append_pending_runtime_output(text)
+          self.pending_runtime_outputs ||= []
+          pending_runtime_outputs << text.to_s
         end
 
         def idle?
@@ -329,7 +335,8 @@ module Kward
           background_run: nil,
           transient_shell_entries: [],
           error_reported: false,
-          local_busy_activity: nil
+          local_busy_activity: nil,
+          pending_runtime_outputs: []
         ).tap { |tab| assign_tab_question_prompt(agent, tab) }
       end
 
@@ -557,6 +564,20 @@ module Kward
           render_tab_transient_shell_entries(tab)
         end
         restore_tab_composer_snapshot(tab.snapshot) if restore_composer
+        render_pending_tab_runtime_outputs(tab)
+      end
+
+      def render_pending_tab_runtime_outputs(tab)
+        outputs = Array(tab.pending_runtime_outputs)
+        tab.pending_runtime_outputs = []
+        outputs.each { |output| runtime_output(output) }
+      end
+
+      def flush_pending_runtime_outputs(tab)
+        return false unless tab && tab == active_tab
+
+        render_pending_tab_runtime_outputs(tab)
+        true
       end
 
       def render_tab_transient_shell_entries(tab)

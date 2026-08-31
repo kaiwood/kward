@@ -1,5 +1,6 @@
 require "json"
 require_relative "model/chat_invocation"
+require_relative "cancellation"
 require_relative "compaction/file_operation_tracker"
 require_relative "compaction/token_estimator"
 require_relative "config_files"
@@ -671,20 +672,24 @@ module Kward
         @prompt_builder = prompt_builder
       end
 
-      def summarize(preparation, custom_instructions: nil)
+      def summarize(preparation, custom_instructions: nil, cancellation: nil)
         summary = chat(
           @prompt_builder.build(preparation, custom_instructions: custom_instructions),
-          max_tokens: @prompt_builder.normal_summary_max_tokens(preparation.settings, model_max_tokens: model_max_tokens)
+          max_tokens: @prompt_builder.normal_summary_max_tokens(preparation.settings, model_max_tokens: model_max_tokens),
+          cancellation: cancellation
         )
         if preparation.split_turn && !preparation.turn_prefix_messages.empty?
           turn_summary = chat(
             @prompt_builder.build_split(preparation),
-            max_tokens: @prompt_builder.split_turn_max_tokens(preparation.settings, model_max_tokens: model_max_tokens)
+            max_tokens: @prompt_builder.split_turn_max_tokens(preparation.settings, model_max_tokens: model_max_tokens),
+            cancellation: cancellation
           )
           summary = "#{summary}\n\n---\n\n**Turn Context (split turn):**\n\n#{turn_summary}"
         end
         summary.to_s.strip
       rescue Cancelled
+        raise
+      rescue Kward::Cancellation::CancelledError
         raise
       rescue StandardError => e
         raise SummarizationFailed, e.message
@@ -692,8 +697,8 @@ module Kward
 
       private
 
-      def chat(messages, max_tokens: nil)
-        message = ChatInvocation.call(@client, messages, { tools: [], max_tokens: max_tokens })
+      def chat(messages, max_tokens: nil, cancellation: nil)
+        message = ChatInvocation.call(@client, messages, { tools: [], max_tokens: max_tokens, cancellation: cancellation })
         content = message_content(message)
         text = message_content_text(content).strip
         raise SummarizationFailed, "Compaction produced an empty summary; context was not changed." if text.empty?
@@ -752,13 +757,19 @@ module Kward
       false
     end
 
-    def compact(custom_instructions: nil, compaction_summary: true)
+    def compact(custom_instructions: nil, compaction_summary: true, cancellation: nil)
+      cancellation&.raise_if_cancelled!
       old_count = @conversation.messages.length
       preparation = prepare
-      summary = @summarizer.summarize(preparation, custom_instructions: custom_instructions)
+      summary = if cancellation
+        @summarizer.summarize(preparation, custom_instructions: custom_instructions, cancellation: cancellation)
+      else
+        @summarizer.summarize(preparation, custom_instructions: custom_instructions)
+      end
       summary = append_files_section(summary, preparation.file_ops)
       raise Compaction::SummarizationFailed, "Compaction produced an empty summary; context was not changed." if summary.strip.empty?
 
+      cancellation&.raise_if_cancelled!
       @conversation.compact!(
         summary,
         compaction_summary: compaction_summary,

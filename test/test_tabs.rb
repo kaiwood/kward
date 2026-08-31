@@ -105,6 +105,31 @@ class TestTabs < KwardTestCase
     end
   end
 
+  class OutputTrackingPrompt < TabPrompt
+    attr_reader :tab_outputs
+
+    def initialize
+      super
+      @active_output_tab = 0
+      @tab_outputs = Hash.new { |outputs, index| outputs[index] = [] }
+    end
+
+    def update_tabs(labels:, active_index: 0)
+      @active_output_tab = active_index
+      super
+    end
+
+    def say(message)
+      @tab_outputs[@active_output_tab] << message
+      super
+    end
+
+    def write_delta(delta)
+      @tab_outputs[@active_output_tab] << delta
+      super
+    end
+  end
+
   class OverlayConfirmationPrompt < TabPrompt
     attr_reader :questions
 
@@ -1344,6 +1369,50 @@ class TestTabs < KwardTestCase
       assert_equal :success, first_tab.attention
       assert_equal :success, prompt.tab_update_colors.first
       refute prompt.tabs_updates.last[:labels].first.key?(:marker)
+    ensure
+      cli&.send(:stop_tabs)
+    end
+  end
+
+  def test_busy_local_command_completion_is_rendered_in_originating_tab
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = OutputTrackingPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store)
+      agent = cli.send(:setup_interactive_tabs, store, nil)
+      conversation = agent.conversation
+      4.times do |index|
+        conversation.append_user("user #{index} #{'x ' * 2_000}")
+        conversation.append_assistant({ "role" => "assistant", "content" => "assistant #{index} #{'y ' * 2_000}" })
+      end
+      cli.send(:handle_tab_action, { tab_action: :new }, store)
+      cli.send(:handle_tab_action, { tab_action: :previous }, store)
+      first_tab = cli.send(:active_tab)
+      summarizer = BlockingSummarizer.new("summary from tab one")
+      compactor = Kward::Compactor.new(
+        conversation: conversation,
+        client: FakeClient.new([]),
+        settings: Kward::Compaction::Settings.new(keep_recent_tokens: 3_000),
+        summarizer: summarizer
+      )
+
+      with_compactor_stub(compactor) do
+        command = Thread.new { cli.send(:handle_local_slash_command, "/compact", agent, store) }
+        summarizer.started.pop
+        wait_until { first_tab.local_busy? }
+
+        prompt.queue_poll({ tab_action: :next })
+        wait_until { cli.instance_variable_get(:@active_tab_index) == 1 }
+        summarizer.release << true
+        command.join(1)
+
+        refute_includes prompt.tab_outputs[1].join, "Compacted context:"
+        refute_includes prompt.tab_outputs[1].join, "summary from tab one"
+
+        cli.send(:handle_tab_action, { tab_action: :previous }, store)
+        assert_includes prompt.tab_outputs[0].join, "Compacted context:"
+        assert_includes prompt.tab_outputs[0].join, "summary from tab one"
+      end
     ensure
       cli&.send(:stop_tabs)
     end
