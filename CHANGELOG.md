@@ -8,6 +8,10 @@ All notable changes to Kward will be documented in this file.
 
 - Added `/name` to rename the active session and tab together, including while the tab's agent is running.
 
+### Changed
+
+- Grouped session, shell, PTY, terminal, workspace, plugin, tab, transcript, editor, and model implementations under domain folders; legacy internal require paths remain available through the 0.85 release line and are scheduled for removal in 0.86.0.
+
 ### Fixed
 
 - Fixed the interactive composer leaving the final streamed transcript line too close to its top border.

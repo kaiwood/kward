@@ -1,2 +1,2 @@
-# Compatibility require path for session tree nodes.
+# Deprecated compatibility require path; scheduled for removal in 0.86.0.
 require_relative "sessions/tree_nodes"
