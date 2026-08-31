@@ -127,7 +127,7 @@ Generated Ruby API:
 
 ## Development
 
-Read [Contributing to Kward](https://github.com/kaiwood/kward/blob/main/CONTRIBUTING.md) before preparing a pull request. Participation is governed by the [Code of conduct](https://github.com/kaiwood/kward/blob/main/CODE_OF_CONDUCT.md).
+Read [Contributing to Kward](https://github.com/kaiwood/kward/blob/main/CONTRIBUTING.md) before preparing a pull request.
 
 Run tests:
 
