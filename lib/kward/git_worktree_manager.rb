@@ -2,7 +2,7 @@ require "fileutils"
 require "open3"
 require "pathname"
 
-require_relative "path_guard"
+require_relative "workspace/path_guard"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
