@@ -1,6 +1,6 @@
 require "open3"
 require_relative "test_helper"
-require_relative "../lib/kward/git_worktree_manager"
+require_relative "../lib/kward/workspace/git_worktree_manager"
 
 class TestGitWorktreeManager < KwardTestCase
   def test_discovers_repository_and_reports_dirty_entries

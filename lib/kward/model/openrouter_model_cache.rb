@@ -3,9 +3,9 @@ require "json"
 require "net/http"
 require "time"
 require "uri"
-require_relative "config_files"
-require_relative "http"
-require_relative "private_file"
+require_relative "../config_files"
+require_relative "../http"
+require_relative "../private_file"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
