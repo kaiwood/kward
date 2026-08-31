@@ -11,6 +11,7 @@ module Kward
       { name: "session", description: "Open saved sessions or name the current session.", argument_hint: "[path]|name [name]" },
       { name: "resume", description: "Alias for /session.", argument_hint: "[path]" },
       { name: "rename", description: "Rename the current session.", argument_hint: "<name>" },
+      { name: "name", description: "Rename the current session and tab.", argument_hint: "<name>" },
       { name: "clone", description: "Clone the current session.", argument_hint: "" },
       { name: "fork", description: "Fork from an earlier prompt into a new session.", argument_hint: "" },
       { name: "rewind", description: "Revisit an earlier prompt and try a different direction.", argument_hint: "" },

@@ -2840,17 +2840,18 @@ class TestCLI < KwardTestCase
     end
   end
 
-  def test_name_is_no_longer_a_builtin_command
+  def test_name_renames_the_current_session
     Dir.mktmpdir do |config_dir|
       store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
       prompt = FakePrompt.new(["/name Useful", "/exit"])
-      client = RecordingClient.new(["reply"])
+      client = RecordingClient.new([])
       cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client, session_store: store)
 
       cli.interactive_loop
 
-      assert_equal "/name Useful", client.seen_messages.first.last[:content]
-      refute prompt.output.any? { |line| line.include?("Named session: Useful") }
+      assert_empty client.seen_messages
+      assert prompt.output.any? { |line| line.include?("Named session: Useful") }
+      assert jsonl_records(Dir.glob(File.join(store.session_dir, "*.jsonl")).first).any? { |record| record["type"] == "session_info" && record["name"] == "Useful" }
     end
   end
 

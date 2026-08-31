@@ -1244,6 +1244,13 @@ class TestTabs < KwardTestCase
       assert_same running_agent, running_tab.agent
       assert running_tab.running?
 
+      cli.send(:handle_tab_busy_input, running_tab, "/name Running")
+      assert_equal "Running", running_tab.label
+      assert_equal "Running", running_tab.session.name
+      assert_same running_agent, running_tab.agent
+      assert running_tab.running?
+      assert_empty running_tab.queued_inputs
+
       cli.send(:handle_tab_busy_input, running_tab, "/tab move right")
       assert_equal 1, cli.instance_variable_get(:@active_tab_index)
       assert_same running_tab, cli.send(:active_tab)
@@ -1686,6 +1693,46 @@ class TestTabs < KwardTestCase
 
       assert_equal ["Ops"], prompt.tab_update_names
       refute_includes prompt.tab_update_names.first, "1"
+    end
+  end
+
+  def test_name_slash_command_renames_active_session_and_tab
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      tab = cli.send(:active_tab)
+
+      handled, replacement = cli.send(:handle_local_slash_command, "/name Ops", tab.agent, store)
+
+      assert handled
+      assert_nil replacement
+      assert_equal "Ops", tab.label
+      assert_equal "Ops", tab.session.name
+      assert_equal ["Ops"], prompt.tab_update_names
+      saved_tabs = Kward::TabStore.new(config_dir: config_dir, cwd: Dir.pwd).load
+      assert_equal "Ops", saved_tabs["tabs"].first["label"]
+      assert jsonl_records(tab.session.path).any? { |record| record["type"] == "session_info" && record["name"] == "Ops" }
+      assert_includes prompt.output.join, "Named session and tab: Ops"
+    end
+  end
+
+  def test_name_slash_command_requires_a_name
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: RecordingClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      tab = cli.send(:active_tab)
+      tab.label = "Before"
+      tab.session.rename("Before")
+
+      cli.send(:handle_local_slash_command, "/name   ", tab.agent, store)
+
+      assert_equal "Before", tab.label
+      assert_equal "Before", tab.session.name
+      assert_includes prompt.output.join, "Usage: /name <name>"
     end
   end
 

@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added `/name` to rename the active session and tab together, including while the tab's agent is running.
+
 ### Fixed
 
 - Fixed `/compact` completion output and cancellation so work remains owned by its originating tab instead of rendering into whichever tab is active.

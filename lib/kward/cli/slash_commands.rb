@@ -64,6 +64,9 @@ module Kward
           [true, nil]
         when "tab"
           [true, handle_tab_command(argument, session_store)]
+        when "name"
+          rename_active_session_and_tab(argument)
+          [true, nil]
         when "worktree"
           handle_worktree_command(argument)
           [true, active_tab&.agent]
@@ -135,6 +138,38 @@ module Kward
 
       def parse_slash_command(command)
         PromptCommands.parse(command) || [nil, ""]
+      end
+
+      def rename_active_session_and_tab(argument)
+        name = argument.to_s.strip
+        return runtime_output("Usage: /name <name>") if name.empty?
+
+        tab = active_tab
+        unless @active_session && (!tab || tab.session.equal?(@active_session))
+          return runtime_output("The /name command is only available in a session tab.")
+        end
+
+        errors = []
+        begin
+          rename_session(name, require_name: true, announce: false)
+        rescue StandardError => error
+          errors << "session: #{error.message}"
+        end
+
+        if tab
+          begin
+            rename_active_tab(name)
+          rescue StandardError => error
+            errors << "tab: #{error.message}"
+          end
+        end
+
+        if errors.empty?
+          label = tab ? "Named session and tab: #{name}" : "Named session: #{name}"
+          runtime_output(label)
+        else
+          runtime_output("Name update incomplete (#{errors.join("; ")}).")
+        end
       end
 
       def handle_sandbox_command(argument, workspace_root)
