@@ -13,7 +13,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - Make the smallest correct change for the request.
 - Inspect relevant files before editing, and preserve existing style and naming.
 - Prefer straightforward Ruby from the standard library unless an existing dependency is already used.
-- Internal requires should target canonical implementations under domain folders; deprecated root-level compatibility require files are only for legacy external paths and are scheduled for removal in 0.86.0. Keep the documented public `plugin_registry.rb` entrypoint.
+- Internal requires should target canonical implementations under domain folders. Keep the documented public `plugin_registry.rb` entrypoint.
 - Keep user-facing behavior consistent with existing docs and tests.
 - Do not introduce broad rewrites, formatting-only churn, or unrelated cleanup.
 - Do not split large orchestration files such as `RPC::SessionManager` or `Model::Client` just because they are large; extract only when a behavior change exposes a clear, tested ownership boundary.

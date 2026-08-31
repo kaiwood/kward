@@ -10,7 +10,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
-- Grouped session, shell, PTY, terminal, workspace, plugin, tab, transcript, editor, and model implementations under domain folders; legacy internal require paths remain available through the 0.85 release line and are scheduled for removal in 0.86.0.
+- Grouped session, shell, PTY, terminal, workspace, plugin, tab, transcript, editor, and model implementations under domain folders and removed the old internal require paths.
 
 ### Fixed
 

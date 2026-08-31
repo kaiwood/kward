@@ -90,8 +90,6 @@ The generated comments focus on these supported extension boundaries rather than
 
 The generated reference is useful for understanding the codebase, but it does not make every class, method, or constructor a supported public API.
 
-Legacy root-level require paths for internal implementations remain available through the 0.85 release line as migration aliases and are scheduled for removal in 0.86.0. Internal integrations should require the canonical files under their domain folders. The documented `kward/plugin_registry` entrypoint remains supported and is not part of that removal.
-
 Prefer the documented guides for supported extension behavior. Use generated class and method pages when you need implementation detail, are contributing to Kward itself, or are coordinating a frontend integration with the current codebase.
 
 As a rule of thumb:
