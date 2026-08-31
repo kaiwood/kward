@@ -118,10 +118,16 @@ module Kward
         old_top = [height - old_reserved_rows + 1, 1].max
         @reserved_rows = new_reserved_rows
         new_top = composer_top_row(height)
-        print_output_locked(TerminalSequences.scroll_region(1, transcript_bottom_row(height)))
+        new_bottom = transcript_bottom_row(height)
+        print_output_locked(TerminalSequences.scroll_region(1, new_bottom))
         clear_screen_rows_locked(old_top, new_top - 1) if new_top > old_top
+        clear_screen_rows_locked(new_bottom + 1, new_top - 1) if old_reserved_rows.positive? && new_bottom < new_top - 1
         @last_composer_rows = []
-        redraw_transcript_locked(width: width, height: height) if redraw_transcript && new_reserved_rows < old_reserved_rows
+        if redraw_transcript && @stream_state.block && new_reserved_rows > old_reserved_rows
+          @transcript_viewport_rows = [@transcript_viewport_rows, new_bottom].min
+        end
+        should_redraw_transcript = redraw_transcript && (new_reserved_rows < old_reserved_rows || @stream_state.block)
+        redraw_transcript_locked(width: width, height: height) if should_redraw_transcript && new_reserved_rows != old_reserved_rows
       end
 
       def handle_resize_locked

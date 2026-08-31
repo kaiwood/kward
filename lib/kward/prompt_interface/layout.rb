@@ -19,7 +19,7 @@ module Kward
       end
 
       def transcript_bottom_row(height = screen_height)
-        [height - @reserved_rows, 1].max
+        [height - @reserved_rows - TRANSCRIPT_COMPOSER_GAP_ROWS, 1].max
       end
 
     end

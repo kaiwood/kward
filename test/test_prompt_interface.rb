@@ -298,6 +298,48 @@ class TestPromptInterface < KwardTestCase
     refute_includes output.string, TTY::Cursor.clear_screen
   end
 
+  def test_prompt_interface_leaves_a_row_between_transcript_and_composer
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 80 }
+    TTY::Screen.define_singleton_method(:height) { 20 }
+
+    prompt.start
+
+    assert_includes output.string, "\e[1;16r"
+    assert_equal 16, prompt.send(:transcript_bottom_row, 20)
+    assert_equal 18, prompt.send(:composer_top_row, 20)
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
+  def test_prompt_interface_reflows_active_transcript_when_composer_grows
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    original_width = TTY::Screen.method(:width)
+    original_height = TTY::Screen.method(:height)
+    TTY::Screen.define_singleton_method(:width) { 40 }
+    TTY::Screen.define_singleton_method(:height) { 12 }
+
+    prompt.start
+    prompt.start_stream_block("Reasoning")
+    prompt.write_delta((1..8).map { |index| "line#{index}" }.join("\n"))
+    output.truncate(0)
+    output.rewind
+
+    prompt.send(:composer_input=, "first\nsecond")
+    prompt.send(:composer_cursor=, "first\nsecond".length)
+    prompt.send(:render_prompt_locked)
+
+    assert_includes output.string, "line8"
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+    TTY::Screen.define_singleton_method(:height, original_height) if original_height
+  end
+
   def test_prompt_interface_renders_footer_line
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output, footer: -> { "custom footer" })
@@ -2251,7 +2293,7 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:clear_prompt_for_output_locked)
 
     assert_includes output.string, "\e[r"
-    assert_includes output.string, "\e[1;7r"
+    assert_includes output.string, "\e[1;6r"
   ensure
     TTY::Screen.define_singleton_method(:width, original_width) if original_width
     TTY::Screen.define_singleton_method(:height, original_height) if original_height

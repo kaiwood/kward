@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed the interactive composer leaving the final streamed transcript line too close to its top border.
 - Fixed `/compact` completion output and cancellation so work remains owned by its originating tab instead of rendering into whichever tab is active.
 - Fixed interactive PTY handoff cleanup so preserved keyboard protocol state is restored when Kward exits.
 
