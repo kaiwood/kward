@@ -140,7 +140,7 @@ class TestCLIBusyInput < KwardTestCase
   def test_session_is_builtin_slash_command
     assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "session"
     refute_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "sessions"
-    refute_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "name"
+    assert_includes Kward::CLI::BUILTIN_SLASH_COMMAND_NAMES, "name"
   end
 
 end

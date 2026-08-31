@@ -136,6 +136,7 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/tab close` | close the active tab. |
 | `/tab new` | open a new tab. |
 | `/tab name <label>` | rename the active tab label. |
+| `/name <name>` | rename the active session and tab together; available while the tab's agent is running. |
 | `/tab worktree` | create or activate the active session tab's linked Git worktree. |
 | `/tab worktree activate` | explicitly create or activate the active session tab's linked Git worktree. |
 | `/tab worktree detach` | return to the original workspace while keeping the linked worktree and branch. |
@@ -191,7 +192,7 @@ Use sessions when work spans more than one terminal sitting, or when you want to
 Typical flow:
 
 ```text
-/rename oauth cleanup
+/name oauth cleanup
 # work with Kward
 /export oauth-notes.md
 /exit

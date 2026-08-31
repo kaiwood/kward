@@ -800,8 +800,12 @@ module Kward
           tab.queued_inputs << input
           @prompt.set_queued_count(tab.queued_inputs.length) if @prompt.respond_to?(:set_queued_count)
           return
-        elsif busy_tab_command?(input)
-          handle_tab_command(input.to_s.strip.sub(%r{\A/tab(?:\s+|\z)}, ""), @session_store)
+        elsif busy_tab_command?(input) || busy_name_command?(input)
+          if busy_tab_command?(input)
+            handle_tab_command(input.to_s.strip.sub(%r{\A/tab(?:\s+|\z)}, ""), @session_store)
+          else
+            handle_local_slash_command(input, tab.agent, @session_store)
+          end
           unless active_tab.equal?(tab)
             @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
             return :active_tab_changed
@@ -831,6 +835,10 @@ module Kward
 
       def busy_tab_command?(input)
         input.to_s.strip.match?(%r{\A/tab(?:\s|\z)})
+      end
+
+      def busy_name_command?(input)
+        input.to_s.strip.match?(%r{\A/name(?:\s|\z)})
       end
 
       def refresh_active_tab

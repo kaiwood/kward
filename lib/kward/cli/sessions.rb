@@ -415,7 +415,7 @@ module Kward
         SessionTreeRenderer.new(roots: roots, current_leaf_id: current_leaf_id).items
       end
 
-      def rename_session(argument, require_name: false)
+      def rename_session(argument, require_name: false, announce: true)
         unless @active_session
           runtime_output("No active persisted session.")
           return
@@ -430,8 +430,10 @@ module Kward
         old_name = @active_session.name
         @active_session.rename(name)
         run_lifecycle_hook("session_rename", conversation: new_conversation(workspace_root: current_workspace_root), session: @active_session, payload: { old_name: old_name, new_name: @active_session.name })
-        label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
-        runtime_output(label)
+        if announce
+          label = @active_session.name ? "Named session: #{@active_session.name}" : "Cleared session name."
+          runtime_output(label)
+        end
       end
 
       def clone_session(session_store, agent)

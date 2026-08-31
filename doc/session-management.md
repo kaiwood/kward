@@ -25,13 +25,13 @@ To automatically resume the last active session for the current workspace on sta
 
 ## A normal session workflow
 
-Start a chat and give it a useful name:
+Start a chat and give the current session and tab a useful name:
 
 ```text
-/rename oauth cleanup
+/name oauth cleanup
 ```
 
-`/rename` requires a name. Use `/session name` without an argument to clear the current session name.
+`/name` requires a name and updates both the active session and its tab label. It can also be used while the active tab's agent is running; it is unavailable in plugin tabs. Use `/rename` when you only want to rename the session. Use `/session name` without an argument to clear the current session name.
 
 Work normally:
 
@@ -227,7 +227,8 @@ This is useful when you want to confirm which session you are in or check whethe
 | Need | Use |
 | --- | --- |
 | Continue earlier work | `/session` or `/resume` |
-| Give the current session a better name | `/rename <name>` |
+| Give the current session and tab a better name | `/name <name>` |
+| Give only the current session a better name | `/rename <name>` |
 | Clear the current session name | `/session name` |
 | Keep the current state but try another future | `/clone` |
 | Start a separate session from before an earlier prompt | `/fork` |
