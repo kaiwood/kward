@@ -570,6 +570,127 @@ body.kward-docs #footer {
   color: var(--kward-accent-bright);
 }
 
+/*
+  Hero tagline "swosh": cycles each line through three phrases. The first
+  line moves right-to-left: "Your terminal.", "Your RPC frontend.", then
+  "Your workflow." The second line mirrors it left-to-right: "Your agent.",
+  "Your LLM engine.", then "Your harness." Pure CSS — no JS. The global
+  @media (prefers-reduced-motion) rule above collapses the animation to
+  the static original copy ("Your terminal. Your agent.") so it remains
+  accessible and calm.
+*/
+.kward-swosh {
+  box-sizing: content-box;
+  display: inline-block;
+  height: 0.98em;
+  line-height: 0.98;
+  margin: -0.16em -0.08em;
+  overflow: hidden;
+  padding: 0.16em 0.08em;
+  position: relative;
+  vertical-align: top;
+}
+
+.kward-hero h1 .kward-swosh-text {
+  color: var(--kward-ink);
+  display: inline-block;
+  line-height: 0.98;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+/* The longest text ("Your RPC frontend.") stays in flow to size the box;
+   the shorter phrases overlay it absolutely. */
+.kward-swosh-text-a,
+.kward-swosh-text-e {
+  left: 0.08em;
+  position: absolute;
+  top: 0.16em;
+}
+
+.kward-swosh-text-a {
+  animation: kward-swosh-a 18s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.kward-swosh-text-b {
+  animation: kward-swosh-b 18s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  position: relative;
+}
+
+.kward-swosh-text-e {
+  animation: kward-swosh-e 18s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+@keyframes kward-swosh-a {
+  0%, 25%   { transform: translateX(0);     opacity: 1; filter: none; }
+  33%       { transform: translateX(-140%); opacity: 0; filter: blur(3px); }
+  34%, 92%  { transform: translateX(140%);  opacity: 0; filter: none; }
+  100%      { transform: translateX(0);     opacity: 1; filter: none; }
+}
+
+@keyframes kward-swosh-b {
+  0%, 25%   { transform: translateX(140%);  opacity: 0; filter: none; }
+  33%       { transform: translateX(0);     opacity: 1; filter: none; }
+  58%       { transform: translateX(0);     opacity: 1; filter: none; }
+  66%       { transform: translateX(-140%); opacity: 0; filter: blur(3px); }
+  67%, 100% { transform: translateX(140%);  opacity: 0; filter: none; }
+}
+
+@keyframes kward-swosh-e {
+  0%, 58%   { transform: translateX(140%);  opacity: 0; filter: none; }
+  66%       { transform: translateX(0);     opacity: 1; filter: none; }
+  92%       { transform: translateX(0);     opacity: 1; filter: none; }
+  100%      { transform: translateX(-140%); opacity: 0; filter: blur(3px); }
+}
+
+/*
+  Second line, mirrored left-to-right. All texts keep the accent-bright
+  color of the original "Your agent." span.
+*/
+.kward-hero h1 .kward-swosh-text-c,
+.kward-hero h1 .kward-swosh-text-f {
+  color: var(--kward-accent-bright);
+  left: 0.08em;
+  position: absolute;
+  top: 0.16em;
+}
+
+.kward-hero h1 .kward-swosh-text-c {
+  animation: kward-swosh-c 18s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+.kward-hero h1 .kward-swosh-text-d {
+  animation: kward-swosh-d 18s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+  color: var(--kward-accent-bright);
+  position: relative;
+}
+
+.kward-hero h1 .kward-swosh-text-f {
+  animation: kward-swosh-f 18s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+@keyframes kward-swosh-c {
+  0%, 25%   { transform: translateX(0);     opacity: 1; filter: none; }
+  33%       { transform: translateX(140%);  opacity: 0; filter: blur(3px); }
+  34%, 92%  { transform: translateX(-140%); opacity: 0; filter: none; }
+  100%      { transform: translateX(0);     opacity: 1; filter: none; }
+}
+
+@keyframes kward-swosh-d {
+  0%, 25%   { transform: translateX(-140%); opacity: 0; filter: none; }
+  33%       { transform: translateX(0);     opacity: 1; filter: none; }
+  58%       { transform: translateX(0);     opacity: 1; filter: none; }
+  66%       { transform: translateX(140%);  opacity: 0; filter: blur(3px); }
+  67%, 100% { transform: translateX(-140%); opacity: 0; filter: none; }
+}
+
+@keyframes kward-swosh-f {
+  0%, 58%   { transform: translateX(-140%); opacity: 0; filter: none; }
+  66%       { transform: translateX(0);     opacity: 1; filter: none; }
+  92%       { transform: translateX(0);     opacity: 1; filter: none; }
+  100%      { transform: translateX(140%);  opacity: 0; filter: blur(3px); }
+}
+
 .kward-lede {
   color: var(--kward-ink);
   font-size: 19px;
@@ -918,6 +1039,10 @@ body.kward-docs .kward-home #footer p {
 
   .kward-hero h1 {
     font-size: clamp(32px, 10vw, 38px);
+  }
+
+  .kward-swosh {
+    max-width: 100%;
   }
 
   .kward-feature-strip,
