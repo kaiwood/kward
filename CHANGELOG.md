@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Fixed
 
 - Fixed `/compact` completion output and cancellation so work remains owned by its originating tab instead of rendering into whichever tab is active.
+- Fixed interactive PTY handoff cleanup so preserved keyboard protocol state is restored when Kward exits.
 
 ## [0.84.0] - 2026-08-30
 

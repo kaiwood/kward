@@ -736,7 +736,7 @@ module Kward
         restore_scroll_region_locked
         print_output_locked(TerminalSequences::SGR_RESET)
         enter_raw_mode_locked
-        print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
+        print_output_locked(KEYBOARD_PROTOCOL_ENABLE) unless preserve_tab_keybindings
         print_output_locked(BRACKETED_PASTE_ENABLE)
         @handoff_input_buffer.clear
         disable_editor_mouse_reporting(force: true)
