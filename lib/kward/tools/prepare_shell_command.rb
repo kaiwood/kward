@@ -1,5 +1,5 @@
 require_relative "base"
-require_relative "../shell_prompt_session"
+require_relative "../shell/prompt_session"
 
 # Namespace for the Kward agent runtime.
 module Kward
