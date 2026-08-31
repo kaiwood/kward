@@ -1,4 +1,4 @@
-require_relative "../../editor_mode"
+require_relative "editor_mode"
 require_relative "../../text_boundary"
 require_relative "buffer"
 require_relative "file_marker"

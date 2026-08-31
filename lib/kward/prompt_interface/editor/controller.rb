@@ -1,5 +1,5 @@
 require "fileutils"
-require_relative "../../scratchpad_languages"
+require_relative "scratchpad_languages"
 require_relative "runner"
 
 # Namespace for the Kward CLI agent runtime.

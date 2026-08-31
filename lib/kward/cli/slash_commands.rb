@@ -1,4 +1,4 @@
-require_relative "../scratchpad_languages"
+require_relative "../prompt_interface/editor/scratchpad_languages"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward

@@ -1,4 +1,4 @@
-require_relative "../../scratchpad_runner"
+require_relative "scratchpad_runner"
 require_relative "runner_state"
 
 # Namespace for the Kward CLI agent runtime.
