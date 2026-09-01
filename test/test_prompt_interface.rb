@@ -877,16 +877,24 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
-  def test_prompt_interface_preserved_keyboard_protocol_is_restored_on_close
+  def test_prompt_interface_reasserts_preserved_keyboard_protocol_after_child_reset
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
 
     prompt.start
-    prompt.with_terminal_handoff(preserve_tab_keybindings: true) {}
+    prompt.with_terminal_handoff(preserve_tab_keybindings: true) do |_input, handoff_output|
+      handoff_output.print(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE)
+    end
     prompt.close
 
-    assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE).length
-    assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE).length
+    child_reset = output.string.index(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE)
+    reenable = output.string.index(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE, child_reset)
+    final_restore = output.string.index(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE, reenable)
+
+    assert_equal 2, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE).length
+    assert_equal 2, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE).length
+    assert_operator reenable, :>, child_reset
+    assert_operator final_restore, :>, reenable
   end
 
   def test_prompt_interface_inline_terminal_handoff_preserves_composer_until_exclusive_transition
