@@ -81,7 +81,7 @@ module Kward
       type = supported_types(surface: surface).find { |entry| entry.id == type_id.to_s }
       raise ArgumentError, "Unknown #{surface} plugin chat: #{type_id}" unless type
 
-      chat_for(type, scope_key: scope_key, descriptor: descriptor, workspace_root: workspace_root)
+      chat_for(type, surface: surface, scope_key: scope_key, descriptor: descriptor, workspace_root: workspace_root)
     end
 
     def chat(chat_id)
@@ -159,9 +159,12 @@ module Kward
     # Converts normalized image attachment hashes into the input shape accepted
     # by plugin chat drivers. RPC and transport frontends can normalize their
     # own boundary formats before calling this helper.
-    def input_with_attachments(input, attachments)
+    def input_with_attachments(input, attachments, capabilities: PluginChatCapabilities.legacy)
       attachments = Array(attachments)
       return input.to_s if attachments.empty?
+      if capabilities.declared? && !capabilities.allows_attachment?(:image)
+        raise ArgumentError, "plugin chat does not allow image attachments"
+      end
 
       [{ type: "text", text: input.to_s }] + attachments.map do |attachment|
         {
@@ -181,21 +184,34 @@ module Kward
       registry
     end
 
-    def chat_for(type, scope_key:, descriptor:, workspace_root:)
+    def chat_for(type, surface:, scope_key:, descriptor:, workspace_root:)
+      surface = surface.to_sym
+      host_surface = type.rpc && type.transport ? :shared : surface
       scope_key = normalize_scope_key(scope_key)
+      scope_key = "global" if type.singleton == :global && type.capabilities.declared?
       chat_id = chat_id_for(type, scope_key)
       @mutex.synchronize do
         @chats[chat_id] ||= begin
           descriptor = {
             "kind" => "plugin",
-            "plugin_tab_type" => type.id,
-            "label" => type.title,
-            "scope_key" => scope_key
+            "label" => type.title
           }.merge(descriptor.transform_keys(&:to_s))
-          host = PluginTabHost.new(client: @client, workspace_root: workspace_root)
+          descriptor["plugin_tab_type"] = type.id
+          descriptor["scope_key"] = scope_key
+          host = PluginTabHost.new(
+            client: @client,
+            workspace_root: workspace_root,
+            plugin_host: type.plugin_id && plugin_registry.plugin_for(type.plugin_id),
+            type_id: type.id,
+            surface: host_surface,
+            scope_key: scope_key,
+            capabilities: type.capabilities
+          )
           begin
             driver = type.handler.call(host, descriptor)
             raise "Plugin chat #{type.id.inspect} did not return a tab driver." unless driver
+
+            type.capabilities.validate_driver!(driver)
           rescue StandardError
             host.shutdown
             raise

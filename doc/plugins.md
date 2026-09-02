@@ -526,13 +526,25 @@ in piped/non-interactive mode or through RPC.
 
 A plugin can provide a persistent tab with Kward's normal composer, transcript
 rendering, streaming, image input, cancellation, and tab switching. The plugin
-owns its transcript, storage, model behavior, and any global state; it does not
-need to use a Kward workspace session.
+owns its transcript and model behavior, while Kward can provide scoped storage,
+configuration, secrets, logging, and resource cleanup. It does not need to use a
+Kward workspace session.
 
 ```ruby
-Kward.plugin do |plugin|
-  plugin.tab_type "example", id: "com.example.chat", title: "Example", singleton: :global do |host, descriptor|
-    ExampleChat.new(client: host.client, descriptor: descriptor)
+Kward.plugin(id: "com.example.plugin", version: "1.0.0", api: 1) do |plugin|
+  plugin.tab_type(
+    "example",
+    id: "com.example.chat",
+    title: "Example",
+    singleton: :global,
+    api: 1,
+    capabilities: {
+      attachments: [:image],
+      steering: false,
+      transcript_paging: false
+    }
+  ) do |host, descriptor|
+    ExampleChat.new(client: host.client, storage: host.storage, descriptor: descriptor)
   end
 end
 ```
@@ -545,6 +557,39 @@ Open it from interactive Kward:
 
 `id` is a stable persisted identifier: do not change it after release.
 Use `singleton: :global` for one plugin-managed chat shared by all tab views.
+
+### Versioned chat contract
+
+Pass `api: 1` and `capabilities:` together to opt into the versioned plugin-chat
+contract. The capability object supports:
+
+- `attachments`: currently `[]` or `[:image]`;
+- `steering`: whether the driver supports in-flight steering;
+- `transcript_paging`: whether the driver implements `transcript_page`.
+
+Kward validates versioned drivers when they are created. A declared driver must
+implement `messages`, `submit`, `descriptor`, `supports_steering?`, and
+`assistant_label`. Its `supports_steering?` result must match the declaration,
+and a driver declaring transcript paging must implement `transcript_page`.
+Omitting both options preserves the legacy method-probing behavior.
+
+The factory's `host` exposes:
+
+- `host.plugin_id` (nil for a legacy anonymous plugin) and `host.type_id`;
+- `host.surface`, one of `:local`, `:rpc`, `:transport`, or `:shared` when the
+  same runtime can serve RPC and transports;
+- `host.scope_key`, persisted for local tabs and stable for RPC/transport scopes;
+- `host.capabilities`, the declared contract;
+- `host.config`, the identified plugin's immutable private configuration;
+- `host.storage`, isolated by plugin, chat type, and scope;
+- `host.secret(name, env: nil)` and `host.logger`;
+- `host.background` and `host.on_cleanup` for work owned by this chat instance.
+
+Closing a local tab or shutting down the shared RPC/transport chat runtime calls
+the driver's optional `close` method (or `shutdown` fallback), then cleans up the
+host's managed resources. Scoped storage remains durable across reconstruction.
+Legacy plugins receive the same host surface using their stable tab type ID as
+the configuration namespace.
 
 Plugin tabs do not notify global transcript observers by default. Set
 `transcript_events: true` only when the tab explicitly permits its streamed

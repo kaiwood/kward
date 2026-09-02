@@ -67,7 +67,7 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `turns`: asynchronous turns, per-session concurrency, active and recent turn lists, busy-input steering when the provider supports it, queued follow-ups, best-effort cancellation, and recent in-memory event replay. Per-turn options cover model, reasoning, tool scope, and tool approval, with structured client context for editor integrations.
 - `plugins`: the supported plugin API version and public `id`, `version`, and `apiVersion` metadata for identified plugins. Private plugin configuration is never included.
 - `pluginTools`: model-callable tools registered by trusted local plugins, including the registered count, `tools/list` discovery, execution-profile filtering, and permission-policy enforcement.
-- `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions. A type may also report `transport: true` when a trusted external transport is allowed to target it; RPC opt-in and external transport opt-in remain separate.
+- `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Versioned types report declared attachment, steering, and transcript-paging capabilities. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions. A type may also report `transport: true` when a trusted external transport is allowed to target it; RPC opt-in and external transport opt-in remain separate.
 - `events`: the `turn/event` contract, assistant and reasoning events, typed plugin-command results, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model listing, refresh, selection, and exposed metadata across providers. Scoped model selection is not supported.
@@ -297,7 +297,11 @@ Returns `{ "session": {}, "editorText": "...", "cancelled": false, "aborted": fa
 
 ## Plugin chat methods
 
-Plugin chats are optional trusted-plugin capabilities, not Kward workspace sessions. When `initialize.capabilities.pluginChats.supported` is true, use `pluginChats/list` to discover available types.
+Plugin chats are optional trusted-plugin capabilities, not Kward workspace
+sessions. When `initialize.capabilities.pluginChats.supported` is true, use
+`pluginChats/list` to discover available types. Types using the versioned chat
+contract also report `apiVersion` and `capabilities` with `attachments`,
+`steering`, and `transcriptPaging`; legacy types omit those fields.
 
 ### `pluginChats/open`
 
@@ -333,7 +337,10 @@ Params:
 - `input`;
 - `attachments`: optional base64 image attachments using the same MIME and size limits as `turns/start`.
 
-Queues a plugin-chat turn and returns `{ id, chatId, status, ... }`. Plugin chat turns are serialized per chat and do not use workspace sessions, agents, or model overrides.
+Queues a plugin-chat turn and returns `{ id, chatId, status, ... }`. Plugin chat
+turns are serialized per chat and do not use workspace sessions, agents, or
+model overrides. A versioned chat whose declared `attachments` capability omits
+`image` rejects image attachments before invoking its driver.
 
 ### `pluginChats/turns/cancel`, `pluginChats/turns/status`, `pluginChats/turns/events`, `pluginChats/turns/list`, `pluginChats/turns/listActive`
 

@@ -40,6 +40,27 @@ class TestPluginChatRuntime < KwardTestCase
     runtime&.shutdown
   end
 
+  def test_exposes_shared_surface_scope_and_type_through_the_chat_host
+    hosts = Queue.new
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.tab_type "bot", id: "example.context", rpc: true, transport: true do |host, descriptor|
+        hosts << host
+        Driver.new(descriptor)
+      end
+    end
+    runtime = Kward::PluginChatRuntime.new(client: Object.new, plugin_registry_provider: -> { registry })
+
+    runtime.open(type_id: "example.context", surface: :transport, scope_key: "conversation:42")
+    host = hosts.pop
+
+    assert_equal "example.context", host.type_id
+    assert_equal :shared, host.surface
+    assert_equal "conversation:42", host.scope_key
+  ensure
+    runtime&.shutdown
+  end
+
   def test_global_plugin_chats_ignore_scope_keys
     registry = Kward::PluginRegistry.new
     registry.evaluate do |plugin|

@@ -30,21 +30,25 @@ module Kward
         @runtime.supported_types(surface: :rpc)
       end
 
+      def type_entries
+        supported_types.map { |type| type_payload(type) }
+      end
+
       def list
-        { chats: supported_types.map { |type| type_payload(type) } }
+        { chats: type_entries }
       end
 
       def open(type_id:)
         chat = @runtime.open(type_id: type_id, surface: :rpc, scope_key: "owner")
         payload = chat_payload(chat)
-        return payload if chat.driver.respond_to?(:transcript_page)
+        return payload if transcript_paging?(chat)
 
         payload.merge(messages: TranscriptNormalizer.new(chat.driver.messages).normalize)
       end
 
       def transcript(chat_id:, limit: nil, before: nil)
         chat = fetch_chat(chat_id)
-        page = transcript_page(chat.driver, limit: limit, before: before)
+        page = transcript_page(chat, limit: limit, before: before)
         {
           chat: chat_payload(chat),
           messages: TranscriptNormalizer.new(page.fetch(:messages)).normalize,
@@ -70,7 +74,7 @@ module Kward
         normalized_attachments = AttachmentNormalizer.new.normalize(attachments)
         turn = @runtime.start_turn(
           chat_id: chat.id,
-          input: @runtime.input_with_attachments(input, normalized_attachments),
+          input: @runtime.input_with_attachments(input, normalized_attachments, capabilities: chat.type.capabilities),
           display_input: input.to_s
         )
         turn_payload(turn)
@@ -121,19 +125,35 @@ module Kward
       end
 
       def type_payload(type)
-        {
+        payload = {
           id: type.id,
           name: type.name,
           title: type.title,
           singleton: type.singleton,
           transport: type.transport == true ? true : nil
         }.compact
+        return payload unless type.capabilities.declared?
+
+        capabilities = type.capabilities.to_h
+        payload.merge(
+          apiVersion: capabilities.fetch(:api_version),
+          capabilities: {
+            attachments: capabilities.fetch(:attachments),
+            steering: capabilities.fetch(:steering),
+            transcriptPaging: capabilities.fetch(:transcript_paging)
+          }
+        )
       end
 
-      def transcript_page(driver, limit:, before:)
-        return { messages: driver.messages, has_more: false } unless limit && driver.respond_to?(:transcript_page)
+      def transcript_paging?(chat)
+        capabilities = chat.type.capabilities
+        capabilities.declared? ? capabilities.transcript_paging? : chat.driver.respond_to?(:transcript_page)
+      end
 
-        driver.transcript_page(limit: limit, before: before)
+      def transcript_page(chat, limit:, before:)
+        return { messages: chat.driver.messages, has_more: false } unless limit && transcript_paging?(chat)
+
+        chat.driver.transcript_page(limit: limit, before: before)
       end
 
       def chat_payload(chat)

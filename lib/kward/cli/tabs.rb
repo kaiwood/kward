@@ -1,4 +1,5 @@
 require "json"
+require "securerandom"
 require "thread"
 require_relative "../cancellation"
 
@@ -214,12 +215,13 @@ module Kward
         tab_type = plugin_registry.tab_type_for_id(descriptor["plugin_tab_type"])
         host = nil
         driver = if tab_type&.local
-          host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
+          descriptor["scope_key"] ||= plugin_tab_scope_key(tab_type)
+          host = build_plugin_tab_host(tab_type, workspace_root: session_store.cwd, scope_key: descriptor["scope_key"])
           begin
             created_driver = tab_type.handler.call(host, descriptor)
             raise "Plugin tab #{descriptor["plugin_tab_type"].inspect} did not return a tab driver." unless created_driver
 
-            created_driver
+            tab_type.capabilities.validate_driver!(created_driver)
           rescue StandardError
             host.shutdown
             raise
@@ -240,11 +242,14 @@ module Kward
 
         save_active_tab_state
         stop_tab_live_view
-        descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title }
-        host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
+        scope_key = plugin_tab_scope_key(tab_type)
+        descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title, "scope_key" => scope_key }
+        host = build_plugin_tab_host(tab_type, workspace_root: session_store.cwd, scope_key: scope_key)
         begin
           driver = tab_type.handler.call(host, descriptor)
           raise "Plugin tab #{name.inspect} did not return a tab driver." unless driver
+
+          tab_type.capabilities.validate_driver!(driver)
         rescue StandardError
           host.shutdown
           raise
@@ -717,10 +722,23 @@ module Kward
 
       def submit_tab_input(tab, input, display_input: nil)
         return if input.to_s.strip.empty?
+        return unless plugin_tab_attachments_allowed?(tab, input)
 
         save_active_tab_state
         start_tab_turn(tab, input, display_input: display_input)
         start_tab_live_view(tab) if tab == active_tab
+      end
+
+      def plugin_tab_attachments_allowed?(tab, input)
+        capabilities = tab.plugin_host&.capabilities
+        return true unless capabilities&.declared?
+        return true if capabilities.allows_attachment?(:image)
+
+        attached = ImageAttachments.references_from_text(input.to_s).any? { |reference| reference[:status] == :attached }
+        return true unless attached
+
+        runtime_output("This plugin chat does not allow image attachments.")
+        false
       end
 
       def start_tab_turn(tab, input, display_input: nil)
@@ -730,7 +748,13 @@ module Kward
         tab.unread = false
         tab.attention = nil
         tab.cancellation = Cancellation.new
-        tab.steering = tab.driver.supports_steering? && steering_supported? ? Steering.new : nil
+        steering_capability = tab.plugin_host&.capabilities
+        driver_supports_steering = if steering_capability&.declared?
+          steering_capability.steering?
+        else
+          tab.driver.supports_steering?
+        end
+        tab.steering = driver_supports_steering && steering_supported? ? Steering.new : nil
         tab.error = nil
         tab.answer = nil
         tab.error_reported = false
@@ -1119,6 +1143,22 @@ module Kward
         end
       end
 
+      def build_plugin_tab_host(tab_type, workspace_root:, scope_key:)
+        PluginTabHost.new(
+          client: @client,
+          workspace_root: workspace_root,
+          plugin_host: tab_type.plugin_id && plugin_registry.plugin_for(tab_type.plugin_id),
+          type_id: tab_type.id,
+          surface: :local,
+          scope_key: scope_key,
+          capabilities: tab_type.capabilities
+        )
+      end
+
+      def plugin_tab_scope_key(tab_type)
+        tab_type.singleton == :global ? "global" : SecureRandom.uuid
+      end
+
       def close_plugin_tab(tab)
         return unless tab&.plugin_host
 
@@ -1138,7 +1178,11 @@ module Kward
         return unless @tab_store
 
         @tab_store.save(
-          tabs: @tabs.map { |tab| tab.driver.descriptor.merge("label" => tab.label.to_s) },
+          tabs: @tabs.map do |tab|
+            descriptor = tab.driver.descriptor.merge("label" => tab.label.to_s)
+            descriptor["scope_key"] ||= tab.plugin_host.scope_key if tab.plugin_host
+            descriptor
+          end,
           active_index: @active_tab_index
         )
       end

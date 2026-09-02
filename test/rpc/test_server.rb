@@ -309,7 +309,7 @@ class TestRPCServer < KwardTestCase
       FileUtils.mkdir_p(plugins)
       File.write(File.join(plugins, "chat.rb"), <<~'RUBY')
         Kward.plugin do |plugin|
-          plugin.tab_type "chat", id: "test.chat", title: "Test Chat", rpc: true do |_host, _descriptor|
+          plugin.tab_type "chat", id: "test.chat", title: "Test Chat", rpc: true, api: 1, capabilities: { attachments: [], steering: false, transcript_paging: false } do |_host, _descriptor|
             Object.new
           end
         end
@@ -321,6 +321,8 @@ class TestRPCServer < KwardTestCase
 
         assert_equal true, capability["supported"]
         assert_equal "test.chat", capability["types"].first["id"]
+        assert_equal 1, capability["types"].first["apiVersion"]
+        assert_equal({ "attachments" => [], "steering" => false, "transcriptPaging" => false }, capability["types"].first["capabilities"])
         assert_includes capability["methods"], "pluginChats/subscribe"
       end
     end

@@ -33,6 +33,8 @@ Generated entry points:
 - [`Kward::PluginResult`](Kward/PluginResult.html)
 - [`Kward::PluginHost`](Kward/PluginHost.html)
 - [`Kward::PluginStore`](Kward/PluginStore.html)
+- [`Kward::PluginScopedStore`](Kward/PluginScopedStore.html)
+- [`Kward::PluginChatCapabilities`](Kward/PluginChatCapabilities.html)
 - [`Kward::PluginTask`](Kward/PluginTask.html)
 - [`Kward::PluginDisposable`](Kward/PluginDisposable.html)
 - [`Kward::PluginTabHost`](Kward/PluginTabHost.html)

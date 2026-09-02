@@ -3,9 +3,10 @@ require_relative "../lib/kward/transport/plugin_chat_gateway"
 
 class TestTransportPluginChatGateway < KwardTestCase
   class Driver
-    attr_reader :messages
+    attr_reader :descriptor, :messages
 
-    def initialize(_descriptor)
+    def initialize(descriptor)
+      @descriptor = descriptor
       @messages = []
     end
 
@@ -16,6 +17,14 @@ class TestTransportPluginChatGateway < KwardTestCase
       yield Kward::Events::AssistantDelta.new(delta: "Done")
       yield Kward::Events::Answer.new(content: "Done")
       "Done"
+    end
+
+    def supports_steering?
+      false
+    end
+
+    def assistant_label
+      "Plugin"
     end
   end
 
@@ -51,6 +60,35 @@ class TestTransportPluginChatGateway < KwardTestCase
     input = runtime.chat(chat.id).driver.messages.first[:content]
     assert_equal "aW1hZ2UtYnl0ZXM=", input.last[:data]
     assert_equal "image/png", input.last[:media_type]
+  ensure
+    host&.shutdown
+    runtime&.shutdown
+  end
+
+  def test_rejects_transport_attachments_omitted_from_the_declared_contract
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.tab_type(
+        "bot",
+        id: "example.bot",
+        transport: true,
+        api: 1,
+        capabilities: { attachments: [], steering: false, transcript_paging: false }
+      ) { |_host, descriptor| Driver.new(descriptor) }
+    end
+    runtime = Kward::PluginChatRuntime.new(client: Object.new, plugin_registry_provider: -> { registry })
+    gateway = Kward::Transport::PluginChatGateway.new(runtime: runtime, transport_id: "example.transport")
+    host = Kward::Transport::Host.new(transport_id: "example.transport", plugin_chat_gateway: gateway)
+    chat = host.plugin_chats.resolve(
+      type_id: "example.bot",
+      conversation: Kward::Transport.conversation_key(transport_id: "example.transport", external_id: "chat"),
+      actor: Kward::Transport.actor(id: "user")
+    )
+
+    error = assert_raises(ArgumentError) do
+      chat.start_turn("hello", attachments: [Kward::Transport.attachment(mime_type: "image/png", data: "image")])
+    end
+    assert_includes error.message, "does not allow image attachments"
   ensure
     host&.shutdown
     runtime&.shutdown

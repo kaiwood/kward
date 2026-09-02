@@ -21,6 +21,14 @@ class TestRPCPluginChatManager < KwardTestCase
       yield Kward::Events::Answer.new(content: "hello")
       "hello"
     end
+
+    def supports_steering?
+      false
+    end
+
+    def assistant_label
+      "Plugin"
+    end
   end
 
   class PagedDriver < Driver
@@ -48,7 +56,12 @@ class TestRPCPluginChatManager < KwardTestCase
   def test_returns_a_bounded_plugin_transcript_page_when_the_driver_supports_paging
     manager = nil
     Dir.mktmpdir do |home|
-      write_plugin(home, driver: "PagedDriver")
+      write_plugin(
+        home,
+        driver: "PagedDriver",
+        api: 1,
+        capabilities: { attachments: [], steering: false, transcript_paging: true }
+      )
       with_env("HOME" => home) do
         manager = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
         first_page = manager.transcript(chat_id: "test.chat", limit: 1)
@@ -145,6 +158,41 @@ class TestRPCPluginChatManager < KwardTestCase
     replacement&.shutdown
   end
 
+  def test_exposes_declared_chat_contract_and_enforces_attachment_capability
+    manager = nil
+    Dir.mktmpdir do |home|
+      write_plugin(
+        home,
+        api: 1,
+        capabilities: { attachments: [], steering: false, transcript_paging: false }
+      )
+      with_env("HOME" => home) do
+        manager = Kward::RPC::PluginChatManager.new(server: RecordingServer.new)
+
+        assert_equal({
+          id: "test.chat",
+          name: "test-chat",
+          title: "Test Chat",
+          singleton: :global,
+          apiVersion: 1,
+          capabilities: { attachments: [], steering: false, transcriptPaging: false }
+        }, manager.list[:chats].first)
+
+        manager.open(type_id: "test.chat")
+        error = assert_raises(ArgumentError) do
+          manager.start_turn(
+            chat_id: "test.chat",
+            input: "image",
+            attachments: [{ type: "image", data: Base64.strict_encode64("image"), mimeType: "image/png" }]
+          )
+        end
+        assert_includes error.message, "does not allow image attachments"
+      end
+    end
+  ensure
+    manager&.shutdown
+  end
+
   def test_exposes_opted_in_plugin_chat_and_streams_only_after_subscription
     manager = nil
     Dir.mktmpdir do |home|
@@ -179,7 +227,7 @@ class TestRPCPluginChatManager < KwardTestCase
 
   private
 
-  def write_plugin(home, driver: "Driver", singleton: :global, transcript_events: false, observe_events: false)
+  def write_plugin(home, driver: "Driver", singleton: :global, transcript_events: false, observe_events: false, api: nil, capabilities: nil)
     plugins = File.join(home, ".kward", "plugins")
     FileUtils.mkdir_p(plugins)
     self.class.plugin_events = []
@@ -193,9 +241,10 @@ class TestRPCPluginChatManager < KwardTestCase
     else
       ""
     end
+    contract = api ? ", api: #{api.inspect}, capabilities: #{capabilities.inspect}" : ""
     File.write(File.join(plugins, "chat.rb"), <<~RUBY)
       Kward.plugin do |plugin|
-        plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: #{singleton.inspect}, rpc: true, transcript_events: #{transcript_events} do |_host, descriptor|
+        plugin.tab_type "test-chat", id: "test.chat", title: "Test Chat", singleton: #{singleton.inspect}, rpc: true, transcript_events: #{transcript_events}#{contract} do |_host, descriptor|
           TestRPCPluginChatManager::#{driver}.new(descriptor)
         end#{observer}
       end

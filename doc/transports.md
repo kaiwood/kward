@@ -104,6 +104,13 @@ Plugin-chat drivers may accept a `context:` keyword on `submit`. Transport turns
 provide the authenticated actor there. Existing drivers that do not accept the
 keyword continue to work, but cannot use actor-specific context.
 
+The plugin-chat factory host reports `surface: :transport`, the stable chat type
+ID and scope key, immutable plugin configuration, scoped durable storage, secret
+lookup, logging, declared chat capabilities, and managed cleanup. Storage is
+isolated by plugin, chat type, and external conversation scope. Versioned chat
+contracts also reject attachments not declared by that chat type before calling
+the driver.
+
 Plugin-chat transport IDs, turn events, transcript storage, and authorization
 remain separate from normal workspace sessions. A plugin's `singleton: :global`
 setting also means that all transport conversations share that one plugin

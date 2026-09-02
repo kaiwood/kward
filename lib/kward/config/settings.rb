@@ -189,6 +189,17 @@ module Kward
         value.is_a?(Hash) ? value : {}
       end
 
+      # Returns the private configuration namespace for one identified plugin.
+      def plugin_config(plugin_id, config = read_config)
+        plugins = config.fetch("plugins", {})
+        raise ArgumentError, "Kward plugin config must be an object" unless plugins.is_a?(Hash)
+
+        values = plugins.fetch(plugin_id.to_s, {})
+        raise ArgumentError, "Kward plugin config for #{plugin_id} must be an object" unless values.is_a?(Hash)
+
+        DeepCopy.dup(values)
+      end
+
       # Returns the private configuration namespace for one transport.
       def transport_config(transport_id, config = read_config)
         transports = config["transports"]

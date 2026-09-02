@@ -754,7 +754,47 @@ class TestPluginRegistry < KwardTestCase
     assert tab_type.local
     assert_equal [tab_type], registry.transport_tab_types
     assert tab_type.transcript_events
+    refute tab_type.capabilities.declared?
     assert_same tab_type, registry.tab_type_for_id("example.chat")
+  end
+
+  def test_registers_identified_plugin_chat_contract
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(id: "com.example.plugin", version: "1.0.0", api: "1") do |plugin|
+      plugin.tab_type(
+        "example",
+        id: "example.chat",
+        rpc: true,
+        api: 1,
+        capabilities: { attachments: [:image], steering: true, transcript_paging: true }
+      ) { nil }
+    end
+
+    tab_type = registry.tab_type_for("example")
+    assert_equal "com.example.plugin", tab_type.plugin_id
+    assert tab_type.capabilities.declared?
+    assert_equal 1, tab_type.capabilities.api_version
+    assert_equal [:image], tab_type.capabilities.attachments
+    assert tab_type.capabilities.steering?
+    assert tab_type.capabilities.transcript_paging?
+  end
+
+  def test_rejects_invalid_plugin_chat_contracts
+    registry = Kward::PluginRegistry.new
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate do |plugin|
+        plugin.tab_type("example", id: "example.chat", api: 2, capabilities: {}) { nil }
+      end
+    end
+    assert_includes error.message, "Unsupported Kward plugin chat API"
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate do |plugin|
+        plugin.tab_type("example", id: "example.chat", capabilities: {}) { nil }
+      end
+    end
+    assert_includes error.message, "api and capabilities are required together"
   end
 
   def test_registers_transport_only_tab_type

@@ -1,3 +1,4 @@
+require "digest"
 require "json"
 require "logger"
 require "thread"
@@ -45,6 +46,11 @@ module Kward
       end
     end
 
+    # Returns a view whose keys cannot overlap another plugin-owned scope.
+    def scoped(namespace)
+      PluginScopedStore.new(self, namespace)
+    end
+
     private
 
     def load_state
@@ -74,6 +80,40 @@ module Kward
       return nil if value.nil?
 
       DeepCopy.dup(value)
+    end
+  end
+
+  # Namespaced view over an identified plugin's durable storage.
+  class PluginScopedStore
+    attr_reader :namespace
+
+    def initialize(storage, namespace)
+      @storage = storage
+      @namespace = namespace.to_s
+      raise ArgumentError, "plugin storage namespace is required" if @namespace.empty?
+
+      @prefix = "scope.#{Digest::SHA256.hexdigest(@namespace)[0, 24]}"
+    end
+
+    def get(key)
+      @storage.get(scoped_key(key))
+    end
+
+    def put(key, value)
+      @storage.put(scoped_key(key), value)
+    end
+
+    def delete(key)
+      @storage.delete(scoped_key(key))
+    end
+
+    private
+
+    def scoped_key(key)
+      key = key.to_s
+      raise ArgumentError, "storage key is required" unless key.match?(PluginStore::KEY_PATTERN)
+
+      "#{@prefix}.#{key}"
     end
   end
 
@@ -157,13 +197,7 @@ module Kward
     private
 
     def configured_values
-      plugins = ConfigFiles.read_config.fetch("plugins", {})
-      raise ArgumentError, "Kward plugin config must be an object" unless plugins.is_a?(Hash)
-
-      values = plugins.fetch(@id, {})
-      raise ArgumentError, "Kward plugin config for #{@id} must be an object" unless values.is_a?(Hash)
-
-      values
+      ConfigFiles.plugin_config(@id)
     end
 
     def freeze_config(value)
