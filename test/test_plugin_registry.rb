@@ -119,6 +119,24 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
+  def test_shipped_plugin_examples_declare_stable_identity
+    examples = [
+      File.expand_path("../examples/plugins/stardate_footer.rb", __dir__),
+      File.expand_path("../examples/plugins/space_invaders.rb", __dir__),
+      File.expand_path("../examples/plugins/telegram/plugin.rb", __dir__)
+    ]
+
+    registry = Kward::PluginRegistry.load(paths: examples)
+
+    assert_equal [
+      "com.kward.example.stardate-footer",
+      "com.kward.example.space-invaders",
+      "com.kward.telegram"
+    ], registry.plugins.map(&:id)
+    assert registry.plugins.all? { |plugin| plugin.version == "1.0.0" }
+    assert registry.plugins.all? { |plugin| plugin.api_version == Kward::PluginRegistry::PLUGIN_API_VERSION }
+  end
+
   def test_plugin_paths_are_home_only_files_and_package_entrypoints
     Dir.mktmpdir do |home|
       plugins = File.join(home, ".kward", "plugins")
