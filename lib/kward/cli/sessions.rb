@@ -392,13 +392,15 @@ module Kward
       end
 
       def reload_active_session(session_store)
+        workspace_root = current_workspace_root
+        worktree = worktree_binding_for(active_tab)
         @active_session, conversation = session_store.load(
           @active_session.path,
-          workspace: configured_workspace(root: session_store.cwd),
+          workspace: configured_workspace(root: workspace_root, strict: worktree&.active? == true),
           provider: current_model_provider,
           model: current_model_id,
           reasoning_effort: current_reasoning_effort,
-          project_skill_paths: project_skill_paths_for(session_store.cwd) || []
+          project_skill_paths: project_skill_paths_for(workspace_root) || []
         )
         reset_session_diff(@active_session.path)
         track_session(@active_session)

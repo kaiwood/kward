@@ -582,6 +582,35 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_rewind_stays_in_an_active_worktree
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new(["1"])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        tab.agent.conversation.append_user("create a step-by-step plan")
+        tab.agent.conversation.append_assistant("plan: implement step one, then step two")
+        tab.agent.conversation.append_user("implement step one")
+        tab.agent.conversation.append_assistant("step one complete")
+
+        handled, replacement = cli.send(:handle_local_slash_command, "/rewind", tab.agent, store)
+        cli.send(:replace_active_tab_agent, replacement)
+
+        assert handled
+        assert binding.active?
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+        assert_equal File.realpath(binding.path), prompt.workspace_roots.last[:root]
+        assert_equal ["create a step-by-step plan", "plan: implement step one, then step two"], tab.agent.conversation.messages.map { |message| message.fetch("content") }
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_status_reports_the_bound_worktree
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|
