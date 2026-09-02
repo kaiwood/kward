@@ -531,16 +531,37 @@ module Kward
 
       def run_plugin_command(session_id:, command:, arguments: "")
         rpc_session = fetch_session(session_id)
+        raise ArgumentError, "Plugin commands are disabled for this session" if rpc_session.execution_profile && !rpc_session.execution_profile.plugin_commands
+
         command = plugin_registry.command_for(command.to_s.delete_prefix("/")) || raise(ArgumentError, "Unknown plugin command: #{command}")
+        arguments = command.parse_arguments(arguments)
         output = []
-        context = plugin_context(rpc_session, args: arguments.to_s, say_callback: lambda { |message| output << message.to_s })
-        result = command.handler.call(arguments.to_s, context)
+        context = plugin_context(rpc_session, args: arguments, say_callback: lambda { |message| output << message.to_s })
+        result = command.normalize_result(command.handler.call(arguments, context))
         output = rpc_session.plugin_output.shift(rpc_session.plugin_output.length) + output
-        { command: command.name, output: output, result: result.nil? ? nil : result.to_s }
+        serialized_result = command.typed? ? result.to_h : (result.nil? ? nil : result.to_s)
+        { command: command.name, output: output, result: serialized_result }
       end
 
       def plugin_commands
         plugin_registry.commands
+      end
+
+      def plugin_actions
+        plugin_registry.actions
+      end
+
+      def run_plugin_action(session_id:, id:, arguments: {})
+        rpc_session = fetch_session(session_id)
+        raise ArgumentError, "Plugin actions are disabled for this session" if rpc_session.execution_profile && !rpc_session.execution_profile.plugin_commands
+
+        action = plugin_registry.action_for(id) || raise(ArgumentError, "Unknown plugin action: #{id}")
+        arguments = action.parse_arguments(arguments)
+        output = []
+        context = plugin_context(rpc_session, args: arguments, say_callback: lambda { |message| output << message.to_s })
+        result = action.normalize_result(action.handler.call(arguments, context))
+        output = rpc_session.plugin_output.shift(rpc_session.plugin_output.length) + output
+        { action: action.id, output: output, result: result.to_h }
       end
 
       def available_models
@@ -1433,15 +1454,21 @@ module Kward
       def run_plugin_turn(rpc_session, turn)
         turn.cancellation&.raise_if_cancelled!
         command = plugin_registry.command_for(turn.plugin_command_name) || raise(ArgumentError, "Unknown plugin command: #{turn.plugin_command_name}")
+        arguments = command.parse_arguments(turn.plugin_arguments)
         output = []
         context = plugin_context(
           rpc_session,
-          args: turn.plugin_arguments.to_s,
+          args: arguments,
           say_callback: lambda { |message| output << message.to_s },
           requests: true,
           cancellation: turn.cancellation
         )
-        result = command.handler.call(turn.plugin_arguments.to_s, context)
+        result = command.normalize_result(command.handler.call(arguments, context))
+        turn.cancellation&.raise_if_cancelled!
+        if command.typed?
+          emit_turn_event(turn, "pluginCommandResult", { command: command.name, result: result.to_h })
+          result = result.message
+        end
         answer = (output + [result]).compact.map(&:to_s).reject(&:empty?).join("\n")
         unless answer.empty?
           emit_turn_event(turn, "assistantDelta", { delta: answer })

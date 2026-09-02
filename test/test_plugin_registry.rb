@@ -444,6 +444,114 @@ class TestPluginRegistry < KwardTestCase
     assert_includes error.message, "requires unknown properties: missing"
   end
 
+  def test_registers_typed_command_with_shell_style_arguments
+    registry = Kward::PluginRegistry.new
+    received = nil
+
+    registry.evaluate(id: "com.example.release", version: "1.0.0", api: "1") do |plugin|
+      plugin.command "deploy",
+        description: "Deploy a service",
+        schema: {
+          type: "object",
+          properties: {
+            service: { type: "string" },
+            environment: { type: "string", enum: %w[staging production], default: "staging" },
+            dry_run: { type: "boolean", default: false },
+            retries: { type: "integer", default: 1 },
+            labels: { type: "array", items: { type: "string" } }
+          },
+          required: ["service"]
+        },
+        positionals: ["service"] do |args, ctx|
+          received = [args, ctx.args]
+          ctx.result(message: "Queued", data: { deployment_id: 42 })
+        end
+    end
+
+    command = registry.command_for("deploy")
+    arguments = command.parse_arguments("api --environment production --dry-run --retries 3 --labels urgent --labels 'release candidate'")
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil), args: arguments)
+    result = command.normalize_result(command.handler.call(arguments, context))
+
+    assert command.typed?
+    assert_equal "com.example.release", command.plugin_id
+    assert_equal ["service"], command.positionals
+    assert_equal({
+      "service" => "api",
+      "environment" => "production",
+      "dry_run" => true,
+      "retries" => 3,
+      "labels" => ["urgent", "release candidate"]
+    }, arguments)
+    assert_equal [arguments, arguments], received
+    assert_equal({ message: "Queued", data: { "deployment_id" => 42 } }, result.to_h)
+    assert_equal false, command.parse_arguments("api --no-dry-run").fetch("dry_run")
+    assert command.schema.frozen?
+  end
+
+  def test_typed_command_rejects_unknown_missing_and_invalid_arguments
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.command "deploy", schema: {
+        type: "object",
+        properties: {
+          environment: { type: "string", enum: %w[staging production] },
+          force: { type: "boolean" }
+        },
+        required: ["environment"]
+      } do |_args, _ctx|
+        "unused"
+      end
+    end
+    command = registry.command_for("deploy")
+
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments("--unknown value") }.message, "unknown option"
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments("") }.message, "missing required arguments"
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments("--environment test") }.message, "must be one of"
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments({ environment: "staging", force: "yes" }) }.message, "force must be boolean"
+  end
+
+  def test_legacy_command_keeps_raw_string_arguments
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.command("legacy") { |args| args }
+    end
+
+    command = registry.command_for("legacy")
+
+    refute command.typed?
+    assert_equal "--still raw", command.parse_arguments("--still raw")
+    assert_equal "done", command.normalize_result("done")
+  end
+
+  def test_registers_namespaced_plugin_action_and_requires_identity
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(id: "com.example.release", version: "1.0.0", api: "1") do |plugin|
+      plugin.action "status", description: "Read release status", schema: {
+        type: "object",
+        properties: { deployment_id: { type: "integer" } },
+        required: ["deployment_id"]
+      } do |args, ctx|
+        ctx.result(data: { deployment_id: args.fetch("deployment_id"), state: "ready" })
+      end
+    end
+
+    action = registry.action_for("com.example.release/status")
+    arguments = action.parse_arguments(deployment_id: 42)
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil), args: arguments)
+    result = action.normalize_result(action.handler.call(arguments, context))
+
+    assert_equal [action], registry.actions
+    assert_equal "com.example.release", action.plugin_id
+    assert_equal({ data: { "deployment_id" => 42, "state" => "ready" } }, result.to_h)
+    assert_includes assert_raises(ArgumentError) { action.parse_arguments("--deployment-id 42") }.message, "must be an object"
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate { |plugin| plugin.action("broken", description: "Broken") { nil } }
+    end
+    assert_includes error.message, "require stable plugin identity"
+  end
+
   def test_registers_plugin_tab_type
     registry = Kward::PluginRegistry.new
     registry.evaluate do |plugin|

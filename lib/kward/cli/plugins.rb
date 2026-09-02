@@ -151,20 +151,26 @@ module Kward
         PromptCommands.expand(input, templates: prompt_templates, reserved_commands: builtin_slash_command_names)
       end
 
-      def run_plugin_command(name, argument, agent)
+      def run_plugin_command(name, argument, agent, cancellation: nil)
         command = plugin_command_for(name)
         return [false, nil] unless command
 
+        cancellation&.raise_if_cancelled!
         agent.conversation.plugin_registry ||= plugin_registry if agent.conversation.respond_to?(:plugin_registry)
-        context = plugin_context(agent.conversation, argument)
-        command.handler.call(argument, context)
+        arguments = command.parse_arguments(argument)
+        context = plugin_context(agent.conversation, arguments, cancellation: cancellation)
+        result = command.normalize_result(command.handler.call(arguments, context))
+        cancellation&.raise_if_cancelled!
+        runtime_output(result.message) if command.typed? && !result.message.to_s.empty?
         [true, nil]
+      rescue Cancellation::CancelledError
+        raise
       rescue StandardError => e
         runtime_output("Plugin command /#{name} error: #{e.message}")
         [true, nil]
       end
 
-      def plugin_context(conversation, args, requests: true, tool_requests: nil)
+      def plugin_context(conversation, args, requests: true, tool_requests: nil, cancellation: nil)
         say_callback = lambda { |message| runtime_output(message) }
         tool_requests = requests if tool_requests.nil?
         PluginRegistry::Context.new(
@@ -173,6 +179,7 @@ module Kward
           session: @active_session,
           workspace_root: conversation.workspace_root,
           say_callback: say_callback,
+          cancellation: cancellation,
           ui: plugin_ui(say_callback, requests: requests),
           tool_ui: plugin_ui(say_callback, requests: tool_requests)
         )

@@ -75,6 +75,7 @@ module Kward
         "memory/why", "memory/summarize"
       ].freeze
       COMMAND_METHODS = ["commands/list", "commands/run"].freeze
+      PLUGIN_ACTION_METHODS = ["pluginActions/list", "pluginActions/run"].freeze
       SKILL_CAPTURE_METHODS = ["skills/captureSessions", "skills/captureDraft", "skills/saveCapturedDraft"].freeze
       STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
       CONFIG_METHODS = ["config/read", "config/update"].freeze
@@ -108,6 +109,7 @@ module Kward
         auth: AUTH_METHODS,
         memory: MEMORY_METHODS,
         commands: COMMAND_METHODS,
+        plugin_actions: PLUGIN_ACTION_METHODS,
         skill_capture: SKILL_CAPTURE_METHODS,
         startup_resources: STARTUP_RESOURCE_METHODS,
         config: CONFIG_METHODS,
@@ -287,6 +289,10 @@ module Kward
           commands_list(params)
         when COMMAND_METHODS[1]
           commands_run(params)
+        when PLUGIN_ACTION_METHODS[0]
+          plugin_actions_list(params)
+        when PLUGIN_ACTION_METHODS[1]
+          plugin_actions_run(params)
         when SKILL_CAPTURE_METHODS[0]
           { sessions: @session_manager.skill_capture_sessions }
         when SKILL_CAPTURE_METHODS[1]
@@ -532,6 +538,7 @@ module Kward
             reasoning: { start: false, delta: true, boundary: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
             steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
+            pluginCommands: { structuredResult: "pluginCommandResult" },
             tools: { call: true, update: true, result: true, normalizedMetadata: true, diffs: true, firstChangedLine: true, changedFiles: true, workspaceGuardrails: workspace_guardrails_enabled?, focusedContext: true, contextBudgetStats: true },
             errors: true,
             sessionUpdates: false
@@ -596,7 +603,26 @@ module Kward
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: [] },
-          commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
+          commands: {
+            supported: true,
+            methods: COMMAND_METHODS,
+            method: COMMAND_METHODS[0],
+            runMethod: COMMAND_METHODS[1],
+            sources: ["builtin", "prompt", "skill", "plugin"],
+            executableSources: ["builtin", "plugin"],
+            typedArguments: { supported: true, schema: "jsonSchemaObject", textSyntax: "shellFlags", legacyRawStrings: true },
+            structuredResults: true
+          },
+          pluginActions: {
+            supported: true,
+            methods: PLUGIN_ACTION_METHODS,
+            registered: @session_manager.plugin_actions.length,
+            namespace: "pluginId/actionName",
+            arguments: "jsonSchemaObject",
+            structuredResults: true,
+            blockingUi: false,
+            localTui: false
+          },
           skillCapture: { supported: true, methods: SKILL_CAPTURE_METHODS, destination: "personal", source: "savedSessionActiveLeaf", reviewRequired: true, overwrite: "explicit", autoActivate: false },
           projectSkillTrust: { supported: false, trustRequired: true, reason: "RPC has no interactive trust decision bridge; project skills remain skipped unless globally enabled." },
           mcp: {
@@ -810,8 +836,12 @@ module Kward
             argumentHint: command.argument_hint,
             source: "plugin",
             path: command.path,
-            executable: true
-          }
+            pluginId: command.plugin_id,
+            executable: true,
+            typed: command.typed?,
+            schema: command.schema,
+            positionals: command.positionals
+          }.compact
         end
         { commands: builtins + prompts + skills + plugins }
       end
@@ -820,7 +850,29 @@ module Kward
         @session_manager.run_command(
           session_id: params.fetch("sessionId"),
           command: params.fetch("name"),
-          arguments: params["arguments"] || ""
+          arguments: params.key?("arguments") ? params["arguments"] : ""
+        )
+      end
+
+      def plugin_actions_list(params)
+        @session_manager.runtime_state(session_id: params.fetch("sessionId"))
+        actions = @session_manager.plugin_actions.map do |action|
+          {
+            id: action.id,
+            name: action.name,
+            pluginId: action.plugin_id,
+            description: action.description,
+            schema: action.schema
+          }
+        end
+        { actions: actions }
+      end
+
+      def plugin_actions_run(params)
+        @session_manager.run_plugin_action(
+          session_id: params.fetch("sessionId"),
+          id: params.fetch("id"),
+          arguments: params.key?("arguments") ? params["arguments"] : {}
         )
       end
 

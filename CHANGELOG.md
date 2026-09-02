@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added typed plugin commands with JSON Schema validation, shell-style flags and declared positional arguments, structured frontend/RPC results, cancellation context, and legacy raw-string compatibility, plus identified-plugin actions with namespaced RPC discovery and execution.
 - Added structured frontend-neutral plugin UI for questions, selections, confirmations, text input, progress, and notifications, with TUI rendering, RPC capability negotiation and request/answer notifications, transport interaction routing, bounded validation, cancellation, and fail-closed fallbacks.
 - Added stable plugin identity metadata and a shared plugin host with namespaced configuration, private durable storage, secret lookup, logging, API compatibility checks, and sanitized RPC discovery.
 - Added model-callable plugin tools with strict JSON schemas, cancellation context, normal permission and lifecycle-hook enforcement, execution-profile filtering, RPC discovery, and tool-output compaction.

@@ -2,6 +2,7 @@ require_relative "../config_files"
 require_relative "../deep_copy"
 require_relative "../hooks"
 require_relative "../transport"
+require_relative "actions"
 require_relative "host"
 require_relative "ui"
 
@@ -10,8 +11,9 @@ module Kward
   # Loads trusted user plugin files and provides the plugin DSL.
   #
   # Plugins live in the user plugin directory, run as local Ruby code, and can
-  # register slash commands, model-callable tools, one footer renderer, prompt
-  # context, and live transcript-event observers for CLI and RPC frontends.
+  # register slash commands, namespaced actions, model-callable tools, one footer
+  # renderer, prompt context, and live transcript-event observers for CLI and RPC
+  # frontends.
   #
   # This registry is intentionally trust-based, not a sandbox. Keep plugin loading
   # restricted to `ConfigFiles.plugin_paths`, keep workspace-local code out of the
@@ -21,13 +23,9 @@ module Kward
     PLUGIN_API_VERSION = "1"
     COMMAND_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_-]*\z/.freeze
 
-    # Registered slash command exposed in completion, RPC command listings, and
-    # interactive command dispatch.
-    Command = Struct.new(:name, :description, :argument_hint, :path, :handler, keyword_init: true) do
-      def entry
-        { name: name, description: description, argument_hint: argument_hint }
-      end
-    end
+    # Public registration types retained under the registry namespace.
+    Command = PluginCommand
+    Action = PluginAction
 
     # Registered model-callable tool exposed through each normal agent tool
     # registry. The handler receives parsed arguments and a runtime context.
@@ -83,7 +81,7 @@ module Kward
       # Creates an object for trusted plugin loading and dispatch.
       def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil, ui: nil, tool_ui: nil)
         @conversation = conversation
-        @args = args.to_s
+        @args = args.is_a?(Hash) ? DeepCopy.freeze(DeepCopy.dup(args)) : args.to_s
         @session = session
         @workspace_root = workspace_root
         @say_callback = say_callback
@@ -130,8 +128,17 @@ module Kward
         nil
       end
 
-      # Returns whether the active plugin tool call has been cancelled.
-      # Non-tool plugin contexts do not have a cancellation token and return false.
+      # Builds a structured result for a typed command or plugin action.
+      #
+      # @param message [#to_s, nil] optional user-facing result text
+      # @param data [Object, nil] optional JSON-compatible machine-readable data
+      # @return [PluginResult]
+      def result(message: nil, data: nil)
+        PluginResult.new(message: message, data: data)
+      end
+
+      # Returns whether the active plugin operation has been cancelled.
+      # Contexts without a cancellable operation return false.
       def cancelled?
         @cancellation&.cancelled? == true
       end
@@ -228,12 +235,39 @@ module Kward
       # @param name [String, #to_s] command name without the leading slash
       # @param description [String] short text shown in command listings
       # @param argument_hint [String] optional usage hint for arguments
-      # @yieldparam args [String] text after the command name
+      # @param schema [Hash, nil] strict object JSON Schema for typed arguments
+      # @param positionals [Array<String, Symbol>] schema properties filled by positional text
+      # @yieldparam args [String, Hash] raw text for legacy commands or parsed typed arguments
       # @yieldparam ctx [Context] plugin execution context
       # @return [void]
       # @api public
-      def command(name, description: "", argument_hint: "", &block)
-        @registry.register_command(name, description: description, argument_hint: argument_hint, path: @path, &block)
+      def command(name, description: "", argument_hint: "", schema: nil, positionals: [], &block)
+        @registry.register_command(
+          name,
+          description: description,
+          argument_hint: argument_hint,
+          schema: schema,
+          positionals: positionals,
+          plugin_id: @host&.id,
+          path: @path,
+          &block
+        )
+      end
+
+      # Registers a namespaced typed action for trusted RPC clients.
+      # Identified plugin metadata is required so the action has a stable ID.
+      #
+      # @param name [String, #to_s] action name within the plugin namespace
+      # @param description [String] short client-facing description
+      # @param schema [Hash] strict object JSON Schema for typed arguments
+      # @yieldparam args [Hash] validated action arguments
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def action(name, description:, schema: { type: "object", properties: {} }, &block)
+        raise ArgumentError, "Plugin actions require stable plugin identity" unless @host
+
+        @registry.register_action(name, plugin_id: @host.id, description: description, schema: schema, path: @path, &block)
       end
 
       # Registers a model-callable tool for normal Kward agent turns.
@@ -381,6 +415,7 @@ module Kward
       @warning_sink = warning_sink
       @plugins = {}
       @commands = {}
+      @actions = {}
       @tools = {}
       @interactive_commands = {}
       @tab_types = {}
@@ -416,6 +451,14 @@ module Kward
 
     def command_for(name)
       @commands[name.to_s]
+    end
+
+    def actions
+      @actions.values
+    end
+
+    def action_for(id)
+      @actions[id.to_s]
     end
 
     def tools
@@ -545,10 +588,11 @@ module Kward
       @plugins[id] = PluginHost.new(id: id, version: version, api_version: api, source_path: path)
     end
 
-    def register_command(name, description: "", argument_hint: "", path: nil, &handler)
+    def register_command(name, description: "", argument_hint: "", schema: nil, positionals: [], plugin_id: nil, path: nil, &handler)
       name = name.to_s
       raise "Plugin command name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
       raise "Plugin command /#{name} requires a handler" unless handler
+      raise ArgumentError, "Plugin command /#{name} positionals require a schema" if schema.nil? && !Array(positionals).empty?
 
       if @reserved_commands.include?(name)
         emit_warning "Warning: skipping Kward plugin command /#{name}: reserved command"
@@ -563,6 +607,31 @@ module Kward
         name: name,
         description: description.to_s,
         argument_hint: argument_hint.to_s,
+        schema: schema,
+        positionals: positionals,
+        plugin_id: plugin_id,
+        path: path,
+        handler: handler
+      )
+    end
+
+    def register_action(name, plugin_id:, description:, schema:, path: nil, &handler)
+      name = name.to_s
+      raise "Plugin action name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin action #{plugin_id}/#{name} requires a description" if description.to_s.strip.empty?
+      raise "Plugin action #{plugin_id}/#{name} requires a handler" unless handler
+
+      id = "#{plugin_id}/#{name}"
+      if @actions.key?(id)
+        emit_warning "Warning: skipping duplicate Kward plugin action #{id}: #{path}"
+        return nil
+      end
+
+      @actions[id] = Action.new(
+        name: name,
+        plugin_id: plugin_id,
+        description: description.to_s,
+        schema: schema,
         path: path,
         handler: handler
       )

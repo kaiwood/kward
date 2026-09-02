@@ -4762,6 +4762,39 @@ edit this prompt"
     end
   end
 
+  def test_typed_plugin_command_parses_shell_arguments_and_renders_result_message
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    registry = Kward::PluginRegistry.new
+    received = nil
+    registry.evaluate do |plugin|
+      plugin.command "deploy", schema: {
+        type: "object",
+        properties: {
+          service: { type: "string" },
+          dry_run: { type: "boolean", default: false }
+        },
+        required: ["service"]
+      }, positionals: ["service"] do |args, ctx|
+        received = [args, ctx.args, ctx.cancellation]
+        ctx.result(message: "Queued #{args.fetch('service')}", data: { accepted: true })
+      end
+    end
+    cli.instance_variable_set(:@plugin_registry, registry)
+    conversation = Kward::Conversation.new(plugin_registry: registry)
+    agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
+    cancellation = Kward::Cancellation.new
+
+    handled, result = cli.send(:run_plugin_command, "deploy", "api --dry-run", agent, cancellation: cancellation)
+
+    assert handled
+    assert_nil result
+    assert_equal({ "service" => "api", "dry_run" => true }, received[0])
+    assert_equal received[0], received[1]
+    assert_same cancellation, received[2]
+    assert_includes prompt.output.join("\n"), "Queued api"
+  end
+
   def test_reload_plugins_updates_commands_and_current_system_message
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")

@@ -192,6 +192,14 @@ class TestRPCServer < KwardTestCase
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
     assert_equal "commands/run", capabilities["commands"]["runMethod"]
+    assert_equal true, capabilities["commands"].dig("typedArguments", "supported")
+    assert_equal "shellFlags", capabilities["commands"].dig("typedArguments", "textSyntax")
+    assert_equal true, capabilities["commands"]["structuredResults"]
+    assert_equal "pluginCommandResult", capabilities.dig("events", "pluginCommands", "structuredResult")
+    assert_equal true, capabilities["pluginActions"]["supported"]
+    assert_equal Kward::RPC::Server::PLUGIN_ACTION_METHODS, capabilities["pluginActions"]["methods"]
+    assert_equal "pluginId/actionName", capabilities["pluginActions"]["namespace"]
+    assert_equal false, capabilities["pluginActions"]["localTui"]
     assert_equal true, capabilities["pluginTools"]["supported"]
     assert_equal 0, capabilities["pluginTools"]["registered"]
     assert_equal "tools/list", capabilities["pluginTools"]["discoveryMethod"]
@@ -455,7 +463,7 @@ class TestRPCServer < KwardTestCase
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
       protocol workspace tools mcp prompts sessions turns plugin_chats models runtime runtime_settings
-      auth memory commands skill_capture startup_resources config logging lifecycle_hooks ui tool_approval
+      auth memory commands plugin_actions skill_capture startup_resources config logging lifecycle_hooks ui tool_approval
     ]
 
     assert_equal expected_groups, Kward::RPC::Server::METHOD_GROUPS.keys
@@ -464,6 +472,7 @@ class TestRPCServer < KwardTestCase
     assert_includes Kward::RPC::Server::RPC_METHODS, "sessions/create"
     assert_includes Kward::RPC::Server::RPC_METHODS, "turns/start"
     assert_includes Kward::RPC::Server::RPC_METHODS, "pluginChats/list"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "pluginActions/list"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerRequest"
     assert_includes Kward::RPC::Server::RPC_METHODS, "hooks/logs"
@@ -503,6 +512,7 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::COMMAND_METHODS, capabilities["commands"]["methods"]
     assert_equal Kward::RPC::Server::COMMAND_METHODS[0], capabilities["commands"]["method"]
     assert_equal Kward::RPC::Server::COMMAND_METHODS[1], capabilities["commands"]["runMethod"]
+    assert_equal Kward::RPC::Server::PLUGIN_ACTION_METHODS, capabilities["pluginActions"]["methods"]
     assert_equal Kward::RPC::Server::STARTUP_RESOURCE_METHODS.first, capabilities["startupResources"]["method"]
     assert_equal false, messages[0]["result"]["experimental"]
     assert_equal "stable", capabilities["stability"]["protocol"]

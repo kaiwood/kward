@@ -134,6 +134,97 @@ Command names do not include `/`. They must start with a letter or number and ma
 
 A plugin command cannot replace a built-in command or prompt-template command.
 
+### Typed command arguments and results
+
+Add an object JSON Schema when a command needs validated arguments. Interactive
+slash commands use shell-style `--flags`; RPC clients may send either the same
+text or an argument object. Declare `positionals:` when selected properties may
+be supplied without flags:
+
+```ruby
+Kward.plugin(id: "com.example.release", version: "1.0.0", api: 1) do |plugin|
+  plugin.command "deploy",
+    description: "Deploy a service",
+    argument_hint: "SERVICE [--environment NAME] [--dry-run]",
+    schema: {
+      type: "object",
+      properties: {
+        service: { type: "string" },
+        environment: {
+          type: "string",
+          enum: %w[staging production],
+          default: "staging"
+        },
+        dry_run: { type: "boolean", default: false },
+        labels: { type: "array", items: { type: "string" } }
+      },
+      required: ["service"]
+    },
+    positionals: ["service"] do |args, ctx|
+      deployment = Release.deploy(
+        args.fetch("service"),
+        environment: args.fetch("environment"),
+        dry_run: args.fetch("dry_run"),
+        labels: args.fetch("labels", [])
+      )
+      ctx.result(
+        message: "Queued deployment #{deployment.id}.",
+        data: { deployment_id: deployment.id }
+      )
+    end
+end
+```
+
+For example:
+
+```text
+/deploy api --environment production --dry-run --labels urgent --labels "release candidate"
+```
+
+Typed command handlers receive a string-keyed argument hash through both the
+first block argument and `ctx.args`. Supported property types are `string`,
+`integer`, `number`, `boolean`, `array`, and `object`; array items must be scalar.
+Use `--flag` or `--no-flag` for booleans, repeat an array option to collect
+values, and use `--` before positional text that starts with a dash. Unknown,
+missing, duplicate, incorrectly typed, and out-of-enum arguments are rejected
+before plugin code runs. Commands without `schema:` keep receiving their raw
+argument string for compatibility.
+
+`ctx.result(message:, data:)` returns optional user-facing text plus optional
+JSON-compatible machine data. The TUI displays `message`. RPC returns the full
+structured result, and asynchronous slash-command turns also emit a
+`pluginCommandResult` event before their normal answer event.
+
+## Add a namespaced action
+
+Actions are typed operations intended for trusted RPC integrations rather than
+slash-command completion. They require identified plugin metadata and receive a
+stable `<plugin-id>/<action-name>` ID:
+
+```ruby
+Kward.plugin(id: "com.example.release", version: "1.0.0", api: 1) do |plugin|
+  plugin.action "status",
+    description: "Read deployment status",
+    schema: {
+      type: "object",
+      properties: { deployment_id: { type: "integer" } },
+      required: ["deployment_id"]
+    } do |args, ctx|
+      deployment = Release.find(args.fetch("deployment_id"))
+      ctx.result(data: { id: deployment.id, state: deployment.state })
+    end
+end
+```
+
+RPC clients discover actions with `pluginActions/list` and invoke them with
+`pluginActions/run`. Action arguments must be an object and results always use
+the structured `{ message, data }` contract. Synchronous actions support
+`ctx.say`, progress, and notifications, but blocking UI requests fail closed so
+the RPC reader cannot deadlock. Actions are disabled when the session execution
+profile disables plugin commands. They are not exposed as local TUI commands;
+register a typed command as well when people should invoke the operation from
+the composer.
+
 ## Add a model-callable tool
 
 Plugin tools let the model call trusted local Ruby integrations without requiring
@@ -465,6 +556,7 @@ Handlers receive a `ctx` object. Common methods:
 - `ctx.workspace_root`
 - `ctx.args`
 - `ctx.say(message)`
+- `ctx.result(message:, data:)`
 - `ctx.ui`
 - `ctx.transcript.messages`
 - `ctx.session_id`
@@ -472,7 +564,7 @@ Handlers receive a `ctx` object. Common methods:
 - `ctx.session_path`
 - `ctx.refresh_system_message!`
 
-These methods are available in all handler types, including model-callable tools. Tool contexts additionally expose `ctx.cancellation` and `ctx.cancelled?`. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called. Interactive `ctx.ui` methods remain capability-gated because not every handler runs in a frontend context that can wait for an answer.
+These methods are available in all handler types, including model-callable tools, although `ctx.result` is the result contract specifically for typed commands and actions. Typed command and action handlers receive their validated hash through `ctx.args`; legacy commands continue to receive text. Model-callable tools and asynchronous TUI/RPC slash commands expose `ctx.cancellation` and `ctx.cancelled?`. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called. Interactive `ctx.ui` methods remain capability-gated because not every handler runs in a frontend context that can wait for an answer.
 
 The transcript is read-only. Use context methods instead of mutating Kward internals.
 
@@ -485,8 +577,9 @@ RPC clients can:
 - discover plugin tools through `tools/list`,
 - invoke plugin tools through normal model turns,
 - list plugin commands through `commands/list`,
-- run plugin commands through `commands/run`,
+- run plugin commands through `commands/run`, including typed object arguments and structured results,
 - run plugin slash commands through `turns/start` input such as `/hello World`,
+- discover and run namespaced typed actions through `pluginActions/list` and `pluginActions/run`,
 - render and answer structured plugin UI requests advertised through `extensionUi`.
 
 Plugin command output is emitted through normal turn events without calling the model.

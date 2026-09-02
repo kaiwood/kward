@@ -68,7 +68,7 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `plugins`: the supported plugin API version and public `id`, `version`, and `apiVersion` metadata for identified plugins. Private plugin configuration is never included.
 - `pluginTools`: model-callable tools registered by trusted local plugins, including the registered count, `tools/list` discovery, execution-profile filtering, and permission-policy enforcement.
 - `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions. A type may also report `transport: true` when a trusted external transport is allowed to target it; RPC opt-in and external transport opt-in remain separate.
-- `events`: the `turn/event` contract, assistant and reasoning events, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
+- `events`: the `turn/event` contract, assistant and reasoning events, typed plugin-command results, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model listing, refresh, selection, and exposed metadata across providers. Scoped model selection is not supported.
 - `runtime`: runtime state, message-count statistics, and OpenAI/Codex context usage. Kward does not yet compute cumulative token or cost statistics.
@@ -76,7 +76,8 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: available providers and authentication methods, private API-key storage, sanitized status, and logout. OpenAI and Anthropic OAuth are supported; Copilot OAuth is CLI-only, OpenRouter PKCE is not implemented, and xAI has no supported stable third-party flow.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
-- `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
+- `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns. Plugin commands may advertise validated JSON Schema arguments, shell-style text parsing, and structured results while legacy raw-string commands remain supported.
+- `pluginActions`: namespaced typed actions discovered through `pluginActions/list` and synchronously invoked through `pluginActions/run`. They use object arguments and structured results, are not local TUI commands, and cannot make blocking UI requests.
 - `skillCapture`: capture a reviewed personal `SKILL.md` from any saved session’s active branch through `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`.
 - `projectSkillTrust`: explicitly unsupported over RPC. RPC clients cannot answer the interactive Allow/Deny/Review decision, so project skills remain skipped unless the global `skills.trust_project` override is enabled.
 - `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. It does not support MCP resources, prompts, sampling, or Streamable HTTP.
@@ -441,6 +442,7 @@ Known event types:
 - `toolCall`
 - `toolUpdate`
 - `toolResult`
+- `pluginCommandResult`
 - `answer`
 - `turnCancelRequested`
 - `error`
@@ -463,6 +465,10 @@ Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFi
 `toolUpdate` additionally includes `delta.content` and optional `elapsedMs` for clients that want progress/status updates before the final result. Kward currently emits one update after each built-in tool finishes; clients should treat future additional updates as additive.
 
 `toolResult` additionally includes `result` with `content`, `isError`, optional unified `diff`, optional `changedFiles`, and `images`. Failed or declined tools set `isError: true`.
+
+A typed plugin slash command emits `pluginCommandResult` with `command` and a
+structured `result` containing optional `message` and `data` fields. It then
+emits the usual text events when the command produced user-facing output.
 
 Examples:
 
@@ -802,7 +808,46 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns frontend-neutral slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
+Returns frontend-neutral slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Typed plugin entries additionally include `typed: true`, their strict object `schema`, declared `positionals`, and `pluginId` when the plugin has stable identity. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
+
+### `commands/run`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+- `name`: plugin command name, with or without the leading slash.
+- `arguments`: shell-style text or, for typed commands, an object matching the advertised schema.
+
+Legacy plugin commands return their existing string-or-null `result`. Typed
+commands return `result` as an object containing optional user-facing `message`
+and JSON-compatible `data`; text emitted through `ctx.say` remains in `output`.
+Blocking structured UI requests are unavailable on this synchronous path. Use a
+slash-command `turns/start` call when the command needs interactive UI.
+
+### `pluginActions/list`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns identified-plugin actions with `id`, local `name`, `pluginId`,
+`description`, and strict object `schema`. Action IDs use
+`<plugin-id>/<action-name>`.
+
+### `pluginActions/run`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+- `id`: complete namespaced action ID.
+- `arguments`: object matching the action schema; defaults to an empty object.
+
+Returns `action`, `output`, and a structured `result` with optional `message` and
+`data`. Actions run synchronously and therefore expose notifications and progress
+but not blocking questions, selections, confirmations, or input. They are
+rejected when the session execution profile disables plugin commands. Actions
+are intentionally not exposed in local slash completion; a plugin should also
+register a typed command when it needs a human-facing TUI entry point.
 
 ### `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`
 
@@ -920,4 +965,5 @@ Returns login status for a login ID.
 - RPC is intended for a trusted local UI and can read/write files, run shell commands, update secrets, and use OAuth.
 - Workspace roots may be any existing local directory accessible to the process.
 - Tool execution matches current CLI behavior; mutating tools are not approval-gated by RPC.
+- `commands/run` and `pluginActions/run` execute trusted local plugin code. Action schemas validate data shape but are not an authorization boundary; use execution profiles to disable plugin operations for restricted sessions.
 - Responses and diagnostics redact secret-looking fields, but clients should still avoid logging full protocol traffic unless necessary.
