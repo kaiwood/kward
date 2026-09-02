@@ -33,6 +33,9 @@ Generated entry points:
 - [`Kward::PluginResult`](Kward/PluginResult.html)
 - [`Kward::PluginHost`](Kward/PluginHost.html)
 - [`Kward::PluginStore`](Kward/PluginStore.html)
+- [`Kward::PluginTask`](Kward/PluginTask.html)
+- [`Kward::PluginDisposable`](Kward/PluginDisposable.html)
+- [`Kward::PluginTabHost`](Kward/PluginTabHost.html)
 
 ### Tool authors and contributors
 
@@ -50,7 +53,7 @@ Generated entry points:
 - [`Kward::Tools::Base`](Kward/Tools/Base.html)
 - [`Kward::ToolRegistry`](Kward/ToolRegistry.html)
 
-These pages document the schema and dispatch contract used by built-in tools. Kward does not yet provide a plugin DSL for registering arbitrary model-callable tools; contributors add them through the built-in registry and keep schemas, validation, docs, and tests aligned.
+These pages document the schema and dispatch contract used by built-in tools. Plugin authors can register model-callable tools through `PluginRegistry::DSL#tool`; those tools use the same permission, lifecycle-hook, execution-profile, and output-compaction path.
 
 ### RPC and frontend authors
 

@@ -4728,6 +4728,40 @@ edit this prompt"
     end
   end
 
+  def test_reload_plugins_runs_old_cleanup_before_starting_new_registry
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      plugin_path = File.join(plugins_dir, "lifecycle.rb")
+      events_path = File.join(home, "events.log")
+      FileUtils.mkdir_p(plugins_dir)
+      write_plugin = lambda do |version|
+        File.write(plugin_path, <<~RUBY)
+          Kward.plugin(id: "com.example.lifecycle", version: "#{version}", api: 1) do |plugin|
+            plugin.on_start do |host|
+              File.open(#{events_path.dump}, "a") { |file| file.puts("start-#{version}") }
+              host.on_cleanup { File.open(#{events_path.dump}, "a") { |file| file.puts("cleanup-#{version}") } }
+            end
+            plugin.on_reload { File.open(#{events_path.dump}, "a") { |file| file.puts("reload-#{version}") } }
+            plugin.on_shutdown { File.open(#{events_path.dump}, "a") { |file| file.puts("shutdown-#{version}") } }
+          end
+        RUBY
+      end
+      write_plugin.call("v1")
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+        registry = cli.send(:plugin_registry)
+        conversation = Kward::Conversation.new(plugin_registry: registry)
+
+        write_plugin.call("v2")
+        cli.send(:reload_plugins, conversation)
+        cli.send(:shutdown_plugins)
+
+        assert_equal %w[start-v1 reload-v1 cleanup-v1 start-v2 shutdown-v2 cleanup-v2], File.readlines(events_path, chomp: true)
+      end
+    end
+  end
+
   def test_reload_plugins_updates_model_callable_tools
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")

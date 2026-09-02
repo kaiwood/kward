@@ -334,6 +334,24 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_closing_plugin_tab_closes_driver_and_owned_resources
+    events = []
+    driver = Object.new
+    driver.define_singleton_method(:close) { events << :driver_closed }
+    host = Kward::PluginTabHost.new(client: Object.new, workspace_root: Dir.pwd)
+    host.on_cleanup { events << :host_cleaned }
+    tab = Kward::CLI::Tabs::TabRuntime.new(driver: driver, plugin_host: host, status: "idle")
+    cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new)
+    cli.instance_variable_set(:@tabs, [tab])
+    cli.instance_variable_set(:@active_tab_index, 0)
+
+    result = cli.send(:close_active_tab)
+
+    assert_equal Kward::PromptInterface::EXIT_INPUT, result
+    assert_equal %i[driver_closed host_cleaned], events
+    assert_empty cli.instance_variable_get(:@tabs)
+  end
+
   def test_opted_in_plugin_tab_notifies_transcript_observers
     Dir.mktmpdir do |home|
       Dir.mktmpdir do |config_dir|

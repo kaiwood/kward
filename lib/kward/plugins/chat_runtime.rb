@@ -21,6 +21,7 @@ module Kward
       :id,
       :type,
       :driver,
+      :host,
       :queue,
       :worker,
       :running_turn_id,
@@ -55,6 +56,7 @@ module Kward
       @turns = {}
       @event_listeners = []
       @mutex = Mutex.new
+      @shutdown = false
     end
 
     def supported_types(surface: :rpc)
@@ -138,11 +140,19 @@ module Kward
     end
 
     def shutdown
-      chats = @mutex.synchronize { @chats.values.dup }
+      chats = @mutex.synchronize do
+        return nil if @shutdown
+
+        @shutdown = true
+        @chats.values.dup
+      end
+      @mutex.synchronize { @turns.values.dup }.each { |turn| turn.cancellation.cancel! }
       chats.each do |chat|
         chat.queue << WORKER_STOP if chat.worker&.alive?
         chat.worker&.join(0.2)
+        close_chat(chat)
       end
+      @plugin_registry&.shutdown! unless @plugin_registry_provider
       nil
     end
 
@@ -166,9 +176,9 @@ module Kward
     private
 
     def plugin_registry
-      return @plugin_registry_provider.call if @plugin_registry_provider
-
-      @plugin_registry ||= PluginRegistry.load
+      registry = @plugin_registry_provider ? @plugin_registry_provider.call : (@plugin_registry ||= PluginRegistry.load)
+      registry.start!
+      registry
     end
 
     def chat_for(type, scope_key:, descriptor:, workspace_root:)
@@ -183,13 +193,19 @@ module Kward
             "scope_key" => scope_key
           }.merge(descriptor.transform_keys(&:to_s))
           host = PluginTabHost.new(client: @client, workspace_root: workspace_root)
-          driver = type.handler.call(host, descriptor)
-          raise "Plugin chat #{type.id.inspect} did not return a tab driver." unless driver
+          begin
+            driver = type.handler.call(host, descriptor)
+            raise "Plugin chat #{type.id.inspect} did not return a tab driver." unless driver
+          rescue StandardError
+            host.shutdown
+            raise
+          end
 
           Chat.new(
             id: chat_id,
             type: type,
             driver: driver,
+            host: host,
             queue: Queue.new,
             scope_key: scope_key,
             descriptor: descriptor,
@@ -197,6 +213,18 @@ module Kward
           )
         end
       end
+    end
+
+    def close_chat(chat)
+      if chat.driver.respond_to?(:close)
+        chat.driver.close
+      elsif chat.driver.respond_to?(:shutdown)
+        chat.driver.shutdown
+      end
+    rescue StandardError => e
+      ConfigFiles.emit_warning("Warning: Kward plugin chat cleanup error: #{e.message}")
+    ensure
+      chat.host.shutdown
     end
 
     def normalize_scope_key(scope_key)

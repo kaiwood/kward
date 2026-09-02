@@ -181,6 +181,7 @@ module Kward
         @transport_manager.shutdown
         @plugin_chat_manager.shutdown
         @session_manager.shutdown_sessions
+        @session_manager.shutdown_plugins
         @shutdown_complete = true
       end
 

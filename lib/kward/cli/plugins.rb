@@ -11,7 +11,7 @@ module Kward
       end
 
       def plugin_registry
-        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names).tap(&:start!)
       end
 
       def plugin_commands
@@ -32,12 +32,18 @@ module Kward
 
       def reload_plugins(conversation, tool_registry: nil)
         @prompt_templates = nil
-        @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        @plugin_registry&.reload!
+        @plugin_registry = registry.tap(&:start!)
         @prompt.update_slash_commands(slash_command_entries) if @prompt.respond_to?(:update_slash_commands)
         conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
         conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
         tool_registry&.replace_plugin_tools!(@plugin_registry.tools)
         runtime_output("Plugins reloaded.")
+      end
+
+      def shutdown_plugins
+        @plugin_registry&.shutdown!
       end
 
       def lifecycle_hook_manager(conversation)

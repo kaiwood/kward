@@ -4,6 +4,7 @@ require "thread"
 require_relative "../config_files"
 require_relative "../deep_copy"
 require_relative "../private_file"
+require_relative "resources"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -93,7 +94,7 @@ module Kward
 
     attr_reader :id, :version, :api_version, :source_path, :config, :storage, :logger
 
-    def initialize(id:, version:, api_version:, source_path: nil, config: nil, storage: nil, logger: nil, env: ENV, storage_root: ConfigFiles.config_dir)
+    def initialize(id:, version:, api_version:, source_path: nil, config: nil, storage: nil, logger: nil, env: ENV, storage_root: ConfigFiles.config_dir, warning_sink: nil)
       @id = validate_id(id).freeze
       @version = validate_value(version, "plugin version").freeze
       @api_version = validate_value(api_version, "plugin API version").freeze
@@ -102,6 +103,40 @@ module Kward
       @storage = storage || PluginStore.new(@id, root: storage_root)
       @logger = logger || default_logger
       @env = env
+      @resources = PluginResources.new(name: "Kward plugin #{id}", warning_sink: warning_sink)
+    end
+
+    # Starts cooperative background work owned by this plugin. The block may
+    # accept a cancellation token and must stop cooperatively when cancelled.
+    #
+    # @return [PluginTask]
+    def background(name: nil, cancellation: nil, &block)
+      @resources.background(name: name, cancellation: cancellation, &block)
+    end
+
+    # Registers idempotent cleanup for a subscription or other plugin resource.
+    # The returned disposable may be invoked early; otherwise Kward invokes it
+    # during plugin reload or shutdown.
+    #
+    # @return [PluginDisposable]
+    def on_cleanup(resource = nil, &block)
+      @resources.on_cleanup(resource, &block)
+    end
+
+    alias manage on_cleanup
+
+    # Activates managed runtime services after plugin loading completes.
+    # @api private
+    def activate!
+      @resources.activate!
+      self
+    end
+
+    # Cancels background work and invokes registered cleanup callbacks.
+    # @api private
+    def shutdown(timeout: PluginResources::DEFAULT_SHUTDOWN_TIMEOUT)
+      @resources.shutdown(timeout: timeout)
+      self
     end
 
     # Reads a secret from private plugin config, an explicit environment

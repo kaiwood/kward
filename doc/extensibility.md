@@ -89,7 +89,7 @@ Hooks are deterministic automation and policy. They are not model instructions.
 
 Use plugins when text instructions are not enough and you need Ruby code to run locally.
 
-Plugins can add legacy or schema-typed slash commands, namespaced typed RPC actions, model-callable tools, structured frontend-neutral UI, prompt context, footer UI, transcript observers, plugin-owned tabs, and external transports. Identified plugins also receive namespaced configuration, private durable storage, secret lookup, and logging through a shared host. Transport plugins can connect external conversations to normal Kward sessions or explicitly transport-capable plugin chats; they remain distinct from plugin-owned tabs.
+Plugins can add legacy or schema-typed slash commands, namespaced typed RPC actions, model-callable tools, structured frontend-neutral UI, prompt context, footer UI, transcript observers, plugin-owned tabs, and external transports. Identified plugins also receive namespaced configuration, private durable storage, secret lookup, logging, lifecycle callbacks, cooperative background tasks, and managed cleanup through a shared host. Transport plugins can connect external conversations to normal Kward sessions or explicitly transport-capable plugin chats; they remain distinct from plugin-owned tabs.
 
 Use `kward transport list` and `kward transport status` to inspect registered transports. Run a foreground transport with `kward transport run NAME`.
 

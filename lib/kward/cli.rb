@@ -167,6 +167,7 @@ module Kward
       warn runtime_error_message(e)
       exit 1
     ensure
+      shutdown_plugins if respond_to?(:shutdown_plugins, true)
       ConfigFiles.skip_config = false
     end
 

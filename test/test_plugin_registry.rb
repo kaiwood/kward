@@ -64,6 +64,125 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
+  def test_plugin_lifecycle_starts_lazily_and_cleans_up_owned_work
+    events = Queue.new
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.lifecycle", version: "1.0.0", api: 1) do |plugin|
+      plugin.on_start do |host|
+        events << :started
+        host.on_cleanup { events << :cleaned }
+        host.background(name: "watcher") do |cancellation|
+          events << :task_started
+          sleep 0.005 until cancellation.cancelled?
+          events << :task_stopped
+        end
+      end
+      plugin.on_shutdown { events << :shutdown }
+    end
+
+    assert events.empty?, "plugin loading must not start runtime work"
+    registry.start!
+    wait_until { events.size >= 2 }
+    registry.shutdown!
+
+    observed = []
+    observed << events.pop until events.empty?
+    assert_equal :started, observed.first
+    assert_includes observed, :task_started
+    assert_includes observed, :shutdown
+    assert_includes observed, :task_stopped
+    assert_includes observed, :cleaned
+  end
+
+  def test_plugin_reload_uses_reload_callback_and_disposes_once
+    events = []
+    registry = Kward::PluginRegistry.new
+    disposable = nil
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.reload", version: "1.0.0", api: 1) do |plugin|
+      disposable = plugin.host.on_cleanup { events << :cleaned }
+      plugin.on_start { events << :started }
+      plugin.on_reload { events << :reloaded }
+      plugin.on_shutdown { events << :shutdown }
+    end
+
+    registry.start!
+    registry.reload!
+    registry.reload!
+    disposable.dispose
+
+    assert_equal %i[started reloaded cleaned], events
+    refute_includes events, :shutdown
+  end
+
+  def test_plugin_lifecycle_failures_are_isolated
+    warnings = []
+    events = []
+    registry = Kward::PluginRegistry.new(warning_sink: warnings.method(:<<))
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.errors", version: "1.0.0", api: 1) do |plugin|
+      plugin.on_start { raise "broken start" }
+      plugin.on_start { events << :continued }
+      plugin.host.on_cleanup { raise "broken cleanup" }
+    end
+
+    registry.start!
+    registry.shutdown!
+
+    assert_equal [:continued], events
+    assert warnings.any? { |warning| warning.include?("plugin start error") && warning.include?("broken start") }
+    assert warnings.any? { |warning| warning.include?("cleanup failed") && warning.include?("broken cleanup") }
+  end
+
+  def test_background_work_requires_activation_and_records_failures
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: warnings.method(:<<))
+    host = nil
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.tasks", version: "1.0.0", api: 1) do |plugin|
+      host = plugin.host
+    end
+
+    error = assert_raises(RuntimeError) { host.background { nil } }
+    assert_includes error.message, "cannot start before plugin activation"
+
+    registry.start!
+    task = host.background(name: "failure") { raise "task exploded" }
+    wait_until { task.complete? }
+
+    assert_equal "task exploded", task.error.message
+    assert warnings.any? { |warning| warning.include?("background task \"failure\" failed: task exploded") }
+  ensure
+    registry&.shutdown!
+  end
+
+  def test_plugin_shutdown_bounds_wait_for_non_cooperative_tasks
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: warnings.method(:<<))
+    host = nil
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.slow", version: "1.0.0", api: 1) do |plugin|
+      host = plugin.host
+    end
+    registry.start!
+    started = Queue.new
+    release = Queue.new
+    task = host.background(name: "slow") do
+      started << true
+      release.pop
+    end
+    started.pop
+
+    registry.shutdown!(timeout: 0.001)
+
+    assert task.alive?
+    assert warnings.any? { |warning| warning.include?("background task \"slow\" did not stop before shutdown") }
+  ensure
+    release << true if task&.alive?
+    task&.join
+  end
+
   def test_legacy_plugin_remains_supported_without_managed_host
     registry = Kward::PluginRegistry.new
     host = :unset
@@ -73,6 +192,11 @@ class TestPluginRegistry < KwardTestCase
       plugin.command("legacy") { "ok" }
     end
 
+    lifecycle_error = assert_raises(ArgumentError) do
+      registry.evaluate { |plugin| plugin.on_start { nil } }
+    end
+
+    assert_includes lifecycle_error.message, "require stable plugin identity"
     assert_nil host
     assert_empty registry.plugins
     assert registry.command_for("legacy")

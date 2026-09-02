@@ -1,3 +1,6 @@
+require_relative "../config_files"
+require_relative "../plugins/resources"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Adapts a session-backed agent to the tab runtime interface. Plugin tab
@@ -85,6 +88,26 @@ module Kward
     def initialize(client:, workspace_root:)
       @client = client
       @workspace_root = workspace_root
+      @resources = PluginResources.new(name: "Kward plugin tab", warning_sink: ConfigFiles.warning_sink).tap(&:activate!)
+    end
+
+    # Starts cooperative background work owned by this tab instance.
+    def background(name: nil, cancellation: nil, &block)
+      @resources.background(name: name, cancellation: cancellation, &block)
+    end
+
+    # Registers cleanup that runs when the tab instance closes.
+    def on_cleanup(resource = nil, &block)
+      @resources.on_cleanup(resource, &block)
+    end
+
+    alias manage on_cleanup
+
+    # Cancels tab-owned work and invokes cleanup callbacks.
+    # @api private
+    def shutdown(timeout: PluginResources::DEFAULT_SHUTDOWN_TIMEOUT)
+      @resources.shutdown(timeout: timeout)
+      self
     end
   end
 end

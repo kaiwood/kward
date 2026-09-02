@@ -18,6 +18,7 @@ module Kward
         :session,
         :agent,
         :driver,
+        :plugin_host,
         :diff,
         :snapshot,
         :status,
@@ -211,14 +212,22 @@ module Kward
         end
 
         tab_type = plugin_registry.tab_type_for_id(descriptor["plugin_tab_type"])
+        host = nil
         driver = if tab_type&.local
           host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
-          tab_type.handler.call(host, descriptor)
+          begin
+            created_driver = tab_type.handler.call(host, descriptor)
+            raise "Plugin tab #{descriptor["plugin_tab_type"].inspect} did not return a tab driver." unless created_driver
+
+            created_driver
+          rescue StandardError
+            host.shutdown
+            raise
+          end
         else
           UnavailableTabDriver.new(descriptor: descriptor, message: "Plugin tab #{descriptor["plugin_tab_type"].inspect} is unavailable.")
         end
-        raise "Plugin tab #{descriptor["plugin_tab_type"].inspect} did not return a tab driver." unless driver
-        build_tab(nil, nil, driver: driver, label: label || descriptor["label"] || tab_type&.title)
+        build_tab(nil, nil, driver: driver, plugin_host: host, label: label || descriptor["label"] || tab_type&.title)
       end
 
       def open_plugin_tab(name, session_store)
@@ -233,10 +242,15 @@ module Kward
         stop_tab_live_view
         descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title }
         host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
-        driver = tab_type.handler.call(host, descriptor)
-        raise "Plugin tab #{name.inspect} did not return a tab driver." unless driver
+        begin
+          driver = tab_type.handler.call(host, descriptor)
+          raise "Plugin tab #{name.inspect} did not return a tab driver." unless driver
+        rescue StandardError
+          host.shutdown
+          raise
+        end
 
-        @tabs << build_tab(nil, nil, driver: driver, label: tab_type.title)
+        @tabs << build_tab(nil, nil, driver: driver, plugin_host: host, label: tab_type.title)
         @active_tab_index = @tabs.length - 1
         activate_tab(@active_tab_index)
       rescue StandardError => e
@@ -308,12 +322,13 @@ module Kward
         end
       end
 
-      def build_tab(session, agent, driver: nil, label: nil)
+      def build_tab(session, agent, driver: nil, plugin_host: nil, label: nil)
         driver ||= SessionTabDriver.new(session: session, agent: agent)
         TabRuntime.new(
           session: session,
           agent: agent,
           driver: driver,
+          plugin_host: plugin_host,
           diff: session&.path ? SessionDiff.from_session_file(session.path) : SessionDiff.new,
           snapshot: nil,
           status: "idle",
@@ -437,6 +452,7 @@ module Kward
 
         if @tabs.length <= 1
           close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
+          close_plugin_tab(tab)
           @tabs.clear
           persist_tabs
           return PromptInterface::EXIT_INPUT
@@ -445,7 +461,7 @@ module Kward
         stop_tab_live_view
         close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
         tab.session&.delete_if_unused if tab&.session.respond_to?(:delete_if_unused)
-        tab.driver.close if tab.driver.respond_to?(:close)
+        close_plugin_tab(tab)
         @tabs.delete_at(@active_tab_index)
         @active_tab_index = [@active_tab_index, @tabs.length - 1].min
         activate_tab(@active_tab_index)
@@ -1097,9 +1113,25 @@ module Kward
           end
           tab.background_run = nil
           close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
+          close_plugin_tab(tab)
         rescue StandardError
           nil
         end
+      end
+
+      def close_plugin_tab(tab)
+        return unless tab&.plugin_host
+
+        if tab.driver.respond_to?(:close)
+          tab.driver.close
+        elsif tab.driver.respond_to?(:shutdown)
+          tab.driver.shutdown
+        end
+      rescue StandardError => e
+        runtime_output("Plugin tab cleanup error: #{e.message}")
+      ensure
+        tab&.plugin_host&.shutdown
+        tab.plugin_host = nil if tab
       end
 
       def persist_tabs

@@ -11,9 +11,9 @@ module Kward
   # Loads trusted user plugin files and provides the plugin DSL.
   #
   # Plugins live in the user plugin directory, run as local Ruby code, and can
-  # register slash commands, namespaced actions, model-callable tools, one footer
-  # renderer, prompt context, and live transcript-event observers for CLI and RPC
-  # frontends.
+  # register slash commands, namespaced actions, model-callable tools, lifecycle
+  # callbacks, one footer renderer, prompt context, and live transcript-event
+  # observers for CLI and RPC frontends.
   #
   # This registry is intentionally trust-based, not a sandbox. Keep plugin loading
   # restricted to `ConfigFiles.plugin_paths`, keep workspace-local code out of the
@@ -57,6 +57,10 @@ module Kward
 
     # Registered lifecycle hook handler.
     HookHandler = Struct.new(:event, :id, :description, :path, :order, :match, :failure_policy, :handler, keyword_init: true)
+
+    # Plugin-runtime callback invoked when an identified plugin starts, reloads,
+    # or shuts down.
+    LifecycleHandler = Struct.new(:event, :host, :path, :handler, keyword_init: true)
 
     # Read-only transcript view exposed to plugin code.
     class Transcript
@@ -287,6 +291,36 @@ module Kward
         @registry.register_tool(name, description: description, schema: schema, path: @path, &block)
       end
 
+      # Registers a callback invoked after plugin loading when the runtime is
+      # ready to start owned background work.
+      #
+      # @yieldparam host [PluginHost] identified plugin host and resource owner
+      # @return [void]
+      # @api public
+      def on_start(&block)
+        register_lifecycle(:start, &block)
+      end
+
+      # Registers a callback invoked on the old plugin instance immediately
+      # before its resources are cleaned up during reload.
+      #
+      # @yieldparam host [PluginHost] identified plugin host and resource owner
+      # @return [void]
+      # @api public
+      def on_reload(&block)
+        register_lifecycle(:reload, &block)
+      end
+
+      # Registers a callback invoked immediately before plugin resources are
+      # cleaned up during process shutdown.
+      #
+      # @yieldparam host [PluginHost] identified plugin host and resource owner
+      # @return [void]
+      # @api public
+      def on_shutdown(&block)
+        register_lifecycle(:shutdown, &block)
+      end
+
       # Registers or replaces the custom footer renderer.
       #
       # Only one footer renderer is active. If multiple plugins register one,
@@ -394,6 +428,14 @@ module Kward
       def transport(name, id:, capabilities: nil, execution_profile: nil, &block)
         @registry.register_transport(name, id: id, capabilities: capabilities, execution_profile: execution_profile, path: @path, &block)
       end
+
+      private
+
+      def register_lifecycle(event, &block)
+        raise ArgumentError, "Plugin lifecycle callbacks require stable plugin identity" unless @host
+
+        @registry.register_lifecycle(event, host: @host, path: @path, &block)
+      end
     end
 
     # Mutable singleton guard used while loading trusted plugin files.
@@ -427,6 +469,9 @@ module Kward
       @transcript_event_handlers = []
       @prompt_context_renderers = []
       @hook_handlers = []
+      @lifecycle_handlers = { start: [], reload: [], shutdown: [] }
+      @lifecycle_state = :loaded
+      @lifecycle_mutex = Mutex.new
       @paths = []
     end
 
@@ -521,6 +566,25 @@ module Kward
       @hook_handlers.dup
     end
 
+    # Activates identified plugins and invokes their start callbacks once.
+    def start!
+      transition_lifecycle!(:loaded, :active) do
+        @plugins.each_value(&:activate!)
+        run_lifecycle_callbacks(:start)
+      end
+      self
+    end
+
+    # Invokes reload callbacks on the old registry and cleans up all resources.
+    def reload!(timeout: PluginResources::DEFAULT_SHUTDOWN_TIMEOUT)
+      stop_lifecycle!(:reload, timeout: timeout)
+    end
+
+    # Invokes shutdown callbacks and cleans up all resources.
+    def shutdown!(timeout: PluginResources::DEFAULT_SHUTDOWN_TIMEOUT)
+      stop_lifecycle!(:shutdown, timeout: timeout)
+    end
+
     def hook_manager
       manager = Hooks::Manager.new
       @hook_handlers.each do |hook|
@@ -585,7 +649,13 @@ module Kward
       raise ArgumentError, "Unsupported Kward plugin API #{api.inspect} for #{id}; supported API: #{PLUGIN_API_VERSION}" unless api == PLUGIN_API_VERSION
       raise ArgumentError, "Duplicate Kward plugin id: #{id}" if @plugins.key?(id)
 
-      @plugins[id] = PluginHost.new(id: id, version: version, api_version: api, source_path: path)
+      @plugins[id] = PluginHost.new(
+        id: id,
+        version: version,
+        api_version: api,
+        source_path: path,
+        warning_sink: method(:emit_warning)
+      )
     end
 
     def register_command(name, description: "", argument_hint: "", schema: nil, positionals: [], plugin_id: nil, path: nil, &handler)
@@ -742,6 +812,14 @@ module Kward
       @prompt_context_renderers << { path: path, renderer: renderer }
     end
 
+    def register_lifecycle(event, host:, path: nil, &handler)
+      event = event.to_sym
+      raise ArgumentError, "Unknown plugin lifecycle event: #{event}" unless @lifecycle_handlers.key?(event)
+      raise ArgumentError, "Plugin lifecycle #{event} requires a handler" unless handler
+
+      @lifecycle_handlers[event] << LifecycleHandler.new(event: event, host: host, path: path, handler: handler)
+    end
+
     def register_hook(event, id: nil, description: "", order: 100, match: nil, failure_policy: nil, path: nil, &handler)
       event = event.to_s
       raise "Plugin hook event is required" if event.empty?
@@ -760,6 +838,32 @@ module Kward
     end
 
     private
+
+    def transition_lifecycle!(from, to)
+      should_run = @lifecycle_mutex.synchronize do
+        next false unless @lifecycle_state == from
+
+        @lifecycle_state = to
+        true
+      end
+      yield if should_run
+    end
+
+    def stop_lifecycle!(event, timeout:)
+      transition_lifecycle!(:active, :stopped) do
+        run_lifecycle_callbacks(event)
+        @plugins.each_value { |host| host.shutdown(timeout: timeout) }
+      end
+      self
+    end
+
+    def run_lifecycle_callbacks(event)
+      @lifecycle_handlers.fetch(event).each do |entry|
+        entry.handler.arity.zero? ? entry.handler.call : entry.handler.call(entry.host)
+      rescue StandardError => e
+        emit_warning "Warning: Kward plugin #{event} error in #{entry.path}: #{e.message}"
+      end
+    end
 
     def normalize_tool_schema(name, schema)
       raise ArgumentError, "Plugin tool #{name} schema must be an object" unless schema.is_a?(Hash)

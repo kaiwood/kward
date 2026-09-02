@@ -95,6 +95,8 @@ module Kward
       @server&.close unless @server&.closed?
     rescue IOError
       nil
+    ensure
+      @plugin_registry&.shutdown!
     end
 
     def enqueue_prompt(prompt)
@@ -177,7 +179,7 @@ module Kward
     end
 
     def plugin_registry
-      @plugin_registry ||= PluginRegistry.load(reserved_commands: PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES)
+      @plugin_registry ||= PluginRegistry.load(reserved_commands: PromptCommands::BUILTIN_RESERVED_COMMAND_NAMES).tap(&:start!)
     end
 
     def start_worker

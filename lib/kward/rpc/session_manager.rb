@@ -215,7 +215,7 @@ module Kward
 
       # Returns the plugin registry shared by RPC sessions and plugin chats.
       def plugin_registry
-        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names).tap(&:start!)
       end
 
       # Renames the persisted session attached to an RPC session id.
@@ -389,6 +389,11 @@ module Kward
       def shutdown_sessions
         rpc_sessions = @mutex.synchronize { @sessions.values.dup }
         rpc_sessions.reverse_each { |rpc_session| close_rpc_session(rpc_session) }
+        { closed: true }
+      end
+
+      def shutdown_plugins
+        @plugin_registry&.shutdown!
         { closed: true }
       end
 
@@ -655,6 +660,8 @@ module Kward
 
       def reload_plugins
         registry = PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+        @plugin_registry&.reload!
+        registry.start!
         sessions = @mutex.synchronize do
           @plugin_registry = registry
           @sessions.values

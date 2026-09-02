@@ -117,6 +117,61 @@ as `KWARD_PLUGIN_COM_EXAMPLE_ISSUES_TOKEN`. Do not log secret values.
 Existing `Kward.plugin do ... end` files remain supported, but `plugin.host` is
 `nil` until the plugin declares stable identity metadata.
 
+## Lifecycle and owned background work
+
+Plugin files are loaded without starting runtime work. Identified plugins can
+register lifecycle callbacks for the points where managed work is safe:
+
+```ruby
+Kward.plugin(id: "com.example.watcher", version: "1.0.0", api: 1) do |plugin|
+  plugin.on_start do |host|
+    subscription = Watcher.subscribe { |event| host.logger.info(event) }
+    host.on_cleanup(subscription) { |value| Watcher.unsubscribe(value) }
+
+    host.background(name: "poller") do |cancellation|
+      until cancellation.cancelled?
+        Watcher.poll
+        sleep 1
+      end
+    end
+  end
+
+  plugin.on_reload { |host| host.logger.info("Reloading") }
+  plugin.on_shutdown { |host| host.logger.info("Stopping") }
+end
+```
+
+Lifecycle behavior is explicit:
+
+- `on_start` runs after loading, when the registry becomes active. A newly loaded
+  registry receives `on_start` after `/reload` too.
+- `on_reload` runs on the old plugin instance immediately before Kward cleans up
+  its resources.
+- `on_shutdown` runs immediately before final process cleanup.
+- Callback failures are reported as warnings and do not prevent other plugins
+  from cleaning up.
+
+`host.background` returns a `PluginTask`. Its block may accept a cooperative
+`Cancellation` token. Kward cancels and waits up to a bounded deadline for owned
+tasks during reload or shutdown; blocking work should register cleanup that
+closes the socket, stream, or other resource needed to wake it. Tasks also accept
+an optional parent token with `cancellation:`.
+
+`host.on_cleanup(resource) { |resource| ... }` returns an idempotent
+`PluginDisposable`. Call `dispose` to unsubscribe early, or leave it registered
+for automatic cleanup. `host.manage` is an alias. Cleanup runs in reverse
+registration order so dependent resources unwind predictably.
+
+Plugin-owned tab hosts expose the same `background`, `on_cleanup`, and `manage`
+methods. Their resources are cleaned up when a local tab closes or its shared
+plugin-chat runtime shuts down. A tab driver may implement `close` (or `shutdown`
+as a fallback) for its own final cleanup; Kward invokes it before closing the tab
+host.
+
+Do not open network connections or start threads directly while the plugin file
+is loading. Register them from `on_start`, a command, or a plugin-tab factory so
+Kward can own their lifetime.
+
 ## Add a slash command
 
 Use plugin commands for local actions that should not call the model.
