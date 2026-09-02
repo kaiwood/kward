@@ -87,7 +87,7 @@ See [Lifecycle hooks](lifecycle-hooks.md) for policy examples and [RPC protocol]
 
 ## Opt-in permission policy
 
-`permissions.enabled` is off by default. When enabled, Kward can allow, ask, or deny model-requested file changes, shell commands, web tools, and MCP tools before execution. The interactive CLI uses an approval overlay; an unavailable approval bridge fails closed. The policy is not a sandbox: after Kward permits a shell command, it still runs with the permissions of your user account. See [Permissions](permissions.md) for workflows, modes, rules, and limits.
+`permissions.enabled` is off by default. When enabled, Kward can allow, ask, or deny model-requested file changes, shell commands, web tools, MCP tools, and plugin tools before execution. The interactive CLI uses an approval overlay; an unavailable approval bridge fails closed. The policy is not a sandbox: after Kward permits a shell command, it still runs with the permissions of your user account. See [Permissions](permissions.md) for workflows, modes, rules, and limits.
 
 ## Know what you are trusting
 
@@ -112,6 +112,11 @@ Ruby plugins in `~/.kward/plugins/*.rb` or package entrypoints at
 They can read files and environment variables, write files, run commands, and
 make network requests. Kward intentionally does not load plugins from a
 workspace directory.
+
+Identified-plugin configuration and state remain local to the active config
+directory. RPC capability reports include only plugin IDs and versions, never
+plugin configuration or secret values. Treat `host.logger` output as
+user-visible diagnostics and never write credentials to it.
 
 ### MCP servers
 
@@ -168,6 +173,7 @@ Kward keeps user data under `~/.kward` by default, or mostly beside `KWARD_CONFI
 | Memory | `~/.kward/memory/` | Off by default; directory `0700` and files `0600`. |
 | Telemetry logs | `~/.kward/logs/` | Off by default; redacted metadata, not intentional prompt or file-content logging. |
 | Plugins | `~/.kward/plugins/` | Trusted Ruby code, not private data storage. |
+| Plugin state | `~/.kward/plugin_state/` | Namespaced by stable plugin ID; state files use mode `0600`. |
 | Hook audit log and trust records | `~/.kward/logs/`, `~/.kward/trusted_workspace_hooks.json` | Audit records use redacted metadata rather than raw event values. |
 
 Private file modes help on normal Unix-like systems but do not protect data from your own account, privileged users, backups, malware, or a compromised machine. Session exports are written to the path you choose and should be protected separately.

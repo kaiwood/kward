@@ -275,6 +275,7 @@ module Kward
           hook_manager: hook_manager,
           hook_context: hook_context,
           mcp_clients: strict ? [] : nil,
+          plugin_tools: strict ? [] : plugin_registry.tools,
           git_committer: git_committer
         )
         @footer_conversation = conversation

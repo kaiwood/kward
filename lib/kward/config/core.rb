@@ -145,6 +145,7 @@ module Kward
             "include_principles" => true
           },
           "mcpServers" => {},
+          "plugins" => {},
           "transports" => {},
           "tools" => {
             "workspace_guardrails" => true

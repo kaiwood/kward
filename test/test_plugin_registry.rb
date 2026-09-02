@@ -37,6 +37,88 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
+  def test_registers_stable_plugin_identity_and_shared_host
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "plugins" => {
+          "com.example.demo" => { "endpoint" => "https://example.test" }
+        }
+      ))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        registry = Kward::PluginRegistry.new
+        captured_host = nil
+
+        registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "2.3.4", api: 1) do |plugin|
+          captured_host = plugin.host
+          plugin.command("host-id") { |_args, _ctx| plugin.host.id }
+        end
+
+        assert_same captured_host, registry.plugin_for("com.example.demo")
+        assert_equal [captured_host], registry.plugins
+        assert_equal "2.3.4", captured_host.version
+        assert_equal "https://example.test", captured_host.config["endpoint"]
+        assert_equal "com.example.demo", registry.command_for("host-id").handler.call(nil, nil)
+      end
+    end
+  end
+
+  def test_legacy_plugin_remains_supported_without_managed_host
+    registry = Kward::PluginRegistry.new
+    host = :unset
+
+    registry.evaluate do |plugin|
+      host = plugin.host
+      plugin.command("legacy") { "ok" }
+    end
+
+    assert_nil host
+    assert_empty registry.plugins
+    assert registry.command_for("legacy")
+  end
+
+  def test_rejects_incomplete_unsupported_and_duplicate_plugin_identity
+    registry = Kward::PluginRegistry.new
+
+    incomplete = assert_raises(ArgumentError) do
+      registry.evaluate(id: "com.example.demo", version: "1.0.0") { }
+    end
+    assert_includes incomplete.message, "id, version, and api are required together"
+
+    unsupported = assert_raises(ArgumentError) do
+      registry.evaluate(id: "com.example.demo", version: "1.0.0", api: 2) { }
+    end
+    assert_includes unsupported.message, "Unsupported Kward plugin API"
+
+    registry.evaluate(id: "com.example.demo", version: "1.0.0", api: 1) { }
+    duplicate = assert_raises(ArgumentError) do
+      registry.evaluate(id: "com.example.demo", version: "1.0.1", api: 1) { }
+    end
+    assert_includes duplicate.message, "Duplicate Kward plugin id"
+  end
+
+  def test_loads_identified_plugin_from_entrypoint
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      plugin_path = File.join(plugins, "identified.rb")
+      File.write(plugin_path, <<~'RUBY')
+        Kward.plugin(id: "com.example.loaded", version: "1.0.0", api: 1) do |plugin|
+          plugin.command("loaded-host") { plugin.host.id }
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        registry = Kward::PluginRegistry.load
+
+        assert_equal "com.example.loaded", registry.plugins.first.id
+        assert_equal plugin_path, registry.plugins.first.source_path
+        assert_equal "com.example.loaded", registry.command_for("loaded-host").handler.call
+      end
+    end
+  end
+
   def test_plugin_paths_are_home_only_files_and_package_entrypoints
     Dir.mktmpdir do |home|
       plugins = File.join(home, ".kward", "plugins")
@@ -283,6 +365,65 @@ class TestPluginRegistry < KwardTestCase
     assert_equal 1, received.length
     assert_equal "reasoning_boundary", received.first.type
     assert_equal({}, received.first.payload)
+  end
+
+  def test_registers_model_callable_tool
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate(path: "/plugins/issues.rb") do |plugin|
+      plugin.tool "issue_search", description: "Search issues", schema: {
+        type: "object",
+        properties: {
+          limit: { type: "integer" },
+          query: { type: "string" }
+        },
+        required: ["query"]
+      } do |args, ctx|
+        "#{ctx.workspace_root}:#{args.fetch("query")}"
+      end
+    end
+
+    tool = registry.tool_for("issue_search")
+
+    assert_equal [tool], registry.tools
+    assert_equal "Search issues", tool.description
+    assert_equal "/plugins/issues.rb", tool.path
+    assert_equal %i[limit query], tool.schema.fetch(:properties).keys
+    assert_equal ["query"], tool.schema.fetch(:required)
+    assert_equal false, tool.schema.fetch(:additionalProperties)
+    assert tool.schema.frozen?
+  end
+
+  def test_skips_duplicate_plugin_tools
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })
+
+    registry.evaluate do |plugin|
+      2.times do
+        plugin.tool("lookup", description: "Look up a value") { "ok" }
+      end
+    end
+
+    assert_equal 1, registry.tools.length
+    assert_includes warnings.join("\n"), "duplicate Kward plugin tool lookup"
+  end
+
+  def test_rejects_invalid_plugin_tool_schemas
+    registry = Kward::PluginRegistry.new
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate do |plugin|
+        plugin.tool "lookup", description: "Look up a value", schema: {
+          type: "object",
+          properties: {},
+          required: ["missing"]
+        } do
+          "ok"
+        end
+      end
+    end
+
+    assert_includes error.message, "requires unknown properties: missing"
   end
 
   def test_registers_plugin_tab_type

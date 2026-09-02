@@ -84,7 +84,9 @@ module Kward
           configure_reasoning(agent.conversation)
           [true, nil]
         when "reload"
-          run_busy_local_command_and_requeue { reload_plugins(agent.conversation) }
+          strict_worktree = active_tab&.driver&.respond_to?(:worktree) && active_tab.driver.worktree&.active?
+          registry = strict_worktree ? nil : agent.tool_registry
+          run_busy_local_command_and_requeue { reload_plugins(agent.conversation, tool_registry: registry) }
           [true, nil]
         when "new"
           [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]

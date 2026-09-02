@@ -160,11 +160,15 @@ module Kward
       end
 
       def network?(request)
-        NETWORK_TOOLS.include?(request.fetch("tool")) || request["source"] == "mcp"
+        NETWORK_TOOLS.include?(request.fetch("tool"))
+      end
+
+      def extension_tool?(request)
+        %w[mcp plugin].include?(request["source"])
       end
 
       def risky?(request)
-        mutating?(request) || request.fetch("tool") == "run_shell_command" || network?(request)
+        mutating?(request) || request.fetch("tool") == "run_shell_command" || network?(request) || extension_tool?(request)
       end
 
       def outside_write_scopes?(request)

@@ -15,7 +15,7 @@ If you use Kward from the terminal, start with the [user guides](file.README.htm
 
 ### Plugin authors
 
-Use plugins when you need trusted local Ruby code for slash commands, prompt context, footer UI, transcript events, or RPC-visible commands.
+Use plugins when you need trusted local Ruby code for commands, model-callable tools, prompt context, footer UI, transcript events, plugin-owned chats, or external transports.
 
 Read first:
 
@@ -28,6 +28,8 @@ Generated entry points:
 - [`Kward::PluginRegistry`](Kward/PluginRegistry.html)
 - [`Kward::PluginRegistry::DSL`](Kward/PluginRegistry/DSL.html)
 - [`Kward::PluginRegistry::Context`](Kward/PluginRegistry/Context.html)
+- [`Kward::PluginHost`](Kward/PluginHost.html)
+- [`Kward::PluginStore`](Kward/PluginStore.html)
 
 ### Tool authors and contributors
 

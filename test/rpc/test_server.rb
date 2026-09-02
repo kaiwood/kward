@@ -192,6 +192,11 @@ class TestRPCServer < KwardTestCase
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
     assert_equal "commands/run", capabilities["commands"]["runMethod"]
+    assert_equal true, capabilities["pluginTools"]["supported"]
+    assert_equal 0, capabilities["pluginTools"]["registered"]
+    assert_equal "tools/list", capabilities["pluginTools"]["discoveryMethod"]
+    assert_equal true, capabilities["pluginTools"]["executionProfileFiltering"]
+    assert_equal true, capabilities["pluginTools"]["permissionPolicy"]
     assert_equal true, capabilities["mcp"]["supported"]
     assert_equal "stdio", capabilities["mcp"]["transport"]
     assert_equal "mcpServers", capabilities["mcp"]["config"]
@@ -283,6 +288,32 @@ class TestRPCServer < KwardTestCase
         assert_equal true, capability["supported"]
         assert_equal "test.chat", capability["types"].first["id"]
         assert_includes capability["methods"], "pluginChats/subscribe"
+      end
+    end
+  end
+
+  def test_initialize_reports_identified_plugin_metadata_without_private_config
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      File.write(File.join(plugins, "identified.rb"), <<~'RUBY')
+        Kward.plugin(id: "com.example.identified", version: "1.4.0", api: 1) do |plugin|
+          plugin.command("identified") { "ok" }
+        end
+      RUBY
+      File.write(File.join(home, ".kward", "config.json"), JSON.dump(
+        "plugins" => {
+          "com.example.identified" => { "token" => "must-not-leak" }
+        }
+      ))
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        messages = run_rpc([{ jsonrpc: "2.0", id: 1, method: "initialize" }, { jsonrpc: "2.0", id: 2, method: "shutdown" }])
+        capability = messages.first.dig("result", "capabilities", "plugins")
+
+        assert_equal "1", capability["apiVersion"]
+        assert_equal [{ "id" => "com.example.identified", "version" => "1.4.0", "apiVersion" => "1" }], capability["identified"]
+        refute_includes JSON.dump(capability), "must-not-leak"
       end
     end
   end
@@ -645,6 +676,14 @@ class TestRPCServer < KwardTestCase
               ctx.say("Hello #{args}; messages=#{ctx.transcript.messages.length}")
               "returned #{args}"
             end
+
+            plugin.tool "issue_search", description: "Search issues", schema: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"]
+            } do |args, _ctx|
+              "Found #{args.fetch("query")}"
+            end
           end
         RUBY
 
@@ -670,6 +709,11 @@ class TestRPCServer < KwardTestCase
           assert_equal "Say hello", plugin[:description]
           assert_equal "<name>", plugin[:argumentHint]
           assert_equal true, plugin[:executable]
+
+          tools = server.instance_variable_get(:@session_manager).tool_schemas(session_id: session[:id])[:tools]
+          plugin_tool = tools.find { |tool| tool.dig(:function, :name) == "issue_search" }
+          assert_equal "plugin", plugin_tool.dig(:metadata, :source)
+          assert_equal ["query"], plugin_tool.dig(:function, :parameters, :required)
 
           run = server.send(:commands_run, "sessionId" => session[:id], "name" => "hello", "arguments" => "Martok")
           assert_equal "hello", run[:command]

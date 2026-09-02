@@ -5,6 +5,7 @@ Plugins are trusted local Ruby extensions for Kward. Use them when you need beha
 Good plugin use cases:
 
 - add a slash command for a personal workflow,
+- expose a local integration as a model-callable tool,
 - show project/session status in the terminal footer,
 - add concise local context to prompts,
 - log or observe transcript events,
@@ -49,7 +50,7 @@ mkdir -p ~/.kward/plugins
 Create `~/.kward/plugins/hello.rb`:
 
 ```ruby
-Kward.plugin do |plugin|
+Kward.plugin(id: "com.example.hello", version: "1.0.0", api: 1) do |plugin|
   plugin.command "hello", description: "Say hello", argument_hint: "[name]" do |args, ctx|
     name = args.strip.empty? ? "there" : args.strip
     ctx.say("Hello, #{name}.")
@@ -64,6 +65,57 @@ Start Kward and run:
 ```
 
 When developing plugins or prompt templates, use `/reload` inside Kward to reload configured prompt files and all plugin files without restarting. This picks up prompt edits, changes to existing plugins, and new plugin registrations, then refreshes slash-command completion and rebuilds the system message.
+
+## Plugin identity and host services
+
+Give a reusable plugin a stable reverse-domain-style `id`, its own `version`, and
+the Kward plugin API it targets. API version `1` is currently supported. Kward
+skips plugins that declare an unsupported API version or duplicate another
+plugin's ID.
+
+An identified plugin receives one shared host for configuration, private durable
+storage, secret lookup, and logging:
+
+```ruby
+Kward.plugin(id: "com.example.issues", version: "1.2.0", api: 1) do |plugin|
+  host = plugin.host
+
+  plugin.command "issue-server", description: "Show the issue server" do |_args, ctx|
+    visits = host.storage.get("visits").to_i + 1
+    endpoint = host.config.fetch("endpoint")
+    host.storage.put("visits", visits)
+    ctx.say("#{endpoint} (visit #{visits})")
+  end
+end
+```
+
+Configure the plugin under its stable ID in `config.json`:
+
+```json
+{
+  "plugins": {
+    "com.example.issues": {
+      "endpoint": "https://issues.example.com"
+    }
+  }
+}
+```
+
+The host exposes:
+
+- `host.id`, `host.version`, and `host.api_version`;
+- `host.config`, an immutable copy of the plugin's namespaced configuration;
+- `host.storage.get`, `put`, and `delete` for JSON-compatible values;
+- `host.secret(name, env: nil)` for private config or environment lookup;
+- `host.logger`, a standard Ruby logger routed through Kward's diagnostic output.
+
+Storage is kept in `plugin_state/<plugin-id>/state.json` under Kward's active
+config directory and survives `/reload`. Secret lookup checks plugin config,
+then the optional explicit environment variable, then a conventional name such
+as `KWARD_PLUGIN_COM_EXAMPLE_ISSUES_TOKEN`. Do not log secret values.
+
+Existing `Kward.plugin do ... end` files remain supported, but `plugin.host` is
+`nil` until the plugin declares stable identity metadata.
 
 ## Add a slash command
 
@@ -81,6 +133,52 @@ end
 Command names do not include `/`. They must start with a letter or number and may contain letters, numbers, `_`, and `-`.
 
 A plugin command cannot replace a built-in command or prompt-template command.
+
+## Add a model-callable tool
+
+Plugin tools let the model call trusted local Ruby integrations without requiring
+an MCP server. Define a model-facing description and a strict object JSON Schema
+for the arguments:
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.tool "issue_search",
+    description: "Search the local issue tracker",
+    schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Issue search text." },
+        limit: { type: "integer", description: "Maximum results." }
+      },
+      required: ["query"]
+    } do |args, ctx|
+      ctx.cancellation&.raise_if_cancelled!
+      IssueTracker.search(args.fetch("query"), limit: args.fetch("limit", 10))
+        .map { |issue| "#{issue.id}: #{issue.title}" }
+        .join("\n")
+    end
+end
+```
+
+The handler receives a parsed argument hash and a normal plugin context. It
+should return model-facing text. `ctx.cancellation` contains the
+active cooperative cancellation token, and `ctx.cancelled?` is a convenient
+boolean check for longer operations.
+
+Plugin tool schemas are exposed in normal CLI, RPC, Pan, and transport-backed
+agent turns. Kward forces `additionalProperties: false`, validates required
+property names, reports the tool source as `plugin`, and routes execution through
+the normal permission policy, approval bridge, lifecycle hooks, output
+compaction, and transcript artifact storage. Restricted execution profiles can
+filter plugin tools by name or remove all tools. Editor-scoped prompts,
+shell-agent prompts, and strict worktree agents do not receive plugin tools.
+Plugin-owned chats continue to own their own tool behavior.
+
+Plugin tools cannot replace built-in, MCP, or other plugin tools. Duplicate
+plugin registrations are skipped with a warning. Because trusted plugin code can
+perform arbitrary local or network effects, an enabled permission policy treats
+plugin tools as approval-requiring operations unless an explicit allow rule
+matches the tool or `source: plugin`.
 
 ## Add prompt context
 
@@ -314,7 +412,7 @@ Handlers receive a `ctx` object. Common methods:
 - `ctx.session_path`
 - `ctx.refresh_system_message!`
 
-These methods are available in all handler types: commands, footers, prompt context renderers, and transcript event observers. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called.
+These methods are available in all handler types, including model-callable tools. Tool contexts additionally expose `ctx.cancellation` and `ctx.cancelled?`. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called.
 
 The transcript is read-only. Use context methods instead of mutating Kward internals.
 
@@ -324,6 +422,8 @@ Plugins are available in the CLI and RPC backend.
 
 RPC clients can:
 
+- discover plugin tools through `tools/list`,
+- invoke plugin tools through normal model turns,
 - list plugin commands through `commands/list`,
 - run plugin commands through `commands/run`,
 - run plugin slash commands through `turns/start` input such as `/hello World`.
@@ -332,7 +432,7 @@ Plugin command output is emitted through normal turn events without calling the 
 
 ## Security
 
-Plugins are local Ruby code. They can read files, write files, run commands, make network requests, and read environment variables as your user.
+Plugins are local Ruby code. They can read files, write files, run commands, make network requests, and read environment variables as your user. Model-callable plugin tools execute in Kward's host process and are not contained by the command sandbox; permission checks decide whether a call starts but do not sandbox trusted plugin code after it begins.
 
 Recommended practices:
 

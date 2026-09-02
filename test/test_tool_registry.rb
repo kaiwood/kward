@@ -379,6 +379,135 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_plugin_tool_is_advertised_and_dispatched_with_runtime_context
+    plugin_registry = Kward::PluginRegistry.new
+    received = nil
+    plugin_registry.evaluate(path: "/plugins/issues.rb") do |plugin|
+      plugin.tool "issue_search", description: "Search issues", schema: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"]
+      } do |args, ctx|
+        received = [args, ctx.workspace_root, ctx.session_id, ctx.cancellation]
+        "Found #{args.fetch("query")}"
+      end
+    end
+    session = Struct.new(:id, :name, :path).new("session-1", nil, nil)
+    base_context = Kward::PluginRegistry::Context.new(
+      conversation: Kward::Conversation.new,
+      session: session,
+      workspace_root: "/workspace"
+    )
+    cancellation = Kward::Cancellation.new
+    registry = Kward::ToolRegistry.new(
+      plugin_tools: plugin_registry.tools,
+      hook_context: base_context,
+      web_search_enabled: false,
+      mcp_clients: [],
+      skills: []
+    )
+    conversation = Kward::Conversation.new
+
+    schema = registry.schemas.find { |entry| entry.dig(:function, :name) == "issue_search" }
+    result = registry.dispatch(tool_call("issue_search", query: "open"), conversation, cancellation: cancellation)
+
+    assert_equal "plugin", schema.dig(:metadata, :source)
+    assert_equal "Search issues", schema.dig(:function, :description)
+    assert_equal false, schema.dig(:function, :parameters, :additionalProperties)
+    assert_equal "Found open", result
+    assert_equal [{ "query" => "open" }, "/workspace", "session-1", cancellation], received
+    assert_equal "issue_search", conversation.messages.last[:name]
+  end
+
+  def test_plugin_tools_follow_allowed_tool_filtering
+    plugin_registry = Kward::PluginRegistry.new
+    plugin_registry.evaluate do |plugin|
+      plugin.tool("lookup", description: "Look up a value") { "ok" }
+    end
+
+    registry = Kward::ToolRegistry.new(
+      plugin_tools: plugin_registry.tools,
+      allowed_tool_names: [],
+      web_search_enabled: false,
+      skills: []
+    )
+
+    refute_includes registry.schemas.map { |schema| schema.dig(:function, :name) }, "lookup"
+  end
+
+  def test_plugin_tools_are_not_available_to_scoped_editor_or_shell_prompts
+    plugin_registry = Kward::PluginRegistry.new
+    plugin_registry.evaluate do |plugin|
+      plugin.tool("lookup", description: "Look up a value") { "ok" }
+    end
+    registry = Kward::ToolRegistry.new(plugin_tools: plugin_registry.tools)
+
+    editor_registry = registry.for_editor_prompt(Object.new)
+    shell_registry = registry.for_shell_prompt(Object.new)
+
+    refute_includes editor_registry.schemas.map { |schema| schema.dig(:function, :name) }, "lookup"
+    refute_includes shell_registry.schemas.map { |schema| schema.dig(:function, :name) }, "lookup"
+  end
+
+  def test_plugin_tools_run_generic_tool_hooks_with_plugin_source
+    plugin_registry = Kward::PluginRegistry.new
+    plugin_registry.evaluate do |plugin|
+      plugin.tool("lookup", description: "Look up a value") { "ok" }
+    end
+    events = []
+    manager = Kward::Hooks::Manager.new
+    %w[tool_call_before tool_call_after].each do |event_name|
+      manager.register(event_name) do |event|
+        events << [event.name, event.payload[:source]]
+        Kward::Hooks::Decision.allow
+      end
+    end
+    registry = Kward::ToolRegistry.new(plugin_tools: plugin_registry.tools, hook_manager: manager)
+
+    assert_equal "ok", registry.dispatch(tool_call("lookup", {}), Kward::Conversation.new)
+    assert_equal [["tool_call_before", "plugin"], ["tool_call_after", "plugin"]], events
+  end
+
+  def test_permission_policy_treats_plugin_tools_as_approval_required
+    plugin_registry = Kward::PluginRegistry.new
+    executed = false
+    plugin_registry.evaluate do |plugin|
+      plugin.tool("lookup", description: "Look up a value") do
+        executed = true
+        "ok"
+      end
+    end
+    policy = Kward::Permissions::Policy.new(enabled: true)
+    registry = Kward::ToolRegistry.new(plugin_tools: plugin_registry.tools, permission_policy: policy)
+
+    result = registry.dispatch(tool_call("lookup", {}), Kward::Conversation.new)
+
+    assert_equal "Declined: tool execution denied by user: lookup", result
+    refute executed
+  end
+
+  def test_tool_registry_skips_plugin_tool_name_collisions
+    plugin_registry = Kward::PluginRegistry.new
+    plugin_registry.evaluate do |plugin|
+      plugin.tool("read_file", description: "Replace a built-in") { "unsafe" }
+      plugin.tool("open_editor", description: "Replace a frontend-specific built-in") { "unsafe" }
+    end
+    warnings = []
+    previous_warning_sink = Kward::ConfigFiles.warning_sink
+    Kward::ConfigFiles.warning_sink = ->(message) { warnings << message }
+
+    registry = Kward::ToolRegistry.new(plugin_tools: plugin_registry.tools)
+
+    read_file_schemas = registry.schemas.select { |schema| schema.dig(:function, :name) == "read_file" }
+    assert_equal 1, read_file_schemas.length
+    assert_equal "builtin", read_file_schemas.first.dig(:metadata, :source)
+    refute_includes registry.schemas.map { |schema| schema.dig(:function, :name) }, "open_editor"
+    assert_includes warnings.join("\n"), "skipping Kward plugin tool read_file"
+    assert_includes warnings.join("\n"), "skipping Kward plugin tool open_editor"
+  ensure
+    Kward::ConfigFiles.warning_sink = previous_warning_sink
+  end
+
   def test_tool_registry_rejects_colliding_mcp_tool_names
     remote_name = "a" * 60
     clients = ["one", "two"].map do |suffix|

@@ -65,6 +65,8 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `transcript`: Kward transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, and methods for listing, auto-resume, live-session discovery, linear forking, compaction, and labeled tree navigation with branch summaries. Import is unsupported. Live session updates are also unsupported but reserve the `session/updated` notification name. Git worktree bindings are reported as interactive-TUI-only.
 - `turns`: asynchronous turns, per-session concurrency, active and recent turn lists, busy-input steering when the provider supports it, queued follow-ups, best-effort cancellation, and recent in-memory event replay. Per-turn options cover model, reasoning, tool scope, and tool approval, with structured client context for editor integrations.
+- `plugins`: the supported plugin API version and public `id`, `version`, and `apiVersion` metadata for identified plugins. Private plugin configuration is never included.
+- `pluginTools`: model-callable tools registered by trusted local plugins, including the registered count, `tools/list` discovery, execution-profile filtering, and permission-policy enforcement.
 - `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions. A type may also report `transport: true` when a trusted external transport is allowed to target it; RPC opt-in and external transport opt-in remain separate.
 - `events`: the `turn/event` contract, assistant and reasoning events, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
@@ -737,11 +739,11 @@ Params:
 
 Returns current tool schemas. The existing model-facing schema shape is preserved: each entry still has `type: "function"` and `function` with `name`, `description`, and `parameters`. Entries also include additive metadata for UI discovery:
 
-- `metadata.source`: one of practical source labels such as `builtin`, `mcp`, `web`, `skill`, `ui`, or `unknown`.
+- `metadata.source`: one of practical source labels such as `builtin`, `plugin`, `mcp`, `web`, `skill`, `ui`, or `unknown`.
 - `metadata.displayName`: human-readable tool label.
 - MCP tools also include `metadata.serverName` and `metadata.remoteName`. The callable name remains sanitized with a double underscore, for example `github__search_issues`, while `displayName` is `github.search_issues`.
 
-Clients that only read `tools[].function` remain compatible.
+Clients that only read `tools[].function` remain compatible. Model-callable tools registered by trusted local plugins appear here with `metadata.source: "plugin"` and follow the same per-session execution-profile filtering as built-in tools.
 
 ### `mcp/status`
 

@@ -2,20 +2,22 @@ require_relative "../config_files"
 require_relative "../deep_copy"
 require_relative "../hooks"
 require_relative "../transport"
+require_relative "host"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Loads trusted user plugin files and provides the plugin DSL.
   #
   # Plugins live in the user plugin directory, run as local Ruby code, and can
-  # register slash commands, one footer renderer, prompt context, and live
-  # transcript-event observers for CLI and RPC frontends.
+  # register slash commands, model-callable tools, one footer renderer, prompt
+  # context, and live transcript-event observers for CLI and RPC frontends.
   #
   # This registry is intentionally trust-based, not a sandbox. Keep plugin loading
   # restricted to `ConfigFiles.plugin_paths`, keep workspace-local code out of the
   # load path, and expose immutable transcript views so plugins can observe state
   # without corrupting active conversations.
   class PluginRegistry
+    PLUGIN_API_VERSION = "1"
     COMMAND_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_-]*\z/.freeze
 
     # Registered slash command exposed in completion, RPC command listings, and
@@ -25,6 +27,10 @@ module Kward
         { name: name, description: description, argument_hint: argument_hint }
       end
     end
+
+    # Registered model-callable tool exposed through each normal agent tool
+    # registry. The handler receives parsed arguments and a runtime context.
+    Tool = Struct.new(:name, :description, :schema, :path, :handler, keyword_init: true)
 
     # Registered interactive command that takes over the composer region with a
     # Kward-driven render and input loop. Like a slash command but with canvas
@@ -68,18 +74,19 @@ module Kward
       end
     end
 
-    # Runtime context passed to plugin commands, footers, prompt context
-    # renderers, and transcript event handlers.
+    # Runtime context passed to plugin commands, tools, footers, prompt context
+    # renderers, hooks, and transcript event handlers.
     class Context
-      attr_reader :args, :workspace_root
+      attr_reader :args, :workspace_root, :cancellation
 
       # Creates an object for trusted plugin loading and dispatch.
-      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil)
+      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil)
         @conversation = conversation
         @args = args.to_s
         @session = session
         @workspace_root = workspace_root
         @say_callback = say_callback
+        @cancellation = cancellation
       end
 
       # @return [Transcript] read-only transcript wrapper
@@ -118,6 +125,24 @@ module Kward
       def refresh_system_message!
         @conversation.refresh_system_message! if @conversation.respond_to?(:refresh_system_message!)
         nil
+      end
+
+      # Returns whether the active plugin tool call has been cancelled.
+      # Non-tool plugin contexts do not have a cancellation token and return false.
+      def cancelled?
+        @cancellation&.cancelled? == true
+      end
+
+      # Builds a fresh context for one model-callable plugin tool invocation.
+      # @api private
+      def for_tool(conversation:, cancellation: nil)
+        self.class.new(
+          conversation: conversation,
+          session: @session,
+          workspace_root: @workspace_root,
+          say_callback: @say_callback,
+          cancellation: cancellation
+        )
       end
 
       # Allows the current lifecycle event to continue.
@@ -179,10 +204,17 @@ module Kward
     # @api public
     class DSL
       # Creates an object for trusted plugin loading and dispatch.
-      def initialize(registry, path)
+      def initialize(registry, path, host: nil)
         @registry = registry
         @path = path
+        @host = host
       end
+
+      # Shared metadata, configuration, storage, secrets, and logging services.
+      # Legacy plugins without declared identity return nil.
+      #
+      # @return [PluginHost, nil]
+      attr_reader :host
 
       # Registers a slash command.
       #
@@ -198,6 +230,23 @@ module Kward
       # @api public
       def command(name, description: "", argument_hint: "", &block)
         @registry.register_command(name, description: description, argument_hint: argument_hint, path: @path, &block)
+      end
+
+      # Registers a model-callable tool for normal Kward agent turns.
+      #
+      # Tool arguments are described with a strict object JSON Schema. The
+      # handler must return model-facing text and receives the normal plugin
+      # context with the active cancellation token.
+      #
+      # @param name [String, #to_s] function name exposed to the model
+      # @param description [String] model-facing description of the operation
+      # @param schema [Hash] object JSON Schema for parsed tool arguments
+      # @yieldparam args [Hash] parsed model-provided arguments
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def tool(name, description:, schema: { type: "object", properties: {} }, &block)
+        @registry.register_tool(name, description: description, schema: schema, path: @path, &block)
       end
 
       # Registers or replaces the custom footer renderer.
@@ -326,7 +375,9 @@ module Kward
     def initialize(reserved_commands: [], warning_sink: nil)
       @reserved_commands = reserved_commands.map(&:to_s)
       @warning_sink = warning_sink
+      @plugins = {}
       @commands = {}
+      @tools = {}
       @interactive_commands = {}
       @tab_types = {}
       @tab_types_by_id = {}
@@ -346,12 +397,29 @@ module Kward
     # @return [Array<String>] plugin files successfully loaded by this registry
     attr_reader :paths
 
+    # @return [Array<PluginHost>] identified plugins loaded by this registry
+    def plugins
+      @plugins.values
+    end
+
+    def plugin_for(id)
+      @plugins[id.to_s]
+    end
+
     def commands
       @commands.values
     end
 
     def command_for(name)
       @commands[name.to_s]
+    end
+
+    def tools
+      @tools.values
+    end
+
+    def tool_for(name)
+      @tools[name.to_s]
     end
 
     def interactive_commands
@@ -453,10 +521,24 @@ module Kward
       self.class.loading_path = previous_path
     end
 
-    def evaluate(path: nil, &block)
-      dsl = DSL.new(self, path)
+    def evaluate(path: nil, id: nil, version: nil, api: nil, &block)
+      host = register_plugin_identity(id: id, version: version, api: api, path: path)
+      dsl = DSL.new(self, path, host: host)
       block.arity == 1 ? block.call(dsl) : dsl.instance_eval(&block)
       self
+    end
+
+    def register_plugin_identity(id:, version:, api:, path: nil)
+      values = [id, version, api]
+      return nil if values.all?(&:nil?)
+      raise ArgumentError, "Plugin id, version, and api are required together" if values.any?(&:nil?)
+
+      id = id.to_s
+      api = api.to_s
+      raise ArgumentError, "Unsupported Kward plugin API #{api.inspect} for #{id}; supported API: #{PLUGIN_API_VERSION}" unless api == PLUGIN_API_VERSION
+      raise ArgumentError, "Duplicate Kward plugin id: #{id}" if @plugins.key?(id)
+
+      @plugins[id] = PluginHost.new(id: id, version: version, api_version: api, source_path: path)
     end
 
     def register_command(name, description: "", argument_hint: "", path: nil, &handler)
@@ -477,6 +559,26 @@ module Kward
         name: name,
         description: description.to_s,
         argument_hint: argument_hint.to_s,
+        path: path,
+        handler: handler
+      )
+    end
+
+    def register_tool(name, description:, schema:, path: nil, &handler)
+      name = name.to_s
+      raise "Plugin tool name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin tool #{name} requires a description" if description.to_s.strip.empty?
+      raise "Plugin tool #{name} requires a handler" unless handler
+
+      if @tools.key?(name)
+        emit_warning "Warning: skipping duplicate Kward plugin tool #{name}: #{path}"
+        return nil
+      end
+
+      @tools[name] = Tool.new(
+        name: name,
+        description: description.to_s,
+        schema: normalize_tool_schema(name, schema),
         path: path,
         handler: handler
       )
@@ -586,6 +688,37 @@ module Kward
 
     private
 
+    def normalize_tool_schema(name, schema)
+      raise ArgumentError, "Plugin tool #{name} schema must be an object" unless schema.is_a?(Hash)
+
+      parameters = schema.each_with_object({}) { |(key, value), result| result[key.to_sym] = DeepCopy.dup(value) }
+      type = parameters.fetch(:type, "object").to_s
+      raise ArgumentError, "Plugin tool #{name} schema type must be object" unless type == "object"
+
+      properties = parameters.fetch(:properties, {})
+      required = parameters.fetch(:required, [])
+      raise ArgumentError, "Plugin tool #{name} schema properties must be an object" unless properties.is_a?(Hash)
+      raise ArgumentError, "Plugin tool #{name} schema required must be an array" unless required.is_a?(Array)
+      if parameters[:additionalProperties] == true
+        raise ArgumentError, "Plugin tool #{name} schema cannot allow additional properties"
+      end
+
+      property_names = properties.keys.map(&:to_s)
+      required = required.map(&:to_s).uniq.sort
+      unknown_required = required - property_names
+      unless unknown_required.empty?
+        raise ArgumentError, "Plugin tool #{name} schema requires unknown properties: #{unknown_required.join(', ')}"
+      end
+
+      parameters[:type] = "object"
+      parameters[:properties] = properties.keys.sort_by(&:to_s).each_with_object({}) do |key, result|
+        result[key] = properties[key]
+      end
+      parameters[:required] = required
+      parameters[:additionalProperties] = false
+      DeepCopy.freeze(parameters)
+    end
+
     def normalize_execution_profile(profile)
       return nil if profile.nil?
       return profile if profile.is_a?(Transport::ExecutionProfile)
@@ -646,14 +779,18 @@ module Kward
   # directory. It raises if called outside plugin loading so workspace code
   # cannot silently mutate Kward's runtime by merely being required.
   #
+  # @param id [String, nil] stable reverse-domain-style plugin identifier
+  # @param version [String, nil] plugin release version
+  # @param api [String, Integer, nil] Kward plugin API version
   # @yieldparam plugin [PluginRegistry::DSL] plugin registration DSL
   # @return [Object, nil] the plugin block result
   # @api public
-  def self.plugin(&block)
+  def self.plugin(id: nil, version: nil, api: nil, &block)
     registry = PluginRegistry.loading_registry
     raise "Kward.plugin can only be called while loading a plugin" unless registry
 
-    dsl = PluginRegistry::DSL.new(registry, PluginRegistry.loading_path)
+    host = registry.register_plugin_identity(id: id, version: version, api: api, path: PluginRegistry.loading_path)
+    dsl = PluginRegistry::DSL.new(registry, PluginRegistry.loading_path, host: host)
     block.arity == 1 ? block.call(dsl) : dsl.instance_eval(&block)
   end
 end

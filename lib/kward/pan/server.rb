@@ -130,7 +130,7 @@ module Kward
       hook_manager = lifecycle_hook_manager
       Agent.new(
         client: @client,
-        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false, hook_manager: hook_manager, hook_context: hook_context),
+        tool_registry: ToolRegistry.new(workspace: @workspace, ask_user_question_enabled: false, plugin_tools: plugin_registry.tools, hook_manager: hook_manager, hook_context: hook_context),
         conversation: @conversation,
         hook_manager: hook_manager,
         hook_context: hook_context

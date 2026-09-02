@@ -469,6 +469,20 @@ module Kward
             startMode: "cliOnly",
             entries: @transport_manager.list
           },
+          plugins: {
+            apiVersion: PluginRegistry::PLUGIN_API_VERSION,
+            identified: @session_manager.plugin_registry.plugins.map do |plugin|
+              { id: plugin.id, version: plugin.version, apiVersion: plugin.api_version }
+            end
+          },
+          pluginTools: {
+            supported: true,
+            registered: @session_manager.plugin_registry.tools.length,
+            discoveryMethod: TOOL_METHODS.first,
+            source: "plugin",
+            executionProfileFiltering: true,
+            permissionPolicy: true
+          },
           pluginChats: {
             supported: @plugin_chat_manager.supported_types.any?,
             methods: PLUGIN_CHAT_METHODS,

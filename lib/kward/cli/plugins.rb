@@ -30,12 +30,13 @@ module Kward
         plugin_registry.interactive_command_for(command)
       end
 
-      def reload_plugins(conversation)
+      def reload_plugins(conversation, tool_registry: nil)
         @prompt_templates = nil
         @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
         @prompt.update_slash_commands(slash_command_entries) if @prompt.respond_to?(:update_slash_commands)
         conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
         conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
+        tool_registry&.replace_plugin_tools!(@plugin_registry.tools)
         runtime_output("Plugins reloaded.")
       end
 

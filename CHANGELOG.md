@@ -6,6 +6,8 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added stable plugin identity metadata and a shared plugin host with namespaced configuration, private durable storage, secret lookup, logging, API compatibility checks, and sanitized RPC discovery.
+- Added model-callable plugin tools with strict JSON schemas, cancellation context, normal permission and lifecycle-hook enforcement, execution-profile filtering, RPC discovery, and tool-output compaction.
 - Added `/name` to rename the active session and tab together, including while the tab's agent is running.
 
 ### Changed

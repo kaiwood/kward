@@ -1074,6 +1074,7 @@ module Kward
           workspace: configured_workspace(workspace_root),
           prompt: prompt,
           allowed_tool_names: allowed_tool_names,
+          plugin_tools: plugin_registry.tools,
           tool_approval: tool_approval,
           approval_for_allowed_tools: !tool_approval.nil?,
           hook_manager: hook_manager,

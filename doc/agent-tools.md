@@ -19,6 +19,7 @@ Tools also enforce important boundaries:
 | Web tools | `web_search`, `fetch_content`, `fetch_raw` | [Web search](web-search.md) |
 | Code search | `code_search` | [Code search](code-search.md) |
 | Context and interaction tools | `read_skill`, `retrieve_tool_output`, `ask_user_question` | [Context tools](context-tools.md) |
+| Plugin tools | Trusted local integrations registered by installed plugins | [Plugins](plugins.md#Add_a_model_callable_tool) |
 
 ## How tools save tokens
 
@@ -42,7 +43,8 @@ See [Context budgeting](context-budgeting.md) for the full compaction strategy, 
 
 - web tools can be hidden with web search configuration,
 - `read_skill` is advertised only when skills are available,
-- `ask_user_question` is advertised only when the frontend can display structured questions.
+- `ask_user_question` is advertised only when the frontend can display structured questions,
+- plugin tools are advertised in normal agent turns and remain subject to execution profiles and permission policy.
 
 When `write_file` or `edit_file` changes an `AGENTS.md` file in the workspace root, Kward automatically rebuilds the system message so the model picks up the new instructions without a restart.
 

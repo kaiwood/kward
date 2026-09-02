@@ -2,7 +2,7 @@
 
 Kward reads user configuration from `~/.kward/config.json` by default. Most users should start with `/settings`, `/login`, `/model`, or `/reasoning` inside Kward. Edit JSON directly when you need an advanced setting, an integration, or a reproducible configuration.
 
-On first start, Kward creates the file when it does not exist. The starter config records defaults for personas, memory, the composer, editor, overlays, web search, update checks, sessions, skills, MCP, and workspace guardrails. Provider-specific model defaults are added only when you choose a provider or model.
+On first start, Kward creates the file when it does not exist. The starter config records defaults for personas, memory, the composer, editor, overlays, web search, update checks, sessions, skills, MCP, plugins, and workspace guardrails. Provider-specific model defaults are added only when you choose a provider or model.
 
 If `KWARD_CONFIG_PATH` is set, Kward uses that file and treats its directory as the config directory for prompts, skills, memory, logs, and caches.
 
@@ -49,6 +49,27 @@ Add trusted local Model Context Protocol servers under `mcpServers`:
 ```
 
 See [MCP servers](mcp.md) for setup, supported fields, and security notes.
+
+### Plugin configuration
+
+Identified plugins read immutable configuration from the `plugins` object under
+their stable ID:
+
+```json
+{
+  "plugins": {
+    "com.example.issues": {
+      "endpoint": "https://issues.example.com"
+    }
+  }
+}
+```
+
+Plugin-managed state is stored privately under `plugin_state/<plugin-id>` in the
+active config directory. Credentials can come from private plugin config or the
+plugin's documented environment variables; do not commit them to shared config
+files. See [Plugins](plugins.md#Plugin_identity_and_host_services) for the host
+API, secret lookup order, and storage example.
 
 ### Transport plugins
 
@@ -728,9 +749,9 @@ Available modes are:
 
 | Mode | Behavior |
 | --- | --- |
-| `ask` | Read-only tools run normally; file changes, shell commands, web tools, and MCP tools need approval. |
-| `workspace-write` | File changes within `write_scopes` run without approval; shell and network tools still need approval. |
-| `read-only` | Denies file changes, shell commands, web tools, and MCP tools. |
+| `ask` | Read-only tools run normally; file changes, shell commands, web tools, MCP tools, and plugin tools need approval. |
+| `workspace-write` | File changes within `write_scopes` run without approval; shell, network, MCP, and plugin tools still need approval. |
+| `read-only` | Denies file changes, shell commands, web tools, MCP tools, and plugin tools. |
 | `deny-by-default` | Denies risky tools unless an `allow` rule matches. |
 
 `allow`, `ask`, and `deny` rules are arrays of objects matching `tool`, `path`, `host`, `command`, or `source`. Deny rules always take precedence, then ask, then allow. Use `write_scopes` to restrict writes in `workspace-write` mode:

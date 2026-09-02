@@ -4728,6 +4728,40 @@ edit this prompt"
     end
   end
 
+  def test_reload_plugins_updates_model_callable_tools
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      plugin_path = File.join(plugins_dir, "tool.rb")
+      FileUtils.mkdir_p(plugins_dir)
+      File.write(plugin_path, <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.tool("plugin_version", description: "Return plugin version") { "v1" }
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        prompt = FakePrompt.new([])
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+        plugin_registry = cli.send(:plugin_registry)
+        conversation = Kward::Conversation.new(plugin_registry: plugin_registry)
+        tool_registry = Kward::ToolRegistry.new(plugin_tools: plugin_registry.tools)
+
+        assert_equal "v1", tool_registry.dispatch(tool_call("plugin_version", {}), Kward::Conversation.new)
+
+        File.write(plugin_path, <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.tool("plugin_version", description: "Return plugin version") { "v2" }
+            plugin.tool("plugin_new", description: "Return new tool") { "new" }
+          end
+        RUBY
+        cli.send(:reload_plugins, conversation, tool_registry: tool_registry)
+
+        assert_equal "v2", tool_registry.dispatch(tool_call("plugin_version", {}), Kward::Conversation.new)
+        assert_includes tool_registry.schemas.map { |schema| schema.dig(:function, :name) }, "plugin_new"
+      end
+    end
+  end
+
   def test_reload_plugins_updates_commands_and_current_system_message
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")
