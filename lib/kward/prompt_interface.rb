@@ -141,12 +141,48 @@ module Kward
       end
     end
 
+    # Forwards child output while tracking keyboard-protocol resets across chunks.
+    class TerminalHandoffOutput
+      def initialize(output, on_keyboard_protocol_restore:)
+        @output = output
+        @on_keyboard_protocol_restore = on_keyboard_protocol_restore
+        @pending = +"".b
+      end
+
+      def write(value)
+        value = value.to_s.b
+        detect_keyboard_protocol_restore(value)
+        @output.write(value)
+      end
+
+      def print(*values)
+        values.each { |value| write(value) }
+        nil
+      end
+
+      def flush
+        @output.flush if @output.respond_to?(:flush)
+      end
+
+      private
+
+      def detect_keyboard_protocol_restore(value)
+        @pending << value
+        return unless @pending.include?(TerminalSequences::KEYBOARD_PROTOCOL_RESTORE)
+
+        @on_keyboard_protocol_restore.call
+        keep = [TerminalSequences::KEYBOARD_PROTOCOL_RESTORE.bytesize - 1, @pending.bytesize].min
+        @pending = keep.positive? ? @pending.byteslice(-keep, keep) : +"".b
+      end
+    end
+
     def initialize(input: $stdin, output: $stdout, slash_commands: [], overlay_settings: nil, project_browser_icon_theme: "off", footer: nil, composer_status: nil, busy_help: true, attachment_badges: nil, attachment_parser: nil, banner_message: nil, tab_keybindings: nil, prompt_history: nil, workspace_root: Dir.pwd, editor_mode: nil, editor_mode_source: nil, editor_auto_indent: true, editor_auto_indent_source: nil, editor_auto_close_pairs: true, editor_auto_close_pairs_source: nil, editor_soft_wrap: true, editor_soft_wrap_source: nil, editor_bar_cursor: true, editor_bar_cursor_source: nil, editor_line_numbers: "absolute", editor_line_numbers_source: nil, diff_view: "auto", diff_view_source: nil, editor_runners_source: nil, redraw_handler: nil)
       @input_io = input
       @output_io = output
       # Logical state may change during a child handoff, but only the owner may render.
       @terminal_owner = :kward
       @terminal_handoff_mode = nil
+      @terminal_handoff_keyboard_protocol_reset = false
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
       @prompt_history = prompt_history
@@ -718,12 +754,19 @@ module Kward
         print_output_locked(BRACKETED_PASTE_RESTORE)
         print_output_locked(KEYBOARD_PROTOCOL_RESTORE) unless preserve_tab_keybindings
         @handoff_input_buffer.clear
+        @terminal_handoff_keyboard_protocol_reset = false
         restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
         flush_output_locked
         restore_console_mode_locked
         input = @input_io
-        output = @output_io
+        output = if preserve_tab_keybindings
+          TerminalHandoffOutput.new(@output_io, on_keyboard_protocol_restore: -> {
+            @terminal_handoff_keyboard_protocol_reset = true
+          })
+        else
+          @output_io
+        end
         transition = method(:switch_terminal_handoff_to_exclusive)
         @terminal_handoff_mode = inline ? :inline : :exclusive
         @terminal_owner = :child
@@ -737,9 +780,12 @@ module Kward
         restore_scroll_region_locked
         print_output_locked(TerminalSequences::SGR_RESET)
         enter_raw_mode_locked
-        print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
+        if !preserve_tab_keybindings || @terminal_handoff_keyboard_protocol_reset
+          print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
+        end
         print_output_locked(BRACKETED_PASTE_ENABLE)
         @handoff_input_buffer.clear
+        @terminal_handoff_keyboard_protocol_reset = false
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked(force: true)
         @cursor_visible = nil

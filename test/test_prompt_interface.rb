@@ -877,6 +877,18 @@ class TestPromptInterface < KwardTestCase
     assert_includes output.string, "\e[?2004h"
   end
 
+  def test_prompt_interface_balances_preserved_keyboard_protocol_without_child_reset
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.start
+    3.times { prompt.with_terminal_handoff(preserve_tab_keybindings: true) {} }
+    prompt.close
+
+    assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE).length
+    assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE).length
+  end
+
   def test_prompt_interface_reasserts_preserved_keyboard_protocol_after_child_reset
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

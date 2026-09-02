@@ -18,7 +18,7 @@ All notable changes to Kward will be documented in this file.
 - Fixed the interactive composer leaving the final streamed transcript line too close to its top border.
 - Fixed `/compact` completion output and cancellation so work remains owned by its originating tab instead of rendering into whichever tab is active.
 - Fixed detached `/shell` commands losing output across tab switches by retaining pre-detach output and streaming buffered output when the originating tab is active again.
-- Fixed interactive PTY handoff cleanup so preserved keyboard protocol state is reasserted after child exit and restored when Kward exits.
+- Fixed interactive PTY handoff cleanup so preserved keyboard protocol state is reasserted only after a child reset and remains balanced when Kward exits.
 - Fixed `/rewind` and session-tree navigation detaching active worktree tabs by reloading their conversations against the original workspace instead of the linked worktree.
 
 ## [0.84.0] - 2026-08-30
