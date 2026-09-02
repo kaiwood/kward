@@ -407,19 +407,52 @@ If plugin state changes and Kward should rebuild the active system message, call
 ctx.refresh_system_message!
 ```
 
-## Add a footer
+## Add status to the footer
 
-A footer can show compact local status in the terminal UI:
+Identified plugins can contribute compact status without replacing status from
+other plugins. Give each contribution a stable name:
 
 ```ruby
-Kward.plugin do |plugin|
-  plugin.footer do |ctx|
-    "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
+Kward.plugin(id: "com.example.session-status", version: "1.0.0", api: 1) do |plugin|
+  plugin.status "session", order: 10, priority: :high do |ctx|
+    {
+      text: ctx.session_name || "unnamed",
+      tooltip: "Current Kward session"
+    }
+  end
+
+  plugin.status "messages", order: 20, priority: :low do |ctx|
+    "#{ctx.transcript.messages.length} messages"
   end
 end
 ```
 
-Only one footer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning. Kward evaluates the active footer at most once per second and reuses its last value between refreshes.
+Kward joins visible contributions with ` · `. Lower `order` values appear
+first. `priority` may be `:low`, `:normal` (the default), or `:high`. When the
+terminal is too narrow, Kward removes complete low-priority contributions
+first, followed by normal- and high-priority contributions. Among contributions
+with the same priority, later ones are removed first.
+
+Return a string for ordinary status, a hash with `text` and optional `tooltip`
+for structured clients, or `nil` to hide the contribution temporarily. One
+renderer failing does not hide status from other plugins. Kward evaluates the
+contributions at most once per second and reuses their values between refreshes.
+
+RPC clients receive both the combined `text` fallback and the individual
+structured segments. Terminal footers display the combined text; tooltips are
+available to clients that can render them.
+
+The older `plugin.footer` API remains supported. Each legacy footer is treated
+as a normal-priority contribution, so footers from different plugins now
+compose instead of replacing one another:
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.footer do |ctx|
+    "#{ctx.session_name || 'unnamed'}"
+  end
+end
+```
 
 ## Add an interactive command
 

@@ -66,7 +66,7 @@ module Kward
       WORKER_STOP_TIMEOUT = 2.0
       WORKER_STOP = Object.new.freeze
 
-      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :execution_profile, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
+      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :execution_profile, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, :last_footer_segments, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :execution_profile, :mutex, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
@@ -670,7 +670,7 @@ module Kward
           rpc_session.conversation.plugin_registry = registry if rpc_session.conversation.respond_to?(:plugin_registry=)
           rpc_session.conversation.refresh_system_message! if rpc_session.conversation.respond_to?(:refresh_system_message!)
           rebuild_session_tools(rpc_session)
-          if registry.footer_renderer
+          if registry.status?
             start_footer_worker(rpc_session)
             emit_footer_update(rpc_session)
           else
@@ -1258,7 +1258,7 @@ module Kward
       end
 
       def start_footer_worker(rpc_session)
-        return unless plugin_registry.footer_renderer
+        return unless plugin_registry.status?
         return if rpc_session.footer_worker&.alive?
 
         rpc_session.footer_worker = Thread.new do
@@ -1546,27 +1546,30 @@ module Kward
       end
 
       def emit_footer_update(rpc_session)
-        renderer = plugin_registry.footer_renderer
-        return clear_footer_update(rpc_session) unless renderer
+        return clear_footer_update(rpc_session) unless plugin_registry.status?
 
-        text = begin
+        segments = begin
           context = plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
-          renderer.call(context).to_s.gsub(/\s+/, " ").strip
+          plugin_registry.status_segments(context)
         rescue StandardError => e
           warn "Warning: Kward plugin footer error: #{e.message}"
-          ""
+          []
         end
-        return if rpc_session.last_footer_text == text
+        segment_payloads = segments.map(&:to_h)
+        text = plugin_registry.compose_status(segments)
+        return if rpc_session.last_footer_text == text && rpc_session.last_footer_segments == segment_payloads
 
         rpc_session.last_footer_text = text
-        notify("ui/footer", { sessionId: rpc_session.id, text: text })
+        rpc_session.last_footer_segments = segment_payloads
+        notify("ui/footer", { sessionId: rpc_session.id, text: text, segments: segment_payloads })
       end
 
       def clear_footer_update(rpc_session)
-        return if rpc_session.last_footer_text.to_s.empty?
+        return if rpc_session.last_footer_text.to_s.empty? && Array(rpc_session.last_footer_segments).empty?
 
         rpc_session.last_footer_text = ""
-        notify("ui/footer", { sessionId: rpc_session.id, text: "" })
+        rpc_session.last_footer_segments = []
+        notify("ui/footer", { sessionId: rpc_session.id, text: "", segments: [] })
       end
 
       def emit_turn_event(turn, type, payload)

@@ -4728,6 +4728,21 @@ edit this prompt"
     end
   end
 
+  def test_plugin_footer_drops_low_priority_status_when_width_is_constrained
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(path: "/plugins/status.rb", id: "com.example.status", version: "1.0.0", api: 1) do |plugin|
+      plugin.status("optional", order: 10, priority: :low) { "Optional" }
+      plugin.status("core", order: 20, priority: :high) { "Core" }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+    cli.instance_variable_set(:@plugin_registry, registry)
+
+    footer = cli.send(:prompt_footer_renderer)
+
+    assert_equal "Optional · Core", footer.call
+    assert_equal "Core", footer.call(4)
+  end
+
   def test_reload_plugins_runs_old_cleanup_before_starting_new_registry
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")

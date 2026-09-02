@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added composable plugin footer status with stable segment IDs, display ordering, width-aware priority removal, isolated render failures, structured RPC segments and tooltips, and backward-compatible `plugin.footer` contributions.
 - Added identified-plugin start, reload, and shutdown callbacks; plugin- and tab-owned cooperative background tasks; idempotent managed cleanup; bounded shutdown waits; and optional plugin-tab driver cleanup.
 - Added typed plugin commands with JSON Schema validation, shell-style flags and declared positional arguments, structured frontend/RPC results, cancellation context, and legacy raw-string compatibility, plus identified-plugin actions with namespaced RPC discovery and execution.
 - Added structured frontend-neutral plugin UI for questions, selections, confirmations, text input, progress, and notifications, with TUI rendering, RPC capability negotiation and request/answer notifications, transport interaction routing, bounded validation, cancellation, and fail-closed fallbacks.

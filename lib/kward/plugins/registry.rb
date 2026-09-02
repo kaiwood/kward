@@ -12,8 +12,8 @@ module Kward
   #
   # Plugins live in the user plugin directory, run as local Ruby code, and can
   # register slash commands, namespaced actions, model-callable tools, lifecycle
-  # callbacks, one footer renderer, prompt context, and live transcript-event
-  # observers for CLI and RPC frontends.
+  # callbacks, composable status renderers, prompt context, and live
+  # transcript-event observers for CLI and RPC frontends.
   #
   # This registry is intentionally trust-based, not a sandbox. Keep plugin loading
   # restricted to `ConfigFiles.plugin_paths`, keep workspace-local code out of the
@@ -30,6 +30,21 @@ module Kward
     # Registered model-callable tool exposed through each normal agent tool
     # registry. The handler receives parsed arguments and a runtime context.
     Tool = Struct.new(:name, :description, :schema, :path, :handler, keyword_init: true)
+
+    STATUS_PRIORITIES = { low: 0, normal: 1, high: 2 }.freeze
+    STATUS_SEPARATOR = " · "
+
+    # Registered footer/status contribution. Display order is independent from
+    # priority: order places segments, while priority decides which segments are
+    # removed first when the terminal is narrow.
+    Status = Struct.new(:id, :order, :priority, :path, :renderer, :sequence, keyword_init: true)
+
+    # Rendered, frontend-neutral status contribution.
+    StatusSegment = Struct.new(:id, :text, :tooltip, :priority, :order, keyword_init: true) do
+      def to_h
+        { id: id, text: text, tooltip: tooltip, priority: priority.to_s, order: order }.compact
+      end
+    end
 
     # Registered interactive command that takes over the composer region with a
     # Kward-driven render and input loop. Like a slash command but with canvas
@@ -321,16 +336,41 @@ module Kward
         register_lifecycle(:shutdown, &block)
       end
 
-      # Registers or replaces the custom footer renderer.
-      #
-      # Only one footer renderer is active. If multiple plugins register one,
-      # the later renderer replaces the earlier renderer.
+      # Registers a legacy footer contribution. Multiple plugin footers are
+      # composed rather than replacing one another. Identified plugins should
+      # prefer {#status} so clients receive a descriptive stable segment ID.
       #
       # @yieldparam ctx [Context] plugin execution context
       # @return [void]
       # @api public
       def footer(&block)
-        @registry.register_footer(path: @path, &block)
+        @registry.register_footer(plugin_id: @host&.id, path: @path, &block)
+      end
+
+      # Registers a composable status contribution.
+      #
+      # The renderer may return a string, nil to hide the segment, or a hash with
+      # `text` and optional `tooltip`. Lower order values render first. On narrow
+      # terminals low-priority segments are removed before normal- and
+      # high-priority segments.
+      #
+      # @param name [String, #to_s] stable name within the plugin namespace
+      # @param order [Integer] display order; lower values render first
+      # @param priority [Symbol, String] `low`, `normal`, or `high`
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def status(name, order: 100, priority: :normal, &block)
+        raise ArgumentError, "Plugin status contributions require stable plugin identity" unless @host
+
+        @registry.register_status(
+          name,
+          plugin_id: @host.id,
+          order: order,
+          priority: priority,
+          path: @path,
+          &block
+        )
       end
 
       # Registers a live transcript event observer.
@@ -464,7 +504,8 @@ module Kward
       @tab_types_by_id = {}
       @transports = {}
       @transports_by_id = {}
-      @footer = nil
+      @statuses = {}
+      @status_sequence = 0
       @footer_path = nil
       @transcript_event_handlers = []
       @prompt_context_renderers = []
@@ -475,7 +516,7 @@ module Kward
       @paths = []
     end
 
-    # @return [String, nil] plugin file currently responsible for footer output
+    # @return [String, nil] most recent plugin file to register legacy footer output
     attr_reader :footer_path
 
     # @return [Array<String>] plugin files successfully loaded by this registry
@@ -550,8 +591,43 @@ module Kward
       @transports_by_id[id.to_s]
     end
 
+    def status?
+      !@statuses.empty?
+    end
+
+    # Backward-compatible aggregate footer renderer.
     def footer_renderer
-      @footer
+      return nil unless status?
+
+      lambda do |context|
+        compose_status(status_segments(context))
+      end
+    end
+
+    # Evaluates every status renderer independently and returns display-ordered
+    # frontend-neutral segments. A broken renderer cannot hide healthy segments.
+    def status_segments(context)
+      @statuses.values.sort_by { |status| [status.order, status.sequence] }.filter_map do |status|
+        normalize_status_segment(status, status.renderer.call(context))
+      rescue StandardError => e
+        emit_warning "Warning: Kward plugin status #{status.id} error in #{status.path}: #{e.message}"
+        nil
+      end
+    end
+
+    # Composes already-rendered segments. When max_width is supplied, complete
+    # low-priority segments are removed first; the caller remains responsible
+    # for truncating a final oversized segment according to frontend rules.
+    def compose_status(segments, max_width: nil, &measure)
+      visible = Array(segments).dup
+      return "" if visible.empty? || (!max_width.nil? && max_width.to_i <= 0)
+
+      measure ||= ->(text) { text.to_s.length }
+      width = max_width&.to_i
+      while width && visible.length > 1 && measure.call(status_text(visible)) > width
+        remove_lowest_priority_segment!(visible)
+      end
+      status_text(visible)
     end
 
     def transcript_event_handlers
@@ -788,12 +864,48 @@ module Kward
       @transports_by_id[id] = transport
     end
 
-    def register_footer(path: nil, &renderer)
+    def register_footer(plugin_id: nil, path: nil, &renderer)
       raise "Plugin footer requires a renderer" unless renderer
 
-      emit_warning "Warning: replacing Kward plugin footer from #{@footer_path}: #{path}" if @footer
-      @footer = renderer
+      id = if plugin_id
+             "#{plugin_id}/footer"
+           else
+             available_legacy_status_id("legacy/#{legacy_status_source(path)}")
+           end
+      @status_sequence += 1 unless @statuses.key?(id)
+      @statuses[id] = Status.new(
+        id: id,
+        order: 100,
+        priority: :normal,
+        path: path,
+        renderer: renderer,
+        sequence: @statuses[id]&.sequence || @status_sequence
+      )
       @footer_path = path
+    end
+
+    def register_status(name, plugin_id:, order: 100, priority: :normal, path: nil, &renderer)
+      name = name.to_s
+      raise "Plugin status name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin status #{plugin_id}/#{name} requires a renderer" unless renderer
+
+      id = "#{plugin_id}/#{name}"
+      if @statuses.key?(id)
+        emit_warning "Warning: skipping duplicate Kward plugin status #{id}: #{path}"
+        return nil
+      end
+
+      order = Integer(order)
+      priority = normalize_status_priority(priority)
+      @status_sequence += 1
+      @statuses[id] = Status.new(
+        id: id,
+        order: order,
+        priority: priority,
+        path: path,
+        renderer: renderer,
+        sequence: @status_sequence
+      )
     end
 
     def emit_warning(message)
@@ -838,6 +950,62 @@ module Kward
     end
 
     private
+
+    def normalize_status_priority(priority)
+      value = priority.to_s.to_sym
+      return value if STATUS_PRIORITIES.key?(value)
+
+      raise ArgumentError, "Plugin status priority must be low, normal, or high"
+    end
+
+    def normalize_status_segment(status, value)
+      attributes = value.is_a?(Hash) ? value : { text: value }
+      text = status_value(attributes, :text).to_s.gsub(/\s+/, " ").strip
+      return nil if text.empty?
+
+      tooltip = status_value(attributes, :tooltip)
+      tooltip = tooltip.to_s.gsub(/\s+/, " ").strip unless tooltip.nil?
+      tooltip = nil if tooltip.to_s.empty?
+      StatusSegment.new(
+        id: status.id.dup.freeze,
+        text: text.freeze,
+        tooltip: tooltip&.freeze,
+        priority: status.priority,
+        order: status.order
+      ).freeze
+    end
+
+    def status_value(attributes, key)
+      attributes.key?(key) ? attributes[key] : attributes[key.to_s]
+    end
+
+    def status_text(segments)
+      segments.map(&:text).join(STATUS_SEPARATOR)
+    end
+
+    def remove_lowest_priority_segment!(segments)
+      lowest_priority = segments.map { |segment| STATUS_PRIORITIES.fetch(segment.priority) }.min
+      index = segments.each_index.select do |candidate|
+        STATUS_PRIORITIES.fetch(segments[candidate].priority) == lowest_priority
+      end.max_by { |candidate| [segments[candidate].order, candidate] }
+      segments.delete_at(index)
+    end
+
+    def available_legacy_status_id(base_id)
+      return base_id unless @statuses.key?(base_id)
+
+      suffix = 2
+      suffix += 1 while @statuses.key?("#{base_id}##{suffix}")
+      "#{base_id}##{suffix}"
+    end
+
+    def legacy_status_source(path)
+      source = path.to_s
+      return "plugin" if source.empty?
+
+      basename = File.basename(source)
+      basename == "plugin.rb" ? File.basename(File.dirname(source)) : File.basename(source, ".rb")
+    end
 
     def transition_lifecycle!(from, to)
       should_run = @lifecycle_mutex.synchronize do

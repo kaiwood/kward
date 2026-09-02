@@ -197,7 +197,7 @@ The composer area can include:
 - approximate context-window usage,
 - provider, model, and reasoning effort,
 - a tab bar plus queued or steered input counts,
-- an optional plugin footer.
+- composable status contributions from installed plugins.
 
 Context usage is an estimate, not provider billing. Use `/status` for more session and compaction detail.
 

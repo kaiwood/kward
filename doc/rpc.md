@@ -514,16 +514,37 @@ When the model calls `ask_user_question`, RPC emits a `ui/question` notification
 }
 ```
 
-When a loaded Kward plugin registers a footer, RPC emits `ui/footer` after session creation/resume/clone and after each completed turn:
+When loaded Kward plugins contribute footer status, RPC emits `ui/footer` after
+session creation/resume/clone, after each completed turn, and when the status
+changes during its periodic refresh:
 
 ```json
 {
   "sessionId": "...",
-  "text": "custom footer text"
+  "text": "Bridge · 2 messages",
+  "segments": [
+    {
+      "id": "com.example.session/session",
+      "text": "Bridge",
+      "tooltip": "Current Kward session",
+      "priority": "high",
+      "order": 10
+    },
+    {
+      "id": "com.example.session/messages",
+      "text": "2 messages",
+      "priority": "low",
+      "order": 20
+    }
+  ]
 }
 ```
 
-An empty `text` value clears the client footer.
+`text` is the combined fallback for clients that do not render segments.
+`segments` remains display-ordered and lets richer clients show tooltips or
+apply their own width policy. An empty `text` with an empty `segments` array
+clears the client footer. The `extensionUi.footer` capability advertises
+segment, tooltip, and priority support.
 
 The UI must respond with `ui/answerQuestion`:
 

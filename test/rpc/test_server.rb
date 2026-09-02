@@ -263,7 +263,10 @@ class TestRPCServer < KwardTestCase
       "widgets" => false,
       "footer" => {
         "supported" => true,
-        "notification" => "ui/footer"
+        "notification" => "ui/footer",
+        "segments" => true,
+        "tooltip" => true,
+        "priorities" => %w[low normal high]
       },
       "custom" => false,
       "terminalInput" => false

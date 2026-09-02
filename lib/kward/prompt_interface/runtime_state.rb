@@ -108,11 +108,16 @@ module Kward
       end
 
       def refresh_footer_text_locked
-        @cached_footer_text = @footer.call.to_s.gsub(/\s+/, " ").strip
+        @cached_footer_text = call_footer([screen_width - 4, 1].max).to_s.gsub(/\s+/, " ").strip
       rescue StandardError
         @cached_footer_text = ""
       ensure
         @last_footer_refresh = monotonic_now
+      end
+
+      def call_footer(max_width)
+        arity = @footer.respond_to?(:arity) ? @footer.arity : @footer.method(:call).arity
+        arity.zero? ? @footer.call : @footer.call(max_width)
       end
 
       def cached_composer_status_text

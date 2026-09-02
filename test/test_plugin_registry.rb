@@ -37,6 +37,67 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
+  def test_composes_legacy_footers_without_replacing_plugins
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })
+    registry.evaluate(path: "/plugins/one.rb") { |plugin| plugin.footer { "one" } }
+    registry.evaluate(path: "/plugins/two.rb") { |plugin| plugin.footer { "two" } }
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    assert_equal "one · two", registry.footer_renderer.call(context)
+    assert_empty warnings
+  end
+
+  def test_status_contributions_are_ordered_structured_and_priority_aware
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "1.0.0", api: 1) do |plugin|
+      plugin.status("high", order: 30, priority: :high) { { text: "High", tooltip: "Required status" } }
+      plugin.status("low", order: 10, priority: :low) { "Low" }
+      plugin.status("normal", order: 20) { "Normal" }
+      plugin.status("hidden", order: 40) { nil }
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    segments = registry.status_segments(context)
+
+    assert_equal %w[com.example.demo/low com.example.demo/normal com.example.demo/high], segments.map(&:id)
+    assert_equal({ id: "com.example.demo/high", text: "High", tooltip: "Required status", priority: "high", order: 30 }, segments.last.to_h)
+    assert_equal "Low · Normal · High", registry.compose_status(segments)
+    assert_equal "Normal · High", registry.compose_status(segments, max_width: 13)
+    assert_equal "High", registry.compose_status(segments, max_width: 4)
+  end
+
+  def test_status_renderer_failures_do_not_hide_other_segments
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "1.0.0", api: 1) do |plugin|
+      plugin.status("broken") { raise "offline" }
+      plugin.status("healthy") { "Ready" }
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    assert_equal "Ready", registry.compose_status(registry.status_segments(context))
+    assert_equal 1, warnings.length
+    assert_includes warnings.first, "com.example.demo/broken"
+    assert_includes warnings.first, "offline"
+  end
+
+  def test_status_registration_requires_identity_and_known_priority
+    registry = Kward::PluginRegistry.new
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate { |plugin| plugin.status("demo") { "Demo" } }
+    end
+    assert_equal "Plugin status contributions require stable plugin identity", error.message
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "1.0.0", api: 1) do |plugin|
+        plugin.status("demo", priority: :critical) { "Demo" }
+      end
+    end
+    assert_equal "Plugin status priority must be low, normal, or high", error.message
+  end
+
   def test_registers_stable_plugin_identity_and_shared_host
     Dir.mktmpdir do |config_dir|
       config_path = File.join(config_dir, "config.json")

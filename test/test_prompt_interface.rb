@@ -173,6 +173,24 @@ class TestPromptInterface < KwardTestCase
     refute_includes strip_ansi(output.string), "footer 2"
   end
 
+  def test_prompt_interface_passes_available_width_to_footer
+    widths = []
+    output = StringIO.new
+    original_width = TTY::Screen.method(:width)
+    TTY::Screen.define_singleton_method(:width) { 40 }
+    prompt = Kward::PromptInterface.new(
+      input: StringIO.new,
+      output: output,
+      footer: ->(width) { widths << width; "footer" }
+    )
+
+    prompt.start
+
+    assert_equal [36], widths
+  ensure
+    TTY::Screen.define_singleton_method(:width, original_width) if original_width
+  end
+
   def test_refresh_composer_status_refreshes_cached_footer
     value = "first"
     output = StringIO.new

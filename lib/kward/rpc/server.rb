@@ -652,7 +652,7 @@ module Kward
             notify: { supported: true, notification: UI_NOTIFICATION, levels: PluginUI::NOTIFICATION_LEVELS.map(&:to_s) },
             editor: false,
             widgets: false,
-            footer: { supported: true, notification: UI_FOOTER_NOTIFICATION },
+            footer: { supported: true, notification: UI_FOOTER_NOTIFICATION, segments: true, tooltip: true, priorities: PluginRegistry::STATUS_PRIORITIES.keys.map(&:to_s) },
             custom: false,
             terminalInput: false
           },
