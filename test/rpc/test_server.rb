@@ -225,9 +225,32 @@ class TestRPCServer < KwardTestCase
         "multiSelect" => false,
         "preview" => false
       },
-      "select" => false,
-      "confirm" => false,
-      "input" => false,
+      "select" => {
+        "supported" => true,
+        "notification" => "ui/request",
+        "method" => "ui/answerRequest",
+        "maxOptions" => 100
+      },
+      "confirm" => {
+        "supported" => true,
+        "notification" => "ui/request",
+        "method" => "ui/answerRequest"
+      },
+      "input" => {
+        "supported" => true,
+        "notification" => "ui/request",
+        "method" => "ui/answerRequest",
+        "maxBytes" => 16_384
+      },
+      "progress" => {
+        "supported" => true,
+        "notification" => "ui/progress"
+      },
+      "notify" => {
+        "supported" => true,
+        "notification" => "ui/notification",
+        "levels" => %w[info success warning error]
+      },
       "editor" => false,
       "widgets" => false,
       "footer" => {
@@ -442,6 +465,7 @@ class TestRPCServer < KwardTestCase
     assert_includes Kward::RPC::Server::RPC_METHODS, "turns/start"
     assert_includes Kward::RPC::Server::RPC_METHODS, "pluginChats/list"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerRequest"
     assert_includes Kward::RPC::Server::RPC_METHODS, "hooks/logs"
     assert_includes Kward::RPC::Server::RPC_METHODS, "skills/captureDraft"
   end
@@ -455,6 +479,9 @@ class TestRPCServer < KwardTestCase
     assert_includes docs, Kward::RPC::Server::SESSION_UPDATED_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::TURN_EVENT_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::UI_QUESTION_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_REQUEST_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_PROGRESS_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::UI_FOOTER_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::TOOL_APPROVAL_NOTIFICATION
   end
@@ -483,6 +510,9 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::SESSION_EVENT_NOTIFICATION, capabilities["sessions"]["compact"]["notification"]
     assert_equal Kward::RPC::Server::TURN_EVENT_NOTIFICATION, capabilities["events"]["notification"]
     assert_equal Kward::RPC::Server::UI_QUESTION_NOTIFICATION, capabilities["extensionUi"]["question"]["notification"]
+    assert_equal Kward::RPC::Server::UI_REQUEST_NOTIFICATION, capabilities["extensionUi"]["select"]["notification"]
+    assert_equal Kward::RPC::Server::UI_PROGRESS_NOTIFICATION, capabilities["extensionUi"]["progress"]["notification"]
+    assert_equal Kward::RPC::Server::UI_NOTIFICATION, capabilities["extensionUi"]["notify"]["notification"]
     assert_equal Kward::RPC::Server::UI_FOOTER_NOTIFICATION, capabilities["extensionUi"]["footer"]["notification"]
   end
 

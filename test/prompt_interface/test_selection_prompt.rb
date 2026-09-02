@@ -13,6 +13,45 @@ class TestPromptInterfaceSelectionPrompt < KwardTestCase
     input&.close unless input&.closed?
   end
 
+  def test_plugin_ui_select_returns_the_structured_option_value
+    input, writer = IO.pipe
+    output = StringIO.new
+    writer.write("\e[B\r")
+    writer.close
+    prompt = Kward::PromptInterface.new(input: input, output: output)
+
+    value = prompt.request_plugin_ui(:select, {
+      title: "Action",
+      options: [
+        { label: "Wait", value: "wait" },
+        { label: "Deploy", value: "deploy", description: "Ship it." }
+      ]
+    })
+
+    assert_equal "deploy", value
+    refute prompt.modal_active?
+  ensure
+    input&.close unless input&.closed?
+  end
+
+  def test_plugin_ui_confirm_and_input_use_terminal_prompts
+    confirm_input, confirm_writer = IO.pipe
+    confirm_writer.write("\r")
+    confirm_writer.close
+    confirm_prompt = Kward::PromptInterface.new(input: confirm_input, output: StringIO.new)
+    assert_equal true, confirm_prompt.request_plugin_ui(:confirm, { title: "Release", message: "Continue?", default: true })
+
+    text_input, text_writer = IO.pipe
+    text_writer.write("v1.2.3\r")
+    text_writer.close
+    text_prompt = Kward::PromptInterface.new(input: text_input, output: StringIO.new)
+    assert_equal "v1.2.3", text_prompt.request_plugin_ui(:input, { title: "Tag", placeholder: "Version", default: nil })
+    refute text_prompt.modal_active?
+  ensure
+    confirm_input&.close unless confirm_input&.closed?
+    text_input&.close unless text_input&.closed?
+  end
+
   def test_prompt_interface_select_is_modal_while_active
     input, writer = IO.pipe
     output = StringIO.new

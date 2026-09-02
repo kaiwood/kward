@@ -51,7 +51,7 @@ module Kward
       end
 
       def lifecycle_hook_context(conversation)
-        plugin_context(conversation, "")
+        plugin_context(conversation, "", requests: false, tool_requests: true)
       end
 
       def run_lifecycle_hook(name, conversation:, payload: {}, session: @active_session)
@@ -82,7 +82,7 @@ module Kward
         return [false, nil] unless command
         return [false, nil] unless prompt_interface? && @prompt.respond_to?(:start_interactive)
 
-        context = plugin_context(agent.conversation, argument)
+        context = plugin_context(agent.conversation, argument, requests: false)
         controller = @prompt.start_interactive(title: "/#{name}", rows: command.rows, fps: command.fps)
         command.handler.call(controller, context)
         run_interactive_loop
@@ -164,13 +164,41 @@ module Kward
         [true, nil]
       end
 
-      def plugin_context(conversation, args)
+      def plugin_context(conversation, args, requests: true, tool_requests: nil)
+        say_callback = lambda { |message| runtime_output(message) }
+        tool_requests = requests if tool_requests.nil?
         PluginRegistry::Context.new(
           conversation: conversation,
           args: args,
           session: @active_session,
           workspace_root: conversation.workspace_root,
-          say_callback: lambda { |message| runtime_output(message) }
+          say_callback: say_callback,
+          ui: plugin_ui(say_callback, requests: requests),
+          tool_ui: plugin_ui(say_callback, requests: tool_requests)
+        )
+      end
+
+      def plugin_ui(say_callback, requests:)
+        capabilities = { progress: true, notify: true }
+        requester = nil
+        if requests && @prompt.respond_to?(:request_plugin_ui)
+          capabilities.merge!(question: true, select: true, confirm: true, input: true)
+          requester = lambda do |kind, payload, cancellation: nil|
+            @prompt.request_plugin_ui(kind, payload, cancellation: cancellation)
+          end
+        end
+        emitter = lambda do |kind, payload|
+          case kind
+          when :notify
+            runtime_output(payload[:message])
+          when :progress
+            text = payload[:percent] ? "#{payload[:message]} (#{payload[:percent]}%)" : payload[:message]
+            runtime_output(text)
+          end
+        end
+        PluginUI.new(
+          backend: PluginUI::Backend.new(capabilities: capabilities, requester: requester, emitter: emitter),
+          say_callback: say_callback
         )
       end
 
@@ -202,7 +230,7 @@ module Kward
         return unless conversation
         return if plugin_registry.transcript_event_handlers.empty?
 
-        plugin_registry.notify_transcript_event(event, plugin_context(conversation, ""))
+        plugin_registry.notify_transcript_event(event, plugin_context(conversation, "", requests: false))
       end
 
       def notify_plugin_tab_transcript_event(event, driver)

@@ -80,13 +80,16 @@ module Kward
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
       LIFECYCLE_HOOK_METHODS = ["hooks/logs"].freeze
-      UI_METHODS = ["ui/answerQuestion"].freeze
+      UI_METHODS = ["ui/answerQuestion", "ui/answerRequest"].freeze
       TOOL_APPROVAL_METHODS = ["tool/answerApproval"].freeze
       TRANSPORT_METHODS = ["transports/list", "transports/status"].freeze
       SESSION_EVENT_NOTIFICATION = "session/event"
       SESSION_UPDATED_NOTIFICATION = "session/updated"
       TURN_EVENT_NOTIFICATION = "turn/event"
       UI_QUESTION_NOTIFICATION = "ui/question"
+      UI_REQUEST_NOTIFICATION = "ui/request"
+      UI_PROGRESS_NOTIFICATION = "ui/progress"
+      UI_NOTIFICATION = "ui/notification"
       UI_FOOTER_NOTIFICATION = "ui/footer"
       TOOL_APPROVAL_NOTIFICATION = "tool/approvalRequested"
       HOOK_EVENT_NOTIFICATION = "hook/event"
@@ -421,6 +424,8 @@ module Kward
           @plugin_chat_manager.list_turns(chat_id: params["chatId"], active: true)
         when UI_METHODS[0]
           @session_manager.answer_question(session_id: params.fetch("sessionId"), question_request_id: params.fetch("questionRequestId"), answers: params.fetch("answers"))
+        when UI_METHODS[1]
+          @session_manager.answer_plugin_ui(session_id: params.fetch("sessionId"), request_id: params.fetch("requestId"), value: params["value"])
         when TOOL_APPROVAL_METHODS[0]
           @session_manager.answer_tool_approval(session_id: params.fetch("sessionId"), approval_request_id: params.fetch("approvalRequestId"), approved: params.fetch("approved"))
         else
@@ -613,9 +618,11 @@ module Kward
           scratchpad: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
             question: { supported: true, notification: UI_QUESTION_NOTIFICATION, method: UI_METHODS.first, maxQuestions: 4, multiSelect: false, preview: false },
-            select: false,
-            confirm: false,
-            input: false,
+            select: { supported: true, notification: UI_REQUEST_NOTIFICATION, method: UI_METHODS[1], maxOptions: PluginUI::MAX_OPTIONS },
+            confirm: { supported: true, notification: UI_REQUEST_NOTIFICATION, method: UI_METHODS[1] },
+            input: { supported: true, notification: UI_REQUEST_NOTIFICATION, method: UI_METHODS[1], maxBytes: PluginUI::MAX_TEXT_BYTES },
+            progress: { supported: true, notification: UI_PROGRESS_NOTIFICATION },
+            notify: { supported: true, notification: UI_NOTIFICATION, levels: PluginUI::NOTIFICATION_LEVELS.map(&:to_s) },
             editor: false,
             widgets: false,
             footer: { supported: true, notification: UI_FOOTER_NOTIFICATION },

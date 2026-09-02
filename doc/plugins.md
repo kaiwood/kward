@@ -180,6 +180,65 @@ perform arbitrary local or network effects, an enabled permission policy treats
 plugin tools as approval-requiring operations unless an explicit allow rule
 matches the tool or `source: plugin`.
 
+## Use structured plugin UI
+
+Plugin commands and model-callable plugin tools receive `ctx.ui`, a
+frontend-neutral interface for questions, choices, confirmation, text input,
+notifications, and progress:
+
+```ruby
+plugin.command "release", description: "Prepare a release" do |_args, ctx|
+  environment = ctx.ui.select(
+    "Environment",
+    [
+      { label: "Staging", value: "staging", description: "Deploy for testing." },
+      { label: "Production", value: "production", description: "Deploy publicly." }
+    ]
+  )
+  next unless environment
+  next unless ctx.ui.confirm("Release", "Deploy to #{environment}?")
+
+  tag = ctx.ui.input("Release tag", "For example, v1.2.0")
+  next if tag.to_s.empty?
+
+  ctx.ui.progress(id: "release", message: "Preparing #{tag}", percent: 25)
+  # Perform work here.
+  ctx.ui.progress(id: "release", message: "Prepared #{tag}", percent: 100, done: true)
+  ctx.ui.notify("#{tag} is ready for #{environment}.", level: :success)
+end
+```
+
+Available methods:
+
+- `ctx.ui.question(questions)` uses the same validated 1-4 question contract as
+  `ask_user_question` and returns its answer array or `nil` when cancelled;
+- `ctx.ui.select(title, options, message: nil)` accepts 1-100 strings or
+  `{ label:, value:, description: }` objects and returns the selected value;
+- `ctx.ui.confirm(title, message = nil, default: false)` returns a boolean;
+- `ctx.ui.input(title, placeholder = nil, default: nil)` returns text or `nil`;
+- `ctx.ui.progress(id:, message:, percent: nil, done: false)` publishes a
+  non-blocking progress update;
+- `ctx.ui.notify(message, level: :info)` publishes an `info`, `success`,
+  `warning`, or `error` notification;
+- `ctx.ui.supported?(:select)` and `ctx.ui.capabilities` let a plugin inspect
+  the active frontend before requesting interaction.
+
+Blocking requests fail closed when the active frontend does not support them:
+questions, selections, and input return `nil`, while confirmation returns
+`false`. Notifications and progress fall back to normal `ctx.say` text. Inputs
+and emitted text are bounded, and plugin-tool cancellation is checked before
+and after blocking requests.
+
+The interactive terminal implements all six primitives. RPC implements them for
+plugin commands submitted through `turns/start` and for plugin tools; use that
+asynchronous turn path when a command needs to wait for UI input. Synchronous
+RPC `commands/run` supports notifications and progress but deliberately fails
+closed for blocking requests so the protocol reader cannot deadlock waiting for
+its own response. Pan has no interaction bridge, so blocking requests fail
+closed and non-blocking output falls back to its existing plugin message event.
+Transport gateways expose blocking requests as transport-neutral interactions;
+the transport adapter decides whether and how to render and answer them.
+
 ## Add prompt context
 
 Prompt context is short text injected into future model requests.
@@ -406,13 +465,14 @@ Handlers receive a `ctx` object. Common methods:
 - `ctx.workspace_root`
 - `ctx.args`
 - `ctx.say(message)`
+- `ctx.ui`
 - `ctx.transcript.messages`
 - `ctx.session_id`
 - `ctx.session_name`
 - `ctx.session_path`
 - `ctx.refresh_system_message!`
 
-These methods are available in all handler types, including model-callable tools. Tool contexts additionally expose `ctx.cancellation` and `ctx.cancelled?`. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called.
+These methods are available in all handler types, including model-callable tools. Tool contexts additionally expose `ctx.cancellation` and `ctx.cancelled?`. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called. Interactive `ctx.ui` methods remain capability-gated because not every handler runs in a frontend context that can wait for an answer.
 
 The transcript is read-only. Use context methods instead of mutating Kward internals.
 
@@ -426,7 +486,8 @@ RPC clients can:
 - invoke plugin tools through normal model turns,
 - list plugin commands through `commands/list`,
 - run plugin commands through `commands/run`,
-- run plugin slash commands through `turns/start` input such as `/hello World`.
+- run plugin slash commands through `turns/start` input such as `/hello World`,
+- render and answer structured plugin UI requests advertised through `extensionUi`.
 
 Plugin command output is emitted through normal turn events without calling the model.
 

@@ -490,6 +490,12 @@ module Kward
         { ok: true }
       end
 
+      def answer_plugin_ui(session_id:, request_id:, value:)
+        rpc_session = fetch_session(session_id)
+        rpc_session.prompt.answer_plugin_ui(request_id, value)
+        { ok: true }
+      end
+
       def answer_tool_approval(session_id:, approval_request_id:, approved:)
         rpc_session = fetch_session(session_id)
         rpc_session.prompt.answer_tool_approval(approval_request_id, approved: approved)
@@ -714,7 +720,9 @@ module Kward
         hook_context = lifecycle_hook_context(
           conversation: rpc_session.conversation,
           session: rpc_session.session,
-          workspace_root: rpc_session.workspace_root
+          workspace_root: rpc_session.workspace_root,
+          prompt: rpc_session.prompt,
+          session_id: rpc_session.id
         )
         hook_manager = lifecycle_hook_manager(rpc_session.workspace_root)
         tool_registry = build_tool_registry(
@@ -1042,7 +1050,13 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(notify: method(:notify), session_id: id)
-        hook_context = lifecycle_hook_context(conversation: conversation, session: session, workspace_root: workspace_root)
+        hook_context = lifecycle_hook_context(
+          conversation: conversation,
+          session: session,
+          workspace_root: workspace_root,
+          prompt: prompt,
+          session_id: id
+        )
         hook_manager = lifecycle_hook_manager(workspace_root)
         tool_registry = build_tool_registry(workspace_root, prompt, hook_manager: hook_manager, hook_context: hook_context)
         agent = Agent.new(
@@ -1116,13 +1130,16 @@ module Kward
         })
       end
 
-      def lifecycle_hook_context(conversation:, session:, workspace_root:)
+      def lifecycle_hook_context(conversation:, session:, workspace_root:, prompt: nil, session_id: nil)
+        say_callback = lambda { |message| notify("hook/message", { message: message.to_s }) }
         PluginRegistry::Context.new(
           conversation: conversation,
           args: "",
           session: session,
           workspace_root: workspace_root,
-          say_callback: lambda { |message| notify("hook/message", { message: message.to_s }) }
+          say_callback: say_callback,
+          ui: rpc_plugin_ui(prompt: prompt, session_id: session_id, say_callback: say_callback, requests: false),
+          tool_ui: rpc_plugin_ui(prompt: prompt, session_id: session_id, say_callback: say_callback, requests: !prompt.nil?)
         )
       end
 
@@ -1372,12 +1389,43 @@ module Kward
         turn_payload(turn)
       end
 
-      def plugin_context(rpc_session, args: nil, say_callback:)
+      def plugin_context(rpc_session, args: nil, say_callback:, requests: false, cancellation: nil)
         PluginRegistry::Context.new(
           conversation: rpc_session.conversation,
           args: args,
           session: rpc_session.session,
           workspace_root: rpc_session.workspace_root,
+          say_callback: say_callback,
+          cancellation: cancellation,
+          ui: rpc_plugin_ui(
+            prompt: rpc_session.prompt,
+            session_id: rpc_session.id,
+            say_callback: say_callback,
+            requests: requests
+          )
+        )
+      end
+
+      def rpc_plugin_ui(prompt:, session_id:, say_callback:, requests:)
+        capabilities = { progress: true, notify: true }
+        requester = nil
+        if requests && prompt
+          capabilities.merge!(question: true, select: true, confirm: true, input: true)
+          requester = lambda do |kind, payload, cancellation: nil|
+            if kind == :question
+              prompt.ask_user_question(payload.fetch(:questions), cancellation: cancellation)
+            else
+              prompt.request_plugin_ui(kind, payload, cancellation: cancellation)
+            end
+          end
+        end
+        emitter = lambda do |kind, payload|
+          method = kind == :progress ? "ui/progress" : "ui/notification"
+          payload = payload.merge(level: payload[:level].to_s) if payload[:level]
+          notify(method, { sessionId: session_id }.merge(payload))
+        end
+        PluginUI.new(
+          backend: PluginUI::Backend.new(capabilities: capabilities, requester: requester, emitter: emitter),
           say_callback: say_callback
         )
       end
@@ -1386,7 +1434,13 @@ module Kward
         turn.cancellation&.raise_if_cancelled!
         command = plugin_registry.command_for(turn.plugin_command_name) || raise(ArgumentError, "Unknown plugin command: #{turn.plugin_command_name}")
         output = []
-        context = plugin_context(rpc_session, args: turn.plugin_arguments.to_s, say_callback: lambda { |message| output << message.to_s })
+        context = plugin_context(
+          rpc_session,
+          args: turn.plugin_arguments.to_s,
+          say_callback: lambda { |message| output << message.to_s },
+          requests: true,
+          cancellation: turn.cancellation
+        )
         result = command.handler.call(turn.plugin_arguments.to_s, context)
         answer = (output + [result]).compact.map(&:to_s).reject(&:empty?).join("\n")
         unless answer.empty?

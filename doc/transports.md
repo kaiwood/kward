@@ -119,6 +119,14 @@ API.
 Transports that cannot support interactive approvals must use an explicit
 configured fallback policy; they must not leave an agent turn waiting forever.
 
+Structured plugin UI requests use the same transport-neutral interaction path.
+Plugin `question`, `select`, `confirm`, and `input` calls arrive with matching
+interaction kinds, prompts, choices, and metadata, and answers are routed back to the
+waiting plugin handler. An adapter may support only a subset, but it must cancel
+or answer unsupported requests rather than leaving the turn blocked. Plugin
+notifications and progress remain local to the RPC/TUI UI bridge for now and
+are not transport interaction requests.
+
 ## Storage and routing
 
 Transport plugins receive namespaced durable storage for state such as:

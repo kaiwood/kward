@@ -15,7 +15,7 @@ A typical client launches the server, sends `initialize`, creates or resumes a s
 | Connect and negotiate capabilities | [Launch](#Launch), [Framing](#Framing), and [Initialization](#Initialization) |
 | Open, resume, branch, or export a conversation | [Session methods](#Session_methods) |
 | Send input and render a response | [Turn methods](#Turn_methods) and [Turn notifications](#Turn_notifications) |
-| Handle tool approval or structured questions | [Tool approval bridge](#Tool_approval_bridge) and [UI question bridge](#UI_question_bridge) |
+| Handle tool approval or structured plugin UI | [Tool approval bridge](#Tool_approval_bridge) and [Structured UI bridge](#Structured_UI_bridge) |
 | Show model, runtime, auth, or configuration controls | [Runtime methods](#Runtime_methods), [Model methods](#Model_methods), and [Config and auth methods](#Config_and_auth_methods) |
 | Discover tools, MCP servers, prompts, skills, or plugins | [Tool and prompt methods](#Tool_and_prompt_methods) |
 
@@ -81,7 +81,7 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `projectSkillTrust`: explicitly unsupported over RPC. RPC clients cannot answer the interactive Allow/Deny/Review decision, so project skills remain skipped unless the global `skills.trust_project` override is enabled.
 - `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. It does not support MCP resources, prompts, sampling, or Streamable HTTP.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
-- `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
+- `extensionUi`: structured question support plus plugin `select`, `confirm`, `input`, `progress`, and `notify` UI through `ui/request`, `ui/answerRequest`, `ui/progress`, and `ui/notification`; plugin footer updates use `ui/footer`. Editor, widget, custom-canvas, and raw terminal-input primitives remain explicitly unsupported.
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access. Vibe editor prompts are unsupported over RPC (`composer.editorPrompt.supported: false`) because RPC has no live integrated editor buffer.
 - `security`: trusted-local behavior and optional per-turn tool approval. By default, RPC turns have no workspace mutation guard or tool approval, so shell commands and file changes can run. Clients can inspect file-tool guardrails through `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`. `security.sandbox` reports the command sandbox mode, enforcement backend, and filesystem and network capabilities; session pinning and one-time elevation are unsupported. See [Command sandboxing](sandboxing.md) for the boundary and its limits.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
@@ -492,11 +492,11 @@ Params:
 
 Denied tools are returned to the model as error-like tool results instead of executing the local operation.
 
-## UI question bridge
+## Structured UI bridge
 
-Kward supports the structured question bridge and plugin footer updates over RPC. The `extensionUi` capability reports `question.supported: true` with `notification: "ui/question"`, `method: "ui/answerQuestion"`, `maxQuestions: 4`, `multiSelect: false`, and `preview: false`. It also reports `footer.supported: true` with `notification: "ui/footer"`. Other Pi-style extension UI primitives (`select`, `confirm`, `input`, `editor`, `widgets`, `custom`, and `terminalInput`) are explicitly reported as unsupported until Kward has a real plugin/extension consumer for them.
+Kward supports model questions and frontend-neutral plugin UI over RPC. The `extensionUi` capability reports the notification and answer method for each operation. `question` continues to use `ui/question` and `ui/answerQuestion`; plugin `select`, `confirm`, and `input` requests use `ui/request` and `ui/answerRequest`. Non-blocking plugin updates use `ui/progress` and `ui/notification`, while plugin footers use `ui/footer`. Editor, widget, custom-canvas, and raw terminal-input primitives remain explicitly unsupported.
 
-Question requests are validated before notification. Kward accepts 1-4 questions, each with 2-4 options, and rejects unsupported `multiSelect` or option `preview` requests.
+Question requests are validated before notification. Kward accepts 1-4 questions, each with 2-4 options, and rejects unsupported `multiSelect` or option `preview` requests. Plugin selections accept at most 100 options, and plugin text input is bounded to 16,384 bytes.
 
 When the model calls `ask_user_question`, RPC emits a `ui/question` notification:
 
@@ -526,6 +526,40 @@ Params:
 - `sessionId`
 - `questionRequestId`
 - `answers`: answer array returned to the tool.
+
+When a plugin calls `ctx.ui.select`, `ctx.ui.confirm`, or `ctx.ui.input` during an asynchronous plugin-command turn or plugin tool call, RPC emits:
+
+```json
+{
+  "method": "ui/request",
+  "params": {
+    "sessionId": "...",
+    "requestId": "...",
+    "kind": "select",
+    "payload": {
+      "title": "Environment",
+      "message": "Choose a target",
+      "options": [
+        { "label": "Staging", "value": "staging", "description": "Deploy for testing." }
+      ]
+    }
+  }
+}
+```
+
+Answer it with `ui/answerRequest`:
+
+```json
+{
+  "sessionId": "...",
+  "requestId": "...",
+  "value": "staging"
+}
+```
+
+For `confirm`, `value` must be a boolean. For `input`, it is a string or `null` when cancelled. For `select`, it is one of the advertised option values or `null`. Submit interactive plugin commands through `turns/start`; synchronous `commands/run` deliberately reports blocking plugin UI as unavailable so the RPC reader never waits for an answer it cannot read.
+
+`ctx.ui.progress` emits `ui/progress` with `sessionId`, stable `id`, `message`, optional `percent`, and `done`. `ctx.ui.notify` emits `ui/notification` with `sessionId`, `message`, and `level` (`info`, `success`, `warning`, or `error`). These notifications do not require answers.
 
 ## Runtime methods
 

@@ -74,6 +74,31 @@ module Kward
         answer_raw(request_id, normalize_answers(answers))
       end
 
+      def request_plugin_ui(kind, payload, cancellation: nil)
+        request_id = SecureRandom.uuid
+        @mutex.synchronize { @pending_requests[request_id] = true }
+        cancellation&.on_cancel { cancel_request(request_id) }
+        unless cancellation&.cancelled?
+          @notify.call("ui/request", {
+            sessionId: @session_id,
+            requestId: request_id,
+            kind: kind.to_s,
+            payload: payload
+          })
+        end
+
+        @mutex.synchronize do
+          @condition.wait(@mutex) until @answers.key?(request_id)
+          answer = @answers.delete(request_id)
+          @pending_requests.delete(request_id)
+          answer
+        end
+      end
+
+      def answer_plugin_ui(request_id, value)
+        answer_raw(request_id, value)
+      end
+
       def cancel_request(request_id)
         @mutex.synchronize do
           request_id = request_id.to_s

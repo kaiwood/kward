@@ -36,6 +36,44 @@ class TestRPCPromptBridge < KwardTestCase
     answer_thread&.join
   end
 
+  def test_prompt_bridge_brokers_plugin_ui_requests
+    server = RecordingServer.new
+    bridge = Kward::RPC::PromptBridge.new(server: server, session_id: "session-1")
+    answer_thread = Thread.new do
+      wait_until { server.notifications.any? }
+      params = server.notifications.first[:params]
+      bridge.answer_plugin_ui(params[:requestId], "deploy")
+    end
+
+    answer = bridge.request_plugin_ui(:select, { title: "Action", options: [{ label: "Deploy", value: "deploy" }] })
+
+    assert_equal "deploy", answer
+    assert_equal "ui/request", server.notifications.first[:method]
+    assert_equal "select", server.notifications.first[:params][:kind]
+    assert_equal "session-1", server.notifications.first[:params][:sessionId]
+  ensure
+    answer_thread&.join
+  end
+
+  def test_plugin_ui_request_is_released_by_cancellation
+    server = RecordingServer.new
+    bridge = Kward::RPC::PromptBridge.new(server: server, session_id: "session-1")
+    cancellation = Kward::Cancellation.new
+    answer = :pending
+    thread = Thread.new do
+      answer = bridge.request_plugin_ui(:input, { title: "Name" }, cancellation: cancellation)
+    end
+    wait_until { server.notifications.any? }
+
+    cancellation.cancel!
+    thread.join(1)
+
+    assert_nil answer
+    refute thread.alive?
+  ensure
+    thread&.kill if thread&.alive?
+  end
+
   def test_prompt_bridge_validates_question_contract
     server = RecordingServer.new
     bridge = Kward::RPC::PromptBridge.new(server: server, session_id: "session-1")

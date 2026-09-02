@@ -79,6 +79,26 @@ class TestTransportGateway < KwardTestCase
     assert_equal "Continue?", requests.first.prompt
   end
 
+  def test_forwards_and_answers_plugin_ui_requests
+    manager = FakeSessionManager.new
+    gateway = Kward::Transport::Gateway.new(session_manager: manager, transport_id: "test")
+    requests = []
+    gateway.subscribe_transport_interactions { |request| requests << request }
+
+    manager.emit(
+      "ui/request",
+      sessionId: "session-1",
+      requestId: "request-1",
+      kind: "select",
+      payload: { title: "Action", options: [{ label: "Deploy", value: "deploy" }] }
+    )
+    gateway.answer_transport_interaction(session_id: "session-1", request_id: "request-1", answer: "deploy")
+
+    assert_equal "select", requests.first.kind
+    assert_equal "Action", requests.first.prompt
+    assert_equal ["session-1", "request-1", "deploy"], manager.plugin_ui_answer
+  end
+
   def test_subscribes_to_normalized_turn_events_until_completion
     manager = FakeSessionManager.new
     Dir.mktmpdir do |root|
@@ -94,7 +114,7 @@ class TestTransportGateway < KwardTestCase
   end
 
   class FakeSessionManager
-    attr_reader :created, :resumed, :status_reads
+    attr_reader :created, :resumed, :status_reads, :plugin_ui_answer
 
     def initialize
       @created = []
@@ -142,6 +162,10 @@ class TestTransportGateway < KwardTestCase
     def turn_status(turn_id:)
       @status_reads += 1
       { status: @event_reads.zero? ? "running" : "completed" }
+    end
+
+    def answer_plugin_ui(session_id:, request_id:, value:)
+      @plugin_ui_answer = [session_id, request_id, value]
     end
   end
 end

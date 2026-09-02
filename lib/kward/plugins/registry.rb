@@ -3,6 +3,7 @@ require_relative "../deep_copy"
 require_relative "../hooks"
 require_relative "../transport"
 require_relative "host"
+require_relative "ui"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -77,16 +78,18 @@ module Kward
     # Runtime context passed to plugin commands, tools, footers, prompt context
     # renderers, hooks, and transcript event handlers.
     class Context
-      attr_reader :args, :workspace_root, :cancellation
+      attr_reader :args, :workspace_root, :cancellation, :ui
 
       # Creates an object for trusted plugin loading and dispatch.
-      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil)
+      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil, ui: nil, tool_ui: nil)
         @conversation = conversation
         @args = args.to_s
         @session = session
         @workspace_root = workspace_root
         @say_callback = say_callback
         @cancellation = cancellation
+        @ui = (ui || PluginUI.new(say_callback: say_callback)).with_cancellation(cancellation)
+        @tool_ui = tool_ui
       end
 
       # @return [Transcript] read-only transcript wrapper
@@ -141,7 +144,8 @@ module Kward
           session: @session,
           workspace_root: @workspace_root,
           say_callback: @say_callback,
-          cancellation: cancellation
+          cancellation: cancellation,
+          ui: @tool_ui || @ui
         )
       end
 
