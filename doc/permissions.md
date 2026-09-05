@@ -22,7 +22,7 @@ In `ask` mode, Kward allows ordinary read-only tools and asks before the agent:
 - writes or edits a workspace file,
 - runs `run_shell_command`,
 - searches or fetches content on the web,
-- calls an MCP tool.
+- calls an MCP or model-callable plugin tool.
 
 When Kward needs approval in the interactive CLI, it shows the complete tool arguments in an overlay. For example, a write request includes the file path and content.
 
@@ -75,8 +75,8 @@ Set `permissions.mode` to one of these values:
 
 | Mode | Good for | Default behavior |
 | --- | --- | --- |
-| `ask` | Interactive supervised work | Asks before file changes, shell commands, web tools, and MCP tools. |
-| `workspace-write` | Routine edits in selected paths | Allows file changes in `write_scopes`; still asks before shell, web, and MCP tools. |
+| `ask` | Interactive supervised work | Asks before file changes, shell commands, web tools, MCP tools, and plugin tools. |
+| `workspace-write` | Routine edits in selected paths | Allows file changes in `write_scopes`; still asks before shell, web, MCP, and plugin tools. |
 | `read-only` | Code review and investigation | Denies risky tools by default. |
 | `deny-by-default` | Automation or tightly controlled runs | Denies risky tools unless an `allow` rule matches. |
 
@@ -110,7 +110,7 @@ Use `allow`, `ask`, and `deny` arrays to describe exceptions. A rule can match t
 - `path` — the file-tool path supplied by the model;
 - `command` — the requested shell command text;
 - `host` — the host in a `fetch_content` or `fetch_raw` URL;
-- `source` — currently useful for `mcp` tools.
+- `source` — currently useful for `mcp` and `plugin` tools.
 
 Patterns support `*` within a path segment and `**` across directories. Rule matching is case-sensitive.
 

@@ -11,7 +11,7 @@ module Kward
       end
 
       def plugin_registry
-        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names).tap(&:start!)
       end
 
       def plugin_commands
@@ -30,13 +30,20 @@ module Kward
         plugin_registry.interactive_command_for(command)
       end
 
-      def reload_plugins(conversation)
+      def reload_plugins(conversation, tool_registry: nil)
         @prompt_templates = nil
-        @plugin_registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        registry = PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+        @plugin_registry&.reload!
+        @plugin_registry = registry.tap(&:start!)
         @prompt.update_slash_commands(slash_command_entries) if @prompt.respond_to?(:update_slash_commands)
         conversation.plugin_registry = @plugin_registry if conversation.respond_to?(:plugin_registry=)
         conversation.refresh_system_message! if conversation.respond_to?(:refresh_system_message!)
+        tool_registry&.replace_plugin_tools!(@plugin_registry.tools)
         runtime_output("Plugins reloaded.")
+      end
+
+      def shutdown_plugins
+        @plugin_registry&.shutdown!
       end
 
       def lifecycle_hook_manager(conversation)
@@ -50,7 +57,7 @@ module Kward
       end
 
       def lifecycle_hook_context(conversation)
-        plugin_context(conversation, "")
+        plugin_context(conversation, "", requests: false, tool_requests: true)
       end
 
       def run_lifecycle_hook(name, conversation:, payload: {}, session: @active_session)
@@ -81,7 +88,7 @@ module Kward
         return [false, nil] unless command
         return [false, nil] unless prompt_interface? && @prompt.respond_to?(:start_interactive)
 
-        context = plugin_context(agent.conversation, argument)
+        context = plugin_context(agent.conversation, argument, requests: false)
         controller = @prompt.start_interactive(title: "/#{name}", rows: command.rows, fps: command.fps)
         command.handler.call(controller, context)
         run_interactive_loop
@@ -150,26 +157,61 @@ module Kward
         PromptCommands.expand(input, templates: prompt_templates, reserved_commands: builtin_slash_command_names)
       end
 
-      def run_plugin_command(name, argument, agent)
+      def run_plugin_command(name, argument, agent, cancellation: nil)
         command = plugin_command_for(name)
         return [false, nil] unless command
 
+        cancellation&.raise_if_cancelled!
         agent.conversation.plugin_registry ||= plugin_registry if agent.conversation.respond_to?(:plugin_registry)
-        context = plugin_context(agent.conversation, argument)
-        command.handler.call(argument, context)
+        arguments = command.parse_arguments(argument)
+        context = plugin_context(agent.conversation, arguments, cancellation: cancellation)
+        result = command.normalize_result(command.handler.call(arguments, context))
+        cancellation&.raise_if_cancelled!
+        runtime_output(result.message) if command.typed? && !result.message.to_s.empty?
         [true, nil]
+      rescue Cancellation::CancelledError
+        raise
       rescue StandardError => e
         runtime_output("Plugin command /#{name} error: #{e.message}")
         [true, nil]
       end
 
-      def plugin_context(conversation, args)
+      def plugin_context(conversation, args, requests: true, tool_requests: nil, cancellation: nil)
+        say_callback = lambda { |message| runtime_output(message) }
+        tool_requests = requests if tool_requests.nil?
         PluginRegistry::Context.new(
           conversation: conversation,
           args: args,
           session: @active_session,
           workspace_root: conversation.workspace_root,
-          say_callback: lambda { |message| runtime_output(message) }
+          say_callback: say_callback,
+          cancellation: cancellation,
+          ui: plugin_ui(say_callback, requests: requests),
+          tool_ui: plugin_ui(say_callback, requests: tool_requests)
+        )
+      end
+
+      def plugin_ui(say_callback, requests:)
+        capabilities = { progress: true, notify: true }
+        requester = nil
+        if requests && @prompt.respond_to?(:request_plugin_ui)
+          capabilities.merge!(question: true, select: true, confirm: true, input: true)
+          requester = lambda do |kind, payload, cancellation: nil|
+            @prompt.request_plugin_ui(kind, payload, cancellation: cancellation)
+          end
+        end
+        emitter = lambda do |kind, payload|
+          case kind
+          when :notify
+            runtime_output(payload[:message])
+          when :progress
+            text = payload[:percent] ? "#{payload[:message]} (#{payload[:percent]}%)" : payload[:message]
+            runtime_output(text)
+          end
+        end
+        PluginUI.new(
+          backend: PluginUI::Backend.new(capabilities: capabilities, requester: requester, emitter: emitter),
+          say_callback: say_callback
         )
       end
 
@@ -201,7 +243,7 @@ module Kward
         return unless conversation
         return if plugin_registry.transcript_event_handlers.empty?
 
-        plugin_registry.notify_transcript_event(event, plugin_context(conversation, ""))
+        plugin_registry.notify_transcript_event(event, plugin_context(conversation, "", requests: false))
       end
 
       def notify_plugin_tab_transcript_event(event, driver)

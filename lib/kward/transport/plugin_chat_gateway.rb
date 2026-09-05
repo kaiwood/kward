@@ -45,9 +45,10 @@ module Kward
           raise ArgumentError, "plugin chat turns do not support #{streaming_behavior} streaming"
         end
 
+        chat = fetch_chat(chat_id)
         turn = @runtime.start_turn(
           chat_id: chat_id,
-          input: @runtime.input_with_attachments(input, normalize_attachments(attachments)),
+          input: @runtime.input_with_attachments(input, normalize_attachments(attachments), capabilities: chat.type.capabilities),
           display_input: input.to_s,
           context: { actor: actor }
         )

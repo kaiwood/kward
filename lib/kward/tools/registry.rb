@@ -11,6 +11,7 @@ require_relative "fetch_raw"
 require_relative "git_commit"
 require_relative "list_directory"
 require_relative "mcp_tool"
+require_relative "plugin_tool"
 require_relative "read_file"
 require_relative "read_skill"
 require_relative "run_shell_command"
@@ -66,6 +67,18 @@ module Kward
       retrieve_tool_output
     ].freeze
 
+    BUILTIN_TOOL_NAMES = (CORE_TOOL_NAMES + %w[
+      git_commit
+      web_search
+      fetch_content
+      fetch_raw
+      read_skill
+      ask_user_question
+      replace_editor_buffer
+      open_editor
+      prepare_shell_command
+    ]).freeze
+
     # Tool schemas advertised to the model for the current frontend and config.
     #
     # @return [Array<Hash>] tool schemas currently advertised to the model
@@ -82,7 +95,8 @@ module Kward
     # @param web_search_enabled [Boolean, nil] override for web search exposure
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
+    # @param plugin_tools [Array<PluginRegistry::Tool>] trusted plugin tool registrations
+    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
       @workspace = workspace
       @prompt = prompt
       @web_search = web_search
@@ -97,6 +111,7 @@ module Kward
       @tool_output_compactor = tool_output_compactor
       @telemetry_logger = telemetry_logger
       @context_budget_meter = context_budget_meter
+      @plugin_tools = Array(plugin_tools)
       @tool_approval = tool_approval
       @approval_for_allowed_tools = approval_for_allowed_tools == true
       @permission_policy = permission_policy || Permissions::Policy.from_config(ConfigFiles.read_config)
@@ -112,6 +127,16 @@ module Kward
                      end
       @tools = build_tools.freeze
       @schemas = build_schema_tools.map { |tool| schema_with_metadata(tool) }.freeze
+    end
+
+    # Replaces plugin registrations while preserving this registry's frontend,
+    # workspace, permission, hook, and execution-profile restrictions.
+    def replace_plugin_tools!(plugin_tools)
+      @plugin_tools = Array(plugin_tools)
+      @plugin_tool_values = nil
+      @tools = build_tools.freeze
+      @schemas = build_schema_tools.map { |tool| schema_with_metadata(tool) }.freeze
+      self
     end
 
     # Builds a registry scoped to one editor prompt turn.
@@ -254,6 +279,8 @@ module Kward
       case tool
       when Tools::MCPTool
         "mcp"
+      when Tools::PluginTool
+        "plugin"
       when Tools::WebSearch, Tools::FetchContent, Tools::FetchRaw
         "web"
       when Tools::ReadSkill
@@ -514,6 +541,11 @@ module Kward
       tools = all_tools
       tools = tools.select { |tool| @allowed_tool_names.include?(tool.name) } if @allowed_tool_names
       tools.each_with_object({}) do |tool, result|
+        if tool.is_a?(Tools::PluginTool) && (BUILTIN_TOOL_NAMES.include?(tool.name) || result.key?(tool.name))
+          source = tool.plugin_path.to_s.empty? ? "" : " (#{tool.plugin_path})"
+          ConfigFiles.emit_warning("Warning: skipping Kward plugin tool #{tool.name}#{source}: duplicate tool name")
+          next
+        end
         raise ArgumentError, "Duplicate tool name: #{tool.name}" if result.key?(tool.name)
 
         result[tool.name] = tool
@@ -528,6 +560,7 @@ module Kward
       tools << @tools["git_commit"] if @tools["git_commit"]
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
+      tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::PluginTool) })
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
       tools.compact
@@ -542,7 +575,7 @@ module Kward
         Tools::FetchRaw.new(web_fetch: @web_fetch),
         Tools::ReadSkill.new(skills: discovered_skills),
         Tools::AskUserQuestion.new(prompt: @prompt)
-      ] + mcp_tool_values
+      ] + mcp_tool_values + plugin_tool_values
     end
 
     def core_tools
@@ -609,6 +642,27 @@ module Kward
 
     def mcp_tool_values
       @mcp_tool_values ||= build_mcp_tools
+    end
+
+    def plugin_tool_values
+      @plugin_tool_values ||= @plugin_tools.map do |registration|
+        Tools::PluginTool.new(
+          registration: registration,
+          context_factory: method(:plugin_tool_context)
+        )
+      end
+    end
+
+    def plugin_tool_context(conversation, cancellation)
+      if @hook_context.respond_to?(:for_tool)
+        @hook_context.for_tool(conversation: conversation, cancellation: cancellation)
+      else
+        PluginRegistry::Context.new(
+          conversation: conversation,
+          workspace_root: @workspace.respond_to?(:root) ? @workspace.root.to_s : Dir.pwd,
+          cancellation: cancellation
+        )
+      end
     end
 
     def build_mcp_tools

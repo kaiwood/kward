@@ -322,15 +322,122 @@ class TestTabs < KwardTestCase
             tab.thread.join
             assert_equal "Plugin reply", tab.answer
             assert_equal ["hello"], tab.driver.submissions.map { |submission| submission[:input] }
-            assert_equal "test.example", Kward::TabStore.new(config_dir: config_dir, cwd: workspace).load["tabs"].last["plugin_tab_type"]
+            persisted_descriptor = Kward::TabStore.new(config_dir: config_dir, cwd: workspace).load["tabs"].last
+            assert_equal "test.example", persisted_descriptor["plugin_tab_type"]
+            refute_empty persisted_descriptor["scope_key"]
 
             restored_prompt = TabPrompt.new
             restored_cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: restored_prompt, client: RecordingClient.new([]), session_store: store)
             restored_cli.send(:setup_interactive_tabs, store, nil)
-            assert_instance_of PluginTabDriver, restored_cli.send(:active_tab).driver
+            restored_tab = restored_cli.send(:active_tab)
+            assert_instance_of PluginTabDriver, restored_tab.driver
+            assert_equal persisted_descriptor["scope_key"], restored_tab.plugin_host.scope_key
+            assert_equal :local, restored_tab.plugin_host.surface
           end
         end
       end
+    end
+  end
+
+  def test_closing_plugin_tab_closes_driver_and_owned_resources
+    events = []
+    driver = Object.new
+    driver.define_singleton_method(:close) { events << :driver_closed }
+    host = Kward::PluginTabHost.new(client: Object.new, workspace_root: Dir.pwd)
+    host.on_cleanup { events << :host_cleaned }
+    tab = Kward::CLI::Tabs::TabRuntime.new(driver: driver, plugin_host: host, status: "idle")
+    cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new)
+    cli.instance_variable_set(:@tabs, [tab])
+    cli.instance_variable_set(:@active_tab_index, 0)
+
+    result = cli.send(:close_active_tab)
+
+    assert_equal Kward::PromptInterface::EXIT_INPUT, result
+    assert_equal %i[driver_closed host_cleaned], events
+    assert_empty cli.instance_variable_get(:@tabs)
+  end
+
+  def test_versioned_plugin_tab_rejects_undeclared_image_attachments
+    capabilities = Kward::PluginChatCapabilities.build(
+      api: 1,
+      capabilities: { attachments: [], steering: false, transcript_paging: false }
+    )
+    host = Kward::PluginTabHost.new(
+      client: Object.new,
+      workspace_root: Dir.pwd,
+      type_id: "com.example.chat",
+      capabilities: capabilities,
+      config: {}
+    )
+    tab = Kward::CLI::Tabs::TabRuntime.new(plugin_host: host)
+    cli = Kward::CLI.new(argv: [], prompt: TabPrompt.new)
+
+    refute cli.send(:plugin_tab_attachments_allowed?, tab, "data:image/png;base64,aW1hZ2U=")
+  ensure
+    host&.shutdown
+  end
+
+  def test_plugin_tab_host_exposes_scoped_managed_services_and_context
+    Dir.mktmpdir do |root|
+      logger = Object.new
+      plugin_host = Kward::PluginHost.new(
+        id: "com.example.plugin",
+        version: "1.0.0",
+        api_version: "1",
+        config: { "token" => "private", "setting" => "configured" },
+        storage_root: root,
+        logger: logger
+      )
+      capabilities = Kward::PluginChatCapabilities.build(
+        api: 1,
+        capabilities: { attachments: [:image], steering: false, transcript_paging: false }
+      )
+      first = Kward::PluginTabHost.new(
+        client: Object.new,
+        workspace_root: Dir.pwd,
+        plugin_host: plugin_host,
+        type_id: "com.example.chat",
+        surface: :transport,
+        scope_key: "conversation:first",
+        capabilities: capabilities
+      )
+      same_scope = Kward::PluginTabHost.new(
+        client: Object.new,
+        workspace_root: Dir.pwd,
+        plugin_host: plugin_host,
+        type_id: "com.example.chat",
+        surface: :transport,
+        scope_key: "conversation:first",
+        capabilities: capabilities
+      )
+      other_scope = Kward::PluginTabHost.new(
+        client: Object.new,
+        workspace_root: Dir.pwd,
+        plugin_host: plugin_host,
+        type_id: "com.example.chat",
+        surface: :rpc,
+        scope_key: "owner",
+        capabilities: capabilities
+      )
+
+      first.storage.put("cursor", 42)
+
+      assert_equal 42, same_scope.storage.get("cursor")
+      assert_nil other_scope.storage.get("cursor")
+      assert_equal "private", first.secret("token")
+      assert_equal "configured", first.config["setting"]
+      assert first.config.frozen?
+      assert_same logger, first.logger
+      assert_equal "com.example.plugin", first.plugin_id
+      assert_equal "com.example.chat", first.type_id
+      assert_equal :transport, first.surface
+      assert_equal "conversation:first", first.scope_key
+      assert_same capabilities, first.capabilities
+    ensure
+      first&.shutdown
+      same_scope&.shutdown
+      other_scope&.shutdown
+      plugin_host&.shutdown
     end
   end
 

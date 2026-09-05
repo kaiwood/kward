@@ -84,7 +84,9 @@ module Kward
           configure_reasoning(agent.conversation)
           [true, nil]
         when "reload"
-          run_busy_local_command_and_requeue { reload_plugins(agent.conversation) }
+          strict_worktree = active_tab&.driver&.respond_to?(:worktree) && active_tab.driver.worktree&.active?
+          registry = strict_worktree ? nil : agent.tool_registry
+          run_busy_local_command_and_requeue { reload_plugins(agent.conversation, tool_registry: registry) }
           [true, nil]
         when "new"
           [true, run_busy_local_command_and_requeue { start_new_session(session_store) }]
@@ -129,7 +131,9 @@ module Kward
           elsif interactive_command_for(name) && prompt_interface? && @prompt.respond_to?(:start_interactive)
             run_interactive_command(name, argument, agent)
           elsif plugin_command_for(name)
-            run_busy_local_command_and_requeue(activity: "running") { run_plugin_command(name, argument, agent) }
+            run_busy_local_command_and_requeue(activity: "running") do |cancellation|
+              run_plugin_command(name, argument, agent, cancellation: cancellation)
+            end
           else
             [false, nil]
           end

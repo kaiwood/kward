@@ -37,6 +37,291 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
+  def test_composes_legacy_footers_without_replacing_plugins
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })
+    registry.evaluate(path: "/plugins/one.rb") { |plugin| plugin.footer { "one" } }
+    registry.evaluate(path: "/plugins/two.rb") { |plugin| plugin.footer { "two" } }
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    assert_equal "one · two", registry.footer_renderer.call(context)
+    assert_empty warnings
+  end
+
+  def test_status_contributions_are_ordered_structured_and_priority_aware
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "1.0.0", api: 1) do |plugin|
+      plugin.status("high", order: 30, priority: :high) { { text: "High", tooltip: "Required status" } }
+      plugin.status("low", order: 10, priority: :low) { "Low" }
+      plugin.status("normal", order: 20) { "Normal" }
+      plugin.status("hidden", order: 40) { nil }
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    segments = registry.status_segments(context)
+
+    assert_equal %w[com.example.demo/low com.example.demo/normal com.example.demo/high], segments.map(&:id)
+    assert_equal({ id: "com.example.demo/high", text: "High", tooltip: "Required status", priority: "high", order: 30 }, segments.last.to_h)
+    assert_equal "Low · Normal · High", registry.compose_status(segments)
+    assert_equal "Normal · High", registry.compose_status(segments, max_width: 13)
+    assert_equal "High", registry.compose_status(segments, max_width: 4)
+  end
+
+  def test_status_renderer_failures_do_not_hide_other_segments
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "1.0.0", api: 1) do |plugin|
+      plugin.status("broken") { raise "offline" }
+      plugin.status("healthy") { "Ready" }
+    end
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil))
+
+    assert_equal "Ready", registry.compose_status(registry.status_segments(context))
+    assert_equal 1, warnings.length
+    assert_includes warnings.first, "com.example.demo/broken"
+    assert_includes warnings.first, "offline"
+  end
+
+  def test_status_registration_requires_identity_and_known_priority
+    registry = Kward::PluginRegistry.new
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate { |plugin| plugin.status("demo") { "Demo" } }
+    end
+    assert_equal "Plugin status contributions require stable plugin identity", error.message
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "1.0.0", api: 1) do |plugin|
+        plugin.status("demo", priority: :critical) { "Demo" }
+      end
+    end
+    assert_equal "Plugin status priority must be low, normal, or high", error.message
+  end
+
+  def test_registers_stable_plugin_identity_and_shared_host
+    Dir.mktmpdir do |config_dir|
+      config_path = File.join(config_dir, "config.json")
+      File.write(config_path, JSON.dump(
+        "plugins" => {
+          "com.example.demo" => { "endpoint" => "https://example.test" }
+        }
+      ))
+
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        registry = Kward::PluginRegistry.new
+        captured_host = nil
+
+        registry.evaluate(path: "/plugins/demo.rb", id: "com.example.demo", version: "2.3.4", api: 1) do |plugin|
+          captured_host = plugin.host
+          plugin.command("host-id") { |_args, _ctx| plugin.host.id }
+        end
+
+        assert_same captured_host, registry.plugin_for("com.example.demo")
+        assert_equal [captured_host], registry.plugins
+        assert_equal "2.3.4", captured_host.version
+        assert_equal "https://example.test", captured_host.config["endpoint"]
+        assert_equal "com.example.demo", registry.command_for("host-id").handler.call(nil, nil)
+      end
+    end
+  end
+
+  def test_plugin_lifecycle_starts_lazily_and_cleans_up_owned_work
+    events = Queue.new
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.lifecycle", version: "1.0.0", api: 1) do |plugin|
+      plugin.on_start do |host|
+        events << :started
+        host.on_cleanup { events << :cleaned }
+        host.background(name: "watcher") do |cancellation|
+          events << :task_started
+          sleep 0.005 until cancellation.cancelled?
+          events << :task_stopped
+        end
+      end
+      plugin.on_shutdown { events << :shutdown }
+    end
+
+    assert events.empty?, "plugin loading must not start runtime work"
+    registry.start!
+    wait_until { events.size >= 2 }
+    registry.shutdown!
+
+    observed = []
+    observed << events.pop until events.empty?
+    assert_equal :started, observed.first
+    assert_includes observed, :task_started
+    assert_includes observed, :shutdown
+    assert_includes observed, :task_stopped
+    assert_includes observed, :cleaned
+  end
+
+  def test_plugin_reload_uses_reload_callback_and_disposes_once
+    events = []
+    registry = Kward::PluginRegistry.new
+    disposable = nil
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.reload", version: "1.0.0", api: 1) do |plugin|
+      disposable = plugin.host.on_cleanup { events << :cleaned }
+      plugin.on_start { events << :started }
+      plugin.on_reload { events << :reloaded }
+      plugin.on_shutdown { events << :shutdown }
+    end
+
+    registry.start!
+    registry.reload!
+    registry.reload!
+    disposable.dispose
+
+    assert_equal %i[started reloaded cleaned], events
+    refute_includes events, :shutdown
+  end
+
+  def test_plugin_lifecycle_failures_are_isolated
+    warnings = []
+    events = []
+    registry = Kward::PluginRegistry.new(warning_sink: warnings.method(:<<))
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.errors", version: "1.0.0", api: 1) do |plugin|
+      plugin.on_start { raise "broken start" }
+      plugin.on_start { events << :continued }
+      plugin.host.on_cleanup { raise "broken cleanup" }
+    end
+
+    registry.start!
+    registry.shutdown!
+
+    assert_equal [:continued], events
+    assert warnings.any? { |warning| warning.include?("plugin start error") && warning.include?("broken start") }
+    assert warnings.any? { |warning| warning.include?("cleanup failed") && warning.include?("broken cleanup") }
+  end
+
+  def test_background_work_requires_activation_and_records_failures
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: warnings.method(:<<))
+    host = nil
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.tasks", version: "1.0.0", api: 1) do |plugin|
+      host = plugin.host
+    end
+
+    error = assert_raises(RuntimeError) { host.background { nil } }
+    assert_includes error.message, "cannot start before plugin activation"
+
+    registry.start!
+    task = host.background(name: "failure") { raise "task exploded" }
+    wait_until { task.complete? }
+
+    assert_equal "task exploded", task.error.message
+    assert warnings.any? { |warning| warning.include?("background task \"failure\" failed: task exploded") }
+  ensure
+    registry&.shutdown!
+  end
+
+  def test_plugin_shutdown_bounds_wait_for_non_cooperative_tasks
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: warnings.method(:<<))
+    host = nil
+
+    registry.evaluate(path: "/plugins/demo.rb", id: "com.example.slow", version: "1.0.0", api: 1) do |plugin|
+      host = plugin.host
+    end
+    registry.start!
+    started = Queue.new
+    release = Queue.new
+    task = host.background(name: "slow") do
+      started << true
+      release.pop
+    end
+    started.pop
+
+    registry.shutdown!(timeout: 0.001)
+
+    assert task.alive?
+    assert warnings.any? { |warning| warning.include?("background task \"slow\" did not stop before shutdown") }
+  ensure
+    release << true if task&.alive?
+    task&.join
+  end
+
+  def test_legacy_plugin_remains_supported_without_managed_host
+    registry = Kward::PluginRegistry.new
+    host = :unset
+
+    registry.evaluate do |plugin|
+      host = plugin.host
+      plugin.command("legacy") { "ok" }
+    end
+
+    lifecycle_error = assert_raises(ArgumentError) do
+      registry.evaluate { |plugin| plugin.on_start { nil } }
+    end
+
+    assert_includes lifecycle_error.message, "require stable plugin identity"
+    assert_nil host
+    assert_empty registry.plugins
+    assert registry.command_for("legacy")
+  end
+
+  def test_rejects_incomplete_unsupported_and_duplicate_plugin_identity
+    registry = Kward::PluginRegistry.new
+
+    incomplete = assert_raises(ArgumentError) do
+      registry.evaluate(id: "com.example.demo", version: "1.0.0") { }
+    end
+    assert_includes incomplete.message, "id, version, and api are required together"
+
+    unsupported = assert_raises(ArgumentError) do
+      registry.evaluate(id: "com.example.demo", version: "1.0.0", api: 2) { }
+    end
+    assert_includes unsupported.message, "Unsupported Kward plugin API"
+
+    registry.evaluate(id: "com.example.demo", version: "1.0.0", api: 1) { }
+    duplicate = assert_raises(ArgumentError) do
+      registry.evaluate(id: "com.example.demo", version: "1.0.1", api: 1) { }
+    end
+    assert_includes duplicate.message, "Duplicate Kward plugin id"
+  end
+
+  def test_loads_identified_plugin_from_entrypoint
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      plugin_path = File.join(plugins, "identified.rb")
+      File.write(plugin_path, <<~'RUBY')
+        Kward.plugin(id: "com.example.loaded", version: "1.0.0", api: 1) do |plugin|
+          plugin.command("loaded-host") { plugin.host.id }
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        registry = Kward::PluginRegistry.load
+
+        assert_equal "com.example.loaded", registry.plugins.first.id
+        assert_equal plugin_path, registry.plugins.first.source_path
+        assert_equal "com.example.loaded", registry.command_for("loaded-host").handler.call
+      end
+    end
+  end
+
+  def test_shipped_plugin_examples_declare_stable_identity
+    examples = [
+      File.expand_path("../examples/plugins/stardate_footer.rb", __dir__),
+      File.expand_path("../examples/plugins/space_invaders.rb", __dir__),
+      File.expand_path("../examples/plugins/telegram/plugin.rb", __dir__)
+    ]
+
+    registry = Kward::PluginRegistry.load(paths: examples)
+
+    assert_equal [
+      "com.kward.example.stardate-footer",
+      "com.kward.example.space-invaders",
+      "com.kward.telegram"
+    ], registry.plugins.map(&:id)
+    assert registry.plugins.all? { |plugin| plugin.version == "1.0.0" }
+    assert registry.plugins.all? { |plugin| plugin.api_version == Kward::PluginRegistry::PLUGIN_API_VERSION }
+  end
+
   def test_plugin_paths_are_home_only_files_and_package_entrypoints
     Dir.mktmpdir do |home|
       plugins = File.join(home, ".kward", "plugins")
@@ -285,6 +570,173 @@ class TestPluginRegistry < KwardTestCase
     assert_equal({}, received.first.payload)
   end
 
+  def test_registers_model_callable_tool
+    registry = Kward::PluginRegistry.new
+
+    registry.evaluate(path: "/plugins/issues.rb") do |plugin|
+      plugin.tool "issue_search", description: "Search issues", schema: {
+        type: "object",
+        properties: {
+          limit: { type: "integer" },
+          query: { type: "string" }
+        },
+        required: ["query"]
+      } do |args, ctx|
+        "#{ctx.workspace_root}:#{args.fetch("query")}"
+      end
+    end
+
+    tool = registry.tool_for("issue_search")
+
+    assert_equal [tool], registry.tools
+    assert_equal "Search issues", tool.description
+    assert_equal "/plugins/issues.rb", tool.path
+    assert_equal %i[limit query], tool.schema.fetch(:properties).keys
+    assert_equal ["query"], tool.schema.fetch(:required)
+    assert_equal false, tool.schema.fetch(:additionalProperties)
+    assert tool.schema.frozen?
+  end
+
+  def test_skips_duplicate_plugin_tools
+    warnings = []
+    registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })
+
+    registry.evaluate do |plugin|
+      2.times do
+        plugin.tool("lookup", description: "Look up a value") { "ok" }
+      end
+    end
+
+    assert_equal 1, registry.tools.length
+    assert_includes warnings.join("\n"), "duplicate Kward plugin tool lookup"
+  end
+
+  def test_rejects_invalid_plugin_tool_schemas
+    registry = Kward::PluginRegistry.new
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate do |plugin|
+        plugin.tool "lookup", description: "Look up a value", schema: {
+          type: "object",
+          properties: {},
+          required: ["missing"]
+        } do
+          "ok"
+        end
+      end
+    end
+
+    assert_includes error.message, "requires unknown properties: missing"
+  end
+
+  def test_registers_typed_command_with_shell_style_arguments
+    registry = Kward::PluginRegistry.new
+    received = nil
+
+    registry.evaluate(id: "com.example.release", version: "1.0.0", api: "1") do |plugin|
+      plugin.command "deploy",
+        description: "Deploy a service",
+        schema: {
+          type: "object",
+          properties: {
+            service: { type: "string" },
+            environment: { type: "string", enum: %w[staging production], default: "staging" },
+            dry_run: { type: "boolean", default: false },
+            retries: { type: "integer", default: 1 },
+            labels: { type: "array", items: { type: "string" } }
+          },
+          required: ["service"]
+        },
+        positionals: ["service"] do |args, ctx|
+          received = [args, ctx.args]
+          ctx.result(message: "Queued", data: { deployment_id: 42 })
+        end
+    end
+
+    command = registry.command_for("deploy")
+    arguments = command.parse_arguments("api --environment production --dry-run --retries 3 --labels urgent --labels 'release candidate'")
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil), args: arguments)
+    result = command.normalize_result(command.handler.call(arguments, context))
+
+    assert command.typed?
+    assert_equal "com.example.release", command.plugin_id
+    assert_equal ["service"], command.positionals
+    assert_equal({
+      "service" => "api",
+      "environment" => "production",
+      "dry_run" => true,
+      "retries" => 3,
+      "labels" => ["urgent", "release candidate"]
+    }, arguments)
+    assert_equal [arguments, arguments], received
+    assert_equal({ message: "Queued", data: { "deployment_id" => 42 } }, result.to_h)
+    assert_equal false, command.parse_arguments("api --no-dry-run").fetch("dry_run")
+    assert command.schema.frozen?
+  end
+
+  def test_typed_command_rejects_unknown_missing_and_invalid_arguments
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.command "deploy", schema: {
+        type: "object",
+        properties: {
+          environment: { type: "string", enum: %w[staging production] },
+          force: { type: "boolean" }
+        },
+        required: ["environment"]
+      } do |_args, _ctx|
+        "unused"
+      end
+    end
+    command = registry.command_for("deploy")
+
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments("--unknown value") }.message, "unknown option"
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments("") }.message, "missing required arguments"
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments("--environment test") }.message, "must be one of"
+    assert_includes assert_raises(ArgumentError) { command.parse_arguments({ environment: "staging", force: "yes" }) }.message, "force must be boolean"
+  end
+
+  def test_legacy_command_keeps_raw_string_arguments
+    registry = Kward::PluginRegistry.new
+    registry.evaluate do |plugin|
+      plugin.command("legacy") { |args| args }
+    end
+
+    command = registry.command_for("legacy")
+
+    refute command.typed?
+    assert_equal "--still raw", command.parse_arguments("--still raw")
+    assert_equal "done", command.normalize_result("done")
+  end
+
+  def test_registers_namespaced_plugin_action_and_requires_identity
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(id: "com.example.release", version: "1.0.0", api: "1") do |plugin|
+      plugin.action "status", description: "Read release status", schema: {
+        type: "object",
+        properties: { deployment_id: { type: "integer" } },
+        required: ["deployment_id"]
+      } do |args, ctx|
+        ctx.result(data: { deployment_id: args.fetch("deployment_id"), state: "ready" })
+      end
+    end
+
+    action = registry.action_for("com.example.release/status")
+    arguments = action.parse_arguments(deployment_id: 42)
+    context = Kward::PluginRegistry::Context.new(conversation: Kward::Conversation.new(system_message: nil), args: arguments)
+    result = action.normalize_result(action.handler.call(arguments, context))
+
+    assert_equal [action], registry.actions
+    assert_equal "com.example.release", action.plugin_id
+    assert_equal({ data: { "deployment_id" => 42, "state" => "ready" } }, result.to_h)
+    assert_includes assert_raises(ArgumentError) { action.parse_arguments("--deployment-id 42") }.message, "must be an object"
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate { |plugin| plugin.action("broken", description: "Broken") { nil } }
+    end
+    assert_includes error.message, "require stable plugin identity"
+  end
+
   def test_registers_plugin_tab_type
     registry = Kward::PluginRegistry.new
     registry.evaluate do |plugin|
@@ -302,7 +754,47 @@ class TestPluginRegistry < KwardTestCase
     assert tab_type.local
     assert_equal [tab_type], registry.transport_tab_types
     assert tab_type.transcript_events
+    refute tab_type.capabilities.declared?
     assert_same tab_type, registry.tab_type_for_id("example.chat")
+  end
+
+  def test_registers_identified_plugin_chat_contract
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(id: "com.example.plugin", version: "1.0.0", api: "1") do |plugin|
+      plugin.tab_type(
+        "example",
+        id: "example.chat",
+        rpc: true,
+        api: 1,
+        capabilities: { attachments: [:image], steering: true, transcript_paging: true }
+      ) { nil }
+    end
+
+    tab_type = registry.tab_type_for("example")
+    assert_equal "com.example.plugin", tab_type.plugin_id
+    assert tab_type.capabilities.declared?
+    assert_equal 1, tab_type.capabilities.api_version
+    assert_equal [:image], tab_type.capabilities.attachments
+    assert tab_type.capabilities.steering?
+    assert tab_type.capabilities.transcript_paging?
+  end
+
+  def test_rejects_invalid_plugin_chat_contracts
+    registry = Kward::PluginRegistry.new
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate do |plugin|
+        plugin.tab_type("example", id: "example.chat", api: 2, capabilities: {}) { nil }
+      end
+    end
+    assert_includes error.message, "Unsupported Kward plugin chat API"
+
+    error = assert_raises(ArgumentError) do
+      registry.evaluate do |plugin|
+        plugin.tab_type("example", id: "example.chat", capabilities: {}) { nil }
+      end
+    end
+    assert_includes error.message, "api and capabilities are required together"
   end
 
   def test_registers_transport_only_tab_type

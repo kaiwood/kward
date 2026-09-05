@@ -14,6 +14,10 @@ class TestRPCSessionManagerProfiles < KwardTestCase
         executed = true
         raise "isolated profile executed a plugin command"
       end
+      plugin.tool("local-tool", description: "Run local integration") do
+        executed = true
+        raise "isolated profile executed a plugin tool"
+      end
     end
     profile = Kward::Transport.execution_profile(
       id: "isolated_chat",

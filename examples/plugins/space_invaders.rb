@@ -15,7 +15,7 @@
 # The game renders colored sprites and particle-burst explosions inside the
 # composer canvas region using the interactive mode API.
 
-Kward.plugin do |plugin|
+Kward.plugin(id: "com.kward.example.space-invaders", version: "1.0.0", api: 1) do |plugin|
   plugin.interactive_command "invaders", rows: 18, fps: 30, description: "Space Invaders arcade game" do |ui, ctx|
     game = SpaceInvadersGame.new(width: ui.width, height: ui.height)
     ui.on_tick { |ui| game.tick(ui) }

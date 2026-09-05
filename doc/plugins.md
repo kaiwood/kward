@@ -5,6 +5,7 @@ Plugins are trusted local Ruby extensions for Kward. Use them when you need beha
 Good plugin use cases:
 
 - add a slash command for a personal workflow,
+- expose a local integration as a model-callable tool,
 - show project/session status in the terminal footer,
 - add concise local context to prompts,
 - log or observe transcript events,
@@ -49,7 +50,7 @@ mkdir -p ~/.kward/plugins
 Create `~/.kward/plugins/hello.rb`:
 
 ```ruby
-Kward.plugin do |plugin|
+Kward.plugin(id: "com.example.hello", version: "1.0.0", api: 1) do |plugin|
   plugin.command "hello", description: "Say hello", argument_hint: "[name]" do |args, ctx|
     name = args.strip.empty? ? "there" : args.strip
     ctx.say("Hello, #{name}.")
@@ -64,6 +65,112 @@ Start Kward and run:
 ```
 
 When developing plugins or prompt templates, use `/reload` inside Kward to reload configured prompt files and all plugin files without restarting. This picks up prompt edits, changes to existing plugins, and new plugin registrations, then refreshes slash-command completion and rebuilds the system message.
+
+## Plugin identity and host services
+
+Give a reusable plugin a stable reverse-domain-style `id`, its own `version`, and
+the Kward plugin API it targets. API version `1` is currently supported. Kward
+skips plugins that declare an unsupported API version or duplicate another
+plugin's ID.
+
+An identified plugin receives one shared host for configuration, private durable
+storage, secret lookup, and logging:
+
+```ruby
+Kward.plugin(id: "com.example.issues", version: "1.2.0", api: 1) do |plugin|
+  host = plugin.host
+
+  plugin.command "issue-server", description: "Show the issue server" do |_args, ctx|
+    visits = host.storage.get("visits").to_i + 1
+    endpoint = host.config.fetch("endpoint")
+    host.storage.put("visits", visits)
+    ctx.say("#{endpoint} (visit #{visits})")
+  end
+end
+```
+
+Configure the plugin under its stable ID in `config.json`:
+
+```json
+{
+  "plugins": {
+    "com.example.issues": {
+      "endpoint": "https://issues.example.com"
+    }
+  }
+}
+```
+
+The host exposes:
+
+- `host.id`, `host.version`, and `host.api_version`;
+- `host.config`, an immutable copy of the plugin's namespaced configuration;
+- `host.storage.get`, `put`, and `delete` for JSON-compatible values;
+- `host.secret(name, env: nil)` for private config or environment lookup;
+- `host.logger`, a standard Ruby logger routed through Kward's diagnostic output.
+
+Storage is kept in `plugin_state/<plugin-id>/state.json` under Kward's active
+config directory and survives `/reload`. Secret lookup checks plugin config,
+then the optional explicit environment variable, then a conventional name such
+as `KWARD_PLUGIN_COM_EXAMPLE_ISSUES_TOKEN`. Do not log secret values.
+
+Existing `Kward.plugin do ... end` files remain supported, but `plugin.host` is
+`nil` until the plugin declares stable identity metadata.
+
+## Lifecycle and owned background work
+
+Plugin files are loaded without starting runtime work. Identified plugins can
+register lifecycle callbacks for the points where managed work is safe:
+
+```ruby
+Kward.plugin(id: "com.example.watcher", version: "1.0.0", api: 1) do |plugin|
+  plugin.on_start do |host|
+    subscription = Watcher.subscribe { |event| host.logger.info(event) }
+    host.on_cleanup(subscription) { |value| Watcher.unsubscribe(value) }
+
+    host.background(name: "poller") do |cancellation|
+      until cancellation.cancelled?
+        Watcher.poll
+        sleep 1
+      end
+    end
+  end
+
+  plugin.on_reload { |host| host.logger.info("Reloading") }
+  plugin.on_shutdown { |host| host.logger.info("Stopping") }
+end
+```
+
+Lifecycle behavior is explicit:
+
+- `on_start` runs after loading, when the registry becomes active. A newly loaded
+  registry receives `on_start` after `/reload` too.
+- `on_reload` runs on the old plugin instance immediately before Kward cleans up
+  its resources.
+- `on_shutdown` runs immediately before final process cleanup.
+- Callback failures are reported as warnings and do not prevent other plugins
+  from cleaning up.
+
+`host.background` returns a `PluginTask`. Its block may accept a cooperative
+`Cancellation` token. Kward cancels and waits up to a bounded deadline for owned
+tasks during reload or shutdown; blocking work should register cleanup that
+closes the socket, stream, or other resource needed to wake it. Tasks also accept
+an optional parent token with `cancellation:`.
+
+`host.on_cleanup(resource) { |resource| ... }` returns an idempotent
+`PluginDisposable`. Call `dispose` to unsubscribe early, or leave it registered
+for automatic cleanup. `host.manage` is an alias. Cleanup runs in reverse
+registration order so dependent resources unwind predictably.
+
+Plugin-owned tab hosts expose the same `background`, `on_cleanup`, and `manage`
+methods. Their resources are cleaned up when a local tab closes or its shared
+plugin-chat runtime shuts down. A tab driver may implement `close` (or `shutdown`
+as a fallback) for its own final cleanup; Kward invokes it before closing the tab
+host.
+
+Do not open network connections or start threads directly while the plugin file
+is loading. Register them from `on_start`, a command, or a plugin-tab factory so
+Kward can own their lifetime.
 
 ## Add a slash command
 
@@ -81,6 +188,202 @@ end
 Command names do not include `/`. They must start with a letter or number and may contain letters, numbers, `_`, and `-`.
 
 A plugin command cannot replace a built-in command or prompt-template command.
+
+### Typed command arguments and results
+
+Add an object JSON Schema when a command needs validated arguments. Interactive
+slash commands use shell-style `--flags`; RPC clients may send either the same
+text or an argument object. Declare `positionals:` when selected properties may
+be supplied without flags:
+
+```ruby
+Kward.plugin(id: "com.example.release", version: "1.0.0", api: 1) do |plugin|
+  plugin.command "deploy",
+    description: "Deploy a service",
+    argument_hint: "SERVICE [--environment NAME] [--dry-run]",
+    schema: {
+      type: "object",
+      properties: {
+        service: { type: "string" },
+        environment: {
+          type: "string",
+          enum: %w[staging production],
+          default: "staging"
+        },
+        dry_run: { type: "boolean", default: false },
+        labels: { type: "array", items: { type: "string" } }
+      },
+      required: ["service"]
+    },
+    positionals: ["service"] do |args, ctx|
+      deployment = Release.deploy(
+        args.fetch("service"),
+        environment: args.fetch("environment"),
+        dry_run: args.fetch("dry_run"),
+        labels: args.fetch("labels", [])
+      )
+      ctx.result(
+        message: "Queued deployment #{deployment.id}.",
+        data: { deployment_id: deployment.id }
+      )
+    end
+end
+```
+
+For example:
+
+```text
+/deploy api --environment production --dry-run --labels urgent --labels "release candidate"
+```
+
+Typed command handlers receive a string-keyed argument hash through both the
+first block argument and `ctx.args`. Supported property types are `string`,
+`integer`, `number`, `boolean`, `array`, and `object`; array items must be scalar.
+Use `--flag` or `--no-flag` for booleans, repeat an array option to collect
+values, and use `--` before positional text that starts with a dash. Unknown,
+missing, duplicate, incorrectly typed, and out-of-enum arguments are rejected
+before plugin code runs. Commands without `schema:` keep receiving their raw
+argument string for compatibility.
+
+`ctx.result(message:, data:)` returns optional user-facing text plus optional
+JSON-compatible machine data. The TUI displays `message`. RPC returns the full
+structured result, and asynchronous slash-command turns also emit a
+`pluginCommandResult` event before their normal answer event.
+
+## Add a namespaced action
+
+Actions are typed operations intended for trusted RPC integrations rather than
+slash-command completion. They require identified plugin metadata and receive a
+stable `<plugin-id>/<action-name>` ID:
+
+```ruby
+Kward.plugin(id: "com.example.release", version: "1.0.0", api: 1) do |plugin|
+  plugin.action "status",
+    description: "Read deployment status",
+    schema: {
+      type: "object",
+      properties: { deployment_id: { type: "integer" } },
+      required: ["deployment_id"]
+    } do |args, ctx|
+      deployment = Release.find(args.fetch("deployment_id"))
+      ctx.result(data: { id: deployment.id, state: deployment.state })
+    end
+end
+```
+
+RPC clients discover actions with `pluginActions/list` and invoke them with
+`pluginActions/run`. Action arguments must be an object and results always use
+the structured `{ message, data }` contract. Synchronous actions support
+`ctx.say`, progress, and notifications, but blocking UI requests fail closed so
+the RPC reader cannot deadlock. Actions are disabled when the session execution
+profile disables plugin commands. They are not exposed as local TUI commands;
+register a typed command as well when people should invoke the operation from
+the composer.
+
+## Add a model-callable tool
+
+Plugin tools let the model call trusted local Ruby integrations without requiring
+an MCP server. Define a model-facing description and a strict object JSON Schema
+for the arguments:
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.tool "issue_search",
+    description: "Search the local issue tracker",
+    schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Issue search text." },
+        limit: { type: "integer", description: "Maximum results." }
+      },
+      required: ["query"]
+    } do |args, ctx|
+      ctx.cancellation&.raise_if_cancelled!
+      IssueTracker.search(args.fetch("query"), limit: args.fetch("limit", 10))
+        .map { |issue| "#{issue.id}: #{issue.title}" }
+        .join("\n")
+    end
+end
+```
+
+The handler receives a parsed argument hash and a normal plugin context. It
+should return model-facing text. `ctx.cancellation` contains the
+active cooperative cancellation token, and `ctx.cancelled?` is a convenient
+boolean check for longer operations.
+
+Plugin tool schemas are exposed in normal CLI, RPC, Pan, and transport-backed
+agent turns. Kward forces `additionalProperties: false`, validates required
+property names, reports the tool source as `plugin`, and routes execution through
+the normal permission policy, approval bridge, lifecycle hooks, output
+compaction, and transcript artifact storage. Restricted execution profiles can
+filter plugin tools by name or remove all tools. Editor-scoped prompts,
+shell-agent prompts, and strict worktree agents do not receive plugin tools.
+Plugin-owned chats continue to own their own tool behavior.
+
+Plugin tools cannot replace built-in, MCP, or other plugin tools. Duplicate
+plugin registrations are skipped with a warning. Because trusted plugin code can
+perform arbitrary local or network effects, an enabled permission policy treats
+plugin tools as approval-requiring operations unless an explicit allow rule
+matches the tool or `source: plugin`.
+
+## Use structured plugin UI
+
+Plugin commands and model-callable plugin tools receive `ctx.ui`, a
+frontend-neutral interface for questions, choices, confirmation, text input,
+notifications, and progress:
+
+```ruby
+plugin.command "release", description: "Prepare a release" do |_args, ctx|
+  environment = ctx.ui.select(
+    "Environment",
+    [
+      { label: "Staging", value: "staging", description: "Deploy for testing." },
+      { label: "Production", value: "production", description: "Deploy publicly." }
+    ]
+  )
+  next unless environment
+  next unless ctx.ui.confirm("Release", "Deploy to #{environment}?")
+
+  tag = ctx.ui.input("Release tag", "For example, v1.2.0")
+  next if tag.to_s.empty?
+
+  ctx.ui.progress(id: "release", message: "Preparing #{tag}", percent: 25)
+  # Perform work here.
+  ctx.ui.progress(id: "release", message: "Prepared #{tag}", percent: 100, done: true)
+  ctx.ui.notify("#{tag} is ready for #{environment}.", level: :success)
+end
+```
+
+Available methods:
+
+- `ctx.ui.question(questions)` uses the same validated 1-4 question contract as
+  `ask_user_question` and returns its answer array or `nil` when cancelled;
+- `ctx.ui.select(title, options, message: nil)` accepts 1-100 strings or
+  `{ label:, value:, description: }` objects and returns the selected value;
+- `ctx.ui.confirm(title, message = nil, default: false)` returns a boolean;
+- `ctx.ui.input(title, placeholder = nil, default: nil)` returns text or `nil`;
+- `ctx.ui.progress(id:, message:, percent: nil, done: false)` publishes a
+  non-blocking progress update;
+- `ctx.ui.notify(message, level: :info)` publishes an `info`, `success`,
+  `warning`, or `error` notification;
+- `ctx.ui.supported?(:select)` and `ctx.ui.capabilities` let a plugin inspect
+  the active frontend before requesting interaction.
+
+Blocking requests fail closed when the active frontend does not support them:
+questions, selections, and input return `nil`, while confirmation returns
+`false`. Notifications and progress fall back to normal `ctx.say` text. Inputs
+and emitted text are bounded, and plugin-tool cancellation is checked before
+and after blocking requests.
+
+The interactive terminal implements all six primitives. RPC implements them for
+plugin commands submitted through `turns/start` and for plugin tools; use that
+asynchronous turn path when a command needs to wait for UI input. Synchronous
+RPC `commands/run` supports notifications and progress but deliberately fails
+closed for blocking requests so the protocol reader cannot deadlock waiting for
+its own response. Pan has no interaction bridge, so blocking requests fail
+closed and non-blocking output falls back to its existing plugin message event.
+Transport gateways expose blocking requests as transport-neutral interactions;
+the transport adapter decides whether and how to render and answer them.
 
 ## Add prompt context
 
@@ -104,19 +407,52 @@ If plugin state changes and Kward should rebuild the active system message, call
 ctx.refresh_system_message!
 ```
 
-## Add a footer
+## Add status to the footer
 
-A footer can show compact local status in the terminal UI:
+Identified plugins can contribute compact status without replacing status from
+other plugins. Give each contribution a stable name:
 
 ```ruby
-Kward.plugin do |plugin|
-  plugin.footer do |ctx|
-    "#{ctx.session_name || 'unnamed'} • #{ctx.transcript.messages.length} messages"
+Kward.plugin(id: "com.example.session-status", version: "1.0.0", api: 1) do |plugin|
+  plugin.status "session", order: 10, priority: :high do |ctx|
+    {
+      text: ctx.session_name || "unnamed",
+      tooltip: "Current Kward session"
+    }
+  end
+
+  plugin.status "messages", order: 20, priority: :low do |ctx|
+    "#{ctx.transcript.messages.length} messages"
   end
 end
 ```
 
-Only one footer is active. If multiple plugins register footers, the later one replaces the earlier one and Kward prints a warning. Kward evaluates the active footer at most once per second and reuses its last value between refreshes.
+Kward joins visible contributions with ` · `. Lower `order` values appear
+first. `priority` may be `:low`, `:normal` (the default), or `:high`. When the
+terminal is too narrow, Kward removes complete low-priority contributions
+first, followed by normal- and high-priority contributions. Among contributions
+with the same priority, later ones are removed first.
+
+Return a string for ordinary status, a hash with `text` and optional `tooltip`
+for structured clients, or `nil` to hide the contribution temporarily. One
+renderer failing does not hide status from other plugins. Kward evaluates the
+contributions at most once per second and reuses their values between refreshes.
+
+RPC clients receive both the combined `text` fallback and the individual
+structured segments. Terminal footers display the combined text; tooltips are
+available to clients that can render them.
+
+The older `plugin.footer` API remains supported. Each legacy footer is treated
+as a normal-priority contribution, so footers from different plugins now
+compose instead of replacing one another:
+
+```ruby
+Kward.plugin do |plugin|
+  plugin.footer do |ctx|
+    "#{ctx.session_name || 'unnamed'}"
+  end
+end
+```
 
 ## Add an interactive command
 
@@ -190,13 +526,25 @@ in piped/non-interactive mode or through RPC.
 
 A plugin can provide a persistent tab with Kward's normal composer, transcript
 rendering, streaming, image input, cancellation, and tab switching. The plugin
-owns its transcript, storage, model behavior, and any global state; it does not
-need to use a Kward workspace session.
+owns its transcript and model behavior, while Kward can provide scoped storage,
+configuration, secrets, logging, and resource cleanup. It does not need to use a
+Kward workspace session.
 
 ```ruby
-Kward.plugin do |plugin|
-  plugin.tab_type "example", id: "com.example.chat", title: "Example", singleton: :global do |host, descriptor|
-    ExampleChat.new(client: host.client, descriptor: descriptor)
+Kward.plugin(id: "com.example.plugin", version: "1.0.0", api: 1) do |plugin|
+  plugin.tab_type(
+    "example",
+    id: "com.example.chat",
+    title: "Example",
+    singleton: :global,
+    api: 1,
+    capabilities: {
+      attachments: [:image],
+      steering: false,
+      transcript_paging: false
+    }
+  ) do |host, descriptor|
+    ExampleChat.new(client: host.client, storage: host.storage, descriptor: descriptor)
   end
 end
 ```
@@ -209,6 +557,39 @@ Open it from interactive Kward:
 
 `id` is a stable persisted identifier: do not change it after release.
 Use `singleton: :global` for one plugin-managed chat shared by all tab views.
+
+### Versioned chat contract
+
+Pass `api: 1` and `capabilities:` together to opt into the versioned plugin-chat
+contract. The capability object supports:
+
+- `attachments`: currently `[]` or `[:image]`;
+- `steering`: whether the driver supports in-flight steering;
+- `transcript_paging`: whether the driver implements `transcript_page`.
+
+Kward validates versioned drivers when they are created. A declared driver must
+implement `messages`, `submit`, `descriptor`, `supports_steering?`, and
+`assistant_label`. Its `supports_steering?` result must match the declaration,
+and a driver declaring transcript paging must implement `transcript_page`.
+Omitting both options preserves the legacy method-probing behavior.
+
+The factory's `host` exposes:
+
+- `host.plugin_id` (nil for a legacy anonymous plugin) and `host.type_id`;
+- `host.surface`, one of `:local`, `:rpc`, `:transport`, or `:shared` when the
+  same runtime can serve RPC and transports;
+- `host.scope_key`, persisted for local tabs and stable for RPC/transport scopes;
+- `host.capabilities`, the declared contract;
+- `host.config`, the identified plugin's immutable private configuration;
+- `host.storage`, isolated by plugin, chat type, and scope;
+- `host.secret(name, env: nil)` and `host.logger`;
+- `host.background` and `host.on_cleanup` for work owned by this chat instance.
+
+Closing a local tab or shutting down the shared RPC/transport chat runtime calls
+the driver's optional `close` method (or `shutdown` fallback), then cleans up the
+host's managed resources. Scoped storage remains durable across reconstruction.
+Legacy plugins receive the same host surface using their stable tab type ID as
+the configuration namespace.
 
 Plugin tabs do not notify global transcript observers by default. Set
 `transcript_events: true` only when the tab explicitly permits its streamed
@@ -308,13 +689,15 @@ Handlers receive a `ctx` object. Common methods:
 - `ctx.workspace_root`
 - `ctx.args`
 - `ctx.say(message)`
+- `ctx.result(message:, data:)`
+- `ctx.ui`
 - `ctx.transcript.messages`
 - `ctx.session_id`
 - `ctx.session_name`
 - `ctx.session_path`
 - `ctx.refresh_system_message!`
 
-These methods are available in all handler types: commands, footers, prompt context renderers, and transcript event observers. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called.
+These methods are available in all handler types, including model-callable tools, although `ctx.result` is the result contract specifically for typed commands and actions. Typed command and action handlers receive their validated hash through `ctx.args`; legacy commands continue to receive text. Model-callable tools and asynchronous TUI/RPC slash commands expose `ctx.cancellation` and `ctx.cancelled?`. `ctx.say` outputs to the active frontend (terminal or RPC) wherever it is called. Interactive `ctx.ui` methods remain capability-gated because not every handler runs in a frontend context that can wait for an answer.
 
 The transcript is read-only. Use context methods instead of mutating Kward internals.
 
@@ -324,15 +707,19 @@ Plugins are available in the CLI and RPC backend.
 
 RPC clients can:
 
+- discover plugin tools through `tools/list`,
+- invoke plugin tools through normal model turns,
 - list plugin commands through `commands/list`,
-- run plugin commands through `commands/run`,
-- run plugin slash commands through `turns/start` input such as `/hello World`.
+- run plugin commands through `commands/run`, including typed object arguments and structured results,
+- run plugin slash commands through `turns/start` input such as `/hello World`,
+- discover and run namespaced typed actions through `pluginActions/list` and `pluginActions/run`,
+- render and answer structured plugin UI requests advertised through `extensionUi`.
 
 Plugin command output is emitted through normal turn events without calling the model.
 
 ## Security
 
-Plugins are local Ruby code. They can read files, write files, run commands, make network requests, and read environment variables as your user.
+Plugins are local Ruby code. They can read files, write files, run commands, make network requests, and read environment variables as your user. Model-callable plugin tools execute in Kward's host process and are not contained by the command sandbox; permission checks decide whether a call starts but do not sandbox trusted plugin code after it begins.
 
 Recommended practices:
 

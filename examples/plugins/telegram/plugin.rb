@@ -1,6 +1,6 @@
 require_relative "telegram_transport"
 
-Kward.plugin do |plugin|
+Kward.plugin(id: "com.kward.telegram", version: "1.0.0", api: 1) do |plugin|
   capabilities = {
     inbound: %i[text],
     outbound: %i[text],

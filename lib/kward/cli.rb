@@ -167,6 +167,7 @@ module Kward
       warn runtime_error_message(e)
       exit 1
     ensure
+      shutdown_plugins if respond_to?(:shutdown_plugins, true)
       ConfigFiles.skip_config = false
     end
 
@@ -424,6 +425,7 @@ module Kward
         tool_registry: ToolRegistry.new(
           workspace: configured_workspace,
           prompt: @prompt,
+          plugin_tools: plugin_registry.tools,
           hook_manager: hook_manager,
           hook_context: hook_context
         ),

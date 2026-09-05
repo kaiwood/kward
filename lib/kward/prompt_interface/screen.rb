@@ -145,6 +145,7 @@ module Kward
         @reserved_rows = 0
         @last_width = current_width
         @last_height = current_height
+        @last_footer_refresh = nil if current_width != old_width
         if interactive_active_locked?
           @interactive_state[:controller].resize(width: interactive_canvas_width(current_width))
         end

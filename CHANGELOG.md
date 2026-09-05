@@ -7,6 +7,13 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added GPT-6 Astra to the OpenAI, Codex, and Copilot model choices with its 1,050,000-token context metadata and model-specific reasoning limits.
+- Added a versioned plugin-chat contract with declared attachment, steering, and transcript-paging capabilities; scoped chat configuration/storage/secrets/logging; surface and scope context; persistent local scope IDs; RPC capability discovery; and driver validation while preserving legacy plugin tabs.
+- Added composable plugin footer status with stable segment IDs, display ordering, width-aware priority removal, isolated render failures, structured RPC segments and tooltips, and backward-compatible `plugin.footer` contributions.
+- Added identified-plugin start, reload, and shutdown callbacks; plugin- and tab-owned cooperative background tasks; idempotent managed cleanup; bounded shutdown waits; and optional plugin-tab driver cleanup.
+- Added typed plugin commands with JSON Schema validation, shell-style flags and declared positional arguments, structured frontend/RPC results, cancellation context, and legacy raw-string compatibility, plus identified-plugin actions with namespaced RPC discovery and execution.
+- Added structured frontend-neutral plugin UI for questions, selections, confirmations, text input, progress, and notifications, with TUI rendering, RPC capability negotiation and request/answer notifications, transport interaction routing, bounded validation, cancellation, and fail-closed fallbacks.
+- Added stable plugin identity metadata and a shared plugin host with namespaced configuration, private durable storage, secret lookup, logging, API compatibility checks, and sanitized RPC discovery.
+- Added model-callable plugin tools with strict JSON schemas, cancellation context, normal permission and lifecycle-hook enforcement, execution-profile filtering, RPC discovery, and tool-output compaction.
 - Added `/name` to rename the active session and tab together, including while the tab's agent is running.
 
 ### Changed

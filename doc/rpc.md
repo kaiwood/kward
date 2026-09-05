@@ -15,7 +15,7 @@ A typical client launches the server, sends `initialize`, creates or resumes a s
 | Connect and negotiate capabilities | [Launch](#Launch), [Framing](#Framing), and [Initialization](#Initialization) |
 | Open, resume, branch, or export a conversation | [Session methods](#Session_methods) |
 | Send input and render a response | [Turn methods](#Turn_methods) and [Turn notifications](#Turn_notifications) |
-| Handle tool approval or structured questions | [Tool approval bridge](#Tool_approval_bridge) and [UI question bridge](#UI_question_bridge) |
+| Handle tool approval or structured plugin UI | [Tool approval bridge](#Tool_approval_bridge) and [Structured UI bridge](#Structured_UI_bridge) |
 | Show model, runtime, auth, or configuration controls | [Runtime methods](#Runtime_methods), [Model methods](#Model_methods), and [Config and auth methods](#Config_and_auth_methods) |
 | Discover tools, MCP servers, prompts, skills, or plugins | [Tool and prompt methods](#Tool_and_prompt_methods) |
 
@@ -65,8 +65,10 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `transcript`: Kward transcript format support, including normalized messages, image/tool support, compaction summaries, and restored assistant reasoning as Pi-compatible `thinking` content blocks.
 - `sessions`: explicit RPC session mode, JSONL persistence, and methods for listing, auto-resume, live-session discovery, linear forking, compaction, and labeled tree navigation with branch summaries. Import is unsupported. Live session updates are also unsupported but reserve the `session/updated` notification name. Git worktree bindings are reported as interactive-TUI-only.
 - `turns`: asynchronous turns, per-session concurrency, active and recent turn lists, busy-input steering when the provider supports it, queued follow-ups, best-effort cancellation, and recent in-memory event replay. Per-turn options cover model, reasoning, tool scope, and tool approval, with structured client context for editor integrations.
-- `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions. A type may also report `transport: true` when a trusted external transport is allowed to target it; RPC opt-in and external transport opt-in remain separate.
-- `events`: the `turn/event` contract, assistant and reasoning events, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
+- `plugins`: the supported plugin API version and public `id`, `version`, and `apiVersion` metadata for identified plugins. Private plugin configuration is never included.
+- `pluginTools`: model-callable tools registered by trusted local plugins, including the registered count, `tools/list` discovery, execution-profile filtering, and permission-policy enforcement.
+- `pluginChats`: optional plugin-owned chats. The capability lists opted-in chat types and methods. Versioned types report declared attachment, steering, and transcript-paging capabilities. Clients must explicitly subscribe before receiving `pluginChat/event` notifications; plugin chats are independent from workspace sessions. A type may also report `transport: true` when a trusted external transport is allowed to target it; RPC opt-in and external transport opt-in remain separate.
+- `events`: the `turn/event` contract, assistant and reasoning events, typed plugin-command results, normalized tool metadata, tool updates and results, diff support, workspace guardrail status, focused-context and context-budget statistics tools, and explicitly unsupported shell changed-file and session-update flags.
 - `attachments`: supported input attachment contract for `turns/start`, with accepted base64 image MIME types and a stable max byte value.
 - `models`: model listing, refresh, selection, and exposed metadata across providers. Scoped model selection is not supported.
 - `runtime`: runtime state, message-count statistics, and OpenAI/Codex context usage. Kward does not yet compute cumulative token or cost statistics.
@@ -74,12 +76,13 @@ Read `capabilities` at runtime instead of assuming every feature is available. I
 - `runtimeSettings`: live `runtime/updateSetting` support for `defaultModel` and `defaultThinkingLevel`, plus `runtime/reload`.
 - `auth`: available providers and authentication methods, private API-key storage, sanitized status, and logout. OpenAI and Anthropic OAuth are supported; Copilot OAuth is CLI-only, OpenRouter PKCE is not implemented, and xAI has no supported stable third-party flow.
 - `memory`: opt-in structured memory support, interactive prompt injection only, JSON/JSONL local storage, and dedicated `memory/*` methods.
-- `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns.
+- `commands`: supported `commands/list` capability for prompt, skill, and plugin command sources, plus plugin execution through `commands/run` or plugin slash turns. Plugin commands may advertise validated JSON Schema arguments, shell-style text parsing, and structured results while legacy raw-string commands remain supported.
+- `pluginActions`: namespaced typed actions discovered through `pluginActions/list` and synchronously invoked through `pluginActions/run`. They use object arguments and structured results, are not local TUI commands, and cannot make blocking UI requests.
 - `skillCapture`: capture a reviewed personal `SKILL.md` from any saved session’s active branch through `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`.
 - `projectSkillTrust`: explicitly unsupported over RPC. RPC clients cannot answer the interactive Allow/Deny/Review decision, so project skills remain skipped unless the global `skills.trust_project` override is enabled.
 - `mcp`: local stdio MCP server support through the shared `mcpServers` config. RPC exposes MCP tools to turns and advertises discovery with `methods: ["tools/list", "mcp/status"]`, `toolMetadata: true`, and `serverStatus: true`. It does not support MCP resources, prompts, sampling, or Streamable HTTP.
 - `startupResources`: supported startup resource listing for context, skills, prompts, and plugins.
-- `extensionUi`: question bridge support via `ui/question` and `ui/answerQuestion`, plus plugin footer updates via `ui/footer`; other UI primitives are explicitly unsupported.
+- `extensionUi`: structured question support plus plugin `select`, `confirm`, `input`, `progress`, and `notify` UI through `ui/request`, `ui/answerRequest`, `ui/progress`, and `ui/notification`; plugin footer updates use `ui/footer`. Editor, widget, custom-canvas, and raw terminal-input primitives remain explicitly unsupported.
 - `composer`: composer-only UI features. Interactive session diff totals are explicitly unsupported over RPC (`composer.sessionDiff.supported: false`) because RPC clients already receive per-tool diff results and no live composer status payload is exposed. Clipboard copy is also unsupported over RPC (`composer.copy.supported: false`) because UI clients own clipboard access. Vibe editor prompts are unsupported over RPC (`composer.editorPrompt.supported: false`) because RPC has no live integrated editor buffer.
 - `security`: trusted-local behavior and optional per-turn tool approval. By default, RPC turns have no workspace mutation guard or tool approval, so shell commands and file changes can run. Clients can inspect file-tool guardrails through `capabilities.events.tools.workspaceGuardrails` and `runtime/state.workspaceGuardrailsEnabled`. `security.sandbox` reports the command sandbox mode, enforcement backend, and filesystem and network capabilities; session pinning and one-time elevation are unsupported. See [Command sandboxing](sandboxing.md) for the boundary and its limits.
 - `export`: supported transcript export formats. Currently `markdown` and `html`; default is `markdown`.
@@ -294,7 +297,11 @@ Returns `{ "session": {}, "editorText": "...", "cancelled": false, "aborted": fa
 
 ## Plugin chat methods
 
-Plugin chats are optional trusted-plugin capabilities, not Kward workspace sessions. When `initialize.capabilities.pluginChats.supported` is true, use `pluginChats/list` to discover available types.
+Plugin chats are optional trusted-plugin capabilities, not Kward workspace
+sessions. When `initialize.capabilities.pluginChats.supported` is true, use
+`pluginChats/list` to discover available types. Types using the versioned chat
+contract also report `apiVersion` and `capabilities` with `attachments`,
+`steering`, and `transcriptPaging`; legacy types omit those fields.
 
 ### `pluginChats/open`
 
@@ -330,7 +337,10 @@ Params:
 - `input`;
 - `attachments`: optional base64 image attachments using the same MIME and size limits as `turns/start`.
 
-Queues a plugin-chat turn and returns `{ id, chatId, status, ... }`. Plugin chat turns are serialized per chat and do not use workspace sessions, agents, or model overrides.
+Queues a plugin-chat turn and returns `{ id, chatId, status, ... }`. Plugin chat
+turns are serialized per chat and do not use workspace sessions, agents, or
+model overrides. A versioned chat whose declared `attachments` capability omits
+`image` rejects image attachments before invoking its driver.
 
 ### `pluginChats/turns/cancel`, `pluginChats/turns/status`, `pluginChats/turns/events`, `pluginChats/turns/list`, `pluginChats/turns/listActive`
 
@@ -439,6 +449,7 @@ Known event types:
 - `toolCall`
 - `toolUpdate`
 - `toolResult`
+- `pluginCommandResult`
 - `answer`
 - `turnCancelRequested`
 - `error`
@@ -461,6 +472,10 @@ Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFi
 `toolUpdate` additionally includes `delta.content` and optional `elapsedMs` for clients that want progress/status updates before the final result. Kward currently emits one update after each built-in tool finishes; clients should treat future additional updates as additive.
 
 `toolResult` additionally includes `result` with `content`, `isError`, optional unified `diff`, optional `changedFiles`, and `images`. Failed or declined tools set `isError: true`.
+
+A typed plugin slash command emits `pluginCommandResult` with `command` and a
+structured `result` containing optional `message` and `data` fields. It then
+emits the usual text events when the command produced user-facing output.
 
 Examples:
 
@@ -490,11 +505,11 @@ Params:
 
 Denied tools are returned to the model as error-like tool results instead of executing the local operation.
 
-## UI question bridge
+## Structured UI bridge
 
-Kward supports the structured question bridge and plugin footer updates over RPC. The `extensionUi` capability reports `question.supported: true` with `notification: "ui/question"`, `method: "ui/answerQuestion"`, `maxQuestions: 4`, `multiSelect: false`, and `preview: false`. It also reports `footer.supported: true` with `notification: "ui/footer"`. Other Pi-style extension UI primitives (`select`, `confirm`, `input`, `editor`, `widgets`, `custom`, and `terminalInput`) are explicitly reported as unsupported until Kward has a real plugin/extension consumer for them.
+Kward supports model questions and frontend-neutral plugin UI over RPC. The `extensionUi` capability reports the notification and answer method for each operation. `question` continues to use `ui/question` and `ui/answerQuestion`; plugin `select`, `confirm`, and `input` requests use `ui/request` and `ui/answerRequest`. Non-blocking plugin updates use `ui/progress` and `ui/notification`, while plugin footers use `ui/footer`. Editor, widget, custom-canvas, and raw terminal-input primitives remain explicitly unsupported.
 
-Question requests are validated before notification. Kward accepts 1-4 questions, each with 2-4 options, and rejects unsupported `multiSelect` or option `preview` requests.
+Question requests are validated before notification. Kward accepts 1-4 questions, each with 2-4 options, and rejects unsupported `multiSelect` or option `preview` requests. Plugin selections accept at most 100 options, and plugin text input is bounded to 16,384 bytes.
 
 When the model calls `ask_user_question`, RPC emits a `ui/question` notification:
 
@@ -506,16 +521,37 @@ When the model calls `ask_user_question`, RPC emits a `ui/question` notification
 }
 ```
 
-When a loaded Kward plugin registers a footer, RPC emits `ui/footer` after session creation/resume/clone and after each completed turn:
+When loaded Kward plugins contribute footer status, RPC emits `ui/footer` after
+session creation/resume/clone, after each completed turn, and when the status
+changes during its periodic refresh:
 
 ```json
 {
   "sessionId": "...",
-  "text": "custom footer text"
+  "text": "Bridge · 2 messages",
+  "segments": [
+    {
+      "id": "com.example.session/session",
+      "text": "Bridge",
+      "tooltip": "Current Kward session",
+      "priority": "high",
+      "order": 10
+    },
+    {
+      "id": "com.example.session/messages",
+      "text": "2 messages",
+      "priority": "low",
+      "order": 20
+    }
+  ]
 }
 ```
 
-An empty `text` value clears the client footer.
+`text` is the combined fallback for clients that do not render segments.
+`segments` remains display-ordered and lets richer clients show tooltips or
+apply their own width policy. An empty `text` with an empty `segments` array
+clears the client footer. The `extensionUi.footer` capability advertises
+segment, tooltip, and priority support.
 
 The UI must respond with `ui/answerQuestion`:
 
@@ -524,6 +560,40 @@ Params:
 - `sessionId`
 - `questionRequestId`
 - `answers`: answer array returned to the tool.
+
+When a plugin calls `ctx.ui.select`, `ctx.ui.confirm`, or `ctx.ui.input` during an asynchronous plugin-command turn or plugin tool call, RPC emits:
+
+```json
+{
+  "method": "ui/request",
+  "params": {
+    "sessionId": "...",
+    "requestId": "...",
+    "kind": "select",
+    "payload": {
+      "title": "Environment",
+      "message": "Choose a target",
+      "options": [
+        { "label": "Staging", "value": "staging", "description": "Deploy for testing." }
+      ]
+    }
+  }
+}
+```
+
+Answer it with `ui/answerRequest`:
+
+```json
+{
+  "sessionId": "...",
+  "requestId": "...",
+  "value": "staging"
+}
+```
+
+For `confirm`, `value` must be a boolean. For `input`, it is a string or `null` when cancelled. For `select`, it is one of the advertised option values or `null`. Submit interactive plugin commands through `turns/start`; synchronous `commands/run` deliberately reports blocking plugin UI as unavailable so the RPC reader never waits for an answer it cannot read.
+
+`ctx.ui.progress` emits `ui/progress` with `sessionId`, stable `id`, `message`, optional `percent`, and `done`. `ctx.ui.notify` emits `ui/notification` with `sessionId`, `message`, and `level` (`info`, `success`, `warning`, or `error`). These notifications do not require answers.
 
 ## Runtime methods
 
@@ -737,11 +807,11 @@ Params:
 
 Returns current tool schemas. The existing model-facing schema shape is preserved: each entry still has `type: "function"` and `function` with `name`, `description`, and `parameters`. Entries also include additive metadata for UI discovery:
 
-- `metadata.source`: one of practical source labels such as `builtin`, `mcp`, `web`, `skill`, `ui`, or `unknown`.
+- `metadata.source`: one of practical source labels such as `builtin`, `plugin`, `mcp`, `web`, `skill`, `ui`, or `unknown`.
 - `metadata.displayName`: human-readable tool label.
 - MCP tools also include `metadata.serverName` and `metadata.remoteName`. The callable name remains sanitized with a double underscore, for example `github__search_issues`, while `displayName` is `github.search_issues`.
 
-Clients that only read `tools[].function` remain compatible.
+Clients that only read `tools[].function` remain compatible. Model-callable tools registered by trusted local plugins appear here with `metadata.source: "plugin"` and follow the same per-session execution-profile filtering as built-in tools.
 
 ### `mcp/status`
 
@@ -766,7 +836,46 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Returns frontend-neutral slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
+Returns frontend-neutral slash command metadata for configured prompt templates, skills, and plugins. Prompt command names omit the leading slash. Skill command names use `skill:<name>`. Plugin command names omit the leading slash and include `executable: true`. Typed plugin entries additionally include `typed: true`, their strict object `schema`, declared `positionals`, and `pluginId` when the plugin has stable identity. Builtin terminal-only commands are omitted. Prompt commands can be submitted directly to `turns/start` as slash commands or expanded first with `prompts/expand`; plugin commands can be submitted to `turns/start` or run explicitly with `commands/run`.
+
+### `commands/run`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+- `name`: plugin command name, with or without the leading slash.
+- `arguments`: shell-style text or, for typed commands, an object matching the advertised schema.
+
+Legacy plugin commands return their existing string-or-null `result`. Typed
+commands return `result` as an object containing optional user-facing `message`
+and JSON-compatible `data`; text emitted through `ctx.say` remains in `output`.
+Blocking structured UI requests are unavailable on this synchronous path. Use a
+slash-command `turns/start` call when the command needs interactive UI.
+
+### `pluginActions/list`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+
+Returns identified-plugin actions with `id`, local `name`, `pluginId`,
+`description`, and strict object `schema`. Action IDs use
+`<plugin-id>/<action-name>`.
+
+### `pluginActions/run`
+
+Params:
+
+- `sessionId`: active RPC session ID.
+- `id`: complete namespaced action ID.
+- `arguments`: object matching the action schema; defaults to an empty object.
+
+Returns `action`, `output`, and a structured `result` with optional `message` and
+`data`. Actions run synchronously and therefore expose notifications and progress
+but not blocking questions, selections, confirmations, or input. They are
+rejected when the session execution profile disables plugin commands. Actions
+are intentionally not exposed in local slash completion; a plugin should also
+register a typed command when it needs a human-facing TUI entry point.
 
 ### `skills/captureSessions`, `skills/captureDraft`, and `skills/saveCapturedDraft`
 
@@ -884,4 +993,5 @@ Returns login status for a login ID.
 - RPC is intended for a trusted local UI and can read/write files, run shell commands, update secrets, and use OAuth.
 - Workspace roots may be any existing local directory accessible to the process.
 - Tool execution matches current CLI behavior; mutating tools are not approval-gated by RPC.
+- `commands/run` and `pluginActions/run` execute trusted local plugin code. Action schemas validate data shape but are not an authorization boundary; use execution profiles to disable plugin operations for restricted sessions.
 - Responses and diagnostics redact secret-looking fields, but clients should still avoid logging full protocol traffic unless necessary.

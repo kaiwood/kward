@@ -15,7 +15,7 @@ If you use Kward from the terminal, start with the [user guides](file.README.htm
 
 ### Plugin authors
 
-Use plugins when you need trusted local Ruby code for slash commands, prompt context, footer UI, transcript events, or RPC-visible commands.
+Use plugins when you need trusted local Ruby code for typed commands and actions, model-callable tools, prompt context, footer UI, transcript events, plugin-owned chats, or external transports.
 
 Read first:
 
@@ -28,6 +28,16 @@ Generated entry points:
 - [`Kward::PluginRegistry`](Kward/PluginRegistry.html)
 - [`Kward::PluginRegistry::DSL`](Kward/PluginRegistry/DSL.html)
 - [`Kward::PluginRegistry::Context`](Kward/PluginRegistry/Context.html)
+- [`Kward::PluginCommand`](Kward/PluginCommand.html)
+- [`Kward::PluginAction`](Kward/PluginAction.html)
+- [`Kward::PluginResult`](Kward/PluginResult.html)
+- [`Kward::PluginHost`](Kward/PluginHost.html)
+- [`Kward::PluginStore`](Kward/PluginStore.html)
+- [`Kward::PluginScopedStore`](Kward/PluginScopedStore.html)
+- [`Kward::PluginChatCapabilities`](Kward/PluginChatCapabilities.html)
+- [`Kward::PluginTask`](Kward/PluginTask.html)
+- [`Kward::PluginDisposable`](Kward/PluginDisposable.html)
+- [`Kward::PluginTabHost`](Kward/PluginTabHost.html)
 
 ### Tool authors and contributors
 
@@ -45,7 +55,7 @@ Generated entry points:
 - [`Kward::Tools::Base`](Kward/Tools/Base.html)
 - [`Kward::ToolRegistry`](Kward/ToolRegistry.html)
 
-These pages document the schema and dispatch contract used by built-in tools. Kward does not yet provide a plugin DSL for registering arbitrary model-callable tools; contributors add them through the built-in registry and keep schemas, validation, docs, and tests aligned.
+These pages document the schema and dispatch contract used by built-in tools. Plugin authors can register model-callable tools through `PluginRegistry::DSL#tool`; those tools use the same permission, lifecycle-hook, execution-profile, and output-compaction path.
 
 ### RPC and frontend authors
 

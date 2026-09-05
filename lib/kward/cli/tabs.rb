@@ -1,4 +1,5 @@
 require "json"
+require "securerandom"
 require "thread"
 require_relative "../cancellation"
 
@@ -18,6 +19,7 @@ module Kward
         :session,
         :agent,
         :driver,
+        :plugin_host,
         :diff,
         :snapshot,
         :status,
@@ -211,14 +213,23 @@ module Kward
         end
 
         tab_type = plugin_registry.tab_type_for_id(descriptor["plugin_tab_type"])
+        host = nil
         driver = if tab_type&.local
-          host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
-          tab_type.handler.call(host, descriptor)
+          descriptor["scope_key"] ||= plugin_tab_scope_key(tab_type)
+          host = build_plugin_tab_host(tab_type, workspace_root: session_store.cwd, scope_key: descriptor["scope_key"])
+          begin
+            created_driver = tab_type.handler.call(host, descriptor)
+            raise "Plugin tab #{descriptor["plugin_tab_type"].inspect} did not return a tab driver." unless created_driver
+
+            tab_type.capabilities.validate_driver!(created_driver)
+          rescue StandardError
+            host.shutdown
+            raise
+          end
         else
           UnavailableTabDriver.new(descriptor: descriptor, message: "Plugin tab #{descriptor["plugin_tab_type"].inspect} is unavailable.")
         end
-        raise "Plugin tab #{descriptor["plugin_tab_type"].inspect} did not return a tab driver." unless driver
-        build_tab(nil, nil, driver: driver, label: label || descriptor["label"] || tab_type&.title)
+        build_tab(nil, nil, driver: driver, plugin_host: host, label: label || descriptor["label"] || tab_type&.title)
       end
 
       def open_plugin_tab(name, session_store)
@@ -231,12 +242,20 @@ module Kward
 
         save_active_tab_state
         stop_tab_live_view
-        descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title }
-        host = PluginTabHost.new(client: @client, workspace_root: session_store.cwd)
-        driver = tab_type.handler.call(host, descriptor)
-        raise "Plugin tab #{name.inspect} did not return a tab driver." unless driver
+        scope_key = plugin_tab_scope_key(tab_type)
+        descriptor = { "kind" => "plugin", "plugin_tab_type" => tab_type.id, "label" => tab_type.title, "scope_key" => scope_key }
+        host = build_plugin_tab_host(tab_type, workspace_root: session_store.cwd, scope_key: scope_key)
+        begin
+          driver = tab_type.handler.call(host, descriptor)
+          raise "Plugin tab #{name.inspect} did not return a tab driver." unless driver
 
-        @tabs << build_tab(nil, nil, driver: driver, label: tab_type.title)
+          tab_type.capabilities.validate_driver!(driver)
+        rescue StandardError
+          host.shutdown
+          raise
+        end
+
+        @tabs << build_tab(nil, nil, driver: driver, plugin_host: host, label: tab_type.title)
         @active_tab_index = @tabs.length - 1
         activate_tab(@active_tab_index)
       rescue StandardError => e
@@ -275,6 +294,7 @@ module Kward
           hook_manager: hook_manager,
           hook_context: hook_context,
           mcp_clients: strict ? [] : nil,
+          plugin_tools: strict ? [] : plugin_registry.tools,
           git_committer: git_committer
         )
         @footer_conversation = conversation
@@ -307,12 +327,13 @@ module Kward
         end
       end
 
-      def build_tab(session, agent, driver: nil, label: nil)
+      def build_tab(session, agent, driver: nil, plugin_host: nil, label: nil)
         driver ||= SessionTabDriver.new(session: session, agent: agent)
         TabRuntime.new(
           session: session,
           agent: agent,
           driver: driver,
+          plugin_host: plugin_host,
           diff: session&.path ? SessionDiff.from_session_file(session.path) : SessionDiff.new,
           snapshot: nil,
           status: "idle",
@@ -436,6 +457,7 @@ module Kward
 
         if @tabs.length <= 1
           close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
+          close_plugin_tab(tab)
           @tabs.clear
           persist_tabs
           return PromptInterface::EXIT_INPUT
@@ -444,7 +466,7 @@ module Kward
         stop_tab_live_view
         close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
         tab.session&.delete_if_unused if tab&.session.respond_to?(:delete_if_unused)
-        tab.driver.close if tab.driver.respond_to?(:close)
+        close_plugin_tab(tab)
         @tabs.delete_at(@active_tab_index)
         @active_tab_index = [@active_tab_index, @tabs.length - 1].min
         activate_tab(@active_tab_index)
@@ -700,10 +722,23 @@ module Kward
 
       def submit_tab_input(tab, input, display_input: nil)
         return if input.to_s.strip.empty?
+        return unless plugin_tab_attachments_allowed?(tab, input)
 
         save_active_tab_state
         start_tab_turn(tab, input, display_input: display_input)
         start_tab_live_view(tab) if tab == active_tab
+      end
+
+      def plugin_tab_attachments_allowed?(tab, input)
+        capabilities = tab.plugin_host&.capabilities
+        return true unless capabilities&.declared?
+        return true if capabilities.allows_attachment?(:image)
+
+        attached = ImageAttachments.references_from_text(input.to_s).any? { |reference| reference[:status] == :attached }
+        return true unless attached
+
+        runtime_output("This plugin chat does not allow image attachments.")
+        false
       end
 
       def start_tab_turn(tab, input, display_input: nil)
@@ -713,7 +748,13 @@ module Kward
         tab.unread = false
         tab.attention = nil
         tab.cancellation = Cancellation.new
-        tab.steering = tab.driver.supports_steering? && steering_supported? ? Steering.new : nil
+        steering_capability = tab.plugin_host&.capabilities
+        driver_supports_steering = if steering_capability&.declared?
+          steering_capability.steering?
+        else
+          tab.driver.supports_steering?
+        end
+        tab.steering = driver_supports_steering && steering_supported? ? Steering.new : nil
         tab.error = nil
         tab.answer = nil
         tab.error_reported = false
@@ -1096,16 +1137,52 @@ module Kward
           end
           tab.background_run = nil
           close_kwsh_session(tab.shell) if tab&.shell && respond_to?(:close_kwsh_session, true)
+          close_plugin_tab(tab)
         rescue StandardError
           nil
         end
+      end
+
+      def build_plugin_tab_host(tab_type, workspace_root:, scope_key:)
+        PluginTabHost.new(
+          client: @client,
+          workspace_root: workspace_root,
+          plugin_host: tab_type.plugin_id && plugin_registry.plugin_for(tab_type.plugin_id),
+          type_id: tab_type.id,
+          surface: :local,
+          scope_key: scope_key,
+          capabilities: tab_type.capabilities
+        )
+      end
+
+      def plugin_tab_scope_key(tab_type)
+        tab_type.singleton == :global ? "global" : SecureRandom.uuid
+      end
+
+      def close_plugin_tab(tab)
+        return unless tab&.plugin_host
+
+        if tab.driver.respond_to?(:close)
+          tab.driver.close
+        elsif tab.driver.respond_to?(:shutdown)
+          tab.driver.shutdown
+        end
+      rescue StandardError => e
+        runtime_output("Plugin tab cleanup error: #{e.message}")
+      ensure
+        tab&.plugin_host&.shutdown
+        tab.plugin_host = nil if tab
       end
 
       def persist_tabs
         return unless @tab_store
 
         @tab_store.save(
-          tabs: @tabs.map { |tab| tab.driver.descriptor.merge("label" => tab.label.to_s) },
+          tabs: @tabs.map do |tab|
+            descriptor = tab.driver.descriptor.merge("label" => tab.label.to_s)
+            descriptor["scope_key"] ||= tab.plugin_host.scope_key if tab.plugin_host
+            descriptor
+          end,
           active_index: @active_tab_index
         )
       end

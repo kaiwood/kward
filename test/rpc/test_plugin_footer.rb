@@ -6,9 +6,10 @@ class TestRPCPluginFooter < KwardTestCase
   def test_rpc_plugin_footer_notifications_include_session_text
     Dir.mktmpdir do |config_dir|
       registry = Kward::PluginRegistry.new
-      registry.evaluate do |plugin|
-        plugin.footer do |ctx|
-          "#{ctx.session_name || "unnamed"} #{ctx.transcript.messages.length} messages"
+      registry.evaluate(path: "/plugins/session.rb", id: "com.example.session", version: "1.0.0", api: 1) do |plugin|
+        plugin.status("session", order: 10, priority: :high) { |ctx| ctx.session_name || "unnamed" }
+        plugin.status("messages", order: 20, priority: :low) do |ctx|
+          { text: "#{ctx.transcript.messages.length} messages", tooltip: "Conversation size" }
         end
       end
       manager = Kward::RPC::SessionManager.new(server: RecordingServer.new, client: RecordingClient.new(["done"]), config_dir: config_dir)
@@ -16,13 +17,21 @@ class TestRPCPluginFooter < KwardTestCase
 
       session = manager.create_session(workspace_root: Dir.pwd, name: "Bridge")
       create_footer = manager.instance_variable_get(:@server).notifications.find { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "Bridge 0 messages" }, create_footer[:params])
+      assert_equal({
+        sessionId: session[:id],
+        text: "Bridge · 0 messages",
+        segments: [
+          { id: "com.example.session/session", text: "Bridge", priority: "high", order: 10 },
+          { id: "com.example.session/messages", text: "0 messages", tooltip: "Conversation size", priority: "low", order: 20 }
+        ]
+      }, create_footer[:params])
 
       turn = manager.start_turn(session_id: session[:id], input: "hello")
       wait_until { manager.turn_status(turn_id: turn[:id])[:status] == "completed" }
 
       footer_notifications = manager.instance_variable_get(:@server).notifications.select { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "Bridge 2 messages" }, footer_notifications.last[:params])
+      assert_equal "Bridge · 2 messages", footer_notifications.last[:params][:text]
+      assert_equal "2 messages", footer_notifications.last[:params][:segments].last[:text]
     end
   end
 
@@ -52,8 +61,12 @@ class TestRPCPluginFooter < KwardTestCase
         end
 
         footer_notifications = server.notifications.select { |notification| notification[:method] == "ui/footer" }
-        assert_equal({ sessionId: session[:id], text: "Reloaded footer" }, footer_notifications.first[:params])
-        assert_equal({ sessionId: session[:id], text: "" }, footer_notifications.last[:params])
+        assert_equal({
+          sessionId: session[:id],
+          text: "Reloaded footer",
+          segments: [{ id: "legacy/footer", text: "Reloaded footer", priority: "normal", order: 100 }]
+        }, footer_notifications.first[:params])
+        assert_equal({ sessionId: session[:id], text: "", segments: [] }, footer_notifications.last[:params])
         manager.close_session(session_id: session[:id])
       end
     end
@@ -148,8 +161,16 @@ class TestRPCPluginFooter < KwardTestCase
       wait_until { server.notifications.count { |notification| notification[:method] == "ui/footer" } >= 2 }
 
       footer_notifications = server.notifications.select { |notification| notification[:method] == "ui/footer" }
-      assert_equal({ sessionId: session[:id], text: "tick 1" }, footer_notifications.first[:params])
-      assert_equal({ sessionId: session[:id], text: "tick 2" }, footer_notifications[1][:params])
+      assert_equal({
+        sessionId: session[:id],
+        text: "tick 1",
+        segments: [{ id: "legacy/plugin", text: "tick 1", priority: "normal", order: 100 }]
+      }, footer_notifications.first[:params])
+      assert_equal({
+        sessionId: session[:id],
+        text: "tick 2",
+        segments: [{ id: "legacy/plugin", text: "tick 2", priority: "normal", order: 100 }]
+      }, footer_notifications[1][:params])
       manager.close_session(session_id: session[:id])
     end
   ensure

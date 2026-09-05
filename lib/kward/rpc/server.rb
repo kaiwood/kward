@@ -75,18 +75,22 @@ module Kward
         "memory/why", "memory/summarize"
       ].freeze
       COMMAND_METHODS = ["commands/list", "commands/run"].freeze
+      PLUGIN_ACTION_METHODS = ["pluginActions/list", "pluginActions/run"].freeze
       SKILL_CAPTURE_METHODS = ["skills/captureSessions", "skills/captureDraft", "skills/saveCapturedDraft"].freeze
       STARTUP_RESOURCE_METHODS = ["resources/startup"].freeze
       CONFIG_METHODS = ["config/read", "config/update"].freeze
       LOGGING_METHODS = ["logging/stats", "logging/tokenCsv"].freeze
       LIFECYCLE_HOOK_METHODS = ["hooks/logs"].freeze
-      UI_METHODS = ["ui/answerQuestion"].freeze
+      UI_METHODS = ["ui/answerQuestion", "ui/answerRequest"].freeze
       TOOL_APPROVAL_METHODS = ["tool/answerApproval"].freeze
       TRANSPORT_METHODS = ["transports/list", "transports/status"].freeze
       SESSION_EVENT_NOTIFICATION = "session/event"
       SESSION_UPDATED_NOTIFICATION = "session/updated"
       TURN_EVENT_NOTIFICATION = "turn/event"
       UI_QUESTION_NOTIFICATION = "ui/question"
+      UI_REQUEST_NOTIFICATION = "ui/request"
+      UI_PROGRESS_NOTIFICATION = "ui/progress"
+      UI_NOTIFICATION = "ui/notification"
       UI_FOOTER_NOTIFICATION = "ui/footer"
       TOOL_APPROVAL_NOTIFICATION = "tool/approvalRequested"
       HOOK_EVENT_NOTIFICATION = "hook/event"
@@ -105,6 +109,7 @@ module Kward
         auth: AUTH_METHODS,
         memory: MEMORY_METHODS,
         commands: COMMAND_METHODS,
+        plugin_actions: PLUGIN_ACTION_METHODS,
         skill_capture: SKILL_CAPTURE_METHODS,
         startup_resources: STARTUP_RESOURCE_METHODS,
         config: CONFIG_METHODS,
@@ -176,6 +181,7 @@ module Kward
         @transport_manager.shutdown
         @plugin_chat_manager.shutdown
         @session_manager.shutdown_sessions
+        @session_manager.shutdown_plugins
         @shutdown_complete = true
       end
 
@@ -284,6 +290,10 @@ module Kward
           commands_list(params)
         when COMMAND_METHODS[1]
           commands_run(params)
+        when PLUGIN_ACTION_METHODS[0]
+          plugin_actions_list(params)
+        when PLUGIN_ACTION_METHODS[1]
+          plugin_actions_run(params)
         when SKILL_CAPTURE_METHODS[0]
           { sessions: @session_manager.skill_capture_sessions }
         when SKILL_CAPTURE_METHODS[1]
@@ -421,6 +431,8 @@ module Kward
           @plugin_chat_manager.list_turns(chat_id: params["chatId"], active: true)
         when UI_METHODS[0]
           @session_manager.answer_question(session_id: params.fetch("sessionId"), question_request_id: params.fetch("questionRequestId"), answers: params.fetch("answers"))
+        when UI_METHODS[1]
+          @session_manager.answer_plugin_ui(session_id: params.fetch("sessionId"), request_id: params.fetch("requestId"), value: params["value"])
         when TOOL_APPROVAL_METHODS[0]
           @session_manager.answer_tool_approval(session_id: params.fetch("sessionId"), approval_request_id: params.fetch("approvalRequestId"), approved: params.fetch("approved"))
         else
@@ -469,13 +481,27 @@ module Kward
             startMode: "cliOnly",
             entries: @transport_manager.list
           },
+          plugins: {
+            apiVersion: PluginRegistry::PLUGIN_API_VERSION,
+            identified: @session_manager.plugin_registry.plugins.map do |plugin|
+              { id: plugin.id, version: plugin.version, apiVersion: plugin.api_version }
+            end
+          },
+          pluginTools: {
+            supported: true,
+            registered: @session_manager.plugin_registry.tools.length,
+            discoveryMethod: TOOL_METHODS.first,
+            source: "plugin",
+            executionProfileFiltering: true,
+            permissionPolicy: true
+          },
           pluginChats: {
             supported: @plugin_chat_manager.supported_types.any?,
             methods: PLUGIN_CHAT_METHODS,
             notification: "pluginChat/event",
             subscriptions: { supported: true, methods: PLUGIN_CHAT_METHODS.values_at(3, 4), requiredForLiveEvents: true },
             attachments: { supported: true, method: PLUGIN_CHAT_METHODS[5], encoding: "base64", mimeTypes: SessionManager::RPC_IMAGE_MIME_TYPES, maxBytes: SessionManager::RPC_ATTACHMENT_MAX_BYTES },
-            types: @plugin_chat_manager.supported_types.map { |type| { id: type.id, name: type.name, title: type.title, singleton: type.singleton, transport: type.transport == true ? true : nil }.compact }
+            types: @plugin_chat_manager.type_entries
           },
           turns: {
             mode: "async",
@@ -513,6 +539,7 @@ module Kward
             reasoning: { start: false, delta: true, boundary: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
             steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
+            pluginCommands: { structuredResult: "pluginCommandResult" },
             tools: { call: true, update: true, result: true, normalizedMetadata: true, diffs: true, firstChangedLine: true, changedFiles: true, workspaceGuardrails: workspace_guardrails_enabled?, focusedContext: true, contextBudgetStats: true },
             errors: true,
             sessionUpdates: false
@@ -577,7 +604,26 @@ module Kward
           },
           memory: { supported: true, optIn: true, defaultEnabled: false, autoSummaryDefaultEnabled: false, promptInjection: "interactive", storage: { core: "json", soft: "jsonl", events: "jsonl" }, methods: MEMORY_METHODS },
           stability: { protocol: "stable", compatibility: "additive-fields-unless-protocol-version-changes", experimentalCapabilities: [] },
-          commands: { supported: true, methods: COMMAND_METHODS, method: COMMAND_METHODS[0], runMethod: COMMAND_METHODS[1], sources: ["builtin", "prompt", "skill", "plugin"], executableSources: ["builtin", "plugin"] },
+          commands: {
+            supported: true,
+            methods: COMMAND_METHODS,
+            method: COMMAND_METHODS[0],
+            runMethod: COMMAND_METHODS[1],
+            sources: ["builtin", "prompt", "skill", "plugin"],
+            executableSources: ["builtin", "plugin"],
+            typedArguments: { supported: true, schema: "jsonSchemaObject", textSyntax: "shellFlags", legacyRawStrings: true },
+            structuredResults: true
+          },
+          pluginActions: {
+            supported: true,
+            methods: PLUGIN_ACTION_METHODS,
+            registered: @session_manager.plugin_actions.length,
+            namespace: "pluginId/actionName",
+            arguments: "jsonSchemaObject",
+            structuredResults: true,
+            blockingUi: false,
+            localTui: false
+          },
           skillCapture: { supported: true, methods: SKILL_CAPTURE_METHODS, destination: "personal", source: "savedSessionActiveLeaf", reviewRequired: true, overwrite: "explicit", autoActivate: false },
           projectSkillTrust: { supported: false, trustRequired: true, reason: "RPC has no interactive trust decision bridge; project skills remain skipped unless globally enabled." },
           mcp: {
@@ -599,12 +645,14 @@ module Kward
           scratchpad: { supported: false, reason: "interactiveTuiOnly" },
           extensionUi: {
             question: { supported: true, notification: UI_QUESTION_NOTIFICATION, method: UI_METHODS.first, maxQuestions: 4, multiSelect: false, preview: false },
-            select: false,
-            confirm: false,
-            input: false,
+            select: { supported: true, notification: UI_REQUEST_NOTIFICATION, method: UI_METHODS[1], maxOptions: PluginUI::MAX_OPTIONS },
+            confirm: { supported: true, notification: UI_REQUEST_NOTIFICATION, method: UI_METHODS[1] },
+            input: { supported: true, notification: UI_REQUEST_NOTIFICATION, method: UI_METHODS[1], maxBytes: PluginUI::MAX_TEXT_BYTES },
+            progress: { supported: true, notification: UI_PROGRESS_NOTIFICATION },
+            notify: { supported: true, notification: UI_NOTIFICATION, levels: PluginUI::NOTIFICATION_LEVELS.map(&:to_s) },
             editor: false,
             widgets: false,
-            footer: { supported: true, notification: UI_FOOTER_NOTIFICATION },
+            footer: { supported: true, notification: UI_FOOTER_NOTIFICATION, segments: true, tooltip: true, priorities: PluginRegistry::STATUS_PRIORITIES.keys.map(&:to_s) },
             custom: false,
             terminalInput: false
           },
@@ -789,8 +837,12 @@ module Kward
             argumentHint: command.argument_hint,
             source: "plugin",
             path: command.path,
-            executable: true
-          }
+            pluginId: command.plugin_id,
+            executable: true,
+            typed: command.typed?,
+            schema: command.schema,
+            positionals: command.positionals
+          }.compact
         end
         { commands: builtins + prompts + skills + plugins }
       end
@@ -799,7 +851,29 @@ module Kward
         @session_manager.run_command(
           session_id: params.fetch("sessionId"),
           command: params.fetch("name"),
-          arguments: params["arguments"] || ""
+          arguments: params.key?("arguments") ? params["arguments"] : ""
+        )
+      end
+
+      def plugin_actions_list(params)
+        @session_manager.runtime_state(session_id: params.fetch("sessionId"))
+        actions = @session_manager.plugin_actions.map do |action|
+          {
+            id: action.id,
+            name: action.name,
+            pluginId: action.plugin_id,
+            description: action.description,
+            schema: action.schema
+          }
+        end
+        { actions: actions }
+      end
+
+      def plugin_actions_run(params)
+        @session_manager.run_plugin_action(
+          session_id: params.fetch("sessionId"),
+          id: params.fetch("id"),
+          arguments: params.key?("arguments") ? params["arguments"] : {}
         )
       end
 

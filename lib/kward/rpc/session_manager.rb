@@ -66,7 +66,7 @@ module Kward
       WORKER_STOP_TIMEOUT = 2.0
       WORKER_STOP = Object.new.freeze
 
-      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :execution_profile, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, keyword_init: true)
+      RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :execution_profile, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, :last_footer_segments, keyword_init: true)
       Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :execution_profile, :mutex, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
@@ -215,7 +215,7 @@ module Kward
 
       # Returns the plugin registry shared by RPC sessions and plugin chats.
       def plugin_registry
-        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_plugin_command_names).tap(&:start!)
       end
 
       # Renames the persisted session attached to an RPC session id.
@@ -392,6 +392,11 @@ module Kward
         { closed: true }
       end
 
+      def shutdown_plugins
+        @plugin_registry&.shutdown!
+        { closed: true }
+      end
+
       # Returns the normalized transcript for the active RPC session.
       def transcript(session_id:)
         rpc_session = fetch_session(session_id)
@@ -490,6 +495,12 @@ module Kward
         { ok: true }
       end
 
+      def answer_plugin_ui(session_id:, request_id:, value:)
+        rpc_session = fetch_session(session_id)
+        rpc_session.prompt.answer_plugin_ui(request_id, value)
+        { ok: true }
+      end
+
       def answer_tool_approval(session_id:, approval_request_id:, approved:)
         rpc_session = fetch_session(session_id)
         rpc_session.prompt.answer_tool_approval(approval_request_id, approved: approved)
@@ -525,16 +536,37 @@ module Kward
 
       def run_plugin_command(session_id:, command:, arguments: "")
         rpc_session = fetch_session(session_id)
+        raise ArgumentError, "Plugin commands are disabled for this session" if rpc_session.execution_profile && !rpc_session.execution_profile.plugin_commands
+
         command = plugin_registry.command_for(command.to_s.delete_prefix("/")) || raise(ArgumentError, "Unknown plugin command: #{command}")
+        arguments = command.parse_arguments(arguments)
         output = []
-        context = plugin_context(rpc_session, args: arguments.to_s, say_callback: lambda { |message| output << message.to_s })
-        result = command.handler.call(arguments.to_s, context)
+        context = plugin_context(rpc_session, args: arguments, say_callback: lambda { |message| output << message.to_s })
+        result = command.normalize_result(command.handler.call(arguments, context))
         output = rpc_session.plugin_output.shift(rpc_session.plugin_output.length) + output
-        { command: command.name, output: output, result: result.nil? ? nil : result.to_s }
+        serialized_result = command.typed? ? result.to_h : (result.nil? ? nil : result.to_s)
+        { command: command.name, output: output, result: serialized_result }
       end
 
       def plugin_commands
         plugin_registry.commands
+      end
+
+      def plugin_actions
+        plugin_registry.actions
+      end
+
+      def run_plugin_action(session_id:, id:, arguments: {})
+        rpc_session = fetch_session(session_id)
+        raise ArgumentError, "Plugin actions are disabled for this session" if rpc_session.execution_profile && !rpc_session.execution_profile.plugin_commands
+
+        action = plugin_registry.action_for(id) || raise(ArgumentError, "Unknown plugin action: #{id}")
+        arguments = action.parse_arguments(arguments)
+        output = []
+        context = plugin_context(rpc_session, args: arguments, say_callback: lambda { |message| output << message.to_s })
+        result = action.normalize_result(action.handler.call(arguments, context))
+        output = rpc_session.plugin_output.shift(rpc_session.plugin_output.length) + output
+        { action: action.id, output: output, result: result.to_h }
       end
 
       def available_models
@@ -628,6 +660,8 @@ module Kward
 
       def reload_plugins
         registry = PluginRegistry.load(reserved_commands: reserved_plugin_command_names)
+        @plugin_registry&.reload!
+        registry.start!
         sessions = @mutex.synchronize do
           @plugin_registry = registry
           @sessions.values
@@ -636,7 +670,7 @@ module Kward
           rpc_session.conversation.plugin_registry = registry if rpc_session.conversation.respond_to?(:plugin_registry=)
           rpc_session.conversation.refresh_system_message! if rpc_session.conversation.respond_to?(:refresh_system_message!)
           rebuild_session_tools(rpc_session)
-          if registry.footer_renderer
+          if registry.status?
             start_footer_worker(rpc_session)
             emit_footer_update(rpc_session)
           else
@@ -714,7 +748,9 @@ module Kward
         hook_context = lifecycle_hook_context(
           conversation: rpc_session.conversation,
           session: rpc_session.session,
-          workspace_root: rpc_session.workspace_root
+          workspace_root: rpc_session.workspace_root,
+          prompt: rpc_session.prompt,
+          session_id: rpc_session.id
         )
         hook_manager = lifecycle_hook_manager(rpc_session.workspace_root)
         tool_registry = build_tool_registry(
@@ -1042,7 +1078,13 @@ module Kward
         conversation.plugin_registry ||= plugin_registry if conversation.respond_to?(:plugin_registry)
         id = SecureRandom.uuid
         prompt = PromptBridge.new(notify: method(:notify), session_id: id)
-        hook_context = lifecycle_hook_context(conversation: conversation, session: session, workspace_root: workspace_root)
+        hook_context = lifecycle_hook_context(
+          conversation: conversation,
+          session: session,
+          workspace_root: workspace_root,
+          prompt: prompt,
+          session_id: id
+        )
         hook_manager = lifecycle_hook_manager(workspace_root)
         tool_registry = build_tool_registry(workspace_root, prompt, hook_manager: hook_manager, hook_context: hook_context)
         agent = Agent.new(
@@ -1074,6 +1116,7 @@ module Kward
           workspace: configured_workspace(workspace_root),
           prompt: prompt,
           allowed_tool_names: allowed_tool_names,
+          plugin_tools: plugin_registry.tools,
           tool_approval: tool_approval,
           approval_for_allowed_tools: !tool_approval.nil?,
           hook_manager: hook_manager,
@@ -1115,13 +1158,16 @@ module Kward
         })
       end
 
-      def lifecycle_hook_context(conversation:, session:, workspace_root:)
+      def lifecycle_hook_context(conversation:, session:, workspace_root:, prompt: nil, session_id: nil)
+        say_callback = lambda { |message| notify("hook/message", { message: message.to_s }) }
         PluginRegistry::Context.new(
           conversation: conversation,
           args: "",
           session: session,
           workspace_root: workspace_root,
-          say_callback: lambda { |message| notify("hook/message", { message: message.to_s }) }
+          say_callback: say_callback,
+          ui: rpc_plugin_ui(prompt: prompt, session_id: session_id, say_callback: say_callback, requests: false),
+          tool_ui: rpc_plugin_ui(prompt: prompt, session_id: session_id, say_callback: say_callback, requests: !prompt.nil?)
         )
       end
 
@@ -1212,7 +1258,7 @@ module Kward
       end
 
       def start_footer_worker(rpc_session)
-        return unless plugin_registry.footer_renderer
+        return unless plugin_registry.status?
         return if rpc_session.footer_worker&.alive?
 
         rpc_session.footer_worker = Thread.new do
@@ -1371,12 +1417,43 @@ module Kward
         turn_payload(turn)
       end
 
-      def plugin_context(rpc_session, args: nil, say_callback:)
+      def plugin_context(rpc_session, args: nil, say_callback:, requests: false, cancellation: nil)
         PluginRegistry::Context.new(
           conversation: rpc_session.conversation,
           args: args,
           session: rpc_session.session,
           workspace_root: rpc_session.workspace_root,
+          say_callback: say_callback,
+          cancellation: cancellation,
+          ui: rpc_plugin_ui(
+            prompt: rpc_session.prompt,
+            session_id: rpc_session.id,
+            say_callback: say_callback,
+            requests: requests
+          )
+        )
+      end
+
+      def rpc_plugin_ui(prompt:, session_id:, say_callback:, requests:)
+        capabilities = { progress: true, notify: true }
+        requester = nil
+        if requests && prompt
+          capabilities.merge!(question: true, select: true, confirm: true, input: true)
+          requester = lambda do |kind, payload, cancellation: nil|
+            if kind == :question
+              prompt.ask_user_question(payload.fetch(:questions), cancellation: cancellation)
+            else
+              prompt.request_plugin_ui(kind, payload, cancellation: cancellation)
+            end
+          end
+        end
+        emitter = lambda do |kind, payload|
+          method = kind == :progress ? "ui/progress" : "ui/notification"
+          payload = payload.merge(level: payload[:level].to_s) if payload[:level]
+          notify(method, { sessionId: session_id }.merge(payload))
+        end
+        PluginUI.new(
+          backend: PluginUI::Backend.new(capabilities: capabilities, requester: requester, emitter: emitter),
           say_callback: say_callback
         )
       end
@@ -1384,9 +1461,21 @@ module Kward
       def run_plugin_turn(rpc_session, turn)
         turn.cancellation&.raise_if_cancelled!
         command = plugin_registry.command_for(turn.plugin_command_name) || raise(ArgumentError, "Unknown plugin command: #{turn.plugin_command_name}")
+        arguments = command.parse_arguments(turn.plugin_arguments)
         output = []
-        context = plugin_context(rpc_session, args: turn.plugin_arguments.to_s, say_callback: lambda { |message| output << message.to_s })
-        result = command.handler.call(turn.plugin_arguments.to_s, context)
+        context = plugin_context(
+          rpc_session,
+          args: arguments,
+          say_callback: lambda { |message| output << message.to_s },
+          requests: true,
+          cancellation: turn.cancellation
+        )
+        result = command.normalize_result(command.handler.call(arguments, context))
+        turn.cancellation&.raise_if_cancelled!
+        if command.typed?
+          emit_turn_event(turn, "pluginCommandResult", { command: command.name, result: result.to_h })
+          result = result.message
+        end
         answer = (output + [result]).compact.map(&:to_s).reject(&:empty?).join("\n")
         unless answer.empty?
           emit_turn_event(turn, "assistantDelta", { delta: answer })
@@ -1457,27 +1546,30 @@ module Kward
       end
 
       def emit_footer_update(rpc_session)
-        renderer = plugin_registry.footer_renderer
-        return clear_footer_update(rpc_session) unless renderer
+        return clear_footer_update(rpc_session) unless plugin_registry.status?
 
-        text = begin
+        segments = begin
           context = plugin_context(rpc_session, say_callback: lambda { |message| rpc_session.plugin_output << message.to_s })
-          renderer.call(context).to_s.gsub(/\s+/, " ").strip
+          plugin_registry.status_segments(context)
         rescue StandardError => e
           warn "Warning: Kward plugin footer error: #{e.message}"
-          ""
+          []
         end
-        return if rpc_session.last_footer_text == text
+        segment_payloads = segments.map(&:to_h)
+        text = plugin_registry.compose_status(segments)
+        return if rpc_session.last_footer_text == text && rpc_session.last_footer_segments == segment_payloads
 
         rpc_session.last_footer_text = text
-        notify("ui/footer", { sessionId: rpc_session.id, text: text })
+        rpc_session.last_footer_segments = segment_payloads
+        notify("ui/footer", { sessionId: rpc_session.id, text: text, segments: segment_payloads })
       end
 
       def clear_footer_update(rpc_session)
-        return if rpc_session.last_footer_text.to_s.empty?
+        return if rpc_session.last_footer_text.to_s.empty? && Array(rpc_session.last_footer_segments).empty?
 
         rpc_session.last_footer_text = ""
-        notify("ui/footer", { sessionId: rpc_session.id, text: "" })
+        rpc_session.last_footer_segments = []
+        notify("ui/footer", { sessionId: rpc_session.id, text: "", segments: [] })
       end
 
       def emit_turn_event(turn, type, payload)

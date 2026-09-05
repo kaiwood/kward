@@ -13,6 +13,7 @@ module Kward
     # without changing transport plugins.
     class Gateway
       POLL_INTERVAL = 0.05
+      INTERACTION_ROUTE_LIMIT = 1_000
       TERMINAL_STATUSES = %w[completed canceled failed].freeze
 
       def initialize(session_manager:, transport_id:, storage: nil, poll_interval: POLL_INTERVAL)
@@ -22,6 +23,7 @@ module Kward
         @poll_interval = poll_interval
         @subscriptions = []
         @interaction_subscribers = []
+        @interaction_routes = {}
         @mutex = Mutex.new
         @session_manager.subscribe_events { |method, payload| handle_runtime_event(method, payload) } if @session_manager.respond_to?(:subscribe_events)
       end
@@ -73,19 +75,16 @@ module Kward
       end
 
       def answer_transport_interaction(session_id:, request_id:, answer:)
-        if answer == true || answer == false
-          @session_manager.answer_tool_approval(
-            session_id: session_id,
-            approval_request_id: request_id,
-            approved: answer
-          )
+        route = @mutex.synchronize { @interaction_routes.delete(request_id.to_s) }
+        case route
+        when :plugin_ui
+          @session_manager.answer_plugin_ui(session_id: session_id, request_id: request_id, value: answer)
+        when :tool_approval
+          @session_manager.answer_tool_approval(session_id: session_id, approval_request_id: request_id, approved: answer == true)
+        when :question
+          answer_transport_question(session_id, request_id, answer)
         else
-          answers = answer.is_a?(Array) ? answer : [{ question: request_id, answer: answer.to_s }]
-          @session_manager.answer_question(
-            session_id: session_id,
-            question_request_id: request_id,
-            answers: answers
-          )
+          answer == true || answer == false ? answer_transport_approval(session_id, request_id, answer) : answer_transport_question(session_id, request_id, answer)
         end
       end
 
@@ -122,6 +121,7 @@ module Kward
           current = @subscriptions
           @subscriptions = []
           @interaction_subscribers = []
+          @interaction_routes = {}
           current
         end
         subscriptions.each(&:kill)
@@ -168,31 +168,17 @@ module Kward
       end
 
       def handle_runtime_event(method, payload)
-        request = case method
-                  when "ui/question"
-                    questions = Array(payload[:questions] || payload["questions"])
-                    Transport.interaction_request(
-                      id: payload[:questionRequestId] || payload["questionRequestId"],
-                      session_id: payload[:sessionId] || payload["sessionId"],
-                      turn_id: payload[:turnId] || payload["turnId"] || "unknown",
-                      kind: :question,
-                      prompt: questions.map { |question| question[:question] || question["question"] }.join("\\n"),
-                      choices: questions
-                    )
-                  when "tool/approvalRequested"
-                    Transport.interaction_request(
-                      id: payload[:approvalRequestId] || payload["approvalRequestId"],
-                      session_id: payload[:sessionId] || payload["sessionId"],
-                      turn_id: payload[:turnId] || payload["turnId"] || "unknown",
-                      kind: :tool_approval,
-                      prompt: "Allow #{payload[:toolName] || payload["toolName"]}?",
-                      choices: [{ id: "approve", label: "Approve" }, { id: "deny", label: "Deny" }],
-                      metadata: { tool_call_id: payload[:toolCallId] || payload["toolCallId"], args: payload[:args] || payload["args"] }
-                    )
-                  end
+        request, route = interaction_for_runtime_event(method, payload)
         return unless request
 
-        subscribers = @mutex.synchronize { @interaction_subscribers.dup }
+        subscribers = @mutex.synchronize do
+          current = @interaction_subscribers.dup
+          if route && !current.empty?
+            @interaction_routes[request.id.to_s] = route
+            @interaction_routes.shift while @interaction_routes.length > INTERACTION_ROUTE_LIMIT
+          end
+          current
+        end
         subscribers.each do |subscriber|
           begin
             subscriber.call(request)
@@ -200,6 +186,64 @@ module Kward
             nil
           end
         end
+      end
+
+      def interaction_for_runtime_event(method, payload)
+        session_id = payload[:sessionId] || payload["sessionId"]
+        turn_id = payload[:turnId] || payload["turnId"] || "unknown"
+        case method
+        when "ui/question"
+          questions = Array(payload[:questions] || payload["questions"])
+          [Transport.interaction_request(
+            id: payload[:questionRequestId] || payload["questionRequestId"],
+            session_id: session_id,
+            turn_id: turn_id,
+            kind: :question,
+            prompt: questions.map { |question| question[:question] || question["question"] }.join("\\n"),
+            choices: questions
+          ), :question]
+        when "ui/request"
+          plugin_ui_interaction(payload, session_id, turn_id)
+        when "tool/approvalRequested"
+          [Transport.interaction_request(
+            id: payload[:approvalRequestId] || payload["approvalRequestId"],
+            session_id: session_id,
+            turn_id: turn_id,
+            kind: :tool_approval,
+            prompt: "Allow #{payload[:toolName] || payload["toolName"]}?",
+            choices: [{ id: "approve", label: "Approve" }, { id: "deny", label: "Deny" }],
+            metadata: { tool_call_id: payload[:toolCallId] || payload["toolCallId"], args: payload[:args] || payload["args"] }
+          ), :tool_approval]
+        end
+      end
+
+      def plugin_ui_interaction(payload, session_id, turn_id)
+        kind = (payload[:kind] || payload["kind"]).to_s
+        details = payload[:payload] || payload["payload"] || {}
+        prompt = details[:message] || details["message"] || details[:title] || details["title"]
+        choices = details[:options] || details["options"] || []
+        if kind == "confirm"
+          choices = [{ label: "Yes", value: true }, { label: "No", value: false }]
+        end
+        default = details.key?(:default) ? details[:default] : details["default"]
+        [Transport.interaction_request(
+          id: payload[:requestId] || payload["requestId"],
+          session_id: session_id,
+          turn_id: turn_id,
+          kind: kind,
+          prompt: prompt,
+          choices: choices,
+          metadata: { title: details[:title] || details["title"], placeholder: details[:placeholder] || details["placeholder"], default: default }.compact
+        ), :plugin_ui]
+      end
+
+      def answer_transport_approval(session_id, request_id, answer)
+        @session_manager.answer_tool_approval(session_id: session_id, approval_request_id: request_id, approved: answer)
+      end
+
+      def answer_transport_question(session_id, request_id, answer)
+        answers = answer.is_a?(Array) ? answer : [{ question: request_id, answer: answer.to_s }]
+        @session_manager.answer_question(session_id: session_id, question_request_id: request_id, answers: answers)
       end
 
       def profile_options(options, profile)

@@ -192,6 +192,19 @@ class TestRPCServer < KwardTestCase
     assert_equal ["builtin", "prompt", "skill", "plugin"], capabilities["commands"]["sources"]
     assert_equal ["builtin", "plugin"], capabilities["commands"]["executableSources"]
     assert_equal "commands/run", capabilities["commands"]["runMethod"]
+    assert_equal true, capabilities["commands"].dig("typedArguments", "supported")
+    assert_equal "shellFlags", capabilities["commands"].dig("typedArguments", "textSyntax")
+    assert_equal true, capabilities["commands"]["structuredResults"]
+    assert_equal "pluginCommandResult", capabilities.dig("events", "pluginCommands", "structuredResult")
+    assert_equal true, capabilities["pluginActions"]["supported"]
+    assert_equal Kward::RPC::Server::PLUGIN_ACTION_METHODS, capabilities["pluginActions"]["methods"]
+    assert_equal "pluginId/actionName", capabilities["pluginActions"]["namespace"]
+    assert_equal false, capabilities["pluginActions"]["localTui"]
+    assert_equal true, capabilities["pluginTools"]["supported"]
+    assert_equal 0, capabilities["pluginTools"]["registered"]
+    assert_equal "tools/list", capabilities["pluginTools"]["discoveryMethod"]
+    assert_equal true, capabilities["pluginTools"]["executionProfileFiltering"]
+    assert_equal true, capabilities["pluginTools"]["permissionPolicy"]
     assert_equal true, capabilities["mcp"]["supported"]
     assert_equal "stdio", capabilities["mcp"]["transport"]
     assert_equal "mcpServers", capabilities["mcp"]["config"]
@@ -220,14 +233,40 @@ class TestRPCServer < KwardTestCase
         "multiSelect" => false,
         "preview" => false
       },
-      "select" => false,
-      "confirm" => false,
-      "input" => false,
+      "select" => {
+        "supported" => true,
+        "notification" => "ui/request",
+        "method" => "ui/answerRequest",
+        "maxOptions" => 100
+      },
+      "confirm" => {
+        "supported" => true,
+        "notification" => "ui/request",
+        "method" => "ui/answerRequest"
+      },
+      "input" => {
+        "supported" => true,
+        "notification" => "ui/request",
+        "method" => "ui/answerRequest",
+        "maxBytes" => 16_384
+      },
+      "progress" => {
+        "supported" => true,
+        "notification" => "ui/progress"
+      },
+      "notify" => {
+        "supported" => true,
+        "notification" => "ui/notification",
+        "levels" => %w[info success warning error]
+      },
       "editor" => false,
       "widgets" => false,
       "footer" => {
         "supported" => true,
-        "notification" => "ui/footer"
+        "notification" => "ui/footer",
+        "segments" => true,
+        "tooltip" => true,
+        "priorities" => %w[low normal high]
       },
       "custom" => false,
       "terminalInput" => false
@@ -270,7 +309,7 @@ class TestRPCServer < KwardTestCase
       FileUtils.mkdir_p(plugins)
       File.write(File.join(plugins, "chat.rb"), <<~'RUBY')
         Kward.plugin do |plugin|
-          plugin.tab_type "chat", id: "test.chat", title: "Test Chat", rpc: true do |_host, _descriptor|
+          plugin.tab_type "chat", id: "test.chat", title: "Test Chat", rpc: true, api: 1, capabilities: { attachments: [], steering: false, transcript_paging: false } do |_host, _descriptor|
             Object.new
           end
         end
@@ -282,7 +321,35 @@ class TestRPCServer < KwardTestCase
 
         assert_equal true, capability["supported"]
         assert_equal "test.chat", capability["types"].first["id"]
+        assert_equal 1, capability["types"].first["apiVersion"]
+        assert_equal({ "attachments" => [], "steering" => false, "transcriptPaging" => false }, capability["types"].first["capabilities"])
         assert_includes capability["methods"], "pluginChats/subscribe"
+      end
+    end
+  end
+
+  def test_initialize_reports_identified_plugin_metadata_without_private_config
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      File.write(File.join(plugins, "identified.rb"), <<~'RUBY')
+        Kward.plugin(id: "com.example.identified", version: "1.4.0", api: 1) do |plugin|
+          plugin.command("identified") { "ok" }
+        end
+      RUBY
+      File.write(File.join(home, ".kward", "config.json"), JSON.dump(
+        "plugins" => {
+          "com.example.identified" => { "token" => "must-not-leak" }
+        }
+      ))
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        messages = run_rpc([{ jsonrpc: "2.0", id: 1, method: "initialize" }, { jsonrpc: "2.0", id: 2, method: "shutdown" }])
+        capability = messages.first.dig("result", "capabilities", "plugins")
+
+        assert_equal "1", capability["apiVersion"]
+        assert_equal [{ "id" => "com.example.identified", "version" => "1.4.0", "apiVersion" => "1" }], capability["identified"]
+        refute_includes JSON.dump(capability), "must-not-leak"
       end
     end
   end
@@ -401,7 +468,7 @@ class TestRPCServer < KwardTestCase
   def test_rpc_method_inventory_is_grouped_and_unique
     expected_groups = %i[
       protocol workspace tools mcp prompts sessions turns plugin_chats models runtime runtime_settings
-      auth memory commands skill_capture startup_resources config logging lifecycle_hooks ui tool_approval
+      auth memory commands plugin_actions skill_capture startup_resources config logging lifecycle_hooks ui tool_approval
     ]
 
     assert_equal expected_groups, Kward::RPC::Server::METHOD_GROUPS.keys
@@ -410,7 +477,9 @@ class TestRPCServer < KwardTestCase
     assert_includes Kward::RPC::Server::RPC_METHODS, "sessions/create"
     assert_includes Kward::RPC::Server::RPC_METHODS, "turns/start"
     assert_includes Kward::RPC::Server::RPC_METHODS, "pluginChats/list"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "pluginActions/list"
     assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerQuestion"
+    assert_includes Kward::RPC::Server::RPC_METHODS, "ui/answerRequest"
     assert_includes Kward::RPC::Server::RPC_METHODS, "hooks/logs"
     assert_includes Kward::RPC::Server::RPC_METHODS, "skills/captureDraft"
   end
@@ -424,6 +493,9 @@ class TestRPCServer < KwardTestCase
     assert_includes docs, Kward::RPC::Server::SESSION_UPDATED_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::TURN_EVENT_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::UI_QUESTION_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_REQUEST_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_PROGRESS_NOTIFICATION
+    assert_includes docs, Kward::RPC::Server::UI_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::UI_FOOTER_NOTIFICATION
     assert_includes docs, Kward::RPC::Server::TOOL_APPROVAL_NOTIFICATION
   end
@@ -445,6 +517,7 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::COMMAND_METHODS, capabilities["commands"]["methods"]
     assert_equal Kward::RPC::Server::COMMAND_METHODS[0], capabilities["commands"]["method"]
     assert_equal Kward::RPC::Server::COMMAND_METHODS[1], capabilities["commands"]["runMethod"]
+    assert_equal Kward::RPC::Server::PLUGIN_ACTION_METHODS, capabilities["pluginActions"]["methods"]
     assert_equal Kward::RPC::Server::STARTUP_RESOURCE_METHODS.first, capabilities["startupResources"]["method"]
     assert_equal false, messages[0]["result"]["experimental"]
     assert_equal "stable", capabilities["stability"]["protocol"]
@@ -452,6 +525,9 @@ class TestRPCServer < KwardTestCase
     assert_equal Kward::RPC::Server::SESSION_EVENT_NOTIFICATION, capabilities["sessions"]["compact"]["notification"]
     assert_equal Kward::RPC::Server::TURN_EVENT_NOTIFICATION, capabilities["events"]["notification"]
     assert_equal Kward::RPC::Server::UI_QUESTION_NOTIFICATION, capabilities["extensionUi"]["question"]["notification"]
+    assert_equal Kward::RPC::Server::UI_REQUEST_NOTIFICATION, capabilities["extensionUi"]["select"]["notification"]
+    assert_equal Kward::RPC::Server::UI_PROGRESS_NOTIFICATION, capabilities["extensionUi"]["progress"]["notification"]
+    assert_equal Kward::RPC::Server::UI_NOTIFICATION, capabilities["extensionUi"]["notify"]["notification"]
     assert_equal Kward::RPC::Server::UI_FOOTER_NOTIFICATION, capabilities["extensionUi"]["footer"]["notification"]
   end
 
@@ -645,6 +721,14 @@ class TestRPCServer < KwardTestCase
               ctx.say("Hello #{args}; messages=#{ctx.transcript.messages.length}")
               "returned #{args}"
             end
+
+            plugin.tool "issue_search", description: "Search issues", schema: {
+              type: "object",
+              properties: { query: { type: "string" } },
+              required: ["query"]
+            } do |args, _ctx|
+              "Found #{args.fetch("query")}"
+            end
           end
         RUBY
 
@@ -670,6 +754,11 @@ class TestRPCServer < KwardTestCase
           assert_equal "Say hello", plugin[:description]
           assert_equal "<name>", plugin[:argumentHint]
           assert_equal true, plugin[:executable]
+
+          tools = server.instance_variable_get(:@session_manager).tool_schemas(session_id: session[:id])[:tools]
+          plugin_tool = tools.find { |tool| tool.dig(:function, :name) == "issue_search" }
+          assert_equal "plugin", plugin_tool.dig(:metadata, :source)
+          assert_equal ["query"], plugin_tool.dig(:function, :parameters, :required)
 
           run = server.send(:commands_run, "sessionId" => session[:id], "name" => "hello", "arguments" => "Martok")
           assert_equal "hello", run[:command]

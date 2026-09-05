@@ -4728,6 +4728,122 @@ edit this prompt"
     end
   end
 
+  def test_plugin_footer_drops_low_priority_status_when_width_is_constrained
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(path: "/plugins/status.rb", id: "com.example.status", version: "1.0.0", api: 1) do |plugin|
+      plugin.status("optional", order: 10, priority: :low) { "Optional" }
+      plugin.status("core", order: 20, priority: :high) { "Core" }
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+    cli.instance_variable_set(:@plugin_registry, registry)
+
+    footer = cli.send(:prompt_footer_renderer)
+
+    assert_equal "Optional · Core", footer.call
+    assert_equal "Core", footer.call(4)
+  end
+
+  def test_reload_plugins_runs_old_cleanup_before_starting_new_registry
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      plugin_path = File.join(plugins_dir, "lifecycle.rb")
+      events_path = File.join(home, "events.log")
+      FileUtils.mkdir_p(plugins_dir)
+      write_plugin = lambda do |version|
+        File.write(plugin_path, <<~RUBY)
+          Kward.plugin(id: "com.example.lifecycle", version: "#{version}", api: 1) do |plugin|
+            plugin.on_start do |host|
+              File.open(#{events_path.dump}, "a") { |file| file.puts("start-#{version}") }
+              host.on_cleanup { File.open(#{events_path.dump}, "a") { |file| file.puts("cleanup-#{version}") } }
+            end
+            plugin.on_reload { File.open(#{events_path.dump}, "a") { |file| file.puts("reload-#{version}") } }
+            plugin.on_shutdown { File.open(#{events_path.dump}, "a") { |file| file.puts("shutdown-#{version}") } }
+          end
+        RUBY
+      end
+      write_plugin.call("v1")
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: FakePrompt.new([]), client: FakeClient.new([]))
+        registry = cli.send(:plugin_registry)
+        conversation = Kward::Conversation.new(plugin_registry: registry)
+
+        write_plugin.call("v2")
+        cli.send(:reload_plugins, conversation)
+        cli.send(:shutdown_plugins)
+
+        assert_equal %w[start-v1 reload-v1 cleanup-v1 start-v2 shutdown-v2 cleanup-v2], File.readlines(events_path, chomp: true)
+      end
+    end
+  end
+
+  def test_reload_plugins_updates_model_callable_tools
+    Dir.mktmpdir do |home|
+      plugins_dir = File.join(home, ".kward", "plugins")
+      plugin_path = File.join(plugins_dir, "tool.rb")
+      FileUtils.mkdir_p(plugins_dir)
+      File.write(plugin_path, <<~'RUBY')
+        Kward.plugin do |plugin|
+          plugin.tool("plugin_version", description: "Return plugin version") { "v1" }
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        prompt = FakePrompt.new([])
+        cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+        plugin_registry = cli.send(:plugin_registry)
+        conversation = Kward::Conversation.new(plugin_registry: plugin_registry)
+        tool_registry = Kward::ToolRegistry.new(plugin_tools: plugin_registry.tools)
+
+        assert_equal "v1", tool_registry.dispatch(tool_call("plugin_version", {}), Kward::Conversation.new)
+
+        File.write(plugin_path, <<~'RUBY')
+          Kward.plugin do |plugin|
+            plugin.tool("plugin_version", description: "Return plugin version") { "v2" }
+            plugin.tool("plugin_new", description: "Return new tool") { "new" }
+          end
+        RUBY
+        cli.send(:reload_plugins, conversation, tool_registry: tool_registry)
+
+        assert_equal "v2", tool_registry.dispatch(tool_call("plugin_version", {}), Kward::Conversation.new)
+        assert_includes tool_registry.schemas.map { |schema| schema.dig(:function, :name) }, "plugin_new"
+      end
+    end
+  end
+
+  def test_typed_plugin_command_parses_shell_arguments_and_renders_result_message
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    registry = Kward::PluginRegistry.new
+    received = nil
+    registry.evaluate do |plugin|
+      plugin.command "deploy", schema: {
+        type: "object",
+        properties: {
+          service: { type: "string" },
+          dry_run: { type: "boolean", default: false }
+        },
+        required: ["service"]
+      }, positionals: ["service"] do |args, ctx|
+        received = [args, ctx.args, ctx.cancellation]
+        ctx.result(message: "Queued #{args.fetch('service')}", data: { accepted: true })
+      end
+    end
+    cli.instance_variable_set(:@plugin_registry, registry)
+    conversation = Kward::Conversation.new(plugin_registry: registry)
+    agent = Kward::Agent.new(client: FakeClient.new([]), tool_registry: Kward::ToolRegistry.new(prompt: prompt), conversation: conversation)
+    cancellation = Kward::Cancellation.new
+
+    handled, result = cli.send(:run_plugin_command, "deploy", "api --dry-run", agent, cancellation: cancellation)
+
+    assert handled
+    assert_nil result
+    assert_equal({ "service" => "api", "dry_run" => true }, received[0])
+    assert_equal received[0], received[1]
+    assert_same cancellation, received[2]
+    assert_includes prompt.output.join("\n"), "Queued api"
+  end
+
   def test_reload_plugins_updates_commands_and_current_system_message
     Dir.mktmpdir do |home|
       plugins_dir = File.join(home, ".kward", "plugins")

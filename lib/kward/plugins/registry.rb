@@ -2,13 +2,18 @@ require_relative "../config_files"
 require_relative "../deep_copy"
 require_relative "../hooks"
 require_relative "../transport"
+require_relative "actions"
+require_relative "chat_contract"
+require_relative "host"
+require_relative "ui"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Loads trusted user plugin files and provides the plugin DSL.
   #
   # Plugins live in the user plugin directory, run as local Ruby code, and can
-  # register slash commands, one footer renderer, prompt context, and live
+  # register slash commands, namespaced actions, model-callable tools, lifecycle
+  # callbacks, composable status renderers, prompt context, and live
   # transcript-event observers for CLI and RPC frontends.
   #
   # This registry is intentionally trust-based, not a sandbox. Keep plugin loading
@@ -16,13 +21,29 @@ module Kward
   # load path, and expose immutable transcript views so plugins can observe state
   # without corrupting active conversations.
   class PluginRegistry
+    PLUGIN_API_VERSION = "1"
     COMMAND_NAME_PATTERN = /\A[A-Za-z0-9][A-Za-z0-9_-]*\z/.freeze
 
-    # Registered slash command exposed in completion, RPC command listings, and
-    # interactive command dispatch.
-    Command = Struct.new(:name, :description, :argument_hint, :path, :handler, keyword_init: true) do
-      def entry
-        { name: name, description: description, argument_hint: argument_hint }
+    # Public registration types retained under the registry namespace.
+    Command = PluginCommand
+    Action = PluginAction
+
+    # Registered model-callable tool exposed through each normal agent tool
+    # registry. The handler receives parsed arguments and a runtime context.
+    Tool = Struct.new(:name, :description, :schema, :path, :handler, keyword_init: true)
+
+    STATUS_PRIORITIES = { low: 0, normal: 1, high: 2 }.freeze
+    STATUS_SEPARATOR = " · "
+
+    # Registered footer/status contribution. Display order is independent from
+    # priority: order places segments, while priority decides which segments are
+    # removed first when the terminal is narrow.
+    Status = Struct.new(:id, :order, :priority, :path, :renderer, :sequence, keyword_init: true)
+
+    # Rendered, frontend-neutral status contribution.
+    StatusSegment = Struct.new(:id, :text, :tooltip, :priority, :order, keyword_init: true) do
+      def to_h
+        { id: id, text: text, tooltip: tooltip, priority: priority.to_s, order: order }.compact
       end
     end
 
@@ -37,7 +58,7 @@ module Kward
 
     # Registered plugin-owned tab runtime. Its factory receives a
     # `PluginTabHost` and its persisted descriptor, then returns a driver.
-    TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :transport, :local, :transcript_events, :path, :handler, keyword_init: true)
+    TabType = Struct.new(:id, :name, :title, :singleton, :rpc, :transport, :local, :transcript_events, :capabilities, :plugin_id, :path, :handler, keyword_init: true)
 
     # Registered external transport. The factory receives a transport host and
     # configuration when the transport is started, not while plugins load.
@@ -52,6 +73,10 @@ module Kward
 
     # Registered lifecycle hook handler.
     HookHandler = Struct.new(:event, :id, :description, :path, :order, :match, :failure_policy, :handler, keyword_init: true)
+
+    # Plugin-runtime callback invoked when an identified plugin starts, reloads,
+    # or shuts down.
+    LifecycleHandler = Struct.new(:event, :host, :path, :handler, keyword_init: true)
 
     # Read-only transcript view exposed to plugin code.
     class Transcript
@@ -68,18 +93,21 @@ module Kward
       end
     end
 
-    # Runtime context passed to plugin commands, footers, prompt context
-    # renderers, and transcript event handlers.
+    # Runtime context passed to plugin commands, tools, footers, prompt context
+    # renderers, hooks, and transcript event handlers.
     class Context
-      attr_reader :args, :workspace_root
+      attr_reader :args, :workspace_root, :cancellation, :ui
 
       # Creates an object for trusted plugin loading and dispatch.
-      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil)
+      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil, ui: nil, tool_ui: nil)
         @conversation = conversation
-        @args = args.to_s
+        @args = args.is_a?(Hash) ? DeepCopy.freeze(DeepCopy.dup(args)) : args.to_s
         @session = session
         @workspace_root = workspace_root
         @say_callback = say_callback
+        @cancellation = cancellation
+        @ui = (ui || PluginUI.new(say_callback: say_callback)).with_cancellation(cancellation)
+        @tool_ui = tool_ui
       end
 
       # @return [Transcript] read-only transcript wrapper
@@ -118,6 +146,34 @@ module Kward
       def refresh_system_message!
         @conversation.refresh_system_message! if @conversation.respond_to?(:refresh_system_message!)
         nil
+      end
+
+      # Builds a structured result for a typed command or plugin action.
+      #
+      # @param message [#to_s, nil] optional user-facing result text
+      # @param data [Object, nil] optional JSON-compatible machine-readable data
+      # @return [PluginResult]
+      def result(message: nil, data: nil)
+        PluginResult.new(message: message, data: data)
+      end
+
+      # Returns whether the active plugin operation has been cancelled.
+      # Contexts without a cancellable operation return false.
+      def cancelled?
+        @cancellation&.cancelled? == true
+      end
+
+      # Builds a fresh context for one model-callable plugin tool invocation.
+      # @api private
+      def for_tool(conversation:, cancellation: nil)
+        self.class.new(
+          conversation: conversation,
+          session: @session,
+          workspace_root: @workspace_root,
+          say_callback: @say_callback,
+          cancellation: cancellation,
+          ui: @tool_ui || @ui
+        )
       end
 
       # Allows the current lifecycle event to continue.
@@ -179,10 +235,17 @@ module Kward
     # @api public
     class DSL
       # Creates an object for trusted plugin loading and dispatch.
-      def initialize(registry, path)
+      def initialize(registry, path, host: nil)
         @registry = registry
         @path = path
+        @host = host
       end
+
+      # Shared metadata, configuration, storage, secrets, and logging services.
+      # Legacy plugins without declared identity return nil.
+      #
+      # @return [PluginHost, nil]
+      attr_reader :host
 
       # Registers a slash command.
       #
@@ -192,24 +255,123 @@ module Kward
       # @param name [String, #to_s] command name without the leading slash
       # @param description [String] short text shown in command listings
       # @param argument_hint [String] optional usage hint for arguments
-      # @yieldparam args [String] text after the command name
+      # @param schema [Hash, nil] strict object JSON Schema for typed arguments
+      # @param positionals [Array<String, Symbol>] schema properties filled by positional text
+      # @yieldparam args [String, Hash] raw text for legacy commands or parsed typed arguments
       # @yieldparam ctx [Context] plugin execution context
       # @return [void]
       # @api public
-      def command(name, description: "", argument_hint: "", &block)
-        @registry.register_command(name, description: description, argument_hint: argument_hint, path: @path, &block)
+      def command(name, description: "", argument_hint: "", schema: nil, positionals: [], &block)
+        @registry.register_command(
+          name,
+          description: description,
+          argument_hint: argument_hint,
+          schema: schema,
+          positionals: positionals,
+          plugin_id: @host&.id,
+          path: @path,
+          &block
+        )
       end
 
-      # Registers or replaces the custom footer renderer.
+      # Registers a namespaced typed action for trusted RPC clients.
+      # Identified plugin metadata is required so the action has a stable ID.
       #
-      # Only one footer renderer is active. If multiple plugins register one,
-      # the later renderer replaces the earlier renderer.
+      # @param name [String, #to_s] action name within the plugin namespace
+      # @param description [String] short client-facing description
+      # @param schema [Hash] strict object JSON Schema for typed arguments
+      # @yieldparam args [Hash] validated action arguments
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def action(name, description:, schema: { type: "object", properties: {} }, &block)
+        raise ArgumentError, "Plugin actions require stable plugin identity" unless @host
+
+        @registry.register_action(name, plugin_id: @host.id, description: description, schema: schema, path: @path, &block)
+      end
+
+      # Registers a model-callable tool for normal Kward agent turns.
+      #
+      # Tool arguments are described with a strict object JSON Schema. The
+      # handler must return model-facing text and receives the normal plugin
+      # context with the active cancellation token.
+      #
+      # @param name [String, #to_s] function name exposed to the model
+      # @param description [String] model-facing description of the operation
+      # @param schema [Hash] object JSON Schema for parsed tool arguments
+      # @yieldparam args [Hash] parsed model-provided arguments
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def tool(name, description:, schema: { type: "object", properties: {} }, &block)
+        @registry.register_tool(name, description: description, schema: schema, path: @path, &block)
+      end
+
+      # Registers a callback invoked after plugin loading when the runtime is
+      # ready to start owned background work.
+      #
+      # @yieldparam host [PluginHost] identified plugin host and resource owner
+      # @return [void]
+      # @api public
+      def on_start(&block)
+        register_lifecycle(:start, &block)
+      end
+
+      # Registers a callback invoked on the old plugin instance immediately
+      # before its resources are cleaned up during reload.
+      #
+      # @yieldparam host [PluginHost] identified plugin host and resource owner
+      # @return [void]
+      # @api public
+      def on_reload(&block)
+        register_lifecycle(:reload, &block)
+      end
+
+      # Registers a callback invoked immediately before plugin resources are
+      # cleaned up during process shutdown.
+      #
+      # @yieldparam host [PluginHost] identified plugin host and resource owner
+      # @return [void]
+      # @api public
+      def on_shutdown(&block)
+        register_lifecycle(:shutdown, &block)
+      end
+
+      # Registers a legacy footer contribution. Multiple plugin footers are
+      # composed rather than replacing one another. Identified plugins should
+      # prefer {#status} so clients receive a descriptive stable segment ID.
       #
       # @yieldparam ctx [Context] plugin execution context
       # @return [void]
       # @api public
       def footer(&block)
-        @registry.register_footer(path: @path, &block)
+        @registry.register_footer(plugin_id: @host&.id, path: @path, &block)
+      end
+
+      # Registers a composable status contribution.
+      #
+      # The renderer may return a string, nil to hide the segment, or a hash with
+      # `text` and optional `tooltip`. Lower order values render first. On narrow
+      # terminals low-priority segments are removed before normal- and
+      # high-priority segments.
+      #
+      # @param name [String, #to_s] stable name within the plugin namespace
+      # @param order [Integer] display order; lower values render first
+      # @param priority [Symbol, String] `low`, `normal`, or `high`
+      # @yieldparam ctx [Context] plugin execution context
+      # @return [void]
+      # @api public
+      def status(name, order: 100, priority: :normal, &block)
+        raise ArgumentError, "Plugin status contributions require stable plugin identity" unless @host
+
+        @registry.register_status(
+          name,
+          plugin_id: @host.id,
+          order: order,
+          priority: priority,
+          path: @path,
+          &block
+        )
       end
 
       # Registers a live transcript event observer.
@@ -286,12 +448,28 @@ module Kward
       # @param transport [Boolean] allow external transport adapters to target this chat
       # @param local [Boolean] expose this chat as an interactive local tab
       # @param transcript_events [Boolean] allow global transcript observers to receive this tab's events
+      # @param api [Integer, nil] versioned plugin-chat contract API
+      # @param capabilities [Hash, nil] explicit attachments, steering, and transcript-paging support
       # @yieldparam host [PluginTabHost] supported host dependencies
       # @yieldparam descriptor [Hash] persisted tab descriptor
       # @return [void]
       # @api public
-      def tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, local: true, transcript_events: false, &block)
-        @registry.register_tab_type(name, id: id, title: title, singleton: singleton, rpc: rpc, transport: transport, local: local, transcript_events: transcript_events, path: @path, &block)
+      def tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, local: true, transcript_events: false, api: nil, capabilities: nil, &block)
+        @registry.register_tab_type(
+          name,
+          id: id,
+          title: title,
+          singleton: singleton,
+          rpc: rpc,
+          transport: transport,
+          local: local,
+          transcript_events: transcript_events,
+          api: api,
+          capabilities: capabilities,
+          plugin_id: @host&.id,
+          path: @path,
+          &block
+        )
       end
 
       # Registers an external messaging or event transport. The factory is
@@ -306,6 +484,14 @@ module Kward
       # @api public
       def transport(name, id:, capabilities: nil, execution_profile: nil, &block)
         @registry.register_transport(name, id: id, capabilities: capabilities, execution_profile: execution_profile, path: @path, &block)
+      end
+
+      private
+
+      def register_lifecycle(event, &block)
+        raise ArgumentError, "Plugin lifecycle callbacks require stable plugin identity" unless @host
+
+        @registry.register_lifecycle(event, host: @host, path: @path, &block)
       end
     end
 
@@ -326,25 +512,41 @@ module Kward
     def initialize(reserved_commands: [], warning_sink: nil)
       @reserved_commands = reserved_commands.map(&:to_s)
       @warning_sink = warning_sink
+      @plugins = {}
       @commands = {}
+      @actions = {}
+      @tools = {}
       @interactive_commands = {}
       @tab_types = {}
       @tab_types_by_id = {}
       @transports = {}
       @transports_by_id = {}
-      @footer = nil
+      @statuses = {}
+      @status_sequence = 0
       @footer_path = nil
       @transcript_event_handlers = []
       @prompt_context_renderers = []
       @hook_handlers = []
+      @lifecycle_handlers = { start: [], reload: [], shutdown: [] }
+      @lifecycle_state = :loaded
+      @lifecycle_mutex = Mutex.new
       @paths = []
     end
 
-    # @return [String, nil] plugin file currently responsible for footer output
+    # @return [String, nil] most recent plugin file to register legacy footer output
     attr_reader :footer_path
 
     # @return [Array<String>] plugin files successfully loaded by this registry
     attr_reader :paths
+
+    # @return [Array<PluginHost>] identified plugins loaded by this registry
+    def plugins
+      @plugins.values
+    end
+
+    def plugin_for(id)
+      @plugins[id.to_s]
+    end
 
     def commands
       @commands.values
@@ -352,6 +554,22 @@ module Kward
 
     def command_for(name)
       @commands[name.to_s]
+    end
+
+    def actions
+      @actions.values
+    end
+
+    def action_for(id)
+      @actions[id.to_s]
+    end
+
+    def tools
+      @tools.values
+    end
+
+    def tool_for(name)
+      @tools[name.to_s]
     end
 
     def interactive_commands
@@ -390,8 +608,43 @@ module Kward
       @transports_by_id[id.to_s]
     end
 
+    def status?
+      !@statuses.empty?
+    end
+
+    # Backward-compatible aggregate footer renderer.
     def footer_renderer
-      @footer
+      return nil unless status?
+
+      lambda do |context|
+        compose_status(status_segments(context))
+      end
+    end
+
+    # Evaluates every status renderer independently and returns display-ordered
+    # frontend-neutral segments. A broken renderer cannot hide healthy segments.
+    def status_segments(context)
+      @statuses.values.sort_by { |status| [status.order, status.sequence] }.filter_map do |status|
+        normalize_status_segment(status, status.renderer.call(context))
+      rescue StandardError => e
+        emit_warning "Warning: Kward plugin status #{status.id} error in #{status.path}: #{e.message}"
+        nil
+      end
+    end
+
+    # Composes already-rendered segments. When max_width is supplied, complete
+    # low-priority segments are removed first; the caller remains responsible
+    # for truncating a final oversized segment according to frontend rules.
+    def compose_status(segments, max_width: nil, &measure)
+      visible = Array(segments).dup
+      return "" if visible.empty? || (!max_width.nil? && max_width.to_i <= 0)
+
+      measure ||= ->(text) { text.to_s.length }
+      width = max_width&.to_i
+      while width && visible.length > 1 && measure.call(status_text(visible)) > width
+        remove_lowest_priority_segment!(visible)
+      end
+      status_text(visible)
     end
 
     def transcript_event_handlers
@@ -404,6 +657,25 @@ module Kward
 
     def hook_handlers
       @hook_handlers.dup
+    end
+
+    # Activates identified plugins and invokes their start callbacks once.
+    def start!
+      transition_lifecycle!(:loaded, :active) do
+        @plugins.each_value(&:activate!)
+        run_lifecycle_callbacks(:start)
+      end
+      self
+    end
+
+    # Invokes reload callbacks on the old registry and cleans up all resources.
+    def reload!(timeout: PluginResources::DEFAULT_SHUTDOWN_TIMEOUT)
+      stop_lifecycle!(:reload, timeout: timeout)
+    end
+
+    # Invokes shutdown callbacks and cleans up all resources.
+    def shutdown!(timeout: PluginResources::DEFAULT_SHUTDOWN_TIMEOUT)
+      stop_lifecycle!(:shutdown, timeout: timeout)
     end
 
     def hook_manager
@@ -453,16 +725,37 @@ module Kward
       self.class.loading_path = previous_path
     end
 
-    def evaluate(path: nil, &block)
-      dsl = DSL.new(self, path)
+    def evaluate(path: nil, id: nil, version: nil, api: nil, &block)
+      host = register_plugin_identity(id: id, version: version, api: api, path: path)
+      dsl = DSL.new(self, path, host: host)
       block.arity == 1 ? block.call(dsl) : dsl.instance_eval(&block)
       self
     end
 
-    def register_command(name, description: "", argument_hint: "", path: nil, &handler)
+    def register_plugin_identity(id:, version:, api:, path: nil)
+      values = [id, version, api]
+      return nil if values.all?(&:nil?)
+      raise ArgumentError, "Plugin id, version, and api are required together" if values.any?(&:nil?)
+
+      id = id.to_s
+      api = api.to_s
+      raise ArgumentError, "Unsupported Kward plugin API #{api.inspect} for #{id}; supported API: #{PLUGIN_API_VERSION}" unless api == PLUGIN_API_VERSION
+      raise ArgumentError, "Duplicate Kward plugin id: #{id}" if @plugins.key?(id)
+
+      @plugins[id] = PluginHost.new(
+        id: id,
+        version: version,
+        api_version: api,
+        source_path: path,
+        warning_sink: method(:emit_warning)
+      )
+    end
+
+    def register_command(name, description: "", argument_hint: "", schema: nil, positionals: [], plugin_id: nil, path: nil, &handler)
       name = name.to_s
       raise "Plugin command name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
       raise "Plugin command /#{name} requires a handler" unless handler
+      raise ArgumentError, "Plugin command /#{name} positionals require a schema" if schema.nil? && !Array(positionals).empty?
 
       if @reserved_commands.include?(name)
         emit_warning "Warning: skipping Kward plugin command /#{name}: reserved command"
@@ -477,6 +770,51 @@ module Kward
         name: name,
         description: description.to_s,
         argument_hint: argument_hint.to_s,
+        schema: schema,
+        positionals: positionals,
+        plugin_id: plugin_id,
+        path: path,
+        handler: handler
+      )
+    end
+
+    def register_action(name, plugin_id:, description:, schema:, path: nil, &handler)
+      name = name.to_s
+      raise "Plugin action name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin action #{plugin_id}/#{name} requires a description" if description.to_s.strip.empty?
+      raise "Plugin action #{plugin_id}/#{name} requires a handler" unless handler
+
+      id = "#{plugin_id}/#{name}"
+      if @actions.key?(id)
+        emit_warning "Warning: skipping duplicate Kward plugin action #{id}: #{path}"
+        return nil
+      end
+
+      @actions[id] = Action.new(
+        name: name,
+        plugin_id: plugin_id,
+        description: description.to_s,
+        schema: schema,
+        path: path,
+        handler: handler
+      )
+    end
+
+    def register_tool(name, description:, schema:, path: nil, &handler)
+      name = name.to_s
+      raise "Plugin tool name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin tool #{name} requires a description" if description.to_s.strip.empty?
+      raise "Plugin tool #{name} requires a handler" unless handler
+
+      if @tools.key?(name)
+        emit_warning "Warning: skipping duplicate Kward plugin tool #{name}: #{path}"
+        return nil
+      end
+
+      @tools[name] = Tool.new(
+        name: name,
+        description: description.to_s,
+        schema: normalize_tool_schema(name, schema),
         path: path,
         handler: handler
       )
@@ -507,7 +845,7 @@ module Kward
       )
     end
 
-    def register_tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, local: true, transcript_events: false, path: nil, &handler)
+    def register_tab_type(name, id:, title: nil, singleton: nil, rpc: false, transport: false, local: true, transcript_events: false, api: nil, capabilities: nil, plugin_id: nil, path: nil, &handler)
       name = name.to_s
       id = id.to_s
       raise "Plugin tab type name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
@@ -519,7 +857,20 @@ module Kward
         return nil
       end
 
-      tab_type = TabType.new(id: id, name: name, title: title.to_s.empty? ? name.capitalize : title.to_s, singleton: singleton&.to_sym, rpc: rpc == true, transport: transport == true, local: local == true, transcript_events: transcript_events == true, path: path, handler: handler)
+      tab_type = TabType.new(
+        id: id,
+        name: name,
+        title: title.to_s.empty? ? name.capitalize : title.to_s,
+        singleton: singleton&.to_sym,
+        rpc: rpc == true,
+        transport: transport == true,
+        local: local == true,
+        transcript_events: transcript_events == true,
+        capabilities: PluginChatCapabilities.build(api: api, capabilities: capabilities),
+        plugin_id: plugin_id,
+        path: path,
+        handler: handler
+      )
       @tab_types[name] = tab_type
       @tab_types_by_id[id] = tab_type
     end
@@ -543,12 +894,48 @@ module Kward
       @transports_by_id[id] = transport
     end
 
-    def register_footer(path: nil, &renderer)
+    def register_footer(plugin_id: nil, path: nil, &renderer)
       raise "Plugin footer requires a renderer" unless renderer
 
-      emit_warning "Warning: replacing Kward plugin footer from #{@footer_path}: #{path}" if @footer
-      @footer = renderer
+      id = if plugin_id
+             "#{plugin_id}/footer"
+           else
+             available_legacy_status_id("legacy/#{legacy_status_source(path)}")
+           end
+      @status_sequence += 1 unless @statuses.key?(id)
+      @statuses[id] = Status.new(
+        id: id,
+        order: 100,
+        priority: :normal,
+        path: path,
+        renderer: renderer,
+        sequence: @statuses[id]&.sequence || @status_sequence
+      )
       @footer_path = path
+    end
+
+    def register_status(name, plugin_id:, order: 100, priority: :normal, path: nil, &renderer)
+      name = name.to_s
+      raise "Plugin status name is invalid: #{name}" unless name.match?(COMMAND_NAME_PATTERN)
+      raise "Plugin status #{plugin_id}/#{name} requires a renderer" unless renderer
+
+      id = "#{plugin_id}/#{name}"
+      if @statuses.key?(id)
+        emit_warning "Warning: skipping duplicate Kward plugin status #{id}: #{path}"
+        return nil
+      end
+
+      order = Integer(order)
+      priority = normalize_status_priority(priority)
+      @status_sequence += 1
+      @statuses[id] = Status.new(
+        id: id,
+        order: order,
+        priority: priority,
+        path: path,
+        renderer: renderer,
+        sequence: @status_sequence
+      )
     end
 
     def emit_warning(message)
@@ -565,6 +952,14 @@ module Kward
       raise "Plugin prompt context requires a renderer" unless renderer
 
       @prompt_context_renderers << { path: path, renderer: renderer }
+    end
+
+    def register_lifecycle(event, host:, path: nil, &handler)
+      event = event.to_sym
+      raise ArgumentError, "Unknown plugin lifecycle event: #{event}" unless @lifecycle_handlers.key?(event)
+      raise ArgumentError, "Plugin lifecycle #{event} requires a handler" unless handler
+
+      @lifecycle_handlers[event] << LifecycleHandler.new(event: event, host: host, path: path, handler: handler)
     end
 
     def register_hook(event, id: nil, description: "", order: 100, match: nil, failure_policy: nil, path: nil, &handler)
@@ -585,6 +980,119 @@ module Kward
     end
 
     private
+
+    def normalize_status_priority(priority)
+      value = priority.to_s.to_sym
+      return value if STATUS_PRIORITIES.key?(value)
+
+      raise ArgumentError, "Plugin status priority must be low, normal, or high"
+    end
+
+    def normalize_status_segment(status, value)
+      attributes = value.is_a?(Hash) ? value : { text: value }
+      text = status_value(attributes, :text).to_s.gsub(/\s+/, " ").strip
+      return nil if text.empty?
+
+      tooltip = status_value(attributes, :tooltip)
+      tooltip = tooltip.to_s.gsub(/\s+/, " ").strip unless tooltip.nil?
+      tooltip = nil if tooltip.to_s.empty?
+      StatusSegment.new(
+        id: status.id.dup.freeze,
+        text: text.freeze,
+        tooltip: tooltip&.freeze,
+        priority: status.priority,
+        order: status.order
+      ).freeze
+    end
+
+    def status_value(attributes, key)
+      attributes.key?(key) ? attributes[key] : attributes[key.to_s]
+    end
+
+    def status_text(segments)
+      segments.map(&:text).join(STATUS_SEPARATOR)
+    end
+
+    def remove_lowest_priority_segment!(segments)
+      lowest_priority = segments.map { |segment| STATUS_PRIORITIES.fetch(segment.priority) }.min
+      index = segments.each_index.select do |candidate|
+        STATUS_PRIORITIES.fetch(segments[candidate].priority) == lowest_priority
+      end.max_by { |candidate| [segments[candidate].order, candidate] }
+      segments.delete_at(index)
+    end
+
+    def available_legacy_status_id(base_id)
+      return base_id unless @statuses.key?(base_id)
+
+      suffix = 2
+      suffix += 1 while @statuses.key?("#{base_id}##{suffix}")
+      "#{base_id}##{suffix}"
+    end
+
+    def legacy_status_source(path)
+      source = path.to_s
+      return "plugin" if source.empty?
+
+      basename = File.basename(source)
+      basename == "plugin.rb" ? File.basename(File.dirname(source)) : File.basename(source, ".rb")
+    end
+
+    def transition_lifecycle!(from, to)
+      should_run = @lifecycle_mutex.synchronize do
+        next false unless @lifecycle_state == from
+
+        @lifecycle_state = to
+        true
+      end
+      yield if should_run
+    end
+
+    def stop_lifecycle!(event, timeout:)
+      transition_lifecycle!(:active, :stopped) do
+        run_lifecycle_callbacks(event)
+        @plugins.each_value { |host| host.shutdown(timeout: timeout) }
+      end
+      self
+    end
+
+    def run_lifecycle_callbacks(event)
+      @lifecycle_handlers.fetch(event).each do |entry|
+        entry.handler.arity.zero? ? entry.handler.call : entry.handler.call(entry.host)
+      rescue StandardError => e
+        emit_warning "Warning: Kward plugin #{event} error in #{entry.path}: #{e.message}"
+      end
+    end
+
+    def normalize_tool_schema(name, schema)
+      raise ArgumentError, "Plugin tool #{name} schema must be an object" unless schema.is_a?(Hash)
+
+      parameters = schema.each_with_object({}) { |(key, value), result| result[key.to_sym] = DeepCopy.dup(value) }
+      type = parameters.fetch(:type, "object").to_s
+      raise ArgumentError, "Plugin tool #{name} schema type must be object" unless type == "object"
+
+      properties = parameters.fetch(:properties, {})
+      required = parameters.fetch(:required, [])
+      raise ArgumentError, "Plugin tool #{name} schema properties must be an object" unless properties.is_a?(Hash)
+      raise ArgumentError, "Plugin tool #{name} schema required must be an array" unless required.is_a?(Array)
+      if parameters[:additionalProperties] == true
+        raise ArgumentError, "Plugin tool #{name} schema cannot allow additional properties"
+      end
+
+      property_names = properties.keys.map(&:to_s)
+      required = required.map(&:to_s).uniq.sort
+      unknown_required = required - property_names
+      unless unknown_required.empty?
+        raise ArgumentError, "Plugin tool #{name} schema requires unknown properties: #{unknown_required.join(', ')}"
+      end
+
+      parameters[:type] = "object"
+      parameters[:properties] = properties.keys.sort_by(&:to_s).each_with_object({}) do |key, result|
+        result[key] = properties[key]
+      end
+      parameters[:required] = required
+      parameters[:additionalProperties] = false
+      DeepCopy.freeze(parameters)
+    end
 
     def normalize_execution_profile(profile)
       return nil if profile.nil?
@@ -646,14 +1154,18 @@ module Kward
   # directory. It raises if called outside plugin loading so workspace code
   # cannot silently mutate Kward's runtime by merely being required.
   #
+  # @param id [String, nil] stable reverse-domain-style plugin identifier
+  # @param version [String, nil] plugin release version
+  # @param api [String, Integer, nil] Kward plugin API version
   # @yieldparam plugin [PluginRegistry::DSL] plugin registration DSL
   # @return [Object, nil] the plugin block result
   # @api public
-  def self.plugin(&block)
+  def self.plugin(id: nil, version: nil, api: nil, &block)
     registry = PluginRegistry.loading_registry
     raise "Kward.plugin can only be called while loading a plugin" unless registry
 
-    dsl = PluginRegistry::DSL.new(registry, PluginRegistry.loading_path)
+    host = registry.register_plugin_identity(id: id, version: version, api: api, path: PluginRegistry.loading_path)
+    dsl = PluginRegistry::DSL.new(registry, PluginRegistry.loading_path, host: host)
     block.arity == 1 ? block.call(dsl) : dsl.instance_eval(&block)
   end
 end

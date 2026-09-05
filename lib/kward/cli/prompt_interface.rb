@@ -247,14 +247,16 @@ module Kward
       end
 
       def prompt_footer_renderer
-        return nil unless plugin_registry.footer_renderer
+        return nil unless plugin_registry.status?
 
-        lambda do
-          renderer = plugin_registry.footer_renderer
-          next "" unless renderer
+        lambda do |max_width = nil|
+          next "" unless plugin_registry.status?
 
           context = plugin_context(current_footer_conversation, "")
-          renderer.call(context).to_s
+          segments = plugin_registry.status_segments(context)
+          plugin_registry.compose_status(segments, max_width: max_width) do |text|
+            TerminalText.width(ANSI.strip(text.to_s))
+          end
         rescue StandardError => e
           emit_warning "Warning: Kward plugin footer error: #{e.message}"
           ""

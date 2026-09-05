@@ -159,6 +159,18 @@ class TestConfigFiles < KwardTestCase
     end
   end
 
+  def test_plugin_config_is_scoped_copied_and_validated
+    config = { "plugins" => { "com.example.test" => { "token" => "secret" } } }
+
+    values = Kward::ConfigFiles.plugin_config("com.example.test", config)
+    values["token"] = "changed"
+
+    assert_equal({ "token" => "secret" }, Kward::ConfigFiles.plugin_config("com.example.test", config))
+    assert_equal({}, Kward::ConfigFiles.plugin_config("missing", config))
+    assert_raises(ArgumentError) { Kward::ConfigFiles.plugin_config("bad", "plugins" => []) }
+    assert_raises(ArgumentError) { Kward::ConfigFiles.plugin_config("bad", "plugins" => { "bad" => "nope" }) }
+  end
+
   def test_transport_config_is_scoped_and_copied
     config = { "transports" => { "com.example.test" => { "token" => "secret" } } }
 

@@ -21,6 +21,7 @@ module Kward
       :id,
       :type,
       :driver,
+      :host,
       :queue,
       :worker,
       :running_turn_id,
@@ -55,6 +56,7 @@ module Kward
       @turns = {}
       @event_listeners = []
       @mutex = Mutex.new
+      @shutdown = false
     end
 
     def supported_types(surface: :rpc)
@@ -79,7 +81,7 @@ module Kward
       type = supported_types(surface: surface).find { |entry| entry.id == type_id.to_s }
       raise ArgumentError, "Unknown #{surface} plugin chat: #{type_id}" unless type
 
-      chat_for(type, scope_key: scope_key, descriptor: descriptor, workspace_root: workspace_root)
+      chat_for(type, surface: surface, scope_key: scope_key, descriptor: descriptor, workspace_root: workspace_root)
     end
 
     def chat(chat_id)
@@ -138,20 +140,31 @@ module Kward
     end
 
     def shutdown
-      chats = @mutex.synchronize { @chats.values.dup }
+      chats = @mutex.synchronize do
+        return nil if @shutdown
+
+        @shutdown = true
+        @chats.values.dup
+      end
+      @mutex.synchronize { @turns.values.dup }.each { |turn| turn.cancellation.cancel! }
       chats.each do |chat|
         chat.queue << WORKER_STOP if chat.worker&.alive?
         chat.worker&.join(0.2)
+        close_chat(chat)
       end
+      @plugin_registry&.shutdown! unless @plugin_registry_provider
       nil
     end
 
     # Converts normalized image attachment hashes into the input shape accepted
     # by plugin chat drivers. RPC and transport frontends can normalize their
     # own boundary formats before calling this helper.
-    def input_with_attachments(input, attachments)
+    def input_with_attachments(input, attachments, capabilities: PluginChatCapabilities.legacy)
       attachments = Array(attachments)
       return input.to_s if attachments.empty?
+      if capabilities.declared? && !capabilities.allows_attachment?(:image)
+        raise ArgumentError, "plugin chat does not allow image attachments"
+      end
 
       [{ type: "text", text: input.to_s }] + attachments.map do |attachment|
         {
@@ -166,30 +179,49 @@ module Kward
     private
 
     def plugin_registry
-      return @plugin_registry_provider.call if @plugin_registry_provider
-
-      @plugin_registry ||= PluginRegistry.load
+      registry = @plugin_registry_provider ? @plugin_registry_provider.call : (@plugin_registry ||= PluginRegistry.load)
+      registry.start!
+      registry
     end
 
-    def chat_for(type, scope_key:, descriptor:, workspace_root:)
+    def chat_for(type, surface:, scope_key:, descriptor:, workspace_root:)
+      surface = surface.to_sym
+      host_surface = type.rpc && type.transport ? :shared : surface
       scope_key = normalize_scope_key(scope_key)
+      scope_key = "global" if type.singleton == :global && type.capabilities.declared?
       chat_id = chat_id_for(type, scope_key)
       @mutex.synchronize do
         @chats[chat_id] ||= begin
           descriptor = {
             "kind" => "plugin",
-            "plugin_tab_type" => type.id,
-            "label" => type.title,
-            "scope_key" => scope_key
+            "label" => type.title
           }.merge(descriptor.transform_keys(&:to_s))
-          host = PluginTabHost.new(client: @client, workspace_root: workspace_root)
-          driver = type.handler.call(host, descriptor)
-          raise "Plugin chat #{type.id.inspect} did not return a tab driver." unless driver
+          descriptor["plugin_tab_type"] = type.id
+          descriptor["scope_key"] = scope_key
+          host = PluginTabHost.new(
+            client: @client,
+            workspace_root: workspace_root,
+            plugin_host: type.plugin_id && plugin_registry.plugin_for(type.plugin_id),
+            type_id: type.id,
+            surface: host_surface,
+            scope_key: scope_key,
+            capabilities: type.capabilities
+          )
+          begin
+            driver = type.handler.call(host, descriptor)
+            raise "Plugin chat #{type.id.inspect} did not return a tab driver." unless driver
+
+            type.capabilities.validate_driver!(driver)
+          rescue StandardError
+            host.shutdown
+            raise
+          end
 
           Chat.new(
             id: chat_id,
             type: type,
             driver: driver,
+            host: host,
             queue: Queue.new,
             scope_key: scope_key,
             descriptor: descriptor,
@@ -197,6 +229,18 @@ module Kward
           )
         end
       end
+    end
+
+    def close_chat(chat)
+      if chat.driver.respond_to?(:close)
+        chat.driver.close
+      elsif chat.driver.respond_to?(:shutdown)
+        chat.driver.shutdown
+      end
+    rescue StandardError => e
+      ConfigFiles.emit_warning("Warning: Kward plugin chat cleanup error: #{e.message}")
+    ensure
+      chat.host.shutdown
     end
 
     def normalize_scope_key(scope_key)

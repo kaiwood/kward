@@ -66,6 +66,7 @@ module Kward
           workspace: workspace,
           prompt: @prompt,
           skills: ConfigFiles.skills(workspace_root: conversation.workspace_root, project_skill_paths: project_skill_paths_for(conversation.workspace_root)),
+          plugin_tools: plugin_registry.tools,
           tool_approval: interactive_tool_approval_callback,
           hook_manager: hook_manager,
           hook_context: hook_context
