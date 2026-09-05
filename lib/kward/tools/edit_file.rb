@@ -7,12 +7,12 @@ module Kward
     # Tool wrapper for exact block replacement edits.
     class EditFile < Base
       # Builds the tool schema and stores the execution dependency.
-      def initialize(workspace:)
-        @workspace = workspace
+      def initialize(workspace:, workspace_targets: nil)
+        configure_workspace_targets(workspace, workspace_targets)
         super(
           "edit_file",
           "Edit a read workspace file by exact replacements. Each old_text must match once; edits must not overlap.",
-          properties: {
+          properties: targeted_properties(
             path: { type: "string", description: "Workspace-relative path." },
             edits: {
               type: "array",
@@ -27,7 +27,7 @@ module Kward
                 additionalProperties: false
               }
             }
-          },
+          ),
           required: ["path", "edits"]
         )
       end
@@ -37,8 +37,11 @@ module Kward
         path = argument(args, :path, "")
         edits = argument(args, :edits, [])
 
-        result = @workspace.edit_file(path, edits, read_paths: conversation.read_paths)
-        conversation.refresh_system_message! if agents_file_changed?(@workspace, path, result)
+        workspace = workspace_for(args)
+        result = workspace.edit_file(path, edits, read_paths: conversation.read_paths)
+        if workspace.equal?(@workspace) && agents_file_changed?(workspace, path, result)
+          conversation.refresh_system_message!
+        end
         result
       end
     end

@@ -16,23 +16,32 @@ module Kward
       SKIP_DIRECTORIES = %w[.git .yardoc _yardoc node_modules vendor tmp log coverage dist build .bundle].freeze
 
       # Builds the tool schema and stores the execution dependency.
-      def initialize(workspace:)
-        @workspace = workspace
+      def initialize(workspace:, workspace_targets: nil)
+        configure_workspace_targets(workspace, workspace_targets)
         super(
           "context_for_task",
           "Build focused workspace context for a task from outlines and matching excerpts within a byte budget.",
-          properties: {
+          properties: targeted_properties(
             budget: { type: "integer", description: "Approximate byte budget for the returned context. Default 4000, maximum 20000." },
             paths: { type: "array", items: { type: "string" }, description: "Optional workspace-relative files or directories to focus." },
             task: { type: "string", description: "Task or question to gather context for." }
-          },
+          ),
           required: ["task"]
         )
       end
 
       # Executes focused context retrieval.
-      def call(args, _conversation, cancellation: nil)
+      def call(args, conversation, cancellation: nil)
         cancellation&.raise_if_cancelled!
+        selected_workspace = workspace_for(args)
+        unless selected_workspace.equal?(@workspace)
+          return self.class.new(workspace: selected_workspace).call(
+            @workspace_targets.without_target(args),
+            conversation,
+            cancellation: cancellation
+          )
+        end
+
         task = argument(args, :task, "").to_s.strip
         return "Error: task is required" if task.empty?
 

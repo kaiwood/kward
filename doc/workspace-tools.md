@@ -21,6 +21,15 @@ Important behavior:
 - Edits use exact text replacement, so accidental partial or fuzzy changes fail instead of guessing.
 - With sandboxing off (the default), shell commands run as your operating-system user from the workspace. Enable [command sandboxing](sandboxing.md) to apply an OS boundary to model-requested `run_shell_command` workers. Command output is capped at 128 KB.
 
+### Worktree targets
+
+In an active linked-worktree tab, `list_directory`, `read_file`, `write_file`, `edit_file`, `run_shell_command`, `summarize_file_structure`, and `context_for_task` also advertise an optional `target` argument:
+
+- `active` is the default linked worktree.
+- `origin` is the tab's verified original repository worktree.
+
+Kward supplies this fixed role map from the tab binding; the model cannot provide an arbitrary filesystem root. Selecting `origin` does not add a separate approval prompt, so the agent can complete a requested inspect/edit/test/commit workflow without interruption. The normal configured tool-permission policy still applies equally to both targets. Each target keeps its own path guard and strict shell sandbox.
+
 ## Reading the workspace
 
 ### `list_directory`

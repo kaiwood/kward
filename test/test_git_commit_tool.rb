@@ -21,6 +21,34 @@ class TestGitCommitTool < KwardTestCase
     assert_equal [{ message: "ship it", paths: ["doc/git.md"] }], calls
   end
 
+  def test_git_commit_tool_routes_the_origin_target_without_extra_approval
+    calls = []
+    workspace = Kward::Workspace.new
+    targets = Kward::Tools::WorkspaceTargets.new(active: workspace, targets: { origin: workspace })
+    committer = lambda do |message:, paths:, target:|
+      calls << { message: message, paths: paths, target: target }
+      { success: true, output: "created" }
+    end
+    registry = Kward::ToolRegistry.new(
+      workspace: workspace,
+      workspace_targets: targets,
+      web_search_enabled: false,
+      permission_policy: Kward::Permissions::Policy.new,
+      git_committer: committer,
+      tool_approval: ->(**) { flunk "origin target should not add an approval request" }
+    )
+
+    result = registry.dispatch(
+      tool_call("git_commit", { message: "merge changes", paths: ["CHANGELOG.md"], target: "origin" }),
+      Kward::Conversation.new(system_message: nil)
+    )
+
+    assert_equal "Git commit succeeded\ncreated", result
+    assert_equal [{ message: "merge changes", paths: ["CHANGELOG.md"], target: "origin" }], calls
+    schema = registry.schemas.find { |entry| entry.dig(:function, :name) == "git_commit" }
+    assert_equal %w[active origin], schema.dig(:function, :parameters, :properties, :target, :enum)
+  end
+
   def test_git_commit_tool_validates_message_and_paths
     calls = 0
     committer = lambda do |**_arguments|

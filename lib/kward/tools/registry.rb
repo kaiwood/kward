@@ -19,6 +19,7 @@ require_relative "prepare_shell_command"
 require_relative "summarize_file_structure"
 require_relative "retrieve_tool_output"
 require_relative "web_search"
+require_relative "workspace_targets"
 require_relative "write_file"
 require_relative "open_editor"
 require_relative "replace_editor_buffer"
@@ -67,6 +68,17 @@ module Kward
       retrieve_tool_output
     ].freeze
 
+    TARGETED_WORKSPACE_TOOLS = %w[
+      list_directory
+      read_file
+      write_file
+      edit_file
+      run_shell_command
+      summarize_file_structure
+      context_for_task
+      git_commit
+    ].freeze
+
     BUILTIN_TOOL_NAMES = (CORE_TOOL_NAMES + %w[
       git_commit
       web_search
@@ -87,6 +99,7 @@ module Kward
     # Builds tool objects and the schema list for the current frontend/config.
     #
     # @param workspace [Workspace] filesystem/shell boundary used by local tools
+    # @param workspace_targets [Tools::WorkspaceTargets, nil] additional host-scoped worktree roles
     # @param prompt [Object, nil] interactive prompt bridge; tools such as
     #   `ask_user_question` and `open_editor` are advertised only when supported
     # @param web_search [WebSearch] live web search implementation
@@ -96,8 +109,9 @@ module Kward
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
     # @param plugin_tools [Array<PluginRegistry::Tool>] trusted plugin tool registrations
-    def initialize(workspace: Workspace.new, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
+    def initialize(workspace: Workspace.new, workspace_targets: nil, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
       @workspace = workspace
+      @workspace_targets = workspace_targets || Tools::WorkspaceTargets.new(active: workspace)
       @prompt = prompt
       @web_search = web_search
       @web_fetch = web_fetch
@@ -188,7 +202,10 @@ module Kward
       original_content = if tool
                            before_tool = run_hook("tool_call_before", conversation, payload: tool_payload(name, args, tool_call))
                            args = hook_arguments(before_tool, args)
-                           if before_tool.denied?
+                           target_error = workspace_target_error(name, args)
+                           if target_error
+                             target_error
+                           elsif before_tool.denied?
                              hook_denied_content(before_tool, "tool call denied: #{name}")
                            elsif before_tool.approval_required? && hook_approval_denied?(before_tool, tool_call, name, args, cancellation)
                              hook_denied_content(before_tool, "tool call approval denied: #{name}")
@@ -518,6 +535,13 @@ module Kward
       (metadata[:source] || metadata["source"]).to_s == "mcp"
     end
 
+    def workspace_target_error(name, args)
+      return nil unless TARGETED_WORKSPACE_TOOLS.include?(name.to_s)
+      return nil if @workspace_targets.valid?(args)
+
+      "Error: Unknown workspace target: #{@workspace_targets.target_name(args)}"
+    end
+
     def permission_approval_result(tool_call, name, args, cancellation)
       return false unless @tool_approval
 
@@ -568,7 +592,7 @@ module Kward
 
     def all_tools
       tools = core_tools
-      tools << Tools::GitCommit.new(committer: @git_committer) if @git_committer
+      tools << Tools::GitCommit.new(committer: @git_committer, workspace_targets: @workspace_targets) if @git_committer
       tools + [
         Tools::WebSearch.new(web_search: @web_search),
         Tools::FetchContent.new(web_fetch: @web_fetch),
@@ -580,14 +604,14 @@ module Kward
 
     def core_tools
       tools = [
-        Tools::ListDirectory.new(workspace: @workspace),
-        Tools::ReadFile.new(workspace: @workspace),
-        Tools::WriteFile.new(workspace: @workspace),
-        Tools::EditFile.new(workspace: @workspace),
+        Tools::ListDirectory.new(workspace: @workspace, workspace_targets: @workspace_targets),
+        Tools::ReadFile.new(workspace: @workspace, workspace_targets: @workspace_targets),
+        Tools::WriteFile.new(workspace: @workspace, workspace_targets: @workspace_targets),
+        Tools::EditFile.new(workspace: @workspace, workspace_targets: @workspace_targets),
         shell_command_tool,
         Tools::CodeSearch.new(code_search: @code_search),
-        Tools::SummarizeFileStructure.new(workspace: @workspace),
-        Tools::ContextForTask.new(workspace: @workspace),
+        Tools::SummarizeFileStructure.new(workspace: @workspace, workspace_targets: @workspace_targets),
+        Tools::ContextForTask.new(workspace: @workspace, workspace_targets: @workspace_targets),
         Tools::ContextBudgetStats.new(context_budget_meter: @context_budget_meter),
         Tools::RetrieveToolOutput.new
       ]
@@ -601,7 +625,7 @@ module Kward
       if @shell_prompt_session
         Tools::RunShellCommand.new(shell_prompt_session: @shell_prompt_session)
       else
-        Tools::RunShellCommand.new(workspace: @workspace)
+        Tools::RunShellCommand.new(workspace: @workspace, workspace_targets: @workspace_targets)
       end
     end
 

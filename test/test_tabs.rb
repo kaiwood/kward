@@ -588,8 +588,11 @@ class TestTabs < KwardTestCase
         cli.send(:handle_tab_command, "worktree", store)
         binding = tab.driver.worktree
         assert_includes tab.agent.conversation.execution_profile_context, "git_commit"
+        assert_includes tab.agent.conversation.system_message.fetch(:content), "use `target: \"origin\"`"
         assert_includes tab.agent.conversation.system_message.fetch(:content), "Do not use `run_shell_command` for `git add` or `git commit`"
         assert_includes tab.agent.tool_registry.schemas.map { |schema| schema.dig(:function, :name) }, "git_commit"
+        read_schema = tab.agent.tool_registry.schemas.find { |schema| schema.dig(:function, :name) == "read_file" }
+        assert_equal %w[active origin], read_schema.dig(:function, :parameters, :properties, :target, :enum)
 
         result = tab.agent.tool_registry.dispatch(
           tool_call("write_file", { "path" => "agent.txt", "content" => "worktree only\n" }),
