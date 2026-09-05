@@ -431,10 +431,18 @@ in the session for transcript display and export. Restoring, cloning, or forking
 the session does not reactivate the instructions. Later model requests omit
 these history entries; compaction receives an informational placeholder instead
 of the expired text.
-System-level input uses each provider's native system-instruction mechanism;
-Anthropic and Gemini require existing dialogue and reject a system-only turn in
-an empty session. Other provider/model restrictions surface as normal request
-errors. No synthetic user prompt is inserted.
+System-level input uses each provider's native instruction mechanism. On Codex
+(ChatGPT subscription), the command becomes a new `developer` message at its
+position in the conversation: that backend rejects inline `system` messages.
+Direct OpenAI Responses and chat-completions payloads use an ordered `system`
+message. These turn instructions are not folded into the base preamble, so the
+model receives a new instruction after the preceding dialogue.
+
+Anthropic and Gemini instead collect system instructions into a separate system
+field; they cannot preserve that ordered-message boundary and require existing
+dialogue. A system-only turn in an empty session is rejected explicitly. Other
+provider/model restrictions surface as normal request errors. No synthetic user
+prompt is inserted.
 
 For instructions that should remain active in future turns instead, use prompt
 context below.

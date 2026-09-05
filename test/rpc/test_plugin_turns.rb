@@ -90,6 +90,8 @@ class TestRPCPluginTurns < KwardTestCase
     assert_equal "turns/start", capability["method"]
     assert_equal false, capability["synchronous"]
     assert_equal "turn", capability["scope"]
+    assert_equal "system", capability["inputRole"]
+    assert_equal "developer", capability["codexInputRole"]
     assert_equal 65_536, capability["maxSystemBytes"]
     assert_equal false, capability["pan"]
   end

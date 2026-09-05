@@ -20,7 +20,7 @@ class TestCLIPluginTurns < KwardTestCase
     assert_equal "ready", tab.status
     assert_includes output.string, request.to_s
     refute_includes output.string, "[image?]"
-    assert_equal [{ role: "system", content: request.system }], client.seen_messages.first
+    assert_equal [{ role: "system", content: request.system, system_turn: true }], client.seen_messages.first
     refute_includes JSON.generate(agent.conversation.context_messages), request.system
   ensure
     tab&.cancellation&.cancel!

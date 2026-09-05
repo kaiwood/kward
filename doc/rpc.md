@@ -866,13 +866,19 @@ submitted as user text and are not reactivated by restoring the session.
 `commands/run` and `pluginActions/run` reject model-turn requests. Discover this
 contract under `initialize.capabilities.commands.modelTurns`, including the
 65,536-byte limit, `scope: "turn"`, and `synchronous: false`.
+`inputRole: "system"` describes Kward's internal instruction role;
+`codexInputRole: "developer"` reports the Codex subscription backend's supported
+wire role. Codex receives the command as a new ordered developer message, while
+direct OpenAI Responses receives an ordered system message. Base instructions
+stay separate from these turn-scoped input messages.
 
 The invocation is saved as a user-visible history entry with `display_content`
 and `plugin_system_turn` metadata (command, plugin ID, instruction text, request ID,
 and scope). Later model requests omit these history entries; compaction uses an
-informational placeholder, not the expired instructions. Anthropic and Gemini require existing dialogue;
-a system-only request in an empty session fails explicitly rather than inserting
-a synthetic user prompt.
+informational placeholder, not the expired instructions. Anthropic and Gemini
+use separate system fields rather than ordered system messages and require
+existing dialogue; a system-only request in an empty session fails explicitly
+rather than inserting a synthetic user prompt.
 
 ### `pluginActions/list`
 

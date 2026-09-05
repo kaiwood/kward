@@ -23,6 +23,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed plugin system-turn instructions being folded into the old conversation's preamble instead of appearing as a new ordered message; Codex uses its supported `developer` input role, while direct OpenAI uses `system`.
 - Fixed plugin system-turn commands such as `/iddqd` crashing in the TUI image renderer; system instructions render as plain text without attachment parsing.
 - Fixed the documentation homepage’s `Get Started` link so it opens the getting-started guide.
 - Fixed the interactive composer leaving the final streamed transcript line too close to its top border.

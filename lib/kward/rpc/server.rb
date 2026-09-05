@@ -615,7 +615,7 @@ module Kward
             structuredResults: true,
             modelTurns: {
               supported: true, method: "turns/start", synchronous: false,
-              inputRole: "system", scope: "turn", maxSystemBytes: PluginTurnRequest::MAX_SYSTEM_BYTES,
+              inputRole: "system", codexInputRole: "developer", scope: "turn", maxSystemBytes: PluginTurnRequest::MAX_SYSTEM_BYTES,
               pluginChats: false, pan: false
             }
           },

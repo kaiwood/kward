@@ -194,8 +194,19 @@ module Kward
 
     # @return [Array<Hash>] provider request context: current system prompt plus durable transcript
     def context_messages
-      messages = @messages.reject { |message| message[:plugin_system_turn] || message["plugin_system_turn"] }
-      messages.unshift({ role: "system", content: @system_turn.system }) if @system_turn
+      instruction = { role: "system", content: @system_turn.system, system_turn: true } if @system_turn
+      inserted = false
+      messages = @messages.filter_map do |message|
+        record = message[:plugin_system_turn] || message["plugin_system_turn"]
+        next message unless record
+        next unless @system_turn && (record[:id] || record["id"]) == @system_turn.id
+
+        inserted = true
+        instruction
+      end
+      # Compaction can remove the history marker; reissue the current directive
+      # after the compacted context rather than demoting it to the base prompt.
+      messages << instruction if instruction && !inserted
       @system_message ? [@system_message] + messages : messages
     end
 

@@ -144,8 +144,14 @@ class TestPluginTurnRequest < KwardTestCase
       chat = client.send(:chat_messages, messages)
       assert_equal ["Base rules", turn.system], chat.select { |message| message[:role] == "system" }.map { |message| message[:content] }
       codex = client.send(:codex_payload, messages, [])
-      assert_includes codex[:instructions], turn.system
-      refute_includes JSON.generate(codex[:input]), turn.system
+      assert_equal "Base rules", codex[:instructions]
+      assert_equal %w[user assistant developer], codex[:input].map { |message| message[:role] }
+      assert_equal [{ type: "input_text", text: turn.system }], codex[:input].last[:content]
+      assert_equal %w[system user assistant system], chat.map { |message| message[:role] }
+      openai = client.send(:build_context_parts, "OpenAI", messages, [])
+      assert_equal "Base rules", openai[:instructions]
+      assert_equal %w[user assistant system], openai[:input].map { |message| message[:role] }
+      assert_equal [{ type: "input_text", text: turn.system }], openai[:input].last[:content]
       anthropic = client.send(:anthropic_payload, messages, [])
       assert_includes JSON.generate(anthropic[:system]), turn.system
       refute_includes JSON.generate(anthropic[:messages]), turn.system
@@ -154,6 +160,37 @@ class TestPluginTurnRequest < KwardTestCase
       refute_includes JSON.generate(gemini[:contents]), turn.system
     end
     refute_includes JSON.generate(client.send(:chat_messages, conversation.context_messages)), turn.system
+    refute_includes JSON.generate(client.send(:codex_payload, conversation.context_messages, [])), turn.system
+  end
+
+  def test_ordered_instruction_stays_before_tool_continuations_and_expires
+    client = Kward::Client.new(api_key: nil, openai_access_token: "test-token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    conversation = Kward::Conversation.new(system_message: nil)
+    conversation.append_user("Hi")
+    conversation.append_assistant("Hello")
+    first = request("Describe this message")
+    conversation.with_system_turn(first) do
+      conversation.append_system_turn(first)
+      call = { "id" => "call_1", "type" => "function", "function" => { "name" => "read_file", "arguments" => "{}" } }
+      conversation.append_assistant({ "role" => "assistant", "content" => nil, "tool_calls" => [call] })
+      conversation.append_tool(tool_call_id: "call_1", name: "read_file", content: "Result")
+      input = client.send(:codex_payload, conversation.context_messages, [])[:input]
+      assert_equal ["user", "assistant", "developer", "function_call", "function_call_output"], input.map { |item| item[:role] || item[:type] }
+      assert_equal first.system, input[2][:content].first[:text]
+    end
+    second = request("Quak like a duck!")
+    conversation.with_system_turn(second) do
+      conversation.append_system_turn(second)
+      payload = client.send(:codex_payload, conversation.context_messages, [])
+      assert_equal "developer", payload[:input].last[:role]
+      assert_equal second.system, payload[:input].last[:content].first[:text]
+      refute_includes JSON.generate(payload), first.system
+      conversation.compact!("Previous exchange", compaction_summary: true)
+      payload = client.send(:codex_payload, conversation.context_messages, [])
+      assert_equal %w[assistant developer], payload[:input].map { |item| item[:role] }
+      assert_equal second.system, payload[:input].last[:content].first[:text]
+    end
+    refute_includes JSON.generate(client.send(:codex_payload, conversation.context_messages, [])), second.system
   end
 
   def test_providers_requiring_dialogue_reject_system_only_requests

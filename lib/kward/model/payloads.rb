@@ -223,7 +223,8 @@ module Kward
           tools: tools.map { |tool| codex_tool_schema(tool) }
         }
       elsif ["Codex", "OpenAI"].include?(provider)
-        instructions, input = codex_messages(messages)
+        # The Codex subscription endpoint rejects inline system messages.
+        instructions, input = codex_messages(messages, system_turn_role: provider == "Codex" ? "developer" : "system")
         {
           provider: provider,
           model: model_for(provider, override_model: model),
@@ -339,7 +340,7 @@ module Kward
       }
     end
 
-    def codex_messages(messages)
+    def codex_messages(messages, system_turn_role: "system")
       instructions = []
       input = []
 
@@ -348,7 +349,11 @@ module Kward
         content = MessageAccess.content(message) || ""
         case role.to_s
         when "system"
-          instructions << plain_content(content).to_s
+          if MessageAccess.value(message, :system_turn)
+            input << codex_message(system_turn_role, plain_content(content).to_s)
+          else
+            instructions << plain_content(content).to_s
+          end
         when "tool", "toolResult"
           input << {
             type: "function_call_output",
