@@ -1,6 +1,33 @@
 require_relative "test_helper"
 
 class TestCLIPluginTurns < KwardTestCase
+  def test_system_turn_renders_and_runs_in_a_real_tui_session_tab
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    client = RecordingClient.new(["Done"])
+    agent = Kward::Agent.new(client: client, conversation: Kward::Conversation.new(system_message: nil))
+    cli = Kward::CLI.new(argv: [], prompt: prompt, client: client)
+    tab = cli.send(:build_tab, nil, agent, label: "Test")
+    cli.instance_variable_set(:@tabs, [tab])
+    cli.instance_variable_set(:@active_tab_index, 0)
+    request = Kward::PluginTurnRequest.new(system: "Explain ./missing.png without attaching it.", command: "iddqd")
+
+    cli.send(:start_tab_turn, tab, request, display_input: request.to_s)
+    assert tab.thread.join(2), "Model turn did not finish"
+
+    assert_nil tab.error
+    assert_equal "Done", tab.answer
+    assert_equal "ready", tab.status
+    assert_includes output.string, request.to_s
+    refute_includes output.string, "[image?]"
+    assert_equal [{ role: "system", content: request.system }], client.seen_messages.first
+    refute_includes JSON.generate(agent.conversation.context_messages), request.system
+  ensure
+    tab&.cancellation&.cancel!
+    tab&.thread&.join(2)
+    prompt&.close
+  end
+
   def test_slash_command_dispatches_system_turn_then_normal_turn
     Dir.mktmpdir do |home|
       with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do

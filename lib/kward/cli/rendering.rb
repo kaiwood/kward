@@ -224,6 +224,9 @@ module Kward
       def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
         visible_input = display_input.nil? ? input : display_input
         write_prompt_transcript("\n#{colored("❯ You>", :blue, :bold)} #{visible_input}\n")
+        # System-turn instructions are plain text, never image attachments.
+        return if input.is_a?(PluginTurnRequest)
+
         print_attachment_badges(input, references: attachment_references)
         print_pasted_images(input, image_parts: image_parts)
       end
