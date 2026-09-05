@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added GPT-6 Astra to the OpenAI, Codex, and Copilot model choices with its 1,050,000-token context metadata and model-specific reasoning limits.
 - Added `/name` to rename the active session and tab together, including while the tab's agent is running.
 
 ### Changed

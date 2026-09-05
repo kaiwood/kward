@@ -712,7 +712,7 @@ module Kward
     end
 
     def copilot_responses_model?(model)
-      model.to_s.match?(/\Agpt-5(?:\.|-|\z)/)
+      model.to_s.match?(/\Agpt-(?:5|6)(?:\.|-|\z)/)
     end
 
     def model_entry(provider, id, current: false, metadata: nil)

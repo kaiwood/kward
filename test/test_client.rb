@@ -519,6 +519,7 @@ class TestClient < KwardTestCase
 
     models = client.available_models
 
+    assert_includes_model models, { provider: "Codex", id: "gpt-6-astra", current: false, contextWindow: 1_050_000 }
     assert_includes_model models, { provider: "Codex", id: "gpt-5.6-sol", current: true, contextWindow: 1_050_000 }
     assert_includes_model models, { provider: "Codex", id: "gpt-5.6-terra", current: false, contextWindow: 1_050_000 }
     assert_includes_model models, { provider: "Codex", id: "gpt-5.6-luna", current: false, contextWindow: 1_050_000 }
@@ -528,6 +529,7 @@ class TestClient < KwardTestCase
     assert_includes_model models, { provider: "Codex", id: "gpt-5.3-codex-spark", current: false, contextWindow: 128_000 }
     refute models.any? { |model| model[:provider] == "OpenRouter" }
     assert_includes_model models, { provider: "Copilot", id: "gpt-5-mini", current: false, contextWindow: 400_000 }
+    assert_includes_model models, { provider: "Copilot", id: "gpt-6-astra", current: false, contextWindow: 1_050_000 }
     assert_includes_model models, { provider: "Anthropic", id: "claude-fable-5", current: false, contextWindow: 1_000_000 }
     assert_includes_model models, { provider: "Anthropic", id: "claude-opus-5", current: false, contextWindow: 1_000_000 }
     assert_includes_model models, { provider: "Anthropic", id: "claude-sonnet-5", current: false, contextWindow: 1_000_000 }
@@ -768,6 +770,25 @@ class TestClient < KwardTestCase
         assert_equal true, payload.fetch("stream")
         assert_equal false, payload.fetch("store")
         assert_equal({ "effort" => "medium", "summary" => "auto" }, payload.fetch("reasoning"))
+      end
+    end
+  end
+
+  def test_copilot_chat_uses_responses_endpoint_for_gpt_6_astra
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "config.json")
+      File.write(path, JSON.dump("provider" => "copilot", "copilot_model" => "gpt-6-astra"))
+      client = Kward::Client.new(api_key: nil, openai_access_token: nil, oauth: FakeOAuth.new(nil), github_oauth: FakeGithubOAuth.new("github-token"), config_path: path)
+      models_body = JSON.dump("data" => [{ "id" => "gpt-6-astra", "model_picker_enabled" => true }])
+      response_body = "data: #{JSON.dump("type" => "response.output_text.delta", "delta" => "ok")}\n\n"
+
+      with_fake_http([fake_net_response(200, models_body), fake_net_response(200, response_body)]) do |http|
+        message = client.chat([{ role: "user", content: "hello" }])
+
+        assert_equal "ok", message["content"]
+        assert_equal URI("https://api.individual.githubcopilot.com/responses"), http.requests.last.uri
+        assert_equal "gpt-6-astra", JSON.parse(http.requests.last.body).fetch("model")
+        assert_equal({ "effort" => "medium", "summary" => "auto" }, JSON.parse(http.requests.last.body).fetch("reasoning"))
       end
     end
   end

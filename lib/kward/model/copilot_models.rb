@@ -14,7 +14,7 @@ module Kward
 
     def supported?(model)
       text = model.to_s
-      text.match?(/\Agpt-5(?:\.|-|\z)/) || text.match?(/\A(?:gemini-|gpt-4\.1|oswe-)/)
+      text.match?(/\Agpt-(?:5|6)(?:\.|-|\z)/) || text.match?(/\A(?:gemini-|gpt-4\.1|oswe-)/)
     end
 
     def supported_choices(choices)
@@ -24,7 +24,7 @@ module Kward
     def resolved_chat_model(configured_model, choices)
       return configured_model if choices.empty? || choices.include?(configured_model)
 
-      choices.find { |model| supported?(model) } || raise("No Copilot models supported by Kward are available for this account. Kward currently supports Copilot GPT-5 Responses and Gemini/GPT-4.1 chat models.")
+      choices.find { |model| supported?(model) } || raise("No Copilot models supported by Kward are available for this account. Kward currently supports Copilot GPT-5/GPT-6 Responses and Gemini/GPT-4.1 chat models.")
     end
 
     def catalog_entries(body)

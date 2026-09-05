@@ -21,6 +21,7 @@ class TestCopilotModels < KwardTestCase
   def test_recognizes_supported_model_families
     assert Kward::CopilotModels.supported?("gpt-5-mini")
     assert Kward::CopilotModels.supported?("gpt-5.1")
+    assert Kward::CopilotModels.supported?("gpt-6-astra")
     assert Kward::CopilotModels.supported?("gemini-2.5-pro")
     assert Kward::CopilotModels.supported?("gpt-4.1")
     assert Kward::CopilotModels.supported?("oswe-agent")
@@ -28,7 +29,7 @@ class TestCopilotModels < KwardTestCase
   end
 
   def test_filters_supported_choices
-    assert_equal ["gpt-5-mini", "gemini-2.5-pro"], Kward::CopilotModels.supported_choices(["gpt-5-mini", "claude-sonnet", "gemini-2.5-pro", "gpt-5-mini"])
+    assert_equal ["gpt-5-mini", "gpt-6-astra", "gemini-2.5-pro"], Kward::CopilotModels.supported_choices(["gpt-5-mini", "gpt-6-astra", "claude-sonnet", "gemini-2.5-pro", "gpt-5-mini"])
   end
 
   def test_resolves_chat_model_to_first_supported_live_choice

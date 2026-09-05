@@ -275,6 +275,8 @@ Defaults:
 - Copilot: `gpt-5-mini`
 - Reasoning effort: `medium`
 
+The OpenAI/Codex and Copilot model choices include `gpt-6-astra`. GPT-6 Astra has a 1,050,000-token context window and supports `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort; it does not support `none`.
+
 The Anthropic model choices include `claude-fable-5`, `claude-opus-5`, and `claude-sonnet-5`. Fable and Opus availability depends on the logged-in account and organization. Selecting a model without access returns an Anthropic provider error. Kward keeps Sonnet 5 as its default because it supports both Pro and Max subscriptions; select Opus 5 explicitly when it is available on the account.
 
 The interactive `/model` picker reads cached OpenRouter models when available. Run `kward openrouter refresh` to fetch text-capable models available to the configured OpenRouter API key and cache them under `~/.kward/cache/openrouter_models.json`. Run `kward openrouter list` to inspect the cached model ids.
