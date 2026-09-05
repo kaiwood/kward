@@ -14,6 +14,7 @@ Start simple. Most users only need `PRINCIPLES.md`, workspace `AGENTS.md`, and m
 | Task-specific reusable instructions | skills |
 | Different tone or role | [personas](personas.md) |
 | Local Ruby behavior or integrations | plugins |
+| Slash commands that run a turn with system-level instructions | [plugin model-turn requests](plugins.md) |
 | External messaging or event integration | transport plugins |
 | Deterministic runtime policy or automation | lifecycle hooks |
 

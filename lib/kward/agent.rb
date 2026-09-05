@@ -3,6 +3,7 @@ require_relative "model/chat_invocation"
 require_relative "compactor"
 require_relative "model/context_overflow"
 require_relative "conversation"
+require_relative "plugins/turn_request"
 require_relative "events"
 require_relative "deep_copy"
 require_relative "hooks"
@@ -41,9 +42,9 @@ module Kward
 
     attr_reader :conversation, :tool_registry
 
-    # Adds a user message, compacts context when needed, and runs the turn.
+    # Adds user input or scopes a plugin system request, then runs a normal turn.
     #
-    # @param input [String] text sent to the model
+    # @param input [String, PluginTurnRequest] user text or host-staged system instructions
     # @param display_input [String, nil] alternate text kept for transcripts
     # @yieldparam event [Object] streamed turn event for frontends
     # @return [String] final assistant answer
@@ -52,19 +53,31 @@ module Kward
       status = "completed"
       error = nil
       cancellation&.raise_if_cancelled!
-      turn_start = run_hook("turn_start", payload: { input: input, display_input: display_input })
+      system_turn = input if input.is_a?(PluginTurnRequest)
+      display_input ||= system_turn.to_s if system_turn
+      input = system_turn.system if system_turn
+      turn_start = run_hook("turn_start", payload: { input: input, display_input: display_input, input_role: system_turn ? "system" : "user" })
       return hook_denied_answer(turn_start) if turn_start.denied?
 
       input = turn_start.payload[:input] || turn_start.payload["input"] || input
       display_input = turn_start.payload[:display_input] || turn_start.payload["display_input"] || display_input
-      @conversation.refresh_system_message_if_workspace_agents_changed!
-      @conversation.append_user(input, display_content: display_input)
-      run_hook("turn_context_build_before", payload: { message_count: @conversation.messages.length })
-      auto_compact_if_needed
-      run_hook("turn_context_build_after", payload: { message_count: @conversation.messages.length })
-      answer = run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, &block)
-      run_hook("turn_end", payload: { input: input, answer: answer })
-      answer
+      if system_turn
+        system_turn = PluginTurnRequest.new(system: input, command: system_turn.command, plugin_id: system_turn.plugin_id, id: system_turn.id)
+      end
+      @conversation.with_system_turn(system_turn) do
+        @conversation.refresh_system_message_if_workspace_agents_changed!
+        if system_turn
+          @conversation.append_system_turn(system_turn)
+        else
+          @conversation.append_user(input, display_content: display_input)
+        end
+        run_hook("turn_context_build_before", payload: { message_count: @conversation.messages.length })
+        auto_compact_if_needed
+        run_hook("turn_context_build_after", payload: { message_count: @conversation.messages.length })
+        answer = run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, &block)
+        run_hook("turn_end", payload: { input: input, answer: answer })
+        answer
+      end
     rescue StandardError => e
       status = "failed"
       error = e

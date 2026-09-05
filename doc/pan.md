@@ -87,6 +87,12 @@ Press Return to send. Use Shift+Return for a new line. The composer grows with m
 
 Prompts are accepted while another turn is running. Pan puts them into a single queue and executes them sequentially. The status below the composer shows whether Kward is working and how many prompts remain queued.
 
+Plugin slash commands that request model turns (such as `/iddqd`) are not
+supported in Pan: its composer submits ordinary prompts, not plugin commands.
+Use the interactive TUI or RPC `turns/start` for these commands. The `/transcript`
+response reports `capabilities.pluginCommandTurns.supported: false` so browser
+clients can make this limitation explicit.
+
 ## Work with sessions
 
 Pan saves conversations through the same workspace-scoped session store as the interactive CLI. The session sidebar shows up to 50 recent sessions with their title, modified time, and message count.

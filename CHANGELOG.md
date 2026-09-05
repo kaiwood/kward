@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `ctx.request_turn(system: text)` for plugin commands to run the active session model with turn-scoped system instructions, normal tools and cancellation, TUI/RPC/transport execution, persisted invocation history, and explicit capability reporting for unsupported contexts.
 - Added GPT-6 Astra to the OpenAI, Codex, and Copilot model choices with its 1,050,000-token context metadata and model-specific reasoning limits.
 - Added a versioned plugin-chat contract with declared attachment, steering, and transcript-paging capabilities; scoped chat configuration/storage/secrets/logging; surface and scope context; persistent local scope IDs; RPC capability discovery; and driver validation while preserving legacy plugin tabs.
 - Added composable plugin footer status with stable segment IDs, display ordering, width-aware priority removal, isolated render failures, structured RPC segments and tooltips, and backward-compatible `plugin.footer` contributions.

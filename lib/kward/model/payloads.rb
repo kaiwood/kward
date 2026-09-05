@@ -95,6 +95,8 @@ module Kward
 
     def anthropic_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
       parts = build_context_parts("Anthropic", messages, tools, model: model)
+      raise ArgumentError, "Anthropic requires conversation messages; a system-only turn is unavailable in an empty session" if parts[:messages].empty?
+
       system = [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." }]
       system << { type: "text", text: parts[:system] } unless parts[:system].to_s.empty?
       payload = {
@@ -122,6 +124,8 @@ module Kward
         contents: messages.filter_map { |message| gemini_message(message) },
         tools: tools.empty? ? nil : [{ functionDeclarations: tools.map { |tool| gemini_tool_schema(tool) } }]
       }.compact
+      raise ArgumentError, "Gemini requires conversation contents; a system-only turn is unavailable in an empty session" if payload[:contents].empty?
+
       payload[:systemInstruction] = { parts: system_parts } unless system_parts.empty?
       payload[:generationConfig] = { maxOutputTokens: max_tokens.to_i } if max_tokens.to_i.positive?
       payload

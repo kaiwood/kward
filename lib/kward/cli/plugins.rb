@@ -157,6 +157,32 @@ module Kward
         PromptCommands.expand(input, templates: prompt_templates, reserved_commands: builtin_slash_command_names)
       end
 
+      def run_plugin_command_and_turn(name, argument, agent)
+        origin_tab = active_tab
+        _handled, request = run_busy_local_command_and_requeue(activity: "running") do |cancellation|
+          run_plugin_command(name, argument, agent, cancellation: cancellation)
+        end
+        return [true, nil] unless request
+        return [true, nil] if origin_tab && (!@tabs.include?(origin_tab) || !origin_tab.agent.equal?(agent))
+
+        flush_pending_reasoning_config(conversation: agent.conversation)
+        if origin_tab
+          session = origin_tab.session
+          session.rename(default_session_name(request.to_s)) if session && session.name.to_s.empty?
+          submit_tab_input(origin_tab, request, display_input: request.to_s)
+        else
+          auto_name_active_session(request.to_s)
+          pending = run_interactive_turn(agent, request, display_input: request.to_s)
+          pending.reverse_each { |input| @pending_inputs.unshift(input) }
+        end
+        [true, nil]
+      rescue Cancellation::CancelledError
+        [true, nil]
+      rescue StandardError => e
+        runtime_output("Error: #{e.message}")
+        [true, nil]
+      end
+
       def run_plugin_command(name, argument, agent, cancellation: nil)
         command = plugin_command_for(name)
         return [false, nil] unless command
@@ -164,11 +190,11 @@ module Kward
         cancellation&.raise_if_cancelled!
         agent.conversation.plugin_registry ||= plugin_registry if agent.conversation.respond_to?(:plugin_registry)
         arguments = command.parse_arguments(argument)
-        context = plugin_context(agent.conversation, arguments, cancellation: cancellation)
+        context = plugin_context(agent.conversation, arguments, cancellation: cancellation, turn_command: command)
         result = command.normalize_result(command.handler.call(arguments, context))
         cancellation&.raise_if_cancelled!
         runtime_output(result.message) if command.typed? && !result.message.to_s.empty?
-        [true, nil]
+        [true, context.requested_turn]
       rescue Cancellation::CancelledError
         raise
       rescue StandardError => e
@@ -176,7 +202,7 @@ module Kward
         [true, nil]
       end
 
-      def plugin_context(conversation, args, requests: true, tool_requests: nil, cancellation: nil)
+      def plugin_context(conversation, args, requests: true, tool_requests: nil, cancellation: nil, turn_command: nil)
         say_callback = lambda { |message| runtime_output(message) }
         tool_requests = requests if tool_requests.nil?
         PluginRegistry::Context.new(
@@ -187,7 +213,8 @@ module Kward
           say_callback: say_callback,
           cancellation: cancellation,
           ui: plugin_ui(say_callback, requests: requests),
-          tool_ui: plugin_ui(say_callback, requests: tool_requests)
+          tool_ui: plugin_ui(say_callback, requests: tool_requests),
+          turn_command: turn_command
         )
       end
 

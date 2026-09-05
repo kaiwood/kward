@@ -6,6 +6,7 @@ require_relative "actions"
 require_relative "chat_contract"
 require_relative "host"
 require_relative "ui"
+require_relative "turn_request"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -96,10 +97,10 @@ module Kward
     # Runtime context passed to plugin commands, tools, footers, prompt context
     # renderers, hooks, and transcript event handlers.
     class Context
-      attr_reader :args, :workspace_root, :cancellation, :ui
+      attr_reader :args, :workspace_root, :cancellation, :ui, :requested_turn
 
       # Creates an object for trusted plugin loading and dispatch.
-      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil, ui: nil, tool_ui: nil)
+      def initialize(conversation:, args: "", session: nil, workspace_root: Dir.pwd, say_callback: nil, cancellation: nil, ui: nil, tool_ui: nil, turn_command: nil)
         @conversation = conversation
         @args = args.is_a?(Hash) ? DeepCopy.freeze(DeepCopy.dup(args)) : args.to_s
         @session = session
@@ -108,6 +109,24 @@ module Kward
         @cancellation = cancellation
         @ui = (ui || PluginUI.new(say_callback: say_callback)).with_cancellation(cancellation)
         @tool_ui = tool_ui
+        @turn_command = turn_command
+      end
+
+      # Whether this command runs on a host that can execute a session turn.
+      def turn_requests_supported?
+        !@turn_command.nil?
+      end
+
+      # Stages one turn for dispatch after the command successfully returns.
+      # Available only to asynchronous, session-backed plugin commands.
+      # @return [nil]
+      def request_turn(system:)
+        raise ArgumentError, "Model turn requests are unavailable here; use a session command through the TUI or RPC turns/start" unless turn_requests_supported?
+        @cancellation&.raise_if_cancelled!
+        raise ArgumentError, "Only one model turn may be requested per command" if @requested_turn
+
+        @requested_turn = PluginTurnRequest.new(system: system, command: @turn_command.name, plugin_id: @turn_command.plugin_id)
+        nil
       end
 
       # @return [Transcript] read-only transcript wrapper

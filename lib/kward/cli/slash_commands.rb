@@ -131,9 +131,7 @@ module Kward
           elsif interactive_command_for(name) && prompt_interface? && @prompt.respond_to?(:start_interactive)
             run_interactive_command(name, argument, agent)
           elsif plugin_command_for(name)
-            run_busy_local_command_and_requeue(activity: "running") do |cancellation|
-              run_plugin_command(name, argument, agent, cancellation: cancellation)
-            end
+            run_plugin_command_and_turn(name, argument, agent)
           else
             [false, nil]
           end

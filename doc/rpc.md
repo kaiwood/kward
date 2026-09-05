@@ -852,6 +852,28 @@ and JSON-compatible `data`; text emitted through `ctx.say` remains in `output`.
 Blocking structured UI requests are unavailable on this synchronous path. Use a
 slash-command `turns/start` call when the command needs interactive UI.
 
+Plugin commands can also stage a model response with `ctx.request_turn(system: text)`.
+Submit these through `turns/start`, for example:
+
+```json
+{"sessionId":"session-id","input":"/iddqd Answer in French and explain the current design."}
+```
+
+The same turn emits the normal model, tool, answer, error, and completion events.
+The host retains cancellation, execution-profile restrictions, and tool approvals.
+The instructions supplement the system prompt for this turn only; they are not
+submitted as user text and are not reactivated by restoring the session.
+`commands/run` and `pluginActions/run` reject model-turn requests. Discover this
+contract under `initialize.capabilities.commands.modelTurns`, including the
+65,536-byte limit, `scope: "turn"`, and `synchronous: false`.
+
+The invocation is saved as a user-visible history entry with `display_content`
+and `plugin_system_turn` metadata (command, plugin ID, instruction text, request ID,
+and scope). Later model requests omit these history entries; compaction uses an
+informational placeholder, not the expired instructions. Anthropic and Gemini require existing dialogue;
+a system-only request in an empty session fails explicitly rather than inserting
+a synthetic user prompt.
+
 ### `pluginActions/list`
 
 Params:

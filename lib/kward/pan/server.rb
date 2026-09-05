@@ -243,7 +243,8 @@ module Kward
       when ["GET", "/kward-logo.png"]
         write_response(socket, 200, { "Content-Type" => "image/png", "Cache-Control" => "public, max-age=86400" }, File.binread(File.join(__dir__, "kward_logo.png")))
       when ["GET", "/transcript"]
-        write_json(socket, 200, transcript: transcript_items, session: active_session_payload, workspace: @workspace.root.to_s)
+        write_json(socket, 200, transcript: transcript_items, session: active_session_payload, workspace: @workspace.root.to_s,
+          capabilities: { pluginCommandTurns: { supported: false, reason: "Pan has no plugin slash-command dispatcher; use the TUI or RPC turns/start." } })
       when ["GET", "/sessions"]
         write_json(socket, 200, sessions: session_payloads, activeSessionId: @session.id)
       when ["GET", "/skill-capture/sessions"]

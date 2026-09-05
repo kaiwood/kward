@@ -114,6 +114,16 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_reports_plugin_command_turns_as_unsupported
+    Dir.mktmpdir do |dir|
+      server = build_server(dir)
+      response = request(server, "GET /transcript HTTP/1.1\r\nHost: example\r\n#{auth_header}\r\n\r\n")
+      capability = json_response(response).dig("capabilities", "pluginCommandTurns")
+      assert_equal false, capability["supported"]
+      assert_includes capability["reason"], "no plugin slash-command dispatcher"
+    end
+  end
+
   def test_pan_server_serves_authenticated_page
     Dir.mktmpdir do |dir|
       server = build_server(dir)

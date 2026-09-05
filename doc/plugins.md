@@ -385,6 +385,60 @@ closed and non-blocking output falls back to its existing plugin message event.
 Transport gateways expose blocking requests as transport-neutral interactions;
 the transport adapter decides whether and how to render and answer them.
 
+## Request a model response from a command
+
+Use `ctx.request_turn(system: text)` when a slash command should run the active
+session's model immediately with turn-scoped system instructions. For example,
+save this as `~/.kward/plugins/iddqd.rb` and run `/reload`:
+
+```ruby
+Kward.plugin(id: "com.example.iddqd", version: "1.0.0", api: 1) do |plugin|
+  plugin.command "iddqd",
+    description: "Run a prompt as system instructions",
+    argument_hint: "<prompt>" do |text, ctx|
+    if text.strip.empty?
+      ctx.say("Usage: /iddqd <prompt>")
+      next
+    end
+
+    ctx.request_turn(system: text)
+  end
+end
+```
+
+Then enter `/iddqd Answer in French and explain the current design.` The text
+needs no quoting or flag parsing. Kward streams the response just like an ordinary
+turn, with the same tools, permissions, hooks, cancellation, and tab ownership.
+This does not replace Kward's base system prompt or bypass host security policy.
+
+The call stages a request and returns `nil`; the host starts the model only after
+the command successfully returns. A handler error or cancellation discards the
+request. Each command may stage one request, containing nonblank text of at most
+65,536 bytes. Instructions last through tool continuations, prompt refreshes,
+compaction, and retries in that turn, then expire even if the turn fails.
+
+Check `ctx.turn_requests_supported?` before offering this behavior on an unknown
+host. It is supported by interactive CLI session commands, asynchronous RPC
+`turns/start` commands, and session-backed transports whose execution profile
+allows plugin commands. Synchronous RPC `commands/run`, plugin actions, plugin
+owned chats, tools, hooks, status renderers, editor/shell prompts, and Pan do not
+provide this capability. Unsupported calls raise an error rather than silently
+launching work or submitting the text as a user prompt. Pan does not dispatch
+plugin slash commands; use the TUI or RPC instead.
+
+**History and provider notes:** the invocation and instruction text are stored
+in the session for transcript display and export. Restoring, cloning, or forking
+the session does not reactivate the instructions. Later model requests omit
+these history entries; compaction receives an informational placeholder instead
+of the expired text.
+System-level input uses each provider's native system-instruction mechanism;
+Anthropic and Gemini require existing dialogue and reject a system-only turn in
+an empty session. Other provider/model restrictions surface as normal request
+errors. No synthetic user prompt is inserted.
+
+For instructions that should remain active in future turns instead, use prompt
+context below.
+
 ## Add prompt context
 
 Prompt context is short text injected into future model requests.

@@ -612,7 +612,12 @@ module Kward
             sources: ["builtin", "prompt", "skill", "plugin"],
             executableSources: ["builtin", "plugin"],
             typedArguments: { supported: true, schema: "jsonSchemaObject", textSyntax: "shellFlags", legacyRawStrings: true },
-            structuredResults: true
+            structuredResults: true,
+            modelTurns: {
+              supported: true, method: "turns/start", synchronous: false,
+              inputRole: "system", scope: "turn", maxSystemBytes: PluginTurnRequest::MAX_SYSTEM_BYTES,
+              pluginChats: false, pan: false
+            }
           },
           pluginActions: {
             supported: true,

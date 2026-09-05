@@ -1336,18 +1336,7 @@ module Kward
         if turn.plugin_command_name
           run_plugin_turn(rpc_session, turn)
         else
-          auto_name_session(rpc_session, turn.display_input || turn.input)
-          prepare_memory_context(rpc_session.conversation, turn.input) unless memory_disabled?(turn)
-          rpc_session.agent.ask(turn.input, display_input: turn_display_input(turn), cancellation: turn.cancellation, steering: turn.steering, options: turn.options || {}, tool_registry: turn.tool_registry) do |event|
-            next if turn.cancel_requested
-
-            notify_plugin_transcript_event(rpc_session, event)
-            handle_agent_event(turn, event)
-          end
-          unless memory_disabled?(turn)
-            persist_memory_state(rpc_session)
-            auto_summarize_memory(rpc_session) unless turn.cancel_requested
-          end
+          run_session_model_turn(rpc_session, turn, input: turn.input, display_input: turn_display_input(turn))
           finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
         end
       rescue Cancellation::CancelledError
@@ -1360,6 +1349,22 @@ module Kward
         Thread.current[:kward_rpc_turn_id] = previous_turn_id
         turn.steering = nil
         rpc_session.running_turn_id = nil
+      end
+
+      def run_session_model_turn(rpc_session, turn, input:, display_input: nil)
+        auto_name_session(rpc_session, display_input || turn.display_input || input)
+        memory_input = input.is_a?(PluginTurnRequest) ? input.to_s : input
+        prepare_memory_context(rpc_session.conversation, memory_input) unless memory_disabled?(turn)
+        rpc_session.agent.ask(input, display_input: display_input, cancellation: turn.cancellation, steering: turn.steering, options: turn.options || {}, tool_registry: turn.tool_registry) do |event|
+          next if turn.cancel_requested
+
+          notify_plugin_transcript_event(rpc_session, event)
+          handle_agent_event(turn, event)
+        end
+        unless memory_disabled?(turn)
+          persist_memory_state(rpc_session)
+          auto_summarize_memory(rpc_session) unless turn.cancel_requested
+        end
       end
 
       def build_steering(_turn)
@@ -1417,7 +1422,7 @@ module Kward
         turn_payload(turn)
       end
 
-      def plugin_context(rpc_session, args: nil, say_callback:, requests: false, cancellation: nil)
+      def plugin_context(rpc_session, args: nil, say_callback:, requests: false, cancellation: nil, turn_command: nil)
         PluginRegistry::Context.new(
           conversation: rpc_session.conversation,
           args: args,
@@ -1425,6 +1430,7 @@ module Kward
           workspace_root: rpc_session.workspace_root,
           say_callback: say_callback,
           cancellation: cancellation,
+          turn_command: turn_command,
           ui: rpc_plugin_ui(
             prompt: rpc_session.prompt,
             session_id: rpc_session.id,
@@ -1468,7 +1474,8 @@ module Kward
           args: arguments,
           say_callback: lambda { |message| output << message.to_s },
           requests: true,
-          cancellation: turn.cancellation
+          cancellation: turn.cancellation,
+          turn_command: command
         )
         result = command.normalize_result(command.handler.call(arguments, context))
         turn.cancellation&.raise_if_cancelled!
@@ -1479,7 +1486,11 @@ module Kward
         answer = (output + [result]).compact.map(&:to_s).reject(&:empty?).join("\n")
         unless answer.empty?
           emit_turn_event(turn, "assistantDelta", { delta: answer })
-          emit_turn_event(turn, "answer", { content: answer })
+          emit_turn_event(turn, "answer", { content: answer }) unless context.requested_turn
+        end
+        if context.requested_turn
+          turn.steering = build_steering(turn) if supports_in_flight_steer?
+          run_session_model_turn(rpc_session, turn, input: context.requested_turn, display_input: context.requested_turn.to_s)
         end
         finish_turn(turn, turn.cancel_requested ? "canceled" : "completed")
       end

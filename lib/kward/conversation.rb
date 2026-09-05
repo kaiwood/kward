@@ -176,9 +176,27 @@ module Kward
       "toolout_#{digest}"
     end
 
+    # Scopes plugin instructions to one host-owned turn, including retries.
+    # The overlay is deliberately not persisted or folded into the base prompt.
+    def with_system_turn(request)
+      previous = @system_turn
+      raise ArgumentError, "A system-instruction turn is already active" if previous
+
+      @system_turn = request
+      yield
+    ensure
+      @system_turn = previous
+    end
+
+    def append_system_turn(request)
+      append_message(request.history_message)
+    end
+
     # @return [Array<Hash>] provider request context: current system prompt plus durable transcript
     def context_messages
-      @system_message ? [@system_message] + @messages : @messages.dup
+      messages = @messages.reject { |message| message[:plugin_system_turn] || message["plugin_system_turn"] }
+      messages.unshift({ role: "system", content: @system_turn.system }) if @system_turn
+      @system_message ? [@system_message] + messages : messages
     end
 
     # Rebuilds the system message from current config, memory, plugins, and

@@ -17,6 +17,11 @@ If you use Kward from the terminal, start with the [user guides](file.README.htm
 
 Use plugins when you need trusted local Ruby code for typed commands and actions, model-callable tools, prompt context, footer UI, transcript events, plugin-owned chats, or external transports.
 
+Session commands can stage a host-owned model response with
+`ctx.request_turn(system: text)`; check `ctx.turn_requests_supported?` before
+offering this on an unknown frontend. Instructions are scoped to that turn,
+while normal tools, hooks, cancellation, and session history remain host-owned.
+
 Read first:
 
 - [Plugins](plugins.md)
