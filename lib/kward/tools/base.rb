@@ -1,3 +1,5 @@
+require_relative "workspace_targets"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Model-callable tool wrappers and their argument schemas.
@@ -52,6 +54,22 @@ module Kward
         @properties.keys.sort_by(&:to_s).each_with_object({}) do |key, result|
           result[key] = @properties[key]
         end
+      end
+
+      # Configures the active workspace and any additional host-scoped targets.
+      def configure_workspace_targets(workspace, workspace_targets)
+        @workspace = workspace
+        @workspace_targets = workspace_targets || WorkspaceTargets.new(active: workspace)
+      end
+
+      # Adds the optional target selector when additional workspaces are available.
+      def targeted_properties(properties)
+        @workspace_targets.properties(properties)
+      end
+
+      # Resolves the requested role through the trusted target map.
+      def workspace_for(args)
+        @workspace_targets.workspace_for(args)
       end
 
       # Reads a tool argument while accepting symbol or string keys from restored calls.

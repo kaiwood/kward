@@ -980,6 +980,70 @@ class TestToolRegistry < KwardTestCase
     end
   end
 
+  def test_workspace_tools_route_operations_to_the_origin_target_without_extra_approval
+    Dir.mktmpdir do |active_dir|
+      Dir.mktmpdir do |origin_dir|
+        File.write(File.join(active_dir, "target.rb"), "active\n")
+        File.write(File.join(origin_dir, "target.rb"), "origin\n")
+        active = Kward::Workspace.new(root: active_dir)
+        origin = Kward::Workspace.new(root: origin_dir)
+        targets = Kward::Tools::WorkspaceTargets.new(active: active, targets: { origin: origin })
+        registry = Kward::ToolRegistry.new(
+          workspace: active,
+          workspace_targets: targets,
+          permission_policy: Kward::Permissions::Policy.new,
+          tool_approval: ->(**) { flunk "origin target should not add an approval request" }
+        )
+        conversation = Kward::Conversation.new
+
+        read_result = registry.dispatch(tool_call("read_file", path: "target.rb", target: "origin"), conversation)
+        edit_result = registry.dispatch(
+          tool_call("edit_file", path: "target.rb", edits: [{ old_text: "origin", new_text: "updated" }], target: "origin"),
+          conversation
+        )
+
+        assert_equal "origin\n", read_result
+        assert_includes edit_result, "Edited"
+        assert_equal "active\n", File.read(File.join(active_dir, "target.rb"))
+        assert_equal "updated\n", File.read(File.join(origin_dir, "target.rb"))
+
+        shell_result = registry.dispatch(
+          tool_call("run_shell_command", command: "pwd", target: "origin"),
+          conversation
+        )
+
+        assert_includes shell_result, File.realpath(origin_dir)
+        context_result = registry.dispatch(
+          tool_call("context_for_task", task: "updated", paths: ["target.rb"], target: "origin"),
+          conversation
+        )
+        assert_includes context_result, "updated"
+
+        targeted_tools = Kward::ToolRegistry::TARGETED_WORKSPACE_TOOLS - ["git_commit"]
+        targeted_tools.each do |name|
+          schema = registry.schemas.find { |entry| entry.dig(:function, :name) == name }
+          assert_equal %w[active origin], schema.dig(:function, :parameters, :properties, :target, :enum), name
+        end
+      end
+    end
+  end
+
+  def test_workspace_target_rejects_unknown_roles
+    workspace = Kward::Workspace.new
+    targets = Kward::Tools::WorkspaceTargets.new(active: workspace, targets: { origin: workspace })
+    registry = Kward::ToolRegistry.new(workspace: workspace, workspace_targets: targets)
+
+    result = registry.dispatch(tool_call("read_file", path: "README.md", target: "elsewhere"), Kward::Conversation.new)
+
+    assert_equal "Error: Unknown workspace target: elsewhere", result
+  end
+
+  def test_normal_workspace_tool_schemas_do_not_advertise_a_target
+    schema = Kward::ToolRegistry.new.schemas.find { |entry| entry.dig(:function, :name) == "read_file" }
+
+    refute schema.dig(:function, :parameters, :properties).key?(:target)
+  end
+
   def test_permission_policy_denies_a_tool_before_execution
     workspace = Kward::Workspace.new
     executed = false

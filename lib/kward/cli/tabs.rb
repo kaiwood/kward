@@ -11,8 +11,9 @@ module Kward
     module Tabs
       WORKTREE_AGENT_CONTEXT = <<~PROMPT.strip.freeze
         This is an active Git worktree tab. The workspace is sandboxed separately from the host repository metadata.
-        When the user explicitly asks you to commit, use the advertised `git_commit` tool. Do not use `run_shell_command` for `git add` or `git commit`, because shared Git metadata is intentionally protected there.
-        `git_commit` requires a commit message and accepts optional workspace-relative paths; omit paths to include all current changes in this worktree. Do not create a commit unless the user requested one.
+        Workspace tools default to the active worktree. When they advertise `target`, use `target: "origin"` to inspect the verified host repository worktree without leaving this tab. Read the origin's applicable `AGENTS.md` before changing it.
+        When the user explicitly asks you to commit, use the advertised `git_commit` tool. Set `target: "origin"` only when the user asks to commit there. Do not use `run_shell_command` for `git add` or `git commit`, because shared Git metadata is intentionally protected.
+        `git_commit` requires a commit message and accepts optional target-relative paths; omit paths to include all current changes in the selected worktree. Do not create a commit unless the user requested one.
       PROMPT
 
       TabRuntime = Struct.new(
@@ -279,15 +280,23 @@ module Kward
         strict = worktree&.active? == true
         update_worktree_agent_context(conversation, strict)
         workspace = configured_workspace(root: conversation.workspace_root, strict: strict)
+        workspace_targets = if strict
+                              origin_workspace = configured_workspace(root: worktree.origin_root, strict: true)
+                              Tools::WorkspaceTargets.new(active: workspace, targets: { origin: origin_workspace })
+                            end
         prompt = TabQuestionPrompt.new(self)
         hook_manager = strict ? nil : lifecycle_hook_manager(conversation)
         hook_context = strict ? nil : lifecycle_hook_context(conversation)
         git_committer = if strict
-                          ->(message:, paths:) { git_commit_for_agent(workspace.root.to_s, message: message, paths: paths) }
+                          lambda do |message:, paths:, target: Tools::WorkspaceTargets::ACTIVE|
+                            commit_workspace = target == "origin" ? worktree.origin_root : workspace.root.to_s
+                            git_commit_for_agent(commit_workspace, message: message, paths: paths)
+                          end
                         end
         project_skill_paths = project_skill_paths_for(conversation.workspace_root) || []
         tool_registry = ToolRegistry.new(
           workspace: workspace,
+          workspace_targets: workspace_targets,
           prompt: prompt,
           skills: ConfigFiles.skills(workspace_root: conversation.workspace_root, project_skill_paths: project_skill_paths),
           tool_approval: tab_tool_approval_callback(prompt),

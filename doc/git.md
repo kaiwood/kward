@@ -111,7 +111,9 @@ If the working tree is clean when you run `/git`, the overlay shows `No uncommit
 
 When an active worktree tab receives an explicit request to commit, the agent can use the model-facing `git_commit` tool. It runs Git in the trusted host process so linked-worktree metadata can be updated without granting arbitrary shell commands write access to shared `.git` metadata.
 
-The tool requires a commit message and can receive an optional list of workspace-relative paths. If paths are omitted, all current changes in the active worktree are included. Generic `run_shell_command` Git commands remain sandboxed and cannot replace this operation. It is exposed only for active interactive worktree tabs; RPC sessions do not currently support worktree bindings.
+The tool requires a commit message and can receive an optional list of paths relative to its selected worktree. It uses the active linked worktree by default. In an active worktree tab, `target: "origin"` selects the verified original repository worktree, allowing the same agent to finish a conflicted merge or commit explicitly requested origin changes without switching tabs. If paths are omitted, all current changes in the selected worktree are included.
+
+Selecting `origin` does not add a separate approval prompt; the normal configured tool-permission policy applies exactly as it does for `active`. Generic `run_shell_command` Git commands remain sandboxed and cannot replace `git_commit`. The tool is exposed only for active interactive worktree tabs; RPC sessions do not currently support worktree bindings.
 
 ## Notes and limitations
 

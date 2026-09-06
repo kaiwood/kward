@@ -67,9 +67,12 @@ after changing the mode.
 
 An active worktree-backed tab uses a strict `workspace_write` policy for its
 model-requested command workers, regardless of the global `sandbox.mode` or
-`tools.workspace_guardrails` settings. The writable root is exactly the linked
-worktree and no configured additional writable roots are carried into the tab.
-The configured child-network setting is preserved.
+`tools.workspace_guardrails` settings. The default writable root is exactly the
+linked worktree and no configured additional writable roots are carried into the
+tab. When a workspace tool explicitly selects the verified `origin` target,
+Kward uses a separate strict command worker whose writable root is exactly that
+original worktree. Arbitrary target paths are not accepted. The configured
+child-network setting is preserved.
 
 If the current platform cannot provide filesystem enforcement, Kward refuses to
 activate the worktree instead of falling back to an unrestricted command
@@ -82,8 +85,11 @@ This does not contain the user-directed `/shell`, `!command`, `/capture`, or
 model-requested shell commands still cannot write Git metadata. Active worktree tabs additionally
 expose a narrow `git_commit` tool for explicit agent-requested commits; it runs
 through the trusted host-side Git workflow rather than widening the shell
-sandbox. The interactive `/git` flow remains available for manual review and
-commit.
+sandbox. The verified original worktree is available as `target: "origin"` on
+core workspace tools so an agent can inspect and resolve merge conflicts without
+switching tabs. Selecting that target does not add an approval layer; the normal
+configured tool-permission policy applies equally to both worktrees. The
+interactive `/git` flow remains available for manual review and commit.
 
 ## Platform support
 

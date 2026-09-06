@@ -59,11 +59,13 @@ Inspect, merge, or remove the binding explicitly:
 /tab worktree remove
 ```
 
-`/tab worktree merge` merges the active worktree's clean, committed branch directly into the branch currently checked out in its original workspace. Kward shows the source and target revisions and requires confirmation. Both worktrees must be clean. If Git reports conflicts, Kward leaves the original workspace in its normal merge state; resolve the conflicts there or cancel them with `/tab worktree merge abort`.
+`/tab worktree merge` merges the active worktree's clean, committed branch directly into the branch currently checked out in its original workspace. Kward shows the source and target revisions and requires confirmation. Both worktrees must be clean. If Git reports conflicts, Kward leaves the original workspace in its normal merge state. You can ask the agent in the same tab to inspect and resolve the original workspace with `target: "origin"`, or cancel the merge with `/tab worktree merge abort`.
 
 Removal refuses a dirty worktree and keeps its branch. A worktree that is missing or no longer points at the recorded branch is restored as unavailable rather than silently falling back to the original workspace.
 
-Worktree tabs are available for normal session tabs, not plugin-owned tabs. Kward's file tools, `@`/`$` completion, `/files` browser, integrated editor, and model-requested shell workers use the active worktree root. Model operations retain strict workspace guardrails. The user-directed `/shell`, `!command`, `/capture`, and `/pty` features remain host-process operations and are not contained by the model command sandbox; use them only when that is intentional. Generic shell Git writes remain protected. When explicitly asked to commit, the agent can use the active tab's narrow `git_commit` tool; use the interactive `/git` flow when you want to review and commit changes yourself.
+Worktree tabs are available for normal session tabs, not plugin-owned tabs. Kward's file tools, `@`/`$` completion, `/files` browser, integrated editor, and model-requested shell workers use the active worktree root by default. Core model workspace tools advertise an optional `target` selector in an active worktree tab: `active` keeps the normal linked-worktree root, while `origin` selects only that tab's verified original repository worktree. Selecting `origin` does not add a separate approval prompt; the normal configured tool-permission policy applies equally to both targets. Paths remain relative to the selected root, and arbitrary filesystem targets are never accepted.
+
+Both targets retain strict workspace guardrails and separate command sandboxes. The user-directed `/shell`, `!command`, `/capture`, and `/pty` features remain host-process operations and are not contained by the model command sandbox; use them only when that is intentional. Generic shell Git writes remain protected. When explicitly asked to commit, the agent can use `git_commit` for the active worktree or set `target: "origin"` for the original worktree; use the interactive `/git` flow when you want to review and commit changes yourself.
 
 ## Common workflow
 
