@@ -101,10 +101,14 @@ module Kward
           remove_active_worktree
         when "merge"
           merge_active_worktree
+        when "merge resolve"
+          resolve_active_worktree_merge
+        when "merge continue"
+          continue_active_worktree_merge
         when "merge abort"
           abort_active_worktree_merge
         else
-          runtime_output("Usage: /tab worktree [activate|detach|status|merge|merge abort|remove]")
+          runtime_output("Usage: /tab worktree [activate|detach|status|merge [resolve|continue|abort]|remove]")
         end
       end
 
@@ -222,6 +226,11 @@ module Kward
           raise GitWorktreeManager::Error, "Worktree branch changed: expected #{binding.branch}, found #{info.branch || "detached HEAD"}" unless info.branch == binding.branch
           status = git_worktree_manager.status(binding.path)
           lines << "Changes: #{status.clean? ? "clean" : "#{status.entries.length} local change(s)"}"
+          if git_worktree_manager.merge_in_progress?(binding.origin_root)
+            conflicts = git_worktree_manager.merge_conflict_marker_paths(binding.origin_root, cached: false)
+            lines << "Merge: in progress in origin#{conflicts.empty? ? "; ready to continue" : "; #{conflicts.length} unresolved conflict(s)"}"
+            lines << "Conflicts: #{conflicts.join(", ")}" unless conflicts.empty?
+          end
         rescue GitWorktreeManager::Error => e
           lines << "State: unavailable (#{e.message})"
         end
@@ -236,6 +245,10 @@ module Kward
         return runtime_output("Activate the worktree before merging it.") unless binding.active?
 
         validate_worktree_binding!(binding)
+        if git_worktree_manager.merge_in_progress?(binding.origin_root)
+          return runtime_output("A merge is already in progress in #{binding.origin_root}. Resolve it with /worktree merge resolve, continue it with /worktree merge continue, or abort it with /worktree merge abort.")
+        end
+
         source_status = git_worktree_manager.status(binding.path)
         return runtime_output("Worktree has local changes; commit or clean it before merging.") if source_status.dirty?
 
@@ -270,8 +283,58 @@ module Kward
         if result.merged?
           runtime_output("Merged #{binding.branch} into #{target_branch}.")
         else
-          runtime_output("Merge conflicts in #{result.conflicts.join(", ")}. Resolve them in #{binding.origin_root} or run /tab worktree merge abort.")
+          runtime_output(<<~MESSAGE.strip)
+            Merge conflicts in #{result.conflicts.join(", ")}.
+            Merge paused in #{binding.origin_root}; this tab remains on #{binding.branch}.
+            Run /worktree merge resolve to let the agent inspect and fix the conflicts here, or /worktree merge abort to cancel.
+          MESSAGE
         end
+      rescue GitWorktreeManager::Error => e
+        runtime_output("Worktree error: #{e.message}")
+      end
+
+      def resolve_active_worktree_merge
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+        return runtime_output("Tab #{active_tab_number} is running and cannot resolve its worktree merge yet.") if tab.running? || tab.local_busy? || tab.shell
+        return runtime_output("Activate the worktree before resolving its merge.") unless binding.active?
+        return runtime_output("No merge is in progress in the original workspace.") unless git_worktree_manager.merge_in_progress?(binding.origin_root)
+
+        validate_worktree_binding!(binding)
+        conflicts = git_worktree_manager.unmerged_paths(binding.origin_root)
+        return runtime_output("No unresolved conflicts remain in #{binding.origin_root}; run /worktree merge continue to finish the merge.") if conflicts.empty?
+
+        submit_tab_input(
+          tab,
+          <<~PROMPT.strip,
+            Resolve the in-progress Git merge in the verified origin workspace. Use target: "origin" for every workspace inspection, edit, and test operation. Read the applicable AGENTS.md files first, inspect the unmerged paths, resolve the conflicts, and run the relevant tests. Do not commit the merge; leave it ready for /worktree merge continue after all conflicts are resolved.
+
+            Unmerged paths: #{conflicts.join(", ")}
+          PROMPT
+          display_input: "Resolve merge conflicts in origin"
+        )
+      rescue GitWorktreeManager::Error => e
+        runtime_output("Worktree error: #{e.message}")
+      end
+
+      def continue_active_worktree_merge
+        tab = active_tab
+        binding = worktree_binding_for(tab)
+        return runtime_output("Tab #{active_tab_number} has no worktree binding.") unless binding
+        return runtime_output("Tab #{active_tab_number} is running and cannot continue its worktree merge yet.") if tab.running? || tab.local_busy? || tab.shell
+        return runtime_output("Activate the worktree before continuing its merge.") unless binding.active?
+        return runtime_output("No merge is in progress in the original workspace.") unless git_worktree_manager.merge_in_progress?(binding.origin_root)
+
+        validate_worktree_binding!(binding)
+        markers = git_worktree_manager.merge_conflict_marker_paths(binding.origin_root, cached: false)
+        return runtime_output("Merge still contains conflict markers: #{markers.join(", ")}.") unless markers.empty?
+        target_branch = git_worktree_manager.current_branch(binding.origin_root)
+        return runtime_output("Original workspace is in detached HEAD state; resolve that before continuing the merge.") if target_branch.empty?
+        return unless confirm_worktree_action("Complete the merge of #{binding.branch} into #{target_branch} in #{binding.origin_root}?")
+
+        git_worktree_manager.continue_merge(binding.origin_root)
+        runtime_output("Completed the merge of #{binding.branch} into #{target_branch}.")
       rescue GitWorktreeManager::Error => e
         runtime_output("Worktree error: #{e.message}")
       end

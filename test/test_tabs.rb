@@ -795,6 +795,68 @@ class TestTabs < KwardTestCase
     end
   end
 
+  def test_worktree_merge_conflicts_can_be_resolved_from_the_same_tab
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new([], confirmations: [true])
+        client = RecordingClient.new(["I inspected the merge conflicts."])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: client, session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "tracked.txt"), "worktree change\n")
+        git_in_test(binding.path, "add", "tracked.txt")
+        git_in_test(binding.path, "commit", "-m", "worktree change")
+        File.write(File.join(root, "tracked.txt"), "target change\n")
+        git_in_test(root, "add", "tracked.txt")
+        git_in_test(root, "commit", "-m", "target change")
+
+        cli.send(:handle_tab_command, "worktree merge", store)
+        cli.send(:handle_tab_command, "worktree merge resolve", store)
+        tab.thread.join
+
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+        assert client.seen_messages.flatten.any? { |message| message.is_a?(Hash) && message[:content].to_s.include?('target: "origin"') }
+        assert_includes prompt.output.join("\n"), "Resolve merge conflicts in origin"
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
+  def test_worktree_merge_can_continue_after_same_tab_resolution
+    with_git_repository do |root|
+      Dir.mktmpdir do |config_dir|
+        store = Kward::SessionStore.new(config_dir: config_dir, cwd: root)
+        prompt = TabPrompt.new([], confirmations: [true, true])
+        cli = Kward::CLI.new(argv: [], prompt: prompt, client: RecordingClient.new([]), session_store: store)
+        cli.send(:setup_interactive_tabs, store, nil)
+        tab = cli.send(:active_tab)
+        cli.send(:handle_tab_command, "worktree", store)
+        binding = tab.driver.worktree
+        File.write(File.join(binding.path, "tracked.txt"), "worktree change\n")
+        git_in_test(binding.path, "add", "tracked.txt")
+        git_in_test(binding.path, "commit", "-m", "worktree change")
+        File.write(File.join(root, "tracked.txt"), "target change\n")
+        git_in_test(root, "add", "tracked.txt")
+        git_in_test(root, "commit", "-m", "target change")
+
+        cli.send(:handle_tab_command, "worktree merge", store)
+        File.write(File.join(root, "tracked.txt"), "resolved change\n")
+        cli.send(:handle_tab_command, "worktree merge continue", store)
+
+        refute Kward::GitWorktreeManager.new.merge_in_progress?(root)
+        assert_equal "resolved change\n", File.read(File.join(root, "tracked.txt"))
+        assert_includes prompt.output.join("\n"), "Completed the merge of #{binding.branch}"
+        assert_equal File.realpath(binding.path), tab.agent.conversation.workspace_root
+      ensure
+        remove_test_worktree(binding)
+      end
+    end
+  end
+
   def test_worktree_merge_reports_conflicts_and_can_abort
     with_git_repository do |root|
       Dir.mktmpdir do |config_dir|
@@ -815,6 +877,9 @@ class TestTabs < KwardTestCase
         cli.send(:handle_tab_command, "worktree merge", store)
 
         assert_includes prompt.output.join("\n"), "Merge conflicts in tracked.txt"
+        cli.send(:handle_tab_command, "worktree status", store)
+        assert_includes prompt.output.join("\n"), "Merge: in progress in origin; 1 unresolved conflict(s)"
+        assert_includes prompt.output.join("\n"), "Conflicts: tracked.txt"
         assert Kward::GitWorktreeManager.new.merge_in_progress?(root)
         cli.send(:handle_tab_command, "worktree merge abort", store)
         refute Kward::GitWorktreeManager.new.merge_in_progress?(root)

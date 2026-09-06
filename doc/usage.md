@@ -142,6 +142,8 @@ Slash commands run local actions in the current session. Most do not send a prom
 | `/tab worktree detach` | return to the original workspace while keeping the linked worktree and branch. |
 | `/tab worktree status` | inspect the active tab's worktree binding and changes. |
 | `/tab worktree merge` | merge a clean worktree branch into the branch checked out in its original workspace. |
+| `/tab worktree merge resolve` | ask the agent to resolve an in-progress merge in the original workspace from the same tab. |
+| `/tab worktree merge continue` | stage resolutions and complete an in-progress merge after confirmation. |
 | `/tab worktree merge abort` | abort a conflicted worktree merge in the original workspace. |
 | `/tab worktree remove` | remove a clean linked worktree while keeping its branch. |
 | `/worktree …` | alias for `/tab worktree …` on the active tab. |

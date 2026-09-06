@@ -59,7 +59,7 @@ Inspect, merge, or remove the binding explicitly:
 /tab worktree remove
 ```
 
-`/tab worktree merge` merges the active worktree's clean, committed branch directly into the branch currently checked out in its original workspace. Kward shows the source and target revisions and requires confirmation. Both worktrees must be clean. If Git reports conflicts, Kward leaves the original workspace in its normal merge state. You can ask the agent in the same tab to inspect and resolve the original workspace with `target: "origin"`, or cancel the merge with `/tab worktree merge abort`.
+`/tab worktree merge` merges the active worktree's clean, committed branch directly into the branch currently checked out in its original workspace. Kward shows the source and target revisions and requires confirmation. Both worktrees must be clean. If Git reports conflicts, Kward leaves the original workspace in its normal merge state while keeping the current tab on the linked branch. The composer shows the target branch and conflict count. Run `/tab worktree merge resolve` (or `/worktree merge resolve`) to start an agent turn that inspects and edits the verified original workspace with `target: "origin"`; the turn leaves committing for review. After the conflicts are resolved, run `/tab worktree merge continue` to stage the resolutions and complete the merge, or use `/tab worktree merge abort` to cancel it.
 
 Removal refuses a dirty worktree and keeps its branch. A worktree that is missing or no longer points at the recorded branch is restored as unavailable rather than silently falling back to the original workspace.
 
@@ -100,6 +100,8 @@ Tabs keep the conversations separate, so context from one tab does not automatic
 | `/tab worktree detach` | Return to the original workspace while keeping the linked worktree and branch |
 | `/tab worktree status` | Show the current tab's worktree binding and Git status |
 | `/tab worktree merge` | Merge the current worktree branch into the branch checked out in its original workspace |
+| `/tab worktree merge resolve` | Ask the agent to resolve an in-progress merge in the original workspace from the same tab |
+| `/tab worktree merge continue` | Stage resolutions and complete an in-progress merge after confirmation |
 | `/tab worktree merge abort` | Abort a conflicted worktree merge in the original workspace |
 | `/tab worktree remove` | Remove a clean linked worktree and keep its branch |
 | `/worktree …` | Alias for `/tab worktree …` on the active tab |

@@ -273,12 +273,30 @@ module Kward
         parts = []
         git = composer_git_branch_text
         parts << git if git
+        merge = composer_worktree_merge_text
+        parts << merge if merge
         diff = composer_session_diff_text
         parts << diff if diff
         usage = composer_context_usage(provider, model)
         parts << composer_context_percent_text(usage[:percent]) if usage
         parts << text
         parts.join(" · ")
+      end
+
+      def composer_worktree_merge_text
+        return nil unless respond_to?(:active_tab, true) && respond_to?(:worktree_binding_for, true)
+
+        binding = worktree_binding_for(active_tab)
+        return nil unless binding&.active?
+        return nil unless git_worktree_manager.merge_in_progress?(binding.origin_root)
+
+        conflicts = git_worktree_manager.merge_conflict_marker_paths(binding.origin_root, cached: false)
+        target = git_worktree_manager.current_branch(binding.origin_root)
+        count = conflicts.length
+        detail = count.zero? ? "ready" : "#{count} conflict#{count == 1 ? "" : "s"}"
+        ANSI.colorize("merge→#{target.empty? ? "detached" : target} (#{detail})", :red, enabled: @color_enabled)
+      rescue GitWorktreeManager::Error
+        nil
       end
 
       def composer_session_diff_text

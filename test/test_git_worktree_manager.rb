@@ -121,6 +121,57 @@ class TestGitWorktreeManager < KwardTestCase
     end
   end
 
+  def test_continues_a_resolved_merge
+    with_git_repository do |root|
+      manager = Kward::GitWorktreeManager.new
+      parent = Dir.mktmpdir("kward-worktree-parent")
+      path = File.join(parent, "linked")
+      binding = manager.create(repository_root: root, origin_root: root, path: path, branch: "kward/continue")
+      File.write(File.join(path, "tracked.txt"), "feature change\n")
+      git("add", "tracked.txt", chdir: path)
+      git("commit", "-m", "feature change", chdir: path)
+      File.write(File.join(root, "tracked.txt"), "target change\n")
+      git("add", "tracked.txt", chdir: root)
+      git("commit", "-m", "target change", chdir: root)
+
+      result = manager.merge(repository_root: root, target_path: root, source_branch: binding.branch)
+      assert result.conflicted?
+
+      File.write(File.join(root, "tracked.txt"), "resolved change\n")
+      manager.continue_merge(root)
+
+      refute manager.merge_in_progress?(root)
+      assert_equal "resolved change\n", File.read(File.join(root, "tracked.txt"))
+      assert_match(/Merge branch/, git("log", "-1", "--pretty=%s", chdir: root))
+    ensure
+      FileUtils.remove_entry(parent) if parent && Dir.exist?(parent)
+    end
+  end
+
+  def test_refuses_to_continue_a_merge_with_unresolved_paths
+    with_git_repository do |root|
+      manager = Kward::GitWorktreeManager.new
+      parent = Dir.mktmpdir("kward-worktree-parent")
+      path = File.join(parent, "linked")
+      binding = manager.create(repository_root: root, origin_root: root, path: path, branch: "kward/unresolved")
+      File.write(File.join(path, "tracked.txt"), "feature change\n")
+      git("add", "tracked.txt", chdir: path)
+      git("commit", "-m", "feature change", chdir: path)
+      File.write(File.join(root, "tracked.txt"), "target change\n")
+      git("add", "tracked.txt", chdir: root)
+      git("commit", "-m", "target change", chdir: root)
+      manager.merge(repository_root: root, target_path: root, source_branch: binding.branch)
+
+      error = assert_raises(Kward::GitWorktreeManager::Error) { manager.continue_merge(root) }
+
+      assert_match(/conflict markers.*tracked.txt/, error.message)
+      assert manager.merge_in_progress?(root)
+    ensure
+      manager.abort_merge(root) if manager&.merge_in_progress?(root)
+      FileUtils.remove_entry(parent) if parent && Dir.exist?(parent)
+    end
+  end
+
   def test_rejects_merge_when_one_is_already_in_progress
     with_git_repository do |root|
       manager = Kward::GitWorktreeManager.new

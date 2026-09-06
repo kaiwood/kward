@@ -1076,7 +1076,7 @@ module Kward
       end
 
       def tab_usage
-        "/tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label> | /tab worktree [activate|detach|status|merge|merge abort|remove]"
+        "/tab 1-n | /tab move 1-n|left|right | /tab close | /tab new | /tab open <plugin-tab> | /tab name <label> | /tab worktree [activate|detach|status|merge [resolve|continue|abort]|remove]"
       end
 
       def switch_tab_number(number)

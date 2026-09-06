@@ -133,10 +133,38 @@ module Kward
       run_git(path, "diff", "--name-only", "--diff-filter=U").lines(chomp: true)
     end
 
+    def merge_conflict_marker_paths(path, cached: true)
+      arguments = ["diff"]
+      arguments << "--cached" if cached
+      arguments << "--check"
+      output, _status = capture_git(path, *arguments)
+      output.lines.filter_map do |line|
+        line[/\A(.+?):\d+: leftover conflict marker/, 1]
+      end.uniq
+    end
+
     def abort_merge(path)
       raise Error, "No merge is in progress." unless merge_in_progress?(path)
 
       run_git(path, "merge", "--abort")
+      true
+    end
+
+    def continue_merge(path)
+      raise Error, "No merge is in progress." unless merge_in_progress?(path)
+
+      run_git(path, "add", "--all")
+      conflicts = unmerged_paths(path)
+      unless conflicts.empty?
+        raise Error, "Merge still has unresolved conflicts: #{conflicts.join(", ")}"
+      end
+
+      marker_paths = merge_conflict_marker_paths(path)
+      unless marker_paths.empty?
+        raise Error, "Merge still contains conflict markers: #{marker_paths.join(", ")}"
+      end
+
+      run_git(path, "commit", "--no-edit")
       true
     end
 
