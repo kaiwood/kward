@@ -19,7 +19,7 @@ Tools also enforce important boundaries:
 | Web tools | `web_search`, `fetch_content`, `fetch_raw` | [Web search](web-search.md) |
 | Code search | `code_search` | [Code search](code-search.md) |
 | Context and interaction tools | `read_skill`, `retrieve_tool_output`, `ask_user_question` | [Context tools](context-tools.md) |
-| Decision tools | `typesafe_evaluate` when `TYPESAFE_API_KEY` is configured | [TypeSafe](#typesafe-evaluation) |
+| Decision tools | `typesafe_evaluate` when `TYPESAFE_API_KEY` is configured | [TypeSafe](#TypeSafe_evaluation) |
 | Plugin tools | Trusted local integrations registered by installed plugins | [Plugins](plugins.md#Add_a_model_callable_tool) |
 
 ## How tools save tokens
