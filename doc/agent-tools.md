@@ -19,6 +19,7 @@ Tools also enforce important boundaries:
 | Web tools | `web_search`, `fetch_content`, `fetch_raw` | [Web search](web-search.md) |
 | Code search | `code_search` | [Code search](code-search.md) |
 | Context and interaction tools | `read_skill`, `retrieve_tool_output`, `ask_user_question` | [Context tools](context-tools.md) |
+| Decision tools | `typesafe_evaluate` when `TYPESAFE_API_KEY` is configured | [TypeSafe](#typesafe-evaluation) |
 | Plugin tools | Trusted local integrations registered by installed plugins | [Plugins](plugins.md#Add_a_model_callable_tool) |
 
 ## How tools save tokens
@@ -44,7 +45,16 @@ See [Context budgeting](context-budgeting.md) for the full compaction strategy, 
 - web tools can be hidden with web search configuration,
 - `read_skill` is advertised only when skills are available,
 - `ask_user_question` is advertised only when the frontend can display structured questions,
+- `typesafe_evaluate` is advertised only in normal turns when `TYPESAFE_API_KEY` is configured,
 - plugin tools are advertised in normal agent turns and remain subject to execution profiles and permission policy.
+
+### TypeSafe evaluation
+
+Set `TYPESAFE_API_KEY` to enable the opt-in `typesafe_evaluate` tool. It sends explicitly supplied state and typed questions to TypeSafe's `jev-latest` model and returns structured answers, probabilities, confidence, and usage. It is intended for classification, scoring, routing, and verification; it is not a chat model and does not generate assistant text.
+
+The tool supports TypeSafe's `noul`, `choice`, and `score` question types. State is bounded to 100,000 bytes and question count to 100. Treat state as third-party data: do not include secrets or personal information unless sending it to TypeSafe is intentional. Requests remain subject to Kward's normal tool permissions and hooks.
+
+See the [TypeSafe API reference](https://docs.typesafe.ai/api) for question and answer details.
 
 When `write_file` or `edit_file` changes an `AGENTS.md` file in the workspace root, Kward automatically rebuilds the system message so the model picks up the new instructions without a restart.
 

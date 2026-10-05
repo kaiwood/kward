@@ -17,6 +17,7 @@ require_relative "read_skill"
 require_relative "run_shell_command"
 require_relative "prepare_shell_command"
 require_relative "summarize_file_structure"
+require_relative "typesafe_evaluate"
 require_relative "retrieve_tool_output"
 require_relative "web_search"
 require_relative "workspace_targets"
@@ -89,6 +90,7 @@ module Kward
       replace_editor_buffer
       open_editor
       prepare_shell_command
+      typesafe_evaluate
     ]).freeze
 
     # Tool schemas advertised to the model for the current frontend and config.
@@ -109,13 +111,14 @@ module Kward
     # @param skills [Array<ConfigFiles::Skill>, nil] override discovered skills
     # @param ask_user_question_enabled [Boolean, nil] override question exposure
     # @param plugin_tools [Array<PluginRegistry::Tool>] trusted plugin tool registrations
-    def initialize(workspace: Workspace.new, workspace_targets: nil, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
+    def initialize(workspace: Workspace.new, workspace_targets: nil, prompt: nil, web_search: WebSearch.new, web_fetch: WebFetch.new, code_search: CodeSearch.new, web_search_enabled: nil, skills: nil, ask_user_question_enabled: nil, allowed_tool_names: nil, editor_prompt_session: nil, tool_output_compactor: ToolOutputCompactor.new, telemetry_logger: TelemetryLogger.new, context_budget_meter: nil, mcp_clients: nil, plugin_tools: [], typesafe_client: TypeSafeClient.new, tool_approval: nil, approval_for_allowed_tools: false, permission_policy: nil, hook_manager: nil, hook_context: nil, git_committer: nil)
       @workspace = workspace
       @workspace_targets = workspace_targets || Tools::WorkspaceTargets.new(active: workspace)
       @prompt = prompt
       @web_search = web_search
       @web_fetch = web_fetch
       @code_search = code_search
+      @typesafe_client = typesafe_client
       @skills = skills
       @web_search_enabled = web_search_enabled
       @ask_user_question_enabled = ask_user_question_enabled
@@ -585,6 +588,7 @@ module Kward
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::PluginTool) })
+      tools << @tools["typesafe_evaluate"] if @tools["typesafe_evaluate"]
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
       tools.compact
@@ -593,13 +597,14 @@ module Kward
     def all_tools
       tools = core_tools
       tools << Tools::GitCommit.new(committer: @git_committer, workspace_targets: @workspace_targets) if @git_committer
-      tools + [
+      (tools + [
+        (Tools::TypeSafeEvaluate.new(client: @typesafe_client) if @typesafe_client&.available?),
         Tools::WebSearch.new(web_search: @web_search),
         Tools::FetchContent.new(web_fetch: @web_fetch),
         Tools::FetchRaw.new(web_fetch: @web_fetch),
         Tools::ReadSkill.new(skills: discovered_skills),
         Tools::AskUserQuestion.new(prompt: @prompt)
-      ] + mcp_tool_values + plugin_tool_values
+      ]).compact + mcp_tool_values + plugin_tool_values
     end
 
     def core_tools

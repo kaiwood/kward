@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added the opt-in `typesafe_evaluate` tool backed by TypeSafe's Jev structured-decision API for `noul`, `choice`, and `score` evaluations, with bounded input and normal tool permissions.
 - Added `ctx.request_turn(system: text)` for plugin commands to run the active session model with turn-scoped system instructions, normal tools and cancellation, TUI/RPC/transport execution, persisted invocation history, and explicit capability reporting for unsupported contexts.
 - Added GPT-6 Astra to the OpenAI, Codex, and Copilot model choices with its 1,050,000-token context metadata and model-specific reasoning limits.
 - Added verified `active` and `origin` targets to core agent workspace tools in linked worktree tabs, plus same-tab merge conflict resolution and continuation commands, allowing the agent to inspect, resolve, test, and complete original-worktree merges without switching tabs or requiring target-specific authorization.
