@@ -4,6 +4,8 @@ class TestModelInfo < KwardTestCase
   def test_context_window_uses_known_codex_model_patterns
     cases = {
       "gpt-6-astra" => 1_050_000,
+      "gpt-6.1-sol" => 1_050_000,
+      "gpt-6-luna" => 1_050_000,
       "gpt-5.6-sol" => 1_050_000,
       "gpt-5.6-terra" => 1_050_000,
       "gpt-5.6-luna" => 1_050_000,
@@ -138,6 +140,8 @@ class TestModelInfo < KwardTestCase
   def test_reasoning_effort_choices_are_model_specific
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-6-astra").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6-astra").map(&:first)
+    assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6.1-sol").map(&:first)
+    assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("OpenAI", "gpt-6-luna").map(&:first)
     assert_equal %w[low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Copilot", "gpt-6-astra").map(&:first)
     assert_equal %w[none low medium high xhigh max], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.6-sol").map(&:first)
     assert_equal %w[none low medium high xhigh], Kward::ModelInfo.reasoning_effort_choices("Codex", "gpt-5.5").map(&:first)

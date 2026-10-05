@@ -9,7 +9,7 @@ module Kward
     DEFAULT_COPILOT_MODEL = "gpt-5-mini"
     DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
     DEFAULT_REASONING_EFFORT = "medium"
-    OPENAI_MODEL_CHOICES = %w[gpt-6-astra gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
+    OPENAI_MODEL_CHOICES = %w[gpt-6-astra gpt-6.1-sol gpt-6-luna gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.4 gpt-5.4-mini gpt-5.3-codex-spark].freeze
     ANTHROPIC_MODEL_CHOICES = %w[
       claude-fable-5
       claude-opus-5
@@ -59,6 +59,10 @@ module Kward
       *REASONING_EFFORT_CHOICES,
       ["max", "Max"]
     ].freeze
+    GPT_6_LUNA_REASONING_EFFORT_CHOICES = [
+      *OPENAI_REASONING_EFFORT_CHOICES,
+      ["max", "Max"]
+    ].freeze
     ANTHROPIC_HIGH_REASONING_EFFORT_CHOICES = [
       ["low", "Low"],
       ["medium", "Medium"],
@@ -83,7 +87,7 @@ module Kward
     ].freeze
 
     CODEX_CONTEXT_WINDOWS = [
-      [/\Agpt-6-astra(?:\z|-)/, 1_050_000],
+      [/\Agpt-6(?:\.1)?-(?:astra|sol|luna)(?:\z|-)/, 1_050_000],
       [/\Agpt-5\.6/, 1_050_000],
       [/\Agpt-5\.5/, 400_000],
       [/\Agpt-5\.4-mini/, 400_000],
@@ -102,7 +106,7 @@ module Kward
       [/\Agpt-3\.5-turbo/, 16_385]
     ].freeze
     OPENAI_CONTEXT_WINDOWS = [
-      [/\Agpt-6-astra(?:\z|-)/, 1_050_000],
+      [/\Agpt-6(?:\.1)?-(?:astra|sol|luna)(?:\z|-)/, 1_050_000],
       [/\Agpt-5\.6/, 1_050_000],
       [/\Agpt-5\.5/, 1_050_000],
       [/\Agpt-5\.4-mini/, 400_000],
@@ -431,7 +435,7 @@ module Kward
       when "Codex", "OpenRouter"
         true
       when "OpenAI"
-        id.to_s.match?(/\Agpt-6-astra(?:\z|-)/)
+        id.to_s.match?(/\Agpt-6(?:\.1)?-(?:astra|sol|luna)(?:\z|-)/)
       when "Anthropic"
         !reasoning_effort_choices(provider, id).empty?
       when "Copilot"
@@ -458,7 +462,8 @@ module Kward
 
     def openai_reasoning_effort_choices(id)
       text = id.to_s.delete_prefix("openai/")
-      return GPT_6_REASONING_EFFORT_CHOICES if text.match?(/\Agpt-6-astra(?:\z|-)/)
+      return GPT_6_LUNA_REASONING_EFFORT_CHOICES if text.match?(/\Agpt-6-luna(?:\z|-)/)
+      return GPT_6_REASONING_EFFORT_CHOICES if text.match?(/\Agpt-6\.1-sol(?:\z|-)|\Agpt-6-astra(?:\z|-)/)
       return REASONING_EFFORT_CHOICES if text.match?(/\Agpt-5\.[23]-codex/)
       return OPENAI_MAX_REASONING_EFFORT_CHOICES if text.match?(/\Agpt-5\.6(?:\z|-)/)
 
