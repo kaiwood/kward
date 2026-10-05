@@ -4,6 +4,8 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+## [0.85.0] - 2026-10-05
+
 ### Added
 
 - Added the opt-in `typesafe_evaluate` tool backed by TypeSafe's Jev structured-decision API for `noul`, `choice`, and `score` evaluations, with bounded input and normal tool permissions.
