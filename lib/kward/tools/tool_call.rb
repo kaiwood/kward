@@ -28,7 +28,8 @@ module Kward
       "read_skill" => "read_skill",
       "ask_user_question" => "ask_user_question",
       "open_editor" => "open_editor",
-      "typesafe_evaluate" => "typesafe_evaluate"
+      "typesafe_evaluate" => "typesafe_evaluate",
+      "datetime" => "datetime"
     }.freeze
 
     module_function

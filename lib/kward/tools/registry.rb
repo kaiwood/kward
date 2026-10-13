@@ -5,6 +5,7 @@ require_relative "ask_user_question"
 require_relative "code_search"
 require_relative "context_budget_stats"
 require_relative "context_for_task"
+require_relative "datetime"
 require_relative "edit_file"
 require_relative "fetch_content"
 require_relative "fetch_raw"
@@ -91,6 +92,7 @@ module Kward
       open_editor
       prepare_shell_command
       typesafe_evaluate
+      datetime
     ]).freeze
 
     # Tool schemas advertised to the model for the current frontend and config.
@@ -588,6 +590,7 @@ module Kward
       tools.concat(@tools.values_at("web_search", "fetch_content", "fetch_raw")) if web_search_available?
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::MCPTool) })
       tools.concat(@tools.values.select { |tool| tool.is_a?(Tools::PluginTool) })
+      tools << @tools["datetime"] if @tools["datetime"]
       tools << @tools["typesafe_evaluate"] if @tools["typesafe_evaluate"]
       tools << @tools["read_skill"] if skills_available?
       tools << @tools["ask_user_question"] if ask_user_question_available?
@@ -603,7 +606,8 @@ module Kward
         Tools::FetchContent.new(web_fetch: @web_fetch),
         Tools::FetchRaw.new(web_fetch: @web_fetch),
         Tools::ReadSkill.new(skills: discovered_skills),
-        Tools::AskUserQuestion.new(prompt: @prompt)
+        Tools::AskUserQuestion.new(prompt: @prompt),
+        Tools::DateTime.new
       ]).compact + mcp_tool_values + plugin_tool_values
     end
 

@@ -18,9 +18,19 @@ Tools also enforce important boundaries:
 | Shell prompt tools | `run_shell_command`, `prepare_shell_command` (available only to the transient `?` shell assistant) | [Embedded shell](shell.md) |
 | Web tools | `web_search`, `fetch_content`, `fetch_raw` | [Web search](web-search.md) |
 | Code search | `code_search` | [Code search](code-search.md) |
+| Date/time | `datetime` | Current time and timestamp arithmetic (details below) |
 | Context and interaction tools | `read_skill`, `retrieve_tool_output`, `ask_user_question` | [Context tools](context-tools.md) |
 | Decision tools | `typesafe_evaluate` when `TYPESAFE_API_KEY` is configured | [TypeSafe](#TypeSafe_evaluation) |
 | Plugin tools | Trusted local integrations registered by installed plugins | [Plugins](plugins.md#Add_a_model_callable_tool) |
+
+## Date and time
+
+The `datetime` tool supports two operations:
+
+- `current_time` returns the current date and time in the host's local timezone by default. Supply `timezone_offset` as `Z` or an ISO 8601 UTC offset such as `-05:00` to request a fixed offset.
+- `add_seconds` accepts an ISO 8601 `timestamp` with an explicit offset and a signed integer `seconds` value, then returns the adjusted timestamp while preserving that offset.
+
+UTC offsets are fixed offsets, not named timezones; they do not apply daylight-saving transitions.
 
 ## How tools save tokens
 
@@ -47,6 +57,7 @@ See [Context budgeting](context-budgeting.md) for the full compaction strategy, 
 - `ask_user_question` is advertised only when the frontend can display structured questions,
 - `typesafe_evaluate` is advertised only in normal turns when `TYPESAFE_API_KEY` is configured,
 - plugin tools are advertised in normal agent turns and remain subject to execution profiles and permission policy.
+- `datetime` is available in normal agent turns and remains subject to the configured tool permission policy.
 
 ### TypeSafe evaluation
 

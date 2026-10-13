@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added the model-callable `datetime` tool for current local/offset time and ISO 8601 timestamp arithmetic with fixed UTC offsets.
+
 ### Fixed
 
 - Kept the active tab visible in the composer tab bar when tabs overflow, with indicators for hidden tabs.
