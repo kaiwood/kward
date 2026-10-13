@@ -4,6 +4,10 @@ All notable changes to Kward will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Kept the active tab visible in the composer tab bar when tabs overflow, with indicators for hidden tabs.
+
 ## [0.85.0] - 2026-10-05
 
 ### Added

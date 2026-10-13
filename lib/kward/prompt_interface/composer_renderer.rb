@@ -130,10 +130,9 @@ module Kward
       def tab_border_rows(width)
         return [bottom_border(width)] if width < 10
 
-        slots = tab_slots
-        active_slot = slots[@active_tab_index]
+        slots = visible_tab_slots(width, tab_slots(width))
+        active_slot = slots.find { |slot| slot[:index] == @active_tab_index }
         return [bottom_border(width)] unless active_slot
-        return [bottom_border(width)] if active_slot[:left] + active_slot[:width] > width
 
         [
           color_tab_border(bottom_tab_border_row(width, active_slot)),
@@ -142,21 +141,55 @@ module Kward
         ]
       end
 
-      def tab_slots
-        label_left = 4
+      def tab_slots(terminal_width)
         @tabs.each_with_index.map do |label, index|
-          text = tab_label(label, index)
-          width = TerminalText.width(ANSI.strip(text))
-          slot = {
-            left: label_left - 2,
-            label_left: label_left,
+          text = tab_label(label, index, max_width: [terminal_width - 10, 1].max)
+          label_width = TerminalText.width(ANSI.strip(text))
+          {
+            index: index,
             label: text,
-            inner_width: width + 2,
-            width: width + 4
+            label_width: label_width,
+            inner_width: label_width + 2,
+            width: label_width + 4
           }
-          label_left += width + 3
-          slot
         end
+      end
+
+      def visible_tab_slots(width, slots)
+        active_index = @active_tab_index
+        return [] unless slots[active_index]
+
+        first = last = active_index
+        return [] if tab_window_width(slots, first, last) > width
+
+        loop do
+          candidates = [first.positive? ? first - 1 : nil, last < slots.length - 1 ? last + 1 : nil].compact
+          fitting = candidates.select do |index|
+            candidate_first = [first, index].min
+            candidate_last = [last, index].max
+            tab_window_width(slots, candidate_first, candidate_last) <= width
+          end
+          break if fitting.empty?
+
+          candidate = fitting.min_by { |index| (index - active_index).abs }
+          first = [first, candidate].min
+          last = [last, candidate].max
+        end
+
+        label_left = 4 + (first.positive? ? 1 : 0)
+        slots[first..last].map do |slot|
+          slot.merge(left: label_left - 2, label_left: label_left).tap do
+            label_left += slot[:label_width] + 3
+          end
+        end
+      end
+
+      def tab_window_width(slots, first, last)
+        label_width = slots[first..last].sum { |slot| slot[:label_width] }
+        gaps = (last - first) * 3
+        left_indicator = first.positive? ? 1 : 0
+        right_indicator = last < slots.length - 1 ? 3 : 0
+        6 + label_width + gaps + left_indicator + right_indicator
       end
 
       def bottom_tab_border_row(width, active_slot)
@@ -170,6 +203,8 @@ module Kward
 
       def tab_bar_row(width, slots, active_slot)
         row = Array.new(width, " ")
+        place_string(row, 2, "‹") if slots.first[:index].positive?
+        place_string(row, width - 3, "›") if slots.last[:index] < @tabs.length - 1
         slots.each do |slot|
           if slot == active_slot
             place_string(row, slot[:left], "│ #{slot[:label]} │")
@@ -213,9 +248,13 @@ module Kward
         end
       end
 
-      def tab_label(label, index)
+      def tab_label(label, index, max_width: nil)
         tab = normalize_tab_label(label)
         name = tab[:name].empty? ? "Tab" : tab[:name]
+        if max_width
+          name_width = [max_width - TerminalText.width("#{index + 1} "), 1].max
+          name = TerminalText.truncate(name, name_width)
+        end
         color = tab[:color]
         name = colored(name, color) if color
         "#{index + 1} #{name}"

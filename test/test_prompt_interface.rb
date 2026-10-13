@@ -438,17 +438,41 @@ class TestPromptInterface < KwardTestCase
     assert_equal first_tab_row.index("3 Tab"), second_tab_row.index("3 Tab")
   end
 
+  def test_prompt_interface_keeps_active_tab_visible_when_tabs_overflow
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.update_tabs(labels: (1..12).map { |index| "Tab#{index}" }, active_index: 11)
+
+    rows, = prompt.send(:composer_layout, 40)
+    tab_row = strip_ansi(rows.last(2).first)
+
+    assert_includes tab_row, "‹"
+    refute_includes tab_row, "›"
+    assert_includes tab_row, "12 Tab12"
+    refute_match(/\b1 Tab1\b/, tab_row)
+  end
+
+  def test_prompt_interface_shows_only_right_overflow_indicator_near_first_tab
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
+    prompt.update_tabs(labels: (1..12).map { |index| "Tab#{index}" }, active_index: 0)
+
+    rows, = prompt.send(:composer_layout, 40)
+    tab_row = strip_ansi(rows.last(2).first)
+
+    refute_includes tab_row, "‹"
+    assert_includes tab_row, "›"
+    assert_includes tab_row, "1 Tab1"
+  end
+
   def test_prompt_interface_preserves_tab_borders_in_narrow_width
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: StringIO.new, editor_mode: "emacs")
     prompt.update_tabs(labels: %w[1 2 3], active_index: 1)
 
     rows, = prompt.send(:composer_layout, 12)
-    rendered_rows = rows.map { |row| strip_ansi(row) }
+    rendered_row = strip_ansi(rows.last)
 
-    assert_equal 3, rendered_rows.length
-    assert_equal 12, rendered_rows.last.length
-    assert_includes rendered_rows.last, "╰"
-    assert_includes rendered_rows.last, "╯"
+    assert_equal 12, Kward::TerminalText.width(rendered_row)
+    assert_includes rendered_row, "╰"
+    assert_includes rendered_row, "╯"
   end
 
   def test_prompt_interface_colorizes_only_tab_names
