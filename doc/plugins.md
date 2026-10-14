@@ -162,6 +162,13 @@ an optional parent token with `cancellation:`.
 for automatic cleanup. `host.manage` is an alias. Cleanup runs in reverse
 registration order so dependent resources unwind predictably.
 
+`host.http_server` creates a loopback-only managed HTTP listener. It defaults to
+an ephemeral port, a 1 MiB maximum request size, a 30-second request timeout,
+and eight clients. Pass an explicit port when a local application needs a stable
+address. Start the server with `server.start`, inspect `server.port`, wait with
+`server.wait`, and stop it with `server.stop`; plugin cleanup stops it
+automatically. The handler receives WEBrick's request and response objects.
+
 Plugin-owned tab hosts expose the same `background`, `on_cleanup`, and `manage`
 methods. Their resources are cleaned up when a local tab closes or its shared
 plugin-chat runtime shuts down. A tab driver may implement `close` (or `shutdown`

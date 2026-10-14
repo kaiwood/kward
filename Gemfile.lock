@@ -10,6 +10,7 @@ PATH
       tty-reader
       tty-screen
       unicode-display_width
+      webrick
 
 GEM
   remote: https://rubygems.org/

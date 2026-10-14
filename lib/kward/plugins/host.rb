@@ -6,6 +6,7 @@ require_relative "../config_files"
 require_relative "../deep_copy"
 require_relative "../private_file"
 require_relative "resources"
+require_relative "http_server"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -152,6 +153,14 @@ module Kward
     # @return [PluginTask]
     def background(name: nil, cancellation: nil, &block)
       @resources.background(name: name, cancellation: cancellation, &block)
+    end
+
+    # Creates a loopback-only HTTP listener owned by this plugin. The listener
+    # is stopped automatically during plugin reload or shutdown.
+    def http_server(host: "127.0.0.1", port: 0, max_body_bytes: PluginHTTPServer::DEFAULT_MAX_BODY_BYTES, request_timeout: PluginHTTPServer::DEFAULT_REQUEST_TIMEOUT, max_clients: 8, &handler)
+      server = PluginHTTPServer.new(host: host, port: port, max_body_bytes: max_body_bytes, request_timeout: request_timeout, max_clients: max_clients, &handler)
+      on_cleanup(server) { |resource| resource.stop }
+      server
     end
 
     # Registers idempotent cleanup for a subscription or other plugin resource.
