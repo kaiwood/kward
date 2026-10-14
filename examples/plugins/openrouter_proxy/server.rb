@@ -73,14 +73,14 @@ module Kward
       def handle_stream(request, response)
         state = @protocol.stream_state(request)
         cancellation = Cancellation.new
-        events = Queue.new
+        events = SizedQueue.new(16)
         worker = Thread.new do
           @codex.stream(**@protocol.responses_request(request), max_output_tokens: request.max_output_tokens, cancellation: cancellation) do |event|
-            events << [:event, event]
+            enqueue_stream_event(events, [:event, event], cancellation)
           end
-          events << [:done, nil]
+          enqueue_stream_event(events, [:done, nil], cancellation)
         rescue StandardError => error
-          events << [:error, error]
+          enqueue_stream_event(events, [:error, error], cancellation) unless cancellation.cancelled?
         end
         worker.report_on_exception = false
 
@@ -119,6 +119,16 @@ module Kward
         ensure
           cancellation.cancel! unless state[:terminal]
           worker.join(2)
+        end
+      end
+
+      def enqueue_stream_event(queue, event, cancellation)
+        loop do
+          cancellation.raise_if_cancelled!
+          queue.push(event, true)
+          return
+        rescue ThreadError
+          sleep 0.01
         end
       end
 
