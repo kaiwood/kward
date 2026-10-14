@@ -28,13 +28,14 @@ module Kward
 
     # Streams parsed Responses API events to the caller and returns after a
     # terminal response event. The OAuth credential is never returned.
-    def stream(model:, input:, instructions: nil, text: nil, cancellation: nil)
+    def stream(model:, input:, instructions: nil, text: nil, max_output_tokens: nil, cancellation: nil)
       token = @oauth.access_token
       raise AuthenticationError, "No OpenAI OAuth login found. Run `kward login`." if token.to_s.empty?
 
       body = { model: model, input: input, store: false, stream: true }
       body[:instructions] = instructions unless instructions.nil?
       body[:text] = text unless text.nil?
+      body[:max_output_tokens] = max_output_tokens if max_output_tokens
       request = Net::HTTP::Post.new(@endpoint)
       request["Authorization"] = "Bearer #{token}"
       request["Content-Type"] = "application/json"

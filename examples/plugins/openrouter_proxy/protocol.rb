@@ -95,6 +95,7 @@ module Kward
           chunks
         when "response.failed", "response.incomplete"
           state[:terminal] = true
+          state[:failed] = true
           [chat_chunk(state, delta: {}, finish_reason: "error", error: { code: "server_error", message: "Codex response did not complete" })]
         else
           []
