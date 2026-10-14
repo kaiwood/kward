@@ -169,6 +169,13 @@ address. Start the server with `server.start`, inspect `server.port`, wait with
 `server.wait`, and stop it with `server.stop`; plugin cleanup stops it
 automatically. The handler receives WEBrick's request and response objects.
 
+`host.codex_responses.stream(model:, input:, instructions: nil, text: nil)`
+streams parsed Responses API events using Kward's configured OpenAI OAuth
+credentials. It always requests `store: false` and `stream: true`, and never
+returns the OAuth token. The caller should handle `response.failed` and
+`response.incomplete` events as unsuccessful turns. Use this provider API instead
+of reading Kward's auth files or calling its private Codex backend route.
+
 Plugin-owned tab hosts expose the same `background`, `on_cleanup`, and `manage`
 methods. Their resources are cleaned up when a local tab closes or its shared
 plugin-chat runtime shuts down. A tab driver may implement `close` (or `shutdown`

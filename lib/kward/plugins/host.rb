@@ -7,6 +7,7 @@ require_relative "../deep_copy"
 require_relative "../private_file"
 require_relative "resources"
 require_relative "http_server"
+require_relative "codex_responses"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -153,6 +154,12 @@ module Kward
     # @return [PluginTask]
     def background(name: nil, cancellation: nil, &block)
       @resources.background(name: name, cancellation: cancellation, &block)
+    end
+
+    # Streams Codex Responses API events using Kward's configured OpenAI OAuth
+    # credentials without exposing the token to plugin code.
+    def codex_responses
+      @codex_responses ||= PluginCodexResponses.new
     end
 
     # Creates a loopback-only HTTP listener owned by this plugin. The listener
