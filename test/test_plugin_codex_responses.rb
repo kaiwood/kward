@@ -29,7 +29,7 @@ class TestPluginCodexResponses < KwardTestCase
 
     adapter.stream(
       model: "gpt-6-luna",
-      input: [{ "role" => "user", "content" => "hello" }],
+      input: [{ role: "user", content: "hello" }],
       instructions: "Answer briefly.",
       text: text_format,
       max_output_tokens: 120,
@@ -61,7 +61,7 @@ class TestPluginCodexResponses < KwardTestCase
 
     Kward::PluginCodexResponses.new(client: client).stream(
       model: "gpt-6-luna",
-      input: [{ "role" => "user", "content" => "hello" }]
+      input: [{ role: "user", content: "hello" }]
     ) { |event| events << event }
 
     assert_equal [{ "type" => "response.output_text.delta", "delta" => "hello" }], events[0...-1]

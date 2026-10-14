@@ -59,11 +59,13 @@ module Kward
       messages = []
       messages << { role: "system", content: instructions } if instructions.is_a?(String) && !instructions.empty?
       input.each_with_index do |item, index|
-        unless item.is_a?(Hash) && %w[user assistant].include?(item["role"]) && item["content"].is_a?(String)
+        role = item["role"] || item[:role] if item.is_a?(Hash)
+        content = item.key?("content") ? item["content"] : item[:content] if item.is_a?(Hash)
+        unless %w[user assistant].include?(role) && content.is_a?(String)
           raise ArgumentError, "Codex input message #{index} must have a supported role and string content"
         end
 
-        messages << { role: item["role"], content: item["content"] }
+        messages << { role: role, content: content }
       end
       messages
     end

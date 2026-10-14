@@ -93,6 +93,25 @@ class TestOpenRouterProxyServer < KwardTestCase
     server&.stop
   end
 
+  def test_chat_completion_passes_protocol_symbol_keyed_messages_to_kward_client
+    client = Object.new
+    client.define_singleton_method(:chat) do |_messages, **options|
+      options.fetch(:on_assistant_delta).call(%q({"ok":true}))
+      { "content" => %q({"ok":true}), "usage" => { "input_tokens" => 2, "output_tokens" => 3, "total_tokens" => 5 } }
+    end
+    codex = Kward::PluginCodexResponses.new(client: client)
+    server, uri = start_proxy(codex)
+
+    response = post(uri, request_payload)
+
+    assert_equal "200", response.code
+    completion = JSON.parse(response.body)
+    assert_equal %q({"ok":true}), completion.dig("choices", 0, "message", "content")
+    assert_equal 5, completion.dig("usage", "total_tokens")
+  ensure
+    server&.stop
+  end
+
   def test_invalid_bearer_token_is_rejected_without_inference
     codex = FakeCodex.new(events: [])
     server, uri = start_proxy(codex)

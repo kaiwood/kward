@@ -26,7 +26,6 @@ Read first:
 
 - [Plugins](plugins.md)
 - [Extensibility](extensibility.md)
-- [OpenRouter-compatible Codex proxy example](openrouter-proxy.md)
 
 Generated entry points:
 
