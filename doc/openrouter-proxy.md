@@ -52,7 +52,7 @@ By default it listens only on `127.0.0.1:4000`. Configure another loopback port 
 
 Configure the application's **chat-completions** endpoint/base URL to the local address and its key to the local proxy token. Its model value must match a key in `model_map` exactly. For example, `openai/gpt-5-mini` maps to Codex model `gpt-5-mini`.
 
-For Credence, the reasoning provider currently posts to OpenRouter directly, and the embeddings client separately uses OpenRouter's `/embeddings` endpoint. Pointing only the reasoning call at Kward leaves embeddings on OpenRouter. Keep the real OpenRouter credential for embeddings, and use a separate local proxy credential for chat; if the application shares one API-key setting between these code paths, it needs a small provider-boundary adjustment to separate the chat endpoint/key from the embeddings endpoint/key.
+If your application also uses OpenRouter for embeddings, pointing only its chat-completions call at Kward leaves embeddings on OpenRouter. Keep the OpenRouter credential for embeddings and use a separate local proxy credential for chat. If both code paths share one API-key setting, adjust the provider boundary to configure their endpoints and credentials separately.
 
 A minimal request looks like:
 

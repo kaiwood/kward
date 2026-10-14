@@ -6,7 +6,7 @@ class TestOpenRouterProxyProtocol < KwardTestCase
     @protocol = Kward::OpenRouterProxy::Protocol.new(model_map: { "openai/gpt-5-mini" => "gpt-5-mini" })
   end
 
-  def test_translates_credence_chat_completion_request_to_responses_api
+  def test_translates_chat_completion_request_with_strict_schema_to_responses_api
     request = @protocol.parse_request(
       "model" => "openai/gpt-5-mini",
       "messages" => [
