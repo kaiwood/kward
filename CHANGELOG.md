@@ -7,6 +7,7 @@ All notable changes to Kward will be documented in this file.
 ### Added
 
 - Added an example `--openrouter-proxy` plugin that serves authenticated, loopback-only OpenRouter Chat Completions requests through Kward's Codex account, with non-streaming and SSE translations and strict JSON-schema output support.
+- Added a local deterministic fake embeddings endpoint to the example OpenRouter proxy, with configured model IDs, bounded dimensions and batches, and no upstream embedding requests.
 - Added a plugin-host Codex Responses streaming client using Kward's OAuth credentials and the documented ChatGPT-plan API endpoint, with storage disabled and safe provider errors.
 - Added a managed, loopback-only HTTP listener to identified plugin hosts with bounded requests and automatic cleanup on reload or shutdown.
 - Added declarative, identified-plugin CLI startup options for foreground modes, parsed before normal command dispatch and activated only when selected.

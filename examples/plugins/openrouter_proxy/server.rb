@@ -1,11 +1,13 @@
 require "json"
 require "thread"
 require_relative "protocol"
+require_relative "fake_embeddings"
 
 module Kward
   module OpenRouterProxy
     class Server
       ENDPOINT_PATH = "/api/v1/chat/completions"
+      EMBEDDINGS_ENDPOINT_PATH = "/api/v1/embeddings"
       DEFAULT_PORT = 4000
       DEFAULT_MAX_BODY_BYTES = 1_048_576
       MAX_NONSTREAM_EVENTS = 100_000
@@ -19,6 +21,7 @@ module Kward
         raise ArgumentError, "Configure at least one proxy model mapping" unless model_map.is_a?(Hash) && !model_map.empty?
 
         @protocol = Protocol.new(model_map: model_map)
+        @fake_embeddings = FakeEmbeddings.new(models: @config.fetch("fake_embedding_models", {}))
         @api_key = host.secret("api_key")
         raise ArgumentError, "Configure the proxy api_key secret before starting" if @api_key.to_s.empty?
       end
@@ -38,11 +41,15 @@ module Kward
 
       def handle(request, response)
         return unauthorized(response) unless authorized?(request)
-        return write_error(response, 404, "Not found", "not_found") unless request.path == ENDPOINT_PATH
+        unless [ENDPOINT_PATH, EMBEDDINGS_ENDPOINT_PATH].include?(request.path)
+          return write_error(response, 404, "Not found", "not_found")
+        end
         return write_error(response, 405, "Method not allowed", "method_not_allowed") unless request.request_method == "POST"
         return write_error(response, 415, "Content-Type must be application/json", "invalid_content_type") unless request["content-type"].to_s.downcase.start_with?("application/json")
 
         payload = JSON.parse(request.body.to_s)
+        return write_json(response, 200, @fake_embeddings.create(payload)) if request.path == EMBEDDINGS_ENDPOINT_PATH
+
         parsed = @protocol.parse_request(payload)
         parsed.stream ? handle_stream(parsed, response) : handle_nonstream(parsed, response)
       rescue JSON::ParserError

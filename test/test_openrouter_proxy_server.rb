@@ -23,7 +23,11 @@ class TestOpenRouterProxyServer < KwardTestCase
       id: "com.kward.openrouter-proxy",
       version: "1.0.0",
       api_version: "1",
-      config: { "api_key" => "local-test-key", "model_map" => { "openai/gpt-5-mini" => "gpt-5-mini" } },
+      config: {
+        "api_key" => "local-test-key",
+        "model_map" => { "openai/gpt-5-mini" => "gpt-5-mini" },
+        "fake_embedding_models" => { "kward/fake-embedding-8" => 8 }
+      },
       storage_root: @directory
     )
   end
@@ -49,6 +53,42 @@ class TestOpenRouterProxyServer < KwardTestCase
     assert_equal "openai/gpt-5-mini", completion["model"]
     assert_equal 7, completion.dig("usage", "total_tokens")
     assert_equal "gpt-5-mini", codex.requests.first[:model]
+  ensure
+    server&.stop
+  end
+
+  def test_fake_embeddings_are_authenticated_deterministic_and_do_not_call_codex
+    codex = FakeCodex.new(events: [])
+    server, uri = start_proxy(codex, path: "/api/v1/embeddings")
+    payload = { "model" => "kward/fake-embedding-8", "input" => ["alpha beta", "alpha beta"] }
+
+    response = post(uri, payload)
+
+    assert_equal "200", response.code
+    body = JSON.parse(response.body)
+    assert_equal "list", body["object"]
+    assert_equal "kward/fake-embedding-8", body["model"]
+    assert_equal 2, body["data"].length
+    assert_equal body.dig("data", 0, "embedding"), body.dig("data", 1, "embedding")
+    assert_equal 8, body.dig("data", 0, "embedding").length
+    assert_in_delta 1.0, Math.sqrt(body.dig("data", 0, "embedding").sum { |value| value * value }), 1e-10
+    assert_equal({ "prompt_tokens" => 4, "total_tokens" => 4 }, body["usage"])
+    assert_empty codex.requests
+  ensure
+    server&.stop
+  end
+
+  def test_fake_embeddings_reject_unknown_models_and_unsupported_fields
+    codex = FakeCodex.new(events: [])
+    server, uri = start_proxy(codex, path: "/api/v1/embeddings")
+
+    unknown_model = post(uri, { "model" => "not-configured", "input" => "text" })
+    unsupported_field = post(uri, { "model" => "kward/fake-embedding-8", "input" => "text", "user" => "ignored" })
+
+    assert_equal "400", unknown_model.code
+    assert_equal "Fake embedding model is not configured", JSON.parse(unknown_model.body).dig("error", "message")
+    assert_equal "400", unsupported_field.code
+    assert_empty codex.requests
   ensure
     server&.stop
   end
@@ -115,11 +155,11 @@ class TestOpenRouterProxyServer < KwardTestCase
 
   private
 
-  def start_proxy(codex)
+  def start_proxy(codex, path: "/api/v1/chat/completions")
     proxy = Kward::OpenRouterProxy::Server.new(host: @host, codex: codex, output: StringIO.new)
     listener = @host.http_server(port: 0) { |request, response| proxy.handle(request, response) }
     listener.start
-    [listener, URI("http://127.0.0.1:#{listener.port}/api/v1/chat/completions")]
+    [listener, URI("http://127.0.0.1:#{listener.port}#{path}")]
   end
 
   def request_payload
