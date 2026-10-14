@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added declarative, identified-plugin CLI startup options for foreground modes, parsed before normal command dispatch and activated only when selected.
 - Added the model-callable `datetime` tool for current local/offset time and ISO 8601 timestamp arithmetic with fixed UTC offsets.
 
 ### Fixed

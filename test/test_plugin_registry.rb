@@ -37,6 +37,35 @@ class TestPluginRegistry < KwardTestCase
     end
   end
 
+  def test_plugin_startup_options_are_declared_without_running_until_selected
+    calls = []
+    registry = Kward::PluginRegistry.new
+    registry.evaluate(path: "/plugins/proxy.rb", id: "example.proxy", version: "1.0", api: 1) do |plugin|
+      plugin.on_start { calls << :started }
+      plugin.startup_option("--proxy", description: "Run proxy") { |host| calls << host.id }
+    end
+
+    assert_equal "Run proxy", registry.startup_option_for("--proxy").description
+    assert_empty calls
+
+    registry.run_startup_option("--proxy")
+
+    assert_equal [:started, "example.proxy"], calls
+  end
+
+  def test_plugin_startup_options_require_identity_and_valid_switch_names
+    registry = Kward::PluginRegistry.new
+    assert_raises(ArgumentError) do
+      registry.evaluate(path: "/plugins/legacy.rb") { |plugin| plugin.startup_option("--proxy", description: "Run") {} }
+    end
+
+    assert_raises(RuntimeError) do
+      registry.evaluate(path: "/plugins/proxy.rb", id: "example.proxy", version: "1.0", api: 1) do |plugin|
+        plugin.startup_option("proxy", description: "Run") {}
+      end
+    end
+  end
+
   def test_composes_legacy_footers_without_replacing_plugins
     warnings = []
     registry = Kward::PluginRegistry.new(warning_sink: ->(message) { warnings << message })

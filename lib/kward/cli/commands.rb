@@ -278,7 +278,21 @@ module Kward
           end
           index += 1
         end
-        remaining
+        ConfigFiles.skip_config = @skip_config
+        extract_plugin_startup_options(remaining)
+      end
+
+      def extract_plugin_startup_options(arguments)
+        return arguments if @prompt_delimited || arguments.none? { |argument| argument.start_with?("--") }
+
+        registry = discover_plugin_registry
+        arguments.reject do |argument|
+          next false unless registry.startup_option_for(argument)
+          raise ArgumentError, "Only one plugin startup option may be selected" if @startup_option_name
+
+          @startup_option_name = argument
+          true
+        end
       end
 
       def normalized_execution_mode(value)

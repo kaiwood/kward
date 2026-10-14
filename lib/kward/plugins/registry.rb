@@ -33,6 +33,9 @@ module Kward
     # registry. The handler receives parsed arguments and a runtime context.
     Tool = Struct.new(:name, :description, :schema, :path, :handler, keyword_init: true)
 
+    # A plugin-owned top-level mode selected by a declared CLI switch.
+    StartupOption = Struct.new(:name, :description, :plugin_id, :path, :handler, keyword_init: true)
+
     STATUS_PRIORITIES = { low: 0, normal: 1, high: 2 }.freeze
     STATUS_SEPARATOR = " · "
 
@@ -505,6 +508,14 @@ module Kward
         @registry.register_transport(name, id: id, capabilities: capabilities, execution_profile: execution_profile, path: @path, &block)
       end
 
+      # Registers a no-argument top-level CLI mode for an identified plugin.
+      # The handler runs only when the user selects this option.
+      def startup_option(name, description:, &block)
+        raise ArgumentError, "Plugin startup options require stable plugin identity" unless @host
+
+        @registry.register_startup_option(name, description: description, plugin_id: @host.id, path: @path, &block)
+      end
+
       private
 
       def register_lifecycle(event, &block)
@@ -540,6 +551,7 @@ module Kward
       @tab_types_by_id = {}
       @transports = {}
       @transports_by_id = {}
+      @startup_options = {}
       @statuses = {}
       @status_sequence = 0
       @footer_path = nil
@@ -625,6 +637,20 @@ module Kward
 
     def transport_for_id(id)
       @transports_by_id[id.to_s]
+    end
+
+    def startup_options
+      @startup_options.values.dup
+    end
+
+    def startup_option_for(name)
+      @startup_options[name.to_s]
+    end
+
+    def run_startup_option(name)
+      option = startup_option_for(name) || raise(ArgumentError, "Unknown plugin startup option: #{name}")
+      start!
+      option.handler.call(plugin_for(option.plugin_id))
     end
 
     def status?
@@ -892,6 +918,19 @@ module Kward
       )
       @tab_types[name] = tab_type
       @tab_types_by_id[id] = tab_type
+    end
+
+    def register_startup_option(name, description:, plugin_id:, path: nil, &handler)
+      name = name.to_s
+      raise "Plugin startup option must look like --name: #{name}" unless name.match?(/\A--[a-z][a-z0-9-]*\z/)
+      raise "Plugin startup option requires a handler: #{name}" unless handler
+
+      if @startup_options.key?(name)
+        emit_warning "Warning: skipping duplicate Kward plugin startup option #{name}: #{path}"
+        return nil
+      end
+
+      @startup_options[name] = StartupOption.new(name: name, description: description.to_s, plugin_id: plugin_id, path: path, handler: handler)
     end
 
     def register_transport(name, id:, capabilities: nil, execution_profile: nil, path: nil, &handler)

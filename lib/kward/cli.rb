@@ -135,6 +135,7 @@ module Kward
       @working_directory = nil
       @prompt_delimited = false
       @requested_mode = "auto"
+      @startup_option_name = nil
       @skip_config = false
       @pending_reasoning_config = nil
       @pending_reasoning_config_mutex = Mutex.new
@@ -147,6 +148,9 @@ module Kward
     # @return [void]
     def run
       @argv = extract_global_options(@argv)
+      if @startup_option_name && (!@argv.empty? || @prompt_delimited)
+        raise ArgumentError, "Plugin startup option #{@startup_option_name} cannot be combined with a prompt or --"
+      end
       ConfigFiles.skip_config = @skip_config
       with_working_directory { dispatch }
     rescue ConfigFiles::ConfigError => e
@@ -220,6 +224,11 @@ module Kward
     end
 
     def dispatch
+      if @startup_option_name
+        discover_plugin_registry.run_startup_option(@startup_option_name)
+        return
+      end
+
       if @prompt_delimited
         ConfigFiles.ensure_default_config!
         run_prompt_or_interactive

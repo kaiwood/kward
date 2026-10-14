@@ -10,8 +10,12 @@ module Kward
         @prompt_templates ||= ConfigFiles.prompt_templates(reserved_commands: builtin_slash_command_names)
       end
 
+      def discover_plugin_registry
+        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names)
+      end
+
       def plugin_registry
-        @plugin_registry ||= PluginRegistry.load(reserved_commands: reserved_slash_command_names).tap(&:start!)
+        discover_plugin_registry.tap(&:start!)
       end
 
       def plugin_commands

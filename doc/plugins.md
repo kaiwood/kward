@@ -172,6 +172,25 @@ Do not open network connections or start threads directly while the plugin file
 is loading. Register them from `on_start`, a command, or a plugin-tab factory so
 Kward can own their lifetime.
 
+## Add a top-level startup option
+
+Identified plugins can declare a no-argument switch for a foreground CLI mode:
+
+```ruby
+Kward.plugin(id: "com.example.server", version: "1.0.0", api: 1) do |plugin|
+  plugin.startup_option("--example-server", description: "Run the example server") do |host|
+    ExampleServer.new(host).run
+  end
+end
+```
+
+The handler is called only when the user selects the option. Kward loads plugin
+registrations to identify plugin-owned switches before normal command dispatch,
+but does not start lifecycle callbacks or run the handler unless the mode is
+selected. A startup option cannot be combined with a prompt or another startup
+option. Keep loading code side-effect-free; the handler should own the selected
+foreground mode and return when it stops.
+
 ## Add a slash command
 
 Use plugin commands for local actions that should not call the model.

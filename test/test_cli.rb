@@ -316,6 +316,46 @@ class TestCLI < KwardTestCase
     Kward::Clipboard.define_singleton_method(:new, original_new)
   end
 
+  def test_plugin_startup_option_is_dispatched_as_a_foreground_mode
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      marker = File.join(home, "proxy-started")
+      File.write(File.join(plugins, "proxy.rb"), <<~RUBY)
+        Kward.plugin(id: "example.proxy", version: "1.0.0", api: 1) do |plugin|
+          plugin.startup_option("--proxy", description: "Run proxy") do |host|
+            File.write(#{marker.inspect}, host.id)
+          end
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        Kward::CLI.new(argv: ["--proxy"], prompt: FakePrompt.new([])).run
+      end
+
+      assert_equal "example.proxy", File.read(marker)
+    end
+  end
+
+  def test_plugin_startup_option_cannot_be_combined_with_a_prompt
+    Dir.mktmpdir do |home|
+      plugins = File.join(home, ".kward", "plugins")
+      FileUtils.mkdir_p(plugins)
+      File.write(File.join(plugins, "proxy.rb"), <<~'RUBY')
+        Kward.plugin(id: "example.proxy", version: "1.0.0", api: 1) do |plugin|
+          plugin.startup_option("--proxy", description: "Run proxy") { }
+        end
+      RUBY
+
+      with_env("HOME" => home, "KWARD_CONFIG_PATH" => nil) do
+        error = assert_raises(SystemExit) do
+          capture_io { Kward::CLI.new(argv: ["--proxy", "hello"], prompt: FakePrompt.new([])).run }
+        end
+        assert_equal 1, error.status
+      end
+    end
+  end
+
   def test_sysprompt_prints_annotated_effective_prompt
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|
