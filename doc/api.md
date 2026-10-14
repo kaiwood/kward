@@ -15,7 +15,7 @@ If you use Kward from the terminal, start with the [user guides](file.README.htm
 
 ### Plugin authors
 
-Use plugins when you need trusted local Ruby code for typed commands and actions, model-callable tools, prompt context, footer UI, transcript events, plugin-owned chats, or external transports.
+Use plugins when you need trusted local Ruby code for typed commands and actions, model-callable tools, prompt context, footer UI, transcript events, plugin-owned chats, external transports, or managed local HTTP and provider access.
 
 Session commands can stage a host-owned model response with
 `ctx.request_turn(system: text)`; check `ctx.turn_requests_supported?` before
@@ -26,6 +26,7 @@ Read first:
 
 - [Plugins](plugins.md)
 - [Extensibility](extensibility.md)
+- [OpenRouter-compatible Codex proxy example](openrouter-proxy.md)
 
 Generated entry points:
 
@@ -36,7 +37,10 @@ Generated entry points:
 - [`Kward::PluginCommand`](Kward/PluginCommand.html)
 - [`Kward::PluginAction`](Kward/PluginAction.html)
 - [`Kward::PluginResult`](Kward/PluginResult.html)
+- [`Kward::PluginRegistry::DSL#startup_option`](Kward/PluginRegistry/DSL.html#startup_option-instance_method)
 - [`Kward::PluginHost`](Kward/PluginHost.html)
+- [`Kward::PluginHTTPServer`](Kward/PluginHTTPServer.html)
+- [`Kward::PluginCodexResponses`](Kward/PluginCodexResponses.html)
 - [`Kward::PluginStore`](Kward/PluginStore.html)
 - [`Kward::PluginScopedStore`](Kward/PluginScopedStore.html)
 - [`Kward::PluginChatCapabilities`](Kward/PluginChatCapabilities.html)

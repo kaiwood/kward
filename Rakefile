@@ -93,7 +93,10 @@ def verify_public_api_docs
   required_links = [
     "Kward.html#plugin-class_method",
     "Kward/PluginRegistry/DSL.html",
+    "Kward/PluginRegistry/DSL.html#startup_option-instance_method",
     "Kward/PluginRegistry/Context.html",
+    "Kward/PluginHTTPServer.html",
+    "Kward/PluginCodexResponses.html",
     "Kward/Tools/Base.html",
     "Kward/ToolRegistry.html",
     "Kward/RPC/Server.html",
