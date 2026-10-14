@@ -49,6 +49,31 @@ class TestOpenRouterProxyProtocol < KwardTestCase
     assert_equal({ prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 }, response[:usage])
   end
 
+  def test_formats_responses_events_as_chat_completion_sse_chunks
+    request = @protocol.parse_request("model" => "openai/gpt-5-mini", "messages" => [{ "role" => "user", "content" => "Hi" }], "stream" => true)
+    state = @protocol.stream_state(request)
+
+    assert_equal "assistant", @protocol.stream_start_chunk(state).dig(:choices, 0, :delta, :role)
+    text = @protocol.stream_chunks(state, "type" => "response.output_text.delta", "delta" => "Hello").first
+    assert_equal "Hello", text.dig(:choices, 0, :delta, :content)
+    assert_nil text.dig(:choices, 0, :finish_reason)
+
+    final_chunks = @protocol.stream_chunks(state, "type" => "response.completed", "response" => { "usage" => { "input_tokens" => 2, "output_tokens" => 1 } })
+    assert_equal "stop", final_chunks.first.dig(:choices, 0, :finish_reason)
+    assert_equal({ prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 }, final_chunks.last[:usage])
+    assert_empty @protocol.stream_chunks(state, "type" => "response.output_text.delta", "delta" => "late")
+  end
+
+  def test_streaming_provider_failure_uses_openai_compatible_error_chunk
+    request = @protocol.parse_request("model" => "openai/gpt-5-mini", "messages" => [{ "role" => "user", "content" => "Hi" }], "stream" => true)
+    state = @protocol.stream_state(request)
+    chunk = @protocol.stream_chunks(state, "type" => "response.failed").first
+
+    assert_equal "error", chunk.dig(:choices, 0, :finish_reason)
+    assert_equal "server_error", chunk.dig(:error, :code)
+    assert_equal "Codex response did not complete", chunk.dig(:error, :message)
+  end
+
   def test_rejects_unknown_models_fields_and_unsupported_message_content
     assert_request_error("Model is not configured") do
       @protocol.parse_request("model" => "not-configured", "messages" => [{ "role" => "user", "content" => "Hi" }])

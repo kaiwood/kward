@@ -71,6 +71,36 @@ module Kward
         result
       end
 
+      def stream_state(request)
+        { id: "chatcmpl-#{SecureRandom.hex(12)}", created: Time.now.to_i, model: request.model_id, terminal: false }
+      end
+
+      def stream_start_chunk(state)
+        chat_chunk(state, delta: { role: "assistant" })
+      end
+
+      def stream_chunks(state, event)
+        return [] if state[:terminal]
+
+        case event["type"]
+        when "response.output_text.delta"
+          return [] unless event["delta"].is_a?(String)
+
+          [chat_chunk(state, delta: { content: event["delta"] })]
+        when "response.completed"
+          state[:terminal] = true
+          response = event["response"].is_a?(Hash) ? event["response"] : {}
+          chunks = [chat_chunk(state, delta: {}, finish_reason: "stop")]
+          chunks << chat_chunk(state, delta: {}, finish_reason: "stop", usage: chat_usage(response["usage"])) if response["usage"].is_a?(Hash)
+          chunks
+        when "response.failed", "response.incomplete"
+          state[:terminal] = true
+          [chat_chunk(state, delta: {}, finish_reason: "error", error: { code: "server_error", message: "Codex response did not complete" })]
+        else
+          []
+        end
+      end
+
       def chat_completion(request, events)
         terminal = events.reverse.find { |event| %w[response.completed response.failed response.incomplete].include?(event["type"]) }
         raise RequestError.new("Codex did not complete the response", status: 502) unless terminal&.fetch("type") == "response.completed"
@@ -136,6 +166,19 @@ module Kward
         raise RequestError, "#{name} must be a positive integer" unless value.is_a?(Integer) && value.positive?
 
         value
+      end
+
+      def chat_chunk(state, delta:, finish_reason: nil, usage: nil, error: nil)
+        chunk = {
+          id: state[:id],
+          object: "chat.completion.chunk",
+          created: state[:created],
+          model: state[:model],
+          choices: [{ index: 0, delta: delta, finish_reason: finish_reason }]
+        }
+        chunk[:usage] = usage if usage
+        chunk[:error] = error if error
+        chunk
       end
 
       def response_output_text(response)
