@@ -13,6 +13,10 @@ All notable changes to Kward will be documented in this file.
 - Added declarative, identified-plugin CLI startup options for foreground modes, parsed before normal command dispatch and activated only when selected.
 - Added the model-callable `datetime` tool for current local/offset time and ISO 8601 timestamp arithmetic with fixed UTC offsets.
 
+### Changed
+
+- Routed plugin-host Codex streaming and the OpenRouter proxy through Kward's normal Codex provider client and configured subscription credentials, rather than the public Responses API path.
+
 ### Fixed
 
 - Kept the active tab visible in the composer tab bar when tabs overflow, with indicators for hidden tabs.

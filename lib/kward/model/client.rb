@@ -110,7 +110,7 @@ module Kward
       @local_models = nil
     end
 
-    def chat(messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil, provider_required: false)
+    def chat(messages, tools: [], on_reasoning_delta: nil, on_reasoning_boundary: nil, on_assistant_delta: nil, on_retry: nil, cancellation: nil, steering: nil, max_tokens: nil, provider: nil, model: nil, reasoning: nil, provider_required: false, text_format: nil)
       cancellation&.raise_if_cancelled!
       requested_provider = provider
       validate_required_provider!(requested_provider) if provider_required
@@ -126,7 +126,7 @@ module Kward
       current_model = resolved_copilot_chat_model(current_model) if resolved_provider == "Copilot" && model.nil?
 
       validate_image_support!(resolved_provider, current_model, messages)
-      request_body = JSON.dump(request_body_payload(resolved_provider, messages, tools, max_tokens: max_tokens, model: current_model, reasoning: reasoning))
+      request_body = JSON.dump(request_body_payload(resolved_provider, messages, tools, max_tokens: max_tokens, model: current_model, reasoning: reasoning, text_format: text_format))
       with_retries(resolved_provider, current_model, request_bytes: request_body.bytesize, on_retry: on_retry, cancellation: cancellation) do
         request_started_at = @telemetry_logger.monotonic_now
         message = nil
@@ -691,7 +691,7 @@ module Kward
       end
     end
 
-    def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil)
+    def request_body_payload(provider, messages, tools, max_tokens: nil, model: nil, reasoning: nil, text_format: nil)
       reasoning = false unless ModelInfo.reasoning_supported?(provider, model)
 
       if provider == "Azure OpenAI"
@@ -699,9 +699,9 @@ module Kward
       elsif provider == "Google Gemini"
         gemini_payload(messages, tools, max_tokens: max_tokens, model: model)
       elsif provider == "OpenAI"
-        openai_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
+        openai_responses_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning, text_format: text_format)
       elsif provider == "Codex"
-        codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
+        codex_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning, text_format: text_format)
       elsif provider == "Anthropic"
         anthropic_payload(messages, tools, max_tokens: max_tokens, model: model, reasoning: reasoning)
       elsif provider == "Copilot" && copilot_responses_model?(model)

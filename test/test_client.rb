@@ -98,6 +98,28 @@ class TestClient < KwardTestCase
     assert_equal Kward::Client::AUTH_ERROR, error.message
   end
 
+  def test_codex_chat_accepts_json_schema_format_on_the_normal_provider_path
+    client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
+    text_format = { format: { type: "json_schema", name: "result", schema: { type: "object" }, strict: true } }
+    success = fake_net_response(200, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"{}\"}\n\n")
+
+    with_fake_http([success]) do |http|
+      client.chat(
+        [{ role: "user", content: "Return JSON." }],
+        provider: "codex",
+        provider_required: true,
+        model: "gpt-6-luna",
+        text_format: text_format
+      )
+
+      request = http.requests.first
+      assert_equal Kward::Client::CODEX_URL, URI(request.uri.to_s)
+      assert_equal "Bearer token", request["Authorization"]
+      assert_equal "gpt-6-luna", JSON.parse(request.body)["model"]
+      assert_equal JSON.parse(JSON.generate(text_format)), JSON.parse(request.body)["text"]
+    end
+  end
+
   def test_codex_oauth_defaults_to_gpt_5_6_sol_medium_reasoning
     client = Kward::Client.new(api_key: nil, openai_access_token: "token", oauth: FakeOAuth.new(nil), config_path: "missing_kward_config.json")
 

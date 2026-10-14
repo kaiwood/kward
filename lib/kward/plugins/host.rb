@@ -156,8 +156,8 @@ module Kward
       @resources.background(name: name, cancellation: cancellation, &block)
     end
 
-    # Streams Codex Responses API events using Kward's configured OpenAI OAuth
-    # credentials without exposing the token to plugin code.
+    # Streams Responses-shaped events through Kward's normal Codex provider
+    # client without exposing the configured credentials to plugin code.
     def codex_responses
       @codex_responses ||= PluginCodexResponses.new
     end

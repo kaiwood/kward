@@ -167,17 +167,17 @@ module Kward
       }
     end
 
-    def codex_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
-      responses_payload("Codex", messages, tools, model: model, reasoning: reasoning)
+    def codex_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil, text_format: nil)
+      responses_payload("Codex", messages, tools, model: model, reasoning: reasoning, text_format: text_format)
     end
 
-    def openai_responses_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil)
-      payload = responses_payload("OpenAI", messages, tools, model: model, reasoning: reasoning)
+    def openai_responses_payload(messages, tools, max_tokens: nil, model: nil, reasoning: nil, text_format: nil)
+      payload = responses_payload("OpenAI", messages, tools, model: model, reasoning: reasoning, text_format: text_format)
       payload[:max_output_tokens] = max_tokens.to_i if max_tokens.to_i.positive?
       payload
     end
 
-    def responses_payload(provider, messages, tools, model:, reasoning:)
+    def responses_payload(provider, messages, tools, model:, reasoning:, text_format: nil)
       parts = build_context_parts(provider, messages, tools, model: model)
       payload = {
         model: parts[:model],
@@ -194,6 +194,7 @@ module Kward
         effort = reasoning || reasoning_effort(provider)
         payload[:reasoning] = { effort: effort, summary: "auto" }
       end
+      payload[:text] = text_format unless text_format.nil?
       payload
     end
 

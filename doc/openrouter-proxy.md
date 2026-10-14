@@ -1,6 +1,6 @@
 # OpenRouter-compatible Codex proxy
 
-The example `openrouter_proxy` plugin lets a local application use Kward's signed-in Codex account for Chat Completions. Kward translates requests to OpenAI's documented ChatGPT-plan Responses API and translates its event stream back to Chat Completions JSON or SSE. It can also serve deterministic, locally generated fake embeddings for app setup and inspection without contacting an embedding provider.
+The example `openrouter_proxy` plugin lets a local application use Kward's configured Codex subscription for Chat Completions. It routes chat through Kward's normal Codex provider client and translates the resulting stream back to Chat Completions JSON or SSE. It can also serve deterministic, locally generated fake embeddings for app setup and inspection without contacting an embedding provider.
 
 This is a deliberately limited compatibility layer, not a complete OpenRouter replacement.
 
@@ -13,7 +13,7 @@ mkdir -p ~/.kward/plugins/openrouter_proxy
 cp examples/plugins/openrouter_proxy/*.rb ~/.kward/plugins/openrouter_proxy/
 ```
 
-Log in to Kward with the Codex account you want the proxy to use:
+The proxy uses the Codex subscription already configured in Kward. If you have not configured that account yet, sign in once with:
 
 ```bash
 kward login
@@ -72,7 +72,7 @@ curl http://127.0.0.1:4000/api/v1/chat/completions \
   }'
 ```
 
-Add `"stream": true` to receive Chat Completions SSE chunks. Non-streaming chat requests are also handled through Kward's upstream Responses stream and returned as one JSON completion.
+Add `"stream": true` to receive Chat Completions SSE chunks. Non-streaming chat requests also use Kward's normal streamed Codex request and are collected into one JSON completion.
 
 A fake embedding request looks like:
 
@@ -90,7 +90,7 @@ curl http://127.0.0.1:4000/api/v1/embeddings \
 - Streaming and non-streaming text responses.
 - `system`, `user`, and `assistant` messages with string content.
 - Strict `response_format.type: "json_schema"`.
-- `max_tokens`, translated to Responses `max_output_tokens`.
+- `max_tokens` is accepted for compatibility but is not enforced by Kward's Codex provider path.
 - Explicit model mapping; unconfigured model IDs are rejected.
 - OpenAI-compatible JSON errors before streaming starts; error chunks for failures after streaming begins.
 
@@ -98,6 +98,6 @@ Fake embeddings use stable token hashing, not a trained model: identical text pr
 
 ## Security and lifecycle
 
-The listener is loopback-only, request sizes and timeouts are bounded, and the local bearer token is distinct from Kward's OAuth credential. The OAuth token is used only for chat-completion requests; it is not returned to the plugin or forwarded to the local client. Embedding inputs are processed locally and are not logged or sent upstream. Stop the foreground process to stop the listener; Kward also stops plugin-owned listeners during cleanup.
+The listener is loopback-only, request sizes and timeouts are bounded, and the local bearer token is distinct from Kward's subscription credentials. Incoming client credentials are checked locally and are never forwarded upstream. Chat requests use Kward's existing Codex credential and account context; those credentials are not returned to the plugin client. Embedding inputs are processed locally and are not logged or sent upstream. Stop the foreground process to stop the listener; Kward also stops plugin-owned listeners during cleanup.
 
-Kward uses `https://api.openai.com/v1/responses` with `store: false` and `stream: true`, following [OpenAI's documented ChatGPT-plan inference flow](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference) rather than its private ChatGPT backend route. See [plugin documentation](plugins.md) for plugin installation and host APIs, and [OpenRouter's API reference](https://openrouter.ai/docs/api_reference/overview) for the broader API this subset resembles.
+For parity with normal Kward Codex agent requests, chat uses Kward's existing `https://chatgpt.com/backend-api/codex/responses` route. This is an undocumented/private endpoint and may change without notice; the proxy is therefore coupled to Kward's internal Codex provider behavior. See [plugin documentation](plugins.md) for plugin installation and host APIs, and [OpenRouter's API reference](https://openrouter.ai/docs/api_reference/overview) for the broader API this subset resembles.
