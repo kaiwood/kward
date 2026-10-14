@@ -400,6 +400,30 @@ class TestCLI < KwardTestCase
     end
   end
 
+  def test_ignore_local_instructions_option_suppresses_workspace_guidance
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace_dir|
+        File.write(File.join(config_dir, "PRINCIPLES.md"), "Global principles.")
+        File.write(File.join(workspace_dir, "AGENTS.md"), "Workspace instructions.")
+        prompt = FakePrompt.new([])
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          Kward::CLI.new(
+            argv: ["--working-directory", workspace_dir, "--ignore-local-instructions", "sysprompt"],
+            stdin: FakeInput.new("", tty: true),
+            prompt: prompt,
+            client: FakeClient.new([])
+          ).run
+        end
+
+        output = prompt.output.join("\n")
+        assert_includes output, "Global principles."
+        refute_includes output, "Workspace instructions."
+        refute_includes output, "Workspace AGENTS.md"
+      end
+    end
+  end
+
   def test_sysprompt_raw_prints_unannotated_effective_prompt
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace_dir|

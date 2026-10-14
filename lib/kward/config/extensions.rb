@@ -12,6 +12,8 @@ module Kward
       end
 
       def project_skill_candidates(workspace_root: Dir.pwd, warning_sink: nil)
+        return [] if ignore_local_instructions?
+
         skills_registry(workspace_root: workspace_root, warning_sink: warning_sink).project_skill_candidates
       end
 
@@ -56,6 +58,7 @@ module Kward
       end
 
       def skills_registry(workspace_root: Dir.pwd, warning_sink: nil, project_skill_paths: nil)
+        project_skill_paths = [] if ignore_local_instructions?
         Skills::Registry.new(
           config_dir: config_dir,
           workspace_root: workspace_root,

@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added `--ignore-local-instructions` to suppress workspace `AGENTS.md` guidance and project skills for a CLI run while retaining user-level instructions and skills.
 - Added an example `--openrouter-proxy` plugin that serves authenticated, loopback-only OpenRouter Chat Completions requests through Kward's Codex account, with non-streaming and SSE translations and strict JSON-schema output support.
 - Added a local deterministic fake embeddings endpoint to the example OpenRouter proxy, with configured model IDs, bounded dimensions and batches, and no upstream embedding requests.
 - Added a plugin-host Codex Responses streaming client using Kward's OAuth credentials and the documented ChatGPT-plan API endpoint, with storage disabled and safe provider errors.

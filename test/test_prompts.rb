@@ -237,6 +237,32 @@ class TestPrompts < KwardTestCase
     end
   end
 
+  def test_ignore_local_instructions_skips_workspace_guidance_and_project_skills
+    Dir.mktmpdir do |config_dir|
+      Dir.mktmpdir do |workspace|
+        File.write(File.join(workspace, "AGENTS.md"), "Workspace instructions.")
+        project_skill = File.join(workspace, ".agents", "skills", "project-agent")
+        user_skill = File.join(config_dir, "skills", "user-agent")
+        FileUtils.mkdir_p(project_skill)
+        FileUtils.mkdir_p(user_skill)
+        File.write(File.join(project_skill, "SKILL.md"), "---\nname: project-agent\ndescription: project skill\n---\nProject skill instructions.")
+        File.write(File.join(user_skill, "SKILL.md"), "---\nname: user-agent\ndescription: user skill\n---\nUser skill instructions.")
+
+        with_env("KWARD_CONFIG_PATH" => File.join(config_dir, "config.json")) do
+          Kward::ConfigFiles.ignore_local_instructions = true
+          content = Kward::Conversation.new(workspace_root: workspace).system_message[:content]
+
+          refute_includes content, "Workspace instructions."
+          refute_includes content, "project-agent"
+          assert_includes content, "user-agent"
+          assert_empty Kward::ConfigFiles.project_skill_candidates(workspace_root: workspace)
+        ensure
+          Kward::ConfigFiles.ignore_local_instructions = false
+        end
+      end
+    end
+  end
+
   def test_oversized_workspace_agents_prompt_warns_and_skips_when_enforced
     Dir.mktmpdir do |config_dir|
       Dir.mktmpdir do |workspace|

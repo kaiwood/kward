@@ -50,7 +50,9 @@ module Kward
       end
       skills = ConfigFiles.skills(workspace_root: workspace_root, project_skill_paths: project_skill_paths)
       sections << prompt_section("Configured skills", skills_prompt(skills), source: skills.empty? ? nil : File.join(ConfigFiles.config_dir, "skills"))
-      sections << prompt_section(workspace_agents_context_label(workspace_root), workspace_agents_context(workspace_root), source: ConfigFiles.workspace_agents_file?(workspace_root) ? ConfigFiles.workspace_agents_path(workspace_root) : nil)
+      unless ConfigFiles.ignore_local_instructions?
+        sections << prompt_section(workspace_agents_context_label(workspace_root), workspace_agents_context(workspace_root), source: ConfigFiles.workspace_agents_file?(workspace_root) ? ConfigFiles.workspace_agents_path(workspace_root) : nil)
+      end
       sections.compact
     end
 
@@ -88,6 +90,8 @@ module Kward
     end
 
     def workspace_agents_context(workspace_root = Dir.pwd)
+      return nil if ConfigFiles.ignore_local_instructions?
+
       if ConfigFiles.enforce_workspace_agents_file?
         ConfigFiles.workspace_agents_prompt(workspace_root)
       else
@@ -96,6 +100,8 @@ module Kward
     end
 
     def workspace_agents_prompt(workspace_root = Dir.pwd)
+      return nil if ConfigFiles.ignore_local_instructions?
+
       ConfigFiles.workspace_agents_prompt(workspace_root)
     end
 

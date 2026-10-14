@@ -152,6 +152,7 @@ module Kward
         raise ArgumentError, "Plugin startup option #{@startup_option_name} cannot be combined with a prompt or --"
       end
       ConfigFiles.skip_config = @skip_config
+      ConfigFiles.ignore_local_instructions = @ignore_local_instructions
       with_working_directory { dispatch }
     rescue ConfigFiles::ConfigError => e
       warn config_error_message(e)
@@ -173,6 +174,7 @@ module Kward
     ensure
       shutdown_plugins if respond_to?(:shutdown_plugins, true)
       ConfigFiles.skip_config = false
+      ConfigFiles.ignore_local_instructions = false
     end
 
     def ensure_client!

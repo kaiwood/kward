@@ -37,6 +37,7 @@ module Kward
     end
 
     @skip_config = false
+    @ignore_local_instructions = false
     @warning_sink = nil
 
     module Core
@@ -44,6 +45,14 @@ module Kward
 
       def skip_config=(value)
         @skip_config = value
+      end
+
+      def ignore_local_instructions=(value)
+        @ignore_local_instructions = value
+      end
+
+      def ignore_local_instructions?
+        @ignore_local_instructions == true
       end
 
       def warning_sink=(sink)

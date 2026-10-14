@@ -96,6 +96,7 @@ module Kward
           ["--mode=MODE", "Execution mode: auto, chat, oneshot, filter"],
           ["--filter", "Shortcut for --mode filter"],
           ["--skip-config", "Ignore the main config file for this run"],
+          ["--ignore-local-instructions", "Ignore workspace AGENTS.md files and project skills for this run"],
           ["--help, -h", "Show help"],
           ["--version, -v", "Show the installed version"]
         ]
@@ -257,6 +258,8 @@ module Kward
             break
           when "--skip-config"
             @skip_config = true
+          when "--ignore-local-instructions"
+            @ignore_local_instructions = true
           when "--filter"
             @requested_mode = "filter"
           when "--mode"
