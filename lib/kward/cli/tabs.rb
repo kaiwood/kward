@@ -573,7 +573,12 @@ module Kward
         update_prompt_tabs
         render_tab(tab) if render
         start_tab_live_view(tab) if tab.running?
-        @prompt.begin_busy_input("You>", activity: tab.local_busy_activity) if tab.local_busy? && @prompt.respond_to?(:begin_busy_input)
+        if tab.local_busy? && tab.shell
+          @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
+          @prompt.update_prompt_label(tab.shell.prompt_label) if @prompt.respond_to?(:update_prompt_label)
+        elsif tab.local_busy? && @prompt.respond_to?(:begin_busy_input)
+          @prompt.begin_busy_input("You>", activity: tab.local_busy_activity)
+        end
         persist_tabs
         service_active_tab_question
         tab.agent
@@ -820,7 +825,9 @@ module Kward
           return input
         end
 
-        @prompt.begin_busy_input("You>") if @prompt.respond_to?(:begin_busy_input)
+        if !tab.shell && @prompt.respond_to?(:begin_busy_input)
+          @prompt.begin_busy_input("You>")
+        end
         loop do
           service_background_tab_runs
           refresh_active_tab

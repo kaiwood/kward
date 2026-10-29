@@ -3,7 +3,7 @@ require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
-    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots, :snapshot_transcript_options
+    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots, :snapshot_transcript_options, :prompt_labels
 
     def initialize(inputs = [], confirmations: [])
       super(inputs, confirmations: confirmations)
@@ -17,6 +17,7 @@ class TestTabs < KwardTestCase
       @confirmation_messages = []
       @workspace_roots = []
       @snapshot_transcript_options = []
+      @prompt_labels = []
     end
 
     def yes?(message, default: false)
@@ -82,6 +83,10 @@ class TestTabs < KwardTestCase
 
     def queue_poll(*inputs)
       @poll_inputs.concat(inputs)
+    end
+
+    def update_prompt_label(label)
+      @prompt_labels << label
     end
 
     def begin_busy_input(_message = "You>", activity: "loading")
@@ -1137,6 +1142,37 @@ class TestTabs < KwardTestCase
       output = strip_ansi(prompt.output.join)
       assert_includes output, nested
       assert_nil first_tab.shell
+    end
+  end
+
+  def test_returning_to_shell_tab_with_background_command_restores_shell_prompt
+    Dir.mktmpdir do |config_dir|
+      store = Kward::SessionStore.new(config_dir: config_dir, cwd: Dir.pwd)
+      prompt = TabPrompt.new
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]), session_store: store)
+      cli.send(:setup_interactive_tabs, store, nil)
+      tab = cli.send(:active_tab)
+      tab.shell = Object.new
+      tab.shell.define_singleton_method(:prompt_label) { "Shell ~/project $" }
+      sink = Object.new
+      sink.define_singleton_method(:captured_output) { "" }
+      run = Object.new
+      run.define_singleton_method(:complete?) { false }
+      run.define_singleton_method(:sink) { sink }
+      run.define_singleton_method(:cancel!) {}
+      run.define_singleton_method(:join) {}
+      tab.background_run = { run: run, output_kind: :streamed, rendered_output: "" }
+      tab.local_busy_activity = "running"
+
+      cli.send(:activate_tab, 0)
+      prompt.queue_poll(tab_action: :next)
+
+      assert_equal({ tab_action: :next }, cli.send(:poll_active_tab_input))
+      assert_equal "Shell ~/project $", prompt.prompt_labels.last
+      assert_equal 0, prompt.busy_started
+      assert_equal 2, prompt.busy_finished
+    ensure
+      cli&.send(:stop_tabs)
     end
   end
 
