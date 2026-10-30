@@ -1551,6 +1551,18 @@ class TestPromptInterface < KwardTestCase
     assert_equal "draft", prompt.send(:composer_input)
   end
 
+  def test_quiet_busy_input_keeps_shell_label_and_still_handles_ctrl_c
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+
+    prompt.begin_busy_input("Shell ~/project $", activity: "running", show_activity: false)
+
+    rendered = strip_ansi(output.string)
+    assert_includes rendered, "Shell ~/project $"
+    refute_includes rendered, "running"
+    assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\x03")
+  end
+
   def test_prompt_interface_renders_activity_pulse_while_busy
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)

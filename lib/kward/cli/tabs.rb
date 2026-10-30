@@ -825,8 +825,12 @@ module Kward
           return input
         end
 
-        if !tab.shell && @prompt.respond_to?(:begin_busy_input)
-          @prompt.begin_busy_input("You>")
+        if @prompt.respond_to?(:begin_busy_input)
+          if tab.shell
+            @prompt.begin_busy_input(tab.shell.prompt_label, activity: "running", show_activity: false)
+          else
+            @prompt.begin_busy_input("You>")
+          end
         end
         loop do
           service_background_tab_runs

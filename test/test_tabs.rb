@@ -3,7 +3,7 @@ require_relative "test_helper"
 
 class TestTabs < KwardTestCase
   class TabPrompt < FakePrompt
-    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots, :snapshot_transcript_options, :prompt_labels
+    attr_reader :tabs_updates, :restores, :busy_started, :busy_finished, :banner_count, :slash_command_updates, :confirmation_messages, :workspace_roots, :snapshot_transcript_options, :prompt_labels, :busy_options
 
     def initialize(inputs = [], confirmations: [])
       super(inputs, confirmations: confirmations)
@@ -18,6 +18,7 @@ class TestTabs < KwardTestCase
       @workspace_roots = []
       @snapshot_transcript_options = []
       @prompt_labels = []
+      @busy_options = []
     end
 
     def yes?(message, default: false)
@@ -89,8 +90,9 @@ class TestTabs < KwardTestCase
       @prompt_labels << label
     end
 
-    def begin_busy_input(_message = "You>", activity: "loading")
+    def begin_busy_input(_message = "You>", activity: "loading", show_activity: true)
       @busy_started += 1
+      @busy_options << { activity: activity, show_activity: show_activity }
     end
 
     def finish_busy_input
@@ -1157,20 +1159,28 @@ class TestTabs < KwardTestCase
       sink = Object.new
       sink.define_singleton_method(:captured_output) { "" }
       run = Object.new
-      run.define_singleton_method(:complete?) { false }
+      completed = false
+      cancelled = false
+      run.define_singleton_method(:complete?) { completed }
       run.define_singleton_method(:sink) { sink }
-      run.define_singleton_method(:cancel!) {}
+      run.define_singleton_method(:cancel!) do
+        cancelled = true
+        completed = true
+      end
+      run.define_singleton_method(:result) { nil }
       run.define_singleton_method(:join) {}
       tab.background_run = { run: run, output_kind: :streamed, rendered_output: "" }
       tab.local_busy_activity = "running"
 
       cli.send(:activate_tab, 0)
-      prompt.queue_poll(tab_action: :next)
+      prompt.queue_poll(Kward::PromptInterface::CANCEL_INPUT)
 
-      assert_equal({ tab_action: :next }, cli.send(:poll_active_tab_input))
+      assert_equal :tab_idle, cli.send(:poll_active_tab_input)
+      assert cancelled, "Ctrl-C should cancel the detached shell process"
       assert_equal "Shell ~/project $", prompt.prompt_labels.last
-      assert_equal 0, prompt.busy_started
-      assert_equal 2, prompt.busy_finished
+      assert_equal 1, prompt.busy_started
+      assert_equal false, prompt.busy_options.last[:show_activity]
+      assert_equal 3, prompt.busy_finished
     ensure
       cli&.send(:stop_tabs)
     end

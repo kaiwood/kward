@@ -195,6 +195,7 @@ module Kward
       @asking = false
       @busy = false
       @busy_activity = "thinking"
+      @busy_activity_visible = true
       @busy_started_at = nil
       @last_busy_elapsed = nil
       @completion_status = nil
@@ -921,11 +922,12 @@ module Kward
       end
     end
 
-    def begin_busy_input(message = "You>", activity: "thinking")
+    def begin_busy_input(message = "You>", activity: "thinking", show_activity: true)
       start
       @mutex.synchronize do
         @prompt_label = message.to_s
         @busy_activity = normalize_busy_activity(activity)
+        @busy_activity_visible = show_activity
         @completion_status = nil
         @response_arrival_until = nil
         self.composer_input = ""
@@ -985,6 +987,7 @@ module Kward
         @busy_started_at = nil
         @busy = false
         @busy_activity = "thinking"
+        @busy_activity_visible = true
         @response_arrival_until = nil
         @queued_count = 0
         @steered_count = 0
