@@ -319,10 +319,10 @@ class TestPersistentShellSession < KwardTestCase
   def test_unsupported_syntax_fails_before_running_any_command
     Dir.mktmpdir("native-shell") do |dir|
       shell = build_shell(dir)
-      result = shell.run_for_agent('printf touched >sentinel; printf "$(pwd)"')
+      result = shell.run_for_agent('printf touched >sentinel; printf x &')
 
       assert_equal 2, result.exit_status
-      assert_includes result.output, "not supported"
+      assert_includes result.output, "unsupported operator"
       refute File.exist?(File.join(dir, "sentinel"))
       follow_up = shell.run_for_agent('printf "status=%s" "$?"')
       assert_includes follow_up.output, "status=2"
@@ -387,6 +387,44 @@ class TestPersistentShellSession < KwardTestCase
       assert_includes result.output, "timed out"
       assert_equal 0, follow_up.exit_status
       assert_includes follow_up.output, "yes"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_nested_native_substitutions_can_be_cancelled_without_losing_the_session
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir, timeout_seconds: 1)
+      result = shell.run_for_agent('KEPT=yes; value=$(while true; do :; done)')
+      assert_equal 1, result.exit_status
+      assert_includes result.output, "timed out"
+      follow_up = shell.run_for_agent('printf "%s" "$KEPT"')
+      assert_equal 0, follow_up.exit_status
+      assert_includes follow_up.output, "yes"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_native_extensions_work_through_the_shell_agent_without_a_system_shell
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/must-not-be-launched")
+      tool = Kward::Tools::RunShellCommand.new(shell_prompt_session: Kward::ShellPromptSession.new(shell))
+      source = <<~'SHELL'
+        values=(one "two words")
+        for ((i=0; i<2; i++)); do
+          [[ ${values[i]} == *o* ]] && printf '<%s>' "${values[i]}"
+        done
+        cat <(printf ':native')
+        printf ':done' > >(cat)
+      SHELL
+      result = tool.call({ "command" => source }, nil)
+      assert_includes result, "Exit status: 0"
+      assert_includes result, "<one><two words>:native:done"
+      assert_equal 0, shell.run_for_agent(":").exit_status
+      assert_nil shell.compose_input("cat <<EOF")
+      assert_nil shell.compose_input("hello")
+      assert_includes shell.run_for_agent(shell.compose_input("EOF")).output, "hello"
     ensure
       shell&.close
     end

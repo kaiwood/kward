@@ -118,18 +118,27 @@ Save a program in a file and run it **inside `/shell`**:
 kwsh scripts/check.kwsh README.md Gemfile
 ```
 
-The script receives `$0`, `$1`, `${10}`, `$#`, and `"$@"`. It runs in a separate native interpreter process, inheriting exported variables and the current directory without changing the caller's variables, functions, or directory. This is an embedded command, not a new standalone `kwsh` executable.
+The script receives `$0`, `$1`, `${10}`, `$#`, and `"$@"`. It runs in a separate native interpreter process, inheriting exported variables and the current directory without changing the caller's variables, functions, or directory. The gem also installs a standalone `kwsh` executable using the same native interpreter, without loading the coding agent:
+
+```sh
+kwsh scripts/check.kwsh README.md
+kwsh -c 'printf "%s\n" "$1"' example argument
+kwsh -n scripts/check.kwsh             # syntax check without execution
+printf 'printf hello\n' | kwsh -s
+```
+
+From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. Interactive terminal composition remains a Kward `/shell` feature.
 
 ### Supported syntax
 
-- Comments, newlines, `;`, single/double quotes, and backslash escaping.
+- Comments, newlines, `;`, single/double quotes, dollar-single-quotes (`$'line\n'`), and backslash escaping.
 - Assignments, `$name`, `${name}`, `$?`, `$$`, positional parameters, `set --`, and `shift`. Parameter operators support defaults, assignment, error checks, alternate values, lengths, and prefix/suffix pattern removal.
 - `export` and `unset`; ordinary assignments stay private to kwsh unless exported. `NAME=value command` supplies a temporary environment.
-- `&&`, `||`, `!`, concurrent pipelines, and `{ commands; }` groups. Pipeline stages have isolated state; pipeline status comes from the last stage.
-- `if` / `elif` / `else`, `case`, `for`, `while`, `until`, functions, `return`, `exit`, and innermost-loop `break` / `continue`.
-- `<`, `>`, `>>`, descriptor duplication, and descriptor closing on file descriptors 0–2. Redirections apply left to right.
+- `&&`, `||`, `!`, concurrent pipelines, brace groups and `( commands )` subshells. Pipeline stages and subshells isolate state. Pipeline status comes from the last stage unless `set -o pipefail` is enabled.
+- `if` / `elif` / `else`, `case`, `for`, `while`, `until`, functions, `return`, `exit`, and multilevel `break` / `continue` (for example, `break 2`).
+- `<`, `>`, `>>`, `<>`, `>|`, here-documents (`<<` / `<<-`), descriptor duplication, and closing on descriptors 0–9. Redirections apply left to right.
 - Ordinary `*`, `?`, and bracket filename patterns, `~` / `~/...`, and field splitting with default, custom, or empty `IFS`. Quote variables and use `"$@"` to preserve argument boundaries. `"$*"` joins arguments with the first character of `IFS` (a space when unset).
-- `read [-r] variable...`, including EOF status, backslash continuation, and multiple destination variables.
+- `read [-r] [-d delimiter] variable...`, including EOF status, backslash continuation, and multiple destination variables.
 - Persistent `cd`, `pwd`, aliases, and direct executable lookup through `PATH`. Utilities such as `printf`, `test` / `[`, `grep`, and `cat` come from the operating system.
 
 ### Handle defaults and process input
@@ -164,7 +173,7 @@ done < files.txt
 
 `case` takes the first matching clause. Patterns support `*`, `?`, bracket ranges, negation, and character classes such as `[[:digit:]]`; unlike filename expansion, these patterns can match slashes and leading dots. Quoted pattern characters are literal. An optional `(` before each pattern list and an empty clause body are accepted; Bash fall-through terminators are not yet supported.
 
-`read -r` preserves backslashes. Without `-r`, backslashes escape the next character and backslash-newline continues a logical line. `read` returns 0 after a newline, 1 at EOF (still assigning any partial line), and greater than 1 for an error. With several variables, the final variable gets the remaining unsplit text, with surrounding IFS whitespace removed, following POSIX.1-2024. Other read options, including `-d`, are not implemented yet.
+`read -r` preserves backslashes. Without `-r`, backslashes escape the next character and backslash-newline continues a logical line. `read` returns 0 after a newline, 1 at EOF (still assigning any partial line), and greater than 1 for an error. With several variables, the final variable gets the remaining unsplit text, with surrounding IFS whitespace removed, following POSIX.1-2024. `read -d delimiter` uses the first byte as the delimiter; an empty delimiter reads NUL-separated records. `-r` and `-d` may be combined. `read -a array` stores split fields in an indexed array; prompt and timeout read options remain unsupported.
 
 Unset `IFS` uses space, tab, and newline. Empty `IFS` disables splitting. Non-whitespace separators such as `:` preserve empty fields between adjacent separators. A prefix assignment such as `IFS= read -r line` applies only to that command; it does not replace the session's `IFS`. `read` consumes only its own logical line, leaving input for the next command. Use redirection or a pipe when asking the shell agent to run it; terminal-input commands should be prepared for you instead.
 
@@ -179,37 +188,96 @@ echo "Result: $((value + 2))"    # Result: 7
 value=$((value + 1))            # update a counter
 ```
 
-Arithmetic supports `+`, `-`, `*`, `/`, `%`, unary signs, and parentheses, with normal operator precedence. Decimal, octal (`010`), and hexadecimal (`0x10`) integers work. Variables can be written as `value`, `$value`, or `${value}`; their values must be integers, not more expressions. Unset or empty variables count as zero. Division truncates toward zero, and division or remainder by zero reports an error.
+Arithmetic supports arithmetic, comparison, logical and bitwise operators, shifts, the conditional `?:`, assignments and compound assignments, comma expressions, prefix/postfix `++` / `--`, and right-associative `**`. Decimal, octal (`010`), and hexadecimal (`0x10`) integers work. Variables can hold arithmetic expressions; cycles are errors, and those values are parsed only as arithmetic, never shell commands. Unset or empty variables count as zero unless `set -u` applies. Division truncates toward zero. Logical operators and conditionals evaluate only the selected operand.
+
+Use `((expression))` as a command (zero means failure, nonzero means success), or `for ((init; condition; update)); do …; done` for a counter loop.
 
 Prefer adjacent `))` for portable syntax. As a kwsh convenience, spaces or tabs may separate the final closing parentheses: `echo $((5 + 2) )` also prints `7`. This extension applies only to arithmetic delimiters; it does not rewrite literal text or allow other tokens or newlines between the closers. Single quotes and an escaped `$` keep the expression literal. Incomplete expressions can continue on the next input line.
 
-This is intentionally a small arithmetic subset: comparisons, logical/bitwise operators, assignments inside expressions, `++`/`--`, exponentiation, and nested expansions remain unsupported. Use `test` or `[` for comparisons. Expressions are limited to 4,096 bytes and 100 nesting levels, and integer values/results to 4,096 bits. Evaluation is native and never invokes Ruby `eval` or another shell.
+Arithmetic is bounded to 4,096 expression bytes, 100 nesting levels, and 4,096-bit integers/results. Negative exponents and negative or oversized shift counts are errors. These bounds are intentional differences from Bash machine-integer overflow behavior. Nested substitutions inside arithmetic and arithmetic array references are not yet supported; expand into a scalar variable first. Evaluation never invokes Ruby `eval` or another shell.
 
-### Deliberate limits
+### Capture output and connect programs
 
-Command substitution (`$(...)` and backticks), heredocs, subshell groups, background jobs, traps, `eval`, executable sourcing, recursive globbing, arrays, `[[ ... ]]`, process substitution, brace expansion, arithmetic `for` loops, and shell options such as `set -e` are not supported. Unsupported constructs report an error; kwsh never retries the program in another shell. Executable text without a shebang also fails instead of falling back to `/bin/sh`; use `kwsh <file>` for native scripts. Explicit commands such as `bash script.sh`, or executables with a shell shebang, still select their requested interpreter.
+```sh
+revision=$(git rev-parse --short HEAD)
+summary="$(printf '%s' "$revision")"
+cat <(printf 'generated input\n')
+printf 'generated output\n' > >(cat)
 
-`capture`, `pty`, `clear`, declarative `source`, and `kward edit` are prompt-level conveniences, not scripting builtins. Use functions for reusable script logic. Aliases inside scripts expand complete commands and do not implement POSIX's token-level alias grammar. The existing `kwshrc` format stays declarative: loading configuration does not start executing scripts.
+cat <<EOF
+Revision: $revision
+EOF
+```
 
-Native scripting and its persistent session remain local-TUI-only. RPC/Pan report it as unsupported; their ordinary bounded, sandbox-aware command tools are unchanged.
+Command substitutions (`$(...)` and legacy backticks) run native parsed programs in an isolated process. They remove trailing newlines, retain interior newlines, and respect surrounding quotes. Assignment-only commands report the last substitution's status. Capture is limited to 16 MiB; oversize output and NUL bytes are explicit errors, not silently truncated values. Substitution children are cleaned up on cancellation.
+
+Process substitutions use inherited `/dev/fd` pipes, owned by the current simple command. Both `<(program)` and `>(program)` work on the supported Unix hosts. Endpoints are closed and children reaped at command completion. kwsh waits for these children before reporting completion, unlike Bash's often-asynchronous process-substitution completion. Do not store these descriptor paths for later commands. Process substitution outside simple commands is not yet supported.
+
+Here-documents expand parameters, command substitutions and arithmetic unless the delimiter is quoted (`<<'EOF'`). `<<-` strips leading tabs, not spaces. Input is stored in an immediately unlinked temporary file, avoiding pipe-buffer deadlocks and persistent temporary content.
+
+### Use arrays, conditions, and generated arguments
+
+```sh
+files=(README.md "notes with spaces.md")
+files[4]=CHANGELOG.md
+printf '%s\n' "${files[@]}"          # retain each element's boundaries
+printf 'Count: %s\n' "${#files[@]}"
+
+declare -A metadata
+metadata=([language]=Ruby [owner]="Kai Wood")
+printf '%s\n' "${metadata[owner]}"
+
+for ((i=0; i<2; i++)); do
+  [[ ${files[i]} == *.md ]] && printf '%s\n' "${files[i]}"
+done
+
+printf '%s\n' report-{draft,final}.{md,txt} item-{01..03}
+shopt -s globstar
+printf '%s\n' **/*.rb
+```
+
+Indexed arrays are sparse, accept arithmetic indices and negative indices relative to the greatest index, and expand in index order. Associative arrays require `declare -A`. Use `"${array[@]}"` for separate arguments, `"${array[*]}"` to join with IFS, and `${!array[@]}` for keys. `unset 'array[index]'` removes an element. Arrays remain private shell state, not environment strings. Declarations accept `declare -a/-A name=(...)` or separate declaration and assignment. `array+=(...)` appends elements, `array[index]+=text` appends to one value, and `read -a array` reads split fields. Local arrays, namerefs, alternate associative key/value-list syntax, and array prefix environments are not implemented.
+
+`[[ … ]]` avoids splitting and filesystem globbing. It supports string and numeric comparisons, common file tests, pattern matching with `==` / `!=`, parentheses, negation, and lazy `&&` / `||`. Quoting the pattern makes it literal. `=~` accepts regular expressions and sets indexed `BASH_REMATCH` captures. It uses Ruby's engine with a 100 ms timeout, so it is not an exact Bash/POSIX ERE implementation. Put Boolean operator boundaries around a regex operand in separate words.
+
+Brace expansion runs before substitutions and only on unquoted source text. It supports nested choices and numeric/letter sequences, with a 4,096-word and 32-level bound. A variable containing `{a,b}` stays literal. Recursive globbing is opt-in with `shopt -s globstar`, as in Bash; `shopt -u globstar` disables it. Other `shopt` options are not implemented.
+
+### Manage script state
+
+- `. ./library.kwsh [args...]` executes a native library in the current shell; supplied positional arguments are restored afterward. This is separate from declarative `source` in the prompt.
+- `readonly name=value`, `unset -f function`, `command [-v|-V|-p]`, and `getopts` operate on interpreter state.
+- Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
+- `umask` accepts octal and `u/g/o` symbolic permissions. It affects redirected files and external children without changing the host process's lasting mask.
+- `cd` and `pwd` support `-L` / `-P`.
+- `set` supports `-a`, `-e`, `-f`, `-n`, `-u`, `-x`, `-C`, their `+` inverses, named `-o` options, and `pipefail`. `set -n` checks standalone scripts without execution and is ignored by interactive `/shell`. `set -x` deliberately writes expanded commands to stderr; do not enable it around secrets. Command substitution clears inherited `errexit`, matching Bash's default behavior.
+
+### Remaining compatibility limits
+
+This is **not yet a fully POSIX- or Bash-conforming shell**. Background `&`, jobs/`wait`, traps, `exec`, additional builtin options, and complete locale, alias, expansion and shell-invocation semantics remain unfinished. Executable text without a shebang still fails rather than falling back to another shell; use `kwsh file` or an explicit native shebang. Explicitly requested executables with another interpreter's shebang still use that interpreter.
+
+`capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Aliases still expand complete commands at execution time, not POSIX tokens. `kwshrc` stays non-executing.
+
+The persistent shell and shell-agent API remain TUI-only. RPC/Pan still report that session capability unsupported. The standalone executable can be invoked as an ordinary external program through existing sandboxed command tools; it does not bypass their permission, cancellation, or sandbox boundaries.
 
 ### Compatibility roadmap
 
 Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus Bash-compatible behavior for the requested extensions. This is a roadmap, **not a claim that the remaining features already work**:
 
-- [x] Parameter operators, `case`, `read -r`, and custom `IFS`.
-- [ ] Subshells and command substitution, including nesting and output capture.
-- [ ] Here-documents, `<>` / `>|`, additional file descriptors, and persistent `exec` redirection.
-- [ ] Executable `.` sourcing, `getopts`, `readonly`, `command`, `eval`, `umask`, remaining builtin options, and `read -d`.
-- [ ] Complete required arithmetic, plus Bash increment/decrement, exponentiation, and `for ((…))`.
-- [ ] Indexed and associative arrays, `[[ … ]]`, process substitution, brace expansion, and recursive `**` globbing.
-- [ ] Traps, asynchronous jobs, `wait`, job control, and shell options.
-- [ ] Standalone invocation, dollar-single-quotes, remaining tilde/special-parameter rules, POSIX alias parsing and execution order, command lookup/error semantics, and executable-text handling.
-- [ ] Conformance coverage for locale-sensitive matching/splitting and expansion edge cases. String patterns currently use Ruby character classes and codepoint ranges, not locale collation/equivalence rules; filesystem matching still uses Ruby globbing.
+- [x] Parameter operators, `case`, `read -r/-d`, and custom `IFS`.
+- [x] Subshells, nested command substitution, and bounded output capture.
+- [x] Here-documents, `<>` / `>|`, and descriptors 0–9.
+- [x] Native dot-sourcing, `getopts`, `readonly`, `command`, `eval`, and `umask`.
+- [x] Arithmetic operators, increment/decrement, exponentiation, and arithmetic loops, within documented bounds.
+- [x] Initial indexed/associative arrays, `[[ … ]]`, process substitution, brace expansion, and opt-in globstar.
+- [x] Standalone file/command/stdin modes, dollar-single-quotes, and the documented `set` options.
+- [ ] Traps, asynchronous jobs, `wait`, job control, and `exec` lifecycle integration.
+- [ ] Remaining array/conditional forms, nested arithmetic substitutions, named-user/assignment-context tilde expansion, builtin flags, and special parameters.
+- [ ] POSIX alias tokenization, incremental script-file execution, command lookup/error rules, and executable-text handling.
+- [ ] Full conformance coverage. Ruby character classes, codepoint ranges and globbing do not implement all locale collation/equivalence rules; regular expressions and bounded arithmetic are not exact Bash equivalents.
 
 Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
 
-References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), and [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html).
+References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html).
 
 ## Ask the shell agent
 

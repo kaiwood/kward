@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Expanded native kwsh with subshells, nested command/process substitution, here-documents, descriptors 0–9, bounded extended arithmetic and arithmetic loops, indexed/associative arrays, `[[ … ]]`, brace expansion, opt-in globstar, native dot-sourcing and state utilities, read delimiters, shell options, and a standalone `kwsh` executable. Full POSIX/Bash conformance remains unfinished; documented limits remain explicit.
 - Added native kwsh parameter operators, `case` pattern matching, `read -r`, and custom/empty `IFS`, with lazy nested expansion, quote-preserving splitting, and line-reading workflows. This is the first stage toward broader POSIX scripting and Bash-compatible extensions, not full compatibility.
 - Added native kwsh integer arithmetic expansion (`$((5 + 2))`), with basic operators, grouping, integer-valued variables, bounded evaluation, and shell-assistant guidance for the supported syntax. A kwsh-specific extension also accepts spaces or tabs between the final closing parentheses (`$((5 + 2) )`).
 - Added native kwsh scripting inside `/shell`: multiline programs, quoted variables and arguments, conditionals, loops, functions, pipelines, ordered redirection, and isolated `kwsh <file> [args]` execution, without delegating the language to another shell.

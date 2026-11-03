@@ -63,7 +63,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_invalid_arithmetic_is_rejected_before_any_side_effects
-    ["5 +", "1=2", "1++", "2**3", "1; touch sentinel", "$(touch sentinel)", "`touch sentinel`", "1.5", "08", "1 << 2", "1 < 2"].each do |expression|
+    ["5 +", "1=2", "1++", "2**", "1; touch sentinel", "$(touch sentinel)", "`touch sentinel`", "1.5", "08", "1 <<", "1 <"].each do |expression|
       status, _, error = execute("printf touched >sentinel; echo $((#{expression}))")
       assert_equal 2, status, expression
       refute_empty error
@@ -76,7 +76,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_arithmetic_runtime_errors_do_not_launch_the_command
-    ["echo $((1 / 0)) >sentinel", "echo $((1 % 0)) >sentinel", "value='$(touch sentinel)'; echo $((value))", "value='1 + 2'; echo $((value))"].each do |source|
+    ["echo $((1 / 0)) >sentinel", "echo $((1 % 0)) >sentinel", "value='$(touch sentinel)'; echo $((value))", "value=value; echo $((value))"].each do |source|
       status, _, error = execute(source)
       assert_equal 2, status, source
       assert_includes error, "arithmetic"
@@ -241,7 +241,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_parse_errors_reject_the_whole_program_before_side_effects
-    ["echo $(pwd)", "echo `pwd`", "echo $((1+=2))", "cat <<EOF\ntext\nEOF", "echo x &", "(echo x)", "case x in x echo x;; esac", "[[ -f x ]]", "echo ${x:1}", "echo $'x'"].each do |unsupported|
+    ["echo $(if)", "echo `if`", "echo $((1+=2))", "cat <<EOF\ntext", "echo x &", "(echo x", "case x in x echo x;; esac", "[[ -f ]]", "echo ${x:1}", "echo $'unclosed"].each do |unsupported|
       status, _, error = execute("printf touched >sentinel; #{unsupported}")
       assert_equal 2, status, unsupported
       refute File.exist?(File.join(@directory, "sentinel")), unsupported
@@ -257,7 +257,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_unsupported_builtins_and_read_options_are_explicit_errors
-    ["eval 'printf no'", "set -e", "read -a values", "read", "break", "return"].each do |source|
+    ["exec true", "set -o unknown", "read -p prompt", "read", "break", "return"].each do |source|
       status, output, error = execute(source)
       assert_equal 2, status, source
       assert_empty output
@@ -408,7 +408,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_parameter_expansion_rejects_invalid_or_excessive_nesting_before_side_effects
-    ['${}', '${x:1}', '${#x:-bad}', '${x:-$(touch sentinel)}', '${x:-' * 101 + 'a' + '}' * 101].each do |expression|
+    ['${}', '${x:1}', '${#x:-bad}', '${x:-$(if)}', '${x:-' * 101 + 'a' + '}' * 101].each do |expression|
       status, _, error = execute("printf touched >sentinel; echo #{expression}")
       assert_equal 2, status, expression
       refute_empty error
@@ -551,6 +551,299 @@ class TestNativeShell < KwardTestCase
     status, _, error = execute('read value <&-')
     assert_equal 2, status
     assert_includes error, "standard input is closed"
+  end
+
+  def test_subshells_and_substitutions_keep_parent_state_and_shell_pid
+    assert_output("child:parent:yes", <<~'SHELL')
+      value=parent
+      result=$(value=child; printf '%s\n\n' "$value")
+      printf '%s:%s:' "$result" "$value"
+      pid=$$
+      (value=isolated; [ "$$" = "$pid" ]) && printf yes
+    SHELL
+    assert_equal "parent", @runtime.variables["value"]
+  end
+
+  def test_command_substitution_handles_nested_syntax_quotes_backticks_and_status
+    assert_output("nested:legacy:7:0", <<~'SHELL')
+      printf '%s:' "$(case x in x) printf '%s' "$(printf nested)";; esac)"
+      printf '%s:' "`printf legacy`"
+      result=$(exit 7)
+      printf '%s:' "$?"
+      printf '%s' "$(printf '%s' 0)"
+    SHELL
+    assert_output("<a><b>|<a b>", 'printf "<%s>" $(printf "a b\n"); printf "|"; printf "<%s>" "$(printf "a b\n")"')
+    assert_output("safe", 'value=safe; printf "%s" "${value:-$(printf bad >sentinel)}"')
+    refute File.exist?(File.join(@directory, "sentinel"))
+  end
+
+  def test_substitution_drains_large_output_and_does_not_reparse_captured_text
+    assert_output("199999", 'value=$(yes x | head -n 100000); printf "%s" "${#value}"')
+    assert_output('$(touch sentinel)', %q{printf '%s' "$(printf '%s' '$(touch sentinel)')"})
+    refute File.exist?(File.join(@directory, "sentinel"))
+  end
+
+  def test_command_substitution_rejects_oversized_and_nul_output
+    status, output, error = execute('value=$(yes x | head -c 16777217)')
+    assert_equal 2, status
+    assert_empty output
+    assert_includes error, "command substitution exceeds"
+    status, _, error = execute(%q{value=$(printf '\000')})
+    assert_equal 2, status
+    assert_includes error, "NUL bytes"
+    assert_output("okay", 'printf okay')
+  end
+
+  def test_process_substitution_handles_readers_writers_and_cleanup
+    assert_output("inout", 'cat <(printf in); printf out > >(cat)')
+    assert_output("ab", 'cat <(printf a) <(printf b)')
+    assert_output("ok", 'true <(yes x); printf ok')
+  end
+
+  def test_extended_arithmetic_and_arithmetic_for_use_lazy_native_evaluation
+    assert_output("512:1:3:3:7:0:1:15:4", <<~'SHELL')
+      value=1
+      printf '%s:%s:%s:%s:' "$((2**3**2))" "$((value++))" "$((++value))" "$value"
+      printf '%s:%s:%s:' "$((1 ? 7 : 1/0))" "$((0 && (value=9)))" "$((1 || 1/0))"
+      printf '%s:%s' "$((value += 12))" "$((~0 & 4))"
+    SHELL
+    assert_output("02:4", 'for ((i=0; i<4; i++)); do ((i % 2)) && continue; printf "%s" "$i"; done; printf ":%s" "$i"')
+    assert_output("3", 'value="1 + 2"; printf "%s" "$((value))"')
+  end
+
+  def test_braces_expand_source_only_with_nested_choices_and_numeric_sequences
+    assert_output("<xa><xb><xc><03><02><01><a><c><e><{a,b}>", <<~'SHELL')
+      literal='{a,b}'
+      printf '<%s>' x{a,{b,c}} {03..01} {a..e..2} "$literal"
+    SHELL
+    status, _, error = execute('printf "%s" {1..1000000}')
+    assert_equal 2, status
+    assert_includes error, "brace expansion exceeds"
+  end
+
+  def test_here_documents_expand_lazily_and_preserve_quoted_delimiters
+    assert_output("hello world 7\n$value $(printf bad)\n", <<~'SHELL')
+      value=world
+      cat <<EOF
+      hello $value $(printf 7)
+      EOF
+      cat <<'EOF'
+      $value $(printf bad)
+      EOF
+      if false; then
+        cat <<EOF
+      $(printf bad >sentinel)
+      EOF
+      fi
+    SHELL
+    refute File.exist?(File.join(@directory, "sentinel"))
+    assert_output("second\n", "cat <<ONE <<-TWO\nfirst\nONE\n\tsecond\n\tTWO\n")
+    assert_output("nested", "printf '%s' \"$(cat <<EOF\nnested\nEOF\n)\"")
+  end
+
+  def test_high_descriptors_are_mapped_without_clobbering_ruby_internal_descriptors
+    ruby = Shellwords.escape(RbConfig.ruby)
+    assert_output("three:nine", "printf three 3>&1 >&3; #{ruby} -e 'IO.for_fd(9).write(\":nine\")' 9>&1")
+    assert_output("data", 'printf data 4<>buffer >&4; cat buffer')
+    assert_output("replacement", 'printf first >buffer; printf replacement >|buffer; cat buffer')
+    status, _, error = execute('printf no >&9')
+    assert_equal 2, status
+    assert_includes error, "bad file descriptor"
+  end
+
+  def test_array_declarations_append_and_read_array_keep_values_separate
+    File.write(File.join(@directory, "array-input"), "a:b::c\n")
+    assert_output("<first><second><third!>|<a><b><><c>", <<~'SHELL')
+      declare -a items=(first second)
+      items+=(third)
+      items[2]+=!
+      printf '<%s>' "${items[@]}"
+      IFS=: read -r -a items <array-input
+      printf '|'
+      printf '<%s>' "${items[@]}"
+    SHELL
+    assert_output("value", 'declare -A options=([key]=value); printf "%s" "${options[key]}"')
+  end
+
+  def test_arrays_support_sparse_indices_associative_keys_and_argument_boundaries
+    assert_output("<one><two three><four>|3|changed|4|0:1:2:7", <<~'SHELL')
+      values=(one "two three" four)
+      printf '<%s>' "${values[@]}"
+      printf '|%s|' "${#values[@]}"
+      i=1
+      values[$i]=changed
+      values[7]=last
+      printf '%s|%s|' "${values[1]}" "${#values[@]}"
+      IFS=:
+      printf '%s' "${!values[*]}"
+    SHELL
+    assert_output("Kai Wood:captain:2:captain", <<~'SHELL')
+      declare -A person
+      person=([name]="Kai Wood" [role]=captain)
+      key=role
+      printf '%s:%s:%s:' "${person[name]}" "${person[$key]}" "${#person[@]}"
+      unset 'person[name]'
+      printf '%s' "${person[role]}"
+    SHELL
+  end
+
+  def test_array_values_are_not_reparsed_as_commands_and_subshell_changes_are_isolated
+    assert_output('$(touch sentinel):first:last', <<~'SHELL')
+      values=(first last)
+      payload='$(touch sentinel)'
+      values[5]=$payload
+      (values[0]=child)
+      printf '%s:%s:%s' "${values[5]}" "${values[0]}" "${values[1]}"
+    SHELL
+    refute File.exist?(File.join(@directory, "sentinel"))
+    assert_output("0", 'values=(); count() { printf "%s" "$#"; }; count "${values[@]}"')
+    assert_output("last", 'values=([4]=first [9]=last); printf "%s" "${values[-1]}"')
+  end
+
+  def test_double_brackets_preserve_words_and_short_circuit_expansion
+    assert_output("pattern:literal:numeric:regex:lazy", <<~'SHELL')
+      value='one two'
+      [[ $value == one* ]] && printf pattern
+      [[ $value != 'one*' ]] && printf :literal
+      [[ 2+3 -eq 5 && ! -z "$value" ]] && printf :numeric
+      [[ abc =~ ^a.* ]] && printf :regex
+      [[ yes || ${missing:?not evaluated} ]] && printf :lazy
+    SHELL
+    assert_output("ab:a:b", '[[ ab =~ ^(a)(b)$ ]] && printf "%s:%s:%s" "${BASH_REMATCH[0]}" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"')
+    assert_output("file", 'printf data >input; [[ -f input && -s input && ( -r input || -z x ) ]] && printf file')
+    status, _, error = execute('[[ x =~ "[" ]]')
+    assert_equal 1, status
+    assert_empty error
+  end
+
+  def test_globstar_is_opt_in_and_braces_precede_substitution
+    FileUtils.mkdir_p(File.join(@directory, "a", "b"))
+    %w[top.rb a/one.rb a/b/two.rb].each { |path| File.write(File.join(@directory, path), "") }
+    assert_output("<a/one.rb>|<a/b/two.rb><a/one.rb><top.rb>", 'printf "<%s>" **/*.rb; printf "|"; shopt -s globstar; printf "<%s>" **/*.rb')
+    assert_output("aab", 'printf "%s" $(printf a){,b}')
+    assert_output("<a><b>", 'printf "<%s>" ""{a,b}')
+  end
+
+  def test_dot_sourcing_and_eval_use_native_state_and_restore_arguments
+    File.write(File.join(@directory, "library.kwsh"), 'VALUE=$1; helper() { printf "%s" "$VALUE"; }; return 7; printf bad')
+    assert_output("7:outer:inner:3", <<~'SHELL')
+      set -- outer
+      . ./library.kwsh inner
+      printf '%s:%s:' "$?" "$1"
+      helper
+      eval 'value=$((1 + 2))'
+      printf ':%s' "$value"
+    SHELL
+    refute @runtime.exited
+  end
+
+  def test_readonly_command_lookup_and_getopts_keep_interpreter_state
+    assert_output("external:pwd\navalue:3", <<~'SHELL')
+      printf() { command printf '%s' external; }
+      printf
+      command printf ':'
+      command -v pwd
+      unset -f printf
+      set -- -a -bvalue rest
+      while getopts 'ab:' option; do
+        case "$option" in a) printf a;; b) printf '%s' "$OPTARG";; esac
+      done
+      printf ':%s' "$OPTIND"
+    SHELL
+    assert_output("", 'readonly fixed=original')
+    status, _, error = execute('fixed=changed')
+    assert_equal 2, status
+    assert_includes error, "readonly variable"
+    assert_equal "original", @runtime.variables["fixed"]
+    status, _, error = execute('unset fixed')
+    assert_equal 2, status
+    assert_includes error, "readonly variable"
+  end
+
+  def test_command_lookup_does_not_report_missing_or_nonexecutable_files
+    File.write(File.join(@directory, "plain-file"), "not executable")
+    assert_output("1:1", 'command -v ./missing; printf "%s:" "$?"; command -v ./plain-file; printf "%s" "$?"')
+  end
+
+  def test_getopts_silent_errors_reset_and_explicit_arguments
+    assert_output("?:z|::b|a|a", <<~'SHELL')
+      getopts ':ab:' option -z
+      printf '%s:%s|' "$option" "$OPTARG"
+      OPTIND=1
+      getopts ':ab:' option -b
+      printf '%s:%s|' "$option" "$OPTARG"
+      OPTIND=1
+      getopts 'ab' option -ab
+      printf '%s|' "$option"
+      OPTIND=1
+      getopts 'ab' option -ab
+      printf '%s' "$option"
+    SHELL
+  end
+
+  def test_shell_options_handle_failure_context_and_pipeline_status
+    assert_output("okay:end:1", 'set -e; false || printf okay; if false; then printf bad; fi; ! true; printf :end; set -o pipefail; false | true || printf ":%s" "$?"')
+    assert_output("", 'set -e; false; printf bad', status: 1)
+    assert @runtime.exited
+  end
+
+  def test_nounset_noglob_noclobber_and_allexport_are_explicit_options
+    File.write(File.join(@directory, "one.rb"), "original")
+    assert_output("*.rb:default", 'set -fu; printf "%s:%s" *.rb "${unset:-default}"')
+    status, _, error = execute('printf "%s" "$unset"')
+    assert_equal 2, status
+    assert_includes error, "unbound variable"
+    status, _, error = execute('set -C; printf bad >one.rb')
+    assert_equal 2, status
+    assert_equal "original", File.read(File.join(@directory, "one.rb"))
+    assert_output("", 'printf replacement >|one.rb; set -a; visible=yes; set +a; private=no')
+    assert_equal "yes", @runtime.environment["visible"]
+    refute @runtime.environment.key?("private")
+    assert_equal "replacement", File.read(File.join(@directory, "one.rb"))
+  end
+
+  def test_umask_controls_redirects_and_external_children_without_changing_host_mask
+    original = File.umask
+    ruby = Shellwords.escape(RbConfig.ruby)
+    assert_output("0077\nu=rwx,g=,o=\n", "umask 077; umask; umask -S; printf x >private; #{ruby} -e 'File.write(\"child-private\", \"x\")'")
+    assert_equal 0o600, File.stat(File.join(@directory, "private")).mode & 0o777
+    assert_equal 0o600, File.stat(File.join(@directory, "child-private")).mode & 0o777
+    assert_equal original, File.umask
+    assert_output("0022\n", 'umask u=rwx,g=rx,o=rx; umask')
+  end
+
+  def test_noexec_checks_syntax_without_running_later_commands
+    assert_output("", 'set -n; printf bad >sentinel')
+    refute File.exist?(File.join(@directory, "sentinel"))
+    status, _, error = execute('if')
+    assert_equal 2, status
+    refute_empty error
+  end
+
+  def test_read_custom_delimiters_dollar_quotes_and_multilevel_loop_control
+    File.binwrite(File.join(@directory, "input"), "one\0two\0")
+    assert_output("<one><two>|a\nb|2", <<~'SHELL')
+      while IFS= read -r -d '' item; do printf '<%s>' "$item"; done <input
+      printf '|%s|' $'a\nb'
+      count=0
+      for first in a b; do
+        for second in c d; do
+          ((count++))
+          continue 2
+        done
+      done
+      printf '%s' "$count"
+    SHELL
+    assert_output("once", 'for a in 1 2; do for b in 1 2; do printf once; break 2; done; done')
+  end
+
+  def test_byte_escapes_preserve_utf8_and_nul_values_cannot_cross_execve
+    assert_output("é:é", %q{printf '%s:%s' $'\xC3\xA9' $'\u00E9'})
+    File.binwrite(File.join(@directory, "nul-input"), "bad\0value\n")
+    status, _, error = execute('IFS= read -r value <nul-input; printf "%s" "$value" >sentinel')
+    assert_equal 2, status
+    refute_empty error
+    assert_equal "", File.read(File.join(@directory, "sentinel"))
   end
 
   def test_unknown_command_and_missing_executable_status

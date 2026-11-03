@@ -1,8 +1,12 @@
 require "shellwords"
 require "set"
+require "tempfile"
 require_relative "native_syntax"
 require_relative "native_process"
 require_relative "native_expansion"
+require_relative "native_substitution"
+require_relative "native_builtins"
+require_relative "native_arrays"
 
 module Kward
   module NativeShell
@@ -10,8 +14,10 @@ module Kward
 
     class Flow < StandardError
       attr_reader :kind, :status
+      attr_accessor :levels
 
-      def initialize(kind, status)
+      def initialize(kind, status, levels: 1)
+        @levels = levels
         @kind = kind
         @status = status
         super(kind.to_s)
@@ -22,14 +28,18 @@ module Kward
     # never a command string, and executable text has no implicit sh fallback.
     class Runtime
       include Expansion
+      include Substitution
+      include Builtins
+      include Condition
+      include Arrays
 
-      UNSUPPORTED = %w[eval exec trap readonly local typeset declare jobs fg bg wait getopts umask ulimit command builtin source .].freeze
-      SPECIAL = %w[export unset exit return break continue shift set :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read kwsh]).freeze
+      UNSUPPORTED = %w[exec trap local typeset jobs fg bg wait ulimit builtin source].freeze
+      SPECIAL = %w[export readonly eval . unset exit return break continue shift set :].freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh]).freeze
 
       attr_reader :cwd, :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh")
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false)
         @cwd = File.expand_path(cwd)
         @variables = env.dup
         @variables["PWD"] = @cwd
@@ -37,7 +47,16 @@ module Kward
         @aliases = aliases.dup
         @arguments = arguments
         @name = name
+        @shell_pid = Process.pid
         @functions = {}
+        @arrays = {}
+        @readonly = Set.new
+        @source_depth = 0
+        @eval_depth = 0
+        @globstar = false
+        @options = Set.new
+        @interactive = interactive
+        @umask = File.umask
         @status = 0
         @exited = false
         @loop_depth = 0
@@ -46,7 +65,7 @@ module Kward
       end
 
       def environment
-        @variables.select { |key, _| @exported.include?(key) }
+        @variables.select { |key, _| @exported.include?(key) && !@arrays.key?(key) }
       end
 
       def run(source, input: $stdin, output: $stdout, error: $stderr)
@@ -80,7 +99,12 @@ module Kward
 
       private
 
-      def evaluate(node, streams)
+      def evaluate(node, streams, ignored: false)
+        previous_ignore = @ignore_failure
+        previous_streams = @streams
+        @ignore_failure = previous_ignore || ignored
+        return 0 if @options.include?("noexec") && !@interactive
+        @streams = streams
         @status = case node.kind
         when :sequence
           result = 0
@@ -88,11 +112,35 @@ module Kward
           result
         when :and_or
           first, rest = node.values
-          result = evaluate(first, streams)
-          rest.each do |operator, command|
-            result = evaluate(command, streams) if operator == "&&" ? result.zero? : !result.zero?
+          result = evaluate(first, streams, ignored: true)
+          rest.each_with_index do |(operator, command), index|
+            result = evaluate(command, streams, ignored: index < rest.length - 1) if operator == "&&" ? result.zero? : !result.zero?
           end
           result
+        when :declare_array
+          mode, name, words = node.values
+          declare_array([mode, name])
+          array_assignment(name, words)
+        when :array_assign
+          array_assignment(*node.values)
+        when :test
+          condition_value(node.values.first) ? 0 : 1
+        when :arithmetic
+          expression = node.values.first
+          expression.strip.empty? || arithmetic_value(expression).to_i.zero? ? 1 : 0
+        when :arithmetic_for
+          (initial, condition, update), body = node.values
+          arithmetic_value(initial) unless initial.strip.empty?
+          loop_commands do
+            result = 0
+            while condition.strip.empty? || !arithmetic_value(condition).to_i.zero?
+              result = loop_body(body, streams)
+              arithmetic_value(update) unless update.strip.empty?
+            end
+            result
+          end
+        when :subshell
+          subshell(node.values.first, streams)
         when :pipeline
           pipeline(*node.values, streams)
         when :simple
@@ -102,7 +150,7 @@ module Kward
           with_redirects(redirects, streams) { |redirected| evaluate(command, redirected) }
         when :if
           condition, yes, no = node.values
-          evaluate(evaluate(condition, streams).zero? ? yes : no, streams)
+          evaluate(evaluate(condition, streams, ignored: true).zero? ? yes : no, streams)
         when :case
           subject, clauses = node.values
           value = scalar(subject)
@@ -123,7 +171,7 @@ module Kward
           kind, condition, body = node.values
           loop_commands do
             result = 0
-            while evaluate(condition, streams).zero? == (kind == "while")
+            while evaluate(condition, streams, ignored: true).zero? == (kind == "while")
               result = loop_body(body, streams)
             end
             result
@@ -133,6 +181,13 @@ module Kward
           @functions[name] = body
           0
         end
+        failed_command = %i[simple subshell test arithmetic pipeline].include?(node.kind)
+        negated = node.kind == :pipeline && node.values.last
+        raise Flow.new(:exit, @status) if failed_command && !negated && @options.include?("errexit") && !@ignore_failure && !@status.zero?
+        @status
+      ensure
+        @streams = previous_streams
+        @ignore_failure = previous_ignore
       end
 
       def loop_commands
@@ -140,6 +195,8 @@ module Kward
         yield
       rescue Flow => flow
         raise unless flow.kind == :break
+        flow.levels -= 1
+        raise if flow.levels.positive?
         0
       ensure
         @loop_depth -= 1
@@ -149,16 +206,22 @@ module Kward
         evaluate(body, streams)
       rescue Flow => flow
         raise unless flow.kind == :continue
+        flow.levels -= 1
+        raise if flow.levels.positive?
         0
       end
 
       def pipeline(commands, negate, streams)
+        previous_ignore = @ignore_failure
+        @ignore_failure ||= negate
         result = if commands.length == 1
           evaluate(commands.first, streams)
         else
           run_pipeline(commands, streams)
         end
         negate ? (result.zero? ? 1 : 0) : result
+      ensure
+        @ignore_failure = previous_ignore
       end
 
       def run_pipeline(commands, streams)
@@ -174,7 +237,7 @@ module Kward
             )
             pipes.flatten.each { |io| io.close unless selected.value?(io) }
             begin
-              exit_status = evaluate(command, selected)
+              exit_status = evaluate(command, selected, ignored: index < commands.length - 1)
             rescue Flow => flow
               exit_status = flow.status
             rescue StandardError => e
@@ -186,30 +249,35 @@ module Kward
           end
         end
         pipes.flatten.each(&:close)
-        result = 0
+        statuses = []
         until pids.empty?
-          result = wait(pids.first)
+          statuses << wait(pids.first)
           pids.shift
         end
-        result
+        @options.include?("pipefail") ? statuses.reverse.find { |status| !status.zero? } || 0 : statuses.last
       ensure
         pipes&.flatten&.each { |io| io.close unless io.closed? }
         pids&.each { |pid| terminate(pid) }
       end
 
       def simple(words, redirects, streams)
+        previous_substitutions = @process_substitutions
+        @process_substitutions = []
+        @substitution_status = nil
         assignments = []
         words = words.dup
         assignments << words.shift.assignment while words.first&.assignment
         arguments = words.each_with_index.flat_map do |word, index|
-          declaration = words.first&.literal == "export" && index.positive? && word.assignment
+          declaration = %w[export readonly].include?(words.first&.literal) && index.positive? && word.assignment
           expand(word, assignment: !!declaration)
         end
         with_redirects(redirects, streams) do |redirected|
+          redirected[2]&.puts("+ #{Shellwords.join(arguments)}") if @options.include?("xtrace") && !arguments.empty?
           if arguments.empty?
             assignments.each { |key, value| assign(key, expand(value, assignment: true).join) }
-            next 0
+            next @substitution_status || 0
           end
+          raise ExecutionError, "array prefix assignments require an assignment-only command" if assignments.any? { |key, _| key.is_a?(Reference) || @arrays.key?(key) }
           name = arguments.first
           persistent = SPECIAL.include?(name)
           saved = assignments.to_h { |key, _| [key, [@variables[key], @exported.include?(key)]] }
@@ -234,14 +302,18 @@ module Kward
       rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
         streams[2]&.puts("kwsh: #{e.message}")
         2
+      ensure
+        resources = @process_substitutions
+        @process_substitutions = previous_substitutions
+        finish_substitutions(resources) if resources
       end
 
-      def dispatch(arguments, streams)
+      def dispatch(arguments, streams, functions: true)
         name, *args = arguments
-        if @functions.key?(name)
+        if functions && @functions.key?(name) && !SPECIAL.include?(name)
           return call_function(name, args, streams)
         end
-        if @aliases.key?(name) && !BUILTINS.include?(name) && !@alias_stack.include?(name)
+        if functions && @aliases.key?(name) && !BUILTINS.include?(name) && !@alias_stack.include?(name)
           raise ExecutionError, "alias expansion exceeds 100 levels" if @alias_stack.length >= 100
           @alias_stack << name
           begin
@@ -257,22 +329,59 @@ module Kward
         when "false" then 1
         when "cd" then change_directory(args, streams)
         when "pwd"
-          raise ExecutionError, "pwd: arguments are not supported" unless args.empty?
-          write_line(streams, @cwd)
+          raise ExecutionError, "pwd: expected -L or -P" unless args.empty? || args.all? { |option| %w[-L -P].include?(option) }
+          write_line(streams, args.last == "-P" ? File.realpath(@cwd) : @cwd)
           0
         when "export" then export(args, streams)
         when "read" then read_variables(args, streams)
+        when "readonly" then readonly(args, streams)
+        when "declare" then declare_array(args)
+        when "umask" then umask_builtin(args, streams)
+        when "shopt" then shopt(args, streams)
+        when "command" then command_builtin(args, streams)
+        when "getopts" then getopts(args, streams)
+        when "." then source_script(args, streams)
+        when "eval"
+          raise ExecutionError, "eval nesting exceeds 100 levels" if @eval_depth >= 100
+          @eval_depth += 1
+          begin
+            evaluate(Parser.parse(args.join(" ")), streams)
+          ensure
+            @eval_depth -= 1
+          end
         when "unset"
-          args.each { |key| validate_name(key); @variables.delete(key); @exported.delete(key) }
+          functions_only = args.first == "-f"
+          args.shift if %w[-f -v].include?(args.first)
+          args.each do |key|
+            if !functions_only && (match = key.match(/\A([A-Za-z_][A-Za-z0-9_]*)\[(.*)\]\z/m))
+              name, subscript = match.captures
+              raise ExecutionError, "#{name}: readonly variable" if @readonly.include?(name)
+              array = @arrays[name]
+              next unless array
+              if %w[@ *].include?(subscript) && !array.associative
+                @arrays.delete(name)
+              else
+                reference = Reference.new(name: name, subscript: Word.new(parts: [Part.new(kind: :literal, text: subscript, quoted: true)]))
+                array.values.delete(array_index(reference, array))
+              end
+              next
+            end
+            validate_name(key)
+            if functions_only
+              @functions.delete(key)
+            else
+              raise ExecutionError, "#{key}: readonly variable" if @readonly.include?(key)
+              @variables.delete(key)
+              @arrays.delete(key)
+              @exported.delete(key)
+            end
+          end
           0
         when "alias" then alias_command(args, streams)
         when "unalias"
           args == ["-a"] ? @aliases.clear : args.each { |name_to_remove| @aliases.delete(name_to_remove) }
           0
-        when "set"
-          raise ExecutionError, "set: only set -- <arguments> is supported" unless args.shift == "--"
-          @arguments = args
-          0
+        when "set" then set_options(args, streams)
         when "shift"
           raise ExecutionError, "shift: expected one nonnegative count" if args.length > 1 || args.first && !args.first.match?(/\A\d+\z/)
           count = args.empty? ? 1 : args.first.to_i
@@ -280,11 +389,12 @@ module Kward
           @arguments = @arguments.drop(count)
           0
         when "break", "continue"
-          raise ExecutionError, "#{name}: only the innermost loop is supported" unless args.empty? || args == ["1"]
+          raise ExecutionError, "#{name}: expected a positive count" if args.length > 1 || args.first && !args.first.match?(/\A[1-9][0-9]*\z/)
+          levels = args.empty? ? 1 : [args.first.to_i, @loop_depth].min
           raise ExecutionError, "#{name}: not in a loop" if @loop_depth.zero?
-          raise Flow.new(name.to_sym, 0)
+          raise Flow.new(name.to_sym, 0, levels: levels)
         when "return", "exit"
-          raise ExecutionError, "return: not in a function" if name == "return" && @function_depth.zero?
+          raise ExecutionError, "return: not in a function" if name == "return" && @function_depth.zero? && @source_depth.zero?
           raise ExecutionError, "#{name}: expected numeric status" if args.length > 1 || args.first && !args.first.match?(/\A[+-]?\d+\z/)
           raise Flow.new(name.to_sym, args.empty? ? @status : args.first.to_i % 256)
         when "kwsh" then script(args, streams)
@@ -315,6 +425,7 @@ module Kward
         streams.values.compact.uniq.each(&:flush)
         pid = Process.fork do
           Signal.trap("INT", "DEFAULT")
+          File.umask(@umask)
           runtime = self.class.new(cwd: @cwd, env: environment, arguments: args.drop(1), name: args.first)
           status = runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
           streams.values.compact.uniq.each(&:flush)
@@ -328,8 +439,17 @@ module Kward
       end
 
       def assign(key, value)
+        return array_store(key, value) if key.is_a?(Reference)
         validate_name(key)
-        @variables[key] = value
+        raise ExecutionError, "#{key}: readonly variable" if @readonly.include?(key)
+        @getopts_index = nil if key == "OPTIND" && value == "1" && !@getopts_running
+        @exported.add(key) if @options.include?("allexport")
+        if @arrays.key?(key)
+          array = @arrays[key]
+          array.values[array.associative ? "0" : 0] = value
+        else
+          @variables[key] = value
+        end
       end
 
       def validate_name(key)
@@ -373,11 +493,17 @@ module Kward
       end
 
       def change_directory(args, streams)
+        physical = false
+        while %w[-L -P --].include?(args.first)
+          option = args.shift
+          break if option == "--"
+          physical = option == "-P"
+        end
         raise ExecutionError, "cd: too many arguments" if args.length > 1
         target = args.first || @variables["HOME"]
         target = @variables["OLDPWD"] if target == "-"
         raise ExecutionError, "cd: directory is not set" if target.to_s.empty?
-        path = File.expand_path(target, @cwd)
+        path = physical ? File.realpath(target, @cwd) : File.expand_path(target, @cwd)
         raise ExecutionError, "cd: no such directory: #{target}" unless File.directory?(path)
         raise ExecutionError, "cd: permission denied: #{target}" unless File.executable?(path)
         @variables["OLDPWD"] = @cwd
@@ -390,20 +516,39 @@ module Kward
 
       def read_variables(args, streams)
         raw = false
+        delimiter = "\n"
+        array_name = nil
         while args.first&.start_with?("-") && args.first != "-"
           option = args.shift
           break if option == "--"
-          raise ExecutionError, "read: only -r is supported" unless option.match?(/\A-r+\z/)
-          raw = true
+          flags = option.delete_prefix("-")
+          until flags.empty?
+            flag = flags.slice!(0)
+            case flag
+            when "r" then raw = true
+            when "a"
+              array_name = flags.empty? ? args.shift : flags
+              raise ExecutionError, "read: -a requires an array name" unless array_name
+              flags = ""
+            when "d"
+              value = flags.empty? ? args.shift : flags
+              raise ExecutionError, "read: -d requires a delimiter" unless value
+              delimiter = value.empty? ? "\0" : value.byteslice(0, 1)
+              flags = ""
+            else raise ExecutionError, "read: unsupported option -#{flag}"
+            end
+          end
         end
-        raise ExecutionError, "read: expected a variable name" if args.empty?
+        raise ExecutionError, "read: expected a variable name" if args.empty? && !array_name
+        raise ExecutionError, "read: -a cannot be combined with variable operands" if array_name && !args.empty?
+        validate_name(array_name) if array_name
         args.each { |name| validate_name(name) }
         input = streams[0]
         raise IOError, "standard input is closed" unless input
         text = +"".b
         complete = false
         while (byte = read_byte(input))
-          if byte == "\n"
+          if byte == delimiter
             complete = true
             break
           elsif byte == "\\" && !raw
@@ -426,9 +571,14 @@ module Kward
             characters.concat(Fields.characters(character, split: true))
           end
         end
-        ranges = Fields.ranges(characters, ifs, limit: args.length - 1)
-        args.each_with_index do |name, index|
-          assign(name, ranges[index] ? Fields.value(characters[ranges[index]]) : "")
+        ranges = Fields.ranges(characters, ifs, limit: array_name ? nil : args.length - 1)
+        if array_name
+          declare_array(["-a", array_name])
+          @arrays[array_name].values = ranges.each_with_index.to_h { |range, index| [index, Fields.value(characters[range])] }
+        else
+          args.each_with_index do |name, index|
+            assign(name, ranges[index] ? Fields.value(characters[ranges[index]]) : "")
+          end
         end
         complete ? 0 : 1
       end
@@ -449,15 +599,32 @@ module Kward
         redirected = streams.dup
         opened = []
         redirects.each do |descriptor, operator, word|
+          if word.is_a?(HereDocument)
+            file = Tempfile.new("kwsh-heredoc")
+            file.unlink
+            opened << file
+            file.write(scalar(word.word))
+            file.rewind
+            redirected[descriptor] = file
+            next
+          end
           targets = expand(word)
           raise ExecutionError, "ambiguous redirection" unless targets.length == 1
           target = targets.first
           if %w[>& <&].include?(operator)
-            raise ExecutionError, "redirection requires descriptor 0, 1, 2, or -" unless target.match?(/\A[012-]\z/)
-            redirected[descriptor] = target == "-" ? nil : redirected.fetch(target.to_i)
+            raise ExecutionError, "redirection requires descriptor 0 through 9, or -" unless target.match?(/\A[0-9-]\z/)
+            raise ExecutionError, "bad file descriptor: #{target}" if target != "-" && !redirected[target.to_i]
+            redirected[descriptor] = target == "-" ? nil : redirected[target.to_i]
           else
-            mode = { "<" => "r", ">" => "w", ">>" => "a" }.fetch(operator)
-            file = File.open(File.expand_path(target, @cwd), mode)
+            mode = { "<" => "r", ">" => "w", ">|" => "w", ">>" => "a", "<>" => File::RDWR | File::CREAT }.fetch(operator)
+            path = File.expand_path(target, @cwd)
+            mode = File::WRONLY | File::CREAT | File::EXCL if operator == ">" && @options.include?("noclobber") && (!File.exist?(path) || File.file?(path))
+            previous_mask = File.umask(@umask)
+            begin
+              file = File.open(path, mode)
+            ensure
+              File.umask(previous_mask)
+            end
             file.sync = true
             opened << file
             redirected[descriptor] = file
@@ -468,9 +635,8 @@ module Kward
         opened&.each(&:close)
       end
 
-      def external(arguments, streams)
-        name = arguments.first
-        executable = if name.include?("/")
+      def executable_path(name)
+        if name.include?("/")
           File.expand_path(name, @cwd)
         else
           candidates = @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map do |directory|
@@ -478,11 +644,16 @@ module Kward
           end
           candidates.find { |path| File.file?(path) && File.executable?(path) } || candidates.find { |path| File.exist?(path) }
         end
+      end
+
+      def external(arguments, streams)
+        name = arguments.first
+        executable = executable_path(name)
         unless executable
           streams[2]&.puts("kwsh: #{name}: command not found")
           return 127
         end
-        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams)
+        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams, mask: @umask)
         result = wait(pid)
         pid = nil
         result

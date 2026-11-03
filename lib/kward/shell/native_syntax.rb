@@ -1,4 +1,6 @@
+require "shellwords"
 require_relative "native_arithmetic"
+require_relative "native_condition"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -8,6 +10,7 @@ module Kward
     class SyntaxError < StandardError; end
     class IncompleteInput < SyntaxError; end
 
+    Reference = Struct.new(:name, :subscript, :append, keyword_init: true)
     Part = Struct.new(:kind, :text, :quoted, keyword_init: true)
     Word = Struct.new(:parts, keyword_init: true) do
       def literal
@@ -19,66 +22,160 @@ module Kward
       def assignment
         first = parts.first
         return unless first && first.kind == :literal && !first.quoted
+        if (array = first.text.match(/\A([A-Za-z_][A-Za-z0-9_]*)\[/))
+          return subscript_assignment(array[0].length, array[1])
+        end
         match = first.text.match(/\A([A-Za-z_][A-Za-z0-9_]*)=(.*)\z/m)
         return unless match
 
         value = [Part.new(kind: :literal, text: match[2], quoted: false)] + parts.drop(1)
         [match[1], Word.new(parts: value)]
       end
+
+      def array_element
+        return unless parts.first&.kind == :literal && !parts.first.quoted && parts.first.text.start_with?("[")
+        subscript_assignment(1, nil)
+      end
+
+      def subscript_assignment(prefix, name)
+        key = []
+        parts.each_with_index do |part, index|
+          text = index.zero? ? part.text[prefix..] : part.text
+          if part.kind == :literal && !part.quoted && (ending = text.match(/\](\+?)=/))
+            finish = ending.begin(0)
+            key << Part.new(kind: :literal, text: text[0...finish], quoted: false)
+            value = [Part.new(kind: :literal, text: text[ending.end(0)..], quoted: false)] + parts.drop(index + 1)
+            return [Reference.new(name: name, subscript: Word.new(parts: key), append: ending[1] == "+"), Word.new(parts: value)]
+          end
+          key << Part.new(kind: part.kind, text: text, quoted: part.quoted)
+        end
+        nil
+      end
     end
     Parameter = Struct.new(:name, :operator, :word, keyword_init: true)
-    Token = Struct.new(:value, :line, keyword_init: true)
+    HereDocument = Struct.new(:delimiter, :strip_tabs, :expand, :word, keyword_init: true)
+    Token = Struct.new(:value, :line, :source, keyword_init: true)
     Node = Struct.new(:kind, :values, keyword_init: true)
 
     class Lexer
-      OPERATORS = %w[&& || >> >& <& ;; ; | > < ( ) { }].freeze
+      OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ; | > < ( ) { }].freeze
 
-      def initialize(source)
+      def initialize(source, depth: 0)
         @source = source
+        @substitution_depth = depth
         @index = 0
         @line = 1
         @parameter_depth = 0
+        @heredocs = []
       end
 
       def tokens
         result = []
-        until current.nil?
-          case current
-          when " ", "\t", "\r"
-            advance
-          when "\\"
-            if @source[@index + 1] == "\n"
-              advance(2)
-            else
-              result << Token.new(value: word, line: @line)
-            end
-          when "#"
-            advance until current.nil? || current == "\n"
-          when "\n"
-            result << Token.new(value: ";", line: @line)
-            advance
-          else
-            line = @line
-            operator = OPERATORS.find { |candidate| @source[@index, candidate.length] == candidate }
-            if @source[@index, 2] == "<<" || current == "&" && operator != "&&"
-              raise SyntaxError, "line #{@line}: unsupported operator near #{@source[@index, 2].inspect}"
-            end
-            # A descriptor is recognized only when immediately adjacent to redirection.
-            if (match = @source[@index..].match(/\A([0-9]+)(>>|>&|<&|>|<)/))
-              result << Token.new(value: [:redirect, match[1].to_i, match[2]], line: line)
-              advance(match[0].length)
-            elsif operator
-              result << Token.new(value: operator, line: line)
-              advance(operator.length)
-            else
-              result << Token.new(value: word, line: line)
-            end
-          end
-        end
+        result << token while (token = next_token)
         result
       end
 
+      def next_token
+        until current.nil?
+          line = @line
+          start = @index
+          case current
+          when " ", "\t", "\r"
+            advance
+          when "#"
+            advance until current.nil? || current == "\n"
+          when "\n"
+            advance
+            consume_heredocs
+            return Token.new(value: ";", line: line)
+          else
+            if @source[@index, 2] == "\\\n"
+              advance(2)
+              next
+            end
+            operator = OPERATORS.find { |candidate| @source[@index, candidate.length] == candidate }
+            operator = nil if ["{", "}"].include?(operator) && @source[@index + 1]&.match?(/[^\s;|&()<>]/)
+            if current == "&" && operator != "&&"
+              raise SyntaxError, "line #{@line}: unsupported operator near #{@source[@index, 2].inspect}"
+            end
+            value = if @source[@index, 2] == "(("
+              [:arithmetic, arithmetic_source]
+            elsif ["<(", ">("].include?(@source[@index, 2])
+              word
+            elsif (match = @source[@index..].match(/\A([0-9]+)(<<-|<<|>>|<>|>\||>&|<&|>|<)/))
+              advance(match[0].length)
+              [:redirect, match[1].to_i, match[2]]
+            elsif operator
+              advance(operator.length)
+              operator
+            else
+              word
+            end
+            return Token.new(value: value, line: line, source: @source[start...@index])
+          end
+        end
+        raise IncompleteInput, "unclosed here-document" unless @heredocs.empty?
+        nil
+      end
+
+      def regex_token
+        advance while current&.match?(/\s/)
+        return unless current
+        line, start = @line, @index
+        value = word(regex: true)
+        Token.new(value: value, line: line, source: @source[start...@index])
+      end
+
+      def queue_heredoc(document)
+        @heredocs << document
+      end
+
+      def heredoc_word
+        parts = []
+        until current.nil?
+          case current
+          when "$" then parameter(parts, true)
+          when "`" then backticks(parts, true)
+          when "\\"
+            advance
+            if ['$', '`', "\\", "\n"].include?(current)
+              literal(parts, current, true) unless current == "\n"
+              advance
+            else
+              literal(parts, "\\", true)
+            end
+          else
+            literal(parts, current, true)
+            advance
+          end
+        end
+        Word.new(parts: parts)
+      end
+
       private
+
+      def consume_heredocs
+        pending = @heredocs
+        @heredocs = []
+        pending.each do |document|
+          body = +""
+          loop do
+            raise IncompleteInput, "unclosed here-document: #{document.delimiter}" unless current
+            finish = @source.index("\n", @index)
+            line = @source[@index...(finish || @source.length)]
+            advance(line.length + (finish ? 1 : 0))
+            line = line.sub(/\A\t+/, "") if document.strip_tabs
+            break if line == document.delimiter
+            body << line
+            body << "\n" if finish
+          end
+          document.word = if document.expand
+            Lexer.new(body, depth: @substitution_depth).heredoc_word
+          else
+            Word.new(parts: [Part.new(kind: :literal, text: body, quoted: true)])
+          end
+        end
+      end
 
       def current
         @source[@index]
@@ -93,9 +190,9 @@ module Kward
         parts << Part.new(kind: :literal, text: text, quoted: quoted)
       end
 
-      def word(parameter_word: false, quoted: false)
+      def word(parameter_word: false, quoted: false, stop: "}", regex: false)
         parts = []
-        until current.nil? || (parameter_word ? current == "}" : current.match?(/[\s;&|<>()]/))
+        until current.nil? || (parameter_word ? current == stop : (regex ? current.match?(/\s/) : word_end?))
           case current
           when "'"
             if quoted
@@ -120,7 +217,16 @@ module Kward
           when "$"
             parameter(parts, quoted)
           when "`"
-            raise SyntaxError, "line #{@line}: command substitution is not supported"
+            backticks(parts, quoted)
+          when "<", ">"
+            if !regex && ["<(", ">("].include?(@source[@index, 2])
+              direction = current
+              advance(2)
+              parts << Part.new(kind: :process, text: [direction, nested_program], quoted: false)
+            else
+              literal(parts, current, quoted)
+              advance
+            end
           else
             literal(parts, current, quoted)
             advance
@@ -147,7 +253,7 @@ module Kward
           when "$"
             parameter(parts, true)
           when "`"
-            raise SyntaxError, "line #{@line}: command substitution is not supported"
+            backticks(parts, true)
           when "\\"
             advance
             raise IncompleteInput, "line #{@line}: unclosed double quote" unless current
@@ -168,6 +274,14 @@ module Kward
       end
 
       def arithmetic(parts, quoted)
+        expression = arithmetic_source
+        Arithmetic::Parser.new(expression).parse
+        parts << Part.new(kind: :arithmetic, text: expression, quoted: quoted)
+      rescue Arithmetic::Error => e
+        raise SyntaxError, "line #{@line}: #{e.message}"
+      end
+
+      def arithmetic_source
         advance(2)
         start = @index
         depth = 0
@@ -184,10 +298,8 @@ module Kward
                 raise SyntaxError, "line #{@line}: expected a second ) to close arithmetic expansion"
               end
               expression = @source[start...@index]
-              Arithmetic::Parser.new(expression).parse
-              parts << Part.new(kind: :arithmetic, text: expression, quoted: quoted)
               advance(closing.length)
-              return
+              return expression
             end
             depth -= 1
           end
@@ -204,12 +316,19 @@ module Kward
           arithmetic(parts, quoted)
           return
         end
-        raise SyntaxError, "line #{@line}: command substitution is not supported" if current == "("
-        raise SyntaxError, "line #{@line}: dollar-single-quoting is not supported" if current == "'" && !quoted
+        if current == "("
+          advance
+          parts << Part.new(kind: :command, text: nested_program, quoted: quoted)
+          return
+        end
+        if current == "'" && !quoted
+          dollar_quote(parts)
+          return
+        end
         if current == "{"
           braced_parameter(parts, quoted)
           return
-        elsif (match = @source[@index..].to_s.match(/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9?@#*$])/))
+        elsif (match = @source[@index..].to_s.match(/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9?@#*$-])/))
           name = match[0]
           advance(name.length)
         elsif ["!", "-"].include?(current)
@@ -221,21 +340,111 @@ module Kward
         parts << Part.new(kind: :parameter, text: name, quoted: quoted)
       end
 
+      def dollar_quote(parts)
+        advance
+        value = +"".b
+        escapes = { "a" => "\a", "b" => "\b", "e" => "\e", "E" => "\e", "f" => "\f", "n" => "\n", "r" => "\r", "t" => "\t", "v" => "\v" }
+        until current.nil? || current == "'"
+          if current != "\\"
+            value << current.b
+            advance
+            next
+          end
+          advance
+          raise IncompleteInput, "unclosed dollar-single-quote" unless current
+          escape = current
+          advance
+          if escapes.key?(escape)
+            value << escapes.fetch(escape)
+          elsif ["\\", "'", '"'].include?(escape)
+            value << escape
+          elsif escape == "c" && current
+            value << (current.upcase.ord & 31).chr
+            advance(current == "\\" && @source[@index + 1] == "\\" ? 2 : 1)
+          elsif %w[x u U].include?(escape)
+            maximum = { "x" => 2, "u" => 4, "U" => 8 }.fetch(escape)
+            digits = @source[@index..][/\A[0-9a-fA-F]{1,#{maximum}}/]
+            if digits
+              value << digits.to_i(16).chr(escape == "x" ? Encoding::BINARY : Encoding::UTF_8).b
+              advance(digits.length)
+            else
+              value << "\\#{escape}"
+            end
+          elsif escape.match?(/[0-7]/)
+            extra = @source[@index..][/\A[0-7]{0,2}/]
+            value << ((escape + extra).to_i(8) & 255).chr(Encoding::BINARY)
+            advance(extra.length)
+          else
+            value << "\\#{escape}"
+          end
+        end
+        raise IncompleteInput, "unclosed dollar-single-quote" unless current
+        advance
+        literal(parts, value.split("\0", 2).first.to_s.force_encoding(Encoding.default_external), true)
+      rescue RangeError
+        raise SyntaxError, "invalid character escape"
+      end
+
+      def word_end?
+        current.match?(/[\s;&|<>()]/) && !["<(", ">("].include?(@source[@index, 2])
+      end
+
+      def nested_program
+        @substitution_depth += 1
+        raise SyntaxError, "substitution nesting exceeds 100 levels" if @substitution_depth > 100
+        previous_heredocs = @heredocs
+        @heredocs = []
+        Parser.new(nil, lexer: self).parse_until_close
+      ensure
+        @heredocs = previous_heredocs if previous_heredocs
+        @substitution_depth -= 1
+      end
+
+      def backticks(parts, quoted)
+        advance
+        source = +""
+        until current.nil? || current == "`"
+          if current == "\\" && ['$', '`', "\\", "\n"].include?(@source[@index + 1])
+            advance
+            source << current unless current == "\n"
+          else
+            source << current
+          end
+          advance
+        end
+        raise IncompleteInput, "line #{@line}: unclosed command substitution" unless current
+        advance
+        raise SyntaxError, "substitution nesting exceeds 100 levels" if @substitution_depth >= 100
+        lexer = Lexer.new(source, depth: @substitution_depth + 1)
+        parts << Part.new(kind: :command, text: Parser.new(nil, lexer: lexer).parse, quoted: quoted)
+      end
+
       def braced_parameter(parts, quoted)
         @parameter_depth += 1
         raise SyntaxError, "parameter nesting exceeds 100 levels" if @parameter_depth > 100
         advance
         length = current == "#" && @source[@index + 1] != "}"
-        advance if length
-        name = @source[@index..][/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?@#*$])/]
+        keys = current == "!"
+        advance if length || keys
+        name = @source[@index..][/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?@#*$-])/]
         raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current
         raise SyntaxError, "line #{@line}: unsupported parameter expansion" unless name
         advance(name.length)
+        if current == "["
+          advance
+          subscript = word(parameter_word: true, stop: "]")
+          raise IncompleteInput, "unclosed array subscript" unless current == "]"
+          advance
+          name = Reference.new(name: name, subscript: subscript)
+        end
+        if keys && (!name.is_a?(Reference) || !%w[@ *].include?(name.subscript.literal))
+          raise SyntaxError, "indirection requires an array @ or * reference"
+        end
         if current == "}"
           advance
-          value = length ? Parameter.new(name: name, operator: :length) : name
+          value = length || keys ? Parameter.new(name: name, operator: keys ? :keys : :length) : name
         else
-          operator = @source[@index..][/\A(?::[-=+?]|[-=+?]|##?|%%?)/] unless length
+          operator = @source[@index..][/\A(?::[-=+?]|[-=+?]|##?|%%?)/] unless length || keys
           raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current
           raise SyntaxError, "line #{@line}: unsupported parameter expansion" unless operator
           advance(operator.length)
@@ -253,15 +462,16 @@ module Kward
 
     class Parser
       RESERVED = %w[if then elif else fi for in do done while until case esac select function time !].freeze
-      REDIRECTS = %w[< > >> >& <&].freeze
+      REDIRECTS = %w[< > >> <> >| >& <& << <<-].freeze
 
       def self.parse(source)
         new(source).parse
       end
 
-      def initialize(source)
-        raise SyntaxError, "NUL bytes are not allowed in shell source" if source.include?("\0")
-        @tokens = Lexer.new(source).tokens
+      def initialize(source, lexer: nil)
+        raise SyntaxError, "NUL bytes are not allowed in shell source" if source&.include?("\0")
+        @lexer = lexer || Lexer.new(source)
+        @tokens = []
         @index = 0
         @depth = 0
       end
@@ -272,14 +482,25 @@ module Kward
         tree
       end
 
+      def parse_until_close
+        tree = sequence([")"])
+        expect(")")
+        tree
+      end
+
       private
 
       def node(kind, *values)
         Node.new(kind: kind, values: values)
       end
 
-      def peek
-        @tokens[@index]&.value
+      def peek(offset = 0)
+        while @tokens.length <= @index + offset
+          token = @lexer.next_token
+          break unless token
+          @tokens << token
+        end
+        @tokens[@index + offset]&.value
       end
 
       def text
@@ -317,7 +538,7 @@ module Kward
         separators
         until peek.nil? || stops.include?(text)
           commands << and_or
-          break if peek.nil? || text == ";;" && stops.include?(";;")
+          break if peek.nil? || [";;", ")"].include?(text) && stops.include?(text)
           error("expected command separator") unless accept(";")
           separators
         end
@@ -348,19 +569,12 @@ module Kward
       def command
         @depth += 1
         raise SyntaxError, "shell syntax nesting exceeds 100 levels" if @depth > 100
-        result = case text
-        when "if" then conditional
-        when "for" then for_loop
-        when "case" then case_command
-        when "while", "until" then condition_loop
-        when "{" then group
-        when "(" then error("subshell groups are not supported")
+        result = if peek.is_a?(Array) && peek.first == :arithmetic
+          expression = take.last
+          validate_arithmetic(expression)
+          node(:arithmetic, expression)
         else
-          if peek.is_a?(Word) && @tokens[@index + 1]&.value == "("
-            function
-          else
-            simple
-          end
+          compound_or_simple
         end
         if result.kind != :simple
           redirects = []
@@ -370,6 +584,94 @@ module Kward
         result
       ensure
         @depth -= 1
+      end
+
+      def validate_arithmetic(expression)
+        Arithmetic::Parser.new(expression).parse unless expression.strip.empty?
+      rescue Arithmetic::Error => e
+        error(e.message)
+      end
+
+      def compound_or_simple
+        case text
+        when "if" then conditional
+        when "for" then for_loop
+        when "case" then case_command
+        when "[["
+          take
+          condition = test_expression
+          expect("]]")
+          node(:test, condition)
+        when "while", "until" then condition_loop
+        when "{" then group
+        when "("
+          take
+          node(:subshell, parse_until_close)
+        else
+          append = peek.is_a?(Word) && peek.literal&.match(/\A([A-Za-z_][A-Za-z0-9_]*)\+=\z/)
+          if peek.is_a?(Word) && (peek.assignment || append) && peek(1) == "("
+            word = take
+            name, value = append ? [append[1], Word.new(parts: [])] : word.assignment
+            error("invalid array assignment") unless name.is_a?(String) && value.parts.all? { |part| part.kind == :literal && part.text.empty? }
+            node(:array_assign, name, array_elements, !!append)
+          elsif peek.is_a?(Word) && peek(1) == "("
+            function
+          else
+            simple
+          end
+        end
+      end
+
+      def array_elements
+        expect("(")
+        elements = []
+        until text == ")"
+          next if accept(";")
+          error("expected array element") unless peek.is_a?(Word)
+          elements << take
+        end
+        expect(")")
+        elements
+      end
+
+      def test_expression(minimum = 0)
+        @depth += 1
+        raise SyntaxError, "conditional nesting exceeds 100 levels" if @depth > 100
+        left = if accept("!")
+          [:not, test_expression(3)]
+        elsif accept("(")
+          result = test_expression
+          expect(")")
+          result
+        elsif Condition::UNARY.include?(text)
+          operator = take.literal
+          [:unary, operator, test_word]
+        else
+          word = test_word
+          if Condition::BINARY.include?(text)
+            operator = text
+            take
+            [:binary, operator, word, test_word(regex: operator == "=~")]
+          else
+            [:string, word]
+          end
+        end
+        while %w[&& ||].include?(text) && (text == "&&" ? 2 : 1) >= minimum
+          operator = take
+          left = [operator == "&&" ? :and : :or, left, test_expression(operator == "&&" ? 3 : 2)]
+        end
+        left
+      ensure
+        @depth -= 1
+      end
+
+      def test_word(regex: false)
+        if regex && @tokens.length == @index
+          token = @lexer.regex_token
+          @tokens << token if token
+        end
+        error("expected conditional operand") unless peek.is_a?(Word) && text != "]]"
+        take
       end
 
       def conditional(depth = 0)
@@ -399,6 +701,16 @@ module Kward
 
       def for_loop
         take
+        if peek.is_a?(Array) && peek.first == :arithmetic
+          expressions = take.last.split(";", -1)
+          error("arithmetic for requires init; condition; update") unless expressions.length == 3
+          expressions.each { |expression| validate_arithmetic(expression) }
+          separators
+          expect("do")
+          body = nonempty_sequence(["done"])
+          expect("done")
+          return node(:arithmetic_for, expressions, body)
+        end
         name = take
         error("expected loop variable") unless name.is_a?(Word) && name.literal&.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
         words = nil
@@ -467,7 +779,7 @@ module Kward
       end
 
       def redirection?
-        peek.is_a?(Array) || REDIRECTS.include?(peek)
+        peek.is_a?(Array) && peek.first == :redirect || REDIRECTS.include?(peek)
       end
 
       def redirect
@@ -477,9 +789,15 @@ module Kward
         else
           descriptor = operator.start_with?("<") ? 0 : 1
         end
-        error("only file descriptors 0, 1, and 2 are supported") unless (0..2).cover?(descriptor)
+        error("only file descriptors 0 through 9 are supported") unless (0..9).cover?(descriptor)
         target = take
         error("expected redirection target") unless target.is_a?(Word)
+        if ["<<", "<<-"].include?(operator)
+          raw = @tokens[@index - 1].source
+          delimiter = Shellwords.split(raw).join
+          target = HereDocument.new(delimiter: delimiter, strip_tabs: operator == "<<-", expand: !raw.match?(/["'\\\\]/))
+          @lexer.queue_heredoc(target)
+        end
         [descriptor, operator, target]
       end
 
@@ -494,6 +812,13 @@ module Kward
             error("[[ is not supported; use test or [") if words.empty? && text == "[["
             words << take
           end
+        end
+        if text == "(" && words.first&.literal == "declare" && words.last&.assignment
+          error("array declaration requires -a or -A") unless words.length == 3 && %w[-a -A].include?(words[1].literal)
+          name, value = words.last.assignment
+          error("invalid array declaration") unless name.is_a?(String) && value.parts.all? { |part| part.kind == :literal && part.text.empty? }
+          result = node(:declare_array, words[1].literal, name, array_elements)
+          return redirects.empty? ? result : node(:redirect, result, redirects)
         end
         error("expected command") if words.empty? && redirects.empty?
         node(:simple, words, redirects)

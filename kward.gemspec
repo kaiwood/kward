@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
     end
   end
   spec.bindir = "exe"
-  spec.executables = ["kward"]
+  spec.executables = ["kward", "kwsh"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "base64"

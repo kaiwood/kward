@@ -25,9 +25,13 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "echo $((5 + 2) ) works too"
     assert_includes instructions, "${name:-default}"
     assert_includes instructions, "case patterns"
-    assert_includes instructions, "read [-r] variable... and custom IFS are supported"
+    assert_includes instructions, "read [-r] [-d delimiter] variable... and custom IFS are supported"
     assert_includes instructions, "Operands expand only when needed"
-    assert_includes instructions, "arrays, [[ ... ]], process substitution"
+    assert_includes instructions, "Indexed arrays use values="
+    assert_includes instructions, "Process substitution <(command)"
+    assert_includes instructions, "shopt -s globstar"
+    assert_includes instructions, "Background jobs, wait, traps, exec"
+    assert_includes instructions, "set -x traces expanded values"
     refute_includes instructions, "Command/arithmetic substitution"
   end
 

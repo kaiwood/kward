@@ -19,7 +19,7 @@ module Kward
 
         while (line = control.gets)
           request = JSON.parse(line)
-          runtime ||= Runtime.new(cwd: request.fetch("cwd"), env: ENV.to_h, aliases: request.fetch("aliases", {}))
+          runtime ||= Runtime.new(cwd: request.fetch("cwd"), env: ENV.to_h, aliases: request.fetch("aliases", {}), interactive: true)
           status = begin
             $stdin.echo = true
             if request["config"]
