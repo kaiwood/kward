@@ -449,8 +449,24 @@ or `off`:
 ```
 
 Detailed mode adds the number of model requests and an input/output token
-breakdown. Narrow terminals drop secondary fields rather than wrapping the
-summary. Invalid or missing values use `compact`. There is no dedicated
+breakdown, plus cached input, reasoning tokens, and cache writes when reported:
+
+```text
+Completed · 18.4s · 24.8k tokens · 3 model requests · 4 tool calls
+Input 23.6k · Cached 20.0k (85%) · Output 1.2k · Reasoning 800
+```
+
+The cache-hit percentage uses total cached input divided by total input across
+the turn, not an average of individual request percentages. Missing details are
+omitted; explicitly reported zeroes are shown. If only some requests report a
+field, its subtotal is marked `(partial)`. A cache-hit percentage is shown only
+when both input and cache counts cover the complete turn and input is nonzero.
+Cached tokens and cache writes are input breakdowns; reasoning tokens are part
+of output. They are not added to total usage again. Availability depends on the
+provider, endpoint, and model; the Codex subscription endpoint may report fewer
+fields than the public OpenAI API.
+
+Narrow terminals drop secondary fields rather than wrapping the summary. Invalid or missing values use `compact`. There is no dedicated
 environment override; `KWARD_CONFIG_PATH` selects the configuration file as usual.
 
 This preference controls CLI/TUI, Pan, and Markdown/HTML export presentation.

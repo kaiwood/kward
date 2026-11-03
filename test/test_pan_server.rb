@@ -272,6 +272,31 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_detailed_summaries_include_reported_cache_and_reasoning
+    Dir.mktmpdir do |dir|
+      reply = { "role" => "assistant", "content" => "done", "usage" => {
+        "input_tokens" => 100, "output_tokens" => 20, "total_tokens" => 120,
+        "cache_read_tokens" => 80, "cache_write_tokens" => 10, "reasoning_tokens" => 15
+      } }
+      server = build_server(dir, client: FakeClient.new([reply]), config: {
+        "pan_mode" => { "username" => "kward", "password" => "secret" },
+        "transcript" => { "turn_stats" => "detailed" }
+      })
+      queue = Queue.new
+      server.send(:subscribe, queue)
+      server.send(:run_prompt, "hello")
+      events = []
+      events << queue.pop until queue.empty?
+      event = events.find { |item| item.include?("event: turn_summary") }
+      payload = JSON.parse(event[/^data: (.+)$/m, 1])
+      assert_includes payload["text"], "Cached 80 (80%)"
+      assert_includes payload["text"], "Reasoning 15"
+      assert_includes payload["text"], "Cache writes 10"
+      assert_equal payload["text"], server.transcript_items.last[:text]
+      assert_equal 120, payload.dig("summary", "usage", "total_tokens")
+    end
+  end
+
   def test_pan_server_transcript_restores_reasoning_and_tools
     Dir.mktmpdir do |dir|
       server = build_server(dir)

@@ -289,7 +289,7 @@ class TestClient < KwardTestCase
 
         assert_equal "Hello captain.", message["content"]
         assert_equal ["Hello ", "captain."], deltas
-        assert_equal({ "input_tokens" => 11, "output_tokens" => 4, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 15, "estimated" => false }, message["usage"])
+        assert_equal({ "input_tokens" => 11, "output_tokens" => 4, "total_tokens" => 15, "estimated" => false }, message["usage"])
         assert_equal "OpenAI", message["provider"]
         assert_equal URI("https://api.openai.com/v1/responses"), http.requests.first.uri
         assert_equal "Bearer fixture-secret", http.requests.first["Authorization"]
@@ -378,7 +378,7 @@ class TestClient < KwardTestCase
         assert_equal "Hello from Azure.", message["content"]
         assert_equal ["Hello ", "from Azure."], deltas
         assert_equal "Azure OpenAI", message["provider"]
-        assert_equal({ "input_tokens" => 12, "output_tokens" => 3, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 15, "estimated" => false }, message["usage"])
+        assert_equal({ "input_tokens" => 12, "output_tokens" => 3, "total_tokens" => 15, "estimated" => false }, message["usage"])
         request = http.requests.first
         assert_equal URI("https://example.openai.azure.com/openai/deployments/production-gpt-5/chat/completions?api-version=2025-04-01-preview"), request.uri
         assert_equal "azure-fixture-key", request["api-key"]
@@ -450,7 +450,7 @@ class TestClient < KwardTestCase
         assert_equal "Hello from Gemini.", message["content"]
         assert_equal ["Hello ", "from Gemini."], deltas
         assert_equal "Google Gemini", message["provider"]
-        assert_equal({ "input_tokens" => 7, "output_tokens" => 4, "cache_read_tokens" => 0, "cache_write_tokens" => 0, "total_tokens" => 11, "estimated" => false }, message["usage"])
+        assert_equal({ "input_tokens" => 7, "output_tokens" => 4, "total_tokens" => 11, "estimated" => false }, message["usage"])
         request = http.requests.first
         assert_equal URI("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse"), request.uri
         assert_equal "gemini-fixture-key", request["x-goog-api-key"]
@@ -1300,7 +1300,8 @@ class TestClient < KwardTestCase
         "prompt_tokens" => 42,
         "completion_tokens" => 7,
         "total_tokens" => 49,
-        "prompt_tokens_details" => { "cached_tokens" => 5 }
+        "prompt_tokens_details" => { "cached_tokens" => 5 },
+        "completion_tokens_details" => { "reasoning_tokens" => 2 }
       }
     )
 
@@ -1313,7 +1314,7 @@ class TestClient < KwardTestCase
         "input_tokens" => 42,
         "output_tokens" => 7,
         "cache_read_tokens" => 5,
-        "cache_write_tokens" => 0,
+        "reasoning_tokens" => 2,
         "total_tokens" => 49,
         "estimated" => false
       }, message["usage"])
@@ -1489,7 +1490,8 @@ class TestClient < KwardTestCase
           "input_tokens" => 100,
           "output_tokens" => 20,
           "total_tokens" => 120,
-          "input_tokens_details" => { "cached_tokens" => 10 }
+          "input_tokens_details" => { "cached_tokens" => 10, "cache_write_tokens" => 25 },
+          "output_tokens_details" => { "reasoning_tokens" => 8 }
         }
       }
     }
@@ -1500,10 +1502,59 @@ class TestClient < KwardTestCase
       "input_tokens" => 100,
       "output_tokens" => 20,
       "cache_read_tokens" => 10,
-      "cache_write_tokens" => 0,
+      "cache_write_tokens" => 25,
+      "reasoning_tokens" => 8,
       "total_tokens" => 120,
       "estimated" => false
     }, message["usage"])
+  end
+
+  def test_responses_usage_preserves_explicit_zero_details_and_does_not_double_count
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    [0, 60].each do |cached|
+      usage = {
+        "input_tokens" => 100,
+        "output_tokens" => 0,
+        "input_tokens_details" => { "cached_tokens" => cached, "cache_write_tokens" => 0 },
+        "output_tokens_details" => { "reasoning_tokens" => 0 }
+      }
+      event = { "type" => "response.completed", "response" => { "usage" => usage } }
+      message = client.send(:parse_codex_sse, "data: #{JSON.dump(event)}\n\n")
+
+      assert_equal 100, message.dig("usage", "total_tokens")
+      assert_equal cached, message.dig("usage", "cache_read_tokens")
+      assert_equal 0, message.dig("usage", "cache_write_tokens")
+      assert_equal 0, message.dig("usage", "reasoning_tokens")
+      assert_equal 0, message.dig("usage", "output_tokens")
+    end
+  end
+
+  def test_usage_omits_missing_or_invalid_optional_details
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    [nil, -1, "unknown"].each do |count|
+      usage = client.send(:normalized_usage, {
+        "input_tokens" => 100, "output_tokens" => 20,
+        "input_tokens_details" => { "cached_tokens" => count, "cache_write_tokens" => count },
+        "output_tokens_details" => { "reasoning_tokens" => count }
+      })
+      assert_equal 120, usage["total_tokens"]
+      refute usage.key?("cache_read_tokens")
+      refute usage.key?("cache_write_tokens")
+      refute usage.key?("reasoning_tokens")
+    end
+  end
+
+  def test_anthropic_cache_tokens_are_included_in_normalized_input_once
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    usage = client.send(:normalized_usage, {
+      input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 60, cache_creation_input_tokens: 30
+    })
+
+    assert_equal 100, usage["input_tokens"]
+    assert_equal 105, usage["total_tokens"]
+    assert_equal 60, usage["cache_read_tokens"]
+    assert_equal 30, usage["cache_write_tokens"]
+    refute usage.key?("reasoning_tokens")
   end
 
   def test_codex_sse_parses_tool_call

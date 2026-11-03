@@ -486,8 +486,17 @@ normalized messages carry it as `turnSummary` on the final entry of the turn
 (which can be a user or tool entry after interruption). Render it below that
 entry; it is metadata, not an assistant message. `usageStatus` is `complete`,
 `partial`, or `unavailable`; `usage` may be null and token fields are optional.
-Cache read/write fields may also be present; do not add them to the reported
-`total_tokens` again. Usage covers main agent requests, excluding auxiliary
+Optional `cache_read_tokens`, `cache_write_tokens`, and `reasoning_tokens`
+fields preserve reported zeroes but are omitted when unavailable. Input counts
+are normalized to include cached input and cache writes; reasoning is already
+part of output. Do not add these breakdowns to `total_tokens` again.
+`usage.partial_fields`, when present, lists fields whose sums cover only part
+of the turn. A `complete` total can coexist with a partial cache or reasoning
+breakdown. Compute cache-hit percentage as `100 * cache_read_tokens /
+input_tokens` only when usage is complete, neither input nor cache reads is
+partial, and input is positive. No new event or capability is required: these
+fields travel in the existing structured summary regardless of display mode.
+Usage covers main agent requests, excluding auxiliary
 compaction/memory calls; see [turn statistics](session-management.md#Turn_statistics).
 
 Initialization reports `transcript.turnSummaries` (including the configured

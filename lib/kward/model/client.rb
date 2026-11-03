@@ -972,24 +972,38 @@ module Kward
 
       input_tokens = integer_value(usage, "input_tokens", "prompt_tokens")
       output_tokens = integer_value(usage, "output_tokens", "completion_tokens")
-      cache_read_tokens = positive_integer(
+      cache_read_tokens = token_count(
         nested_value(usage, "input_tokens_details", "cached_tokens") ||
         nested_value(usage, "prompt_tokens_details", "cached_tokens") ||
         usage["cache_read_tokens"] || usage[:cache_read_tokens] || usage["cacheReadTokens"] || usage[:cacheReadTokens] || usage["cache_read_input_tokens"] || usage[:cache_read_input_tokens]
       )
-      cache_write_tokens = integer_value(usage, "cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens")
+      cache_write_tokens = token_count(
+        nested_value(usage, "input_tokens_details", "cache_write_tokens") ||
+        integer_value(usage, "cache_write_tokens", "cacheWriteTokens", "cache_creation_input_tokens")
+      )
+      reasoning_tokens = token_count(
+        nested_value(usage, "output_tokens_details", "reasoning_tokens") ||
+        nested_value(usage, "completion_tokens_details", "reasoning_tokens") ||
+        integer_value(usage, "reasoning_tokens")
+      )
+      # Anthropic reports uncached input separately; OpenAI/Gemini include cache
+      # tokens in input. Normalize to inclusive input before computing totals.
+      if input_tokens && %w[cache_read_input_tokens cache_creation_input_tokens].any? { |key| usage.key?(key) || usage.key?(key.to_sym) }
+        input_tokens += cache_read_tokens.to_i + cache_write_tokens.to_i
+      end
       total_tokens = integer_value(usage, "total_tokens", "totalTokens")
-      total_tokens ||= [input_tokens, output_tokens, cache_read_tokens, cache_write_tokens].compact.sum
-      return nil unless total_tokens&.positive? || input_tokens&.positive? || output_tokens&.positive?
+      total_tokens ||= input_tokens.to_i + output_tokens.to_i if input_tokens || output_tokens
+      return nil if total_tokens.nil?
 
       {
-        "input_tokens" => input_tokens || 0,
-        "output_tokens" => output_tokens || 0,
-        "cache_read_tokens" => cache_read_tokens || 0,
-        "cache_write_tokens" => cache_write_tokens || 0,
-        "total_tokens" => total_tokens || 0,
+        "input_tokens" => input_tokens,
+        "output_tokens" => output_tokens,
+        "cache_read_tokens" => cache_read_tokens,
+        "cache_write_tokens" => cache_write_tokens,
+        "reasoning_tokens" => reasoning_tokens,
+        "total_tokens" => total_tokens,
         "estimated" => false
-      }
+      }.compact
     end
 
     def integer_value(source, *keys)
@@ -998,7 +1012,7 @@ module Kward
       key = keys.find { |candidate| source.key?(candidate) || source.key?(candidate.to_sym) }
       return nil unless key
 
-      positive_integer(source[key] || source[key.to_sym])
+      token_count(source[key] || source[key.to_sym])
     end
 
     def nested_value(source, outer_key, inner_key)
@@ -1006,6 +1020,11 @@ module Kward
       return nil unless outer.respond_to?(:key?)
 
       outer[inner_key] || outer[inner_key.to_sym]
+    end
+
+    def token_count(value)
+      integer = Integer(value, exception: false)
+      integer if integer && integer >= 0
     end
 
     def positive_integer(value)

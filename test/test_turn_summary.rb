@@ -186,6 +186,106 @@ class TestTurnSummary < KwardTestCase
     assert_equal "", Kward::TurnSummaryFormatter.render(nil)
   end
 
+  def test_detailed_mode_aggregates_cache_and_reasoning_without_changing_compact_mode
+    stats = Kward::TurnSummary.new
+    [
+      { "input_tokens" => 100, "output_tokens" => 20, "total_tokens" => 120, "cache_read_tokens" => 90, "cache_write_tokens" => 10, "reasoning_tokens" => 15 },
+      { "input_tokens" => 900, "output_tokens" => 80, "total_tokens" => 980, "cache_read_tokens" => 300, "cache_write_tokens" => 50, "reasoning_tokens" => 35 }
+    ].each do |usage|
+      stats.model_request
+      stats.record("usage" => usage)
+    end
+    summary = stats.finish(status: "completed", elapsed_ms: 1_500)
+    text = Kward::TurnSummaryFormatter.render(summary, mode: "detailed")
+    assert_equal "Input 1.0k · Cached 390 (39%) · Output 100 · Reasoning 50 · Cache writes 60", text.lines.last.chomp
+    assert_equal 1_100, summary.dig("usage", "total_tokens")
+    refute summary["usage"].key?("partial_fields")
+    assert_equal "Completed · 1.5s · 1.1k tokens · 0 tool calls", Kward::TurnSummaryFormatter.render(summary)
+  end
+
+  def test_detailed_mode_marks_incomplete_fields_and_omits_cache_percentage
+    stats = Kward::TurnSummary.new
+    stats.model_request
+    stats.record("usage" => { "input_tokens" => 100, "output_tokens" => 20, "total_tokens" => 120, "cache_read_tokens" => 90, "reasoning_tokens" => 15 })
+    stats.model_request
+    stats.record(response("done", total: 12))
+    summary = stats.finish(status: "completed", elapsed_ms: 10)
+
+    assert_equal "complete", summary["usageStatus"]
+    assert_equal %w[cache_read_tokens reasoning_tokens], summary["usage"]["partial_fields"]
+    text = Kward::TurnSummaryFormatter.render(summary, mode: "detailed")
+    assert_includes text, "Cached 90 (partial)"
+    assert_includes text, "Reasoning 15 (partial)"
+    refute_includes text, "%"
+    refute_includes text, "Cache writes"
+  end
+
+  def test_detailed_cache_rate_requires_input_coverage_as_well_as_cache_coverage
+    stats = Kward::TurnSummary.new
+    [
+      { "input_tokens" => 100, "output_tokens" => 20, "total_tokens" => 120, "cache_read_tokens" => 90 },
+      { "output_tokens" => 20, "total_tokens" => 120, "cache_read_tokens" => 10 }
+    ].each do |usage|
+      stats.model_request
+      stats.record("usage" => usage)
+    end
+    summary = stats.finish(status: "completed", elapsed_ms: 10)
+    assert_equal ["input_tokens"], summary["usage"]["partial_fields"]
+    text = Kward::TurnSummaryFormatter.render(summary, mode: "detailed")
+    assert_includes text, "Input 100 (partial)"
+    assert_includes text, "Cached 100"
+    refute_includes text, "%"
+  end
+
+  def test_detailed_mode_preserves_zero_but_omits_unknown_details_and_undefined_rates
+    summary = sample_summary
+    text = Kward::TurnSummaryFormatter.render(summary, mode: "detailed")
+    refute_match(/Cached|Reasoning|Cache writes/, text)
+
+    summary["usage"].merge!("cache_read_tokens" => 0, "cache_write_tokens" => 0, "reasoning_tokens" => 0)
+    text = Kward::TurnSummaryFormatter.render(summary, mode: "detailed")
+    assert_includes text, "Cached 0 (0%)"
+    assert_includes text, "Reasoning 0"
+    assert_includes text, "Cache writes 0"
+    summary["usage"]["input_tokens"] = 0
+    refute_includes Kward::TurnSummaryFormatter.render(summary, mode: "detailed"), "%"
+    summary["usage"]["input_tokens"] = 10
+    summary["usageStatus"] = "partial"
+    refute_includes Kward::TurnSummaryFormatter.render(summary, mode: "detailed"), "%"
+  end
+
+  def test_detailed_stats_survive_persistence_rpc_and_exports
+    Dir.mktmpdir do |dir|
+      config_path = File.join(dir, "config.json")
+      File.write(config_path, JSON.dump("transcript" => { "turn_stats" => "detailed" }))
+      with_env("KWARD_CONFIG_PATH" => config_path) do
+        store = Kward::SessionStore.new(config_dir: dir, cwd: Dir.pwd)
+        conversation = Kward::Conversation.new(system_message: nil)
+        session = store.create_from_conversation(conversation)
+        message = response("done", total: 12)
+        message["usage"].merge!("cache_read_tokens" => 8, "cache_write_tokens" => 2, "reasoning_tokens" => 1)
+        Kward::Agent.new(client: FakeClient.new([message]), conversation: conversation).ask("hello")
+        loaded = store.load(session.path).last
+        summary = Kward::RPC::TranscriptNormalizer.new(loaded.messages).normalize.last[:turnSummary]
+        assert_equal 8, summary.dig("usage", "cache_read_tokens")
+        assert_equal 2, summary.dig("usage", "cache_write_tokens")
+        assert_equal 1, summary.dig("usage", "reasoning_tokens")
+        reply = response("done", total: 12).merge("usage" => summary["usage"])
+        cli = Kward::CLI.new(argv: [], client: FakeClient.new([reply]))
+        output = cli.one_shot("hello")
+        assert_includes output, "Cached 8 (80%)"
+        assert_includes output, "Reasoning 1"
+        assert_includes output, "Cache writes 2"
+        %w[markdown html].each do |format|
+          export = Kward::TranscriptExport.content(loaded, format: format)
+          assert_includes export, "Cached 8 (80%)"
+          assert_includes export, "Reasoning 1"
+          assert_includes export, "Cache writes 2"
+        end
+      end
+    end
+  end
+
   def test_display_preference_defaults_and_validation
     assert_equal "compact", Kward::ConfigFiles.transcript_turn_stats({})
     assert_equal "compact", Kward::ConfigFiles.transcript_turn_stats("transcript" => { "turn_stats" => "invalid" })

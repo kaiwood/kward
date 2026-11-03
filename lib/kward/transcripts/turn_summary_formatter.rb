@@ -21,10 +21,13 @@ module Kward
       parts << count_text(value(:toolCalls), "tool call")
       lines = [fit(parts, width)]
       if mode == "detailed" && usage.is_a?(Hash)
-        details = %i[input_tokens output_tokens].filter_map do |field|
-          count = MessageAccess.value(usage, field)
-          "#{field == :input_tokens ? 'Input' : 'Output'} #{number(count)}" unless count.nil?
-        end
+        details = [
+          token_detail(:input_tokens, "Input"),
+          cached_detail,
+          token_detail(:output_tokens, "Output"),
+          token_detail(:reasoning_tokens, "Reasoning"),
+          token_detail(:cache_write_tokens, "Cache writes")
+        ].compact
         lines << fit(details, width) unless details.empty?
       end
       lines.join("\n")
@@ -48,6 +51,30 @@ module Kward
       label = "~#{label}" if MessageAccess.value(usage, :estimated)
       label += " (partial)" if value(:usageStatus) == "partial"
       label
+    end
+
+    def token_detail(field, label)
+      count = MessageAccess.value(usage, field)
+      return if count.nil?
+
+      text = "#{label} #{number(count)}"
+      partial_field?(field) ? "#{text} (partial)" : text
+    end
+
+    def partial_field?(field)
+      Array(MessageAccess.value(usage, :partial_fields)).include?(field.to_s)
+    end
+
+    def cached_detail
+      text = token_detail(:cache_read_tokens, "Cached")
+      return unless text
+
+      input = MessageAccess.value(usage, :input_tokens).to_f
+      cached = MessageAccess.value(usage, :cache_read_tokens).to_f
+      if value(:usageStatus) == "complete" && !partial_field?(:input_tokens) && !partial_field?(:cache_read_tokens) && input.positive? && cached <= input
+        text += format(" (%.0f%%)", 100 * cached / input)
+      end
+      text
     end
 
     def number(value)

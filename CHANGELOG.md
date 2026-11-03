@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added cached-input counts and cache-hit rate, cache-write counts, and reasoning-token counts to detailed turn statistics, preserving unavailable versus reported-zero fields and marking partial breakdowns.
 - Added persistent turn-end elapsed time, token usage, and tool-call summaries across CLI/TUI, RPC, Pan, and transcript exports, with compact/detailed/off display modes and explicit partial or unavailable usage.
 - Added `--ignore-local-instructions` to suppress workspace `AGENTS.md` guidance and project skills for a CLI run while retaining user-level instructions and skills.
 - Added an example `--openrouter-proxy` plugin that serves authenticated, loopback-only OpenRouter Chat Completions requests through Kward's Codex account, with non-streaming and SSE translations and strict JSON-schema output support.
@@ -21,6 +22,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Avoided double-counting cached input when deriving token totals, and normalized separately reported Anthropic cache tokens into inclusive input counts for cache-hit rates.
 - Fixed OpenRouter proxy Chat Completions failing while adapting Kward's symbol-keyed model messages.
 - Kept the active tab visible in the composer tab bar when tabs overflow, with indicators for hidden tabs.
 

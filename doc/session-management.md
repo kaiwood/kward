@@ -31,7 +31,10 @@ to individual tools.
 
 Choose `compact`, `detailed`, or `off` in
 [`transcript.turn_stats`](configuration.md#Transcript_turn_statistics).
-Detailed mode adds model-request counts and input/output totals. Summaries
+Detailed mode adds model-request counts, input/output totals, and reported
+cached-input, cache-write, and reasoning-token breakdowns. The cache-hit rate
+uses aggregated cached input divided by aggregated input; incomplete breakdowns
+are marked partial and do not produce a cache-hit percentage. Summaries
 survive session restoration and branching, follow their transcript entries into
 exports, and are not sent back to the model. Older sessions without recorded
 summaries remain unchanged; historical timings are not guessed.
