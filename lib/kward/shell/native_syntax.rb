@@ -26,16 +26,18 @@ module Kward
         [match[1], Word.new(parts: value)]
       end
     end
+    Parameter = Struct.new(:name, :operator, :word, keyword_init: true)
     Token = Struct.new(:value, :line, keyword_init: true)
     Node = Struct.new(:kind, :values, keyword_init: true)
 
     class Lexer
-      OPERATORS = %w[&& || >> >& <& ; | > < ( ) { }].freeze
+      OPERATORS = %w[&& || >> >& <& ;; ; | > < ( ) { }].freeze
 
       def initialize(source)
         @source = source
         @index = 0
         @line = 1
+        @parameter_depth = 0
       end
 
       def tokens
@@ -58,7 +60,7 @@ module Kward
           else
             line = @line
             operator = OPERATORS.find { |candidate| @source[@index, candidate.length] == candidate }
-            if @source[@index, 2] == "<<" || @source[@index, 2] == ";;" || current == "&" && operator != "&&"
+            if @source[@index, 2] == "<<" || current == "&" && operator != "&&"
               raise SyntaxError, "line #{@line}: unsupported operator near #{@source[@index, 2].inspect}"
             end
             # A descriptor is recognized only when immediately adjacent to redirection.
@@ -91,11 +93,16 @@ module Kward
         parts << Part.new(kind: :literal, text: text, quoted: quoted)
       end
 
-      def word
+      def word(parameter_word: false, quoted: false)
         parts = []
-        until current.nil? || current.match?(/[\s;&|<>()]/)
+        until current.nil? || (parameter_word ? current == "}" : current.match?(/[\s;&|<>()]/))
           case current
           when "'"
+            if quoted
+              literal(parts, current, true)
+              advance
+              next
+            end
             advance
             start = @index
             advance until current.nil? || current == "'"
@@ -107,14 +114,15 @@ module Kward
           when "\\"
             advance
             raise IncompleteInput, "line #{@line}: trailing backslash" unless current
+            literal(parts, "\\", true) if quoted && !['$', '`', '"', "\\", "\n", "}"].include?(current)
             literal(parts, current, true) unless current == "\n"
             advance
           when "$"
-            parameter(parts, false)
+            parameter(parts, quoted)
           when "`"
             raise SyntaxError, "line #{@line}: command substitution is not supported"
           else
-            literal(parts, current, false)
+            literal(parts, current, quoted)
             advance
           end
         end
@@ -133,7 +141,7 @@ module Kward
 
       def double_quote(parts)
         advance
-        literal(parts, "", true)
+        start = parts.length
         until current.nil? || current == '"'
           case current
           when "$"
@@ -155,6 +163,7 @@ module Kward
           end
         end
         raise IncompleteInput, "line #{@line}: unclosed double quote" unless current
+        literal(parts, "", true) if parts.length == start
         advance
       end
 
@@ -198,15 +207,8 @@ module Kward
         raise SyntaxError, "line #{@line}: command substitution is not supported" if current == "("
         raise SyntaxError, "line #{@line}: dollar-single-quoting is not supported" if current == "'" && !quoted
         if current == "{"
-          advance
-          start = @index
-          advance until current.nil? || current == "}"
-          raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current
-          name = @source[start...@index]
-          advance
-          unless name.match?(/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?@#*$])\z/)
-            raise SyntaxError, "line #{@line}: unsupported parameter expansion"
-          end
+          braced_parameter(parts, quoted)
+          return
         elsif (match = @source[@index..].to_s.match(/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9?@#*$])/))
           name = match[0]
           advance(name.length)
@@ -217,6 +219,35 @@ module Kward
           return
         end
         parts << Part.new(kind: :parameter, text: name, quoted: quoted)
+      end
+
+      def braced_parameter(parts, quoted)
+        @parameter_depth += 1
+        raise SyntaxError, "parameter nesting exceeds 100 levels" if @parameter_depth > 100
+        advance
+        length = current == "#" && @source[@index + 1] != "}"
+        advance if length
+        name = @source[@index..][/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?@#*$])/]
+        raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current
+        raise SyntaxError, "line #{@line}: unsupported parameter expansion" unless name
+        advance(name.length)
+        if current == "}"
+          advance
+          value = length ? Parameter.new(name: name, operator: :length) : name
+        else
+          operator = @source[@index..][/\A(?::[-=+?]|[-=+?]|##?|%%?)/] unless length
+          raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current
+          raise SyntaxError, "line #{@line}: unsupported parameter expansion" unless operator
+          advance(operator.length)
+          pattern = operator.start_with?("#", "%")
+          operand = word(parameter_word: true, quoted: quoted && !pattern)
+          raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current == "}"
+          advance
+          value = Parameter.new(name: name, operator: operator, word: operand)
+        end
+        parts << Part.new(kind: :parameter, text: value, quoted: quoted)
+      ensure
+        @parameter_depth -= 1
       end
     end
 
@@ -286,7 +317,7 @@ module Kward
         separators
         until peek.nil? || stops.include?(text)
           commands << and_or
-          break if peek.nil?
+          break if peek.nil? || text == ";;" && stops.include?(";;")
           error("expected command separator") unless accept(";")
           separators
         end
@@ -320,6 +351,7 @@ module Kward
         result = case text
         when "if" then conditional
         when "for" then for_loop
+        when "case" then case_command
         when "while", "until" then condition_loop
         when "{" then group
         when "(" then error("subshell groups are not supported")
@@ -380,6 +412,33 @@ module Kward
         body = nonempty_sequence(["done"])
         expect("done")
         node(:for, name.literal, words, body)
+      end
+
+      def case_command
+        take
+        subject = take
+        error("expected case word") unless subject.is_a?(Word)
+        separators
+        expect("in")
+        separators
+        clauses = []
+        until text == "esac"
+          accept("(")
+          patterns = []
+          loop do
+            pattern = take
+            error("expected case pattern") unless pattern.is_a?(Word)
+            patterns << pattern
+            break unless accept("|")
+          end
+          expect(")")
+          body = sequence(%w[;; esac])
+          clauses << [patterns, body]
+          break unless accept(";;")
+          separators
+        end
+        expect("esac")
+        node(:case, subject, clauses)
       end
 
       def condition_loop

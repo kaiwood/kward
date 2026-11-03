@@ -123,13 +123,50 @@ The script receives `$0`, `$1`, `${10}`, `$#`, and `"$@"`. It runs in a separate
 ### Supported syntax
 
 - Comments, newlines, `;`, single/double quotes, and backslash escaping.
-- Assignments, `$name`, `${name}`, `$?`, `$$`, positional parameters, `set --`, and `shift`.
+- Assignments, `$name`, `${name}`, `$?`, `$$`, positional parameters, `set --`, and `shift`. Parameter operators support defaults, assignment, error checks, alternate values, lengths, and prefix/suffix pattern removal.
 - `export` and `unset`; ordinary assignments stay private to kwsh unless exported. `NAME=value command` supplies a temporary environment.
 - `&&`, `||`, `!`, concurrent pipelines, and `{ commands; }` groups. Pipeline stages have isolated state; pipeline status comes from the last stage.
-- `if` / `elif` / `else`, `for`, `while`, `until`, functions, `return`, `exit`, and innermost-loop `break` / `continue`.
+- `if` / `elif` / `else`, `case`, `for`, `while`, `until`, functions, `return`, `exit`, and innermost-loop `break` / `continue`.
 - `<`, `>`, `>>`, descriptor duplication, and descriptor closing on file descriptors 0–2. Redirections apply left to right.
-- Ordinary `*`, `?`, and bracket filename patterns, `~` / `~/...`, and default whitespace field splitting. Quote variables and use `"$@"` to preserve argument boundaries.
+- Ordinary `*`, `?`, and bracket filename patterns, `~` / `~/...`, and field splitting with default, custom, or empty `IFS`. Quote variables and use `"$@"` to preserve argument boundaries. `"$*"` joins arguments with the first character of `IFS` (a space when unset).
+- `read [-r] variable...`, including EOF status, backslash continuation, and multiple destination variables.
 - Persistent `cd`, `pwd`, aliases, and direct executable lookup through `PATH`. Utilities such as `printf`, `test` / `[`, `grep`, and `cat` come from the operating system.
+
+### Handle defaults and process input
+
+Use parameter operators to avoid repetitive tests:
+
+```sh
+output=${OUTPUT_DIR:-./build}    # use a default when unset or empty
+: "${MODE:=development}"        # also assign the default
+: "${PROJECT:?set PROJECT}"     # stop this submission if PROJECT is missing
+printf '%s\n' "${#PROJECT}"      # character count
+file=src/example.rb
+printf '%s\n' "${file##*/}"      # example.rb
+printf '%s\n' "${file%.rb}"      # src/example
+```
+
+The `-`, `=`, `?`, and `+` operators test whether a parameter is unset. Adding `:` also tests for an empty value. `${name:+word}` substitutes `word` only when the parameter is set and nonempty. Defaults and alternate values may contain nested parameter or arithmetic expansions; unused operands are not evaluated. `:=` can assign ordinary variables, not special or positional parameters. A `:?` error stops the current submission before its command runs, but leaves the interactive session usable.
+
+For pattern removal, `#` / `%` remove the shortest matching prefix / suffix; `##` / `%%` remove the longest. Quote a wildcard **inside** the operator's operand to make it literal: `${file#'*/'}` does not remove a path component. Double-quoting the whole expansion preserves its result without disabling the pattern.
+
+Read a file without losing spaces, backslashes, or its final unterminated line:
+
+```sh
+while IFS= read -r file || [ -n "$file" ]; do
+  case "$file" in
+    *.rb|*.rake) printf 'Ruby: %s\n' "$file" ;;
+    '')         continue ;;
+    *)          printf 'Other: %s\n' "$file" ;;
+  esac
+done < files.txt
+```
+
+`case` takes the first matching clause. Patterns support `*`, `?`, bracket ranges, negation, and character classes such as `[[:digit:]]`; unlike filename expansion, these patterns can match slashes and leading dots. Quoted pattern characters are literal. An optional `(` before each pattern list and an empty clause body are accepted; Bash fall-through terminators are not yet supported.
+
+`read -r` preserves backslashes. Without `-r`, backslashes escape the next character and backslash-newline continues a logical line. `read` returns 0 after a newline, 1 at EOF (still assigning any partial line), and greater than 1 for an error. With several variables, the final variable gets the remaining unsplit text, with surrounding IFS whitespace removed, following POSIX.1-2024. Other read options, including `-d`, are not implemented yet.
+
+Unset `IFS` uses space, tab, and newline. Empty `IFS` disables splitting. Non-whitespace separators such as `:` preserve empty fields between adjacent separators. A prefix assignment such as `IFS= read -r line` applies only to that command; it does not replace the session's `IFS`. `read` consumes only its own logical line, leaving input for the next command. Use redirection or a pipe when asking the shell agent to run it; terminal-input commands should be prepared for you instead.
 
 ### Calculate with integer arithmetic
 
@@ -150,11 +187,29 @@ This is intentionally a small arithmetic subset: comparisons, logical/bitwise op
 
 ### Deliberate limits
 
-Command substitution (`$(...)` and backticks), parameter operators such as `${name:-default}`, heredocs, `case`, subshell groups, background jobs, traps, `eval`, executable sourcing, custom `IFS`, recursive globbing, arrays, `[[ ... ]]`, and shell options such as `set -e` are not supported. Unsupported constructs report an error; kwsh never retries the program in another shell. Executable text without a shebang also fails instead of falling back to `/bin/sh`; use `kwsh <file>` for native scripts. Explicit commands such as `bash script.sh`, or executables with a shell shebang, still select their requested interpreter.
+Command substitution (`$(...)` and backticks), heredocs, subshell groups, background jobs, traps, `eval`, executable sourcing, recursive globbing, arrays, `[[ ... ]]`, process substitution, brace expansion, arithmetic `for` loops, and shell options such as `set -e` are not supported. Unsupported constructs report an error; kwsh never retries the program in another shell. Executable text without a shebang also fails instead of falling back to `/bin/sh`; use `kwsh <file>` for native scripts. Explicit commands such as `bash script.sh`, or executables with a shell shebang, still select their requested interpreter.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` are prompt-level conveniences, not scripting builtins. Use functions for reusable script logic. Aliases inside scripts expand complete commands and do not implement POSIX's token-level alias grammar. The existing `kwshrc` format stays declarative: loading configuration does not start executing scripts.
 
 Native scripting and its persistent session remain local-TUI-only. RPC/Pan report it as unsupported; their ordinary bounded, sandbox-aware command tools are unchanged.
+
+### Compatibility roadmap
+
+Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus Bash-compatible behavior for the requested extensions. This is a roadmap, **not a claim that the remaining features already work**:
+
+- [x] Parameter operators, `case`, `read -r`, and custom `IFS`.
+- [ ] Subshells and command substitution, including nesting and output capture.
+- [ ] Here-documents, `<>` / `>|`, additional file descriptors, and persistent `exec` redirection.
+- [ ] Executable `.` sourcing, `getopts`, `readonly`, `command`, `eval`, `umask`, remaining builtin options, and `read -d`.
+- [ ] Complete required arithmetic, plus Bash increment/decrement, exponentiation, and `for ((…))`.
+- [ ] Indexed and associative arrays, `[[ … ]]`, process substitution, brace expansion, and recursive `**` globbing.
+- [ ] Traps, asynchronous jobs, `wait`, job control, and shell options.
+- [ ] Standalone invocation, dollar-single-quotes, remaining tilde/special-parameter rules, POSIX alias parsing and execution order, command lookup/error semantics, and executable-text handling.
+- [ ] Conformance coverage for locale-sensitive matching/splitting and expansion edge cases. String patterns currently use Ruby character classes and codepoint ranges, not locale collation/equivalence rules; filesystem matching still uses Ruby globbing.
+
+Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
+
+References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), and [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html).
 
 ## Ask the shell agent
 

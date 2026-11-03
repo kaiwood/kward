@@ -23,6 +23,11 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "echo $((5 + 2)) prints 7"
     assert_includes instructions, "Use adjacent closing parentheses for portable syntax"
     assert_includes instructions, "echo $((5 + 2) ) works too"
+    assert_includes instructions, "${name:-default}"
+    assert_includes instructions, "case patterns"
+    assert_includes instructions, "read [-r] variable... and custom IFS are supported"
+    assert_includes instructions, "Operands expand only when needed"
+    assert_includes instructions, "arrays, [[ ... ]], process substitution"
     refute_includes instructions, "Command/arithmetic substitution"
   end
 

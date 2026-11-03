@@ -2,6 +2,7 @@ require "shellwords"
 require "set"
 require_relative "native_syntax"
 require_relative "native_process"
+require_relative "native_expansion"
 
 module Kward
   module NativeShell
@@ -20,10 +21,11 @@ module Kward
     # Owns native shell state. External commands are always spawned with argv,
     # never a command string, and executable text has no implicit sh fallback.
     class Runtime
-      UNSUPPORTED = %w[eval exec trap readonly local typeset declare jobs fg bg wait read getopts umask ulimit command builtin source .].freeze
+      include Expansion
+
+      UNSUPPORTED = %w[eval exec trap readonly local typeset declare jobs fg bg wait getopts umask ulimit command builtin source .].freeze
       SPECIAL = %w[export unset exit return break continue shift set :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias kwsh]).freeze
-      DEFAULT_IFS = " \t\n".freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read kwsh]).freeze
 
       attr_reader :cwd, :variables, :aliases, :status, :exited
 
@@ -58,7 +60,7 @@ module Kward
           error&.puts("kwsh: #{flow.kind}: not in a valid context")
           @status = 2
         end
-      rescue SyntaxError, ExecutionError, SystemCallError, IOError, ArgumentError => e
+      rescue SyntaxError, ExpansionError, ExecutionError, SystemCallError, IOError, ArgumentError => e
         error&.puts("kwsh: #{e.message}")
         @status = 2
       rescue Interrupt
@@ -101,6 +103,11 @@ module Kward
         when :if
           condition, yes, no = node.values
           evaluate(evaluate(condition, streams).zero? ? yes : no, streams)
+        when :case
+          subject, clauses = node.values
+          value = scalar(subject)
+          clause = clauses.find { |patterns, _| patterns.any? { |word| matches_pattern?(pattern(word), value) } }
+          clause ? evaluate(clause.last, streams) : 0
         when :for
           name, words, body = node.values
           values = words ? words.flat_map { |word| expand(word) } : @arguments.dup
@@ -254,6 +261,7 @@ module Kward
           write_line(streams, @cwd)
           0
         when "export" then export(args, streams)
+        when "read" then read_variables(args, streams)
         when "unset"
           args.each { |key| validate_name(key); @variables.delete(key); @exported.delete(key) }
           0
@@ -321,9 +329,6 @@ module Kward
 
       def assign(key, value)
         validate_name(key)
-        if key == "IFS" && value != DEFAULT_IFS
-          raise ExecutionError, "custom IFS is not supported"
-        end
         @variables[key] = value
       end
 
@@ -383,83 +388,61 @@ module Kward
         0
       end
 
+      def read_variables(args, streams)
+        raw = false
+        while args.first&.start_with?("-") && args.first != "-"
+          option = args.shift
+          break if option == "--"
+          raise ExecutionError, "read: only -r is supported" unless option.match?(/\A-r+\z/)
+          raw = true
+        end
+        raise ExecutionError, "read: expected a variable name" if args.empty?
+        args.each { |name| validate_name(name) }
+        input = streams[0]
+        raise IOError, "standard input is closed" unless input
+        text = +"".b
+        complete = false
+        while (byte = read_byte(input))
+          if byte == "\n"
+            complete = true
+            break
+          elsif byte == "\\" && !raw
+            escaped = read_byte(input)
+            break unless escaped
+            next if escaped == "\n"
+            text << byte << escaped
+          else
+            text << byte
+          end
+        end
+        text.force_encoding(input.external_encoding || Encoding.default_external)
+        characters = []
+        source = text.each_char
+        loop do
+          character = source.next
+          if character == "\\" && !raw
+            characters.concat(Fields.characters(source.next, quoted: true))
+          else
+            characters.concat(Fields.characters(character, split: true))
+          end
+        end
+        ranges = Fields.ranges(characters, ifs, limit: args.length - 1)
+        args.each_with_index do |name, index|
+          assign(name, ranges[index] ? Fields.value(characters[ranges[index]]) : "")
+        end
+        complete ? 0 : 1
+      end
+
+      # Never read ahead: the next command may inherit this descriptor directly.
+      def read_byte(input)
+        input.readpartial(1)
+      rescue EOFError
+        nil
+      end
+
       def write_line(streams, text)
         raise IOError, "standard output is closed" unless streams[1]
         streams[1].puts(text)
-      end
-
-      def parameter(name)
-        case name
-        when "?" then @status.to_s
-        when "$" then Process.pid.to_s
-        when "#" then @arguments.length.to_s
-        when "@", "*" then @arguments.join(" ")
-        when "0" then @name
-        when /\A\d+\z/ then @arguments[name.to_i - 1].to_s
-        else @variables.fetch(name, "")
-        end
-      end
-
-      def arithmetic_value(expression)
-        Arithmetic.evaluate(expression) { |name| parameter(name) }.to_s
-      rescue Arithmetic::Error => e
-        raise ExecutionError, e.message
-      end
-
-      # Each field carries both its value and a glob pattern. Quoted wildcard
-      # characters are escaped only in the pattern, never in the argv value.
-      def expand(word, assignment: false)
-        fields = [[+"", +"", false]]
-        word.parts.each_with_index do |part, index|
-          if part.kind == :parameter && part.text == "@" && part.quoted && !assignment
-            if @arguments.empty?
-              # The synthetic empty quote does not turn an empty "$@" into an argument.
-              fields.last[2] = false if word.parts.all? { |item| item.kind == :parameter && item.text == "@" || item.kind == :literal && item.text.empty? }
-            else
-              @arguments.each_with_index do |argument, argument_index|
-                fields << [+"", +"", false] if argument_index.positive?
-                append_field(fields.last, argument, true)
-              end
-            end
-            next
-          end
-          value = case part.kind
-          when :parameter then parameter(part.text)
-          when :arithmetic then arithmetic_value(part.text)
-          else part.text
-          end
-          if index.zero? && part.kind == :literal && !part.quoted && (value == "~" || value.start_with?("~/"))
-            home = @variables.fetch("HOME", "~")
-            append_field(fields.last, home, true)
-            value = value.delete_prefix("~")
-          elsif part.kind == :literal && !part.quoted && value.start_with?("~") && index.zero?
-            raise ExecutionError, "named-user tilde expansion is not supported"
-          end
-          if part.kind == :parameter && !part.quoted && !assignment
-            raise ExecutionError, "custom IFS is not supported" unless @variables.fetch("IFS", DEFAULT_IFS) == DEFAULT_IFS
-            value.split(/([ \t\n]+)/).each do |piece|
-              if piece.match?(/\A[ \t\n]+\z/)
-                fields << [+"", +"", false] if fields.last[2]
-              else
-                append_field(fields.last, piece, false) unless piece.empty?
-              end
-            end
-          else
-            append_field(fields.last, value, part.quoted || assignment)
-          end
-        end
-        return [fields.map(&:first).join] if assignment
-        fields.select { |_, _, present| present }.flat_map do |value, pattern, _|
-          raise ExecutionError, "recursive glob patterns are not supported" if pattern.match?(/(?<!\\\\)\*\*/)
-          matches = pattern.match?(/[*?\[]/) ? Dir.glob(pattern, base: @cwd).sort : []
-          matches.empty? ? [value] : matches
-        end
-      end
-
-      def append_field(field, value, quoted)
-        field[0] << value
-        field[1] << (quoted ? value.gsub(/[\\*?\[\]{}]/) { |character| "\\#{character}" } : value.gsub(/[\\{}]/) { |character| "\\#{character}" })
-        field[2] = true
       end
 
       def with_redirects(redirects, streams)

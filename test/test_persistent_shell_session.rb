@@ -201,13 +201,56 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
-  def test_source_reports_native_configuration_errors
+  def test_source_reports_invalid_configuration_errors
     Dir.mktmpdir("native-shell") do |dir|
-      File.write(File.join(dir, "invalid.kwshrc"), "export IFS=:\n")
+      File.write(File.join(dir, "invalid.kwshrc"), "export INVALID='contains\0nul'\n")
       shell = build_shell(dir)
       result = shell.run("source invalid.kwshrc")
       refute_equal 0, result.exit_status
-      assert_includes result.output, "could not apply configuration"
+      assert_includes result.output, "kwsh: source:"
+      assert_includes result.output, "invalid.kwshrc:1: Unmatched quote"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_source_accepts_custom_ifs_without_executing_configuration
+    Dir.mktmpdir("native-shell") do |dir|
+      File.write(File.join(dir, "ifs.kwshrc"), "export IFS=:\nprintf bad >sentinel\n")
+      shell = build_shell(dir)
+      assert_equal 0, shell.run("source ifs.kwshrc").exit_status
+      result = shell.run_for_agent('value=a:b; printf "<%s>" $value')
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "<a><b>"
+      assert_equal ":", shell.child_env["IFS"]
+      refute File.exist?(File.join(dir, "sentinel"))
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_shell_agent_runs_parameter_case_and_read_workflow_natively
+    Dir.mktmpdir("native-shell") do |dir|
+      File.write(File.join(dir, "input"), "one.rb\ntwo.txt\nlast.rb")
+      shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/must-not-be-launched")
+      tool = Kward::Tools::RunShellCommand.new(shell_prompt_session: Kward::ShellPromptSession.new(shell))
+      source = <<~'SHELL'
+        count=0
+        while IFS= read -r file || [ -n "$file" ]; do
+          case "$file" in *.rb) count=$((count + 1));; esac
+        done < input
+        export RESULT=${count:-0}
+        printf 'count=%s' "$RESULT"
+      SHELL
+      output = tool.call({ "command" => source }, nil)
+      assert_includes output, "Exit status: 0"
+      assert_includes output, "count=2"
+      assert_equal "2", shell.child_env["RESULT"]
+      assert_includes shell.run_for_agent('printf "%s" "$count"').output, "2"
+      assert_nil shell.compose_input("case x in")
+      assert_nil shell.compose_input("x) printf matched;;")
+      command = shell.compose_input("esac")
+      assert_includes shell.run_for_agent(command).output, "matched"
     ensure
       shell&.close
     end
