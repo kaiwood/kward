@@ -70,7 +70,10 @@ module Kward
 
       def normalize_assistant_message(message)
         content = reasoning_first_content(normalize_content(MessageAccess.content(message), preserve_thinking: true))
-        content = response_item_content(message) if text_content_empty?(content)
+        response_content = response_item_content(message)
+        if text_content_empty?(content) || response_content.any? { |part| part[:type] == "text" }
+          content = response_content
+        end
         reasoning = normalize_reasoning_summary(message)
         content.unshift(reasoning) if reasoning && !thinking_content?(content)
         tool_calls(message).each do |tool_call|
@@ -181,11 +184,7 @@ module Kward
             text = response_message_item_text(item)
             next [] if text.empty?
 
-            if ToolCall.value(item, :phase).to_s == "commentary"
-              [{ type: "thinking", thinking: text }]
-            else
-              [{ type: "text", text: text }]
-            end
+            [{ type: "text", text: text }]
           else
             []
           end

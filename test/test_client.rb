@@ -1579,7 +1579,7 @@ class TestClient < KwardTestCase
     assert_equal "fc_1", message["response_items"].first["id"]
   end
 
-  def test_codex_sse_streams_commentary_tool_turn_as_reasoning
+  def test_codex_sse_streams_commentary_tool_turn_as_assistant_text
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
     assistant_deltas = []
     reasoning_deltas = []
@@ -1597,21 +1597,52 @@ class TestClient < KwardTestCase
     )
 
     assert_equal "", message["content"]
-    assert_empty assistant_deltas
-    assert_equal ["Need inspect file first."], reasoning_deltas
+    assert_equal ["Need inspect file first."], assistant_deltas
+    assert_empty reasoning_deltas
+    refute message.key?("reasoning_summary")
     assert_equal "commentary", message["response_items"].first["phase"]
     assert_equal "read_file", message["tool_calls"].first["function"]["name"]
   end
 
-  def test_codex_sse_emits_completed_commentary_as_reasoning_without_streamed_deltas
+  def test_codex_sse_emits_completed_commentary_as_assistant_text_without_streamed_deltas
     client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    assistant_deltas = []
     reasoning_deltas = []
     body = "data: #{JSON.dump("type" => "response.output_item.done", "item" => { "id" => "msg_1", "type" => "message", "role" => "assistant", "content" => [{ "type" => "output_text", "text" => "Need inspect file first." }], "phase" => "commentary" })}\n\n"
 
-    message = client.send(:parse_codex_sse, body, on_reasoning_delta: ->(delta) { reasoning_deltas << delta })
+    message = client.send(
+      :parse_codex_sse,
+      body,
+      on_assistant_delta: ->(delta) { assistant_deltas << delta },
+      on_reasoning_delta: ->(delta) { reasoning_deltas << delta }
+    )
 
     assert_equal "", message["content"]
-    assert_equal ["Need inspect file first."], reasoning_deltas
+    assert_equal ["Need inspect file first."], assistant_deltas
+    assert_empty reasoning_deltas
+  end
+
+  def test_codex_sse_keeps_commentary_separate_from_reasoning_and_final_answer
+    client = Kward::Client.new(api_key: nil, openai_access_token: "env-token", oauth: FakeOAuth.new(nil))
+    deltas = []
+    items = [
+      { "id" => "rs_1", "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "Checking context." }] },
+      { "id" => "msg_1", "type" => "message", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "I'll check that, captain." }] },
+      { "id" => "msg_2", "type" => "message", "phase" => "final_answer", "content" => [{ "type" => "output_text", "text" => "Done." }] }
+    ]
+    body = "data: #{JSON.dump("type" => "response.completed", "response" => { "output" => items })}\n\n"
+
+    message = client.send(
+      :parse_codex_sse,
+      body,
+      on_assistant_delta: ->(delta) { deltas << [:assistant, delta] },
+      on_reasoning_delta: ->(delta) { deltas << [:reasoning, delta] }
+    )
+
+    assert_equal [[:reasoning, "Checking context."], [:assistant, "I'll check that, captain."], [:assistant, "Done."]], deltas
+    assert_equal "Done.", message["content"]
+    assert_equal "Checking context.", message["reasoning_summary"]
+    assert_equal items, message["response_items"]
   end
 
   def test_codex_payload_replays_response_items_without_persisted_ids

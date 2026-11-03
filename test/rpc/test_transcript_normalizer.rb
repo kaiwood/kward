@@ -97,9 +97,29 @@ class TestRPCTranscriptNormalizer < KwardTestCase
 
     assert_equal [
       { type: "thinking", thinking: "Checked context." },
-      { type: "thinking", thinking: "Need inspect file first." },
+      { type: "text", text: "Need inspect file first." },
       { type: "text", text: "Done." },
       { type: "toolCall", id: "call_read_file", name: "read", arguments: { path: "README.md" } }
+    ], messages.first[:content]
+  end
+
+  def test_assistant_response_items_preserve_commentary_when_final_content_is_present
+    messages = Kward::RPC::TranscriptNormalizer.new([
+      {
+        "role" => "assistant",
+        "content" => "Done.",
+        "response_items" => [
+          { "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "Checking context." }] },
+          { "type" => "message", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "I'll check that, captain." }] },
+          { "type" => "message", "phase" => "final_answer", "content" => [{ "type" => "output_text", "text" => "Done." }] }
+        ]
+      }
+    ]).normalize
+
+    assert_equal [
+      { type: "thinking", thinking: "Checking context." },
+      { type: "text", text: "I'll check that, captain." },
+      { type: "text", text: "Done." }
     ], messages.first[:content]
   end
 

@@ -458,6 +458,8 @@ Known event types:
 
 `reasoningBoundary` has an empty payload and marks the end of one reasoning summary message, allowing clients to render the next `reasoningDelta` as a separate block.
 
+Codex commentary is user-facing assistant speech: it streams through `assistantDelta`, not `reasoningDelta`, and appears as `text` rather than `thinking` in normalized transcripts. Render it where it arrives, before subsequent tool events. Commentary remains in the raw message's `response_items` with `phase: "commentary"`; it is not folded into final-answer content.
+
 Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFinished`. Exactly one terminal `turnFinished` is emitted per turn with `status` set to `completed`, `failed`, or `canceled`; failed turns include a sanitized `{ "message": "...", "code": "...", "fatal": false }` error payload.
 
 `turnSummary` is emitted after the answer (or while finishing a failed/canceled

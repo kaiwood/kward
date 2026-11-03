@@ -3280,9 +3280,28 @@ class TestCLI < KwardTestCase
 
       output = strip_ansi(prompt.output.join("\n"))
       assert_includes output, "Reasoning> Need context."
-      assert_includes output, "Reasoning> Need inspect file first."
+      commentary = "#{cli.send(:transcript_label, "Assistant")}> Need inspect file first."
+      assert_includes output, commentary
+      refute_includes output, "Reasoning> Need inspect file first."
       assert_includes output, "Tool> read_file: README.md\n\n1 lines, 16 bytes"
+      assert_operator output.index("Reasoning> Need context."), :<, output.index(commentary)
+      assert_operator output.index(commentary), :<, output.index("Tool> read_file:")
     end
+  end
+
+  def test_transcript_formatter_preserves_commentary_alongside_final_answer_without_duplication
+    message = {
+      "role" => "assistant",
+      "content" => "Done.",
+      "response_items" => [
+        { "type" => "reasoning", "summary" => [{ "type" => "summary_text", "text" => "Checking context." }] },
+        { "type" => "message", "phase" => "commentary", "content" => [{ "type" => "output_text", "text" => "I'll check that, captain." }] },
+        { "type" => "message", "phase" => "final_answer", "content" => [{ "type" => "output_text", "text" => "Done." }] }
+      ]
+    }
+
+    assert_equal ["Checking context."], Kward::CLITranscriptFormatter.reasoning_blocks(message)
+    assert_equal "I'll check that, captain.\n\nDone.", Kward::CLITranscriptFormatter.assistant_content_text(message)
   end
 
   def test_retry_event_renders_retry_message

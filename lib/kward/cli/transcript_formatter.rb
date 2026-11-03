@@ -19,10 +19,6 @@ module Kward
         when "reasoning"
           summary = response_item_text_parts(MessageAccess.value(item, :summary))
           summary.empty? ? response_item_text_parts(MessageAccess.value(item, :content)) : summary
-        when "message"
-          next [] unless MessageAccess.value(item, :phase).to_s == "commentary"
-
-          response_item_text_parts(MessageAccess.value(item, :content))
         else
           []
         end
@@ -54,15 +50,12 @@ module Kward
     end
 
     def assistant_content_text(message)
-      text = content_text(MessageAccess.content(message))
-      return text unless text.empty?
-
-      response_items(message).filter_map do |item|
+      text = response_items(message).filter_map do |item|
         next unless MessageAccess.value(item, :type) == "message"
-        next if MessageAccess.value(item, :phase).to_s == "commentary"
 
         response_item_text(MessageAccess.value(item, :content))
-      end.join
+      end.reject(&:empty?).join("\n\n")
+      text.empty? ? content_text(MessageAccess.content(message)) : text
     end
 
     def user_display_text(message)
