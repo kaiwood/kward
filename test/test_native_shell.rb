@@ -34,6 +34,96 @@ class TestNativeShell < KwardTestCase
     assert_equal expected, output
   end
 
+  def test_arithmetic_expansion_adds_the_requested_numbers
+    assert_output("7\n", 'echo $((5 + 2))')
+  end
+
+  def test_arithmetic_precedence_grouping_unary_signs_and_integer_bases
+    assert_output("11:21:-6:18", 'printf "%s:%s:%s:%s" "$((5 + 2 * 3))" "$(((5 + 2) * 3))" "$((-(5 + 2) + +1))" "$((010 + 0xA))"')
+  end
+
+  def test_arithmetic_division_truncates_toward_zero_and_remainder_follows_dividend
+    assert_output("-2:-1:-2:1", 'printf "%s:%s:%s:%s" "$((-7 / 3))" "$((-7 % 3))" "$((7 / -3))" "$((7 % -3))"')
+  end
+
+  def test_arithmetic_variables_assignments_arguments_and_loop_updates
+    assert_output("7:8:9:0:3", <<~'SHELL')
+      value=5
+      result=$((value + 2))
+      printf '%s:%s:%s:%s' "$result" "$(( $value + 3 ))" "$(( ${value} + 4 ))" "$((unset_value))"
+      set -- 2
+      count=0
+      while [ "$count" -lt "$1" ]; do count=$((count + 1)); done
+      printf ':%s' "$((count + $1 - 1))"
+    SHELL
+  end
+
+  def test_arithmetic_respects_quoting_and_word_concatenation
+    assert_output("before7after:$((5 + 2)):$((5 + 2))", %q{printf '%s:%s:%s' before$((5 + 2))after '$((5 + 2))' "\$((5 + 2))"})
+  end
+
+  def test_invalid_arithmetic_is_rejected_before_any_side_effects
+    ["5 +", "1=2", "1++", "2**3", "1; touch sentinel", "$(touch sentinel)", "`touch sentinel`", "1.5", "08", "1 << 2", "1 < 2"].each do |expression|
+      status, _, error = execute("printf touched >sentinel; echo $((#{expression}))")
+      assert_equal 2, status, expression
+      refute_empty error
+      refute File.exist?(File.join(@directory, "sentinel")), expression
+    end
+  end
+
+  def test_arithmetic_validation_does_not_evaluate_skipped_branches_or_read_future_variables
+    assert_output("7", 'if false; then echo $((1 / 0)); fi; value=5; printf "%s" "$((value + 2))"')
+  end
+
+  def test_arithmetic_runtime_errors_do_not_launch_the_command
+    ["echo $((1 / 0)) >sentinel", "echo $((1 % 0)) >sentinel", "value='$(touch sentinel)'; echo $((value))", "value='1 + 2'; echo $((value))"].each do |source|
+      status, _, error = execute(source)
+      assert_equal 2, status, source
+      assert_includes error, "arithmetic"
+      refute File.exist?(File.join(@directory, "sentinel"))
+    end
+    assert_output("2", 'printf "%s" "$?"')
+  end
+
+  def test_arithmetic_accepts_horizontal_space_between_closing_parentheses
+    assert_output("7\n", 'echo $((5 + 2) )')
+    assert_output("7\n", "echo $((5 + 2) \t )")
+    assert_output("value=21!", 'printf "%s" "value=$(((5 + 2) * 3) )!"')
+    assert_output("7:9", 'value=$((5 + 2) ); printf "%s:%s" "$value" "$((value + 2) )"')
+  end
+
+  def test_spaced_arithmetic_closers_do_not_rewrite_literal_text
+    assert_output('$((5 + 2) )|$((5 + 2) )', %q{printf '%s|%s' '$((5 + 2) )' "\$((5 + 2) )"})
+  end
+
+  def test_arithmetic_rejects_other_tokens_between_closers_before_side_effects
+    ['echo $((5 + 2); touch sentinel)', 'echo $((5 + 2) x)', "echo $((5 + 2)\n)", 'echo $((5 + 2) ) )'].each do |source|
+      status, _, error = execute("printf touched >sentinel; #{source}")
+      assert_equal 2, status, source
+      refute_empty error
+      refute File.exist?(File.join(@directory, "sentinel")), source
+    end
+  end
+
+  def test_incomplete_arithmetic_allows_continuation
+    assert_raises(Kward::NativeShell::IncompleteInput) { Kward::NativeShell::Parser.parse('echo $((5 +') }
+    assert_output("7\n", "echo $((5 +\n2))")
+    assert_output("7\n", "echo $((5 +\n2) )")
+  end
+
+  def test_arithmetic_limits_nesting_expression_length_and_result_size
+    expressions = ["(" * 101 + "1" + ")" * 101, "1+" * 2_048 + "1", "9" * 1_234]
+    expressions.each do |expression|
+      status, _, error = execute("echo $((#{expression}))")
+      assert_equal 2, status
+      assert_includes error, "exceeds"
+    end
+    value = "9" * 700
+    status, _, error = execute("value=#{value}; echo $((value * value))")
+    assert_equal 2, status
+    assert_includes error, "exceeds"
+  end
+
   def test_quoting_empty_arguments_and_expansion_boundaries
     assert_output("<one two>\n<one>\n<two>\n<>\n<$value>\n<one two!>\n", <<~'SHELL')
       value='one two'
@@ -151,7 +241,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_parse_errors_reject_the_whole_program_before_side_effects
-    ["echo $(pwd)", "echo `pwd`", "echo $((1+2))", "cat <<EOF\ntext\nEOF", "echo x &", "(echo x)", "case x in x) echo x;; esac", "[[ -f x ]]", "echo ${x:-default}", "echo $'x'"].each do |unsupported|
+    ["echo $(pwd)", "echo `pwd`", "echo $((1+=2))", "cat <<EOF\ntext\nEOF", "echo x &", "(echo x)", "case x in x) echo x;; esac", "[[ -f x ]]", "echo ${x:-default}", "echo $'x'"].each do |unsupported|
       status, _, error = execute("printf touched >sentinel; #{unsupported}")
       assert_equal 2, status, unsupported
       refute File.exist?(File.join(@directory, "sentinel")), unsupported

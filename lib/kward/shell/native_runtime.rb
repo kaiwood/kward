@@ -400,6 +400,12 @@ module Kward
         end
       end
 
+      def arithmetic_value(expression)
+        Arithmetic.evaluate(expression) { |name| parameter(name) }.to_s
+      rescue Arithmetic::Error => e
+        raise ExecutionError, e.message
+      end
+
       # Each field carries both its value and a glob pattern. Quoted wildcard
       # characters are escaped only in the pattern, never in the argv value.
       def expand(word, assignment: false)
@@ -417,7 +423,11 @@ module Kward
             end
             next
           end
-          value = part.kind == :parameter ? parameter(part.text) : part.text
+          value = case part.kind
+          when :parameter then parameter(part.text)
+          when :arithmetic then arithmetic_value(part.text)
+          else part.text
+          end
           if index.zero? && part.kind == :literal && !part.quoted && (value == "~" || value.start_with?("~/"))
             home = @variables.fetch("HOME", "~")
             append_field(fields.last, home, true)

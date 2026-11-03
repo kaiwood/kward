@@ -34,6 +34,7 @@ Kward is an extendable Ruby CLI coding agent. It supports interactive and one-sh
 - `lib/kward/cli/worktrees.rb` - interactive session-tab worktree binding and workspace re-rooting orchestration.
 - `lib/kward/shell/kwsh.rb`, `lib/kward/shell/kwshrc.rb`, and `lib/kward/shell/persistent_session.rb` - one-off command routing/completion, declarative rc parsing, and persistent native-shell host/PTY lifecycle.
 - `lib/kward/shell/native_syntax.rb`, `native_runtime.rb`, `native_process.rb`, and `native_worker.rb` - quote-preserving native kwsh parser, stateful interpreter, direct `execve` boundary, and single-threaded worker with a private control socket. Native `/shell` programs never implicitly fall back to another shell.
+- `lib/kward/shell/native_arithmetic.rb` - bounded integer-only `$((...))` parsing and evaluation. Keep syntax validation independent of variable lookup, preserve truncation-toward-zero division, and never use Ruby or shell eval. Advanced arithmetic operators and expression-valued variables remain unsupported.
 - `lib/kward/pty/detached_run.rb` - shared lifecycle for commands detached from terminal ownership while remaining owned by a tab.
 - `lib/kward/shell/prompt.rb` and `lib/kward/shell/prompt_session.rb` - transient shell-agent prompt context and scoped actions.
 - `lib/kward/agent.rb` - agent loop and tool execution flow.

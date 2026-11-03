@@ -20,6 +20,10 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "kwsh <file> [arguments]"
     assert_includes instructions, "unless the user explicitly requests that"
     assert_includes instructions, "not executable scripts"
+    assert_includes instructions, "echo $((5 + 2)) prints 7"
+    assert_includes instructions, "Use adjacent closing parentheses for portable syntax"
+    assert_includes instructions, "echo $((5 + 2) ) works too"
+    refute_includes instructions, "Command/arithmetic substitution"
   end
 
   def test_shell_context_tracks_the_last_command_and_bounded_output

@@ -213,6 +213,50 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_shell_agent_tool_accepts_the_exact_spaced_arithmetic_command
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/must-not-be-launched")
+      shell.run_for_agent("echo 5")
+      session = Kward::ShellPromptSession.new(shell)
+      tool = Kward::Tools::RunShellCommand.new(shell_prompt_session: session)
+
+      output = tool.call({ "command" => "echo $((5 + 2) )" }, nil)
+
+      assert_includes output, "Exit status: 0"
+      assert_includes output, "$ echo $((5 + 2) )\n7\n"
+      assert_equal "echo $((5 + 2) )", shell.context_snapshot[:last_command]
+      assert_equal 0, shell.context_snapshot[:exit_status]
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_native_arithmetic_works_for_the_shell_agent_and_keeps_state
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/must-not-be-launched")
+      shell.run_for_agent("echo 5")
+      session = Kward::ShellPromptSession.new(shell)
+      output = session.run("echo $((5 + 2))")
+      assert_includes output, "Exit status: 0"
+      assert_includes output, "\n7\n"
+
+      shell.run_for_agent("value=5")
+      result = shell.run_for_agent('value=$((value + 2)); echo "$value"')
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "\n7\n"
+      assert_nil shell.compose_input('echo $((value +')
+      source = shell.compose_input('2))')
+      assert_includes shell.run_for_agent(source).output, "\n9\n"
+
+      failure = shell.run_for_agent('echo $((value / 0))')
+      assert_equal 2, failure.exit_status
+      assert_includes failure.output, "division by zero"
+      assert_includes shell.run_for_agent('echo "$value"').output, "\n7\n"
+    ensure
+      shell&.close
+    end
+  end
+
   def test_native_programs_share_functions_and_authoritative_exported_state
     Dir.mktmpdir("native-shell") do |dir|
       shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/must-not-be-launched")

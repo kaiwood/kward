@@ -1,3 +1,5 @@
+require_relative "native_arithmetic"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # The deliberately small native kwsh grammar. Words retain quoting information
@@ -156,9 +158,44 @@ module Kward
         advance
       end
 
+      def arithmetic(parts, quoted)
+        advance(2)
+        start = @index
+        depth = 0
+        until current.nil?
+          if current == "("
+            depth += 1
+          elsif current == ")"
+            if depth.zero?
+              raise IncompleteInput, "line #{@line}: unclosed arithmetic expansion; expected ))" unless @source[@index + 1]
+              # kwsh permits horizontal whitespace between the final closers.
+              # Recognize it here, never by rewriting quoted text or commands.
+              closing = @source[@index..][/\A\)[ \t]*\)/]
+              unless closing
+                raise SyntaxError, "line #{@line}: expected a second ) to close arithmetic expansion"
+              end
+              expression = @source[start...@index]
+              Arithmetic::Parser.new(expression).parse
+              parts << Part.new(kind: :arithmetic, text: expression, quoted: quoted)
+              advance(closing.length)
+              return
+            end
+            depth -= 1
+          end
+          advance
+        end
+        raise IncompleteInput, "line #{@line}: unclosed arithmetic expansion; expected ))"
+      rescue Arithmetic::Error => e
+        raise SyntaxError, "line #{@line}: #{e.message}"
+      end
+
       def parameter(parts, quoted)
         advance
-        raise SyntaxError, "line #{@line}: command and arithmetic substitution are not supported" if current == "("
+        if @source[@index, 2] == "(("
+          arithmetic(parts, quoted)
+          return
+        end
+        raise SyntaxError, "line #{@line}: command substitution is not supported" if current == "("
         raise SyntaxError, "line #{@line}: dollar-single-quoting is not supported" if current == "'" && !quoted
         if current == "{"
           advance

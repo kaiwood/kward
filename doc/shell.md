@@ -120,7 +120,7 @@ kwsh scripts/check.kwsh README.md Gemfile
 
 The script receives `$0`, `$1`, `${10}`, `$#`, and `"$@"`. It runs in a separate native interpreter process, inheriting exported variables and the current directory without changing the caller's variables, functions, or directory. This is an embedded command, not a new standalone `kwsh` executable.
 
-### Supported first milestone
+### Supported syntax
 
 - Comments, newlines, `;`, single/double quotes, and backslash escaping.
 - Assignments, `$name`, `${name}`, `$?`, `$$`, positional parameters, `set --`, and `shift`.
@@ -131,9 +131,26 @@ The script receives `$0`, `$1`, `${10}`, `$#`, and `"$@"`. It runs in a separate
 - Ordinary `*`, `?`, and bracket filename patterns, `~` / `~/...`, and default whitespace field splitting. Quote variables and use `"$@"` to preserve argument boundaries.
 - Persistent `cd`, `pwd`, aliases, and direct executable lookup through `PATH`. Utilities such as `printf`, `test` / `[`, `grep`, and `cat` come from the operating system.
 
+### Calculate with integer arithmetic
+
+Use `$((expression))` to substitute a calculated integer:
+
+```sh
+echo $((5 + 2))                 # 7
+value=5
+echo "Result: $((value + 2))"    # Result: 7
+value=$((value + 1))            # update a counter
+```
+
+Arithmetic supports `+`, `-`, `*`, `/`, `%`, unary signs, and parentheses, with normal operator precedence. Decimal, octal (`010`), and hexadecimal (`0x10`) integers work. Variables can be written as `value`, `$value`, or `${value}`; their values must be integers, not more expressions. Unset or empty variables count as zero. Division truncates toward zero, and division or remainder by zero reports an error.
+
+Prefer adjacent `))` for portable syntax. As a kwsh convenience, spaces or tabs may separate the final closing parentheses: `echo $((5 + 2) )` also prints `7`. This extension applies only to arithmetic delimiters; it does not rewrite literal text or allow other tokens or newlines between the closers. Single quotes and an escaped `$` keep the expression literal. Incomplete expressions can continue on the next input line.
+
+This is intentionally a small arithmetic subset: comparisons, logical/bitwise operators, assignments inside expressions, `++`/`--`, exponentiation, and nested expansions remain unsupported. Use `test` or `[` for comparisons. Expressions are limited to 4,096 bytes and 100 nesting levels, and integer values/results to 4,096 bits. Evaluation is native and never invokes Ruby `eval` or another shell.
+
 ### Deliberate limits
 
-Command substitution (`$(...)` and backticks), arithmetic expansion, parameter operators such as `${name:-default}`, heredocs, `case`, subshell groups, background jobs, traps, `eval`, executable sourcing, custom `IFS`, recursive globbing, arrays, `[[ ... ]]`, and shell options such as `set -e` are not supported. Unsupported constructs report an error; kwsh never retries the program in another shell. Executable text without a shebang also fails instead of falling back to `/bin/sh`; use `kwsh <file>` for native scripts. Explicit commands such as `bash script.sh`, or executables with a shell shebang, still select their requested interpreter.
+Command substitution (`$(...)` and backticks), parameter operators such as `${name:-default}`, heredocs, `case`, subshell groups, background jobs, traps, `eval`, executable sourcing, custom `IFS`, recursive globbing, arrays, `[[ ... ]]`, and shell options such as `set -e` are not supported. Unsupported constructs report an error; kwsh never retries the program in another shell. Executable text without a shebang also fails instead of falling back to `/bin/sh`; use `kwsh <file>` for native scripts. Explicit commands such as `bash script.sh`, or executables with a shell shebang, still select their requested interpreter.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` are prompt-level conveniences, not scripting builtins. Use functions for reusable script logic. Aliases inside scripts expand complete commands and do not implement POSIX's token-level alias grammar. The existing `kwshrc` format stays declarative: loading configuration does not start executing scripts.
 

@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added native kwsh integer arithmetic expansion (`$((5 + 2))`), with basic operators, grouping, integer-valued variables, bounded evaluation, and shell-assistant guidance for the supported syntax. A kwsh-specific extension also accepts spaces or tabs between the final closing parentheses (`$((5 + 2) )`).
 - Added native kwsh scripting inside `/shell`: multiline programs, quoted variables and arguments, conditionals, loops, functions, pipelines, ordered redirection, and isolated `kwsh <file> [args]` execution, without delegating the language to another shell.
 - Added RPC model-picker eligibility and safe provider refresh outcomes, with consistent catalog refresh/fallback behavior and explicit cross-process reload guidance.
 - Added cached-input counts and cache-hit rate, cache-write counts, and reasoning-token counts to detailed turn statistics, preserving unavailable versus reported-zero fields and marking partial breakdowns.
