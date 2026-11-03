@@ -1935,6 +1935,7 @@ class TestPromptInterface < KwardTestCase
     prompt.write_delta("hello")
 
     assert_includes output.string, "Assistant>"
+    refute_includes output.string, "✦"
     assert_includes output.string, "hello"
     refute_includes strip_ansi(output.string), Kward::PromptInterface::HELP_TEXT
     refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT

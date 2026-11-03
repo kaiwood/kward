@@ -24,6 +24,7 @@ All notable changes to Kward will be documented in this file.
 ### Changed
 
 - Restored the interactive composer's original Braille spinner and animation pace while retaining activity labels, elapsed time, and completion indicators.
+- Removed decorative prefixes from assistant and user transcript labels, retaining speaker names and colors.
 - Replaced the persistent `/shell` system-shell evaluator with kwsh's deliberately limited POSIX-style interpreter. Unsupported syntax now errors explicitly rather than inheriting the host shell's language; declarative rc loading and the separate one-off/model/RPC command paths retain their existing behavior.
 - Routed plugin-host Codex streaming and the OpenRouter proxy through Kward's normal Codex provider client and configured subscription credentials, rather than the public Responses API path.
 

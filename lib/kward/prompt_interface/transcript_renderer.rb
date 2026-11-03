@@ -118,8 +118,7 @@ module Kward
       end
 
       def transcript_marker(label)
-        marker = "#{transcript_label(label)}>"
-        label == "Assistant" ? "✦ #{marker}" : marker
+        "#{transcript_label(label)}>"
       end
 
       def label_styles(label)
