@@ -16,6 +16,15 @@ class TestRPCSessionManagerTurns < KwardTestCase
       assert events.any? { |event| event[:type] == "assistantDelta" && event[:payload][:delta] == "reply" }
       assert events.any? { |event| event[:type] == "answer" && event[:payload][:content] == "reply" }
       assert_equal "completed", manager.turn_status(turn_id: turn[:id])[:status]
+      summary_event = events.find { |event| event[:type] == "turnSummary" }
+      summary = summary_event[:payload][:summary]
+      assert_equal "completed", summary["status"]
+      assert_equal "unavailable", summary["usageStatus"]
+      assert_equal 1, summary["modelRequests"]
+      assert_equal summary, events.last[:payload][:summary]
+      assert_equal summary, manager.turn_status(turn_id: turn[:id])[:summary]
+      assert_equal summary, manager.transcript(session_id: session[:id])[:messages].last[:turnSummary]
+      assert_operator summary_event[:sequence], :<, events.last[:sequence]
       assert server.notifications.any? { |notification| notification[:method] == "turn/event" }
     end
   end
@@ -334,7 +343,10 @@ class TestRPCSessionManagerTurns < KwardTestCase
       assert_equal true, client.cancelled?
       assert_equal true, manager.turn_status(turn_id: turn[:id])[:cancelRequested]
       events = manager.turn_events(turn_id: turn[:id])[:events]
-      assert_equal "turnCancelRequested", events[-2][:type]
+      assert_equal "turnCancelRequested", events[-3][:type]
+      assert_equal "turnSummary", events[-2][:type]
+      assert_equal "canceled", events[-2][:payload][:summary]["status"]
+      assert_equal "unavailable", events[-1][:payload][:summary]["usageStatus"]
       assert_equal "turnFinished", events[-1][:type]
       assert_equal "canceled", events[-1][:payload][:status]
       refute events.any? { |event| event[:type] == "assistantMessage" }

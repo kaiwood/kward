@@ -1,5 +1,7 @@
 require_relative "../message_access"
 require_relative "../message_text"
+require_relative "../config_files"
+require_relative "turn_summary_formatter"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
@@ -11,6 +13,7 @@ module Kward
 
     def render
       lines = ["# Kward Session", ""]
+      stats_mode = ConfigFiles.transcript_turn_stats
       @conversation.messages.each do |message|
         role = MessageAccess.role(message)
         next if role == "system"
@@ -21,6 +24,11 @@ module Kward
         lines << ""
         lines << markdown_content(message_markdown_content(message, role))
         lines << ""
+        stats = TurnSummaryFormatter.render(MessageAccess.value(message, :turn_summary), mode: stats_mode)
+        unless stats.empty?
+          lines.concat(stats.lines.map { |line| "> #{line.chomp}" })
+          lines << ""
+        end
       end
       lines.join("\n")
     end

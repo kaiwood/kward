@@ -9,6 +9,7 @@ require "uri"
 require_relative "../agent"
 require_relative "../config_files"
 require_relative "../events"
+require_relative "../transcripts/turn_summary_formatter"
 require_relative "../model/retry_message"
 require_relative "../plugins/registry"
 require_relative "../prompts/commands"
@@ -113,7 +114,12 @@ module Kward
     end
 
     def transcript_items
-      RPC::TranscriptNormalizer.new(@conversation.messages).normalize.flat_map { |message| pan_transcript_items(message) }
+      RPC::TranscriptNormalizer.new(@conversation.messages).normalize.flat_map do |message|
+        items = pan_transcript_items(message)
+        text = turn_summary_text(message[:turnSummary])
+        items << { role: "turn-stats", label: "Turn summary", text: text } unless text.empty?
+        items
+      end
     end
 
     private
@@ -200,6 +206,8 @@ module Kward
       broadcast("turn_started", queue_payload)
       @agent.ask(prompt) do |event|
         case event
+        when Events::TurnSummary
+          broadcast("turn_summary", { summary: event.summary, text: turn_summary_text(event.summary) })
         when Events::ReasoningDelta
           broadcast("reasoning_delta", { delta: event.delta.to_s })
         when Events::ReasoningBoundary
@@ -650,6 +658,10 @@ module Kward
 
     def tool_result_payload(tool_call, content)
       { name: tool_call_name(tool_call), content: content.to_s }
+    end
+
+    def turn_summary_text(summary)
+      TurnSummaryFormatter.render(summary, mode: ConfigFiles.transcript_turn_stats(@full_config))
     end
 
     def pan_transcript_items(message)

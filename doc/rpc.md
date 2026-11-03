@@ -360,7 +360,7 @@ Subscribed clients receive `pluginChat/event` notifications:
 }
 ```
 
-Known event types are `turnQueued`, `turnStarted`, `reasoningDelta`, `reasoningBoundary`, `assistantDelta`, `assistantMessage`, `toolCall`, `toolResult`, `answer`, `turnCancelRequested`, and `turnFinished`.
+Known event types are `turnQueued`, `turnStarted`, `reasoningDelta`, `reasoningBoundary`, `assistantDelta`, `assistantMessage`, `toolCall`, `toolResult`, `answer`, `turnCancelRequested`, `turnSummary`, and `turnFinished`.
 
 ## Turn methods
 
@@ -453,11 +453,47 @@ Known event types:
 - `answer`
 - `turnCancelRequested`
 - `error`
+- `turnSummary`
 - `turnFinished`
 
 `reasoningBoundary` has an empty payload and marks the end of one reasoning summary message, allowing clients to render the next `reasoningDelta` as a separate block.
 
 Lifecycle payloads include `status` for `turnQueued`, `turnStarted`, and `turnFinished`. Exactly one terminal `turnFinished` is emitted per turn with `status` set to `completed`, `failed`, or `canceled`; failed turns include a sanitized `{ "message": "...", "code": "...", "fatal": false }` error payload.
+
+`turnSummary` is emitted after the answer (or while finishing a failed/canceled
+agent turn), before `turnFinished`. Its payload is `{ "summary": { ... } }`:
+
+```json
+{
+  "summary": {
+    "status": "completed",
+    "elapsedMs": 18400,
+    "modelRequests": 3,
+    "toolCalls": 4,
+    "usageStatus": "complete",
+    "usage": {
+      "input_tokens": 23600,
+      "output_tokens": 1200,
+      "total_tokens": 24800,
+      "estimated": false
+    }
+  }
+}
+```
+
+The same `summary` is included in `turnFinished` and `turns/status`. Restored
+normalized messages carry it as `turnSummary` on the final entry of the turn
+(which can be a user or tool entry after interruption). Render it below that
+entry; it is metadata, not an assistant message. `usageStatus` is `complete`,
+`partial`, or `unavailable`; `usage` may be null and token fields are optional.
+Cache read/write fields may also be present; do not add them to the reported
+`total_tokens` again. Usage covers main agent requests, excluding auxiliary
+compaction/memory calls; see [turn statistics](session-management.md#Turn_statistics).
+
+Initialization reports `transcript.turnSummaries` (including the configured
+`defaultMode`) and `events.turnSummary`. Data is emitted regardless of the
+presentation preference. Turns canceled before the agent starts and commands
+or plugin chats that do not run an agent turn have no automatic summary.
 
 `modelRetry` is emitted before Kward retries a transient model request failure. Its payload includes `provider`, `model`, `attempt`, `maxAttempts`, `delaySeconds`, and `error`.
 

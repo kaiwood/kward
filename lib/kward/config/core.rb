@@ -116,6 +116,9 @@ module Kward
             "enabled" => false,
             "auto_summary" => false
           },
+          "transcript" => {
+            "turn_stats" => "compact"
+          },
           "composer" => {
             "busy_help" => true,
             "tab_keybindings" => "auto"

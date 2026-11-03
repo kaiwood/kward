@@ -5,6 +5,7 @@ require_relative "model/context_overflow"
 require_relative "conversation"
 require_relative "plugins/turn_request"
 require_relative "events"
+require_relative "turn_summary"
 require_relative "deep_copy"
 require_relative "hooks"
 require_relative "message_access"
@@ -52,6 +53,8 @@ module Kward
       started_at = @telemetry_logger.monotonic_now
       status = "completed"
       error = nil
+      summary = TurnSummary.new
+      turn_started = false
       cancellation&.raise_if_cancelled!
       system_turn = input if input.is_a?(PluginTurnRequest)
       display_input ||= system_turn.to_s if system_turn
@@ -71,19 +74,26 @@ module Kward
         else
           @conversation.append_user(input, display_content: display_input)
         end
+        turn_started = true
         run_hook("turn_context_build_before", payload: { message_count: @conversation.messages.length })
         auto_compact_if_needed
         run_hook("turn_context_build_after", payload: { message_count: @conversation.messages.length })
-        answer = run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, &block)
+        answer = run_turn(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, summary: summary, &block)
         run_hook("turn_end", payload: { input: input, answer: answer })
         answer
       end
     rescue StandardError => e
-      status = "failed"
+      status = e.is_a?(Cancellation::CancelledError) ? "canceled" : "failed"
       error = e
       raise e
     ensure
-      log_turn(duration_ms: @telemetry_logger.duration_ms(started_at), status: status, error: error)
+      elapsed_ms = @telemetry_logger.duration_ms(started_at)
+      log_turn(duration_ms: elapsed_ms, status: status, error: error)
+      if turn_started
+        result = summary.finish(status: status, elapsed_ms: elapsed_ms)
+        @conversation.finish_turn(result)
+        block&.call(Events::TurnSummary.new(summary: result))
+      end
     end
 
     # Runs model calls until the assistant returns an answer without pending
@@ -91,7 +101,7 @@ module Kward
     #
     # @yieldparam event [Object] streamed turn event for frontends
     # @return [String] final assistant answer
-    def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil)
+    def run_turn(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil, summary: nil)
       overflow_retried = false
       steering_state = build_steering_state(steering) do |event|
         yield event if block_given?
@@ -100,7 +110,7 @@ module Kward
         cancellation&.raise_if_cancelled!
         auto_compact_if_needed
         begin
-          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry) do |event|
+          message = chat(on_reasoning_delta: on_reasoning_delta, on_retry: on_retry, cancellation: cancellation, steering: steering, options: options, tool_registry: tool_registry, summary: summary) do |event|
             yield event if block_given?
           end
         rescue StandardError => e
@@ -127,6 +137,7 @@ module Kward
 
         tool_calls.each do |tool_call|
           cancellation&.raise_if_cancelled!
+          summary&.tool_call
           yield Events::ToolCall.new(tool_call: tool_call) if block_given?
           tool_started_at = @telemetry_logger.monotonic_now
           content = nil
@@ -229,7 +240,7 @@ module Kward
       @warning_sink ? @warning_sink.call(message) : warn(message)
     end
 
-    def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil)
+    def chat(on_reasoning_delta: nil, on_retry: nil, cancellation: nil, steering: nil, options: {}, tool_registry: nil, summary: nil)
       reasoning_delta = lambda do |delta|
         cancellation&.raise_if_cancelled!
         on_reasoning_delta&.call(delta)
@@ -245,6 +256,7 @@ module Kward
       end
       retry_callback = lambda do |retry_info|
         cancellation&.raise_if_cancelled!
+        summary&.retry
         event = Events::Retry.new(**retry_info)
         on_retry&.call(event)
         yield event if block_given?
@@ -263,6 +275,7 @@ module Kward
       return { "role" => "assistant", "content" => hook_denied_answer(before) } if before.denied?
 
       run_hook("turn_model_request_before", payload: request)
+      summary&.model_request
       response = ChatInvocation.call(
         @client,
         request[:messages] || request["messages"],
@@ -280,6 +293,7 @@ module Kward
           provider_required: request[:provider_required] || request["provider_required"]
         }
       )
+      summary&.record(response)
       run_hook("model_response_after_parse", payload: { message: response })
       run_hook("turn_model_response_complete", payload: { message: response })
       response

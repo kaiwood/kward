@@ -1004,11 +1004,10 @@ module Kward
       end
 
       def render_tab_answer(tab)
-        return unless tab.status == "ready"
-        return if tab.stream_state[:streamed]
-        return if tab.answer.to_s.empty?
-
-        @prompt.say("\n#{colored(transcript_marker("Assistant"), :activity, :bold)} #{render_markdown_transcript(tab.answer)}\n")
+        if tab.status == "ready" && !tab.stream_state[:streamed] && !tab.answer.to_s.empty?
+          @prompt.say("\n#{colored(transcript_marker("Assistant"), :activity, :bold)} #{render_markdown_transcript(tab.answer)}\n")
+        end
+        print_turn_summary(tab.stream_state.delete(:turn_summary))
       end
 
       def new_tab_stream_state(driver)

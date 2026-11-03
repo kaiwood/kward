@@ -4,6 +4,13 @@ module Kward
     module Settings
       extend self
 
+      # Controls transcript presentation only; stats remain available over RPC.
+      def transcript_turn_stats(config = read_config)
+        transcript = config["transcript"].is_a?(Hash) ? config["transcript"] : {}
+        value = transcript["turn_stats"].to_s
+        %w[off compact detailed].include?(value) ? value : "compact"
+      end
+
       def overlay_settings(config = read_config)
         overlay = config["overlay"].is_a?(Hash) ? config["overlay"] : {}
         settings = DEFAULT_OVERLAY_SETTINGS.dup

@@ -17,7 +17,12 @@ module Kward
       end
 
       def normalize
-        @messages.filter_map { |message| normalize_message(message) }
+        @messages.filter_map do |message|
+          normalized = normalize_message(message)
+          summary = MessageAccess.value(message, :turn_summary)
+          normalized = normalized.merge(turnSummary: summary) if normalized && summary.is_a?(Hash)
+          normalized
+        end
       end
 
       private

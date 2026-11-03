@@ -101,6 +101,7 @@ script/release VERSION
 - This project uses Minitest. Add or update focused tests for behavior changes.
 - Network/auth behavior should be easy to test without real external calls; follow existing test patterns and stubs.
 - Keep CLI output stable unless the task is explicitly about UX copy.
+- `TurnSummary` aggregates main-agent request usage, excluding auxiliary compaction/memory calls. `Agent` emits `Events::TurnSummary` even for interrupted started turns; `Conversation#finish_turn` attaches display-only metadata and `SessionStore` persists a `turn_summary` record anchored by `targetId` without advancing the branch leaf. Keep summaries out of model context, restore them by branch, and preserve RPC/Pan/export parity. `transcript.turn_stats` controls presentation, not data collection; filter output stays answer-only.
 - Keep documentation current when behavior, configuration, extension points, commands, tools, RPC capabilities, or generated docs navigation changes.
 - Add user-facing changes to the `CHANGELOG.md` `[Unreleased]` section using grouped `### Added`, `### Changed`, `### Fixed`, or `### Removed` subsections.
 - When adding configuration, document default behavior and environment variable interactions.

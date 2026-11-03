@@ -461,7 +461,7 @@ class TestConfigFiles < KwardTestCase
         capture_io { cli.run }
       end
 
-      assert_equal "reply\n", out
+      assert_match(/\Areply\n\nCompleted · \d+\.\ds · tokens unavailable · 0 tool calls\n\z/, out)
       assert_equal "", err
       assert File.exist?(config_path)
       config = JSON.parse(File.read(config_path))

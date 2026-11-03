@@ -4,7 +4,7 @@ class TestCLICommands < KwardTestCase
   def test_module_split_keeps_one_shot_mode_working
     cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: FakeClient.new([{ "role" => "assistant", "content" => "hi" }]))
 
-    assert_equal "hi", cli.one_shot("hello")
+    assert_match(/\Ahi\n\nCompleted · \d+\.\ds · tokens unavailable · 0 tool calls\z/, cli.one_shot("hello"))
   end
 
   def test_help_command_prints_colored_command_overview

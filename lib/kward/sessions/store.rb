@@ -85,6 +85,7 @@ module Kward
       def attach(conversation)
         conversation.on_append = lambda { |message| append_message(message) }
         conversation.on_compact = lambda { |message| compact(message) }
+        conversation.on_turn_summary = lambda { |message, summary| append_turn_summary(message, summary) }
         conversation.on_tool_execution = lambda { |tool_call, content| append_tool_execution(tool_call, content) }
         conversation.on_runtime_update = lambda { |provider:, model:, reasoning_effort:| update_runtime(provider: provider, model: model, reasoning_effort: reasoning_effort) }
         conversation.on_system_message_change = lambda { |system_message| append_system_prompt_snapshot(system_message, reason: "changed") }
@@ -104,6 +105,18 @@ module Kward
       def compact(message)
         record = @store.build_tree_record(@path, "compaction", @leaf_id, message: message)
         @leaf_id = record[:id]
+        @store.append_record(@path, record)
+        mark_modified(record)
+      end
+
+      # Anchors display-only stats to an existing entry without advancing the leaf.
+      def append_turn_summary(message, summary)
+        record = {
+          type: "turn_summary",
+          targetId: message["id"] || message[:id],
+          timestamp: Time.now.utc.iso8601(3),
+          summary: summary
+        }
         @store.append_record(@path, record)
         mark_modified(record)
       end
@@ -461,7 +474,7 @@ module Kward
       records = records_from_file(resolve_session_path(path))
       labels = labels_by_target(records)
       timestamps = label_timestamps_by_target(records)
-      records.select { |record| tree_entry_record?(record) }.map do |record|
+      entries_with_turn_summaries(records).map do |record|
         id = record["id"].to_s
         record.dup.tap do |copy|
           copy["resolvedLabel"] = labels[id] if labels.key?(id)
@@ -717,7 +730,7 @@ module Kward
 
 
     def build_session_tree(records)
-      entries = records.select { |record| tree_entry_record?(record) }
+      entries = entries_with_turn_summaries(records)
       labels = labels_by_target(records)
       label_timestamps = label_timestamps_by_target(records)
       nodes = entries.each_with_object({}) do |entry, map|
@@ -749,8 +762,22 @@ module Kward
       entry.dup
     end
 
+    def entries_with_turn_summaries(records)
+      summaries = records.each_with_object({}) do |record, result|
+        result[record["targetId"]] = record["summary"] if record["type"] == "turn_summary"
+      end
+      records.select { |record| tree_entry_record?(record) }.map do |record|
+        summary = summaries[record["id"]]
+        if summary.is_a?(Hash) && record["message"].is_a?(Hash)
+          record.merge("message" => record["message"].merge("turn_summary" => summary))
+        else
+          record
+        end
+      end
+    end
+
     def branch_records(records)
-      entries = records.select { |record| tree_entry_record?(record) && !record["id"].to_s.empty? }
+      entries = entries_with_turn_summaries(records).reject { |record| record["id"].to_s.empty? }
       by_id = entries.to_h { |record| [record["id"].to_s, record] }
       leaf_id = current_leaf_id(records)
       return [] if leaf_id.nil?

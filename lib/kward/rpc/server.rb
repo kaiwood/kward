@@ -459,7 +459,8 @@ module Kward
             supportsToolCalls: true,
             supportsToolResults: true,
             supportsCompactionSummaries: true,
-            supportsReasoningRestore: true
+            supportsReasoningRestore: true,
+            turnSummaries: { supported: true, event: "turnSummary", field: "turnSummary", modes: %w[off compact detailed], defaultMode: ConfigFiles.transcript_turn_stats, scope: "agentTurns" }
           },
           sessions: {
             mode: "explicit",
@@ -538,6 +539,7 @@ module Kward
             assistantText: "assistantDelta",
             reasoning: { start: false, delta: true, boundary: true, end: false },
             modelRetry: { supported: true, event: "modelRetry" },
+            turnSummary: { supported: true, event: "turnSummary", terminalField: "summary" },
             steering: { supported: @session_manager.in_flight_steer_supported?, event: "turnSteered", mode: @session_manager.in_flight_steer_supported? ? "native" : "unsupported" },
             pluginCommands: { structuredResult: "pluginCommandResult" },
             tools: { call: true, update: true, result: true, normalizedMetadata: true, diffs: true, firstChangedLine: true, changedFiles: true, workspaceGuardrails: workspace_guardrails_enabled?, focusedContext: true, contextBudgetStats: true },

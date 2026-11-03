@@ -252,6 +252,26 @@ class TestPanServer < KwardTestCase
     end
   end
 
+  def test_pan_server_streams_and_restores_turn_summaries
+    Dir.mktmpdir do |dir|
+      server = build_server(dir, client: PanStreamingClient.new(["reply"]))
+      queue = Queue.new
+      server.send(:subscribe, queue)
+      server.send(:run_prompt, "hello")
+      events = []
+      events << queue.pop until queue.empty?
+      event = events.find { |item| item.include?("event: turn_summary") }
+      payload = JSON.parse(event[/^data: (.+)$/m, 1])
+      assert_equal "completed", payload["summary"]["status"]
+      assert_includes payload["text"], "tokens unavailable"
+      assert_equal payload["text"], server.transcript_items.last[:text]
+      assert_equal "turn-stats", server.transcript_items.last[:role]
+      page = server.send(:render_index)
+      assert_includes page, "events.addEventListener('turn_summary'"
+      assert_includes page, "if (role === 'turn-stats') textNode.textContent"
+    end
+  end
+
   def test_pan_server_transcript_restores_reasoning_and_tools
     Dir.mktmpdir do |dir|
       server = build_server(dir)

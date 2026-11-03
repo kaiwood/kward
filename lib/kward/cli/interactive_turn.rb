@@ -142,6 +142,9 @@ module Kward
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript && queued_inputs.empty? && !cancelled
         queued_inputs
       ensure
+        if stream_state && !suppress_transcript && !busy_replacement_agent?
+          print_turn_summary(stream_state.delete(:turn_summary))
+        end
         @prompt.finish_busy_input if @prompt.respond_to?(:finish_busy_input)
         if @prompt.respond_to?(:show_completion) && !busy_replacement_agent?
           completion = if cancelled
@@ -213,6 +216,8 @@ module Kward
 
       def handle_interactive_event(event, markdown_chunks, stream_state)
         case event
+        when Events::TurnSummary
+          stream_state[:turn_summary] = event.summary
         when Events::ReasoningDelta
           stream_state[:streamed] = true
           update_busy_activity("reasoning")
@@ -384,7 +389,9 @@ module Kward
       def run_blocking_interactive_turn(agent, input, display_input: nil, tool_registry: nil, suppress_transcript: false, on_complete: nil)
         streamed = false
         markdown_chunks = []
+        summary = nil
         answer = agent.ask(input, **agent_display_options(display_input, tool_registry: tool_registry)) do |event|
+          summary = event.summary if event.is_a?(Events::TurnSummary)
           streamed = true if !suppress_transcript && render_blocking_turn_event(event, markdown_chunks, tool_line_limit: INTERACTIVE_TOOL_OUTPUT_LINE_LIMIT)
         end
         flush_markdown_deltas(markdown_chunks) if streamed
@@ -393,6 +400,9 @@ module Kward
         auto_summarize_memory(agent.conversation) if agent.respond_to?(:conversation) && !suppress_transcript
         on_complete&.call(successful: true, cancelled: false, error: nil, answer: answer)
         []
+      ensure
+        flush_markdown_deltas(markdown_chunks) if markdown_chunks && !suppress_transcript
+        print_turn_summary(summary) unless suppress_transcript
       end
 
       def agent_display_options(display_input, tool_registry: nil)

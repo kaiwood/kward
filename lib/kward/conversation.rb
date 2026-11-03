@@ -47,6 +47,8 @@ module Kward
     attr_accessor :on_compact
     # @return [Proc, nil] callback invoked when a tool execution record should be persisted
     attr_accessor :on_tool_execution
+    # @return [Proc, nil] callback for branch-anchored turn summary metadata
+    attr_accessor :on_turn_summary
     # @return [Proc, nil] callback invoked when runtime metadata should be persisted
     attr_accessor :on_runtime_update
     # @return [Proc, nil] callback invoked when the system prompt runtime state changes
@@ -121,6 +123,14 @@ module Kward
     def append_assistant(message)
       message = { role: "assistant", content: message } if message.is_a?(String)
       append_message(message)
+    end
+
+    def finish_turn(summary)
+      message = @messages.last
+      return unless message
+
+      message["turn_summary"] = summary
+      @on_turn_summary&.call(message, summary)
     end
 
     def append_tool(tool_call_id:, name:, content:)
@@ -198,7 +208,7 @@ module Kward
       inserted = false
       messages = @messages.filter_map do |message|
         record = message[:plugin_system_turn] || message["plugin_system_turn"]
-        next message unless record
+        next message.reject { |key, _| key.to_s == "turn_summary" } unless record
         next unless @system_turn && (record[:id] || record["id"]) == @system_turn.id
 
         inserted = true

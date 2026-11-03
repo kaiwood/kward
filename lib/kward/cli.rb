@@ -444,10 +444,12 @@ module Kward
         hook_manager: hook_manager,
         hook_context: hook_context
       )
+      summary = nil
       answer = if filter
         agent.ask(input)
       else
         agent.ask(input) do |event|
+          summary = event.summary if event.is_a?(Events::TurnSummary)
           result = render_blocking_turn_event(event, markdown_chunks)
           streamed = true if result
           assistant_streamed = true if result == :assistant_streamed
@@ -456,7 +458,13 @@ module Kward
       flush_markdown_deltas(markdown_chunks) if streamed
       return answer if filter
 
-      assistant_streamed ? "" : render_markdown_transcript(answer)
+      text = assistant_streamed ? "" : render_markdown_transcript(answer)
+      stats = turn_summary_text(summary)
+      [text, stats.empty? ? nil : colored(stats, :metadata)].compact.reject(&:empty?).join("\n\n")
+    rescue StandardError
+      flush_markdown_deltas(markdown_chunks) unless filter
+      print_turn_summary(summary) unless filter
+      raise
     end
 
     def resolved_execution_mode(first_prompt:, stdin_input:)

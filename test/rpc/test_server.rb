@@ -16,6 +16,19 @@ class TestRPCServer < KwardTestCase
     assert_equal({ "transports" => [] }, messages[1]["result"])
   end
 
+  def test_initialize_reports_turn_summary_capabilities
+    messages = run_rpc([
+      { jsonrpc: "2.0", id: 1, method: "initialize" },
+      { jsonrpc: "2.0", id: 2, method: "shutdown" }
+    ])
+    capabilities = messages[0]["result"]["capabilities"]
+    stats = capabilities["transcript"]["turnSummaries"]
+    assert_equal true, stats["supported"]
+    assert_equal "compact", stats["defaultMode"]
+    assert_equal %w[off compact detailed], stats["modes"]
+    assert_equal "turnSummary", capabilities["events"]["turnSummary"]["event"]
+  end
+
   def test_initialize_reports_native_steering_when_client_supports_it
     messages = run_rpc([
       { jsonrpc: "2.0", id: 1, method: "initialize" },

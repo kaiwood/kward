@@ -1,3 +1,5 @@
+require_relative "../transcripts/turn_summary_formatter"
+
 # Namespace for the Kward CLI agent runtime.
 module Kward
   # Command-line frontend that coordinates terminal interaction, sessions, tools, and model turns.
@@ -64,7 +66,20 @@ module Kward
           else
             render_transcript_block(role.to_s.capitalize, CLITranscriptFormatter.content_text(message_content(message)))
           end
+          print_turn_summary(MessageAccess.value(message, :turn_summary))
         end
+      end
+
+      def turn_summary_text(summary)
+        return "" unless summary.is_a?(Hash)
+
+        width = [TTY::Screen.width - 1, 1].max if $stdout.tty?
+        TurnSummaryFormatter.render(summary, mode: ConfigFiles.transcript_turn_stats, width: width)
+      end
+
+      def print_turn_summary(summary)
+        text = turn_summary_text(summary)
+        write_prompt_transcript("\n#{colored(text, :metadata)}\n") unless text.empty?
       end
 
       def render_reasoning(message)

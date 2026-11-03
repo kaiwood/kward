@@ -429,6 +429,39 @@ In the normal composer prompt, choose reasoning effort with `/reasoning` or `/mo
 
 `auto` (default) detects terminal support, `ctrl` uses `Ctrl+Tab`/`Shift+Tab` to cycle suggestions and indent, `alt` uses `Alt+Tab` for terminals where `Ctrl+Tab` is swallowed.
 
+## Transcript turn statistics
+
+By default, each agent turn ends with a compact summary:
+
+```text
+Completed · 18.4s · 24.8k tokens · 4 tool calls
+```
+
+Set `transcript.turn_stats` in `config.json` to `compact` (default), `detailed`,
+or `off`:
+
+```json
+{
+  "transcript": {
+    "turn_stats": "detailed"
+  }
+}
+```
+
+Detailed mode adds the number of model requests and an input/output token
+breakdown. Narrow terminals drop secondary fields rather than wrapping the
+summary. Invalid or missing values use `compact`. There is no dedicated
+environment override; `KWARD_CONFIG_PATH` selects the configuration file as usual.
+
+This preference controls CLI/TUI, Pan, and Markdown/HTML export presentation.
+Stats are still saved and available as structured RPC data when display is off;
+RPC clients own their rendering. Pan reads the preference when its server starts.
+Filter mode keeps stdout answer-only. Editor/shell prompts and plugin-owned chats
+do not automatically display these summaries.
+
+See [turn statistics](session-management.md#Turn_statistics) for what the counts
+include and how incomplete provider usage is shown.
+
 ## Editor settings
 
 The built-in TUI file editor supports three keybinding modes. Modern is the default:

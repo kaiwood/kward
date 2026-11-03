@@ -13,5 +13,6 @@ module Kward
     ToolUpdate = Struct.new(:tool_call, :content, :elapsed_ms, keyword_init: true)
     ToolResult = Struct.new(:tool_call, :content, keyword_init: true)
     Answer = Struct.new(:content, keyword_init: true)
+    TurnSummary = Struct.new(:summary, keyword_init: true)
   end
 end

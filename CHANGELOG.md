@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added persistent turn-end elapsed time, token usage, and tool-call summaries across CLI/TUI, RPC, Pan, and transcript exports, with compact/detailed/off display modes and explicit partial or unavailable usage.
 - Added `--ignore-local-instructions` to suppress workspace `AGENTS.md` guidance and project skills for a CLI run while retaining user-level instructions and skills.
 - Added an example `--openrouter-proxy` plugin that serves authenticated, loopback-only OpenRouter Chat Completions requests through Kward's Codex account, with non-streaming and SSE translations and strict JSON-schema output support.
 - Added a local deterministic fake embeddings endpoint to the example OpenRouter proxy, with configured model IDs, bounded dimensions and batches, and no upstream embedding requests.

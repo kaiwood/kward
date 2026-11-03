@@ -67,7 +67,7 @@ module Kward
       WORKER_STOP = Object.new.freeze
 
       RpcSession = Struct.new(:id, :workspace_root, :store, :session, :conversation, :agent, :tool_registry, :execution_profile, :prompt, :plugin_output, :queue, :worker, :running_turn_id, :footer_worker, :last_footer_text, :last_footer_segments, keyword_init: true)
-      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :execution_profile, :mutex, keyword_init: true)
+      Turn = Struct.new(:id, :session_id, :input, :display_input, :status, :cancel_requested, :cancellation, :created_at, :started_at, :finished_at, :events, :next_sequence, :error, :streaming_behavior, :plugin_command_name, :plugin_arguments, :steering, :options, :tool_registry, :execution_profile, :summary, :mutex, keyword_init: true)
 
       # Creates an object for RPC session lifecycle and turn coordination.
       def initialize(
@@ -1356,7 +1356,7 @@ module Kward
         memory_input = input.is_a?(PluginTurnRequest) ? input.to_s : input
         prepare_memory_context(rpc_session.conversation, memory_input) unless memory_disabled?(turn)
         rpc_session.agent.ask(input, display_input: display_input, cancellation: turn.cancellation, steering: turn.steering, options: turn.options || {}, tool_registry: turn.tool_registry) do |event|
-          next if turn.cancel_requested
+          next if turn.cancel_requested && !event.is_a?(Events::TurnSummary)
 
           notify_plugin_transcript_event(rpc_session, event)
           handle_agent_event(turn, event)
@@ -1504,6 +1504,9 @@ module Kward
 
       def handle_agent_event(turn, event)
         case event
+        when Events::TurnSummary
+          turn.mutex.synchronize { turn.summary = event.summary }
+          emit_turn_event(turn, "turnSummary", { summary: event.summary })
         when Events::ReasoningDelta
           emit_turn_event(turn, "reasoningDelta", { delta: event.delta })
         when Events::ReasoningBoundary
@@ -1547,7 +1550,9 @@ module Kward
 
           turn.status = status
           turn.finished_at = now
-          append_turn_event_locked(turn, "turnFinished", { status: status, error: turn.error })
+          payload = { status: status, error: turn.error }
+          payload[:summary] = turn.summary if turn.summary
+          append_turn_event_locked(turn, "turnFinished", payload)
         end
         return unless event
 
@@ -1626,6 +1631,7 @@ module Kward
           createdAt: turn.created_at,
           startedAt: turn.started_at,
           finishedAt: turn.finished_at,
+          summary: turn.summary,
           error: turn.error
         }.compact
       end

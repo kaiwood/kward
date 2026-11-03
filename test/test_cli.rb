@@ -2093,6 +2093,52 @@ class TestCLI < KwardTestCase
     assert_equal ["reasoning", "thinking", "responding", "running read file", "thinking"], prompt.activities
   end
 
+  def test_turn_summary_follows_streamed_and_nonstreamed_answers
+    summary = { "status" => "completed", "elapsedMs" => 1_500, "usageStatus" => "complete", "usage" => { "total_tokens" => 12 }, "toolCalls" => 1 }
+    [true, false].each do |streamed|
+      prompt = BusyPrompt.new([])
+      events = []
+      events << Kward::Events::AssistantDelta.new(delta: "the answer") if streamed
+      events << Kward::Events::TurnSummary.new(summary: summary)
+      agent = EventAgent.new(events, answer: "the answer")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.send(:run_interactive_turn, agent, "hello")
+
+      output = prompt.output.join
+      assert_equal 1, output.scan("Completed · 1.5s · 12 tokens · 1 tool call").length
+      assert_operator output.index("the answer"), :<, output.index("Completed")
+    end
+  end
+
+  def test_turn_summary_is_hidden_when_off_and_in_editor_turns
+    summary = { "status" => "completed", "elapsedMs" => 1_500, "usageStatus" => "unavailable" }
+    [false, true].each do |suppress|
+      prompt = BusyPrompt.new([])
+      agent = EventAgent.new([Kward::Events::TurnSummary.new(summary: summary)], answer: "answer")
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+      Dir.mktmpdir do |dir|
+        config_path = File.join(dir, "config.json")
+        File.write(config_path, JSON.dump("transcript" => { "turn_stats" => suppress ? "compact" : "off" }))
+        with_env("KWARD_CONFIG_PATH" => config_path) do
+          cli.send(:run_interactive_turn, agent, "hello", suppress_transcript: suppress)
+        end
+      end
+      refute_includes prompt.output.join, "Completed"
+    end
+  end
+
+  def test_tab_summary_is_rendered_once_after_completion
+    prompt = FakePrompt.new([])
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+    summary = { "status" => "canceled", "elapsedMs" => 1_500, "usageStatus" => "unavailable" }
+    tab = Struct.new(:status, :stream_state, :answer).new("canceled", { streamed: true, turn_summary: summary }, nil)
+
+    2.times { cli.send(:render_tab_answer, tab) }
+
+    assert_equal 1, prompt.output.join.scan("Cancelled · 1.5s · tokens unavailable").length
+  end
+
   def test_prompt_interface_interactive_turn_adds_reported_tool_duration
     prompt = CombinedStreamPrompt.new([])
     call = tool_call("read_file", path: "README.md")
@@ -2939,7 +2985,9 @@ class TestCLI < KwardTestCase
       client = RecordingClient.new(["reply"])
       cli = Kward::CLI.new(argv: ["hello"], stdin: FakeInput.new("", tty: true), client: client, session_store: store)
 
-      assert_equal "reply", cli.one_shot("hello")
+      answer, stats = cli.one_shot("hello").split("\n\n")
+      assert_equal "reply", answer
+      assert_match(/\ACompleted · \d+\.\ds · tokens unavailable · 0 tool calls\z/, stats)
 
       refute Dir.exist?(store.session_dir)
     end
@@ -2953,7 +3001,9 @@ class TestCLI < KwardTestCase
     cli = Kward::CLI.new(argv: ["read README"], stdin: FakeInput.new("", tty: true), client: client)
 
     output = capture_io do
-      assert_equal "README summary", cli.one_shot("read README")
+      answer, stats = cli.one_shot("read README").split("\n\n")
+      assert_equal "README summary", answer
+      assert_match(/\ACompleted · \d+\.\ds · tokens unavailable · 1 tool call\z/, stats)
     end.first
 
     assert_equal 2, client.seen_messages.length

@@ -4,6 +4,38 @@ Kward saves each interactive chat as a session, so you can close the terminal an
 
 Rewinding and forking are a kind of **context time travel**: go back to an earlier prompt, try another path, and keep both versions instead of losing the original work.
 
+## Turn statistics
+
+Each normal agent turn ends with a quiet summary below the answer:
+
+```text
+Completed · 18.4s · 24.8k tokens · 4 tool calls
+```
+
+Failed and cancelled turns also retain a summary when the agent turn started.
+Existing inline tool timings stay where they are; token counts are not assigned
+to individual tools.
+
+- **Elapsed time** covers the agent turn, including its hooks, compaction, model
+  requests, tool execution, retries, and approval waits. It excludes time queued
+  before the agent starts and post-turn memory work.
+- **Tokens** sum provider-reported usage across the main agent requests, not
+  just the final answer. Repeated context counts again on each request. This is
+  usage, not context-window occupancy or a monetary cost estimate.
+- **Auxiliary calls** for compaction and memory are excluded from token totals.
+  Model-request counts refer to main-loop provider invocations, not individual
+  HTTP retry attempts.
+- **Unavailable usage** reads `tokens unavailable`, never a fabricated zero.
+  Missing usage from some requests, failed requests without usage, or HTTP
+  retries make reported totals `partial`. An estimated total has a `~` prefix.
+
+Choose `compact`, `detailed`, or `off` in
+[`transcript.turn_stats`](configuration.md#Transcript_turn_statistics).
+Detailed mode adds model-request counts and input/output totals. Summaries
+survive session restoration and branching, follow their transcript entries into
+exports, and are not sent back to the model. Older sessions without recorded
+summaries remain unchanged; historical timings are not guessed.
+
 ## Where sessions live
 
 Interactive sessions are saved under:

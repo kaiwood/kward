@@ -49,7 +49,7 @@ class TestAgent < KwardTestCase
     def chat(_messages, tools: [], **_kwargs)
       if tools.empty?
         @summary_calls += 1
-        return { "role" => "assistant", "content" => "## Goal\nContinue after tool compaction." }
+        return { "role" => "assistant", "content" => "## Goal\nContinue after tool compaction.", "usage" => { "total_tokens" => 1_000 } }
       end
 
       @main_calls += 1
@@ -215,6 +215,11 @@ class TestAgent < KwardTestCase
     assert_equal 8, client.main_calls
     assert_operator client.summary_calls, :>=, 1
     assert_equal "compactionSummary", conversation.messages.first[:role]
+    summary = conversation.messages.last["turn_summary"]
+    assert_equal 8, summary["modelRequests"]
+    assert_equal 7, summary["toolCalls"]
+    assert_nil summary["usage"]
+    assert_equal "unavailable", summary["usageStatus"]
   end
 
   def test_agent_does_not_retry_argument_errors_from_custom_client
