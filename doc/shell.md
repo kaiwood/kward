@@ -89,6 +89,56 @@ Leave shell mode with `exit`, `logout`, or Ctrl+D on an empty prompt.
 
 `cd` changes only the embedded shell's directory. It does not change Kward's workspace root or the directory used by the model's other tools.
 
+## Write native kwsh scripts
+
+`/shell` now interprets a small POSIX-style language in kwsh itself. It does not send your program to Bash or `/bin/sh`, and it is **not a fully POSIX-conforming shell**. The one-off `!command`, `/capture`, and ordinary model shell tools keep their existing execution paths.
+
+Define a function, then use it in later commands:
+
+```sh
+check_files() {
+  for file in "$@"; do
+    if [ -f "$file" ]; then
+      printf 'Found: %s\n' "$file"
+    else
+      printf 'Missing: %s\n' "$file" >&2
+      return 1
+    fi
+  done
+}
+
+check_files README.md Gemfile || printf '%s\n' 'Some files are missing'
+```
+
+When a block or quote is incomplete, the prompt changes to `Shell ... >` and collects more lines. No part of that submission runs until it parses successfully. Ctrl+D leaves shell mode; normal execution cancellation and tab detachment still apply once a program is running.
+
+Save a program in a file and run it **inside `/shell`**:
+
+```sh
+kwsh scripts/check.kwsh README.md Gemfile
+```
+
+The script receives `$0`, `$1`, `${10}`, `$#`, and `"$@"`. It runs in a separate native interpreter process, inheriting exported variables and the current directory without changing the caller's variables, functions, or directory. This is an embedded command, not a new standalone `kwsh` executable.
+
+### Supported first milestone
+
+- Comments, newlines, `;`, single/double quotes, and backslash escaping.
+- Assignments, `$name`, `${name}`, `$?`, `$$`, positional parameters, `set --`, and `shift`.
+- `export` and `unset`; ordinary assignments stay private to kwsh unless exported. `NAME=value command` supplies a temporary environment.
+- `&&`, `||`, `!`, concurrent pipelines, and `{ commands; }` groups. Pipeline stages have isolated state; pipeline status comes from the last stage.
+- `if` / `elif` / `else`, `for`, `while`, `until`, functions, `return`, `exit`, and innermost-loop `break` / `continue`.
+- `<`, `>`, `>>`, descriptor duplication, and descriptor closing on file descriptors 0–2. Redirections apply left to right.
+- Ordinary `*`, `?`, and bracket filename patterns, `~` / `~/...`, and default whitespace field splitting. Quote variables and use `"$@"` to preserve argument boundaries.
+- Persistent `cd`, `pwd`, aliases, and direct executable lookup through `PATH`. Utilities such as `printf`, `test` / `[`, `grep`, and `cat` come from the operating system.
+
+### Deliberate limits
+
+Command substitution (`$(...)` and backticks), arithmetic expansion, parameter operators such as `${name:-default}`, heredocs, `case`, subshell groups, background jobs, traps, `eval`, executable sourcing, custom `IFS`, recursive globbing, arrays, `[[ ... ]]`, and shell options such as `set -e` are not supported. Unsupported constructs report an error; kwsh never retries the program in another shell. Executable text without a shebang also fails instead of falling back to `/bin/sh`; use `kwsh <file>` for native scripts. Explicit commands such as `bash script.sh`, or executables with a shell shebang, still select their requested interpreter.
+
+`capture`, `pty`, `clear`, declarative `source`, and `kward edit` are prompt-level conveniences, not scripting builtins. Use functions for reusable script logic. Aliases inside scripts expand complete commands and do not implement POSIX's token-level alias grammar. The existing `kwshrc` format stays declarative: loading configuration does not start executing scripts.
+
+Native scripting and its persistent session remain local-TUI-only. RPC/Pan report it as unsupported; their ordinary bounded, sandbox-aware command tools are unchanged.
+
 ## Ask the shell agent
 
 While `/shell` is active, start a submitted line with `?` to ask the transient shell assistant:
@@ -112,7 +162,7 @@ For a suggestion or prepared command, the assistant uses `prepare_shell_command`
 
 If you explicitly ask it to open an existing workspace file, the assistant uses `open_editor` to open Kward's integrated editor. Opening the editor does not modify or save the file.
 
-The shell assistant cannot safely run commands that require terminal input. Ask it to prepare those commands instead. The local `/shell` session keeps one interactive shell process alive, so directory changes, variables, functions, aliases, and other shell state persist between commands. The one-off `!command` and `/capture` workflows remain separate. SSH remains available through the normal interactive PTY handoff, but shell-agent prompting resumes after that SSH session exits.
+The shell assistant cannot safely run commands that require terminal input. Ask it to prepare those commands instead. The local `/shell` session keeps one native kwsh interpreter process alive, so directory changes, variables, functions, aliases, and other shell state persist between commands. The one-off `!command` and `/capture` workflows remain separate. SSH remains available through the normal interactive PTY handoff, but shell-agent prompting resumes after that SSH session exits.
 
 ## Interactive and captured commands
 
@@ -274,7 +324,7 @@ These runtime settings are built into kwsh and are not configurable through rc f
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `shell` | `/bin/sh` | Absolute executable path for the persistent `/shell` process and interactive shell commands. |
+| `shell` | `/bin/sh` | Executable for the separate one-off command path; persistent `/shell` now uses the native kwsh interpreter. |
 | `timeout_seconds` | `300` | Maximum runtime for one captured or shell-agent command. |
 | `max_output_bytes` | `1048576` | Maximum output retained for one captured or shell-agent command. |
 | `history_limit` | `1000` | Maximum shell-history entries per workspace. |

@@ -2,6 +2,10 @@ require "io/console"
 require "pty"
 require "securerandom"
 require "shellwords"
+require "json"
+require "socket"
+require "rbconfig"
+require_relative "native_syntax"
 require_relative "../terminal/ansi"
 require_relative "kwsh"
 require_relative "kwshrc"
@@ -10,10 +14,9 @@ require_relative "../pty/detached_run"
 
 # Namespace for the Kward CLI agent runtime.
 module Kward
-  # Owns one interactive shell process and serializes user and agent commands.
-  #
-  # The process is kept alive between commands so shell variables, functions,
-  # aliases, directory changes, and child-shell state belong to one session.
+  # Owns one native kwsh interpreter process and serializes user and agent
+  # commands. The PTY owns terminal input/output; a private socket carries
+  # interpreter requests and authoritative shell state.
   class PersistentShellSession
     Result = Kwsh::Result
     InteractiveResult = Struct.new(:exit_status, :input_forwarded, :tab_action, :background, keyword_init: true)
@@ -29,16 +32,39 @@ module Kward
 
     READ_SIZE = 4_096
     STARTUP_TIMEOUT_SECONDS = 5
-    STTY_COMMAND = if File.executable?("/bin/stty")
-      "/bin/stty"
-    elsif File.executable?("/usr/bin/stty")
-      "/usr/bin/stty"
-    else
-      "stty"
-    end.freeze
     STATEFUL_COMMANDS = %w[alias cd export pwd unset unalias].freeze
 
     attr_reader :cwd, :last_command, :timeout_seconds
+
+    def exited?
+      @native_exited == true
+    end
+
+    def input_prompt_label
+      @pending_source ? "Shell ... >" : prompt_label
+    end
+
+    def compose_input(line)
+      return line if !@pending_source && line.start_with?("?")
+
+      source = @pending_source ? "#{@pending_source}\n#{line}" : line
+      if incomplete_input?(source)
+        @pending_source = source
+        nil
+      else
+        @pending_source = nil
+        source
+      end
+    end
+
+    def incomplete_input?(source)
+      NativeShell::Parser.parse(source.sub(/\A\s*(?:capture|pty)\s+/, ""))
+      false
+    rescue NativeShell::IncompleteInput
+      true
+    rescue NativeShell::SyntaxError
+      false
+    end
 
     def initialize(cwd: Dir.pwd, env: ENV.to_h, shell: Kwsh::DEFAULT_SHELL, configured_env: {}, aliases: {}, timeout_seconds: Kwsh::DEFAULT_TIMEOUT_SECONDS, max_output_bytes: Kwsh::DEFAULT_MAX_OUTPUT_BYTES, window_size_provider: nil)
       @cwd = File.expand_path(cwd.to_s.empty? ? Dir.pwd : cwd.to_s)
@@ -83,27 +109,33 @@ module Kward
       return Result.new(output: "", exit_status: 0) if command.empty?
 
       expanded_command = expand_alias(command)
-      words = shell_words(expanded_command)
-      sync_runtime_state(words)
-      result = if words.empty?
+      syntax_command = expanded_command.sub(/\A\s*(?:capture|pty)\s+/, "")
+      tree = NativeShell::Parser.parse(syntax_command)
+      words = routing_words(expanded_command, tree)
+      result = if tree.values.first.empty?
         Result.new(output: "", exit_status: 0)
       elsif words.first == "clear"
         Result.new(output: "", exit_status: 0, clear: true)
       elsif %w[exit logout].include?(words.first)
-        exit_result(command, words)
+        execute_command(expanded_command.sub(/\Alogout\b/, "exit"), display_command: command, cancellation: cancellation, &block)
       elsif words.first == "capture"
         capture_result(command, expanded_command, cancellation: cancellation, &block)
       elsif words.first == "pty"
         interactive_result(command, expanded_command)
       elsif %w[source .].include?(words.first)
         source_result(command, words)
-      elsif (editor_result = editor_command_result(command))
+      elsif words.any? && (editor_result = editor_command_result(command))
         editor_result
       elsif stateful_command?(words)
         execute_command(expanded_command, display_command: command, cancellation: cancellation, &block)
       else
         Result.new(output: command_echo(command), exit_status: 0, interactive_command: expanded_command)
       end
+      remember_result(command, result)
+      result
+    rescue NativeShell::SyntaxError
+      # Let the interpreter record the failure too, so the next $? is correct.
+      result = execute_command(syntax_command, display_command: command, cancellation: cancellation, &block)
       remember_result(command, result)
       result
     rescue ArgumentError => e
@@ -187,6 +219,7 @@ module Kward
         @write_mutex.synchronize do
           @reader&.close unless @reader&.closed?
           @writer&.close unless @writer&.closed?
+          @control&.close unless @control&.closed?
         end
         @process_thread&.join(0.5)
         @process_thread&.kill if @process_thread&.alive?
@@ -230,10 +263,13 @@ module Kward
 
     def start_process
       ready = Queue.new
-      process_env = @env.merge("PS1" => "", "PS2" => "")
+      @control, child_control = UNIXSocket.pair
+      @control.sync = true
+      worker = File.expand_path("native_worker.rb", __dir__)
       @process_thread = Thread.new do
         begin
-          PTY.spawn(process_env, @shell, "-i", chdir: @cwd) do |reader, writer, pid|
+          PTY.spawn(@env, RbConfig.ruby, worker, "3", 3 => child_control, chdir: @cwd, unsetenv_others: true) do |reader, writer, pid|
+            child_control.close
             @reader = reader
             @writer = writer
             @pid = pid
@@ -242,6 +278,8 @@ module Kward
           end
         rescue StandardError => e
           ready << e
+        ensure
+          child_control.close unless child_control.closed?
         end
       end
       started = ready.pop
@@ -259,12 +297,12 @@ module Kward
       update_cwd(protocol[:cwd])
     end
 
-    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false, tab_action_handler: nil, on_detach: nil)
+    def execute_protocol(command, input: nil, sink: nil, timeout_seconds: nil, max_output_bytes: @max_output_bytes, cancellation: nil, suppress_git_pager: false, tab_action_handler: nil, on_detach: nil, config: nil)
       @command_mutex.synchronize do
         ensure_open
         cancellation&.raise_if_cancelled!
         marker = next_marker
-        write_protocol_command(command, marker, suppress_git_pager: suppress_git_pager)
+        write_protocol_command(command, marker, suppress_git_pager: suppress_git_pager, config: config)
         read_until_marker(
           marker,
           input: input,
@@ -284,48 +322,19 @@ module Kward
       raise
     end
 
-    def write_protocol_command(command, marker, suppress_git_pager: false)
-      escaped_command = Shellwords.escape(command.to_s)
-      pager_setup, pager_restore = git_pager_protocol(marker, suppress: suppress_git_pager)
-      protocol = <<~SHELL
-        if true; then
-          if [ -n "${ZSH_VERSION-}" ]; then unsetopt zle 2>/dev/null; fi
-          PS1=''
-          PS2=''
-          export PS1 PS2
-          #{STTY_COMMAND} echo
-          #{pager_setup}
-          if eval #{escaped_command}; then __kward_status=$?; else __kward_status=$?; fi
-          #{pager_restore}
-          __kward_cwd=$(pwd 2>/dev/null)
-          #{STTY_COMMAND} -echo
-          printf '#{marker}:%s:%s\\n' "$__kward_status" "$__kward_cwd"
-        fi
-      SHELL
-      write_raw(protocol)
+    def write_protocol_command(command, marker, suppress_git_pager: false, config: nil)
+      @control.puts(JSON.generate(command: command, marker: marker, cwd: @cwd, aliases: @aliases, suppress_git_pager: suppress_git_pager, config: config))
     end
 
-    def git_pager_protocol(marker, suppress:)
-      return ["", ""] unless suppress
-
-      was_set = "#{marker}_GIT_PAGER_WAS_SET"
-      saved_value = "#{marker}_GIT_PAGER_VALUE"
-      setup = <<~SHELL
-        #{was_set}=${GIT_PAGER+x}
-        #{saved_value}=${GIT_PAGER-}
-        GIT_PAGER=cat
-        export GIT_PAGER
-      SHELL
-      restore = <<~SHELL
-        if [ "$#{was_set}" = x ]; then
-          GIT_PAGER="$#{saved_value}"
-          export GIT_PAGER
-        else
-          unset GIT_PAGER
-        fi
-        unset #{was_set} #{saved_value}
-      SHELL
-      [setup, restore]
+    def receive_runtime_state
+      state = JSON.parse(@control.gets || raise(IOError, "The native shell control channel closed."))
+      @env = state.fetch("env")
+      @aliases = state.fetch("aliases")
+      @native_exited = state.fetch("exited")
+      update_cwd(state.fetch("cwd"))
+      @routing_shell = build_routing_shell
+      @completion_shell = nil
+      @cwd
     end
 
     def read_until_marker(marker, input:, sink:, timeout_seconds:, max_output_bytes:, cancellation:, tab_action_handler: nil, on_detach: nil, initial_buffer: nil)
@@ -379,7 +388,8 @@ module Kward
           end
           parsed = extract_marker(buffer, marker)
           if parsed
-            before, status, cwd = parsed
+            before, status, = parsed
+            cwd = receive_runtime_state
             captured_bytes, truncated = emit_output(
               before,
               sink,
@@ -574,7 +584,7 @@ module Kward
       output << "Exit status: #{status}\n" unless status.zero?
       update_cwd(protocol[:cwd])
       block&.call(output)
-      Result.new(output: output, exit_status: status, streamed: block_given?)
+      Result.new(output: output, exit_status: status, streamed: block_given?, exit_shell: exited?)
     end
 
     def source_result(command, words)
@@ -584,19 +594,10 @@ module Kward
 
       path = Kwshrc.resolve_path(words[1], cwd: @cwd, env: @env)
       config = Kwshrc.read_file(path, env: @env)
-      exports = config[:env]
-      if exports.any?
-        assignments = exports.map { |key, value| "#{key}=#{Shellwords.escape(value)}" }
-        protocol = execute_protocol("export #{assignments.join(" ")}", timeout_seconds: STARTUP_TIMEOUT_SECONDS, max_output_bytes: nil)
-        unless protocol[:status].to_i.zero?
-          return Result.new(output: "#{command_echo(command)}kwsh: source: could not apply environment\n", exit_status: 1)
-        end
+      protocol = execute_protocol(":", config: config, timeout_seconds: STARTUP_TIMEOUT_SECONDS, max_output_bytes: nil)
+      unless protocol[:status].to_i.zero?
+        return Result.new(output: "#{command_echo(command)}kwsh: source: could not apply configuration\n", exit_status: 1)
       end
-
-      @env.merge!(exports)
-      @aliases.merge!(config[:aliases])
-      @routing_shell = build_routing_shell
-      @completion_shell = nil
       Result.new(output: command_echo(command), exit_status: 0)
     rescue Kwshrc::ParseError => e
       Result.new(output: "#{command_echo(command)}kwsh: source: #{e.message}\n", exit_status: 1)
@@ -626,73 +627,25 @@ module Kward
       Result.new(output: command_echo(command), exit_status: 0, interactive_command: interactive_command)
     end
 
-    def exit_result(command, words)
-      if words.length > 2 || (words[1] && !words[1].match?(/\A\d+\z/))
-        return Result.new(output: "#{command_echo(command)}kwsh: #{words.first}: numeric status expected\n", exit_status: 2)
-      end
+    # Host-only conveniences apply only to a single simple command. Compound
+    # programs always belong to the interpreter, even when they start with cd.
+    def routing_words(command, tree)
+      return ["capture"] if command.match?(/\A\s*capture(?:\s|\z)/)
+      return ["pty"] if command.match?(/\A\s*pty(?:\s|\z)/)
+      commands = tree.values.first
+      return [] unless commands.length == 1 && commands.first.kind == :pipeline
+      stages, negate = commands.first.values
+      return [] if negate || stages.length != 1 || stages.first.kind != :simple
+      _, redirects = stages.first.values
+      return [] unless redirects.empty?
 
-      Result.new(output: command_echo(command), exit_status: words[1].to_i, exit_shell: true)
-    end
-
-    def sync_runtime_state(words)
-      changed = sync_runtime_aliases(words) || sync_runtime_environment(words)
-      return unless changed
-
-      @routing_shell = build_routing_shell
-      @completion_shell = nil
-    end
-
-    def sync_runtime_aliases(words)
-      case words.first
-      when "alias"
-        before = @aliases.dup
-        words.drop(1).each do |assignment|
-          name, value = assignment.split("=", 2)
-          @aliases[name] = value.to_s if value && Kwsh.valid_alias_name?(name)
-        end
-        before != @aliases
-      when "unalias"
-        before = @aliases.dup
-        if words == ["unalias", "-a"]
-          @aliases.clear
-        else
-          words.drop(1).reject { |name| name.start_with?("-") }.each { |name| @aliases.delete(name) }
-        end
-        before != @aliases
-      else
-        false
-      end
-    end
-
-    def sync_runtime_environment(words)
-      before = @env.dup
-      case words.first
-      when "export"
-        words.drop(1).reject { |assignment| assignment.start_with?("-") }.each do |assignment|
-          key, value = assignment.split("=", 2)
-          @env[key] = value.to_s if value && valid_environment_key?(key)
-        end
-      when "unset"
-        words.drop(1).reject { |key| key == "--" || key.start_with?("-") }.each do |key|
-          @env.delete(key) if valid_environment_key?(key)
-        end
-      else
-        if words.all? { |word| word.match?(/\A[A-Za-z_][A-Za-z0-9_]*=.*/) }
-          words.each do |assignment|
-            key, value = assignment.split("=", 2)
-            @env[key] = value.to_s if valid_environment_key?(key)
-          end
-        end
-      end
-      before != @env
-    end
-
-    def valid_environment_key?(key)
-      key.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
+      shell_words(command)
+    rescue ArgumentError
+      []
     end
 
     def stateful_command?(words)
-      STATEFUL_COMMANDS.include?(words.first) || words.all? { |word| word.match?(/\A[A-Za-z_][A-Za-z0-9_]*=.*/) }
+      STATEFUL_COMMANDS.include?(words.first) || words.any? && words.all? { |word| word.match?(/\A[A-Za-z_][A-Za-z0-9_]*=.*/) }
     end
 
     def shell_words(command)

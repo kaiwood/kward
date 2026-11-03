@@ -98,7 +98,7 @@ class TestPersistentShellSession < KwardTestCase
 
       worker = Thread.new do
         result = shell.run_interactive(
-          "saved_stty=$(stty -g); stty raw -echo; printf ready; dd bs=1 count=1 2>/dev/null; stty \"$saved_stty\"",
+          "#{Shellwords.escape(RbConfig.ruby)} -rio/console -e 'STDIN.raw { STDOUT.write(\"ready\"); STDOUT.flush; STDOUT.write(STDIN.read(1)) }'",
           input: input_reader,
           sink: sink
         )
@@ -130,7 +130,7 @@ class TestPersistentShellSession < KwardTestCase
       shell = build_shell(dir, env: { "PATH" => ENV.fetch("PATH", "") })
       sink = Sink.new
 
-      result = shell.run_interactive("printf '%s' \"${GIT_PAGER-unset}\"", input: nil, sink: sink)
+      result = shell.run_interactive("#{Shellwords.escape(RbConfig.ruby)} -e 'print ENV.fetch(\"GIT_PAGER\", \"unset\")'", input: nil, sink: sink)
 
       assert_equal 0, result.exit_status
       assert_equal "unset", sink.output
@@ -183,6 +183,7 @@ class TestPersistentShellSession < KwardTestCase
       File.write(File.join(dir, "aliases.kwshrc"), <<~KWSHRC)
         export KWARD_PERSISTENT_SOURCE=ready
         alias sourced='printf sourced'
+        printf unexpected >should-not-exist
       KWSHRC
       shell = build_shell(dir)
 
@@ -194,6 +195,123 @@ class TestPersistentShellSession < KwardTestCase
       assert_equal 0, alias_result.exit_status
       assert_includes alias_result.output, "sourced"
       assert_includes environment_result.output, "ready"
+      refute File.exist?(File.join(dir, "should-not-exist"))
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_source_reports_native_configuration_errors
+    Dir.mktmpdir("native-shell") do |dir|
+      File.write(File.join(dir, "invalid.kwshrc"), "export IFS=:\n")
+      shell = build_shell(dir)
+      result = shell.run("source invalid.kwshrc")
+      refute_equal 0, result.exit_status
+      assert_includes result.output, "could not apply configuration"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_native_programs_share_functions_and_authoritative_exported_state
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = Kward::PersistentShellSession.new(cwd: dir, shell: "/must-not-be-launched")
+      definition = shell.run_for_agent('prepare() { local_value="one two"; export RESULT="$local_value"; }; prepare')
+      result = shell.run_for_agent('for word in "$RESULT"; do printf "<%s>" "$word"; done')
+
+      assert_equal 0, definition.exit_status
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "<one two>"
+      assert_equal "one two", shell.child_env["RESULT"]
+      refute shell.child_env.key?("local_value")
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_unsupported_syntax_fails_before_running_any_command
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent('printf touched >sentinel; printf "$(pwd)"')
+
+      assert_equal 2, result.exit_status
+      assert_includes result.output, "not supported"
+      refute File.exist?(File.join(dir, "sentinel"))
+      follow_up = shell.run_for_agent('printf "status=%s" "$?"')
+      assert_includes follow_up.output, "status=2"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_multiline_composition_waits_for_a_complete_program
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir)
+      assert_nil shell.compose_input("if true; then")
+      assert_equal "Shell ... >", shell.input_prompt_label
+      assert_nil shell.compose_input("printf complete")
+      source = shell.compose_input("fi")
+      assert_equal "if true; then\nprintf complete\nfi", source
+      assert_equal shell.prompt_label, shell.input_prompt_label
+      assert_equal 0, shell.run_for_agent(source).exit_status
+      assert_equal "? explain this", shell.compose_input("? explain this")
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_cli_collects_multiline_programs_and_preserves_them_across_tab_actions
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir)
+      tab_action = { tab_action: :next }
+      answers = ["if true; then", tab_action, "printf complete", "fi"]
+      labels = []
+      prompt = Object.new
+      prompt.define_singleton_method(:ask) { |label| labels << label; answers.shift }
+      cli = Kward::CLI.allocate
+      cli.instance_variable_set(:@prompt, prompt)
+
+      assert_equal tab_action, cli.send(:ask_kwsh, shell)
+      assert_equal "if true; then\nprintf complete\nfi", cli.send(:ask_kwsh, shell)
+      assert_equal [shell.prompt_label, "Shell ... >", "Shell ... >", "Shell ... >"], labels
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_private_control_state_does_not_enter_terminal_output
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir, configured_env: { "KWARD_NATIVE_TEST_SECRET" => "private-control-value" })
+      result = shell.run_for_agent(":")
+      refute_includes result.output, "private-control-value"
+      assert_equal "private-control-value", shell.child_env["KWARD_NATIVE_TEST_SECRET"]
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_timeout_interrupts_native_loops_without_losing_variables
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir, timeout_seconds: 1)
+      result = shell.run_for_agent('KEPT=yes; while true; do :; done')
+      follow_up = shell.run_for_agent('printf "%s" "$KEPT"')
+
+      assert_equal 1, result.exit_status
+      assert_includes result.output, "timed out"
+      assert_equal 0, follow_up.exit_status
+      assert_includes follow_up.output, "yes"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_exit_inside_a_compound_program_is_reported_to_the_host
+    Dir.mktmpdir("native-shell") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent('if true; then exit 7; fi')
+      assert_equal 7, result.exit_status
+      assert result.exit_shell
+      assert shell.exited?
     ensure
       shell&.close
     end

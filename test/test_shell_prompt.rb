@@ -14,6 +14,14 @@ class TestShellPrompt < KwardTestCase
     end
   end
 
+  def test_shell_prompt_describes_the_native_subset_without_implicit_fallback
+    instructions = Kward::ShellPrompt.system_message.fetch(:content)
+    assert_includes instructions, "native kwsh, not Bash or /bin/sh"
+    assert_includes instructions, "kwsh <file> [arguments]"
+    assert_includes instructions, "unless the user explicitly requests that"
+    assert_includes instructions, "not executable scripts"
+  end
+
   def test_shell_context_tracks_the_last_command_and_bounded_output
     shell = Kward::Kwsh.new(cwd: Dir.pwd, shell: "/bin/sh")
 

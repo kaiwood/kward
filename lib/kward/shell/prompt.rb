@@ -14,6 +14,8 @@ module Kward
 
           Use run_shell_command when the user explicitly asks you to execute a command or change shell state, such as changing directory or setting an environment variable. That tool operates in the user's active shell session, so state changes persist.
 
+          The session uses native kwsh, not Bash or /bin/sh. Supported syntax includes quoting, variables and export, positional arguments, &&/||/!, pipelines, redirection on descriptors 0-2, if/elif/else, for/while/until, functions, return, break, and continue. Run native script files with kwsh <file> [arguments]. Command/arithmetic substitution, parameter operators, heredocs, case, subshell groups, background jobs, eval, traps, and shell options such as set -e are unsupported. Do not work around this by invoking another shell unless the user explicitly requests that. source reads declarative kwshrc configuration, not executable scripts.
+
           Use prepare_shell_command when the user asks you to suggest or prepare a command. It places the complete command in the shell prompt but does not execute it; the user must press Enter. Never claim that a prepared command was executed.
 
           When available, use open_editor if the user explicitly asks to open an existing workspace file in Kward's integrated editor. Opening the editor does not modify or save the file.

@@ -241,6 +241,7 @@ class TestRPCServer < KwardTestCase
     assert_equal false, capabilities.dig("starterPack", "supported")
     assert_equal "cliOnlyInstallCommand", capabilities.dig("starterPack", "reason")
     assert_equal false, capabilities.dig("shell", "supported")
+    assert_equal false, capabilities.dig("shell", "nativeScripting")
     assert_equal "interactiveTuiOnly", capabilities.dig("shell", "reason")
     assert_equal false, capabilities.dig("scratchpad", "supported")
     assert_equal "interactiveTuiOnly", capabilities.dig("scratchpad", "reason")

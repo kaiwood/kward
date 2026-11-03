@@ -28,6 +28,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "base64"
+  spec.add_dependency "fiddle"
   spec.add_dependency "nokogiri"
   spec.add_dependency "tiktoken_ruby"
   spec.add_dependency "tty-cursor"

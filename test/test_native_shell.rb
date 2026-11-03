@@ -1,0 +1,246 @@
+require_relative "test_helper"
+require "tempfile"
+require_relative "../lib/kward/shell/native_runtime"
+
+class TestNativeShell < KwardTestCase
+  def setup
+    super
+    @directory = Dir.mktmpdir("native-kwsh")
+    @runtime = Kward::NativeShell::Runtime.new(cwd: @directory, env: { "PATH" => ENV.fetch("PATH"), "HOME" => @directory })
+  end
+
+  def teardown
+    FileUtils.remove_entry(@directory)
+    super
+  end
+
+  def execute(source, runtime: @runtime)
+    Tempfile.create("native-output") do |output|
+      Tempfile.create("native-error") do |error|
+        File.open(File::NULL) do |input|
+          status = runtime.run(source, input: input, output: output, error: error)
+          output.rewind
+          error.rewind
+          return [status, output.read, error.read]
+        end
+      end
+    end
+  end
+
+  def assert_output(expected, source, status: 0)
+    actual_status, output, error = execute(source)
+    assert_equal status, actual_status, error
+    assert_equal "", error
+    assert_equal expected, output
+  end
+
+  def test_quoting_empty_arguments_and_expansion_boundaries
+    assert_output("<one two>\n<one>\n<two>\n<>\n<$value>\n<one two!>\n", <<~'SHELL')
+      value='one two'
+      printf '<%s>\n' "$value" $value "" '$value' "$value"\!
+    SHELL
+  end
+
+  def test_globs_preserve_quoted_wildcards_and_unmatched_patterns
+    File.write(File.join(@directory, "b.rb"), "")
+    File.write(File.join(@directory, "a.rb"), "")
+    assert_output("a.rb\nb.rb\n*.rb\nmissing*\n", "printf '%s\\n' *.rb '*.rb' missing*")
+  end
+
+  def test_variable_export_and_temporary_environment_are_distinct
+    ruby = Shellwords.escape(RbConfig.ruby)
+    assert_output("absent\nlocal\ntemporary\nlocal\n", <<~SHELL)
+      VALUE=local
+      #{ruby} -e 'puts ENV.fetch("VALUE", "absent")'
+      export VALUE
+      #{ruby} -e 'puts ENV.fetch("VALUE", "absent")'
+      VALUE=temporary #{ruby} -e 'puts ENV.fetch("VALUE", "absent")'
+      printf '%s\\n' "$VALUE"
+    SHELL
+    assert_equal "local", @runtime.environment["VALUE"]
+  end
+
+  def test_export_assignment_does_not_split_or_glob
+    assert_output("one two *", "value='one two *'; export RESULT=$value; printf '%s' \"$RESULT\"")
+    assert_equal "one two *", @runtime.environment["RESULT"]
+  end
+
+  def test_sequences_boolean_lists_negation_and_status
+    assert_output("fallback:1:0", 'false && printf no; false || printf fallback; ! true; printf ":%s" "$?"; ! false; printf ":%s" "$?"')
+  end
+
+  def test_if_elif_else_and_nested_control_flow
+    assert_output("right", <<~SHELL)
+      if false; then
+        printf wrong
+      elif true; then
+        if false; then printf wrong; else printf right; fi
+      else
+        printf wrong
+      fi
+    SHELL
+  end
+
+  def test_loops_break_continue_and_until
+    assert_output("ab:done", <<~SHELL)
+      for item in a skip b stop c; do
+        if [ "$item" = skip ]; then continue; fi
+        if [ "$item" = stop ]; then break; fi
+        printf '%s' "$item"
+      done
+      value=start
+      while [ "$value" = start ]; do value=next; done
+      until [ "$value" = done ]; do value=done; done
+      printf ':%s' "$value"
+    SHELL
+  end
+
+  def test_functions_persist_and_restore_positional_arguments
+    assert_output("", 'report() { printf "<%s>" "$@"; return 7; }')
+    assert_output("<one two><>7:outer", 'set -- outer; report "one two" ""; printf "%s:%s" "$?" "$1"')
+  end
+
+  def test_empty_quoted_at_does_not_create_an_argument
+    assert_output("0:2:a b", 'count() { printf "%s" "$#"; }; count "$@"; set -- "a b" ""; printf ":"; count "$@"; printf ":%s" "$1"')
+  end
+
+  def test_default_for_arguments_shift_and_multi_digit_parameters
+    assert_output("ab:1:b:ten", 'set -- a b; for item; do printf "%s" "$item"; done; shift; printf ":%s:%s" "$#" "$1"; set -- 1 2 3 4 5 6 7 8 9 ten; printf ":%s" "${10}"')
+  end
+
+  def test_pipeline_runs_concurrently_and_isolates_builtin_state
+    assert_output("AB:original", "value=original; printf ab | tr a-z A-Z; printf x | value=child; printf ':%s' \"$value\"")
+    status, output, error = execute("yes x | head -n 20000 | wc -l")
+    assert_equal 0, status, error
+    assert_equal 20000, output.to_i
+  end
+
+  def test_ordered_redirection_input_append_and_descriptor_duplication
+    ruby = Shellwords.escape(RbConfig.ruby)
+    command = "#{ruby} -e 'STDOUT.write(\"out\"); STDERR.write(\"err\")'"
+    assert_output("", "#{command} >combined 2>&1")
+    assert_equal "outerr".chars.sort, File.read(File.join(@directory, "combined")).chars.sort
+    assert_output("err", "#{command} 2>&1 >onlyout")
+    assert_equal "out", File.read(File.join(@directory, "onlyout"))
+    assert_output("outmore", "printf more >>onlyout; cat <onlyout")
+  end
+
+  def test_group_redirection_and_function_redirection
+    assert_output("ab", "{ printf a; printf b; } >result; cat result")
+    assert_output("function", "f() { printf function; }; f >result; cat result")
+  end
+
+  def test_native_script_arguments_exit_and_state_isolation
+    File.write(File.join(@directory, "script.kwsh"), <<~'SHELL')
+      VALUE=child
+      printf '%s:%s:%s' "$0" "$#" "$1"
+      exit 7
+      printf unreachable
+    SHELL
+    assert_output("script.kwsh:1:a b:7:parent", 'VALUE=parent; kwsh script.kwsh "a b"; printf ":%s:%s" "$?" "$VALUE"')
+    refute @runtime.exited
+  end
+
+  def test_exit_stops_the_current_program
+    assert_output("before", "printf before; exit 9; printf after", status: 9)
+    assert @runtime.exited
+  end
+
+  def test_aliases_are_available_inside_compound_programs
+    assert_output("ab", "alias say='printf %s'; for value in a b; do say \"$value\"; done")
+  end
+
+  def test_parse_errors_reject_the_whole_program_before_side_effects
+    ["echo $(pwd)", "echo `pwd`", "echo $((1+2))", "cat <<EOF\ntext\nEOF", "echo x &", "(echo x)", "case x in x) echo x;; esac", "[[ -f x ]]", "echo ${x:-default}", "echo $'x'"].each do |unsupported|
+      status, _, error = execute("printf touched >sentinel; #{unsupported}")
+      assert_equal 2, status, unsupported
+      refute File.exist?(File.join(@directory, "sentinel")), unsupported
+      refute_empty error
+    end
+  end
+
+  def test_incomplete_input_is_distinct_from_invalid_syntax
+    ["if true; then", "for x in a; do", "f() {", "printf 'hello", "printf x |"].each do |source|
+      assert_raises(Kward::NativeShell::IncompleteInput, source) { Kward::NativeShell::Parser.parse(source) }
+    end
+    assert_raises(Kward::NativeShell::SyntaxError) { Kward::NativeShell::Parser.parse("echo x &") }
+  end
+
+  def test_unsupported_builtins_and_nondefault_ifs_are_explicit_errors
+    ["eval 'printf no'", "set -e", "IFS=:", "read value", "break", "return"].each do |source|
+      status, output, error = execute(source)
+      assert_equal 2, status, source
+      assert_empty output
+      refute_empty error
+    end
+  end
+
+  def test_executable_text_does_not_fall_back_to_sh
+    path = File.join(@directory, "not-a-binary")
+    File.write(path, "printf touched >sentinel\n")
+    File.chmod(0o700, path)
+    status, _, error = execute("./not-a-binary")
+    assert_equal 126, status
+    assert_includes error, "use kwsh"
+    refute File.exist?(File.join(@directory, "sentinel"))
+  end
+
+  def test_long_boolean_lists_do_not_require_recursive_evaluation
+    assert_output("", Array.new(2_000, "true").join(" && "))
+  end
+
+  def test_builtin_errors_follow_stderr_redirection
+    status, output, error = execute("cd missing 2>errors")
+    assert_equal 2, status
+    assert_empty output
+    assert_empty error
+    assert_includes File.read(File.join(@directory, "errors")), "no such directory"
+
+    status, _, error = execute("pwd >&-")
+    assert_equal 2, status
+    assert_includes error, "standard output is closed"
+  end
+
+  def test_expanded_values_are_not_reparsed_as_source
+    assert_output("; printf injected >sentinel", %q{value='; printf injected >sentinel'; printf '%s' "$value"})
+    refute File.exist?(File.join(@directory, "sentinel"))
+  end
+
+  def test_binary_looking_invalid_executables_cannot_trigger_shell_fallback
+    path = File.join(@directory, "invalid-binary")
+    File.binwrite(path, "\x7fELF\nprintf touched >sentinel\n")
+    File.chmod(0o700, path)
+    status, _, _ = execute("./invalid-binary")
+    assert_equal 126, status
+    refute File.exist?(File.join(@directory, "sentinel"))
+  end
+
+  def test_native_scripts_have_their_own_process_and_no_private_parent_variables
+    File.write(File.join(@directory, "child.kwsh"), 'printf "%s:%s" "$$" "$PRIVATE"')
+    @runtime.run("PRIVATE=parent")
+    status, output, error = execute("kwsh child.kwsh")
+    assert_equal 0, status, error
+    refute_equal Process.pid.to_s, output.split(":").first
+    assert output.end_with?(":"), output
+  end
+
+  def test_nonexecutable_path_entries_return_126
+    File.write(File.join(@directory, "not-executable"), "unused")
+    status, _, error = execute("PATH=.:$PATH not-executable")
+    assert_equal 126, status
+    refute_empty error
+  end
+
+  def test_excessive_conditional_nesting_is_an_error_not_a_stack_overflow
+    source = "if false; then :; " + "elif false; then :; " * 101 + "fi"
+    status, _, error = execute(source)
+    assert_equal 2, status
+    assert_includes error, "nesting exceeds"
+  end
+
+  def test_unknown_command_and_missing_executable_status
+    status, _, error = execute("kwsh-nonexistent-command")
+    assert_equal 127, status
+    assert_includes error, "command not found"
+  end
+end

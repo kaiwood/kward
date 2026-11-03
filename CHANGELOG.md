@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added native kwsh scripting inside `/shell`: multiline programs, quoted variables and arguments, conditionals, loops, functions, pipelines, ordered redirection, and isolated `kwsh <file> [args]` execution, without delegating the language to another shell.
 - Added RPC model-picker eligibility and safe provider refresh outcomes, with consistent catalog refresh/fallback behavior and explicit cross-process reload guidance.
 - Added cached-input counts and cache-hit rate, cache-write counts, and reasoning-token counts to detailed turn statistics, preserving unavailable versus reported-zero fields and marking partial breakdowns.
 - Added persistent turn-end elapsed time, token usage, and tool-call summaries across CLI/TUI, RPC, Pan, and transcript exports, with compact/detailed/off display modes and explicit partial or unavailable usage.
@@ -19,6 +20,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Replaced the persistent `/shell` system-shell evaluator with kwsh's deliberately limited POSIX-style interpreter. Unsupported syntax now errors explicitly rather than inheriting the host shell's language; declarative rc loading and the separate one-off/model/RPC command paths retain their existing behavior.
 - Routed plugin-host Codex streaming and the OpenRouter proxy through Kward's normal Codex provider client and configured subscription credentials, rather than the public Responses API path.
 
 ### Fixed

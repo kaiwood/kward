@@ -590,9 +590,9 @@ module Kward
             pty_result = run_kwsh_interactive_pty_command(shell, result)
             return :tab_action if pty_result&.tab_action
 
-            next
+            next unless shell.respond_to?(:exited?) && shell.exited?
           end
-          if result.exit_shell
+          if result.exit_shell || shell.respond_to?(:exited?) && shell.exited?
             close_kwsh_session(shell)
             tab.shell = nil if tab
             tab.shell_agent = nil if tab
@@ -638,10 +638,17 @@ module Kward
 
       def ask_kwsh(shell)
         provider = ->(input, cursor) { shell.complete(input, cursor) }
-        if @prompt.respond_to?(:with_completion_provider)
-          @prompt.with_completion_provider(provider, slash_overlay: false) { @prompt.ask(shell.prompt_label) }
-        else
-          @prompt.ask(shell.prompt_label)
+        loop do
+          label = shell.respond_to?(:input_prompt_label) ? shell.input_prompt_label : shell.prompt_label
+          input = if @prompt.respond_to?(:with_completion_provider)
+            @prompt.with_completion_provider(provider, slash_overlay: false) { @prompt.ask(label) }
+          else
+            @prompt.ask(label)
+          end
+          return input unless input.is_a?(String) && shell.respond_to?(:compose_input)
+
+          source = shell.compose_input(input)
+          return source if source
         end
       end
 

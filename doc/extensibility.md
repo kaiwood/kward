@@ -68,6 +68,8 @@ Use `AGENTS.md` for project facts and engineering rules. Do not put personality 
 
 By default, Kward adds a compact instruction telling the model that `AGENTS.md` exists and should be read when relevant. Set `enforce_workspace_agents_file: true` only if you want the full file injected every time. See [Configuration](configuration.md) for details.
 
+The transient `?` assistant inside `/shell` has its own scoped instructions and uses the [native kwsh scripting subset](shell.md). It knows which syntax is unsupported and must not silently invoke Bash or another shell to work around those limits. This does not change the normal agent's shell tools or skill activation.
+
 ## Prompt templates
 
 Use prompt templates when you repeatedly type the same kind of request. Each Markdown file in `~/.kward/prompts/` becomes a slash command; its filename is the command name and `$ARGUMENTS` expands the text after the command.
