@@ -23,6 +23,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Kept terminal transcript image attachments badge-only to prevent misplaced graphics during scrolling and redraws, while preserving `/files` image previews and model image input.
 - Displayed Codex commentary as assistant speech instead of reasoning in live CLI/TUI, RPC, and Pan output and restored CLI/RPC transcripts, without folding it into the final answer.
 - Avoided double-counting cached input when deriving token totals, and normalized separately reported Anthropic cache tokens into inclusive input counts for cache-hit rates.
 - Fixed OpenRouter proxy Chat Completions failing while adapting Kward's symbol-keyed model messages.

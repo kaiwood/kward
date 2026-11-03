@@ -4416,7 +4416,7 @@ edit this prompt"
     refute_includes markdown, "Plan this:"
   end
 
-  def test_transcript_replay_renders_structured_user_image_parts
+  def test_transcript_replay_renders_structured_user_images_as_badges_only
     original_term_program = ENV["TERM_PROGRAM"]
     original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
     ENV.delete("TERM_PROGRAM")
@@ -4444,7 +4444,8 @@ edit this prompt"
     assert_includes stripped, "You> look"
     refute_includes stripped, "You> look\ndata:image/png;base64"
     assert_includes output, "[image] pasted image · image/png · 9 B"
-    assert_includes output, "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{data}\e\\"
+    refute_includes output, "\e_G"
+    refute_includes output, "\e]1337;File="
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
@@ -4536,7 +4537,7 @@ edit this prompt"
     assert_equal Kward::Conversation.new.messages, conversation.messages
   end
 
-  def test_interactive_turn_displays_pasted_image
+  def test_user_transcript_displays_pasted_image_badge_without_graphics
     path = "kward_user_transcript.png"
     original_term_program = ENV["TERM_PROGRAM"]
     original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
@@ -4550,7 +4551,8 @@ edit this prompt"
 
     assert_includes strip_ansi(prompt.output.join("\n")), "You> look #{path}"
     assert_includes prompt.output.join("\n"), "[image] #{path} · image/png · 9 B"
-    assert_includes prompt.output.join("\n"), "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{Base64.strict_encode64("png bytes")}\e\\"
+    refute_includes prompt.output.join("\n"), "\e_G"
+    refute_includes prompt.output.join("\n"), "\e]1337;File="
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
@@ -4574,14 +4576,15 @@ edit this prompt"
     assert_includes stripped, "You> look"
     refute_includes stripped, "You> look\n#{path}"
     assert_includes output, "[image] #{path} · image/png · 9 B"
-    assert_includes output, "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{Base64.strict_encode64("png bytes")}\e\\"
+    refute_includes output, "\e_G"
+    refute_includes output, "\e]1337;File="
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
     File.delete(path) if path && File.exist?(path)
   end
 
-  def test_user_transcript_hides_data_url_text_and_renders_image_escape
+  def test_user_transcript_hides_data_url_text_and_renders_badge_only
     original_term_program = ENV["TERM_PROGRAM"]
     original_kitty_window_id = ENV["KITTY_WINDOW_ID"]
     ENV.delete("TERM_PROGRAM")
@@ -4597,10 +4600,26 @@ edit this prompt"
     assert_includes stripped, "You> look"
     refute_includes stripped, "You> look\ndata:image/png;base64"
     assert_includes output, "[image] pasted image · image/png · 9 B"
-    assert_includes output, "\e_Ga=T,f=100,t=d,c=40,q=2,m=0;#{data}\e\\"
+    refute_includes output, "\e_G"
+    refute_includes output, "\e]1337;File="
   ensure
     original_term_program ? ENV["TERM_PROGRAM"] = original_term_program : ENV.delete("TERM_PROGRAM")
     original_kitty_window_id ? ENV["KITTY_WINDOW_ID"] = original_kitty_window_id : ENV.delete("KITTY_WINDOW_ID")
+  end
+
+  def test_user_transcript_uses_badges_only_in_iterm
+    with_env("TERM_PROGRAM" => "iTerm.app", "KITTY_WINDOW_ID" => nil) do
+      data = Base64.strict_encode64("png bytes")
+      prompt = FakePrompt.new([])
+      cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: FakeClient.new([]))
+
+      cli.send(:print_user_transcript, "look\ndata:image/png;base64,#{data}", display_input: "look")
+
+      output = prompt.output.join("\n")
+      assert_includes output, "[image] pasted image · image/png · 9 B"
+      refute_includes output, "\e_G"
+      refute_includes output, "\e]1337;File="
+    end
   end
 
   def test_user_transcript_skips_image_escape_without_supported_terminal

@@ -50,8 +50,7 @@ module Kward
             print_user_transcript(
               CLITranscriptFormatter.user_transcript_input(message),
               display_input: CLITranscriptFormatter.user_display_text(message),
-              attachment_references: CLITranscriptFormatter.image_references(message),
-              image_parts: CLITranscriptFormatter.image_parts(message)
+              attachment_references: CLITranscriptFormatter.image_references(message)
             )
           when "assistant"
             render_reasoning(message)
@@ -236,14 +235,15 @@ module Kward
       end
 
       # Writes the user transcript output for the terminal CLI flow.
-      def print_user_transcript(input, display_input: nil, attachment_references: nil, image_parts: nil)
+      def print_user_transcript(input, display_input: nil, attachment_references: nil)
         visible_input = display_input.nil? ? input : display_input
         write_prompt_transcript("\n#{colored("❯ You>", :blue, :bold)} #{visible_input}\n")
         # System-turn instructions are plain text, never image attachments.
         return if input.is_a?(PluginTurnRequest)
 
+        # Terminal graphics are not tracked by the text-only scroll/redraw buffer.
+        # Keep transcript attachments as badges; /files owns image previews.
         print_attachment_badges(input, references: attachment_references)
-        print_pasted_images(input, image_parts: image_parts)
       end
 
       # Writes the attachment badges output for the terminal CLI flow.
@@ -302,27 +302,6 @@ module Kward
         end
         formatted = size >= 10 ? size.round.to_s : format("%.1f", size).sub(/\.0\z/, "")
         "#{formatted} #{unit}"
-      end
-
-      # Writes the pasted images output for the terminal CLI flow.
-      def print_pasted_images(input, image_parts: nil)
-        parts = image_parts || Kward::ImageAttachments.image_parts_from_text(input)
-        protocol = @prompt.inline_image_protocol if @prompt.respond_to?(:inline_image_protocol)
-        parts.each do |part|
-          next if @prompt.respond_to?(:inline_image_protocol) && protocol.nil?
-
-          part = Kward::ImageAttachments.terminal_image_part(part, protocol) if protocol
-          next if protocol && part.nil?
-
-          sequence = Kward::ImageAttachments.terminal_image_sequence(part, protocol: protocol)
-          next unless sequence
-
-          if @prompt.respond_to?(:say_visual)
-            @prompt.say_visual(sequence)
-          else
-            @prompt.say(sequence)
-          end
-        end
       end
 
       # Writes the block delta output for the terminal CLI flow.
