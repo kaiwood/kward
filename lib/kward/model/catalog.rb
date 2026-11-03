@@ -80,8 +80,10 @@ module Kward
 
     def normalize(body)
       payload = JSON.parse(body.to_s)
-      entries = payload["data"] || payload["models"] || []
-      Array(entries).filter_map { |entry| normalize_entry(entry) }.sort_by { |entry| entry["id"] }
+      entries = payload.is_a?(Hash) && (payload["data"] || payload["models"])
+      raise "Invalid model catalog" unless entries.is_a?(Array)
+
+      entries.filter_map { |entry| normalize_entry(entry) }.sort_by { |entry| entry["id"] }
     rescue JSON::ParserError
       raise "#{@provider.name} model refresh returned invalid JSON"
     end
@@ -89,7 +91,8 @@ module Kward
     def normalize_entry(entry)
       return unless entry.is_a?(Hash)
 
-      id = (entry["id"] || entry["name"]).to_s.delete_prefix("models/")
+      id = (entry["id"] || entry["name"]).to_s
+      id = id.delete_prefix("models/") if @provider.id == "gemini"
       return if id.empty?
 
       {

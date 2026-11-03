@@ -33,6 +33,9 @@ module Kward
         model = model.to_s.strip
         raise "Model must be a non-empty string" if model.empty?
 
+        # RPC catalog IDs identify direct OpenAI; legacy config "openai"
+        # continues to mean Codex when read by ModelInfo.
+        provider = "OpenAI" if provider.to_s == "openai"
         update(ModelInfo.config_values_for_selection(provider, model))
       end
 

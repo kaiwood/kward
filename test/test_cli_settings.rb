@@ -186,8 +186,26 @@ class TestCLISettings < KwardTestCase
 
     cli.send(:configure_model, conversation)
 
-    assert_includes prompt.select_choices.first, "DeepSeek cached-model"
+    assert_includes prompt.select_choices.first, "DeepSeek cached-model (current)"
     assert_includes prompt.select_choices.first, "DeepSeek deepseek-chat"
+  end
+
+  def test_model_picker_uses_conversation_eligibility_instead_of_process_default
+    prompt = FakeSettingsPrompt.new([], [nil])
+    client = FakeClient.new([])
+    client.define_singleton_method(:available_models) do
+      [
+        { provider: "Local", id: "process", current: true, supportedParameters: ["embedContent"] },
+        { provider: "Local", id: "session", current: false, supportedParameters: ["embedContent"] }
+      ]
+    end
+    cli = Kward::CLI.new(argv: [], stdin: FakeInput.new("", tty: true), prompt: prompt, client: client)
+    conversation = Kward::Conversation.new(system_message: nil, provider: "Local", model: "session")
+
+    cli.send(:configure_model, conversation)
+
+    assert_includes prompt.select_choices.first, "Local session (current)"
+    refute prompt.select_choices.first.any? { |choice| choice.start_with?("Local process") }
   end
 
   def test_model_picker_accepts_a_manual_id_for_the_chosen_provider
@@ -228,7 +246,7 @@ class TestCLISettings < KwardTestCase
         cli.send(:configure_model, conversation)
       end
 
-      assert_includes prompt.select_choices.first, "Google Gemini tool-model"
+      assert_includes prompt.select_choices.first, "Google Gemini tool-model (current)"
       assert_includes prompt.select_choices.first, "Google Gemini unknown-metadata-model"
       refute_includes prompt.select_choices.first, "Google Gemini embedding-model"
       assert_includes prompt.select_choices.last, "Google Gemini embedding-model"

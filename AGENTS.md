@@ -98,6 +98,7 @@ script/release VERSION
 
 ## Implementation notes
 
+- `ModelInfo.default_selectable_model?` owns default-picker eligibility. RPC model lists remain complete and expose `defaultSelectable` relative to the process default; the TUI uses its conversation selection. `Client#refresh_model_catalog` refreshes only the targeted provider and reports safe `success`/`unsupported`/`failed` metadata, retaining fallback catalogs on failure. Keep discovery separate from config/plugin reload; external clients explicitly use `runtime/reload` then `models/list` to adopt cross-process changes.
 - This project uses Minitest. Add or update focused tests for behavior changes.
 - Network/auth behavior should be easy to test without real external calls; follow existing test patterns and stubs.
 - Keep CLI output stable unless the task is explicitly about UX copy.

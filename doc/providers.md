@@ -117,9 +117,13 @@ Kward combines several sources so a temporary catalog failure does not lock you 
 4. the currently configured model;
 5. a manual ID entered in `/model`.
 
-When capability metadata is present, the default picker prioritizes entries that advertise generation or tool/function support and hides the others. Empty or incomplete metadata stays visible. Use **Show all models** for embedding, preview, private, or unusually described models.
+When capability metadata is present, the default picker prioritizes entries that advertise generation or tool/function support and hides the others. Unknown or empty metadata and the current selection stay visible. Use **Show all models** for embedding, preview, private, or unusually described models.
 
-Model discovery proves that an ID exists; it does not guarantee account access, tool support, image support, context size, pricing, or regional availability. Provider errors remain authoritative.
+Known model choices can include configured or curated fallbacks, not just discovered IDs. Neither a listing nor successful discovery guarantees account access, tool support, image support, context size, pricing, or regional availability. Provider errors remain authoritative.
+
+**Refresh model list** refreshes only the active provider, or the provider chosen in the picker—not every configured provider. OpenRouter uses its own key-associated disk cache; Copilot and Local replace their process-local discovery results. Anthropic consumes its disk catalog alongside curated choices (live discovery requires an API key). API-key providers with discovery use their provider catalogs. Codex and providers without discovery, such as Azure deployment selection, retain curated/configured choices. Failed discovery preserves the last usable catalog.
+
+Refreshing is not configuration reload. After another Kward process changes configuration or caches, RPC clients should explicitly call `runtime/reload` then `models/list`. Reload also reloads plugins and reapplies configuration-backed session runtime state; ordinary catalog reads and refreshes do neither. Copilot and Local have no shared persisted model catalog and rediscover lazily after reload. There is no automatic cross-process watcher or model-change notification.
 
 ## OAuth availability
 
@@ -133,8 +137,10 @@ RPC clients should discover providers rather than hard-code this table:
 
 - `auth/providers` returns catalog providers and supported authentication methods;
 - `auth/status` returns sanitized configured/source state;
-- `models/list` returns known model entries;
-- `models/refresh` refreshes a provider when supported;
+- `models/list` returns the complete known catalog; use `defaultSelectable` for the default picker and the full list for **Show all models**;
+- `models/refresh` returns the catalog plus a safe `refresh` outcome (`provider`, `status`, `fallbackUsed`), distinguishing `success`, `unsupported`, and `failed`;
 - `models/set` selects the provider and model.
+
+Check `initialize` model field and refresh metadata capabilities before consuming additive fields. Keep `OpenAI` and `Codex` identities separate and pass provider/model IDs back unchanged, including slashes.
 
 See the [RPC protocol](rpc.md#Config_and_auth_methods) for request shapes and unsupported OAuth capability reporting.

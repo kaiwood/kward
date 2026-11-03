@@ -80,8 +80,10 @@ module Kward
 
     def model_entries(body)
       data = JSON.parse(body.to_s)
-      entries = data.is_a?(Hash) ? data["data"] || [] : data
-      Array(entries).select { |entry| entry.is_a?(Hash) }
+      entries = data.is_a?(Hash) ? data["data"] : data
+      raise "Invalid OpenRouter model catalog" unless entries.is_a?(Array)
+
+      entries.select { |entry| entry.is_a?(Hash) }
     rescue JSON::ParserError
       raise "OpenRouter model refresh returned invalid JSON"
     end

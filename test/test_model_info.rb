@@ -179,6 +179,33 @@ class TestModelInfo < KwardTestCase
     assert_equal "high", models.first[:reasoningEffort]
   end
 
+  def test_default_picker_eligibility_preserves_current_and_unknown_capabilities
+    [{}, { supportedParameters: [] }, { supportedParameters: ["embedContent"], current: true }].each do |model|
+      assert Kward::ModelInfo.default_selectable_model?(model)
+    end
+    %w[tools tool_choice function-calling generateContent streamGenerateContent].each do |capability|
+      assert Kward::ModelInfo.default_selectable_model?(supportedParameters: [capability])
+    end
+    refute Kward::ModelInfo.default_selectable_model?(supportedParameters: ["embedContent"])
+  end
+
+  def test_normalization_uses_the_callers_current_model_not_stale_catalog_flags
+    models = Kward::ModelInfo.normalize_available(
+      [
+        { provider: "Local", id: "process-default", current: true, supportedParameters: ["embeddings"] },
+        { provider: "Local", id: "conversation-model", current: false, supportedParameters: ["embeddings"] },
+        { provider: "Local", id: "unknown" }
+      ],
+      current_provider: "Local", current_model: "conversation-model"
+    )
+
+    assert_equal [false, true, false], models.map { |model| model[:current] }
+    assert_equal [false, true, true], models.map { |model| model[:defaultSelectable] }
+    models.each do |model|
+      assert_equal Kward::ModelInfo.default_selectable_model?(model), model[:defaultSelectable]
+    end
+  end
+
   def test_current_payload_preserves_reasoning_effort
     model = Kward::ModelInfo.current_payload(provider: "Codex", model: "gpt-5.5", reasoning_effort: "high", context_window: 200_000)
 

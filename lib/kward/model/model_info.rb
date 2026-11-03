@@ -479,6 +479,18 @@ module Kward
       []
     end
 
+    # Unknown capabilities and the selection in the caller's context stay visible.
+    def default_selectable_model?(model)
+      return true if model[:current]
+
+      capabilities = Array(model[:supportedParameters]).map { |value| value.to_s.downcase }
+      return true if capabilities.empty?
+
+      capabilities.any? do |capability|
+        ["tools", "toolchoice", "functioncalling", "generatecontent", "streamgeneratecontent"].include?(capability.delete("_-"))
+      end
+    end
+
     def normalize(model, current_provider: nil, current_model: nil, current_reasoning_effort: nil)
       model = stringify_keys(model || {})
       provider = model["provider"]
@@ -494,8 +506,8 @@ module Kward
         contextWindow: model["contextWindow"] || model["context_window"] || context_window(provider, id),
         supportedParameters: model["supportedParameters"] || model["supported_parameters"],
         source: model["source"],
-        current: boolean_value(model["current"], default: provider == current_provider && id == current_model)
-      }.compact
+        current: current_provider && current_model ? provider == current_provider && id == current_model : boolean_value(model["current"])
+      }.compact.then { |entry| entry.merge(defaultSelectable: default_selectable_model?(entry)) }
     end
 
     def normalize_available(models, current_provider:, current_model:, current_reasoning_effort: nil)

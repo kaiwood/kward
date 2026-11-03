@@ -558,9 +558,16 @@ module Kward
           models: {
             supported: true,
             methods: MODEL_METHODS,
-            fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow"],
+            fields: ["provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current", "defaultSelectable", "supportedParameters", "source"],
             scopedModels: false,
-            refresh: { supported: true, method: MODEL_METHODS[4], providerParameter: true }
+            refresh: {
+              supported: true,
+              method: MODEL_METHODS[4],
+              providerParameter: true,
+              resultFields: ["models", "refresh"],
+              metadataFields: ["provider", "status", "fallbackUsed"],
+              statuses: ["success", "unsupported", "failed"]
+            }
           },
           runtime: {
             supported: true,
@@ -916,7 +923,7 @@ module Kward
       end
 
       def models_refresh(params)
-        { models: @session_manager.refresh_models(provider: params["provider"]) }
+        @session_manager.refresh_models(provider: params["provider"], with_metadata: true)
       end
 
       def models_current

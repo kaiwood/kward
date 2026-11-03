@@ -45,6 +45,17 @@ class TestModelCatalog < KwardTestCase
     assert_includes requested_url.to_s, "key=secret-key"
   end
 
+  def test_non_gemini_model_ids_keep_all_slash_components
+    Dir.mktmpdir do |directory|
+      catalog = Kward::ModelCatalog.new(
+        provider_id: "openai", api_key: "fixture-key", path: File.join(directory, "models.json"),
+        requester: ->(_url, _headers) { '{"data":[{"id":"models/org/variant"}]}' }
+      )
+
+      assert_equal "models/org/variant", catalog.refresh.first["id"]
+    end
+  end
+
   def test_read_ignores_invalid_cache
     path = File.join(Dir.mktmpdir, "models.json")
     File.write(path, "not json")

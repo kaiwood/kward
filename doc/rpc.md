@@ -674,7 +674,11 @@ Params:
 
 - `sessionId`: active RPC session ID.
 
-Refreshes config-backed runtime state and returns `{ "ok": true, "message": "Resources reloaded." }`.
+Reloads configuration, clears memoized provider catalogs, refreshes active sessions' runtime/tool state, and reloads plugins. Returns `{ "ok": true, "message": "Resources reloaded." }`. This is broader than model discovery: existing session runtime selections are reapplied from the process defaults.
+
+After another Kward process changes configuration or a shared catalog cache, call `runtime/reload` with an active `sessionId`, then `models/list` (and `models/current` if needed). Environment overrides and explicit launch-time model overrides still take precedence. Disk-backed catalogs are reread; Copilot and Local rediscover lazily because their catalogs are process-local. Use `models/refresh` afterward only if you also want fresh provider discovery.
+
+Ordinary list reads and model refresh do not reload plugins or configuration. There is no background file watching, cross-process polling, or `models/changed` notification; clients must request adoption explicitly.
 
 ## Logging methods
 
@@ -811,15 +815,63 @@ Returns `{ "memories": [] }`.
 
 ### `models/list`
 
-Returns known model entries from configured provider catalogs, including cached and curated fallbacks. Entries use `{ "provider", "id", "name", "reasoning", "reasoningEffort", "contextWindow", "current" }`.
+Returns `{ "models": [...] }`, the complete known catalog from configured providers, including configured and curated fallbacks. This is not a guarantee that every entry is currently callable or authorized. Listing uses existing cached/curated choices, with lazy discovery for Copilot/Local when needed; it does not force live discovery on every request.
+
+`capabilities.models.fields` declares `provider`, `id`, `name`, `reasoning`, `reasoningEffort`, `contextWindow`, `current`, `defaultSelectable`, `supportedParameters`, and `source`:
+
+- `provider` and `id` are the identity pair to send unchanged to `models/set`. Preserve slash-containing IDs. Direct `OpenAI` and subscription `Codex` are distinct providers.
+- `current` is relative to the process default, not an individual conversation. `models.scopedModels` remains `false`; use session runtime state for a conversation's selection.
+- `defaultSelectable` is always a boolean. Use it for the default picker instead of duplicating Kward's capability rules. The current model and models with unknown/empty capabilities remain eligible. Known entries without generation/tool/function capabilities have `false` but remain in this response. **Show all models** should display the full array; manual entry remains supported through `models/set`.
+- `supportedParameters` is optional provider capability metadata (an array of strings); absent or empty means unknown, not unsupported.
+- `source` is optional provenance such as `cached`, `curated`, `live`, or `manual`; it is not an authorization or freshness guarantee.
+
+The terminal picker uses the same eligibility rule, but relative to its active conversation. A client with a different conversation selection should keep that selection visible alongside the default-eligible list, without reimplementing capability filtering.
+
+For example, a known non-generation entry can look like:
+
+```json
+{
+  "provider": "Google Gemini",
+  "id": "embedding-model",
+  "name": "embedding-model",
+  "reasoning": false,
+  "contextWindow": 128000,
+  "current": false,
+  "defaultSelectable": false,
+  "supportedParameters": ["embedContent"],
+  "source": "cached"
+}
+```
 
 ### `models/refresh`
 
 Params:
 
-- `provider`: optional configured provider name. Defaults to the active provider.
+- `provider`: optional configured provider name or catalog ID. Defaults to the active provider.
 
-Refreshes that provider's live model catalog when discovery is supported and returns the complete sanitized model list. Providers without live discovery retain configured or curated choices.
+Refreshes only the targeted provider through its discovery implementation, replacing its in-memory choices on success. Does not reload configuration or plugins, or change any conversation's selected model.
+
+The additive response schema is:
+
+```json
+{
+  "models": [],
+  "refresh": {
+    "provider": "OpenRouter",
+    "status": "success",
+    "fallbackUsed": false
+  }
+}
+```
+
+- `models`: the complete normalized catalog, with the same shape as `models/list`, not just the targeted provider.
+- `refresh.provider`: canonical display name of the targeted provider (for example `OpenAI`, `Codex`, or `Google Gemini`). An omitted request provider targets the process's active provider.
+- `refresh.status`: `success` for completed discovery (including a valid empty catalog), `unsupported` when no discovery implementation is available, or `failed` when discovery failed and existing choices were retained.
+- `refresh.fallbackUsed`: `false` on success; `true` for `unsupported` and `failed`, when known/configured/curated choices are used instead of a fresh discovery result. A successful list can still include curated/configured entries.
+
+No raw provider errors, credentials, credential hashes, or authorization headers are included. Discovery failure is an ordinary result with `status: "failed"`, not an RPC error. Providers without discovery retain configured or curated choices.
+
+Negotiate this via `capabilities.models.refresh.resultFields` (`["models", "refresh"]`), `metadataFields` (`["provider", "status", "fallbackUsed"]`), and `statuses` (`["success", "unsupported", "failed"]`). Older clients can continue reading only `models`; the protocol version is unchanged.
 
 ### `models/current`
 
@@ -832,7 +884,13 @@ Params:
 - `model`: model ID string.
 - `provider`: optional provider name or catalog ID; defaults to the active provider.
 
-Updates the config-backed provider model and returns the current model payload.
+Updates the config-backed provider model and returns the current model payload. Send the `provider`/`id` pair from the list as `provider`/`model`, without splitting the ID:
+
+```json
+{"jsonrpc":"2.0","id":3,"method":"models/set","params":{"provider":"OpenRouter","model":"vendor/model/variant"}}
+```
+
+`provider: "OpenAI"` (or catalog ID `openai`) selects the direct API; `provider: "Codex"` selects the subscription backend. The legacy `openai` value in existing configuration files still means Codex; RPC catalog IDs are not that legacy configuration format.
 
 ### `reasoning/set`
 

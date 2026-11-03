@@ -6,9 +6,11 @@ module Kward
   module CopilotModels
     module_function
 
-    def parse(body)
-      catalog_entries(body).filter_map { |entry| model_id(entry) }.uniq
+    def parse(body, strict: false)
+      catalog_entries(body, strict: strict).filter_map { |entry| model_id(entry) }.uniq
     rescue JSON::ParserError
+      raise if strict
+
       []
     end
 
@@ -27,9 +29,11 @@ module Kward
       choices.find { |model| supported?(model) } || raise("No Copilot models supported by Kward are available for this account. Kward currently supports Copilot GPT-5/GPT-6 Responses and Gemini/GPT-4.1 chat models.")
     end
 
-    def catalog_entries(body)
+    def catalog_entries(body, strict: false)
       data = JSON.parse(body.to_s)
-      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] || [] : data
+      entries = data.is_a?(Hash) ? data["data"] || data["models"] || data["items"] : data
+      raise "Invalid Copilot model catalog" if strict && !entries.is_a?(Array)
+
       Array(entries)
     end
 

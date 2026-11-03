@@ -166,7 +166,14 @@ class TestRPCServer < KwardTestCase
     assert_includes capabilities["models"]["methods"], "models/set"
     refute_includes capabilities["models"]["methods"], "openrouter/catalog"
     assert_equal false, capabilities["models"]["scopedModels"]
-    assert_equal({ "supported" => true, "method" => "models/refresh", "providerParameter" => true }, capabilities["models"]["refresh"])
+    assert_equal({
+      "supported" => true, "method" => "models/refresh", "providerParameter" => true,
+      "resultFields" => ["models", "refresh"], "metadataFields" => ["provider", "status", "fallbackUsed"],
+      "statuses" => ["success", "unsupported", "failed"]
+    }, capabilities["models"]["refresh"])
+    %w[current defaultSelectable supportedParameters source].each do |field|
+      assert_includes capabilities["models"]["fields"], field
+    end
     assert_equal true, capabilities["runtime"]["supported"]
     assert_equal ["runtime/state", "runtime/stats"], capabilities["runtime"]["methods"]
     assert_equal true, capabilities["runtime"]["stats"]["messageCounts"]

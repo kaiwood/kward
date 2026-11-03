@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added RPC model-picker eligibility and safe provider refresh outcomes, with consistent catalog refresh/fallback behavior and explicit cross-process reload guidance.
 - Added cached-input counts and cache-hit rate, cache-write counts, and reasoning-token counts to detailed turn statistics, preserving unavailable versus reported-zero fields and marking partial breakdowns.
 - Added persistent turn-end elapsed time, token usage, and tool-call summaries across CLI/TUI, RPC, Pan, and transcript exports, with compact/detailed/off display modes and explicit partial or unavailable usage.
 - Added `--ignore-local-instructions` to suppress workspace `AGENTS.md` guidance and project skills for a CLI run while retaining user-level instructions and skills.

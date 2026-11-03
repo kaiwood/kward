@@ -577,9 +577,14 @@ module Kward
         normalized
       end
 
-      def refresh_models(provider: nil)
-        @client.refresh_available_models(provider: provider) if @client.respond_to?(:refresh_available_models)
-        available_models
+      def refresh_models(provider: nil, with_metadata: false)
+        if @client.respond_to?(:refresh_model_catalog)
+          refresh = @client.refresh_model_catalog(provider: provider)
+        elsif @client.respond_to?(:refresh_available_models)
+          @client.refresh_available_models(provider: provider)
+        end
+        models = available_models
+        with_metadata ? { models: models, refresh: refresh }.compact : models
       end
 
       def current_model

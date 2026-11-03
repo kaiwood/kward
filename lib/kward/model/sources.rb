@@ -32,9 +32,11 @@ module Kward
       merge(cached_models, curated_models)
     end
 
-    def refresh
+    def refresh(strict: false)
       merge(live_models, curated_models)
     rescue StandardError
+      raise if strict
+
       models
     end
 

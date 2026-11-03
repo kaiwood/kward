@@ -37,6 +37,8 @@ class TestModelSources < KwardTestCase
 
     assert_equal %w[account-model deepseek-chat deepseek-reasoner], models.map { |model| model["id"] }
     assert_equal "cached", models.first["source"]
+    assert_raises(RuntimeError) { sources.refresh(strict: true) }
+    assert_equal models, sources.models
   end
 
   def test_manual_model_requires_a_value

@@ -226,11 +226,12 @@ module Kward
           metadata = openrouter_cached_model_entries.find { |entry| (entry["id"] || entry[:id]).to_s == id }
           model_entry("OpenRouter", id, current: provider == "OpenRouter" && openrouter_model == id, metadata: metadata)
         end
+        models << model_entry("OpenRouter", openrouter_model, current: provider == "OpenRouter") unless openrouter_model.to_s.empty? || openrouter_choices.include?(openrouter_model)
       end
 
       if provider_logged_in?("Copilot")
         copilot_model = model_for("Copilot")
-        copilot_choices = provider == "Copilot" ? copilot_model_choices : static_copilot_model_choices
+        copilot_choices = provider == "Copilot" || @copilot_models ? copilot_model_choices : static_copilot_model_choices
         models += copilot_choices.map do |id|
           model_entry("Copilot", id, current: provider == "Copilot" && copilot_model == id)
         end
@@ -239,10 +240,13 @@ module Kward
 
       if provider_logged_in?("Anthropic")
         anthropic_model = model_for("Anthropic")
-        models += ModelInfo::ANTHROPIC_MODEL_CHOICES.map do |id|
-          model_entry("Anthropic", id, current: provider == "Anthropic" && anthropic_model == id)
+        anthropic_entries = ModelSources.new(provider_id: "anthropic", api_key: @api_key_store.fetch("anthropic")).models
+        anthropic_choices = (anthropic_entries.map { |entry| entry.fetch("id") } + ModelInfo::ANTHROPIC_MODEL_CHOICES).uniq
+        models += anthropic_choices.map do |id|
+          metadata = anthropic_entries.find { |entry| entry.fetch("id") == id }
+          model_entry("Anthropic", id, current: provider == "Anthropic" && anthropic_model == id, metadata: metadata)
         end
-        models << model_entry("Anthropic", anthropic_model, current: provider == "Anthropic") unless ModelInfo::ANTHROPIC_MODEL_CHOICES.include?(anthropic_model)
+        models << model_entry("Anthropic", anthropic_model, current: provider == "Anthropic") unless anthropic_choices.include?(anthropic_model)
       end
 
       ProviderCatalog.api_key_providers.each do |catalog_provider|
@@ -270,15 +274,43 @@ module Kward
       models.sort_by { |model| [model[:provider], model[:id]] }
     end
 
-    # Refreshes cached choices for an API-key provider.
+    # Retains the array return value used by terminal pickers and internal callers.
     def refresh_available_models(provider: nil)
-      provider ||= current_provider
-      catalog_provider = ProviderCatalog.find_by_name(provider) || ProviderCatalog.find(provider.to_s.downcase)
-      return available_models unless catalog_provider&.api_key?
-      return available_models unless ProviderCatalog.runtime(catalog_provider.id).automatic_model_discovery?
-
-      ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).refresh
+      refresh_model_catalog(provider: provider)
       available_models
+    end
+
+    # Refreshes only one provider and reports a safe, frontend-neutral outcome.
+    # Failed discovery never replaces the last usable catalog or returns raw errors.
+    def refresh_model_catalog(provider: nil)
+      provider ||= current_provider
+      provider = "OpenAI" if provider.to_s == "openai_api"
+      catalog_provider = ProviderCatalog.find_by_name(provider) || ProviderCatalog.find(provider.to_s.downcase)
+      provider = ModelInfo.provider_label(catalog_provider&.id == "openai" ? "OpenAI" : catalog_provider&.id || provider)
+      status = "success"
+
+      case provider
+      when "OpenRouter"
+        @openrouter_models = openrouter_model_cache.refresh.fetch("models")
+      when "Copilot"
+        fetch_copilot_models(refresh: true)
+      when "Local"
+        local_model_choices(refresh: true)
+      else
+        if catalog_provider&.api_key? && ProviderCatalog.runtime(catalog_provider.id).automatic_model_discovery?
+          ModelSources.new(provider_id: catalog_provider.id, api_key: @api_key_store.fetch(catalog_provider.id)).refresh(strict: true)
+        else
+          status = "unsupported"
+        end
+      end
+
+      { provider: provider, status: status, fallbackUsed: status != "success" }
+    rescue StandardError
+      # Avoid an implicit retry during the following list read when no prior
+      # in-memory catalog exists. Configured/curated choices remain available.
+      @copilot_models ||= [] if provider == "Copilot"
+      @local_models ||= [] if provider == "Local"
+      { provider: provider, status: "failed", fallbackUsed: true }
     end
 
     # Projects messages/tools into the provider-specific context shape without sending it.
@@ -733,23 +765,27 @@ module Kward
       ModelInfo.context_window(provider, id, openrouter_models: openrouter_cached_model_entries)
     end
 
-    def local_model_choices
-      return @local_models if @local_models
+    def local_model_choices(refresh: false)
+      return @local_models if @local_models && !refresh
 
       url = local_models_url
       request = Http.apply_user_agent(Net::HTTP::Get.new(url))
       request["Authorization"] = "Bearer #{local_api_key}" unless local_api_key.to_s.empty?
       request["Accept"] = "application/json"
       response = Net::HTTP.start(url.hostname, url.port, use_ssl: url.scheme == "https", read_timeout: stream_idle_timeout_seconds) { |http| http.request(request) }
-      return @local_models = [] unless response.is_a?(Net::HTTPSuccess)
+      raise "Local model discovery failed" unless response.is_a?(Net::HTTPSuccess)
 
       body = JSON.parse(response.body)
-      entries = body["data"] || body["models"] || []
-      @local_models = Array(entries).filter_map do |entry|
+      entries = body.is_a?(Hash) && (body["data"] || body["models"])
+      raise "Invalid Local model catalog" unless entries.is_a?(Array)
+
+      @local_models = entries.filter_map do |entry|
         entry.is_a?(Hash) ? entry["id"] || entry[:id] || entry["model"] || entry[:model] : entry
       end.map(&:to_s).map(&:strip).reject(&:empty?).uniq
     rescue StandardError
-      @local_models = []
+      raise if refresh
+
+      @local_models ||= []
     end
 
     def openrouter_model_choices
@@ -787,11 +823,11 @@ module Kward
       CopilotModels.resolved_chat_model(configured_model, fetch_copilot_models)
     end
 
-    def fetch_copilot_models
-      return @copilot_models if @copilot_models
+    def fetch_copilot_models(refresh: false)
+      return @copilot_models if @copilot_models && !refresh
 
       token = github_access_token.to_s
-      return [] if token.empty?
+      raise "No Copilot token found" if token.empty?
 
       url = URI("#{@github_oauth.base_url}/models")
       request = Http.apply_user_agent(Net::HTTP::Get.new(url))
@@ -800,10 +836,12 @@ module Kward
       copilot_headers([]).each { |key, value| request[key] = value }
 
       response = Net::HTTP.start(url.hostname, url.port, use_ssl: true) { |http| http.request(request) }
-      return [] unless response.is_a?(Net::HTTPSuccess)
+      raise "Copilot model discovery failed" unless response.is_a?(Net::HTTPSuccess)
 
-      @copilot_models = CopilotModels.parse(response.body)
+      @copilot_models = CopilotModels.parse(response.body, strict: refresh)
     rescue StandardError
+      raise if refresh
+
       []
     end
 
