@@ -12,6 +12,18 @@ module Kward
         tab_action = nil
 
         until @handoff_input_buffer.empty?
+          if @handoff_bracketed_paste
+            if @handoff_input_buffer.start_with?(BRACKETED_PASTE_END)
+              forwarded << @handoff_input_buffer.slice!(0, BRACKETED_PASTE_END.bytesize)
+              @handoff_bracketed_paste = false
+            elsif BRACKETED_PASTE_END.start_with?(@handoff_input_buffer)
+              break
+            else
+              forwarded << @handoff_input_buffer.slice!(0)
+            end
+            next
+          end
+
           if @handoff_input_buffer.start_with?(TerminalKeys::CTRL_T)
             action = handle_tab_key_binding(TerminalKeys::CTRL_T)
             if action != false
@@ -26,11 +38,14 @@ module Kward
           end
 
           if @handoff_input_buffer.start_with?("\e")
-            complete = TerminalKeys::TAB_ACTION_SEQUENCES.find { |sequence| @handoff_input_buffer.start_with?(sequence) }
-            partial = TerminalKeys::TAB_ACTION_SEQUENCES.any? { |sequence| sequence.start_with?(@handoff_input_buffer) }
-            break if partial && !complete
+            complete = @handoff_input_buffer[TerminalKeys::CSI_SEQUENCE_PATTERN] ||
+              TerminalKeys::TAB_ACTION_SEQUENCES.find { |sequence| @handoff_input_buffer.start_with?(sequence) }
+            partial = TerminalKeys::TAB_ACTION_SEQUENCES.any? { |sequence| sequence.start_with?(@handoff_input_buffer) } ||
+              @handoff_input_buffer.match?(TerminalKeys::CSI_PREFIX_PATTERN)
+            break if partial && !complete && @handoff_input_buffer.bytesize < TerminalKeys::MAX_HANDOFF_SEQUENCE_BYTES
 
             if complete
+              @handoff_bracketed_paste = true if complete == BRACKETED_PASTE_START
               action = handle_tab_key_binding(complete)
               if action != false
                 remainder = @handoff_input_buffer.byteslice(complete.bytesize..).to_s
@@ -39,18 +54,10 @@ module Kward
                 tab_action = action
                 break
               end
-              forwarded << complete
+              sequence = parse_csi_u_key(complete)
+              forwarded << (sequence ? legacy_handoff_key(sequence) || complete : complete)
               @handoff_input_buffer = @handoff_input_buffer.byteslice(complete.bytesize..).to_s.b
               next
-            end
-
-            if (sequence = parse_csi_u_key(@handoff_input_buffer)) && @handoff_input_buffer.start_with?(sequence[:sequence])
-              legacy_key = legacy_handoff_key(sequence)
-              unless legacy_key.nil?
-                forwarded << legacy_key
-                @handoff_input_buffer = @handoff_input_buffer.byteslice(sequence[:sequence].bytesize..).to_s.b
-                next
-              end
             end
           end
 
@@ -61,11 +68,14 @@ module Kward
       end
 
       def legacy_handoff_key(sequence)
+        return "" if sequence[:event_type] == 3
+
         event = csi_u_key_event(sequence)
         return event[:text] if event[:type] == :printable
         return "\r" if event[:type] == :enter
         return "\b" if event[:type] == :backspace
         return "\t" if event[:type] == :tab
+        return "\e" if event[:type] == :escape
 
         return unless event[:type] == :modified && ctrl_modifier?(event[:modifier])
         return unless event[:code].between?(32, 126)
@@ -411,6 +421,10 @@ module Kward
         code = sequence[:code]
         modifier = sequence[:modifier]
         queue_pending_keys(sequence[:remaining]) if sequence[:remaining] && !sequence[:remaining].empty?
+        return true if sequence[:event_type] == 3
+
+        tab_result = handle_tab_key_binding(sequence[:sequence])
+        return tab_result unless tab_result == false
 
         case code
         when 9
@@ -454,6 +468,7 @@ module Kward
           code: match[1].to_i,
           modifiers: modifiers,
           modifier: modifier,
+          event_type: (modifiers.split(":", 2)[1] || "1").to_i,
           text: fields[1].to_s,
           remaining: key.to_s[match[0].length..]
         }
@@ -771,6 +786,20 @@ module Kward
 
       def handle_tab_key_binding(key)
         return false if @select_state || @question_state || @tabs.empty?
+
+        if (sequence = parse_csi_u_key(key)) && sequence[:remaining].to_s.empty?
+          return false if sequence[:event_type] == 3
+
+          # Lock modifiers and optional event/text fields do not change shortcuts.
+          modifier = ((sequence[:modifier] - 1) & ~192) + 1
+          key = if modifier == 3 && sequence[:code].between?(32, 126)
+            "\e#{sequence[:code].chr}"
+          else
+            "\e[#{sequence[:code]};#{modifier}u"
+          end
+        elsif (match = key.to_s.match(TerminalKeys::MODIFY_OTHER_KEYS_PATTERN))
+          key = "\e[#{match[2]};#{match[1]}u"
+        end
 
         navigation_result = handle_ctrl_tab_navigation_key_binding(key)
         return navigation_result unless navigation_result == false

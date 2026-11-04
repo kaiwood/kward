@@ -6,6 +6,15 @@ module Kward
   module TerminalSequences
     KEYBOARD_PROTOCOL_ENABLE = "\e[>25u".freeze
     KEYBOARD_PROTOCOL_RESTORE = "\e[<u".freeze
+    KEYBOARD_PROTOCOL_SET = "\e[=25u".freeze
+    # Cancel incomplete controls before restoring the composer's terminal baseline.
+    CONTROL_SEQUENCE_CANCEL = "\x18\e\\".freeze
+    COMPOSER_MODES_RESTORE = (
+      "\e[?2026l\e[?1049l\e[?1047l\e[?47l" +
+      "\e[?1l\e>\e[?1004l\e[>4;0m" +
+      "\e[?1000l\e[?1002l\e[?1003l\e[?1005l\e[?1006l\e[?1015l" +
+      "\e[?6l\e[?7h\e[4l"
+    ).freeze
     BRACKETED_PASTE_ENABLE = "\e[?2004h".freeze
     BRACKETED_PASTE_RESTORE = "\e[?2004l".freeze
     BRACKETED_PASTE_START = "\e[200~".freeze
@@ -23,6 +32,18 @@ module Kward
     SGR_INVERSE_OFF = "\e[27m".freeze
 
     module_function
+
+    def keyboard_mode_mutation?(sequence)
+      sequence.match?(/\A\e\[[><=][0-9;]*u\z/) ||
+        sequence.match?(/\A\e\[>4(?:;[0-9]*)?m\z/)
+    end
+
+    def keyboard_mode_reset?(sequence)
+      return true if sequence == "\ec" || sequence == "\e[!p"
+
+      match = sequence.match(/\A\e\[\?([0-9;]+)[hl]\z/)
+      match && (match[1].split(";") & %w[47 1047 1049]).any?
+    end
 
     def scroll_region(top, bottom)
       "\e[#{top};#{bottom}r"

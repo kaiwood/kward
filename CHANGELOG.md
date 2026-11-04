@@ -39,6 +39,7 @@ All notable changes to Kward will be documented in this file.
 ### Fixed
 
 - Fixed native shell redirection operands being split/globbed, here-document continuation order, and premature execution of backslash-continued input lines.
+- Protected TUI tab shortcuts across shell keyboard-mode changes and screen switches, restored composer terminal modes on handback, and hardened fragmented key and bracketed-paste handling without unbounded output buffering.
 - Corrected native kwsh fatal-error handling and POSIX `errexit` inheritance, preserving interactive recovery, subshell isolation, special-builtin behavior through `command`, and EXIT traps.
 - Kept `/shell` background servers responsive after `bg` by draining idle PTY output instead of letting logs fill the terminal buffer and block further requests; idle output is discarded, so redirect jobs to files to retain logs.
 - Fixed native kwsh jobs intermittently stopping again after Ctrl-Z followed by `bg`, by checking for newer continuation or exit events before propagating a child stop report.

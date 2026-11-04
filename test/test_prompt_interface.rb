@@ -931,7 +931,7 @@ class TestPromptInterface < KwardTestCase
     assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE).length
   end
 
-  def test_prompt_interface_reasserts_preserved_keyboard_protocol_after_child_reset
+  def test_prompt_interface_protects_preserved_keyboard_protocol_from_child_reset
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
 
@@ -941,14 +941,29 @@ class TestPromptInterface < KwardTestCase
     end
     prompt.close
 
-    child_reset = output.string.index(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE)
-    reenable = output.string.index(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE, child_reset)
-    final_restore = output.string.index(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE, reenable)
+    assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE).length
+    assert_equal 1, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE).length
+    assert_order output.string, Kward::TerminalSequences::KEYBOARD_PROTOCOL_SET, Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE
+  end
 
-    assert_equal 2, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_ENABLE).length
-    assert_equal 2, output.string.scan(Kward::TerminalSequences::KEYBOARD_PROTOCOL_RESTORE).length
-    assert_operator reenable, :>, child_reset
-    assert_operator final_restore, :>, reenable
+  def test_prompt_interface_restores_modes_before_redrawing_even_when_child_raises
+    output = StringIO.new
+    prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
+    prompt.start
+    output.truncate(0)
+    output.rewind
+
+    assert_raises(RuntimeError) do
+      prompt.with_terminal_handoff(preserve_tab_keybindings: true) do |_input, handoff_output|
+        handoff_output.write("\e[?1000h\e[?1004h\e[?2026h\e]unfinished")
+        raise "child failed"
+      end
+    end
+
+    assert_order output.string, "unfinished", Kward::TerminalSequences::CONTROL_SEQUENCE_CANCEL
+    assert_order output.string, Kward::TerminalSequences::CONTROL_SEQUENCE_CANCEL, Kward::TerminalSequences::COMPOSER_MODES_RESTORE
+    assert_order output.string, Kward::TerminalSequences::COMPOSER_MODES_RESTORE, Kward::TerminalSequences::KEYBOARD_PROTOCOL_SET
+    assert_equal :kward, prompt.instance_variable_get(:@terminal_owner)
   end
 
   def test_prompt_interface_inline_terminal_handoff_preserves_composer_until_exclusive_transition

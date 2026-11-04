@@ -84,7 +84,11 @@ module Kward
       (1..9).map { |number| "\e#{number}" }
     ).freeze
 
-    CSI_U_PATTERN = /\A\e\[(\d+)((?:;[\d:]*)*)u/.freeze
+    CSI_U_PATTERN = /\A\e\[(\d+)(?::[\d:]*)?((?:;[\d:]*)*)u/.freeze
+    CSI_SEQUENCE_PATTERN = /\A\e\[[0-?]*[ -\/]*[@-~]/.freeze
+    CSI_PREFIX_PATTERN = /\A\e\[[0-?]*[ -\/]*\z/.freeze
+    MODIFY_OTHER_KEYS_PATTERN = /\A\e\[27;(\d+);(\d+)~\z/.freeze
+    MAX_HANDOFF_SEQUENCE_BYTES = 4096
     MODIFIED_CURSOR_PATTERN = /\A\e\[(\d+);(\d+)([CDFH])\z/.freeze
     MODIFIED_DELETE_PATTERN = /\A\e\[3;(\d+)~\z/.freeze
     UP_PATTERN = /\A\e\[[0-9;:]*A\z/.freeze

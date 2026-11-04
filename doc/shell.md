@@ -481,6 +481,14 @@ Shell commands use a separate, workspace-scoped history rather than the normal c
 
 Kward's tab shortcuts work at the shell prompt and while a shell command is running. Switching tabs detaches the running command instead of interrupting it; bounded output and completion state remain owned by the originating tab and are restored when you return. While detached, the command no longer receives terminal input. Explicit cancellation or shutdown still terminates detached work. Bounded output from shell-agent `?` turns is also retained in the tab's transient runtime view, so it is restored when you switch away and back without being added to session history. Ctrl+L clears this transient shell and shell-agent output.
 
+### Protecting terminal shortcuts
+
+With Ctrl tab bindings, Ctrl+1 through Ctrl+9 stay reserved for Kward, including while a command owns the screen. Kward keeps ownership of keyboard encoding: child Kitty keyboard push/pop/set and xterm `modifyOtherKeys` changes are filtered, and screen switches or terminal resets reassert Kward's encoding. Ordinary child input still uses the existing legacy-key translation; applications requiring their own enhanced keyboard protocol should run outside Kward.
+
+On completion, cancellation, or tab detachment, Kward cancels unfinished terminal controls, leaves the alternate screen, and restores its keyboard, paste, mouse, focus, cursor-key, and rendering modes before redrawing. Fragmented key sequences are buffered within a fixed limit, and shortcuts inside bracketed paste are forwarded as pasted data rather than acted on.
+
+This is best-effort protection, not a terminal sandbox. Ctrl+number still depends on your terminal sending distinguishable modified keys; Kward cannot recover modifiers that the terminal or a multiplexer discards. If your terminal cannot send these combinations, use the configurable Alt tab bindings instead. Interactive output remains trusted terminal access, including terminal-specific passthrough controls. These protections apply to local TUI handoffs (`/shell` and `!command`); RPC shell workers remain captured and noninteractive.
+
 ## Completion
 
 Press Tab in `/shell` to complete:
