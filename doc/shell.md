@@ -137,7 +137,7 @@ From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each co
 - `&&`, `||`, `!`, concurrent pipelines, brace groups and `( commands )` subshells. Pipeline stages and subshells isolate state. Pipeline status comes from the last stage unless `set -o pipefail` is enabled.
 - `if` / `elif` / `else`, `case`, `for`, `while`, `until`, functions, `return`, `exit`, and multilevel `break` / `continue` (for example, `break 2`).
 - `<`, `>`, `>>`, `<>`, `>|`, here-documents (`<<` / `<<-`), descriptor duplication, and closing on descriptors 0–9. Redirections apply left to right.
-- Ordinary `*`, `?`, and bracket filename patterns, `~` / `~/...`, and field splitting with default, custom, or empty `IFS`. Quote variables and use `"$@"` to preserve argument boundaries. `"$*"` joins arguments with the first character of `IFS` (a space when unset).
+- Ordinary `*`, `?`, and bracket filename patterns, `~` / `~user/...` (also after assignment colons), and field splitting with default, custom, or empty `IFS`. Quote variables and use `"$@"` to preserve argument boundaries. `"$*"` joins arguments with the first character of `IFS` (a space when unset).
 - `read [-r] [-d delimiter] variable...`, including EOF status, backslash continuation, and multiple destination variables.
 - Persistent `cd`, `pwd`, aliases, and direct executable lookup through `PATH`. Utilities such as `printf`, `test` / `[`, `grep`, and `cat` come from the operating system.
 
@@ -249,13 +249,79 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 - Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
 - `umask` accepts octal and `u/g/o` symbolic permissions. It affects redirected files and external children without changing the host process's lasting mask.
 - `cd` and `pwd` support `-L` / `-P`.
-- `set` supports `-a`, `-e`, `-f`, `-n`, `-u`, `-x`, `-C`, their `+` inverses, named `-o` options, and `pipefail`. `set -n` checks standalone scripts without execution and is ignored by interactive `/shell`. `set -x` deliberately writes expanded commands to stderr; do not enable it around secrets. Command substitution clears inherited `errexit`, matching Bash's default behavior.
+- `set` supports `-a`, `-e`, `-f`, `-m`, `-n`, `-u`, `-x`, `-C`, their `+` inverses, named `-o` options, and `pipefail`. `set -n` checks standalone scripts without execution and is ignored by interactive `/shell`. `set -x` deliberately writes expanded commands to stderr; do not enable it around secrets. Command substitution clears inherited `errexit`, matching Bash's default behavior.
+
+### Run and control background work
+
+```sh
+sleep 2 & first=$!
+sleep 1 & second=$!
+jobs -l
+wait "$second"
+wait "$first"
+printf 'Last status: %s\n' "$?"
+```
+
+`&` starts an isolated asynchronous AND-OR list, including pipelines. `$!` is its waitable leader PID. `wait` with no arguments collects all known jobs and returns zero; with operands it returns the last requested job's status. An unknown or already-collected PID returns 127. Termination by a signal returns `128 + signal number`. Completed statuses are retained until collected; there is a 1,024-job bound.
+
+`jobs` accepts `-l`, `-p`, `-r`, and `-s`. Job selectors include `%1`, `%+` / `%%` (current), `%-` (previous), `%prefix`, and `%?substring`; ambiguous selectors error. `kill [-s signal | -SIGNAL] pid-or-job...` signals a process or an entire job group. `kill -l` lists signal names and translates numbers.
+
+Job control is on by default in `/shell`; standalone scripts can enable it with `set -m`. Ctrl-Z stops a foreground job and returns terminal ownership to kwsh. Terminal modes are saved with the stopped job and restored on `fg`, including for programs that suspend themselves after entering raw mode. Use `bg %1` to continue it in the background, or `fg %1` to return it to the terminal. Without job control, asynchronous input defaults to `/dev/null` unless explicitly redirected.
+
+Hosted jobs remain tab-owned: closing the shell kills its owned groups, including stopped jobs. A forked hosted scope waits for its own background work before reporting completion, keeping descendants owned; standalone scripts do not impose that host-lifecycle rule. Background terminal output can arrive between submissions; redirect long-running jobs to files when output ordering matters. Script jobs are separate from Kward's tab-detached foreground-command feature.
+
+### Handle signals and replace a script
+
+```sh
+trap 'printf "Finished with status %s\n" "$?"' EXIT
+trap 'printf "Received a notification\n"' USR1
+kill -USR1 $$
+trap - USR1                     # restore the original disposition
+
+exec 3>report.log               # retain a descriptor in shell state
+printf '%s\n' ready >&3
+exec 3>&-
+```
+
+`trap` accepts signal names (with or without `SIG`), numbers, and `EXIT` / `0`. An empty action ignores a signal; `-` resets it. `trap` and `trap -p [signals...]` print reusable definitions. Actions execute as native source at interpreter safe points, preserving the interrupted `$?` unless they explicitly exit. Trapped signals interrupt the `wait` builtin; when waiting for an ordinary foreground command, actions run after that command finishes. Caught traps reset in subshells; ignored signals remain ignored. `KILL` and `STOP` cannot be trapped. `EXIT` runs once on normal completion, explicit exit, or `errexit`.
+
+In standalone `kwsh`, `exec program args...` uses direct `execve`: it preserves the PID, does not run an EXIT trap on success, and never falls back to `/bin/sh`. `exec -c` clears the child's environment; `-a name` selects argv[0], `-l` prefixes it with `-`, and `--` ends options. Without a program, redirections persist.
+
+The TUI worker must retain its private control channel. Its hosted `exec` therefore runs the replacement program, reports final state, and ends the logical shell session rather than replacing the protocol process. Hosted child scopes also retain their supervisors so that `exec` cannot abandon background descendants. `USR2` is reserved for hosted shutdown and cannot be trapped in that worker; standalone scripts may trap it normally. Closing a tab is forced host cleanup, not a normal EXIT-trap invocation.
+
+### Read aliases and scripts in order
+
+```sh
+alias say='printf "%s\n"'
+say ready
+alias dispatch='say '           # trailing blank enables alias expansion of the next word
+alias greeting=hello
+dispatch greeting
+```
+
+Native aliases expand unquoted command tokens while parsing, before parameter expansion. They may contain operators, refer to other aliases, or shadow builtins; cycles stop at the already-expanded name. Quoted names and names obtained from variables are not expanded. Define aliases in a separate complete input unit before using them: an alias change does not alter commands already parsed on the same line or in a function body. Expansion is bounded to 100 nested aliases and 65,536 replacement tokens.
+
+Files, stdin, and explicit native source execute one complete input unit at a time. An error on a later line does not undo earlier commands. Stdin execution does not read ahead of a command that consumes its own input. `source` and `kwshrc` remain declarative and non-executing; `. ./file` now consistently means executable native sourcing in `/shell` as well as scripts.
+
+### Select character and sorting rules
+
+`LC_ALL` overrides category settings; otherwise `LC_CTYPE` and `LC_COLLATE` override `LANG`, defaulting to `C`. Installed libc locales control character counts, bracket classes/ranges, single-character collating symbols (`[[.a.]]`) and equivalence classes (`[[=a=]]`), string ordering, and filename sorting. For example:
+
+```sh
+value=é
+LC_ALL=C
+printf '%s\n' "${#value}"       # 2 bytes
+LC_ALL=C.UTF-8
+printf '%s\n' "${#value}"       # 1 character, if this locale is installed
+```
+
+Unavailable locales and unsupported encodings produce explicit errors. Locale changes use thread-local locale objects, not process-global `setlocale`. Path matching shares the bounded native string matcher; globstar does not descend through symlinked directories or hidden entries. A pathname expansion may visit at most 100,000 directory entries and 100 directory levels. These locale bindings target macOS and Linux.
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Background `&`, jobs/`wait`, traps, `exec`, additional builtin options, and complete locale, alias, expansion and shell-invocation semantics remain unfinished. Executable text without a shebang still fails rather than falling back to another shell; use `kwsh file` or an explicit native shebang. Explicitly requested executables with another interpreter's shebang still use that interpreter.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references and nested arithmetic substitutions, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. Alias replacement text is tokenized independently; aliases containing here-document bodies or incomplete quoted fragments are not supported. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and standalone interactive prompt/startup-file modes are not implemented. Executable text without a shebang still fails rather than falling back to another shell; use `kwsh file` or an explicit native shebang. Explicitly requested executables with another interpreter's shebang still use that interpreter.
 
-`capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Aliases still expand complete commands at execution time, not POSIX tokens. `kwshrc` stays non-executing.
+`capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
 The persistent shell and shell-agent API remain TUI-only. RPC/Pan still report that session capability unsupported. The standalone executable can be invoked as an ordinary external program through existing sandboxed command tools; it does not bypass their permission, cancellation, or sandbox boundaries.
 
@@ -270,14 +336,16 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Arithmetic operators, increment/decrement, exponentiation, and arithmetic loops, within documented bounds.
 - [x] Initial indexed/associative arrays, `[[ … ]]`, process substitution, brace expansion, and opt-in globstar.
 - [x] Standalone file/command/stdin modes, dollar-single-quotes, and the documented `set` options.
-- [ ] Traps, asynchronous jobs, `wait`, job control, and `exec` lifecycle integration.
-- [ ] Remaining array/conditional forms, nested arithmetic substitutions, named-user/assignment-context tilde expansion, builtin flags, and special parameters.
-- [ ] POSIX alias tokenization, incremental script-file execution, command lookup/error rules, and executable-text handling.
-- [ ] Full conformance coverage. Ruby character classes, codepoint ranges and globbing do not implement all locale collation/equivalence rules; regular expressions and bounded arithmetic are not exact Bash equivalents.
+- [x] Signal/EXIT traps, asynchronous jobs, `wait`, terminal job control, and standalone/hosted `exec` lifecycle integration.
+- [x] Named-user/assignment-context tildes, `$!`, read-time aliases, and incremental script-file execution.
+- [x] Installed-locale character counts, single-character bracket classes/collation, native pathname matching, and locale sorting.
+- [ ] Remaining array/conditional forms, nested arithmetic substitutions, additional builtin flags and invocation modes.
+- [ ] Exhaustive alias, command lookup/error, and special-builtin conformance coverage.
+- [ ] Full conformance coverage, including multi-character collating elements. Regular expressions and bounded arithmetic are not exact Bash equivalents.
 
 Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
 
-References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html).
+References: [POSIX Shell Command Language](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html), [POSIX read](https://pubs.opengroup.org/onlinepubs/9799919799/utilities/read.html), [Bash parameter expansion](https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html), and [Bash arrays](https://www.gnu.org/software/bash/manual/html_node/Arrays.html), [POSIX wait](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/wait.html), and [POSIX job control](https://pubs.opengroup.org/onlinepubs/9799919799.2024edition/utilities/fg.html), and [Apple newlocale](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/newlocale.3.html).
 
 ## Ask the shell agent
 
@@ -400,7 +468,8 @@ The persistent `/shell` process handles these commands in-session so their state
 | `cd [dir]` | Change the shell directory. Supports `cd`, `cd -`, and relative paths. |
 | `pwd` | Print the shell directory. |
 | `export KEY[=value]` | Set an environment variable. `export` and `export -p` list variables. |
-| `source <file>` / `. <file>` | Parse and apply aliases and exports from an rc file immediately. |
+| `source <file>` | Parse and apply aliases and exports from an rc file immediately. |
+| `. <file> [args...]` | Execute a native script in the current shell. |
 | `unset KEY` | Remove an environment variable. |
 | `alias [name]` | List, inspect, or create aliases. |
 | `unalias name` / `unalias -a` | Remove aliases. |
@@ -409,7 +478,7 @@ The persistent `/shell` process handles these commands in-session so their state
 | `clear` | Clear the visible transcript. |
 | `exit` / `logout` | Leave shell mode. |
 
-Built-ins take precedence over aliases and executables.
+Native aliases expand before builtin lookup. Prompt-only conveniences remain host-routed.
 
 ## Configure kwsh
 
@@ -489,7 +558,7 @@ When rbenv is available, Kward adds its shims and bin directories to `PATH` and 
 
 ### Aliases
 
-Aliases replace the first command word once and append any remaining arguments:
+Native aliases replace unquoted command tokens at read time:
 
 ```sh
 alias ll='ls -la'
@@ -508,7 +577,7 @@ Configured aliases work inside `/shell` and after `!`. Aliases created with the 
 
 For compatibility with older configs, Kward removes a leading `pty` or `capture` mode marker when a configured alias is invoked through `!`, because `!command` is always interactive.
 
-Aliases are intentionally simple: they do not expand recursively and are not shell functions. Use `alias` to list them, `alias name=value` to create a runtime alias, and `unalias` to remove one.
+Native aliases may expand other aliases, with cycle detection; they are not shell functions. The separate `!command` path still performs only one command-prefix replacement. Use `alias` to list aliases, `alias name=value` to create one for subsequent complete input units, and `unalias` to remove one.
 
 ## Terminal output and safety
 

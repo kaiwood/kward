@@ -1,5 +1,8 @@
+require "etc"
 require_relative "native_fields"
 require_relative "native_pattern"
+require_relative "native_locale"
+require_relative "native_glob"
 require_relative "native_braces"
 
 module Kward
@@ -23,6 +26,7 @@ module Kward
         end
         case name
         when "?" then @status.to_s
+        when "!" then @last_background_pid.to_s
         when "$" then @shell_pid.to_s
         when "-" then Builtins::SHELL_OPTIONS.select { |_, name| @options.include?(name) }.keys.join
         when "#" then @arguments.length.to_s
@@ -45,6 +49,7 @@ module Kward
         end
         case name
         when "@", "*" then !@arguments.empty?
+        when "!" then !@last_background_pid.nil?
         when "?", "$", "#", "0", "-" then true
         when /\A\d+\z/ then name.to_i <= @arguments.length
         else @variables.key?(name)
@@ -66,7 +71,7 @@ module Kward
       end
 
       def expand_word(word, assignment: false)
-        groups = word_fields(word)
+        groups = word_fields(word, assignment: assignment)
         return [groups.map { |group| Fields.value(group) }.join(" ")] if assignment
 
         groups.flat_map do |group|
@@ -79,14 +84,11 @@ module Kward
             value = Fields.value(characters)
             next [value] if @options.include?("noglob")
             pattern = Fields.pattern(characters, glob: true)
-            pattern = pattern.gsub(/\\.|(\*\*)/) do |token|
-              if Regexp.last_match(1)
-                @globstar ? (Regexp.last_match.end(0) == pattern.length ? "**/*" : "**") : "*"
-              else
-                token
-              end
+            matches = if pattern.match?(/[*?\[]/)
+              Locale.with(@variables) { |locale| Glob.new(pattern, cwd: @cwd, locale: locale, globstar: @globstar).matches }
+            else
+              []
             end
-            matches = pattern.match?(/[*?\[]/) ? Dir.glob(pattern, base: @cwd).sort : []
             matches.empty? ? [value] : matches
           end
         end
@@ -101,10 +103,10 @@ module Kward
       end
 
       def matches_pattern?(pattern, value)
-        Pattern.new(pattern).match?(value)
+        Locale.with(@variables) { |locale| Pattern.new(pattern, locale: locale).match?(value) }
       end
 
-      def word_fields(word, expanded: false)
+      def word_fields(word, expanded: false, assignment: false)
         groups = [[]]
         word.parts.each_with_index do |part, index|
           additions = case part.kind
@@ -117,21 +119,42 @@ module Kward
           when :arithmetic
             [Fields.characters(arithmetic_value(part.text), quoted: part.quoted, split: !part.quoted)]
           else
-            value = part.text
-            if index.zero? && !part.quoted && (value == "~" || value.start_with?("~/"))
-              home = @variables.fetch("HOME", "~")
-              [Fields.characters(home, quoted: true) + Fields.characters(value.delete_prefix("~"), split: expanded)]
-            elsif index.zero? && !part.quoted && value.start_with?("~")
-              raise ExecutionError, "named-user tilde expansion is not supported"
-            else
-              [Fields.characters(value, quoted: part.quoted, split: expanded && !part.quoted)]
-            end
+            [literal_fields(part, first: index.zero?, following: word.parts[index + 1], assignment: assignment, expanded: expanded)]
           end
           next if additions.empty?
           groups.last.concat(additions.first)
           groups.concat(additions.drop(1))
         end
         groups
+      end
+
+      def literal_fields(part, first:, following:, assignment:, expanded:)
+        return Fields.characters(part.text, quoted: true) if part.quoted
+        pieces = assignment ? part.text.split(":", -1) : [part.text]
+        pieces.each_with_index.flat_map do |piece, index|
+          prefix = assignment && first && index.zero? ? piece[/\A[A-Za-z_][A-Za-z0-9_]*=/].to_s : ""
+          value = piece.delete_prefix(prefix)
+          match = value.match(/\A~([^\/]*)(\/.*)?\z/m) if first || index.positive?
+          continued = index == pieces.length - 1 && following && match && !match[2]
+          home = tilde_home(match[1]) if match && !continued
+          fields = if home
+            Fields.characters(prefix, split: expanded) + Fields.characters(home, quoted: true) + Fields.characters(match[2].to_s, split: expanded)
+          else
+            Fields.characters(piece, split: expanded)
+          end
+          index.zero? ? fields : Fields.characters(":", split: expanded) + fields
+        end
+      end
+
+      def tilde_home(name)
+        case name
+        when "" then @variables.fetch("HOME") { Etc.getpwuid.dir }
+        when "+" then @variables["PWD"]
+        when "-" then @variables["OLDPWD"]
+        else Etc.getpwnam(name).dir
+        end
+      rescue ArgumentError
+        nil
       end
 
       def parameter_fields(expression, quoted)
@@ -148,18 +171,21 @@ module Kward
           length = if name.is_a?(Reference) && %w[@ *].include?(name.subscript.literal)
             array_values(name).length
           else
-            %w[@ *].include?(name) ? @arguments.length : value.length
+            %w[@ *].include?(name) ? @arguments.length : Locale.with(@variables) { |locale| locale.text(value).length }
           end
           return [Fields.characters(length.to_s, quoted: quoted, split: !quoted)]
         end
         if operator.start_with?("#", "%")
-          match = Pattern.new(pattern(operand))
+          source = pattern(operand)
           values = if name.is_a?(Reference) && %w[@ *].include?(name.subscript.literal)
             array_values(name)
           else
             %w[@ *].include?(name) ? @arguments : [value]
           end
-          values = values.map { |item| remove_pattern(item, match, operator) }
+          values = Locale.with(@variables) do |locale|
+            match = Pattern.new(source, locale: locale)
+            values.map { |item| remove_pattern(locale.text(item), match, operator) }
+          end
           return parameter_value_fields(name, quoted, values: values)
         end
 

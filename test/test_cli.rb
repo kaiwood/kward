@@ -1209,7 +1209,9 @@ class TestCLI < KwardTestCase
         cli.interactive_loop(agent: agent)
       end
 
-      assert_equal ["printf %s $KWARD_KWSH_CONFIG_TEST", "printf alias-ok"], calls.map { |call| call[:command] }
+      # Native aliases must reach the worker as source, not be expanded twice.
+      assert_equal ["printf %s $KWARD_KWSH_CONFIG_TEST", "hi"], calls.map { |call| call[:command] }
+      assert_equal "printf alias-ok", calls.last[:shell].expand_alias("hi")
       assert calls.all? { |call| call[:env]["KWARD_KWSH_CONFIG_TEST"] == "configured" }
       assert_empty conversation.messages
     end

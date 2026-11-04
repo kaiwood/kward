@@ -6,6 +6,9 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added native kwsh background lists, `$!`, jobs/wait/kill, stopped-job foreground/background control, signal/EXIT traps, persistent exec redirections, and standalone process replacement, with tab-owned cleanup for hosted shells.
+- Added read-time native aliases, incremental script execution, named-user and assignment-context tildes, and installed-locale character counts, bracket matching, pathname expansion, and sorting.
+
 - Expanded native kwsh with subshells, nested command/process substitution, here-documents, descriptors 0–9, bounded extended arithmetic and arithmetic loops, indexed/associative arrays, `[[ … ]]`, brace expansion, opt-in globstar, native dot-sourcing and state utilities, read delimiters, shell options, and a standalone `kwsh` executable. Full POSIX/Bash conformance remains unfinished; documented limits remain explicit.
 - Added native kwsh parameter operators, `case` pattern matching, `read -r`, and custom/empty `IFS`, with lazy nested expansion, quote-preserving splitting, and line-reading workflows. This is the first stage toward broader POSIX scripting and Bash-compatible extensions, not full compatibility.
 - Added native kwsh integer arithmetic expansion (`$((5 + 2))`), with basic operators, grouping, integer-valued variables, bounded evaluation, and shell-assistant guidance for the supported syntax. A kwsh-specific extension also accepts spaces or tabs between the final closing parentheses (`$((5 + 2) )`).
@@ -22,6 +25,8 @@ All notable changes to Kward will be documented in this file.
 - Added the model-callable `datetime` tool for current local/offset time and ISO 8601 timestamp arithmetic with fixed UTC offsets.
 
 ### Changed
+
+- Native `. file` now executes script code consistently in `/shell`; `source file` remains declarative configuration loading. Native aliases apply to subsequent complete input units instead of being reparsed at execution time. Locale selection follows LC_ALL/category/LANG precedence, defaulting to C; unavailable locales error explicitly. Hosted exec closes the logical session without replacing its control-channel worker, and USR2 is reserved for shutdown.
 
 - Replaced the persistent `/shell` system-shell evaluator with kwsh's deliberately limited POSIX-style interpreter. Unsupported syntax now errors explicitly rather than inheriting the host shell's language; declarative rc loading and the separate one-off/model/RPC command paths retain their existing behavior.
 - Routed plugin-host Codex streaming and the OpenRouter proxy through Kward's normal Codex provider client and configured subscription credentials, rather than the public Responses API path.

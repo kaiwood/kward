@@ -7,25 +7,38 @@ module Kward
 
       private
 
-      def fork_program(tree, streams, close: [], clear_errexit: false)
+      def fork_program(tree, streams, close: [], clear_errexit: false, group: false, gate: nil, asynchronous: false)
         streams.values.compact.uniq.each(&:flush)
         Process.fork do
-          Signal.trap("INT", "DEFAULT")
+          reset_child_state
+          Signal.trap("INT", "DEFAULT") unless @traps["INT"] == ""
+          if asynchronous
+            Signal.trap("INT", "IGNORE")
+            Signal.trap("QUIT", "IGNORE")
+          end
+          if group
+            Process.setpgid(0, 0)
+            @owned_job_group = Process.getpgrp
+          end
           close.each(&:close)
+          if gate
+            gate.read
+            gate.close
+          end
           @options.delete("errexit") if clear_errexit
-          @loop_depth = 0
-          @function_depth = 0
-          @process_substitutions = nil
           begin
-            result = evaluate(tree, streams)
+            result = with_signal_handlers { evaluate(tree, streams) }
           rescue Flow => flow
             result = flow.status
           rescue StandardError => e
             streams[2]&.puts("kwsh: #{e.message}")
             result = 2
           end
+          wait_builtin([], streams) if @interactive && !@jobs.empty?
+          @status = result
+          finish(input: streams[0], output: streams[1], error: streams[2])
           streams.values.compact.uniq.each { |io| io.flush rescue nil }
-          exit!(result)
+          exit!(@status)
         end
       end
 

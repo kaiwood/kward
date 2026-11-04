@@ -54,14 +54,15 @@ module Kward
     end
     Parameter = Struct.new(:name, :operator, :word, keyword_init: true)
     HereDocument = Struct.new(:delimiter, :strip_tabs, :expand, :word, keyword_init: true)
-    Token = Struct.new(:value, :line, :source, keyword_init: true)
-    Node = Struct.new(:kind, :values, keyword_init: true)
+    Token = Struct.new(:value, :line, :source, :alias_names, :alias_next, keyword_init: true)
+    Node = Struct.new(:kind, :values, :source, keyword_init: true)
 
     class Lexer
-      OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ; | > < ( ) { }].freeze
+      OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ; & | > < ( ) { }].freeze
 
-      def initialize(source, depth: 0)
+      def initialize(source, depth: 0, aliases: {})
         @source = source
+        @aliases = aliases
         @substitution_depth = depth
         @index = 0
         @line = 1
@@ -71,7 +72,9 @@ module Kward
 
       def tokens
         result = []
-        result << token while (token = next_token)
+        while (token = next_token)
+          result << token
+        end
         result
       end
 
@@ -95,9 +98,6 @@ module Kward
             end
             operator = OPERATORS.find { |candidate| @source[@index, candidate.length] == candidate }
             operator = nil if ["{", "}"].include?(operator) && @source[@index + 1]&.match?(/[^\s;|&()<>]/)
-            if current == "&" && operator != "&&"
-              raise SyntaxError, "line #{@line}: unsupported operator near #{@source[@index, 2].inspect}"
-            end
             value = if @source[@index, 2] == "(("
               [:arithmetic, arithmetic_source]
             elsif ["<(", ">("].include?(@source[@index, 2])
@@ -170,7 +170,7 @@ module Kward
             body << "\n" if finish
           end
           document.word = if document.expand
-            Lexer.new(body, depth: @substitution_depth).heredoc_word
+            Lexer.new(body, depth: @substitution_depth, aliases: @aliases).heredoc_word
           else
             Word.new(parts: [Part.new(kind: :literal, text: body, quoted: true)])
           end
@@ -328,7 +328,7 @@ module Kward
         if current == "{"
           braced_parameter(parts, quoted)
           return
-        elsif (match = @source[@index..].to_s.match(/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9?@#*$-])/))
+        elsif (match = @source[@index..].to_s.match(/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9?@#*$!-])/))
           name = match[0]
           advance(name.length)
         elsif ["!", "-"].include?(current)
@@ -394,7 +394,7 @@ module Kward
         raise SyntaxError, "substitution nesting exceeds 100 levels" if @substitution_depth > 100
         previous_heredocs = @heredocs
         @heredocs = []
-        Parser.new(nil, lexer: self).parse_until_close
+        Parser.new(nil, lexer: self, aliases: @aliases).parse_until_close
       ensure
         @heredocs = previous_heredocs if previous_heredocs
         @substitution_depth -= 1
@@ -415,8 +415,8 @@ module Kward
         raise IncompleteInput, "line #{@line}: unclosed command substitution" unless current
         advance
         raise SyntaxError, "substitution nesting exceeds 100 levels" if @substitution_depth >= 100
-        lexer = Lexer.new(source, depth: @substitution_depth + 1)
-        parts << Part.new(kind: :command, text: Parser.new(nil, lexer: lexer).parse, quoted: quoted)
+        lexer = Lexer.new(source, depth: @substitution_depth + 1, aliases: @aliases)
+        parts << Part.new(kind: :command, text: Parser.new(nil, lexer: lexer, aliases: @aliases).parse, quoted: quoted)
       end
 
       def braced_parameter(parts, quoted)
@@ -424,9 +424,9 @@ module Kward
         raise SyntaxError, "parameter nesting exceeds 100 levels" if @parameter_depth > 100
         advance
         length = current == "#" && @source[@index + 1] != "}"
-        keys = current == "!"
+        keys = current == "!" && @source[@index + 1] != "}"
         advance if length || keys
-        name = @source[@index..][/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?@#*$-])/]
+        name = @source[@index..][/\A(?:[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[?@#*$!-])/]
         raise IncompleteInput, "line #{@line}: unclosed parameter expansion" unless current
         raise SyntaxError, "line #{@line}: unsupported parameter expansion" unless name
         advance(name.length)
@@ -464,13 +464,15 @@ module Kward
       RESERVED = %w[if then elif else fi for in do done while until case esac select function time !].freeze
       REDIRECTS = %w[< > >> <> >| >& <& << <<-].freeze
 
-      def self.parse(source)
-        new(source).parse
+      def self.parse(source, aliases: {})
+        new(source, aliases: aliases).parse
       end
 
-      def initialize(source, lexer: nil)
+      def initialize(source, lexer: nil, aliases: {})
         raise SyntaxError, "NUL bytes are not allowed in shell source" if source&.include?("\0")
-        @lexer = lexer || Lexer.new(source)
+        @lexer = lexer || Lexer.new(source, aliases: aliases)
+        @aliases = aliases
+        @alias_tokens = 0
         @tokens = []
         @index = 0
         @depth = 0
@@ -537,9 +539,17 @@ module Kward
         commands = []
         separators
         until peek.nil? || stops.include?(text)
-          commands << and_or
+          expand_alias
+          break if peek.nil? || stops.include?(text)
+          if text == ";" && @tokens[@index].source.nil?
+            separators
+            next
+          end
+          command = and_or
+          background = accept("&")
+          commands << (background ? node(:background, command) : command)
           break if peek.nil? || [";;", ")"].include?(text) && stops.include?(text)
-          error("expected command separator") unless accept(";")
+          error("expected command separator") unless background || accept(";")
           separators
         end
         node(:sequence, commands)
@@ -556,17 +566,43 @@ module Kward
         rest.empty? ? first : node(:and_or, first, rest)
       end
 
+      def expand_alias
+        loop do
+          name = peek.is_a?(Word) && peek.literal
+          break unless name && @aliases.key?(name) && !RESERVED.include?(name)
+          token = @tokens[@index]
+          names = token.alias_names || []
+          break if names.include?(name)
+          raise SyntaxError, "alias expansion exceeds 100 levels" if names.length >= 100
+          source = @aliases.fetch(name)
+          replacements = Lexer.new(source, aliases: @aliases).tokens
+          @alias_tokens += replacements.length
+          raise SyntaxError, "alias expansion exceeds 65536 tokens" if @alias_tokens > 65_536
+          replacements.each { |replacement| replacement.alias_names = names + [name] }
+          if source.end_with?(" ", "\t")
+            peek(1)
+            @tokens[@index + 1].alias_next = true if @tokens[@index + 1]
+          end
+          @tokens[@index, 1] = replacements
+        end
+      end
+
       def pipeline
+        start = @index
+        expand_alias
         negate = accept("!")
         commands = [command]
         while accept("|")
           separators
           commands << command
         end
-        node(:pipeline, commands, negate)
+        result = node(:pipeline, commands, negate)
+        result.source = @tokens[start...@index].filter_map(&:source).join(" ")
+        result
       end
 
       def command
+        expand_alias
         @depth += 1
         raise SyntaxError, "shell syntax nesting exceeds 100 levels" if @depth > 100
         result = if peek.is_a?(Array) && peek.first == :arithmetic
@@ -805,6 +841,8 @@ module Kward
         words = []
         redirects = []
         while peek.is_a?(Word) || redirection?
+          expand_alias if words.all?(&:assignment) || @tokens[@index]&.alias_next
+          break unless peek.is_a?(Word) || redirection?
           if redirection?
             redirects << redirect
           else

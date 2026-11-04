@@ -6,8 +6,15 @@ module Kward
     class Pattern
       CLASSES = %w[alnum alpha blank cntrl digit graph lower print punct space upper xdigit].freeze
 
-      def initialize(source)
-        @source = source
+      Bracket = Struct.new(:source, :locale) do
+        def match?(value)
+          locale.bracket?(source, value)
+        end
+      end
+
+      def initialize(source, locale: nil)
+        @locale = locale
+        @source = locale ? locale.text(source) : source
         @index = 0
         @tokens = []
         while (character = @source[@index])
@@ -25,8 +32,12 @@ module Kward
         end
       end
 
+      def wildcards?
+        @tokens.any? { |token| token == :star || token == :any || token.is_a?(Regexp) || token.is_a?(Bracket) }
+      end
+
       def match?(value)
-        characters = value.chars
+        characters = (@locale ? @locale.text(value) : value).chars
         token_index = 0
         value_index = 0
         star_index = nil
@@ -37,7 +48,7 @@ module Kward
             star_index = token_index
             token_index += 1
             retry_index = value_index
-          elsif token == :any || token.is_a?(Regexp) && token.match?(characters[value_index]) || token == characters[value_index]
+          elsif token == :any || (token.is_a?(Regexp) || token.is_a?(Bracket)) && token.match?(characters[value_index]) || token == characters[value_index]
             token_index += 1
             value_index += 1
           elsif star_index
@@ -73,10 +84,16 @@ module Kward
         while (character = @source[@index])
           if character == "]" && (entries.positive? || content.end_with?("\\]"))
             @index += 1
+            return Bracket.new(@source[(start - 1)...@index], @locale) if @locale
             return Regexp.new("\\A[#{content}]\\z")
           elsif character == "\\" && @source[@index + 1]
             content << bracket_literal(@source[@index + 1])
             @index += 2
+          elsif (match = @source[@index..].match(/\A\[([.=])(.*?)\1\]/m))
+            # Collating symbols and equivalence classes are interpreted by libc.
+            return /\A\b\B\z/ if !@locale && match[2].length != 1
+            content << bracket_literal(match[2])
+            @index += match[0].length
           elsif (match = @source[@index..].match(/\A\[:([a-z]+):\]/)) && CLASSES.include?(match[1])
             content << match[0]
             @index += match[0].length

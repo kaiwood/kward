@@ -5,7 +5,77 @@ module Kward
     module Builtins
       private
 
-      SHELL_OPTIONS = { "a" => "allexport", "e" => "errexit", "f" => "noglob", "n" => "noexec", "u" => "nounset", "x" => "xtrace", "C" => "noclobber" }.freeze
+      SHELL_OPTIONS = { "a" => "allexport", "m" => "monitor", "e" => "errexit", "f" => "noglob", "n" => "noexec", "u" => "nounset", "x" => "xtrace", "C" => "noclobber" }.freeze
+
+      def persist_descriptors(redirected, streams)
+        redirected.each do |descriptor, io|
+          next if streams[descriptor].equal?(io)
+          copy = io&.dup
+          copy.sync = true if copy
+          @owned_descriptors << copy if copy
+          @persistent_descriptors[descriptor] = copy
+          streams[descriptor] = copy
+          @base_streams[descriptor] = copy if @base_streams
+        end
+        release_descriptors
+      end
+
+      def release_descriptors
+        retained = @persistent_descriptors.values + @active_streams.flat_map(&:values)
+        @owned_descriptors.delete_if do |io|
+          next false if retained.include?(io)
+          io.close unless io.closed?
+          true
+        end
+      end
+
+      def exec_builtin(args, streams)
+        clear = false
+        argv0 = nil
+        login = false
+        while args.first&.start_with?("-")
+          option = args.shift
+          break if option == "--"
+          case option
+          when "-c" then clear = true
+          when "-l" then login = true
+          when "-a"
+            argv0 = args.shift || raise(ExecutionError, "exec: -a requires a name")
+          else raise ExecutionError, "exec: unsupported option #{option}"
+          end
+        end
+        if args.empty?
+          persist_descriptors(streams, @streams)
+          return 0
+        end
+        executable = executable_path(args.first)
+        unless executable
+          streams[2]&.puts("kwsh: #{args.first}: command not found")
+          raise Flow.new(:exit, 127) unless @interactive
+          return 127
+        end
+        arguments = args.dup
+        arguments[0] = argv0 || arguments[0]
+        arguments[0] = "-#{arguments[0]}" if login
+        env = clear ? {} : environment
+        NativeProcess.validate(arguments, env)
+        if @replace_process
+          result = NativeProcess.replace(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask)
+          raise Flow.new(:exit, result)
+        else
+          pid = NativeProcess.spawn(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask)
+          result = wait(pid)
+          pid = nil
+          # The protocol worker must return its final state before exiting.
+          @traps.delete("EXIT")
+          raise Flow.new(:exit, result)
+        end
+      rescue Interrupt
+        @traps.delete("EXIT")
+        raise Flow.new(:exit, 130)
+      ensure
+        terminate(pid) if pid
+      end
 
       def set_options(args, streams)
         if args.empty?
@@ -90,12 +160,11 @@ module Kward
           @variables.fetch("PATH", "/usr/bin:/bin").split(":", -1).map { |directory| File.expand_path(File.join(directory.empty? ? "." : directory, name), @cwd) }.find { |candidate| File.file?(candidate) }
         end
         raise ExecutionError, ".: file not found: #{name}" unless path
-        tree = Parser.parse(File.read(path))
         previous = @arguments
         @arguments = args.drop(1) if args.length > 1
         @source_depth += 1
         begin
-          evaluate(tree, streams)
+          File.open(path) { |input| evaluate_program(input, streams) }
         rescue Flow => flow
           raise unless flow.kind == :return
           flow.status

@@ -51,8 +51,8 @@ module Kward
           end
           other = scalar(right)
           case operator
-          when "<" then value < other
-          when ">" then value > other
+          when "<" then Locale.with(@variables) { |locale| locale.compare(value, other).negative? }
+          when ">" then Locale.with(@variables) { |locale| locale.compare(value, other).positive? }
           when "-eq", "-ne", "-lt", "-le", "-gt", "-ge"
             operators = { "-eq" => "==", "-ne" => "!=", "-lt" => "<", "-le" => "<=", "-gt" => ">", "-ge" => ">=" }
             Arithmetic.binary(operators.fetch(operator), arithmetic_value(value).to_i, arithmetic_value(other).to_i) == 1

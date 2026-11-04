@@ -40,6 +40,14 @@ class TestNativeShellPattern < KwardTestCase
     refute Kward::NativeShell::Pattern.new('[z-a]').match?("z")
   end
 
+  def test_quoted_and_incomplete_patterns_do_not_require_directory_scans
+    refute Kward::NativeShell::Pattern.new('\*').wildcards?
+    refute Kward::NativeShell::Pattern.new('\[quoted\]').wildcards?
+    refute Kward::NativeShell::Pattern.new('[incomplete').wildcards?
+    assert Kward::NativeShell::Pattern.new('[a-c]').wildcards?
+    assert Kward::NativeShell::Pattern.new('*').wildcards?
+  end
+
   def test_many_wildcards_do_not_use_recursive_or_regex_backtracking
     pattern = Kward::NativeShell::Pattern.new("*a" * 200 + "z")
     refute pattern.match?("a" * 400)

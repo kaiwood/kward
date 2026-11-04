@@ -30,7 +30,10 @@ class TestShellPrompt < KwardTestCase
     assert_includes instructions, "Indexed arrays use values="
     assert_includes instructions, "Process substitution <(command)"
     assert_includes instructions, "shopt -s globstar"
-    assert_includes instructions, "Background jobs, wait, traps, exec"
+    assert_includes instructions, "Background jobs, wait, traps, exec, jobs, fg/bg, and kill are supported"
+    assert_includes instructions, "USR2 is reserved for hosted shutdown"
+    assert_includes instructions, "aliases expand unquoted command tokens at read time"
+    assert_includes instructions, "LC_ALL, LC_CTYPE, LC_COLLATE, and LANG"
     assert_includes instructions, "set -x traces expanded values"
     refute_includes instructions, "Command/arithmetic substitution"
   end

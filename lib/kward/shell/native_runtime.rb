@@ -7,6 +7,9 @@ require_relative "native_expansion"
 require_relative "native_substitution"
 require_relative "native_builtins"
 require_relative "native_arrays"
+require_relative "native_jobs"
+require_relative "native_traps"
+require_relative "native_program"
 
 module Kward
   module NativeShell
@@ -32,14 +35,16 @@ module Kward
       include Builtins
       include Condition
       include Arrays
+      include Jobs
+      include Traps
 
-      UNSUPPORTED = %w[exec trap local typeset jobs fg bg wait ulimit builtin source].freeze
-      SPECIAL = %w[export readonly eval . unset exit return break continue shift set :].freeze
-      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh]).freeze
+      UNSUPPORTED = %w[local typeset ulimit builtin source].freeze
+      SPECIAL = %w[export readonly eval . unset exit return break continue shift set exec trap :].freeze
+      BUILTINS = (SPECIAL + %w[true false cd pwd alias unalias read getopts command shopt declare umask kwsh jobs fg bg wait kill]).freeze
 
       attr_reader :cwd, :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false)
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false)
         @cwd = File.expand_path(cwd)
         @variables = env.dup
         @variables["PWD"] = @cwd
@@ -54,14 +59,20 @@ module Kward
         @source_depth = 0
         @eval_depth = 0
         @globstar = false
-        @options = Set.new
+        @options = Set.new(interactive ? ["monitor"] : [])
+        @jobs = {}
+        @traps = {}
+        @pending_signals = []
+        @persistent_descriptors = {}
+        @owned_descriptors = []
+        @active_streams = []
+        @replace_process = replace_process
         @interactive = interactive
         @umask = File.umask
         @status = 0
         @exited = false
         @loop_depth = 0
         @function_depth = 0
-        @alias_stack = []
       end
 
       def environment
@@ -69,8 +80,12 @@ module Kward
       end
 
       def run(source, input: $stdin, output: $stdout, error: $stderr)
-        tree = Parser.parse(source)
-        evaluate(tree, { 0 => input, 1 => output, 2 => error })
+        run_input(StringIO.new(source), input: input, output: output, error: error)
+      end
+
+      def run_input(source, input: $stdin, output: $stdout, error: $stderr)
+        @base_streams = { 0 => input, 1 => output, 2 => error }.merge(@persistent_descriptors)
+        with_signal_handlers { evaluate_program(source, @base_streams) }
       rescue Flow => flow
         if flow.kind == :exit
           @exited = true
@@ -99,13 +114,26 @@ module Kward
 
       private
 
+      def evaluate_program(input, streams)
+        result = @status
+        Program.each(input, aliases: @aliases) do |tree|
+          result = evaluate(tree, streams) unless tree.values.first.empty?
+        end
+        @status = result
+      end
+
       def evaluate(node, streams, ignored: false)
+        @active_streams << streams
         previous_ignore = @ignore_failure
         previous_streams = @streams
+        previous_description = @command_description
+        @command_description = node.source if node.source
         @ignore_failure = previous_ignore || ignored
         return 0 if @options.include?("noexec") && !@interactive
         @streams = streams
         @status = case node.kind
+        when :background
+          start_job(node.values.first, streams, background: true)
         when :sequence
           result = 0
           node.values.first.each { |command| result = evaluate(command, streams) }
@@ -142,9 +170,17 @@ module Kward
         when :subshell
           subshell(node.values.first, streams)
         when :pipeline
-          pipeline(*node.values, streams)
+          if @options.include?("monitor") && !@job_child && foreground_process?(node)
+            start_job(node, streams, background: false)
+          else
+            pipeline(*node.values, streams)
+          end
         when :simple
           simple(*node.values, streams)
+        when :external
+          external(node.values.first, streams)
+        when :script
+          script(node.values.first, streams)
         when :redirect
           command, redirects = node.values
           with_redirects(redirects, streams) { |redirected| evaluate(command, redirected) }
@@ -184,10 +220,14 @@ module Kward
         failed_command = %i[simple subshell test arithmetic pipeline].include?(node.kind)
         negated = node.kind == :pipeline && node.values.last
         raise Flow.new(:exit, @status) if failed_command && !negated && @options.include?("errexit") && !@ignore_failure && !@status.zero?
+        run_pending_traps(streams)
         @status
       ensure
         @streams = previous_streams
+        @command_description = previous_description
         @ignore_failure = previous_ignore
+        @active_streams.pop
+        release_descriptors
       end
 
       def loop_commands
@@ -230,22 +270,25 @@ module Kward
         pids = []
         commands.each_with_index do |command, index|
           pids << Process.fork do
-            Signal.trap("INT", "DEFAULT")
+            reset_child_state
             selected = streams.merge(
               0 => index.zero? ? streams[0] : pipes[index - 1][0],
               1 => index == commands.length - 1 ? streams[1] : pipes[index][1]
             )
             pipes.flatten.each { |io| io.close unless selected.value?(io) }
             begin
-              exit_status = evaluate(command, selected, ignored: index < commands.length - 1)
+              exit_status = with_signal_handlers { evaluate(command, selected, ignored: index < commands.length - 1) }
             rescue Flow => flow
               exit_status = flow.status
             rescue StandardError => e
               selected[2]&.puts("kwsh: #{e.message}")
               exit_status = 2
             end
+            wait_builtin([], selected) if @interactive && !@jobs.empty?
+            @status = exit_status
+            finish(input: selected[0], output: selected[1], error: selected[2])
             selected.values.compact.each { |io| io.flush rescue nil }
-            exit!(exit_status)
+            exit!(@status)
           end
         end
         pipes.flatten.each(&:close)
@@ -284,7 +327,7 @@ module Kward
           begin
             assignments.each do |key, value|
               assign(key, expand(value, assignment: true).join)
-              @exported.add(key) unless persistent
+              @exported.add(key) if !persistent || name == "exec"
             end
             dispatch(arguments, redirected)
           rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
@@ -313,15 +356,6 @@ module Kward
         if functions && @functions.key?(name) && !SPECIAL.include?(name)
           return call_function(name, args, streams)
         end
-        if functions && @aliases.key?(name) && !BUILTINS.include?(name) && !@alias_stack.include?(name)
-          raise ExecutionError, "alias expansion exceeds 100 levels" if @alias_stack.length >= 100
-          @alias_stack << name
-          begin
-            return evaluate(Parser.parse([@aliases[name], *args.map { |arg| Shellwords.escape(arg) }].join(" ")), streams)
-          ensure
-            @alias_stack.pop
-          end
-        end
         raise ExecutionError, "#{name}: not supported by native kwsh" if UNSUPPORTED.include?(name)
 
         case name
@@ -340,12 +374,19 @@ module Kward
         when "shopt" then shopt(args, streams)
         when "command" then command_builtin(args, streams)
         when "getopts" then getopts(args, streams)
+        when "jobs" then jobs_builtin(args, streams)
+        when "wait" then wait_builtin(args, streams)
+        when "fg" then resume_job(args, streams, foreground: true)
+        when "bg" then resume_job(args, streams, foreground: false)
+        when "kill" then kill_builtin(args, streams)
+        when "trap" then trap_builtin(args, streams)
+        when "exec" then exec_builtin(args, streams)
         when "." then source_script(args, streams)
         when "eval"
           raise ExecutionError, "eval nesting exceeds 100 levels" if @eval_depth >= 100
           @eval_depth += 1
           begin
-            evaluate(Parser.parse(args.join(" ")), streams)
+            evaluate_program(StringIO.new(args.join(" ")), streams)
           ensure
             @eval_depth -= 1
           end
@@ -419,6 +460,9 @@ module Kward
       end
 
       def script(args, streams)
+        if @options.include?("monitor") && !@job_child
+          return start_job(Node.new(kind: :script, values: [args], source: @command_description), streams, background: false)
+        end
         raise ExecutionError, "Usage: kwsh <file> [arguments...]" if args.empty?
         path = File.expand_path(args.first, @cwd)
         source = File.read(path)
@@ -426,8 +470,11 @@ module Kward
         pid = Process.fork do
           Signal.trap("INT", "DEFAULT")
           File.umask(@umask)
-          runtime = self.class.new(cwd: @cwd, env: environment, arguments: args.drop(1), name: args.first)
-          status = runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
+          runtime = self.class.new(cwd: @cwd, env: environment, arguments: args.drop(1), name: args.first, interactive: @interactive)
+          runtime.send(:reset_child_state, job_group: @owned_job_group)
+          runtime.run(source, input: streams[0], output: streams[1], error: streams[2])
+          runtime.send(:wait_builtin, [], streams) if @interactive
+          status = runtime.finish(input: streams[0], output: streams[1], error: streams[2])
           streams.values.compact.uniq.each(&:flush)
           exit!(status)
         end
@@ -476,11 +523,10 @@ module Kward
         else
           args.each do |argument|
             key, value = argument.split("=", 2)
-            unless key.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/) && !BUILTINS.include?(key)
+            unless key.match?(/\A[A-Za-z_][A-Za-z0-9_-]*\z/)
               raise ExecutionError, "invalid alias name: #{key}"
             end
             if value
-              Parser.parse(value)
               @aliases[key] = value
             elsif @aliases.key?(key)
               write_line(streams, "alias #{key}=#{Shellwords.escape(@aliases[key])}")
@@ -647,6 +693,9 @@ module Kward
       end
 
       def external(arguments, streams)
+        if @options.include?("monitor") && !@job_child
+          return start_job(Node.new(kind: :external, values: [arguments], source: @command_description), streams, background: false)
+        end
         name = arguments.first
         executable = executable_path(name)
         unless executable
@@ -662,8 +711,16 @@ module Kward
       end
 
       def wait(pid)
-        _, status = Process.wait2(pid)
-        status.exitstatus || 128 + status.termsig
+        loop do
+          _, status = Process.wait2(pid, Process::WUNTRACED)
+          if status.stopped?
+            # Programs such as pagers can suspend themselves, not the entire
+            # group. Surface that stop through the native job supervisor.
+            Process.kill(status.stopsig, -@owned_job_group) if @owned_job_group == Process.getpgrp
+            next
+          end
+          return status.exitstatus || 128 + status.termsig
+        end
       end
 
       def terminate(pid)

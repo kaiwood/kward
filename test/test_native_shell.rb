@@ -10,6 +10,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def teardown
+    @runtime.close
     FileUtils.remove_entry(@directory)
     super
   end
@@ -32,6 +33,197 @@ class TestNativeShell < KwardTestCase
     assert_equal status, actual_status, error
     assert_equal "", error
     assert_equal expected, output
+  end
+
+  def test_background_lists_have_isolated_state_and_waitable_statuses
+    assert_output("parent:7:1:127", <<~'SHELL')
+      value=parent
+      { value=child; exit 7; } & first=$!
+      false && printf bad & second=${!}
+      wait "$first"; printf '%s:%s:' "$value" "$?"
+      wait "$second"; printf '%s:' "$?"
+      wait "$first"; printf '%s' "$?"
+    SHELL
+  end
+
+  def test_wait_all_returns_zero_and_subshells_have_no_parent_jobs
+    assert_output("0:0:127", <<~'SHELL')
+      false & pid=$!
+      (wait; printf '%s:' "$?")
+      wait; printf '%s:' "$?"
+      wait "$pid"; printf '%s' "$?"
+    SHELL
+  end
+
+  def test_background_stdin_is_null_unless_explicitly_redirected
+    File.write(File.join(@directory, "input"), "value\n")
+    assert_output("1:value", <<~'SHELL')
+      read item & wait $!; printf '%s:' "$?"
+      { read item <input; printf '%s' "$item"; } & wait
+    SHELL
+  end
+
+  def test_background_pipeline_status_and_job_ids
+    assert_output("0:1", 'false | true & wait %1; printf "%s:" "$?"; set -o pipefail; false | true & wait %+; printf "%s" "$?"')
+  end
+
+  def test_kill_and_wait_report_signal_status
+    assert_output((128 + Signal.list.fetch("TERM")).to_s, 'sleep 30 & pid=$!; kill -TERM %1; wait "$pid"; printf "%s" "$?"')
+  end
+
+  def test_traps_run_native_source_preserve_status_and_restore_host_handlers
+    before = Signal.trap("USR1", "IGNORE")
+    assert_output("signal:0:after", %q{trap 'printf "signal:%s:" "$?"' USR1; kill -USR1 $$; printf after})
+    assert_equal "IGNORE", Signal.trap("USR1", "IGNORE")
+  ensure
+    Signal.trap("USR1", before)
+  end
+
+  def test_traps_reset_and_list_without_executing_actions
+    assert_output("", "trap 'printf bad' USR1; trap - USR1; trap")
+    assert_output("", "trap '' USR1; kill -USR1 $$")
+    assert_equal 2, execute("trap ':' KILL").first
+  end
+
+  def test_exec_descriptors_persist_and_duplicate_before_closing
+    assert_output("visible:saved:", <<~'SHELL')
+      exec 3>output
+      printf saved >&3
+      exec 4>&3 3>&-
+      printf : >&4
+      exec 4>&-
+      printf visible:
+      cat output
+    SHELL
+  end
+
+  def test_aliases_expand_tokens_not_values_and_honor_trailing_blanks
+    assert_output("yes:yes:yes", <<~'SHELL')
+      alias say='printf %s'
+      alias indirect='say '
+      alias word=yes
+      indirect word
+      alias choose='if'
+      choose true; then printf :yes; fi
+      alias say='printf :yes'
+      say
+    SHELL
+  end
+
+  def test_aliases_do_not_expand_quoted_or_parameter_command_names
+    assert_output("yes", <<~'SHELL')
+      alias printf='false'
+      "printf" '%s' yes
+      name=printf
+      $name ''
+    SHELL
+  end
+
+  def test_alias_changes_wait_until_the_next_complete_input_unit
+    assert_output("oldnew", <<~'SHELL')
+      alias say='printf old'
+      alias say='printf new'; say
+      say
+    SHELL
+  end
+
+  def test_recursive_aliases_stop_at_the_same_name
+    assert_output("okay", <<~'SHELL')
+      alias printf='printf %s'
+      printf okay
+    SHELL
+  end
+
+  def test_locale_controls_character_lengths_classes_and_collating_symbols
+    assert_output("3:6:yes:yes:no", <<~'SHELL')
+      LC_ALL=C.UTF-8
+      value='é猫a'
+      printf '%s:' "${#value}"
+      LC_ALL=C
+      printf '%s:' "${#value}"
+      case a in [[.a.]]) printf yes:;; esac
+      case a in [[=a=]]) printf yes:;; esac
+      case é in [[:alpha:]]) printf bad;; *) printf no;; esac
+    SHELL
+  end
+
+  def test_locale_is_scoped_and_invalid_names_fail_explicitly
+    assert_output("2", 'LC_ALL=C; value=é; printf "%s" "${#value}"')
+    assert_output("1", 'LC_ALL=C.UTF-8; value=é; printf "%s" "${#value}"')
+    status, _, error = execute('LC_ALL=kwsh_nonexistent_locale; value=x; printf "%s" "${#value}"')
+    assert_equal 2, status
+    assert_includes error, "unavailable locale"
+  end
+
+  def test_recursive_globs_skip_hidden_files_and_symlink_cycles
+    FileUtils.mkdir_p(File.join(@directory, "a", "b"))
+    File.write(File.join(@directory, "a", "b", "data.txt"), "")
+    File.write(File.join(@directory, "a", ".hidden.txt"), "")
+    File.symlink(@directory, File.join(@directory, "a", "loop"))
+    assert_output("<a/b/data.txt>", "shopt -s globstar; printf '<%s>' **/*.txt")
+    assert_output("<a/><a/b/><a/loop/>", "shopt -s globstar; printf '<%s>' **/")
+    assert_output("<a><a/b><a/b/data.txt><a/loop>", "shopt -s globstar; printf '<%s>' **")
+    assert_output("<a/b/data.txt>", "printf '<%s>' a/[[.b.]]/*.txt")
+  end
+
+  def test_aliases_are_expanded_inside_substitutions
+    assert_output("one:two", <<~'SHELL')
+      alias say='printf %s'
+      printf '%s:%s' "$(say one)" "`say two`"
+    SHELL
+  end
+
+  def test_named_user_and_assignment_tildes_preserve_quoted_prefixes
+    user = Etc.getpwuid
+    assert_output("#{user.dir}:#{@directory}:#{user.dir}:~missing_kwsh_user", "printf '%s:' ~#{user.name}; paths=~:~#{user.name}; printf '%s:' \"$paths\"; printf '%s' ~missing_kwsh_user")
+    assert_output("~root:~root", %q{printf '%s:' ~"root"; user=root; printf '%s' ~$user})
+    assert_output("#{@directory}:#{@directory}/bin", 'export paths=~:~/bin; printf "%s" "$paths"')
+  end
+
+  def test_blank_lines_and_comments_preserve_status
+    assert_output("1", "false\n# explanation\n\nprintf '%s' \"$?\"\n")
+  end
+
+  def test_exec_option_terminator_preserves_redirects
+    assert_output("stored", 'exec -- 3>saved; printf stored >&3; exec 3>&-; cat saved')
+  end
+
+  def test_empty_alias_is_an_empty_input_line
+    assert_output("yes", "alias empty=''\nempty\nprintf yes\n")
+  end
+
+  def test_locale_scope_restores_the_calling_threads_locale_even_on_error
+    locale = Kward::NativeShell::Locale
+    before = locale::USE.call(0).to_i
+    locale.with("LC_ALL" => "C.UTF-8") do |active|
+      assert_equal Encoding::UTF_8, active.encoding
+      assert_raises(Kward::NativeShell::ExecutionError) { locale.with("LC_ALL" => "kwsh_missing_locale") { flunk } }
+    end
+    assert_equal before, locale::USE.call(0).to_i
+  end
+
+  def test_job_selectors_and_signal_name_translation
+    assert_output("#{Signal.list.fetch('TERM')}:TERM", 'number=$(kill -l TERM); name=$(kill -l 143); printf "%s:%s" "$number" "$name"')
+    assert_output("0", 'sleep 0.01 & wait %sleep; printf "%s" "$?"')
+  end
+
+  def test_locale_objects_are_released_using_platform_ownership_rules
+    locale = Kward::NativeShell::Locale
+    original = locale::FREE.method(:call)
+    released = []
+    locale::FREE.define_singleton_method(:call) { |handle| released << handle.to_i; original.call(handle) }
+    locale.with("LC_ALL" => "C") { |active| assert_equal Encoding::BINARY, active.encoding }
+    assert_equal locale::DARWIN ? 2 : 1, released.length
+    assert_equal released.uniq, released
+  ensure
+    locale::FREE.singleton_class.send(:remove_method, :call)
+  end
+
+  def test_oversized_kill_pids_fail_without_ending_the_interpreter
+    status, _, error = execute("kill #{'9' * 100}")
+    assert_equal 2, status
+    assert_includes error, "invalid pid"
+    assert_output("alive", "printf alive")
   end
 
   def test_arithmetic_expansion_adds_the_requested_numbers
@@ -237,11 +429,11 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_aliases_are_available_inside_compound_programs
-    assert_output("ab", "alias say='printf %s'; for value in a b; do say \"$value\"; done")
+    assert_output("ab", "alias say='printf %s'\nfor value in a b; do say \"$value\"; done")
   end
 
   def test_parse_errors_reject_the_whole_program_before_side_effects
-    ["echo $(if)", "echo `if`", "echo $((1+=2))", "cat <<EOF\ntext", "echo x &", "(echo x", "case x in x echo x;; esac", "[[ -f ]]", "echo ${x:1}", "echo $'unclosed"].each do |unsupported|
+    ["echo $(if)", "echo `if`", "echo $((1+=2))", "cat <<EOF\ntext", "echo x & &", "(echo x", "case x in x echo x;; esac", "[[ -f ]]", "echo ${x:1}", "echo $'unclosed"].each do |unsupported|
       status, _, error = execute("printf touched >sentinel; #{unsupported}")
       assert_equal 2, status, unsupported
       refute File.exist?(File.join(@directory, "sentinel")), unsupported
@@ -253,11 +445,11 @@ class TestNativeShell < KwardTestCase
     ["if true; then", "for x in a; do", "f() {", "printf 'hello", "printf x |"].each do |source|
       assert_raises(Kward::NativeShell::IncompleteInput, source) { Kward::NativeShell::Parser.parse(source) }
     end
-    assert_raises(Kward::NativeShell::SyntaxError) { Kward::NativeShell::Parser.parse("echo x &") }
+    assert_raises(Kward::NativeShell::SyntaxError) { Kward::NativeShell::Parser.parse("echo x & &") }
   end
 
   def test_unsupported_builtins_and_read_options_are_explicit_errors
-    ["exec true", "set -o unknown", "read -p prompt", "read", "break", "return"].each do |source|
+    ["exec --unsupported true", "set -o unknown", "read -p prompt", "read", "break", "return"].each do |source|
       status, output, error = execute(source)
       assert_equal 2, status, source
       assert_empty output
@@ -404,7 +596,7 @@ class TestNativeShell < KwardTestCase
       printf '%s|' "${#@}"
       printf '%s:%s' "${@#pre}"
     SHELL
-    assert_output("3", 'value="é猫a"; printf "%s" "${#value}"')
+    assert_output("3", 'LC_ALL=C.UTF-8; value="é猫a"; printf "%s" "${#value}"')
   end
 
   def test_parameter_expansion_rejects_invalid_or_excessive_nesting_before_side_effects

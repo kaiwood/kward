@@ -1,0 +1,37 @@
+require "stringio"
+
+module Kward
+  module NativeShell
+    # Read one complete command at a time. In stdin mode the next byte may belong
+    # to read or an external command, so never buffer past the logical boundary.
+    module Program
+      def self.source_encoding(source)
+        source = source.dup.force_encoding(Encoding::UTF_8)
+        source.force_encoding(Encoding::BINARY) unless source.valid_encoding?
+        source
+      end
+      private_class_method :source_encoding
+
+      def self.each(input, aliases: {})
+        source = +"".b
+        loop do
+          begin
+            byte = input.readpartial(1)
+          rescue EOFError
+            yield Parser.parse(source_encoding(source), aliases: aliases) unless source.empty?
+            break
+          end
+          source << byte
+          next unless byte == "\n"
+          begin
+            tree = Parser.parse(source_encoding(source), aliases: aliases)
+          rescue IncompleteInput
+            next
+          end
+          yield tree
+          source = +"".b
+        end
+      end
+    end
+  end
+end

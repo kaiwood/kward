@@ -20,6 +20,223 @@ class TestPersistentShellSession < KwardTestCase
     Kward::PersistentShellSession.new(cwd: dir, shell: "/bin/sh", **options)
   end
 
+  def test_background_jobs_survive_commands_and_are_closed_even_with_ignored_term
+    Dir.mktmpdir("persistent-jobs") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent("trap '' TERM; sleep 30 & printf '%s' \"$!\"")
+      assert_equal 0, result.exit_status
+      pid = Integer(result.output.lines.last.strip)
+      assert_equal pid, Process.getpgid(pid)
+      assert_includes shell.run_for_agent("jobs -l").output, "Running"
+      shell.close
+      wait_until(timeout: 2) do
+        Process.kill(0, pid)
+        false
+      rescue Errno::ESRCH
+        true
+      end
+      assert_raises(Errno::ESRCH) { Process.kill(0, pid) }
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_stopped_jobs_can_resume_in_background_and_be_waited_for
+    Dir.mktmpdir("persistent-jobs") do |dir|
+      shell = build_shell(dir)
+      assert_equal 0, shell.run_for_agent("sleep 30 &").exit_status
+      assert_equal 0, shell.run_for_agent("kill -STOP %1").exit_status
+      wait_until(timeout: 2) { shell.run_for_agent("jobs -s").output.include?("Stopped") }
+      assert_equal 0, shell.run_for_agent("bg %1").exit_status
+      result = shell.run_for_agent("kill -TERM %1; wait %1")
+      assert_equal 128 + Signal.list.fetch("TERM"), result.exit_status
+      assert_equal 0, shell.run_for_agent(":").exit_status
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_terminal_stop_and_foreground_resume_restore_shell_ownership
+    Dir.mktmpdir("persistent-jobs") do |dir|
+      shell = build_shell(dir)
+      reader, writer = IO.pipe
+      sink = Sink.new
+      command = Shellwords.join([RbConfig.ruby, "-e", "STDOUT.sync=true; puts 'ready'; sleep 30"])
+      result = nil
+      thread = Thread.new { result = shell.run_interactive(command, input: reader, sink: sink) }
+      wait_until(timeout: 3) { sink.output.include?("ready") }
+      writer.write("\x1a")
+      writer.flush
+      assert thread.join(3), "foreground job did not stop"
+      assert_equal 128 + Signal.list.fetch("TSTP"), result.exit_status
+      assert_includes shell.run_for_agent("jobs -s").output, "Stopped"
+      thread = Thread.new { result = shell.run_interactive("fg", input: reader, sink: sink) }
+      # Allow the resumed foreground group to acquire the PTY before Ctrl-C.
+      sleep 0.05
+      writer.write("\x03")
+      writer.flush
+      assert thread.join(3), "foreground job did not respond to interrupt"
+      assert_equal 130, result.exit_status
+      assert_equal 0, shell.run_for_agent(":").exit_status
+    ensure
+      shell&.close
+      thread&.join(1)
+      reader&.close
+      writer&.close
+    end
+  end
+
+  def test_exec_reports_final_state_and_closes_the_hosted_shell
+    Dir.mktmpdir("persistent-exec") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent("exec printf replaced; printf bad")
+      assert_equal 0, result.exit_status
+      assert_equal "$ exec printf replaced; printf bad\nreplaced\n", result.output
+      assert shell.exited?
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_native_aliases_are_not_preexpanded_by_the_prompt_router
+    Dir.mktmpdir("persistent-aliases") do |dir|
+      shell = build_shell(dir)
+      assert_equal 0, shell.run_for_agent("alias printf='printf prefix:%s'").exit_status
+      result = shell.run_for_agent("printf value")
+      assert_equal "$ printf value\nprefix:value\n", result.output
+      result = shell.run_for_agent(%q{"printf" '%s' literal})
+      assert_equal "$ \"printf\" '%s' literal\nliteral\n", result.output
+      assert_equal 0, shell.run_for_agent("alias choose='if'").exit_status
+      result = shell.run_for_agent("choose true; then command printf yes; fi")
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "yes"
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_dot_sources_native_code_while_source_remains_declarative
+    Dir.mktmpdir("persistent-source") do |dir|
+      File.write(File.join(dir, "library.kwsh"), "export NATIVE_LIBRARY=ready\nprintf sourced\n")
+      shell = build_shell(dir)
+      result = shell.run_for_agent(". ./library.kwsh")
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "sourced"
+      assert_equal "ready", shell.child_env["NATIVE_LIBRARY"]
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_signal_traps_remain_active_while_the_hosted_shell_is_idle
+    Dir.mktmpdir("persistent-traps") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent(%q{trap 'printf caught >notification' USR1; printf '%s' "$$"})
+      pid = Integer(result.output.lines.last.strip)
+      Process.kill("USR1", pid)
+      path = File.join(dir, "notification")
+      wait_until(timeout: 2) { File.exist?(path) && File.read(path) == "caught" }
+      assert_equal "caught", File.read(path)
+      assert_equal 0, shell.run_for_agent(":").exit_status
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_chld_traps_do_not_retrigger_themselves_while_idle
+    Dir.mktmpdir("persistent-traps") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent(%q{trap 'printf x >>notifications' CHLD; /usr/bin/true})
+      assert_equal 0, result.exit_status
+      path = File.join(dir, "notifications")
+      wait_until(timeout: 2) { File.exist?(path) && File.size(path).positive? }
+      initial = File.read(path)
+      sleep 0.15
+      assert_equal initial, File.read(path)
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_foreground_terminal_ownership_survives_stdin_redirection
+    Dir.mktmpdir("persistent-terminal") do |dir|
+      shell = build_shell(dir)
+      reader, writer = IO.pipe
+      sink = Sink.new
+      code = "STDOUT.sync=true; puts 'ready'; File.open('/dev/tty') { |tty| print 'got=' + tty.gets }"
+      command = Shellwords.join([RbConfig.ruby, "-e", code]) + " </dev/null"
+      result = nil
+      thread = Thread.new { result = shell.run_interactive(command, input: reader, sink: sink) }
+      wait_until(timeout: 3) { sink.output.include?("ready") }
+      writer.write("answer\n")
+      writer.flush
+      assert thread.join(3), "redirected foreground command could not read its terminal"
+      assert_equal 0, result.exit_status
+      assert_includes sink.output, "got=answer"
+      assert_equal 0, shell.run_for_agent(":").exit_status
+    ensure
+      shell&.close
+      thread&.join(1)
+      reader&.close
+      writer&.close
+    end
+  end
+
+  def test_stopped_jobs_save_and_restore_terminal_modes
+    Dir.mktmpdir("persistent-modes") do |dir|
+      shell = build_shell(dir)
+      # PENDIN is a transient kernel flag after switching back to canonical mode.
+      modes = -> { shell.run_for_agent("stty -a").output.gsub(/-?pendin\b/, "").split.join(" ") }
+      baseline = modes.call
+      code = <<~'RUBY'
+        require 'io/console'
+        STDOUT.sync = true
+        original = STDIN.console_mode
+        STDIN.raw!
+        Process.kill('TSTP', Process.pid)
+        puts "echo=#{STDIN.echo?}"
+        STDIN.console_mode = original
+      RUBY
+      File.write(File.join(dir, "pager.kwsh"), Shellwords.join([RbConfig.ruby, "-e", code]))
+      result = shell.run_for_agent("kwsh ./pager.kwsh")
+      assert_equal 128 + Signal.list.fetch("TSTP"), result.exit_status
+      assert_equal baseline, modes.call
+      result = shell.run_for_agent("fg")
+      assert_equal 0, result.exit_status
+      assert_includes result.output, "echo=false"
+      assert_equal baseline, modes.call
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_hosted_exec_keeps_nested_background_descendants_owned
+    Dir.mktmpdir("persistent-owned-exec") do |dir|
+      shell = build_shell(dir)
+      result = shell.run_for_agent(%q{{ sleep 30 & printf '%s' "$!" >nested.pid; exec /usr/bin/true; } & printf '%s' "$!"})
+      assert_equal 0, result.exit_status
+      group = Integer(result.output.lines.last.strip)
+      wait_until(timeout: 2) { File.exist?(File.join(dir, "nested.pid")) }
+      sleep 0.05
+      assert_includes shell.run_for_agent("jobs -r").output, "Running"
+      shell.close
+      wait_until(timeout: 2) do
+        Process.kill(0, -group)
+        false
+      rescue Errno::ESRCH
+        true
+      end
+      assert_raises(Errno::ESRCH) { Process.kill(0, -group) }
+    ensure
+      shell&.close
+      begin
+        Process.kill("KILL", -group) if group
+      rescue Errno::ESRCH
+        # The assertion above normally confirms that the whole group is gone.
+      end
+    end
+  end
+
   def test_commands_share_directory_and_environment_state
     Dir.mktmpdir("persistent-shell") do |dir|
       nested = File.join(dir, "nested")
@@ -319,10 +536,10 @@ class TestPersistentShellSession < KwardTestCase
   def test_unsupported_syntax_fails_before_running_any_command
     Dir.mktmpdir("native-shell") do |dir|
       shell = build_shell(dir)
-      result = shell.run_for_agent('printf touched >sentinel; printf x &')
+      result = shell.run_for_agent('printf touched >sentinel; printf x & &')
 
       assert_equal 2, result.exit_status
-      assert_includes result.output, "unsupported operator"
+      assert_includes result.output, "expected command"
       refute File.exist?(File.join(dir, "sentinel"))
       follow_up = shell.run_for_agent('printf "status=%s" "$?"')
       assert_includes follow_up.output, "status=2"

@@ -32,7 +32,7 @@ module Kward
 
     READ_SIZE = 4_096
     STARTUP_TIMEOUT_SECONDS = 5
-    STATEFUL_COMMANDS = %w[alias cd export pwd unset unalias].freeze
+    STATEFUL_COMMANDS = %w[alias cd export pwd unset unalias .].freeze
 
     attr_reader :cwd, :last_command, :timeout_seconds
 
@@ -58,7 +58,7 @@ module Kward
     end
 
     def incomplete_input?(source)
-      NativeShell::Parser.parse(source.sub(/\A\s*(?:capture|pty)\s+/, ""))
+      NativeShell::Parser.parse(source.sub(/\A\s*(?:capture|pty)\s+/, ""), aliases: @aliases || {})
       false
     rescue NativeShell::IncompleteInput
       true
@@ -109,8 +109,12 @@ module Kward
       return Result.new(output: "", exit_status: 0) if command.empty?
 
       expanded_command = expand_alias(command)
-      syntax_command = expanded_command.sub(/\A\s*(?:capture|pty)\s+/, "")
-      tree = NativeShell::Parser.parse(syntax_command)
+      native_command = command
+      syntax_command = command
+      if expanded_command.match?(/\A\s*(?:capture|pty)(?:\s|\z)/)
+        syntax_command = expanded_command.sub(/\A\s*(?:capture|pty)\s+/, "")
+      end
+      tree = NativeShell::Parser.parse(syntax_command, aliases: @aliases)
       words = routing_words(expanded_command, tree)
       result = if tree.values.first.empty?
         Result.new(output: "", exit_status: 0)
@@ -122,14 +126,14 @@ module Kward
         capture_result(command, expanded_command, cancellation: cancellation, &block)
       elsif words.first == "pty"
         interactive_result(command, expanded_command)
-      elsif %w[source .].include?(words.first)
+      elsif words.first == "source"
         source_result(command, words)
       elsif words.any? && (editor_result = editor_command_result(command))
         editor_result
       elsif stateful_command?(words)
-        execute_command(expanded_command, display_command: command, cancellation: cancellation, &block)
+        execute_command(native_command, display_command: command, cancellation: cancellation, &block)
       else
-        Result.new(output: command_echo(command), exit_status: 0, interactive_command: expanded_command)
+        Result.new(output: command_echo(command), exit_status: 0, interactive_command: native_command)
       end
       remember_result(command, result)
       result
@@ -202,10 +206,16 @@ module Kward
     end
 
     def expand_alias(command, interactive: false)
+      token = NativeShell::Lexer.new(command).next_token&.value
+      return command unless token.is_a?(NativeShell::Word) && token.literal
       @routing_shell.expand_alias(command, interactive: interactive)
+    rescue NativeShell::SyntaxError
+      command
     end
 
     def editor_command_result(command, display_command: command)
+      token = NativeShell::Lexer.new(command).next_token&.value
+      return unless token.is_a?(NativeShell::Word) && token.literal
       @routing_shell.editor_command_result(command, display_command: display_command)
     end
 
@@ -772,10 +782,12 @@ module Kward
     def terminate_process_group(pid)
       return unless pid
 
-      signal_process("TERM", -pid) || signal_process("TERM", pid)
+      # The private worker's shutdown signal cannot be overridden by script traps.
+      # It closes job groups before the bounded hard-kill fallback below.
+      signal_process("USR2", pid)
       deadline = Time.now + 0.2
       while Time.now < deadline
-        return unless process_running?(pid)
+        break unless process_running?(pid)
 
         sleep 0.02
       end
