@@ -57,6 +57,11 @@ module Kward
       end
 
       def arithmetic_value(expression)
+        if expression.is_a?(Word)
+          expression = expression.parts.map do |part|
+            part.kind == :literal ? part.text : scalar(Word.new(parts: [part]))
+          end.join
+        end
         Arithmetic.evaluate(expression, assign: method(:assign)) do |name|
           raise ExpansionError, "#{name}: unbound variable" if @options.include?("nounset") && !parameter_set?(name)
           parameter(name)

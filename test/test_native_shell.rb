@@ -308,7 +308,7 @@ class TestNativeShell < KwardTestCase
   end
 
   def test_invalid_arithmetic_is_rejected_before_any_side_effects
-    ["5 +", "1=2", "1++", "2**", "1; touch sentinel", "$(touch sentinel)", "`touch sentinel`", "1.5", "08", "1 <<", "1 <"].each do |expression|
+    ["5 +", "1=2", "1++", "2**", "1; touch sentinel", "values[0]", "1.5", "08", "1 <<", "1 <"].each do |expression|
       status, _, error = execute("printf touched >sentinel; echo $((#{expression}))")
       assert_equal 2, status, expression
       refute_empty error
@@ -544,7 +544,7 @@ class TestNativeShell < KwardTestCase
 
   def test_executable_text_rejects_unsupported_syntax_without_trying_another_shell
     path = File.join(@directory, "native-text")
-    File.write(path, "printf '%s' \"$(( $(printf 2) + 1 ))\"\n")
+    File.write(path, "printf '%s' \"$((values[0] + 1))\"\n")
     File.chmod(0o700, path)
     status, output, error = execute("./native-text")
     assert_equal 2, status
@@ -819,6 +819,7 @@ class TestNativeShell < KwardTestCase
   def test_read_raw_lines_empty_ifs_eof_and_temporary_assignment
     File.write(File.join(@directory, "input"), "  a\\b  \nlast")
     assert_output("<  a\\b  ><last>:0", <<~'SHELL')
+      unset IFS
       count=0
       while IFS= read -r line || [ -n "$line" ]; do
         printf '<%s>' "$line"

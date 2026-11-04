@@ -55,17 +55,18 @@ module Kward
     Parameter = Struct.new(:name, :operator, :word, keyword_init: true)
     HereDocument = Struct.new(:delimiter, :strip_tabs, :expand, :word, keyword_init: true)
     Token = Struct.new(:value, :line, :source, :alias_names, :alias_next, keyword_init: true)
-    Node = Struct.new(:kind, :values, :source, keyword_init: true)
+    Node = Struct.new(:kind, :values, :source, :line, keyword_init: true)
 
     class Lexer
-      OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ; & | > < ( ) { }].freeze
+      OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ;& ; & | > < ( ) { }].freeze
 
-      def initialize(source, depth: 0, aliases: {})
+      def initialize(source, depth: 0, aliases: {}, line: 1)
         @source = source
         @aliases = aliases
         @substitution_depth = depth
         @index = 0
-        @line = 1
+        @line = line
+        @arithmetic_depth = 0
         @parameter_depth = 0
         @heredocs = []
       end
@@ -274,11 +275,44 @@ module Kward
       end
 
       def arithmetic(parts, quoted)
-        expression = arithmetic_source
-        Arithmetic::Parser.new(expression).parse
-        parts << Part.new(kind: :arithmetic, text: expression, quoted: quoted)
+        @arithmetic_depth += 1
+        raise SyntaxError, "arithmetic nesting exceeds 100 levels" if @arithmetic_depth > 100
+        advance(2)
+        start = @index
+        depth = 0
+        expression = []
+        until current.nil?
+          if current == ")" && depth.zero?
+            raise IncompleteInput, "line #{@line}: unclosed arithmetic expansion; expected ))" unless @source[@index + 1]
+            closing = @source[@index..][/\A\)[ \t]*\)/]
+            raise SyntaxError, "line #{@line}: expected a second ) to close arithmetic expansion" unless closing
+            raise SyntaxError, "arithmetic expression exceeds 4096 bytes" if @source[start...@index].bytesize > 4096
+            word = Word.new(parts: expression)
+            Arithmetic::Parser.new(word.literal.to_s).parse if word.literal
+            advance(closing.length)
+            parts << Part.new(kind: :arithmetic, text: word, quoted: quoted)
+            return
+          end
+          case current
+          when "$" then parameter(expression, false)
+          when "`" then backticks(expression, false)
+          when "\\"
+            advance
+            raise IncompleteInput, "unclosed arithmetic expansion" unless current
+            literal(expression, current, false) unless current == "\n"
+            advance
+          else
+            depth += 1 if current == "("
+            depth -= 1 if current == ")"
+            literal(expression, current, false)
+            advance
+          end
+        end
+        raise IncompleteInput, "line #{@line}: unclosed arithmetic expansion; expected ))"
       rescue Arithmetic::Error => e
         raise SyntaxError, "line #{@line}: #{e.message}"
+      ensure
+        @arithmetic_depth -= 1
       end
 
       def arithmetic_source
@@ -464,13 +498,13 @@ module Kward
       RESERVED = %w[if then elif else fi for in do done while until case esac select function time !].freeze
       REDIRECTS = %w[< > >> <> >| >& <& << <<-].freeze
 
-      def self.parse(source, aliases: {})
-        new(source, aliases: aliases).parse
+      def self.parse(source, aliases: {}, line: 1)
+        new(source, aliases: aliases, line: line).parse
       end
 
-      def initialize(source, lexer: nil, aliases: {})
+      def initialize(source, lexer: nil, aliases: {}, line: 1)
         raise SyntaxError, "NUL bytes are not allowed in shell source" if source&.include?("\0")
-        @lexer = lexer || Lexer.new(source, aliases: aliases)
+        @lexer = lexer || Lexer.new(source, aliases: aliases, line: line)
         @aliases = aliases
         @alias_tokens = 0
         @tokens = []
@@ -548,7 +582,7 @@ module Kward
           command = and_or
           background = accept("&")
           commands << (background ? node(:background, command) : command)
-          break if peek.nil? || [";;", ")"].include?(text) && stops.include?(text)
+          break if peek.nil? || [";;", ";&", ")"].include?(text) && stops.include?(text)
           error("expected command separator") unless background || accept(";")
           separators
         end
@@ -603,6 +637,8 @@ module Kward
 
       def command
         expand_alias
+        peek
+        line = @tokens[@index]&.line
         @depth += 1
         raise SyntaxError, "shell syntax nesting exceeds 100 levels" if @depth > 100
         result = if peek.is_a?(Array) && peek.first == :arithmetic
@@ -617,6 +653,7 @@ module Kward
           redirects << redirect while redirection?
           result = node(:redirect, result, redirects) unless redirects.empty?
         end
+        result.line = line
         result
       ensure
         @depth -= 1
@@ -780,9 +817,10 @@ module Kward
             break unless accept("|")
           end
           expect(")")
-          body = sequence(%w[;; esac])
-          clauses << [patterns, body]
-          break unless accept(";;")
+          body = sequence(%w[;; ;& esac])
+          terminator = take if %w[;; ;&].include?(text)
+          clauses << [patterns, body, terminator == ";&"]
+          break unless terminator
           separators
         end
         expect("esac")

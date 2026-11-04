@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added POSIX arithmetic-expansion substitutions, `case ;&` fall-through, and source-aware `LINENO`; new shells reset inherited `IFS`, and `command -V` follows function/builtin execution precedence.
 - Added native kwsh background lists, `$!`, jobs/wait/kill, stopped-job foreground/background control, signal/EXIT traps, persistent exec redirections, and standalone process replacement, with tab-owned cleanup for hosted shells.
 - Added read-time native aliases, incremental script execution, named-user and assignment-context tildes, and installed-locale character counts, bracket matching, pathname expansion, and sorting.
 

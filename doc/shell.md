@@ -183,11 +183,11 @@ while IFS= read -r file || [ -n "$file" ]; do
 done < files.txt
 ```
 
-`case` takes the first matching clause. Patterns support `*`, `?`, bracket ranges, negation, and character classes such as `[[:digit:]]`; unlike filename expansion, these patterns can match slashes and leading dots. Quoted pattern characters are literal. An optional `(` before each pattern list and an empty clause body are accepted; Bash fall-through terminators are not yet supported.
+`case` takes the first matching clause. Patterns support `*`, `?`, bracket ranges, negation, and character classes such as `[[:digit:]]`; unlike filename expansion, these patterns can match slashes and leading dots. Quoted pattern characters are literal. An optional `(` before each pattern list and an empty clause body are accepted. POSIX.1-2024 `;&` executes the next clause without testing or expanding its patterns; `;;` stops the case. Bash `;;&` re-testing remains unsupported.
 
 `read -r` preserves backslashes. Without `-r`, backslashes escape the next character and backslash-newline continues a logical line. `read` returns 0 after a newline, 1 at EOF (still assigning any partial line), and greater than 1 for an error. With several variables, the final variable gets the remaining unsplit text, with surrounding IFS whitespace removed, following POSIX.1-2024. `read -d delimiter` uses the first byte as the delimiter; an empty delimiter reads NUL-separated records. `-r` and `-d` may be combined. `read -a array` stores split fields in an indexed array; prompt and timeout read options remain unsupported.
 
-Unset `IFS` uses space, tab, and newline. Empty `IFS` disables splitting. Non-whitespace separators such as `:` preserve empty fields between adjacent separators. A prefix assignment such as `IFS= read -r line` applies only to that command; it does not replace the session's `IFS`. `read` consumes only its own logical line, leaving input for the next command. Use redirection or a pipe when asking the shell agent to run it; terminal-input commands should be prepared for you instead.
+New shell invocations initialize `IFS` to space, tab, and newline, ignoring an inherited value. Unset `IFS` uses the same defaults. Empty `IFS` disables splitting. Non-whitespace separators such as `:` preserve empty fields between adjacent separators. A prefix assignment such as `IFS= read -r line` applies only to that command; it does not replace the session's `IFS`. `read` consumes only its own logical line, leaving input for the next command. Use redirection or a pipe when asking the shell agent to run it; terminal-input commands should be prepared for you instead.
 
 ### Calculate with integer arithmetic
 
@@ -206,7 +206,7 @@ Use `((expression))` as a command (zero means failure, nonzero means success), o
 
 Prefer adjacent `))` for portable syntax. As a kwsh convenience, spaces or tabs may separate the final closing parentheses: `echo $((5 + 2) )` also prints `7`. This extension applies only to arithmetic delimiters; it does not rewrite literal text or allow other tokens or newlines between the closers. Single quotes and an escaped `$` keep the expression literal. Incomplete expressions can continue on the next input line.
 
-Arithmetic is bounded to 4,096 expression bytes, 100 nesting levels, and 4,096-bit integers/results. Negative exponents and negative or oversized shift counts are errors. These bounds are intentional differences from Bash machine-integer overflow behavior. Nested substitutions inside arithmetic and arithmetic array references are not yet supported; expand into a scalar variable first. Evaluation never invokes Ruby `eval` or another shell.
+Arithmetic is bounded to 4,096 expression bytes, 100 nesting levels, and 4,096-bit integers/results. Negative exponents and negative or oversized shift counts are errors. These bounds are intentional differences from Bash machine-integer overflow behavior. Arithmetic expansion accepts parameter operators, command substitutions, backticks, and nested arithmetic, for example `$(( $(printf 2) + $((3 + 1)) ))`. Shell substitutions expand once before integer evaluation; expanded values are never parsed as shell commands. Static expressions are syntax-checked without evaluation; expressions containing substitutions are validated after expansion at execution time. Arithmetic array references and substitutions in the Bash-style `((...))` command/loop forms remain unsupported. Evaluation never invokes Ruby `eval` or another shell.
 
 ### Capture output and connect programs
 
@@ -257,6 +257,7 @@ Brace expansion runs before substitutions and only on unquoted source text. It s
 ### Manage script state
 
 - `. ./library.kwsh [args...]` executes a native library in the current shell; supplied positional arguments are restored afterward. This is separate from declarative `source` in the prompt.
+- `LINENO` reports the current source line, including commands in functions and sourced files. Explicitly assigning or unsetting it disables automatic tracking for that interpreter.
 - `readonly name=value`, `unset -f function`, `command [-v|-V|-p]`, and `getopts` operate on interpreter state.
 - Explicit `eval` uses the native parser, not Ruby evaluation or a system shell. Treat its argument as executable source, not data.
 - `umask` accepts octal and `u/g/o` symbolic permissions. It affects redirected files and external children without changing the host process's lasting mask.
@@ -333,7 +334,7 @@ Unavailable locales and unsupported encodings produce explicit errors. Locale ch
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references and nested arithmetic substitutions, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. Alias replacement text is tokenized independently; aliases containing here-document bodies or incomplete quoted fragments are not supported. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and standalone interactive prompt/startup-file modes are not implemented.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. Alias replacement text is tokenized independently; aliases containing here-document bodies or incomplete quoted fragments are not supported. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and standalone interactive prompt/startup-file modes are not implemented.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -354,7 +355,8 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Named-user/assignment-context tildes, `$!`, read-time aliases, and incremental script-file execution.
 - [x] Installed-locale character counts, single-character bracket classes/collation, native pathname matching, and locale sorting.
 - [x] Native interpretation of executable text after `ENOEXEC`, including standalone `exec` and hosted job ownership.
-- [ ] Remaining array/conditional forms, nested arithmetic substitutions, additional builtin flags and invocation modes.
+- [x] Arithmetic-expansion substitutions, POSIX case fall-through, initial IFS, LINENO, and command-reporting precedence.
+- [ ] Remaining array/conditional forms, additional builtin flags and invocation modes.
 - [ ] Exhaustive alias, command lookup/error, and special-builtin conformance coverage.
 - [ ] Full conformance coverage, including multi-character collating elements. Regular expressions and bounded arithmetic are not exact Bash equivalents.
 

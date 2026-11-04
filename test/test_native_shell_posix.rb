@@ -10,6 +10,80 @@ class TestNativeShellPosix < KwardTestCase
     Open3.capture3({ "LC_ALL" => "C" }, RbConfig.ruby, EXECUTABLE, "-c", source, **options)
   end
 
+  def test_arithmetic_expands_shell_syntax_once_before_integer_evaluation
+    output, error, status = run_script(<<~'SHELL')
+      x=2
+      printf '%s:%s:%s:%s' "$(( $(printf '%s' '2') + 1 ))" "$((1 + $((2 + 3))))" "$(( ${x:-4} + `printf 5` ))" "$((1$(printf 2)))"
+    SHELL
+    assert_equal 0, status.exitstatus, error
+    assert_equal "3:6:7:12", output
+    assert_empty error
+    output, error, status = run_script(%q{x='$(printf injected)'; printf '%s' "$(( $x ))"; printf bad})
+    assert_equal 2, status.exitstatus
+    assert_empty output
+    assert_includes error, "arithmetic"
+  end
+
+  def test_arithmetic_syntax_checks_do_not_execute_nested_substitutions
+    Dir.mktmpdir("posix-arithmetic") do |dir|
+      source = %q{printf '%s' "$(( $(printf 2 >sentinel) + $((3)) ))"}
+      output, error, status = Open3.capture3(RbConfig.ruby, EXECUTABLE, "-n", "-c", source, chdir: dir)
+      assert status.success?, error
+      assert_empty output
+      refute File.exist?(File.join(dir, "sentinel"))
+      output, error, status = run_script("if false; then #{source}; fi", chdir: dir)
+      assert status.success?, error
+      refute File.exist?(File.join(dir, "sentinel"))
+    end
+  end
+
+  def test_case_fallthrough_does_not_expand_the_skipped_patterns
+    output, error, status = run_script(<<~'SHELL')
+      case x in
+        x) printf one ;&
+        ${missing:?must-not-expand}) printf two ;&
+        y) false ;;
+        x) printf bad ;;
+      esac
+      printf ':%s' "$?"
+    SHELL
+    assert_equal 0, status.exitstatus, error
+    assert_equal "onetwo:1", output
+    assert_empty error
+  end
+
+  def test_invocation_resets_ifs_but_later_assignments_still_work
+    output, error, status = Open3.capture3({ "IFS" => ":" }, RbConfig.ruby, EXECUTABLE, "-c",
+      %q{x=a:b; set -- $x; printf '%s:' "$#"; IFS=:; set -- $x; printf '%s' "$#"})
+    assert_equal 0, status.exitstatus, error
+    assert_equal "1:2", output
+    assert_empty error
+  end
+
+  def test_lineno_tracks_incremental_input_functions_and_nested_commands
+    output, error, status = run_script(<<~'SHELL')
+      printf '%s:' "$LINENO"
+      f() {
+        printf '%s:' "$LINENO"
+      }
+      f
+      printf '%s:' "$LINENO"
+      printf '%s:' "$(printf '%s' "$LINENO")"
+      LINENO=42
+      printf '%s' "$LINENO"
+    SHELL
+    assert_equal 0, status.exitstatus, error
+    assert_equal "1:3:6:7:42", output
+    assert_empty error
+  end
+
+  def test_command_reports_functions_before_ordinary_builtins
+    output, error, status = run_script("pwd() { :; }; command -V pwd; command -v pwd")
+    assert_equal 0, status.exitstatus, error
+    assert_equal "pwd is function\npwd\n", output
+    assert_empty error
+  end
+
   def test_fatal_errors_exit_noninteractive_shells_even_in_conditions
     # 2.8.1: these errors do not depend on errexit or AND-OR position.
     ["readonly x=1; x=2", "export 1bad=value", ". /__kwsh_missing__/file",

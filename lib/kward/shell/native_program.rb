@@ -14,21 +14,23 @@ module Kward
 
       def self.each(input, aliases: {})
         source = +"".b
+        line = 1
         loop do
           begin
             byte = input.readpartial(1)
           rescue EOFError
-            yield Parser.parse(source_encoding(source), aliases: aliases) unless source.empty?
+            yield Parser.parse(source_encoding(source), aliases: aliases, line: line) unless source.empty?
             break
           end
           source << byte
           next unless byte == "\n"
           begin
-            tree = Parser.parse(source_encoding(source), aliases: aliases)
+            tree = Parser.parse(source_encoding(source), aliases: aliases, line: line)
           rescue IncompleteInput
             next
           end
           yield tree
+          line += source.count("\n")
           source = +"".b
         end
       end

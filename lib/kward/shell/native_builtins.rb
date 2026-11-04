@@ -208,7 +208,13 @@ module Kward
         if ["-v", "-V"].include?(mode)
           result = 0
           args.each do |name|
-            kind = self.class::BUILTINS.include?(name) ? "shell builtin" : (@functions.key?(name) ? "function" : nil)
+            kind = if self.class::SPECIAL.include?(name)
+              "shell builtin"
+            elsif @functions.key?(name)
+              "function"
+            elsif self.class::BUILTINS.include?(name)
+              "shell builtin"
+            end
             if @aliases.key?(name)
               write_line(streams, "alias #{name}=#{Shellwords.escape(@aliases[name])}")
               next

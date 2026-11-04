@@ -49,6 +49,9 @@ module Kward
         @variables = env.dup
         @variables["PWD"] = @cwd
         @exported = Set.new(@variables.keys)
+        @variables["IFS"] = Fields::DEFAULT_IFS
+        @variables["LINENO"] = "1"
+        @line_tracking = true
         @aliases = aliases.dup
         @arguments = arguments
         @name = name
@@ -139,6 +142,7 @@ module Kward
         previous_streams = @streams
         previous_description = @command_description
         @command_description = node.source if node.source
+        @variables["LINENO"] = node.line.to_s if @line_tracking && node.line
         @ignore_failure = previous_ignore || ignored
         return 0 if @options.include?("noexec") && !@interactive
         @streams = streams
@@ -201,8 +205,15 @@ module Kward
         when :case
           subject, clauses = node.values
           value = scalar(subject)
-          clause = clauses.find { |patterns, _| patterns.any? { |word| matches_pattern?(pattern(word), value) } }
-          clause ? evaluate(clause.last, streams) : 0
+          result = 0
+          falling_through = false
+          clauses.each do |patterns, body, fallthrough|
+            next unless falling_through || patterns.any? { |word| matches_pattern?(pattern(word), value) }
+            result = evaluate(body, streams)
+            break unless fallthrough
+            falling_through = true
+          end
+          result
         when :for
           name, words, body = node.values
           values = words ? words.flat_map { |word| expand(word) } : @arguments.dup
@@ -427,6 +438,7 @@ module Kward
             else
               raise ExecutionError, "#{key}: readonly variable" if @readonly.include?(key)
               @variables.delete(key)
+              @line_tracking = false if key == "LINENO"
               @arrays.delete(key)
               @exported.delete(key)
             end
@@ -503,6 +515,7 @@ module Kward
         return array_store(key, value) if key.is_a?(Reference)
         validate_name(key)
         raise ExecutionError, "#{key}: readonly variable" if @readonly.include?(key)
+        @line_tracking = false if key == "LINENO"
         @getopts_index = nil if key == "OPTIND" && value == "1" && !@getopts_running
         @exported.add(key) if @options.include?("allexport")
         if @arrays.key?(key)
