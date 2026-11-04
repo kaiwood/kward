@@ -158,7 +158,7 @@ After the operating system reports an executable-format error (`ENOEXEC`), kwsh 
 - `export` and `unset`; ordinary assignments stay private to kwsh unless exported. `NAME=value command` supplies a temporary environment.
 - `&&`, `||`, `!`, concurrent pipelines, brace groups and `( commands )` subshells. Pipeline stages and subshells isolate state. Pipeline status comes from the last stage unless `set -o pipefail` is enabled.
 - `if` / `elif` / `else`, `case`, `for`, `while`, `until`, functions, `return`, `exit`, and multilevel `break` / `continue` (for example, `break 2`).
-- `<`, `>`, `>>`, `<>`, `>|`, here-documents (`<<` / `<<-`), descriptor duplication, and closing on descriptors 0–9. Redirections apply left to right.
+- `<`, `>`, `>>`, `<>`, `>|`, here-documents (`<<` / `<<-`), descriptor duplication, and closing on descriptors 0–9. Redirections apply left to right. Their operands do not undergo field splitting or pathname expansion, so `file="two words"; printf hello >$file` writes one file. Unquoted here-documents remove backslash-newline continuations before recognizing the delimiter.
 - Ordinary `*`, `?`, and bracket filename patterns, `~` / `~user/...` (also after assignment colons), and field splitting with default, custom, or empty `IFS`. Quote variables and use `"$@"` to preserve argument boundaries. `"$*"` joins arguments with the first character of `IFS` (a space when unset).
 - `read [-r] [-d delimiter] variable...`, including EOF status, backslash continuation, and multiple destination variables.
 - Persistent `cd`, `pwd`, aliases, and direct executable lookup through `PATH`. Utilities such as `printf`, `test` / `[`, `grep`, and `cat` come from the operating system.
@@ -330,7 +330,7 @@ Files, stdin, and explicit native source execute one complete input unit at a ti
 
 ### Select character and sorting rules
 
-`LC_ALL` overrides category settings; otherwise `LC_CTYPE` and `LC_COLLATE` override `LANG`, defaulting to `C`. Installed libc locales control character counts, bracket classes/ranges, single-character collating symbols (`[[.a.]]`) and equivalence classes (`[[=a=]]`), string ordering, and filename sorting. For example:
+`LC_ALL` overrides category settings; otherwise `LC_CTYPE` and `LC_COLLATE` override `LANG`, defaulting to `C`. Installed libc locales control character counts, bracket classes/ranges, single- and multi-character collating symbols (`[[.a.]]`, `[[.ch.]]` where installed) and equivalence classes (`[[=a=]]`), string ordering, and filename sorting. For example:
 
 ```sh
 value=é
@@ -342,9 +342,13 @@ printf '%s\n' "${#value}"       # 1 character, if this locale is installed
 
 Unavailable locales and unsupported encodings produce explicit errors. Locale changes use thread-local locale objects, not process-global `setlocale`. Path matching shares the bounded native string matcher; globstar does not descend through symlinked directories or hidden entries. A pathname expansion may visit at most 100,000 directory entries and 100 directory levels. These locale bindings target macOS and Linux.
 
+Multi-character elements are shared by `case`, parameter trimming, and pathname expansion. For example, in an installed Czech locale, `[[.ch.]]` can match the two characters `ch`, and `[c[.ch.]]h` can match either `ch` or `chh`. Matching retains both paths rather than committing to the shorter element. Outside the POSIX locale, range behavior is unspecified by POSIX; kwsh uses the installed collation order. Available elements and primary equivalence classes depend on host libc/locale data. Multi-character symbol names containing glob metacharacters are rejected rather than passed to an unbounded libc wildcard matcher.
+
+Collating-pattern matching uses an iterative, non-recursive search, capped at 1,000,000 transitions/prefix probes and 16 MiB of cumulative candidate bytes per match. Exceeding a bound is an error, not a partial match or silent omission. Ordinary C/POSIX patterns keep the single-character fast path.
+
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and standalone history/vi/emacs editing are not implemented.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references, advanced array forms, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), XSI `ulimit`, and standalone history/vi/emacs editing are not implemented.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -367,9 +371,33 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Native interpretation of executable text after `ENOEXEC`, including standalone `exec` and hosted job ownership.
 - [x] Arithmetic-expansion substitutions, POSIX case fall-through, initial IFS, LINENO, and command-reporting precedence.
 - [x] Shared-stream aliases, core builtin option combinations, command hashing, CDPATH, times, standalone interactive invocation, and guarded ENV startup.
-- [ ] Remaining Bash array/conditional forms and optional utility/editing profiles.
-- [ ] Exhaustive alias, command lookup/error, and special-builtin conformance coverage.
-- [ ] Full conformance coverage, including multi-character collating elements. Regular expressions and bounded arithmetic are not exact Bash equivalents.
+- [x] Bounded multi-character collation, including mixed brackets, ranges, trimming, and pathname matching.
+- [x] Requirement-linked regression cases for quoting, splitting, redirections, continuations, errors, special builtins, invocation, jobs, and locale integration.
+
+The remaining tracks are separate:
+
+- **POSIX verification:** broader independent clause-by-clause audits and platform/locale matrices. The tests below are regression coverage, not certification of every POSIX requirement.
+- **Optional utility/editing profiles:** XSI `ulimit`, history/`fc`, and vi/emacs editing.
+- **Bash extensions:** remaining array/conditional forms, arithmetic array references, `wait -n`, pseudo-traps, and exact Bash regex/machine-integer behavior.
+- **Intentional hosted differences:** reserved shutdown signals, supervised `exec`, tab-owned descendants, and bounded captures/matching. Standalone interactive execution does not adopt hosted cleanup or reserve its shutdown signal.
+
+### Verify native shell behavior
+
+Run the focused shell suite without network services:
+
+```sh
+ruby -Itest -e '(Dir["test/test_native_shell*.rb"] + %w[test/test_persistent_shell_session.rb test/test_kwsh.rb test/test_shell_prompt.rb]).sort.each { |file| require_relative file }'
+```
+
+| Coverage | Tests |
+| --- | --- |
+| POSIX clause-linked behavior and cross-feature regressions | `test/test_native_shell_posix.rb` |
+| Aliases, builtin options, startup identity checks, terminal invocation | `test/test_native_shell_invocation.rb` |
+| Deterministic collation paths and work bounds | `test/test_native_shell_pattern.rb` |
+| Installed-locale matching, trimming, globbing, and locale restoration | `test/test_native_shell_locale.rb` |
+| Script modes, native execution, traps, descriptors, and process ownership | `test/test_native_shell.rb`, `test/test_native_shell_runner.rb`, `test/test_persistent_shell_session.rb` |
+
+Installed multi-character collation tests require Czech or Slovak UTF-8 locale data and explicitly skip when unavailable. Deterministic matcher tests still run everywhere. Use POSIX.1-2024 as the authority when adding cases; Bash and the host `/bin/sh` can help investigate differences but are not conformance oracles. Do not turn implementation-defined or unspecified behavior into a purported universal requirement.
 
 Language and state transitions remain native; implementing these features must not introduce a Bash or `/bin/sh` fallback. Declarative `kwshrc` loading and ordinary model/RPC command isolation remain separate contracts.
 

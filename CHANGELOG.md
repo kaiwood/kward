@@ -6,6 +6,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Added
 
+- Added bounded multi-character locale collation across native case patterns, parameter trimming, and globs, plus requirement-linked POSIX and installed-locale regression coverage.
 - Added native shared-stream aliases, core builtin flag combinations, command hashing, `type`, `times`, `CDPATH`, and standalone interactive `kwsh -i` with guarded `ENV` startup and parameter-expanded prompts.
 - Added POSIX arithmetic-expansion substitutions, `case ;&` fall-through, and source-aware `LINENO`; new shells reset inherited `IFS`, and `command -V` follows function/builtin execution precedence.
 - Added native kwsh background lists, `$!`, jobs/wait/kill, stopped-job foreground/background control, signal/EXIT traps, persistent exec redirections, and standalone process replacement, with tab-owned cleanup for hosted shells.
@@ -37,6 +38,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Fixed native shell redirection operands being split/globbed, here-document continuation order, and premature execution of backslash-continued input lines.
 - Corrected native kwsh fatal-error handling and POSIX `errexit` inheritance, preserving interactive recovery, subshell isolation, special-builtin behavior through `command`, and EXIT traps.
 - Kept `/shell` background servers responsive after `bg` by draining idle PTY output instead of letting logs fill the terminal buffer and block further requests; idle output is discarded, so redirect jobs to files to retain logs.
 - Fixed native kwsh jobs intermittently stopping again after Ctrl-Z followed by `bg`, by checking for newer continuation or exit events before propagating a child stop report.

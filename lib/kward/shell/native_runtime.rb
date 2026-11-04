@@ -739,9 +739,9 @@ module Kward
             redirected[descriptor] = file
             next
           end
-          targets = expand(word)
-          raise ExecutionError, "ambiguous redirection" unless targets.length == 1
-          target = targets.first
+          # POSIX redirection words do not undergo field splitting or pathname
+          # expansion (interactive pathname expansion is optional).
+          target = scalar(word)
           if %w[>& <&].include?(operator)
             raise ExecutionError, "redirection requires descriptor 0 through 9, or -" unless target.match?(/\A[0-9-]\z/)
             raise ExecutionError, "bad file descriptor: #{target}" if target != "-" && !redirected[target.to_i]

@@ -60,8 +60,9 @@ module Kward
     class Lexer
       OPERATORS = %w[&& || <<- << >> <> >| >& <& ;; ;& ; & | > < ( ) { }].freeze
 
-      def initialize(source, depth: 0, aliases: {}, line: 1)
+      def initialize(source, depth: 0, aliases: {}, line: 1, eof: true)
         @source = source.dup
+        @eof = eof
         @alias_regions = []
         @token_end = 0
         @aliases = aliases
@@ -97,6 +98,7 @@ module Kward
           else
             if @source[@index, 2] == "\\\n"
               advance(2)
+              raise IncompleteInput, "continued input line" if current.nil? && !@eof
               next
             end
             operator = OPERATORS.find { |candidate| @source[@index, candidate.length] == candidate }
@@ -188,10 +190,17 @@ module Kward
         pending.each do |document|
           body = +""
           loop do
-            raise IncompleteInput, "unclosed here-document: #{document.delimiter}" unless current
-            finish = @source.index("\n", @index)
-            line = @source[@index...(finish || @source.length)]
-            advance(line.length + (finish ? 1 : 0))
+            line = +""
+            finish = nil
+            loop do
+              raise IncompleteInput, "unclosed here-document: #{document.delimiter}" unless current
+              finish = @source.index("\n", @index)
+              fragment = @source[@index...(finish || @source.length)]
+              advance(fragment.length + (finish ? 1 : 0))
+              line << fragment
+              break unless document.expand && finish && line[/\\+\z/].to_s.length.odd?
+              line.chop!
+            end
             line = line.sub(/\A\t+/, "") if document.strip_tabs
             break if line == document.delimiter
             body << line
@@ -240,8 +249,10 @@ module Kward
             advance
             raise IncompleteInput, "line #{@line}: trailing backslash" unless current
             literal(parts, "\\", true) if quoted && !['$', '`', '"', "\\", "\n", "}"].include?(current)
-            literal(parts, current, true) unless current == "\n"
+            continued = current == "\n"
+            literal(parts, current, true) unless continued
             advance
+            raise IncompleteInput, "continued input line" if continued && current.nil? && !@eof
           when "$"
             parameter(parts, quoted)
           when "`"
@@ -525,13 +536,13 @@ module Kward
       RESERVED = %w[if then elif else fi for in do done while until case esac select function time !].freeze
       REDIRECTS = %w[< > >> <> >| >& <& << <<-].freeze
 
-      def self.parse(source, aliases: {}, line: 1)
-        new(source, aliases: aliases, line: line).parse
+      def self.parse(source, aliases: {}, line: 1, eof: true)
+        new(source, aliases: aliases, line: line, eof: eof).parse
       end
 
-      def initialize(source, lexer: nil, aliases: {}, line: 1)
+      def initialize(source, lexer: nil, aliases: {}, line: 1, eof: true)
         raise SyntaxError, "NUL bytes are not allowed in shell source" if source&.include?("\0")
-        @lexer = lexer || Lexer.new(source, aliases: aliases, line: line)
+        @lexer = lexer || Lexer.new(source, aliases: aliases, line: line, eof: eof)
         @aliases = aliases
         @alias_tokens = 0
         @alias_bytes = 0

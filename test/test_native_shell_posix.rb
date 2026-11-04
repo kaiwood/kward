@@ -10,6 +10,82 @@ class TestNativeShellPosix < KwardTestCase
     Open3.capture3({ "LC_ALL" => "C" }, RbConfig.ruby, EXECUTABLE, "-c", source, **options)
   end
 
+  # Clause references make additions reviewable without treating Bash as the
+  # oracle. Cases use only specified behavior (not optional pipeline state).
+  CONFORMANCE_CASES = {
+    "2.2 quoting and line continuation" => ["value=hel\\\nlo; printf '%s' \"$value\"", "hello"],
+    "2.5.2 quoted positional parameters" => [%q{set -- 'a b' '' c; printf '<%s>' pre"$@"post}, "<prea b><><cpost>"],
+    "2.6.2 lazy parameter operands" => [%q{x=set; printf '%s:%s' "${x:-${missing:?bad}}" "${absent+${missing:?bad}}"}, "set:"],
+    "2.6.3 command substitution status" => [%q{x=$(exit 7); printf '%s' "$?"}, "7"],
+    "2.6.5 splitting only expansion results" => [%q{IFS=:; x='a::b'; printf '<%s>' before:$x:after}, "<before:a><><b:after>"],
+    "2.9.3 AND-OR precedence" => [%q{true || false && printf yes; false && true || printf ':yes'}, "yes:yes"],
+    "2.9.5 function positional scope" => [%q{set -- parent; f() { printf '%s:' "$1"; return 7; }; f child; printf '%s:%s' "$?" "$1"}, "child:7:parent"],
+    "2.15 temporary versus special assignments" => [%q{x=old; x=temporary true; printf '%s:' "$x"; x=persist :; printf '%s' "$x"}, "old:persist"],
+    "2.15 command suppresses assignment persistence" => [%q{x=old; x=temporary command :; printf '%s' "$x"}, "old"],
+    "getopts reset and argument ownership" => [%q{set -- -ab value tail; while getopts ab: option; do printf '%s:%s|' "$option" "${OPTARG-unset}"; done; printf '%s' "$OPTIND"}, "a:unset|b:value|3"],
+    "wait collects explicit child status" => [%q{(exit 7) & child=$!; wait "$child"; printf '%s' "$?"}, "7"],
+    "2.15 EXIT trap status" => [%q{trap 'printf "%s" "$?"' EXIT; exit 9}, "9", 9]
+  }.freeze
+
+  def test_posix_requirement_matrix
+    CONFORMANCE_CASES.each do |requirement, (source, expected, exit_status)|
+      output, error, status = run_script(source)
+      assert_equal exit_status || 0, status.exitstatus, "#{requirement}: #{error}"
+      assert_equal expected, output, requirement
+      assert_empty error, requirement
+    end
+  end
+
+  def test_redirection_words_are_not_split_or_globbed
+    Dir.mktmpdir("posix-redirection") do |dir|
+      output, error, status = run_script(<<~'SHELL', chdir: dir)
+        file='two words'
+        printf content >$file
+        printf literal >'*.txt'
+        cat <${file}
+        cat <*.txt
+      SHELL
+      assert status.success?, error
+      assert_equal "contentliteral", output
+      assert_empty error
+      assert File.file?(File.join(dir, "two words"))
+      assert File.file?(File.join(dir, "*.txt"))
+    end
+  end
+
+  def test_here_document_line_continuation_precedes_delimiter_recognition
+    output, error, status = run_script(<<~'SHELL')
+      cat <<EOF
+      hel\
+      lo
+      EO\
+      F
+      printf done
+    SHELL
+    assert status.success?, error
+    assert_equal "hello\ndone", output
+    assert_empty error
+    output, error, status = run_script(<<~'SHELL')
+      cat <<'EOF'
+      $HOME\
+      literal
+      EOF
+    SHELL
+    assert status.success?, error
+    assert_equal "$HOME\\\nliteral\n", output
+    assert_empty error
+  end
+
+  def test_failed_special_redirection_preserves_earlier_stderr_redirection
+    Dir.mktmpdir("posix-errors") do |dir|
+      output, error, status = run_script(": 2>errors <missing; printf bad", chdir: dir)
+      assert_equal 2, status.exitstatus
+      assert_empty output
+      assert_empty error
+      assert_includes File.read(File.join(dir, "errors")), "missing"
+    end
+  end
+
   def test_arithmetic_expands_shell_syntax_once_before_integer_evaluation
     output, error, status = run_script(<<~'SHELL')
       x=2

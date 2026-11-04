@@ -26,7 +26,7 @@ module Kward
           source << byte
           next unless byte == "\n"
           begin
-            tree = Parser.parse(source_encoding(source), aliases: aliases, line: line)
+            tree = Parser.parse(source_encoding(source), aliases: aliases, line: line, eof: false)
           rescue IncompleteInput
             next
           end

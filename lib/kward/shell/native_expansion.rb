@@ -73,6 +73,8 @@ module Kward
       def expand(word, assignment: false)
         words = assignment ? [word] : Braces.expand(word)
         words.flat_map { |item| expand_word(item, assignment: assignment) }
+      rescue Pattern::LimitError => e
+        raise ExpansionError, e.message
       end
 
       def expand_word(word, assignment: false)
@@ -109,6 +111,8 @@ module Kward
 
       def matches_pattern?(pattern, value)
         Locale.with(@variables) { |locale| Pattern.new(pattern, locale: locale).match?(value) }
+      rescue Pattern::LimitError => e
+        raise ExpansionError, e.message
       end
 
       def word_fields(word, expanded: false, assignment: false)
@@ -131,7 +135,7 @@ module Kward
           groups.concat(additions.drop(1))
         end
         groups
-      rescue ExecutionError => e
+      rescue ExecutionError, Pattern::LimitError => e
         raise ExpansionError, e.message
       end
 

@@ -2,6 +2,44 @@ require_relative "test_helper"
 require_relative "../lib/kward/shell/native_pattern"
 
 class TestNativeShellPattern < KwardTestCase
+  # Deterministic coverage even on hosts without Czech/Slovak locale data.
+  class Collation
+    def multichar = true
+    def text(value) = value
+    def collating_element?(value) = value.length == 1 || value == "ch"
+    def symbol?(name, value) = name == value && collating_element?(name)
+    def equivalent?(name, value) = symbol?(name, value)
+    def compare(left, right) = (left == "ch" ? "h~" : left) <=> (right == "ch" ? "h~" : right)
+    def bracket?(source, value) = source == "[[:alpha:]]" && value.match?(/\A[a-z]\z/)
+  end
+
+  def test_multichar_collating_elements_preserve_all_matching_paths
+    {
+      "[[.ch.]]" => ["ch"],
+      "[c[.ch.]]h" => ["ch", "chh"],
+      "*[c[.ch.]]h" => ["ch", "chh", "prefixchh"],
+      "[[.ch.]-i]" => ["ch", "i"],
+      "[a-z]" => ["c", "ch"],
+      "[[=ch=]]" => ["ch"],
+      "[!x]" => ["ch", "a"],
+      "[[:alpha:][.ch.]]" => ["ch", "a"]
+    }.each do |pattern, values|
+      matcher = Kward::NativeShell::Pattern.new(pattern, locale: Collation.new)
+      values.each { |value| assert matcher.match?(value), [pattern, value].inspect }
+    end
+    refute Kward::NativeShell::Pattern.new("?", locale: Collation.new).match?("ch")
+    refute Kward::NativeShell::Pattern.new("[[.ch.]]x", locale: Collation.new).match?("cx")
+    refute Kward::NativeShell::Pattern.new("[[.ch.]-i]", locale: Collation.new).match?("h")
+  end
+
+  def test_collating_match_work_is_bounded_without_recursive_backtracking
+    matcher = Kward::NativeShell::Pattern.new("[[.ch.]]*", locale: Collation.new)
+    assert_raises(Kward::NativeShell::Pattern::LimitError) { matcher.match?("c" * 6000) }
+    matcher = Kward::NativeShell::Pattern.new("*[c[.ch.]]" * 20 + "z", locale: Collation.new)
+    refute matcher.match?("ch" * 30)
+    assert matcher.match?("ch" * 30 + "z")
+  end
+
   def test_shell_wildcards_match_whole_strings_including_slashes_dots_and_newlines
     {
       "*" => ["", ".hidden/path", "a\nb"],

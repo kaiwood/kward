@@ -18,14 +18,16 @@ module Kward
       MATCH = Fiddle::Function.new(Fiddle::Handle::DEFAULT["fnmatch"], [POINTER, POINTER, Fiddle::TYPE_INT], Fiddle::TYPE_INT)
       COMPARE = Fiddle::Function.new(Fiddle::Handle::DEFAULT["strcoll"], [POINTER, POINTER], Fiddle::TYPE_INT)
 
-      attr_reader :encoding
+      attr_reader :encoding, :multichar
 
       def self.with(variables)
         raise ExecutionError, "native locale support requires macOS or Linux" unless DARWIN || RUBY_PLATFORM.include?("linux")
         handle = nil
+        collation = "C"
         { "LC_CTYPE" => CTYPE_MASK, "LC_COLLATE" => COLLATE_MASK }.each do |category, mask|
           name = [variables["LC_ALL"], variables[category], variables["LANG"], "C"].find { |value| value && !value.empty? }
           raise ExecutionError, "NUL bytes are not allowed in locale names" if name.include?("\0")
+          collation = name if category == "LC_COLLATE"
           updated = NEW.call(mask, name, handle || 0)
           raise ExecutionError, "unavailable locale: #{name}" if updated.null?
           # Darwin clones base; Linux newlocale consumes it on success.
@@ -34,13 +36,14 @@ module Kward
           handle = updated
         end
         previous = USE.call(handle)
-        yield new(INFO.call(CODESET, handle).to_s)
+        yield new(INFO.call(CODESET, handle).to_s, multichar: !collation.match?(/\A(?:C|POSIX)(?:[.@].*)?\z/))
       ensure
         USE.call(previous) if previous
         FREE.call(handle) if handle
       end
 
-      def initialize(codeset)
+      def initialize(codeset, multichar: true)
+        @multichar = multichar
         @encoding = Encoding.find(codeset)
         @encoding = Encoding::BINARY if @encoding == Encoding::US_ASCII
       rescue ArgumentError
@@ -56,12 +59,34 @@ module Kward
         MATCH.call(source, value, 0).zero?
       end
 
+      def collating_element?(value)
+        value.length == 1 || multichar && symbol?(value, value)
+      end
+
+      def symbol?(name, value)
+        return name == value if name.length == 1
+        # Never let candidate input close the bracket and introduce libc glob
+        # operators. Whole-pattern wildcard iteration belongs to Pattern.
+        return false if name.empty? || unsafe_symbol?(name)
+        bracket?("[[.#{name}.]]", value)
+      end
+
+      def equivalent?(name, value)
+        return false if name.length > 1 && unsafe_symbol?(name)
+        bracket?("[[=#{name}=]]", value) ||
+          symbol?(name, name) && collating_element?(value) && compare(name, value).zero?
+      end
+
       def compare(left, right)
         validate(left, right)
         COMPARE.call(left, right)
       end
 
       private
+
+      def unsafe_symbol?(name)
+        ["[", "]", "\\", "*", "?"].any? { |character| name.include?(character) }
+      end
 
       def validate(*values)
         raise ExecutionError, "NUL bytes are not supported in locale comparisons" if values.any? { |value| value.include?("\0") }

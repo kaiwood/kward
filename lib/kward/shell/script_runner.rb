@@ -104,7 +104,7 @@ module Kward
               text = source.dup.force_encoding(Encoding::UTF_8)
               text.force_encoding(Encoding::BINARY) unless text.valid_encoding?
               begin
-                Parser.parse(text, aliases: runtime.aliases)
+                Parser.parse(text, aliases: runtime.aliases, eof: false)
               rescue IncompleteInput
                 next
               rescue SyntaxError
