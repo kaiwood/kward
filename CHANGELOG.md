@@ -26,6 +26,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Changed
 
+- Native kwsh now interprets executable text after an `ENOEXEC` error, including shebangless scripts found through `PATH` and invoked with `exec`, without delegating to another shell. Permission failures and binary-looking files remain rejected; standalone PID replacement and hosted job ownership are preserved.
 - Native `. file` now executes script code consistently in `/shell`; `source file` remains declarative configuration loading. Native aliases apply to subsequent complete input units instead of being reparsed at execution time. Locale selection follows LC_ALL/category/LANG precedence, defaulting to C; unavailable locales error explicitly. Hosted exec closes the logical session without replacing its control-channel worker, and USR2 is reserved for shutdown.
 - Restored the interactive composer's original Braille spinner and animation pace while retaining activity labels, elapsed time, and completion indicators.
 - Removed decorative prefixes from assistant and user transcript labels, retaining speaker names and colors.

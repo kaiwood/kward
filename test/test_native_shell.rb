@@ -510,14 +510,76 @@ class TestNativeShell < KwardTestCase
     end
   end
 
-  def test_executable_text_does_not_fall_back_to_sh
-    path = File.join(@directory, "not-a-binary")
-    File.write(path, "printf touched >sentinel\n")
+  def test_executable_text_uses_an_isolated_native_interpreter
+    path = File.join(@directory, "native-text")
+    File.write(path, <<~'SHELL')
+      printf '%s|%s|%s|%s|%s|' "$0" "$1" "$EXPORTED" "$PRIVATE" "$((5 + 2) )"
+      pwd -P
+      EXPORTED=child
+      cd /
+      exit 7
+    SHELL
     File.chmod(0o700, path)
-    status, _, error = execute("./not-a-binary")
-    assert_equal 126, status
-    assert_includes error, "use kwsh"
-    refute File.exist?(File.join(@directory, "sentinel"))
+    argument = 'two words; printf injected >sentinel'
+    @runtime.run("export EXPORTED=parent; PRIVATE=secret")
+    { "./native-text" => "./native-text", "PATH=.:$PATH native-text" => "native-text", "command ./native-text" => "./native-text" }.each do |command, name|
+      status, output, error = execute("#{command} #{Shellwords.escape(argument)}")
+      assert_equal 7, status, error
+      assert_empty error
+      assert_equal "#{name}|#{argument}|parent||7|#{File.realpath(@directory)}\n", output
+      assert_equal @directory, @runtime.cwd
+      assert_equal "parent", @runtime.variables["EXPORTED"]
+      refute File.exist?(File.join(@directory, "sentinel"))
+    end
+  end
+
+  def test_executable_text_accepts_empty_files_and_long_first_lines
+    path = File.join(@directory, "native-text")
+    { "" => "", "##{'x' * 5000}\nprintf native" => "native" }.each do |source, expected|
+      File.write(path, source)
+      File.chmod(0o700, path)
+      assert_output(expected, "./native-text")
+    end
+  end
+
+  def test_executable_text_rejects_unsupported_syntax_without_trying_another_shell
+    path = File.join(@directory, "native-text")
+    File.write(path, "printf '%s' \"$(( $(printf 2) + 1 ))\"\n")
+    File.chmod(0o700, path)
+    status, output, error = execute("./native-text")
+    assert_equal 2, status
+    assert_empty output
+    assert_includes error, "unsupported token in arithmetic expression"
+  end
+
+  def test_executable_text_keeps_redirections_input_and_umask
+    path = File.join(@directory, "native-text")
+    File.write(path, "read value <&3\nprintf '%s' \"$value\" >&4\nprintf error >&2\nprintf created >created\n")
+    File.chmod(0o700, path)
+    File.write(File.join(@directory, "input"), "payload\n")
+    status, output, error = execute("umask 077; ./native-text 3<input 4>output 2>errors")
+    assert_equal 0, status, error
+    assert_empty output
+    assert_empty error
+    assert_equal "payload", File.read(File.join(@directory, "output"))
+    assert_equal "error", File.read(File.join(@directory, "errors"))
+    assert_equal 0o600, File.stat(File.join(@directory, "created")).mode & 0o777
+  end
+
+  def test_executable_text_bootstrap_does_not_load_ruby_environment_code
+    path = File.join(@directory, "native-text")
+    File.write(path, "printf native\n")
+    File.chmod(0o700, path)
+    File.write(File.join(@directory, "injected.rb"), "abort 'RUBYOPT executed'")
+    File.write(File.join(@directory, "shellwords.rb"), "abort 'RUBYLIB executed'")
+    assert_output("native", "RUBYOPT=-rinjected RUBYLIB=#{Shellwords.escape(@directory)} ./native-text")
+  end
+
+  def test_explicit_shebang_still_selects_its_interpreter
+    path = File.join(@directory, "ruby-script")
+    File.write(path, "#!#{RbConfig.ruby}\nprint ARGV.fetch(0).upcase\n")
+    File.chmod(0o700, path)
+    assert_output("RUBY", "./ruby-script ruby")
   end
 
   def test_long_boolean_lists_do_not_require_recursive_evaluation
@@ -543,11 +605,13 @@ class TestNativeShell < KwardTestCase
 
   def test_binary_looking_invalid_executables_cannot_trigger_shell_fallback
     path = File.join(@directory, "invalid-binary")
-    File.binwrite(path, "\x7fELF\nprintf touched >sentinel\n")
-    File.chmod(0o700, path)
-    status, _, _ = execute("./invalid-binary")
-    assert_equal 126, status
-    refute File.exist?(File.join(@directory, "sentinel"))
+    ["\x7fELF\nprintf touched >sentinel\n", "\0\nprintf touched >sentinel\n"].each do |content|
+      File.binwrite(path, content)
+      File.chmod(0o700, path)
+      status, _, _ = execute("./invalid-binary")
+      assert_equal 126, status
+      refute File.exist?(File.join(@directory, "sentinel"))
+    end
   end
 
   def test_native_scripts_have_their_own_process_and_no_private_parent_variables

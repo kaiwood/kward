@@ -18,6 +18,8 @@ class TestShellPrompt < KwardTestCase
     instructions = Kward::ShellPrompt.system_message.fetch(:content)
     assert_includes instructions, "native kwsh, not Bash or /bin/sh"
     assert_includes instructions, "kwsh <file> [arguments]"
+    assert_includes instructions, "interpreted natively after ENOEXEC"
+    assert_includes instructions, "permission failures and binary-looking files are rejected"
     assert_includes instructions, "unless the user explicitly requests that"
     assert_includes instructions, "not executable scripts"
     assert_includes instructions, "echo $((5 + 2)) prints 7"

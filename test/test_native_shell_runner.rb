@@ -102,15 +102,44 @@ class TestNativeShellRunner < KwardTestCase
     assert_empty error
   end
 
-  def test_failed_exec_runs_exit_trap_without_executable_text_fallback
+  def test_exec_interprets_executable_text_with_the_same_pid_and_fresh_traps
+    Dir.mktmpdir("native-exec") do |dir|
+      file = File.join(dir, "text with spaces")
+      File.write(file, %q{printf '%s:%s:' "$$" "$1"; trap 'printf child' EXIT; exit 7})
+      File.chmod(0o700, file)
+      source = "printf '%s:' \"$$\"; trap 'printf parent' EXIT; exec #{Shellwords.escape(file)} 'two words'; printf bad"
+      output, error, status = run_kwsh("-c", source)
+      assert_equal 7, status.exitstatus
+      before, after, argument, trap = output.split(":")
+      assert_match(/\A[0-9]+\z/, before)
+      assert_equal before, after
+      assert_equal "two words", argument
+      assert_equal "child", trap
+      assert_empty error
+    end
+  end
+
+  def test_exec_executable_text_can_clear_environment_and_keep_input
+    Dir.mktmpdir("native-exec") do |dir|
+      file = File.join(dir, "text")
+      File.write(file, %q{read value; printf '%s:%s' "$value" "${KW_TEST-unset}"})
+      File.chmod(0o700, file)
+      output, error, status = run_kwsh("-c", "export KW_TEST=secret; exec -c #{Shellwords.escape(file)}", input: "payload\n")
+      assert status.success?, error
+      assert_equal "payload:unset", output
+      assert_empty error
+    end
+  end
+
+  def test_failed_exec_runs_exit_trap_without_interpreting_nonexecutable_text
     Dir.mktmpdir("native-exec") do |dir|
       file = File.join(dir, "text")
       File.write(file, "printf must-not-run")
-      File.chmod(0o700, file)
+      File.chmod(0o600, file)
       output, error, status = run_kwsh("-c", "trap 'printf \"exit:%s\" \"$?\"' EXIT; exec #{Shellwords.escape(file)}")
       assert_equal 126, status.exitstatus
       assert_equal "exit:126", output
-      assert_includes error, "use kwsh"
+      assert_includes error, "Permission denied"
     end
   end
 

@@ -1,11 +1,12 @@
 require "fiddle"
 require "fcntl"
 require "io/nonblock"
+require "rbconfig"
 
 module Kward
   module NativeShell
     # Ruby's Process.spawn/exec retry ENOEXEC through /bin/sh, even with argv.
-    # Call execve directly so unsupported executable formats fail closed.
+    # Call execve directly, interpreting executable text only with native kwsh.
     module NativeProcess
       EXECVE = Fiddle::Function.new(
         Fiddle::Handle::DEFAULT["execve"],
@@ -43,10 +44,10 @@ module Kward
         status
       end
 
-      def self.spawn(executable, arguments, environment, cwd:, streams:, mask: nil)
+      def self.spawn(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false)
         validate(arguments, environment)
         streams.values.compact.uniq.each(&:flush)
-        Process.fork { exit!(replace(executable, arguments, environment, cwd: cwd, streams: streams, mask: mask)) }
+        Process.fork { exit!(replace(executable, arguments, environment, cwd: cwd, streams: streams, mask: mask, hosted: hosted)) }
       end
 
       def self.validate(arguments, environment)
@@ -55,8 +56,9 @@ module Kward
         end
       end
 
-      def self.replace(executable, arguments, environment, cwd:, streams:, mask: nil)
+      def self.replace(executable, arguments, environment, cwd:, streams:, mask: nil, hosted: false)
         validate(arguments, environment)
+        load_path = $LOAD_PATH.map { |path| File.expand_path(path) }
         streams.values.compact.uniq.each(&:flush)
         # Snapshot all sources before replacing any standard descriptor:
         # `2>&1 >file` must retain the original stdout for stderr.
@@ -91,20 +93,47 @@ module Kward
         copies.values.compact.each(&:close)
         File.umask(mask) if mask
         Dir.chdir(cwd)
+        begin
+          execve(executable, arguments, environment)
+        rescue Errno::ENOEXEC
+          prefix = File.binread(executable, 4096) || "".b
+          raise if prefix.include?("\0") || prefix.start_with?("\x7fELF".b)
+
+          # A fresh VM resets caught signals, closes private CLOEXEC descriptors,
+          # and preserves the PID for exec. Only trusted bootstrap code is Ruby;
+          # the script and its arguments remain data for the native interpreter.
+          bootstrap = <<~RUBY
+            $LOAD_PATH.replace(#{load_path.inspect})
+            require #{File.expand_path("script_runner", __dir__).inspect}
+            hosted = ARGV.shift == "1"
+            descriptors = ARGV.shift.split(",").to_h do |value|
+              fd = Integer(value)
+              [fd, IO.for_fd(fd, autoclose: false)]
+            end
+            name = ARGV.shift
+            exit Kward::NativeShell::ScriptRunner.run(["--", *ARGV], name: name, descriptors: descriptors, hosted: hosted)
+          RUBY
+          descriptors = streams.filter_map { |fd, io| fd if fd > 2 && io }.join(",")
+          execve(RbConfig.ruby, [RbConfig.ruby, "--disable=gems,rubyopt", "-e", bootstrap, "--",
+                                hosted ? "1" : "0", descriptors, arguments.first, executable, *arguments.drop(1)], environment)
+        end
+      rescue StandardError => e
+        unless STDERR.closed?
+          STDERR.puts("kwsh: #{e.message}")
+          STDERR.flush
+        end
+        e.is_a?(Errno::ENOENT) ? 127 : 126
+      end
+
+      def self.execve(executable, arguments, environment)
         argv = arguments.map { |argument| Fiddle::Pointer[argument + "\0"] }
         envp = environment.map { |key, value| Fiddle::Pointer["#{key}=#{value}\0"] }
         argv_pointer = (argv.map(&:to_i) + [0]).pack("J*")
         envp_pointer = (envp.map(&:to_i) + [0]).pack("J*")
         EXECVE.call(executable, argv_pointer, envp_pointer)
         raise SystemCallError.new(executable, Fiddle.last_error)
-      rescue StandardError => e
-        unless STDERR.closed?
-          hint = e.is_a?(Errno::ENOEXEC) ? "; use kwsh <file> for native scripts" : ""
-          STDERR.puts("kwsh: #{e.message}#{hint}")
-          STDERR.flush
-        end
-        e.is_a?(Errno::ENOENT) ? 127 : 126
       end
+      private_class_method :execve
     end
   end
 end

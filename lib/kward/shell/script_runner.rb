@@ -6,7 +6,7 @@ module Kward
     module ScriptRunner
       module_function
 
-      def run(arguments, input: $stdin, output: $stdout, error: $stderr)
+      def run(arguments, input: $stdin, output: $stdout, error: $stderr, name: nil, descriptors: {}, hosted: false)
         args = arguments.dup
         options = []
         mode = nil
@@ -30,8 +30,10 @@ module Kward
         raise ArgumentError, "-c requires a command" if mode == "-c" && !command
         file = args.shift unless mode || args.empty? || args.first == "-"
         args.shift if !mode && !file && args.first == "-"
-        name = mode == "-c" ? args.shift || "kwsh" : file || "kwsh"
-        runtime = Runtime.new(arguments: args, name: name, replace_process: true)
+        command_name = args.shift if mode == "-c"
+        name ||= command_name || file || "kwsh"
+        runtime = Runtime.new(arguments: args, name: name, replace_process: !hosted, interactive: hosted, descriptors: descriptors)
+        runtime.send(:reset_child_state, job_group: Process.getpgrp) if hosted
         unless options.empty?
           status = runtime.run("set #{Shellwords.join(options)}", input: input, output: output, error: error)
           return status unless status.zero?
@@ -43,6 +45,7 @@ module Kward
         else
           runtime.run_input(input, input: input, output: output, error: error)
         end
+        runtime.send(:wait_builtin, [], { 0 => input, 1 => output, 2 => error }.merge(descriptors)) if hosted
         runtime.finish(input: input, output: output, error: error)
       rescue ArgumentError, SystemCallError => e
         error.puts("kwsh: #{e.message}")

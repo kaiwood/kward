@@ -200,6 +200,50 @@ class TestPersistentShellSession < KwardTestCase
     end
   end
 
+  def test_hosted_exec_interprets_executable_text_and_closes_the_session
+    Dir.mktmpdir("persistent-exec-text") do |dir|
+      File.write(File.join(dir, "native-text"), "printf '%s' \"$((5 + 2) )\"; exit 7")
+      File.chmod(0o700, File.join(dir, "native-text"))
+      shell = build_shell(dir)
+      result = shell.run_for_agent("exec ./native-text; printf bad")
+      assert_equal 7, result.exit_status
+      assert_equal "$ exec ./native-text; printf bad\n7\nExit status: 7\n", result.output
+      assert shell.exited?
+    ensure
+      shell&.close
+    end
+  end
+
+  def test_hosted_executable_text_keeps_background_descendants_in_the_owned_group
+    Dir.mktmpdir("persistent-text-jobs") do |dir|
+      File.write(File.join(dir, "native-text"), %q{sleep 30 & printf '%s' "$!" >nested.pid; exec /usr/bin/true})
+      File.chmod(0o700, File.join(dir, "native-text"))
+      shell = build_shell(dir)
+      result = shell.run_for_agent(%q{./native-text & printf '%s' "$!"})
+      assert_equal 0, result.exit_status
+      group = Integer(result.output.lines.last.strip)
+      wait_until(timeout: 3) { File.exist?(File.join(dir, "nested.pid")) && !File.zero?(File.join(dir, "nested.pid")) }
+      nested = Integer(File.read(File.join(dir, "nested.pid")))
+      assert_equal group, Process.getpgid(nested)
+      assert_includes shell.run_for_agent("jobs -r").output, "Running"
+      shell.close
+      wait_until(timeout: 2) do
+        Process.kill(0, -group)
+        false
+      rescue Errno::ESRCH
+        true
+      end
+      assert_raises(Errno::ESRCH) { Process.kill(0, -group) }
+    ensure
+      shell&.close
+      begin
+        Process.kill("KILL", -group) if group
+      rescue Errno::ESRCH
+        # Normal shutdown already removed the entire group.
+      end
+    end
+  end
+
   def test_native_aliases_are_not_preexpanded_by_the_prompt_router
     Dir.mktmpdir("persistent-aliases") do |dir|
       shell = build_shell(dir)

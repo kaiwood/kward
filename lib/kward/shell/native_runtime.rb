@@ -44,7 +44,7 @@ module Kward
 
       attr_reader :cwd, :variables, :aliases, :status, :exited
 
-      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false)
+      def initialize(cwd: Dir.pwd, env: ENV.to_h, aliases: {}, arguments: [], name: "kwsh", interactive: false, replace_process: false, descriptors: {})
         @cwd = File.expand_path(cwd)
         @variables = env.dup
         @variables["PWD"] = @cwd
@@ -63,7 +63,7 @@ module Kward
         @jobs = {}
         @traps = {}
         @pending_signals = []
-        @persistent_descriptors = {}
+        @persistent_descriptors = descriptors.dup
         @owned_descriptors = []
         @active_streams = []
         @replace_process = replace_process
@@ -702,7 +702,7 @@ module Kward
           streams[2]&.puts("kwsh: #{name}: command not found")
           return 127
         end
-        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams, mask: @umask)
+        pid = NativeProcess.spawn(executable, arguments, environment, cwd: @cwd, streams: streams, mask: @umask, hosted: @interactive)
         result = wait(pid)
         pid = nil
         result

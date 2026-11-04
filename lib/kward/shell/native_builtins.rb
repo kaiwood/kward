@@ -63,7 +63,7 @@ module Kward
           result = NativeProcess.replace(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask)
           raise Flow.new(:exit, result)
         else
-          pid = NativeProcess.spawn(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask)
+          pid = NativeProcess.spawn(executable, arguments, env, cwd: @cwd, streams: streams, mask: @umask, hosted: @interactive)
           result = wait(pid)
           pid = nil
           # The protocol worker must return its final state before exiting.

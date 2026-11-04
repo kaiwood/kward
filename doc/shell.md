@@ -129,6 +129,18 @@ printf 'printf hello\n' | kwsh -s
 
 From a checkout, use `ruby exe/kwsh`. Standalone stdin processing leaves each command's input available to `read` and external programs; it does not read the entire input stream ahead of execution. Interactive terminal composition remains a Kward `/shell` feature.
 
+Executable text files without a shebang also run natively when invoked from kwsh:
+
+```sh
+cat >hello <<'EOF'
+printf 'Hello, %s\n' "$1"
+EOF
+chmod +x hello
+./hello captain
+```
+
+After the operating system reports an executable-format error (`ENOEXEC`), kwsh interprets the file in a fresh native shell environment. This also works through `PATH`, `command`, and `exec`; arguments, exported variables, the working directory, redirections, and umask are preserved. The command name is retained as `$0`. Files without executable permission still fail, and a bounded prefix check rejects NUL-containing or ELF-looking binaries. Unsupported syntax remains an error, never a reason to try Bash or `/bin/sh`. An explicit shebang continues to select its named interpreter.
+
 ### Supported syntax
 
 - Comments, newlines, `;`, single/double quotes, dollar-single-quotes (`$'line\n'`), and backslash escaping.
@@ -319,7 +331,7 @@ Unavailable locales and unsupported encodings produce explicit errors. Locale ch
 
 ### Remaining compatibility limits
 
-This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references and nested arithmetic substitutions, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. Alias replacement text is tokenized independently; aliases containing here-document bodies or incomplete quoted fragments are not supported. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and standalone interactive prompt/startup-file modes are not implemented. Executable text without a shebang still fails rather than falling back to another shell; use `kwsh file` or an explicit native shebang. Explicitly requested executables with another interpreter's shebang still use that interpreter.
+This is **not yet a fully POSIX- or Bash-conforming shell**. Additional builtin options, arithmetic array references and nested arithmetic substitutions, advanced array forms, multi-character collating elements, and exact Bash/POSIX regular-expression semantics remain outside the implemented subset. Alias replacement text is tokenized independently; aliases containing here-document bodies or incomplete quoted fragments are not supported. `wait -n`, Bash pseudo-traps (`DEBUG`, `ERR`, `RETURN`), and standalone interactive prompt/startup-file modes are not implemented.
 
 `capture`, `pty`, `clear`, declarative `source`, and `kward edit` remain prompt conveniences rather than scripting builtins. Native aliases use read-time token expansion; the separate one-off `!` path retains its existing single command-prefix replacement. `kwshrc` stays non-executing.
 
@@ -339,6 +351,7 @@ Native scripting is being extended in tested stages, targeting POSIX.1-2024 plus
 - [x] Signal/EXIT traps, asynchronous jobs, `wait`, terminal job control, and standalone/hosted `exec` lifecycle integration.
 - [x] Named-user/assignment-context tildes, `$!`, read-time aliases, and incremental script-file execution.
 - [x] Installed-locale character counts, single-character bracket classes/collation, native pathname matching, and locale sorting.
+- [x] Native interpretation of executable text after `ENOEXEC`, including standalone `exec` and hosted job ownership.
 - [ ] Remaining array/conditional forms, nested arithmetic substitutions, additional builtin flags and invocation modes.
 - [ ] Exhaustive alias, command lookup/error, and special-builtin conformance coverage.
 - [ ] Full conformance coverage, including multi-character collating elements. Regular expressions and bounded arithmetic are not exact Bash equivalents.
