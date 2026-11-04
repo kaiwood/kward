@@ -1563,13 +1563,13 @@ class TestPromptInterface < KwardTestCase
     assert_equal Kward::PromptInterface::CANCEL_INPUT, prompt.send(:handle_key, "\x03")
   end
 
-  def test_prompt_interface_renders_activity_pulse_while_busy
+  def test_prompt_interface_renders_spinner_while_busy
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
 
     prompt.begin_busy_input("You>")
 
-    assert_includes strip_ansi(output.string), "╭ You · · thinking "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ thinking "
   end
 
   def test_prompt_interface_renders_custom_busy_activity
@@ -1578,7 +1578,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.begin_busy_input("You>", activity: "compacting")
 
-    assert_includes strip_ansi(output.string), "╭ You · · compacting "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ compacting "
   end
 
   def test_prompt_interface_updates_busy_activity_only_when_it_changes
@@ -1589,7 +1589,7 @@ class TestPromptInterface < KwardTestCase
     output.rewind
 
     assert prompt.update_busy_activity("reasoning")
-    assert_includes strip_ansi(output.string), "╭ You · · reasoning "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ reasoning "
     refute prompt.update_busy_activity("reasoning")
   end
 
@@ -1645,7 +1645,8 @@ class TestPromptInterface < KwardTestCase
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: StringIO.new, output: output)
     prompt.begin_busy_input("You>")
-    prompt.instance_variable_set(:@last_spinner_tick, prompt.send(:monotonic_now) - Kward::PromptInterface::SPINNER_INTERVAL)
+    prompt.instance_variable_set(:@last_spinner_tick, 0.0)
+    prompt.define_singleton_method(:monotonic_now) { 0.1 }
     output.truncate(0)
     output.rewind
 
@@ -1653,7 +1654,7 @@ class TestPromptInterface < KwardTestCase
     prompt.send(:render_prompt_locked)
 
     assert_equal 0, output.string.scan(TTY::Cursor.clear_line).length
-    assert_match(/╭ You · [•●] thinking /, strip_ansi(output.string))
+    assert_includes strip_ansi(output.string), "╭ You · ⠙ thinking "
   end
 
   def test_question_overlay_wraps_each_line_of_approval_details
@@ -1747,18 +1748,19 @@ class TestPromptInterface < KwardTestCase
     thread&.kill if thread&.alive?
   end
 
-  def test_prompt_interface_advances_activity_pulse_while_busy
+  def test_prompt_interface_advances_spinner_while_busy
     input, writer = IO.pipe
     output = StringIO.new
     prompt = Kward::PromptInterface.new(input: input, output: output)
     prompt.begin_busy_input("You>")
-    prompt.instance_variable_set(:@last_spinner_tick, prompt.send(:monotonic_now) - Kward::PromptInterface::SPINNER_INTERVAL)
+    prompt.instance_variable_set(:@last_spinner_tick, 0.0)
+    prompt.define_singleton_method(:monotonic_now) { 0.1 }
     output.truncate(0)
     output.rewind
 
     prompt.poll_input
 
-    assert_match(/╭ You · [•●] thinking /, strip_ansi(output.string))
+    assert_includes strip_ansi(output.string), "╭ You · ⠙ thinking "
   ensure
     writer&.close unless writer&.closed?
     input&.close unless input&.closed?
@@ -1824,7 +1826,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.set_steered_count(1)
 
-    assert_includes strip_ansi(output.string), "╭ You · · steering "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ steering "
     refute_includes output.string, "steered"
     refute_includes output.string, "queued"
   end
@@ -1839,7 +1841,7 @@ class TestPromptInterface < KwardTestCase
 
     prompt.clear_steered_count
 
-    assert_includes strip_ansi(output.string), "╭ You · · thinking "
+    assert_includes strip_ansi(output.string), "╭ You · ⠋ thinking "
     refute_includes output.string, "steering"
     refute_includes output.string, "steered"
   end
@@ -1933,6 +1935,7 @@ class TestPromptInterface < KwardTestCase
     prompt.write_delta("hello")
 
     assert_includes output.string, "Assistant>"
+    refute_includes output.string, "✦"
     assert_includes output.string, "hello"
     refute_includes strip_ansi(output.string), Kward::PromptInterface::HELP_TEXT
     refute_includes strip_ansi(output.string), Kward::PromptInterface::BUSY_HELP_TEXT

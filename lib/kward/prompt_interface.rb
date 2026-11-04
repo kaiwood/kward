@@ -70,8 +70,8 @@ module Kward
   class PromptInterface
     HELP_TEXT = "Enter sends • Shift+Enter newline • / commands • @ files • ↑/↓ history • Ctrl+D exits".freeze
     BUSY_HELP_TEXT = "Ctrl+C cancels".freeze
-    SPINNER_FRAMES = %w[· • ● •].freeze
-    SPINNER_INTERVAL = 0.16
+    SPINNER_FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
+    SPINNER_INTERVAL = 0.1
     FOOTER_REFRESH_INTERVAL = 1.0
     COMPOSER_STATUS_REFRESH_INTERVAL = 1.0
     COMPLETION_DISPLAY_SECONDS = 0.8

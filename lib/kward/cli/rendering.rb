@@ -237,7 +237,7 @@ module Kward
       # Writes the user transcript output for the terminal CLI flow.
       def print_user_transcript(input, display_input: nil, attachment_references: nil)
         visible_input = display_input.nil? ? input : display_input
-        write_prompt_transcript("\n#{colored("❯ You>", :blue, :bold)} #{visible_input}\n")
+        write_prompt_transcript("\n#{colored("You>", :blue, :bold)} #{visible_input}\n")
         # System-turn instructions are plain text, never image attachments.
         return if input.is_a?(PluginTurnRequest)
 
@@ -407,8 +407,7 @@ module Kward
       end
 
       def transcript_marker(label)
-        marker = "#{transcript_label(label)}>"
-        label == "Assistant" ? "✦ #{marker}" : marker
+        "#{transcript_label(label)}>"
       end
 
       def label_styles(label)
