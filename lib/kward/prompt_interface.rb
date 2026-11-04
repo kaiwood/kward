@@ -143,18 +143,45 @@ module Kward
       end
     end
 
-    # Forwards child output while tracking keyboard-protocol resets across chunks.
+    # Kward owns keyboard encoding while its tab shortcuts are reserved. Child
+    # keyboard-mode mutations must not pop our stack entry or change that encoding.
+    # Other controls remain terminal-owned, including streamed OSC/DCS payloads.
     class TerminalHandoffOutput
-      def initialize(output, on_keyboard_protocol_restore:)
+      MAX_SEQUENCE_BYTES = 4096
+
+      def initialize(output)
         @output = output
-        @on_keyboard_protocol_restore = on_keyboard_protocol_restore
         @pending = +"".b
+        @string = false
+        @string_escape = false
       end
 
       def write(value)
         value = value.to_s.b
-        detect_keyboard_protocol_restore(value)
-        @output.write(value)
+        forwarded = +"".b
+        value.each_byte do |byte|
+          if @string
+            forwarded << byte
+            @string = false if byte == 0x18 || byte == 0x1a || (@string == 0x5d && byte == 0x07) || (@string_escape && byte == 0x5c)
+            @string_escape = byte == 0x1b
+          elsif @pending.empty?
+            byte == 0x1b ? @pending << byte : forwarded << byte
+          elsif byte == 0x1b
+            forwarded << @pending << TerminalSequences::CONTROL_SEQUENCE_CANCEL
+            @pending = +"\e".b
+          elsif byte == 0x18 || byte == 0x1a
+            forwarded << @pending << byte
+            @pending.clear
+          elsif byte < 0x20 || byte == 0x7f
+            # C0 controls can execute inside CSI without ending its parameters.
+            forwarded << byte
+          else
+            @pending << byte
+            consume_sequence(forwarded)
+          end
+        end
+        @output.write(forwarded) unless forwarded.empty?
+        value.bytesize
       end
 
       def print(*values)
@@ -168,13 +195,25 @@ module Kward
 
       private
 
-      def detect_keyboard_protocol_restore(value)
-        @pending << value
-        return unless @pending.include?(TerminalSequences::KEYBOARD_PROTOCOL_RESTORE)
+      def consume_sequence(forwarded)
+        if @pending.bytesize == 2 && [0x5d, 0x50, 0x5e, 0x5f, 0x58].include?(@pending.getbyte(1))
+          @string = @pending.getbyte(1)
+          @string_escape = false
+        elsif @pending.start_with?("\e[")
+          return if @pending.bytesize == 2
+          byte = @pending.getbyte(-1)
+          return if byte.between?(0x20, 0x3f) && @pending.bytesize < MAX_SEQUENCE_BYTES
+        elsif @pending.getbyte(-1).between?(0x20, 0x2f) && @pending.bytesize < MAX_SEQUENCE_BYTES
+          return
+        end
 
-        @on_keyboard_protocol_restore.call
-        keep = [TerminalSequences::KEYBOARD_PROTOCOL_RESTORE.bytesize - 1, @pending.bytesize].min
-        @pending = keep.positive? ? @pending.byteslice(-keep, keep) : +"".b
+        unless TerminalSequences.keyboard_mode_mutation?(@pending)
+          forwarded << @pending
+          forwarded << TerminalSequences::CONTROL_SEQUENCE_CANCEL if @pending.bytesize >= MAX_SEQUENCE_BYTES
+          # Main and alternate screens have independent keyboard mode stacks.
+          forwarded << TerminalSequences::KEYBOARD_PROTOCOL_SET if TerminalSequences.keyboard_mode_reset?(@pending)
+        end
+        @pending.clear
       end
     end
 
@@ -184,7 +223,6 @@ module Kward
       # Logical state may change during a child handoff, but only the owner may render.
       @terminal_owner = :kward
       @terminal_handoff_mode = nil
-      @terminal_handoff_keyboard_protocol_reset = false
       @reader = TTY::Reader.new(input: input, output: output, interrupt: :error)
       @mutex = Mutex.new
       @prompt_history = prompt_history
@@ -757,16 +795,14 @@ module Kward
         print_output_locked(BRACKETED_PASTE_RESTORE)
         print_output_locked(KEYBOARD_PROTOCOL_RESTORE) unless preserve_tab_keybindings
         @handoff_input_buffer.clear
-        @terminal_handoff_keyboard_protocol_reset = false
+        @handoff_bracketed_paste = false
         restore_editor_cursor_shape_locked
         set_cursor_visible_locked(true, force: true)
         flush_output_locked
         restore_console_mode_locked
         input = @input_io
         output = if preserve_tab_keybindings
-          TerminalHandoffOutput.new(@output_io, on_keyboard_protocol_restore: -> {
-            @terminal_handoff_keyboard_protocol_reset = true
-          })
+          TerminalHandoffOutput.new(@output_io)
         else
           @output_io
         end
@@ -780,15 +816,15 @@ module Kward
       @mutex.synchronize do
         @terminal_owner = :kward
         @terminal_handoff_mode = nil
+        print_output_locked(TerminalSequences::CONTROL_SEQUENCE_CANCEL)
+        print_output_locked(TerminalSequences::COMPOSER_MODES_RESTORE)
         restore_scroll_region_locked
         print_output_locked(TerminalSequences::SGR_RESET)
         enter_raw_mode_locked
-        if !preserve_tab_keybindings || @terminal_handoff_keyboard_protocol_reset
-          print_output_locked(KEYBOARD_PROTOCOL_ENABLE)
-        end
+        print_output_locked(preserve_tab_keybindings ? TerminalSequences::KEYBOARD_PROTOCOL_SET : KEYBOARD_PROTOCOL_ENABLE)
         print_output_locked(BRACKETED_PASTE_ENABLE)
         @handoff_input_buffer.clear
-        @terminal_handoff_keyboard_protocol_reset = false
+        @handoff_bracketed_paste = false
         disable_editor_mouse_reporting(force: true)
         restore_editor_cursor_shape_locked(force: true)
         @cursor_visible = nil
