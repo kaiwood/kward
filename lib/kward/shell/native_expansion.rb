@@ -126,6 +126,8 @@ module Kward
           groups.concat(additions.drop(1))
         end
         groups
+      rescue ExecutionError => e
+        raise ExpansionError, e.message
       end
 
       def literal_fields(part, first:, following:, assignment:, expanded:)

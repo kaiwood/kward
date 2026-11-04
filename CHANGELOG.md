@@ -35,6 +35,7 @@ All notable changes to Kward will be documented in this file.
 
 ### Fixed
 
+- Corrected native kwsh fatal-error handling and POSIX `errexit` inheritance, preserving interactive recovery, subshell isolation, special-builtin behavior through `command`, and EXIT traps.
 - Kept `/shell` background servers responsive after `bg` by draining idle PTY output instead of letting logs fill the terminal buffer and block further requests; idle output is discarded, so redirect jobs to files to retain logs.
 - Fixed native kwsh jobs intermittently stopping again after Ctrl-Z followed by `bg`, by checking for newer continuation or exit events before propagating a child stop report.
 - Kept terminal transcript image attachments badge-only to prevent misplaced graphics during scrolling and redraws, while preserving `/files` image previews and model image input.

@@ -7,7 +7,7 @@ module Kward
 
       private
 
-      def fork_program(tree, streams, close: [], clear_errexit: false, group: false, gate: nil, asynchronous: false)
+      def fork_program(tree, streams, close: [], group: false, gate: nil, asynchronous: false)
         streams.values.compact.uniq.each(&:flush)
         Process.fork do
           reset_child_state
@@ -25,7 +25,6 @@ module Kward
             gate.read
             gate.close
           end
-          @options.delete("errexit") if clear_errexit
           begin
             result = with_signal_handlers { evaluate(tree, streams) }
           rescue Flow => flow
@@ -54,7 +53,7 @@ module Kward
       def capture_substitution(tree)
         reader, writer = IO.pipe
         writer.sync = true
-        pid = fork_program(tree, @streams.merge(1 => writer), close: [reader], clear_errexit: true)
+        pid = fork_program(tree, @streams.merge(1 => writer), close: [reader])
         writer.close
         value = +"".b
         begin

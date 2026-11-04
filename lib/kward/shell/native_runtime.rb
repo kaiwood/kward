@@ -87,8 +87,8 @@ module Kward
         @base_streams = { 0 => input, 1 => output, 2 => error }.merge(@persistent_descriptors)
         with_signal_handlers { evaluate_program(source, @base_streams) }
       rescue Flow => flow
-        if flow.kind == :exit
-          @exited = true
+        if %i[exit abort].include?(flow.kind)
+          @exited = true if flow.kind == :exit
           @status = flow.status
         else
           error&.puts("kwsh: #{flow.kind}: not in a valid context")
@@ -96,6 +96,7 @@ module Kward
         end
       rescue SyntaxError, ExpansionError, ExecutionError, SystemCallError, IOError, ArgumentError => e
         error&.puts("kwsh: #{e.message}")
+        @exited = true unless interactive_scope?
         @status = 2
       rescue Interrupt
         @status = 130
@@ -113,6 +114,16 @@ module Kward
       end
 
       private
+
+      def interactive_scope?
+        @interactive && !@job_child
+      end
+
+      def command_error(error, streams, fatal: false)
+        streams[2]&.puts("kwsh: #{error.message}")
+        raise Flow.new(interactive_scope? ? :abort : :exit, 2) if fatal
+        2
+      end
 
       def evaluate_program(input, streams)
         result = @status
@@ -217,7 +228,8 @@ module Kward
           @functions[name] = body
           0
         end
-        failed_command = %i[simple subshell test arithmetic pipeline].include?(node.kind)
+        failed_command = %i[simple subshell test arithmetic redirect].include?(node.kind) ||
+                         node.kind == :pipeline && node.values.first.length > 1
         negated = node.kind == :pipeline && node.values.last
         raise Flow.new(:exit, @status) if failed_command && !negated && @options.include?("errexit") && !@ignore_failure && !@status.zero?
         run_pending_traps(streams)
@@ -308,31 +320,34 @@ module Kward
         @process_substitutions = []
         @substitution_status = nil
         assignments = []
+        assigning = false
         words = words.dup
         assignments << words.shift.assignment while words.first&.assignment
         arguments = words.each_with_index.flat_map do |word, index|
           declaration = %w[export readonly].include?(words.first&.literal) && index.positive? && word.assignment
           expand(word, assignment: !!declaration)
         end
-        with_redirects(redirects, streams) do |redirected|
+        persistent = SPECIAL.include?(arguments.first)
+        with_redirects(redirects, streams, fatal: persistent) do |redirected|
           redirected[2]&.puts("+ #{Shellwords.join(arguments)}") if @options.include?("xtrace") && !arguments.empty?
           if arguments.empty?
+            assigning = true
             assignments.each { |key, value| assign(key, expand(value, assignment: true).join) }
             next @substitution_status || 0
           end
           raise ExecutionError, "array prefix assignments require an assignment-only command" if assignments.any? { |key, _| key.is_a?(Reference) || @arrays.key?(key) }
           name = arguments.first
-          persistent = SPECIAL.include?(name)
           saved = assignments.to_h { |key, _| [key, [@variables[key], @exported.include?(key)]] }
           begin
+            assigning = true
             assignments.each do |key, value|
               assign(key, expand(value, assignment: true).join)
               @exported.add(key) if !persistent || name == "exec"
             end
+            assigning = false
             dispatch(arguments, redirected)
           rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
-            redirected[2]&.puts("kwsh: #{e.message}")
-            2
+            command_error(e, redirected, fatal: assigning || persistent)
           ensure
             unless persistent
               saved.each do |key, (value, exported)|
@@ -343,8 +358,7 @@ module Kward
           end
         end
       rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
-        streams[2]&.puts("kwsh: #{e.message}")
-        2
+        command_error(e, streams, fatal: assigning || persistent)
       ensure
         resources = @process_substitutions
         @process_substitutions = previous_substitutions
@@ -641,7 +655,7 @@ module Kward
         streams[1].puts(text)
       end
 
-      def with_redirects(redirects, streams)
+      def with_redirects(redirects, streams, fatal: false)
         redirected = streams.dup
         opened = []
         redirects.each do |descriptor, operator, word|
@@ -676,7 +690,11 @@ module Kward
             redirected[descriptor] = file
           end
         end
+        executing = true
         yield redirected
+      rescue ExecutionError, SystemCallError, IOError, ArgumentError => e
+        raise if executing
+        command_error(e, redirected, fatal: fatal)
       ensure
         opened&.each(&:close)
       end
